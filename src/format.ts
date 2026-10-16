@@ -13,6 +13,14 @@ const percent = new Intl.NumberFormat(LANG, { style: "percent", maximumFractionD
 const share = new Intl.NumberFormat(LANG, { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const utcDay = new Intl.DateTimeFormat(LANG, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 const utcDate = new Intl.DateTimeFormat(LANG, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const utcTime = new Intl.DateTimeFormat(LANG, {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "UTC",
+});
 const duration = new Intl.DurationFormat(LANG, { style: "long" });
 const plurals = new Intl.PluralRules(LANG);
 
@@ -37,6 +45,9 @@ export const day = (time: number): string => utcDay.format(time * 1000);
 /** "3 Mar 2027", in UTC. */
 export const date = (time: number): string => utcDate.format(time * 1000);
 
+/** "Wed 14 Oct, 23:59", in UTC. */
+export const dayTime = (time: number): string => utcTime.format(time * 1000);
+
 /** The two largest units: "6 days, 2 hours", "3 hours, 5 minutes", "less than a minute". */
 export function countdown(seconds: number): string {
   const [days, hours, minutes] = [
@@ -48,10 +59,6 @@ export function countdown(seconds: number): string {
   if (hours) return duration.format({ hours, minutes });
   return minutes ? duration.format({ minutes }) : "less than a minute";
 }
-
-/** A time in the reader's own time zone: "Wed 20:00". */
-export const local = (time: number, timeZone?: string): string =>
-  new Intl.DateTimeFormat(LANG, { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone }).format(time * 1000);
 
 /** "0x5a1C…7e40". */
 export const short = (address: string): string => `${address.slice(0, 6)}…${address.slice(-4)}`;

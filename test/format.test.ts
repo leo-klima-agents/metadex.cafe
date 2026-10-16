@@ -8,8 +8,8 @@ import {
   countdown,
   date,
   day,
+  dayTime,
   earningPower,
-  local,
   shareOf,
   short,
   units,
@@ -30,10 +30,9 @@ test("dates in UTC; some browsers put a comma after the day of the week", () => 
   assert.equal(date(1_803_945_600), "2 Mar 2027");
 });
 
-test("the flip in the reader's time zone", () => {
-  assert.equal(local(FLIP, "Europe/Paris"), "Thu 02:00");
-  assert.equal(local(FLIP, "America/New_York"), "Wed 20:00");
-  assert.equal(local(FLIP, "Asia/Kolkata"), "Thu 05:30");
+test("times in UTC, to the minute", () => {
+  assert.match(dayTime(FLIP), /^Thu,? 22 Oct, 00:00$/);
+  assert.match(dayTime(FLIP - 3), /^Wed,? 21 Oct, 23:59$/);
 });
 
 test("countdowns keep the two largest units", () => {

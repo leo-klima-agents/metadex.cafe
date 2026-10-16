@@ -1,7 +1,7 @@
 # metaDEX Café
 
 The static page at <https://metadex.cafe/> for joining and leaving the Klima "Carbon Impact" automation with Hydrex
-accounts on Base. It shows the automation's settings and latest vote, the week, and the accounts of any address with
+accounts on Base. It shows the automation's settings and latest vote, the epoch, and the accounts of any address with
 where each stands. Klima's keeper, [hydrex-keeper](https://github.com/ldeso/hydrex-keeper), votes with the accounts in
 the automation. The page is `index.html` and `style.css`; a script in `src/` fills in what it reads from Base, and its
 only dependency is `viem`.
@@ -11,16 +11,16 @@ only dependency is `viem`.
 In Hydrex's contracts, an automation is a conduit. Joining calls `setConduitApproval(conduit, tokenId, true)` on
 Hydrex's VotingEscrow, once per account. Then:
 
-- **Votes.** The account's votes count for the automation from the next week, which starts on Thursday at 00:00 UTC.
+- **Votes.** The account's votes count for the automation from the next epoch, which starts on Thursday at 00:00 UTC.
   Meanwhile its owner cannot vote with it.
-- **Rewards.** The automation can claim the account's rewards at once, including any from past weeks that the owner has
+- **Rewards.** The automation can claim the account's rewards at once, including any from past epochs that the owner has
   not claimed. Claim them on Hydrex first to keep them as they are.
-- **Payouts.** Right after each week ends, Klima's keeper claims the rewards. The automation swaps them into kVCM,
+- **Payouts.** Right after each epoch ends, Klima's keeper claims the rewards. The automation swaps them into kVCM,
   retires a share as carbon credits and sends the rest to the owner's payout address.
 - **The account** stays in the owner's wallet, with its HYDX. Nothing is transferred.
 
 Leaving is the same call with `false`, at any time. The automation can no longer claim from then on, and the votes come
-back to the owner from the next week.
+back to the owner from the next epoch.
 
 Hydrex controls the automation with a single key. It can change the share retired up to 100%, the payout tokens, the fee
 up to 1%, the swap routers and any owner's payout address, and choose who claims and votes for the automation: today

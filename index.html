@@ -22,7 +22,7 @@
     <header>
       <h1>metaDEX Café</h1>
       <p>
-        Let an automation vote with your Hydrex accounts every week and claim their rewards. You can leave at any time.
+        Let an automation vote with your Hydrex accounts every epoch and claim their rewards. You can leave at any time.
       </p>
     </header>
     <main>
@@ -47,7 +47,7 @@
       <section>
         <h2>The Carbon Impact automation</h2>
         <p>
-          Klima runs it. Every week, Klima's keeper votes with the accounts in it, then the Carbon Impact automation
+          Klima runs it. Every epoch, Klima's keeper votes with the accounts in it, then the Carbon Impact automation
           claims their rewards, swaps them into kVCM, retires a share as carbon credits and pays the rest to their
           owners.
         </p>
@@ -67,16 +67,16 @@
             </td>
           </tr>
           <tr>
-            <th scope="row">Earning Power this week</th>
+            <th scope="row">Earning Power this epoch</th>
             <td class="power">…</td>
           </tr>
         </table>
 
-        <h3>This week</h3>
+        <h3>This epoch</h3>
         <p>
-          <time class="week-start">…</time> to <time class="week-end">…</time>, 00:00 UTC. The next week starts in
-          <span class="countdown">…</span>, at <time class="local">…</time> your time. Klima's keeper votes just before
-          the week ends and pays out right after. Joining and leaving count from the next week.
+          <time class="week-start">…</time> to <time class="week-end">…</time>, 00:00 UTC. Each epoch lasts a week, and
+          the next one starts in <span class="countdown">…</span>. Klima's keeper votes just before the epoch ends and
+          pays out right after. Joining and leaving count from the next epoch.
         </p>
 
         <h3>Latest vote</h3>
@@ -132,8 +132,8 @@
       <section id="payout" hidden>
         <h2>Payout address</h2>
         <p>
-          Payouts for <code class="owner" translate="no"></code> go to <code class="payout" translate="no"></code
-          ><span id="itself">, the address itself</span>.
+          Payouts for <code translate="no"><a class="owner"></a></code> go to
+          <code translate="no"><a class="payout"></a></code><span id="itself">, the address itself</span>.
         </p>
         <p>
           One address takes the payouts for all of an owner's accounts in the Carbon Impact automation. Hydrex's admin
@@ -146,19 +146,19 @@
         <p>From the contracts' current settings:</p>
         <ul>
           <li>
-            <b>The Carbon Impact automation votes with the account</b> from the next week, which starts on Thursday at
+            <b>The Carbon Impact automation votes with the account</b> from the next epoch, which starts on Thursday at
             00:00 UTC. Meanwhile you can't vote with it yourself.
           </li>
           <li>
             <strong
               >The Carbon Impact automation can claim the account's rewards from the moment it joins, including any you
-              have not claimed from past weeks.</strong
+              have not claimed from past epochs.</strong
             >
             <a href="https://www.hydrex.fi/accounts">Claim them on Hydrex first</a> to keep them as they are.
           </li>
           <li>
-            <b>It swaps, retires and pays.</b> Right after each week ends, Klima's keeper claims the rewards. The Carbon
-            Impact automation swaps them into kVCM (Klima Protocol kVCM) through routers Hydrex approved, retires
+            <b>It swaps, retires and pays.</b> Right after each epoch ends, Klima's keeper claims the rewards. The
+            Carbon Impact automation swaps them into kVCM through routers Hydrex approved, retires
             <span class="retired">…</span> of it as carbon credits in the name "<bdi class="entity" translate="no"
               >…</bdi
             >", and sends the rest to your payout address. <span class="no-fee" hidden>Hydrex takes no fee today.</span
@@ -173,7 +173,7 @@
           <li>
             <b>You can leave at any time, with one transaction per account.</b> From that moment the Carbon Impact
             automation can no longer claim the account's rewards; what it has not claimed is yours to claim on Hydrex.
-            Your votes come back to you from the next week.
+            Your votes come back to you from the next epoch.
           </li>
         </ul>
         <p>
@@ -213,10 +213,11 @@
       <strong>In the Carbon Impact automation.</strong> It votes with this account and claims its rewards.
     </template>
     <template id="joined">
-      <strong>Joined the Carbon Impact automation.</strong> It counts from the week starting <time class="date"></time>.
+      <strong>Joined the Carbon Impact automation.</strong> It counts from the epoch starting
+      <time class="date"></time>.
     </template>
     <template id="left">
-      <strong>Left the Carbon Impact automation.</strong> Its votes count for the automation until
+      <strong>Left the Carbon Impact automation.</strong> Its votes count for the automation until this epoch ends on
       <time class="date"></time>, but the automation can no longer claim its rewards.
     </template>
     <template id="partly">
@@ -228,8 +229,10 @@
       first.
     </template>
     <template id="delegated">
-      <strong>Delegated to <code class="address" translate="no"></code>.</strong> Not a known automation. Joining moves
-      its votes to the Carbon Impact automation.
+      <strong
+        >Delegated to <code translate="no"><a class="address"></a></code>.</strong
+      >
+      Not a known automation. Joining moves its votes to the Carbon Impact automation.
     </template>
     <template id="self"><strong>Not in an automation.</strong> Its owner votes with it.</template>
     <template id="ended">

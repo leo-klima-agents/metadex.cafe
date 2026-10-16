@@ -363,10 +363,13 @@ Taken by the user on 2026-10-15, after this research:
     file lost its sections on personas, Hydrex's app, other relays, comparable interfaces and design checks.
     [earlier-design.md](earlier-design.md) keeps the removed text and the wallet set-up.
 14. **The vote's time.** On 2026-10-16 the user read "Last week" for a vote cast three seconds before the flip, when it
-    was already Thursday in their time zone. The latest vote now also gives its time in the reader's time zone and how
-    long before the week's end it was cast.
+    was already Thursday in their time zone. The latest vote now also gives its time and how long before the epoch's end
+    it was cast.
 15. **No "0%" fee.** When Hydrex takes no fee, the payouts row says only "kVCM", and what joining allows says "Hydrex
     takes no fee today". A fee shows only when there is one.
+16. **UTC and epochs.** Later that day the user asked for UTC everywhere for now, so the page gives no time in the
+    reader's time zone, and for "epoch" rather than "week", as Hydrex says. kVCM needs no gloss, and every address the
+    page shows links to its page on Basescan.
 
 Still open: how much an account has not claimed yet. It would need reads of every bribe the account earned in; it is
 left for later.

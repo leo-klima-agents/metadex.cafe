@@ -6,8 +6,8 @@ import {
   countdown,
   date,
   day,
+  dayTime,
   earningPower,
-  local,
   shareOf,
   short,
   units,
@@ -38,6 +38,14 @@ function show(id: string, shown = true): void {
   document.getElementById(id)!.hidden = !shown;
 }
 
+/** Sets every link with this class to an address: its page on Basescan, and the text shown. */
+function fillAddress(root: ParentNode, name: string, address: Address, text: string): void {
+  for (const link of root.querySelectorAll<HTMLAnchorElement>(`a.${name}`)) {
+    link.href = `https://basescan.org/address/${address}`;
+    link.textContent = text;
+  }
+}
+
 /** Shows or hides every element with this class. */
 function showAll(name: string, shown: boolean): void {
   for (const element of document.querySelectorAll<HTMLElement>(`.${name}`)) element.hidden = !shown;
@@ -58,7 +66,6 @@ function showWeek(): void {
   fillTime(document, "week-start", next - WEEK, day);
   fillTime(document, "week-end", next, day);
   fill(document, "countdown", countdown(next - now));
-  fillTime(document, "local", next, local);
 }
 
 async function showRelay(): Promise<void> {
@@ -77,10 +84,10 @@ async function showRelay(): Promise<void> {
     !lastVoted || !pools.length
       ? "None yet."
       : lastVoted >= start
-        ? `Cast this week, on ${local(lastVoted)} your time. It can change until the week ends.`
+        ? `Cast this epoch, on ${dayTime(lastVoted)} UTC. It can change until the epoch ends.`
         : lastVoted >= start - WEEK
-          ? `Cast on ${local(lastVoted)} your time, ${countdown(start - lastVoted)} before last week ended.`
-          : `Cast in the week of ${day(weekStart(lastVoted))}.`,
+          ? `Cast on ${dayTime(lastVoted)} UTC, ${countdown(start - lastVoted)} before the previous epoch ended.`
+          : `Cast in the epoch that started ${day(weekStart(lastVoted))}.`,
   );
   const total = pools.reduce((sum, pool) => sum + pool.votes, 0n);
   const rows = document.querySelector<HTMLTableElement>(".shares")!.tBodies[0]!;
@@ -115,7 +122,7 @@ function accountItem(account: Account, owner: Address, epochStart: number): Docu
   const line = clone(state.kind);
   if ("date" in state) fillTime(line, "date", state.date, day);
   if ("name" in state) fill(line, "automation", state.name);
-  if ("to" in state) fill(line, "address", short(state.to));
+  if ("to" in state) fillAddress(line, "address", state.to, short(state.to));
   item.querySelector(".status")!.replaceWith(line);
   return item;
 }
@@ -130,8 +137,8 @@ async function showAccounts(owner: Address): Promise<void> {
   fill(document, "empty-count", count(empty.length, "empty account", "empty accounts"));
   show("empty-accounts", empty.length > 0);
   show("none", !full.length);
-  fill(document, "owner", short(owner));
-  fill(document, "payout", payout);
+  fillAddress(document, "owner", owner, short(owner));
+  fillAddress(document, "payout", payout, payout);
   show("itself", payout.toLowerCase() === owner.toLowerCase());
   show("accounts");
   show("payout");
