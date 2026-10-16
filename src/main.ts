@@ -27,6 +27,7 @@ const button = lookUp.querySelector("button")!;
 const payoutForm = document.getElementById("payout-form") as HTMLFormElement;
 const recipient = payoutForm.querySelector("input")!;
 const joinButton = document.getElementById("join") as HTMLButtonElement;
+const leaveButton = document.getElementById("leave") as HTMLButtonElement;
 
 const seconds = () => Math.floor(Date.now() / 1000);
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -97,7 +98,7 @@ function kind({ lockType, end }: Account): string {
   return end ? `Flex Account, lock ${end > seconds() ? "ends" : "ended"} ${date(end)}` : "Flex Account";
 }
 
-/** An account, with a box to tick to join and a button to leave when the connected wallet owns it. */
+/** An account, with a box to tick when the connected wallet owns it and can join or leave with it. */
 function accountItem(account: Account, owner: Address, epochStart: number, mine: boolean): DocumentFragment {
   const item = clone("account");
   if (account.name) fill(item, "name", account.name);
@@ -110,17 +111,11 @@ function accountItem(account: Account, owner: Address, epochStart: number, mine:
   if ("name" in state) fill(line, "automation", state.name);
   if ("to" in state) fillAddress(line, "address", state.to, short(state.to));
   item.querySelector(".status")!.replaceWith(line);
-  if (mine && trusted && canJoin(account, seconds())) {
+  if (mine && (joinable(account) || canLeave(account))) {
     const box = item.querySelector<HTMLInputElement>(".pick")!;
     box.hidden = false;
     box.value = String(account.id);
-    box.ariaLabel = `Join with ${account.name || "Account"} #${account.id}`;
-  }
-  if (mine && canLeave(account)) {
-    item.querySelector<HTMLElement>(".leave-bar")!.hidden = false;
-    const leave = item.querySelector<HTMLButtonElement>(".leave")!;
-    leave.ariaLabel = `Leave with ${account.name || "Account"} #${account.id}`;
-    leave.addEventListener("click", () => reviewLeave(account));
+    box.ariaLabel = `Pick ${account.name || "Account"} #${account.id}`;
   }
   return item;
 }
@@ -139,8 +134,10 @@ function showAccounts(): void {
   show("empty-accounts", empty.length > 0);
   show("none", !full.length);
   show("not-yours", !!connection && !mine);
-  show("join-bar", mine && trusted && full.some((account) => canJoin(account, seconds())));
-  updateJoin();
+  joinButton.hidden = !accounts.some(joinable);
+  leaveButton.hidden = !accounts.some(canLeave);
+  show("pick-bar", mine && !(joinButton.hidden && leaveButton.hidden));
+  updateButtons();
   fillAddress(document, "owner", owner, short(owner));
   fillAddress(document, "payout", payout, payout);
   show("itself", same(payout, owner));
@@ -197,16 +194,25 @@ lookUp.addEventListener("submit", (event) => {
 
 // Joining, leaving and the payout address
 
-const ticked = () =>
-  [...document.querySelectorAll<HTMLInputElement>("#full .pick:checked")].map((box) => BigInt(box.value));
+/** Whether the account can join now: joining stays off until the startup checks pass. */
+const joinable = (account: Account) => trusted && canJoin(account, seconds());
 
-function updateJoin(): void {
-  const n = ticked().length;
-  joinButton.disabled = !n;
-  joinButton.textContent = n ? `Join with ${count(n, "account", "accounts")}` : "Join";
+/** The accounts ticked, in the order shown. */
+function ticked(): Account[] {
+  const boxes = document.querySelectorAll<HTMLInputElement>("#accounts .pick:checked");
+  const ids = new Set([...boxes].map(({ value }) => value));
+  return shown?.accounts.filter(({ id }) => ids.has(String(id))) ?? [];
 }
 
-document.getElementById("full")!.addEventListener("change", updateJoin);
+function updateButtons(): void {
+  const [joining, leaving] = [ticked().filter(joinable).length, ticked().filter(canLeave).length];
+  joinButton.disabled = !joining;
+  joinButton.textContent = joining ? `Join with ${count(joining, "account", "accounts")}` : "Join";
+  leaveButton.disabled = !leaving;
+  leaveButton.textContent = leaving ? `Leave with ${count(leaving, "account", "accounts")}` : "Leave";
+}
+
+document.getElementById("accounts")!.addEventListener("change", updateButtons);
 
 const ids = (accounts: Account[]) => list(accounts.map(({ id }) => `#${id}`));
 
@@ -215,25 +221,22 @@ const reread = (submitted: boolean) => {
   if (submitted && shown) readAndShow(shown.owner).catch(failed);
 };
 
-joinButton.addEventListener("click", () => {
+/** Reviews joining or leaving with the ticked accounts it applies to. */
+function reviewTicked(leaving: boolean): void {
   if (!connection || !shown) return;
-  const picked = ticked();
-  const accounts = shown.accounts.filter(({ id }) => picked.includes(id));
-  const changes = clone("join-effects");
+  const accounts = ticked().filter(leaving ? canLeave : joinable);
+  const changes = clone(leaving ? "leave-effects" : "join-effects");
   fill(changes, "which", ids(accounts));
   fillTime(changes, "next", shown.epochStart + WEEK, day);
   fillPlural(changes, accounts.length);
-  review("Join the Carbon Impact automation", changes, calls.join(accounts), connection, reread);
-});
-
-function reviewLeave(account: Account): void {
-  if (!connection || !shown) return;
-  const changes = clone("leave-effects");
-  fill(changes, "which", `#${account.id}`);
-  fillTime(changes, "next", shown.epochStart + WEEK, day);
-  fillPlural(changes, 1);
-  review("Leave the Carbon Impact automation", changes, calls.leave([account]), connection, reread);
+  const [title, steps] = leaving
+    ? ["Leave the Carbon Impact automation", calls.leave(accounts)]
+    : ["Join the Carbon Impact automation", calls.join(accounts)];
+  review(title, changes, steps, connection, reread);
 }
+
+joinButton.addEventListener("click", () => reviewTicked(false));
+leaveButton.addEventListener("click", () => reviewTicked(true));
 
 payoutForm.addEventListener("submit", (event) => {
   event.preventDefault();

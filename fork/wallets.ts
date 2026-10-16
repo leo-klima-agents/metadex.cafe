@@ -22,7 +22,9 @@ const SCREENSHOTS = process.env.SCREENSHOTS;
 const MEMBER = getAddress("0x388b2d29e7919d45b1b8f6e88b8a13a392f97b40"); // #9540 in Carbon Impact, #14485 its own
 const NEWCOMER = getAddress("0x0208ddbc05a91e1b937e8b3140b62ef22a274c95"); // #141 its own, #42877 in Liquid Hydrex
 const ELSEWHERE = getAddress("0x69707a120ade8239f07595165e180c61395ea655"); // #2435 in Lock Maxi, #2439 in USDC
+const LEAVER = getAddress("0x2573264b8e690ca6b2128c113890f42198840b16"); // #53350 and #82206 in Carbon Impact
 const ENDED = getAddress("0x2518820268e4079e90446b93020dfad7dd54e84d"); // #123351 ended with HYDX in it, #123364
+const LOCK_MAXI = "0x53388a4E98Bb56F8571433F5461010Fc287929d3";
 const RECIPIENT = getAddress("0x000000000000000000000000000000000000beef");
 
 const abi = parseAbi([
@@ -249,7 +251,7 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }
-    for (const owner of [MEMBER, NEWCOMER, ELSEWHERE, ENDED]) {
+    for (const owner of [MEMBER, NEWCOMER, ELSEWHERE, LEAVER, ENDED]) {
       await anvil("anvil_setBalance", [owner, "0x16345785d8a0000"]); // 0.1 ETH for gas
     }
     browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
@@ -269,7 +271,7 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await anvil("evm_revert", [snapshot]);
   });
 
-  test("join two accounts, one taken out of another automation first, one transaction at a time", async () => {
+  test("join with two accounts, one from another automation, one transaction at a time", async () => {
     const { page, sent, origins, violations } = await open({ owner: NEWCOMER });
     await page.getByText("Connect a wallet").waitFor();
     await page.getByRole("button", { name: "Test Wallet" }).click();
@@ -279,14 +281,13 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
       account(page, 42877).getByText("In another Hydrex automation: Liquid Hydrex.").waitFor(),
     );
     assert.equal(await account(page, 329).locator(".pick").isVisible(), false, "an empty account has no box");
-    await page.getByRole("checkbox", { name: "Join with Account #141" }).check();
-    await page.getByRole("checkbox", { name: "Join with Account #42877" }).check();
+    await page.getByRole("checkbox", { name: "Pick Account #141" }).check();
+    await page.getByRole("checkbox", { name: "Pick Account #42877" }).check();
     await shoot(page, "picked-1440-light");
     await page.getByRole("button", { name: "Join with 2 accounts" }).click();
-    await review(page).getByText("3 transactions, one after the other:").waitFor();
+    await review(page).getByText("2 transactions, one after the other:").waitFor();
     assert.deepEqual(await review(page).locator(".says").allTextContents(), [
       "Put #141 in the Carbon Impact automation.",
-      "Take #42877 out of the Liquid Hydrex automation.",
       "Put #42877 in the Carbon Impact automation.",
     ]);
     await review(page).getByText("Checked ✓").waitFor();
@@ -294,7 +295,7 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await confirm(page);
     assert.deepEqual(
       sent.map(({ method }) => method),
-      ["eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction"],
+      ["eth_sendTransaction", "eth_sendTransaction"],
     );
     for (const id of [141n, 42877n]) assert.deepEqual(await approvals(id), { delegate: CONDUIT, claimer: CONDUIT });
     await account(page, 141).getByText("Joined the Carbon Impact automation.").waitFor();
@@ -304,21 +305,21 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     assert.deepEqual(violations, []);
   });
 
-  test("join in one batch, taking accounts out of Lock Maxi and USDC first", async () => {
+  test("join in one batch with accounts from Lock Maxi and USDC", async () => {
     const { page, sent } = await open({ owner: ELSEWHERE, batch: true });
     await page.getByRole("button", { name: "Test Wallet" }).click();
-    await page.getByRole("checkbox", { name: "Join with Account #2435" }).check();
-    await page.getByRole("checkbox", { name: "Join with Account #2439" }).check();
+    await page.getByRole("checkbox", { name: "Pick Account #2435" }).check();
+    await page.getByRole("checkbox", { name: "Pick Account #2439" }).check();
     await page.getByRole("button", { name: "Join with 2 accounts" }).click();
-    await review(page).getByText("One transaction, with 4 calls:").waitFor();
+    await review(page).getByText("One transaction, with 2 calls:").waitFor();
     await confirm(page);
     assert.deepEqual(
       sent.map(({ method, calls }) => [method, calls.length]),
-      [["wallet_sendCalls", 4]],
+      [["wallet_sendCalls", 2]],
     );
     for (const id of [2435n, 2439n]) assert.deepEqual(await approvals(id), { delegate: CONDUIT, claimer: CONDUIT });
-    // Taking #2435 out of Lock Maxi first also cleared Lock Maxi's claim approval, which joining leaves in place.
-    assert.equal(await view(VOTING_ESCROW, "getClaimApproved", [2435n]), "0x0000000000000000000000000000000000000000");
+    // Joining leaves Lock Maxi's ERC-5725 claim approval in place; the VotingEscrow's own claim does not accept it.
+    assert.equal(await view(VOTING_ESCROW, "getClaimApproved", [2435n]), getAddress(LOCK_MAXI));
   });
 
   test("leave with one account, then send the payouts elsewhere", async () => {
@@ -327,7 +328,9 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await account(page, 9540).getByText("In the Carbon Impact automation.").waitFor();
     await account(page, 14485).getByRole("checkbox").waitFor();
     await shoot(page, "member-390-dark");
-    await page.getByRole("button", { name: "Leave with Account #9540" }).click();
+    await page.getByRole("checkbox", { name: "Pick Account #9540" }).check();
+    assert.equal(await page.getByRole("button", { name: "Join" }).isDisabled(), true);
+    await page.getByRole("button", { name: "Leave with 1 account" }).click();
     await review(page).getByText("One transaction:").waitFor();
     await review(page).getByText("Checked ✓").waitFor();
     await shoot(page, "leave-390-dark");
@@ -347,6 +350,28 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     assert.equal(sent.length, 2);
   });
 
+  test("leave with two accounts in one batch", async () => {
+    const { page, sent } = await open({ owner: LEAVER, batch: true });
+    await page.getByRole("button", { name: "Test Wallet" }).click();
+    await page.getByRole("checkbox", { name: "Pick Account #53350" }).check();
+    await page.getByRole("checkbox", { name: "Pick Account #82206" }).check();
+    await page.getByRole("button", { name: "Leave with 2 accounts" }).click();
+    await review(page).getByText("One transaction, with 2 calls:").waitFor();
+    await review(page).getByText("can no longer claim the rewards of #53350 and #82206").waitFor();
+    await confirm(page);
+    assert.deepEqual(
+      sent.map(({ method, calls }) => [method, calls.length]),
+      [["wallet_sendCalls", 2]],
+    );
+    for (const id of [53350n, 82206n]) {
+      assert.deepEqual(await approvals(id), {
+        delegate: LEAVER,
+        claimer: "0x0000000000000000000000000000000000000000",
+      });
+    }
+    await account(page, 53350).getByText("Left the Carbon Impact automation.").waitFor();
+  });
+
   test("an ended lock and another owner's accounts offer nothing to tick", async () => {
     const { page } = await open({ owner: ENDED });
     await page.getByRole("button", { name: "Test Wallet" }).click();
@@ -356,7 +381,8 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await page.getByLabel("See the accounts of an address:").fill(MEMBER);
     await page.getByRole("button", { name: "Show the accounts" }).click();
     await page.getByText("Connect as this address to join or leave with its accounts.").waitFor();
-    assert.equal(await page.locator(".leave:visible").count(), 0);
+    assert.equal(await page.locator(".pick:visible").count(), 0);
+    assert.equal(await page.locator("#pick-bar").isVisible(), false);
     assert.equal(await page.locator("#payout-form").isVisible(), false);
   });
 
@@ -364,7 +390,7 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     const { page, sent } = await open({ owner: NEWCOMER, chainId: 1, decline: true });
     await page.getByRole("button", { name: "Test Wallet" }).click();
     await page.getByText("Your wallet is on another network.").waitFor();
-    await page.getByRole("checkbox", { name: "Join with Account #141" }).check();
+    await page.getByRole("checkbox", { name: "Pick Account #141" }).check();
     await page.getByRole("button", { name: "Join with 1 account" }).click();
     await review(page).getByText("Checked ✓").waitFor();
     await review(page).getByRole("button", { name: "Switch to Base" }).click();

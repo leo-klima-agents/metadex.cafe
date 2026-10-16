@@ -44,27 +44,18 @@ test("joining sets the conduit's approval on the VotingEscrow", () => {
   assert.equal(steps[0]!.on, "Hydrex's VotingEscrow");
 });
 
-test("an account in another automation is taken out of it before it joins", () => {
-  const steps = join([account({ delegate: LIQUID_HYDREX, claimer: LIQUID_HYDREX }), account({ id: 42n })]);
-  assert.deepEqual(calls(steps), [
-    approval(LIQUID_HYDREX, 141n, false),
-    approval(CONDUIT, 141n, true),
-    approval(CONDUIT, 42n, true),
+test("an account in another automation joins directly, one call per account", () => {
+  const steps = join([
+    account({ delegate: LIQUID_HYDREX, claimer: LIQUID_HYDREX }),
+    account({ id: 42n, delegate: LOCK_MAXI, claimer: USDC_CONDUIT }),
   ]);
-  assert.equal(steps[0]!.says, "Take #141 out of the Liquid Hydrex automation.");
-});
-
-test("an account split between two other automations is taken out of both", () => {
-  const steps = join([account({ delegate: LOCK_MAXI, claimer: USDC_CONDUIT })]);
-  assert.deepEqual(calls(steps), [
-    approval(LOCK_MAXI, 141n, false),
-    approval(USDC_CONDUIT, 141n, false),
-    approval(CONDUIT, 141n, true),
-  ]);
+  assert.deepEqual(calls(steps), [approval(CONDUIT, 141n, true), approval(CONDUIT, 42n, true)]);
 });
 
 test("leaving clears the conduit's approval, and the payout address is set on the conduit", () => {
-  assert.deepEqual(calls(leave([account({ delegate: CONDUIT, claimer: CONDUIT })])), [approval(CONDUIT, 141n, false)]);
+  const steps = leave([account({ delegate: CONDUIT, claimer: CONDUIT }), account({ id: 42n, claimer: CONDUIT })]);
+  assert.deepEqual(calls(steps), [approval(CONDUIT, 141n, false), approval(CONDUIT, 42n, false)]);
+  assert.equal(steps[1]!.says, "Take #42 out of the Carbon Impact automation.");
   const step = payout(OWNER);
   assert.deepEqual(calls([step]), [
     { to: CONDUIT, data: encodeFunctionData({ abi, functionName: "setMyPayoutRecipient", args: [OWNER] }) },

@@ -30,9 +30,8 @@ Klima's executor Safe, through which the keeper acts, and the automation's deplo
 ## What the page can and cannot do
 
 - **It sends three calls only:** `setConduitApproval(conduit, tokenId, true)` on Hydrex's VotingEscrow to join, the same
-  with `false` to leave, and `setMyPayoutRecipient(address)` on the Carbon Impact automation. An account in another of
-  Hydrex's automations is taken out of it first, with `setConduitApproval(other, tokenId, false)`. That call resets the
-  account's votes and claims whatever automation it names, so it always comes before the join.
+  with `false` to leave, and `setMyPayoutRecipient(address)` on the Carbon Impact automation. Joining replaces where an
+  account's votes and claims go, so an account in another of Hydrex's automations joins directly.
 - **It checks each call before the wallet asks.** It runs the calls against Base from the owner's address, one after the
   other (`eth_simulateV1`), shows what they change and the exact calls, and sends nothing that would fail.
 - **It holds no key and has no server.** Each action ends in a wallet prompt. A wallet that sends several calls as one
@@ -107,13 +106,13 @@ Needs Node 26. Run `npm ci --ignore-scripts`, then `npm run typecheck`, `npm tes
 committing. `npm run build` writes the page to `dist/`; serve that folder with any static server to try it.
 
 `npm run test:fork` builds the page and drives it in Chromium against a copy of Base in anvil, pinned at a block. A test
-wallet acts as real owners: one joins two accounts, one of them from Liquid Hydrex; another joins from Lock Maxi and
-USDC in one batch; a member leaves and changes the payout address; and the owner of an ended lock gets nothing to tick.
-It also checks the wrong network, a refusal in the wallet, a call that would fail, and that Coinbase Wallet loads under
-the page's policy and opens its window. It needs anvil, from Foundry, and Chromium:
-`npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium's path. `BASE_RPC_URL` is the archive RPC to
-fork from, `https://mainnet.base.org` by default. With `SCREENSHOTS` set to a folder, it saves screenshots there at 390
-and 1440 px, light and dark.
+wallet acts as real owners: one joins with two accounts, one of them from Liquid Hydrex; another joins from Lock Maxi
+and USDC in one batch; a member leaves and changes the payout address; another leaves with two accounts in one batch;
+and the owner of an ended lock gets nothing to tick. It also checks the wrong network, a refusal in the wallet, a call
+that would fail, and that Coinbase Wallet loads under the page's policy and opens its window. It needs anvil, from
+Foundry, and Chromium: `npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium's path. `BASE_RPC_URL` is
+the archive RPC to fork from, `https://mainnet.base.org` by default. With `SCREENSHOTS` set to a folder, it saves
+screenshots there at 390 and 1440 px, light and dark.
 
 `src/config.ts` holds what the page trusts about the automation, and the RPCs it reads from. After a Hydrex upgrade,
 check the new contracts, then update it. `src/hydrex-conduits.json` names Hydrex's other automations, from
@@ -127,7 +126,6 @@ Actions and npm packages.
 
 - No payout history, and no amount of unclaimed rewards per account. The page cannot check that payouts happen.
 - Not inside Safe{Wallet} yet: a Safe's owners cannot use the page as a Safe App.
-- Leaving is one account at a time.
 
 ## License
 

@@ -137,15 +137,18 @@
         <p id="reading" hidden>Reading the accounts…</p>
         <div id="accounts" hidden>
           <p id="not-yours" hidden>Connect as this address to join or leave with its accounts.</p>
-          <ul id="full"></ul>
+          <ul id="full" class="accounts"></ul>
           <p id="none" hidden>No account of this address holds HYDX.</p>
           <details id="empty-accounts" hidden>
             <summary class="empty-count"></summary>
-            <ul></ul>
+            <ul class="accounts"></ul>
           </details>
-          <div id="join-bar" hidden>
-            <p>Tick the accounts that should join, then check what your wallet will ask.</p>
-            <p><button type="button" id="join" disabled>Join</button></p>
+          <div id="pick-bar" hidden>
+            <p>Tick the accounts to join or leave with, then check what your wallet will ask.</p>
+            <p class="buttons">
+              <button type="button" id="join" disabled>Join</button>
+              <button type="button" id="leave" class="secondary" disabled>Leave</button>
+            </p>
           </div>
           <p>Earning Power is shown as on Hydrex: 1.3 times the votes.</p>
         </div>
@@ -211,9 +214,9 @@
             1%), the routers, and your payout address.
           </li>
           <li>
-            <b>You can leave at any time, with one transaction per account.</b> From that moment the Carbon Impact
-            automation can no longer claim the account's rewards; what it has not claimed is yours to claim on Hydrex.
-            Your votes come back to you from the next epoch.
+            <b>You can leave at any time.</b> From that moment the Carbon Impact automation can no longer claim the
+            account's rewards; what it has not claimed is yours to claim on Hydrex. Your votes come back to you from the
+            next epoch.
           </li>
         </ul>
         <p>
@@ -263,7 +266,6 @@
             class="kind"
           ></span
           >, <span class="votes"></span> Earning Power<br /><span class="status"></span>
-          <p class="leave-bar" hidden><button type="button" class="leave secondary">Leave</button></p>
         </div>
       </li>
     </template>
@@ -331,8 +333,8 @@
       them all.
     </template>
     <template id="other">
-      <strong>In another Hydrex automation: <bdi class="automation" translate="no"></bdi>.</strong> Joining takes it out
-      first.
+      <strong>In another Hydrex automation: <bdi class="automation" translate="no"></bdi>.</strong> Joining moves it to
+      the Carbon Impact automation.
     </template>
     <template id="delegated">
       <strong

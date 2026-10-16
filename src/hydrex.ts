@@ -206,12 +206,6 @@ export const canJoin = (account: Account, now: number): boolean =>
 export const canLeave = (account: Account): boolean =>
   same(account.delegate, CONDUIT) || same(account.claimer, CONDUIT);
 
-/** Hydrex's other automations that hold the account's votes or claims. */
-export const others = (account: Account): { name: string; address: Address }[] =>
-  (conduits as { name: string; address: Address }[]).filter(
-    ({ address }) => !same(address, CONDUIT) && (same(address, account.delegate) || same(address, account.claimer)),
-  );
-
 /** The checks that fail, by the id of their message on the page; empty when the chain matches config.ts. */
 export async function check(): Promise<string[]> {
   const [chainId, conduitHash, impl, [veToken, voter, payoutToken, config, logic]] = await Promise.all([
