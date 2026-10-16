@@ -1,0 +1,72 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: fsfe/reuse-action@676e2d560c9a403aa252096d99fcab3e1132b0f5 # v6.0.0
+
+  node:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx prettier --check .
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # A second build, from a fresh clone elsewhere, must give the same files.
+      - run: |
+          git clone --quiet . "$RUNNER_TEMP/second"
+          cd "$RUNNER_TEMP/second"
+          npm ci --ignore-scripts
+          npm run build
+          diff -r "$GITHUB_WORKSPACE/dist" dist
+      # A release tag must match the version the page shows in its footer.
+      - if: startsWith(github.ref, 'refs/tags/v')
+        run: test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
+      - if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: dist
+
+  # A tag v… publishes the build on GitHub Pages, then checks that Pages serves the same files.
+  pages:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [lint, node]
+    runs-on: ubuntu-26.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    concurrency: pages
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: github-pages
+      # The query string skips copies the CDN cached before this deployment.
+      - env:
+          URL: ${{ steps.deploy.outputs.page_url }}
+        run: |
+          mkdir site
+          tar -xf artifact.tar -C site
+          cd site
+          for file in $(find . -type f | sort); do
+            curl -fsS --retry 5 "$URL${file#./}?$GITHUB_SHA" | cmp - "$file"
+          done

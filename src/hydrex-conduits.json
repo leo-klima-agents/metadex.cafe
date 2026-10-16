@@ -1,0 +1,58 @@
+[
+  {
+    "name": "Hydrex Lock Maxi",
+    "address": "0x53388a4E98Bb56F8571433F5461010Fc287929d3"
+  },
+  {
+    "name": "Liquid Hydrex",
+    "address": "0x809F8175b8F60960dF2bc7a78a7C4Eb04d138AF0"
+  },
+  {
+    "name": "USDC",
+    "address": "0xE57b3Ea02336B9b418cA523aB5aD6f479d93bD1D"
+  },
+  {
+    "name": "Bitcoin",
+    "address": "0x65CD36F27bB1B4Ae54289622dF43A063c1e7F829"
+  },
+  {
+    "name": "Carbon Impact",
+    "address": "0xdE91885cF35ac57DF0c4A75c16862127dBe8317c"
+  },
+  {
+    "name": "TGN",
+    "address": "0x24a0C9A719B2d280BC1AA407b5Bc2821fcBC3244"
+  },
+  {
+    "name": "Ethereum",
+    "address": "0xf34F3A2f447Bc1A93553040E104bBd154221692A"
+  },
+  {
+    "name": "WMTX",
+    "address": "0xD656bd0E433baA17Ed1a869a7AC9A1C3303DFddD"
+  },
+  {
+    "name": "Bluechips",
+    "address": "0x612F40755A99017a7e61F35A555e9B3Ae5951b5C"
+  },
+  {
+    "name": "Onchain cbAssets",
+    "address": "0x92D048cbfea68d7A5e312E6c68Ba0B798E5F9CaD"
+  },
+  {
+    "name": "EURC",
+    "address": "0xb0095571C816a6Ce04Ba36C09cf01B9CB3da870c"
+  },
+  {
+    "name": "Base Gaming",
+    "address": "0x6e374F10475D42A5A6AF1Fb11574FE91cBC658b9"
+  },
+  {
+    "name": "Base Memes",
+    "address": "0x528Ad8A5630D777285F72DF8390123AE437B3F62"
+  },
+  {
+    "name": "Reppo (Vote & Earn)",
+    "address": "0x9691Db8C4C8a36E857BAd6ea7125fC6CCF09428a"
+  }
+]

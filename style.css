@@ -1,0 +1,78 @@
+/* The browser's own look, light or dark. Only the controls are styled. */
+:root {
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+  --accent: light-dark(#0b6b64, #5cc8bb);
+  --on-accent: light-dark(#ffffff, #06201d);
+  --edge: light-dark(#7d8f8b, #5f7470);
+  --bad: light-dark(#b3261e, #ff8c7f);
+  --bad-soft: light-dark(#fbe6e3, #3a1b18);
+}
+body {
+  max-inline-size: 40rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+  padding-block-end: 2rem;
+  overflow-wrap: anywhere;
+}
+th,
+td {
+  padding-block: 0.25rem;
+  padding-inline: 0 1rem;
+  text-align: start;
+  vertical-align: top;
+}
+.shares :is(th, td):last-child {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+li + li {
+  margin-block-start: 0.5rem;
+}
+
+/* Controls */
+a {
+  color: var(--accent);
+}
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+button {
+  min-block-size: 2.75rem;
+  padding-block: 0.5rem;
+  padding-inline: 1.25rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+input {
+  box-sizing: border-box;
+  inline-size: 100%;
+  padding-block: 0.5rem;
+  padding-inline: 0.75rem;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  font: inherit;
+  font-family: ui-monospace, monospace;
+}
+input:user-invalid {
+  border-color: var(--bad);
+}
+summary {
+  cursor: pointer;
+}
+.notice {
+  padding-block: 0.5rem;
+  padding-inline: 0.75rem;
+  border-radius: 8px;
+  background: var(--bad-soft);
+}

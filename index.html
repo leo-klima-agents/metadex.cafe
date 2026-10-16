@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src https://mainnet.base.org https://base-rpc.publicnode.com https://base.drpc.org; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <title>metadex.cafe</title>
+    <meta
+      name="description"
+      content="Let the Carbon Impact automation vote with your Hydrex accounts and claim their rewards. You can leave at any time."
+    />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="style.css" />
+    <script type="module" src="main.js"></script>
+  </head>
+  <body>
+    <header>
+      <h1>metadex.cafe</h1>
+      <p>
+        Let an automation vote with your Hydrex accounts every week and claim their rewards. You can leave at any time.
+      </p>
+    </header>
+    <main>
+      <noscript><p class="notice">The numbers on this page are read from Base, which needs JavaScript.</p></noscript>
+      <p id="error" class="notice" role="alert" hidden>
+        <strong>Reading Base failed.</strong> Check the connection and <a href="">try again</a>.
+      </p>
+      <div id="checks" class="notice" role="alert" hidden>
+        <strong>This page's checks of the Carbon Impact automation failed.</strong> Joining stays off until the page is
+        updated.
+        <ul>
+          <li id="chain" hidden>The RPC serves another chain than Base.</li>
+          <li id="code" hidden>The Carbon Impact automation runs other code than this page knows.</li>
+          <li id="contracts" hidden>The Carbon Impact automation points to another VotingEscrow or Voter.</li>
+          <li id="token" hidden>The Carbon Impact automation pays in another token than kVCM.</li>
+          <li id="approvals" hidden>Hydrex changed what joining the Carbon Impact automation approves.</li>
+          <li id="upgrade" hidden>Hydrex upgraded its VotingEscrow.</li>
+          <li id="logic" hidden>Hydrex changed its VotingEscrow's approval logic.</li>
+        </ul>
+      </div>
+
+      <section>
+        <h2>The Carbon Impact automation</h2>
+        <p>
+          Klima runs it. Every week, Klima's keeper votes with the accounts in it, then the Carbon Impact automation
+          claims their rewards, swaps them into kVCM, retires a share as carbon credits and pays the rest to their
+          owners.
+        </p>
+        <table>
+          <tr>
+            <th scope="row">Retired so far</th>
+            <td><span class="tonnes">…</span> tonnes of carbon credits</td>
+          </tr>
+          <tr>
+            <th scope="row">Share retired</th>
+            <td><span class="retired">…</span> of the kVCM</td>
+          </tr>
+          <tr>
+            <th scope="row">Pays out</th>
+            <td>kVCM, after a fee of <span class="fee">…</span> to Hydrex</td>
+          </tr>
+          <tr>
+            <th scope="row">Earning Power this week</th>
+            <td class="power">…</td>
+          </tr>
+        </table>
+
+        <h3>This week</h3>
+        <p>
+          <time class="week-start">…</time> to <time class="week-end">…</time>, 00:00 UTC. The next week starts in
+          <span class="countdown">…</span>, at <time class="local">…</time> your time. Klima's keeper votes just before
+          the week ends and pays out right after. Joining and leaving count from the next week.
+        </p>
+
+        <h3>Latest vote</h3>
+        <p class="voted">…</p>
+        <details id="split" hidden>
+          <summary>How it split across <span class="pools">…</span></summary>
+          <table class="shares">
+            <thead>
+              <tr>
+                <th>Pool</th>
+                <th>Share</th>
+              </tr>
+            </thead>
+            <tbody translate="no"></tbody>
+          </table>
+        </details>
+      </section>
+
+      <section>
+        <h2>Accounts</h2>
+        <search>
+          <form>
+            <p>
+              <label for="address">See the accounts of an address:</label>
+              <input
+                id="address"
+                required
+                pattern="\s*0x[0-9a-fA-F]{40}\s*"
+                title="0x followed by 40 hexadecimal characters"
+                data-typo="This address has a typo: its capital and small letters do not match its checksum."
+                placeholder="0x…"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                enterkeyhint="search"
+              />
+            </p>
+            <p><button>Show the accounts</button></p>
+          </form>
+        </search>
+        <p id="reading" hidden>Reading the accounts…</p>
+        <div id="accounts" hidden>
+          <ul id="full"></ul>
+          <p id="none" hidden>No account of this address holds HYDX.</p>
+          <details id="empty-accounts" hidden>
+            <summary class="empty-count"></summary>
+            <ul></ul>
+          </details>
+          <p>Earning Power is shown as on Hydrex: 1.3 times the votes.</p>
+        </div>
+      </section>
+
+      <section id="payout" hidden>
+        <h2>Payout address</h2>
+        <p>
+          Payouts for <code class="owner" translate="no"></code> go to <code class="payout" translate="no"></code
+          ><span id="itself">, the address itself</span>.
+        </p>
+        <p>
+          One address takes the payouts for all of an owner's accounts in the Carbon Impact automation. Hydrex's admin
+          can also change it.
+        </p>
+      </section>
+
+      <section>
+        <h2>What joining allows</h2>
+        <p>From the contracts' current settings:</p>
+        <ul>
+          <li>
+            <b>The Carbon Impact automation votes with the account</b> from the next week, which starts on Thursday at
+            00:00 UTC. Meanwhile you can't vote with it yourself.
+          </li>
+          <li>
+            <strong
+              >The Carbon Impact automation can claim the account's rewards from the moment it joins, including any you
+              have not claimed from past weeks.</strong
+            >
+            <a href="https://www.hydrex.fi/accounts">Claim them on Hydrex first</a> to keep them as they are.
+          </li>
+          <li>
+            <b>It swaps, retires and pays.</b> Right after each week ends, Klima's keeper claims the rewards. The Carbon
+            Impact automation swaps them into kVCM (Klima Protocol kVCM) through routers Hydrex approved, retires
+            <span class="retired">…</span> of it as carbon credits in the name "<bdi class="entity" translate="no"
+              >…</bdi
+            >", and sends the rest to your payout address. Hydrex's fee is <span class="fee">…</span> today; swaps have
+            their usual costs.
+          </li>
+          <li><b>Your HYDX stays in your account,</b> and the account stays in your wallet. Nothing is transferred.</li>
+          <li>
+            <b>Hydrex can change these settings:</b> the share retired (up to 100%), the payout tokens, the fee (up to
+            1%), the routers, and your payout address.
+          </li>
+          <li>
+            <b>You can leave at any time, with one transaction per account.</b> From that moment the Carbon Impact
+            automation can no longer claim the account's rewards; what it has not claimed is yours to claim on Hydrex.
+            Your votes come back to you from the next week.
+          </li>
+        </ul>
+        <p>
+          Contracts:
+          <a href="https://basescan.org/address/0xdE91885cF35ac57DF0c4A75c16862127dBe8317c"
+            >the Carbon Impact automation</a
+          >,
+          <a href="https://basescan.org/address/0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1">Hydrex's VotingEscrow</a>
+          and <a href="https://basescan.org/address/0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b">Hydrex's Voter</a>.
+          Code: <a href="https://github.com/hydrexfi/hydrex-periphery">the automation's source</a> and
+          <a href="https://github.com/ldeso/hydrex-keeper">Klima's keeper</a>.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <hr />
+      <p>
+        Open source, published from <code translate="no">github.com/ldeso/metadex.cafe</code>. Official address:
+        <code translate="no">https://metadex.cafe/</code>
+      </p>
+      <p>
+        Version %VERSION%, commit <code translate="no">%COMMIT%</code>.
+        <a href="https://github.com/ldeso/metadex.cafe#checking-a-build">Check that this is the official build</a>.
+      </p>
+    </footer>
+
+    <template id="account">
+      <li>
+        <b><bdi class="name" translate="no">Account</bdi> <code class="id" translate="no"></code></b><br /><span
+          class="kind"
+        ></span
+        >, <span class="votes"></span> Earning Power<br /><span class="status"></span>
+      </li>
+    </template>
+    <template id="in">
+      <strong>In the Carbon Impact automation.</strong> It votes with this account and claims its rewards.
+    </template>
+    <template id="joined">
+      <strong>Joined the Carbon Impact automation.</strong> It counts from the week starting <time class="date"></time>.
+    </template>
+    <template id="left">
+      <strong>Left the Carbon Impact automation.</strong> Its votes count for the automation until
+      <time class="date"></time>, but the automation can no longer claim its rewards.
+    </template>
+    <template id="partly">
+      <strong>Partly in the Carbon Impact automation.</strong> Only some of its approvals are set; joining again sets
+      them all.
+    </template>
+    <template id="other">
+      <strong>In another Hydrex automation: <bdi class="automation" translate="no"></bdi>.</strong> Joining takes it out
+      first.
+    </template>
+    <template id="delegated">
+      <strong>Delegated to <code class="address" translate="no"></code>.</strong> Not a known automation. Joining moves
+      its votes to the Carbon Impact automation.
+    </template>
+    <template id="self"><strong>Not in an automation.</strong> Its owner votes with it.</template>
+    <template id="ended">
+      <strong>Lock ended.</strong> No votes to give. <a href="https://www.hydrex.fi/accounts">Extend it on Hydrex</a>.
+    </template>
+    <template id="empty"><strong>Empty.</strong> No HYDX in it.</template>
+  </body>
+</html>

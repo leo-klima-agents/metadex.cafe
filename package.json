@@ -1,0 +1,32 @@
+{
+  "name": "metadex.cafe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Static page for joining and leaving the Carbon Impact automation with Hydrex accounts",
+  "license": "MIT",
+  "type": "module",
+  "homepage": "https://metadex.cafe/",
+  "repository": "github:ldeso/metadex.cafe",
+  "engines": {
+    "node": "26"
+  },
+  "scripts": {
+    "build": "node scripts/build.ts",
+    "format": "prettier --write .",
+    "test": "node --test",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "viem": "2.57.7"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "esbuild": "0.28.2",
+    "prettier": "3.9.10",
+    "typescript": "7.0.2"
+  },
+  "prettier": {
+    "printWidth": 120,
+    "proseWrap": "always"
+  }
+}
