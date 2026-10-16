@@ -2,7 +2,7 @@
 
 Findings for the relay page, checked on Base on 2026-10-15 between blocks 52,653,442 and 52,655,496. Screenshots of
 other sites are kept out of this repository. A script, `scripts/members.ts`, took the members snapshot; it was removed
-since and stays in the git history. The other checks are described well enough to redo with `cast` or a short script.
+since. The other checks are described well enough to redo with `cast` or a short script.
 
 ## What changed from the plan
 
@@ -334,21 +334,22 @@ Taken by the user on 2026-10-15, after this research:
    conduit could also pay AZUSD.
 3. **One vote shown.** The page shows the keeper's vote just before the week ends and never its Tuesday vote: no marker
    on the week, no date for the first vote with a new account, and the latest vote is labelled "last week" or "this
-   week" rather than with its time.
+   week". Decision 14 adds its time.
 4. **Payouts right after the flip.** The keeper claims and pays right after each week ends, on Thursday at 00:00 UTC.
    The page says so.
 5. **Upgrade pins.** The startup checks also pin the VotingEscrow's implementation and its approval logic, by address
    and code hash. An upgrade of either turns writes off until `relays.json` is updated.
 6. **Names.** The product was first "metaDEX Relays", in a repository named `metadex-relays`. On 2026-10-16 the user
    named both after the domain: `relays.metadex.cafe` at first, then, the same day, `metadex.cafe`. The repository is
-   published from `ldeso`.
+   published from `ldeso`. Later that day the user named the product metaDEX Café; the domain, the repository and the
+   package keep `metadex.cafe`.
 7. **GitHub Pages.** `ldeso` publishes it on GitHub Pages. First planned at `https://ldeso.github.io/metadex-relays/`,
    it is served at `https://metadex.cafe/` since 2026-10-16.
 8. **Earning Power, like Hydrex.** The page shows votes × 1.3 and says so once. Vote shares are unaffected.
 9. **A plain page.** After seeing the read-only page, the user asked for the simplest CSS, even at the cost of the
    visual identity. The page is now headings, paragraphs, tables and lists in the browser's own style, light or dark as
    the reader's system is set. The week track, the vote bars, the cards, the icons and Direction A's colours are gone.
-   The mock-ups were removed later; the git history keeps them.
+   The mock-ups were removed later.
 10. **No page for Safe proposals.** A Safe proposes and its owners sign in Safe{Wallet}; the page does not follow the
     proposal.
 11. **"The Carbon Impact automation".** Sentences name the conduit "the Carbon Impact automation", never just "Carbon
@@ -359,8 +360,13 @@ Taken by the user on 2026-10-15, after this research:
 13. **A minimal repository.** On 2026-10-16 the user asked for the smallest repository. Removed: the mock-ups, the
     hallway-test script, the dependency report for lockfile changes, `scripts/members.ts`, the size budget, the test for
     invisible characters, the development server, and the wallet packages and CSP origins that nothing uses yet. This
-    file lost its sections on personas, Hydrex's app, other relays, comparable interfaces and design checks. The git
-    history keeps all of them.
+    file lost its sections on personas, Hydrex's app, other relays, comparable interfaces and design checks.
+    [earlier-design.md](earlier-design.md) keeps the removed text and the wallet set-up.
+14. **The vote's time.** On 2026-10-16 the user read "Last week" for a vote cast three seconds before the flip, when it
+    was already Thursday in their time zone. The latest vote now also gives its time in the reader's time zone and how
+    long before the week's end it was cast.
+15. **No "0%" fee.** When Hydrex takes no fee, the payouts row says only "kVCM", and what joining allows says "Hydrex
+    takes no fee today". A fee shows only when there is one.
 
 Still open: how much an account has not claimed yet. It would need reads of every bribe the account earned in; it is
 left for later.

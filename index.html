@@ -9,7 +9,7 @@
       content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src https://mainnet.base.org https://base-rpc.publicnode.com https://base.drpc.org; base-uri 'none'; form-action 'none'"
     />
     <meta name="referrer" content="no-referrer" />
-    <title>metadex.cafe</title>
+    <title>metaDEX Café</title>
     <meta
       name="description"
       content="Let the Carbon Impact automation vote with your Hydrex accounts and claim their rewards. You can leave at any time."
@@ -20,7 +20,7 @@
   </head>
   <body>
     <header>
-      <h1>metadex.cafe</h1>
+      <h1>metaDEX Café</h1>
       <p>
         Let an automation vote with your Hydrex accounts every week and claim their rewards. You can leave at any time.
       </p>
@@ -62,7 +62,9 @@
           </tr>
           <tr>
             <th scope="row">Pays out</th>
-            <td>kVCM, after a fee of <span class="fee">…</span> to Hydrex</td>
+            <td>
+              kVCM<span class="with-fee" hidden>, after a fee of <span class="fee">…</span> to Hydrex</span>
+            </td>
           </tr>
           <tr>
             <th scope="row">Earning Power this week</th>
@@ -159,8 +161,9 @@
             Impact automation swaps them into kVCM (Klima Protocol kVCM) through routers Hydrex approved, retires
             <span class="retired">…</span> of it as carbon credits in the name "<bdi class="entity" translate="no"
               >…</bdi
-            >", and sends the rest to your payout address. Hydrex's fee is <span class="fee">…</span> today; swaps have
-            their usual costs.
+            >", and sends the rest to your payout address. <span class="no-fee" hidden>Hydrex takes no fee today.</span
+            ><span class="with-fee" hidden>Hydrex's fee is <span class="fee">…</span> today.</span> Swaps have their
+            usual costs.
           </li>
           <li><b>Your HYDX stays in your account,</b> and the account stays in your wallet. Nothing is transferred.</li>
           <li>

@@ -38,6 +38,11 @@ function show(id: string, shown = true): void {
   document.getElementById(id)!.hidden = !shown;
 }
 
+/** Shows or hides every element with this class. */
+function showAll(name: string, shown: boolean): void {
+  for (const element of document.querySelectorAll<HTMLElement>(`.${name}`)) element.hidden = !shown;
+}
+
 function clone(template: string): DocumentFragment {
   return (document.getElementById(template) as HTMLTemplateElement).content.cloneNode(true) as DocumentFragment;
 }
@@ -61,6 +66,8 @@ async function showRelay(): Promise<void> {
   fill(document, "tonnes", units(tonnes));
   fill(document, "retired", bps(retireBps));
   fill(document, "fee", bps(feeBps));
+  showAll("no-fee", feeBps === 0n);
+  showAll("with-fee", feeBps > 0n);
   fill(document, "power", earningPower(votes));
   fill(document, "entity", entity);
   const start = weekStart(seconds());
@@ -70,10 +77,10 @@ async function showRelay(): Promise<void> {
     !lastVoted || !pools.length
       ? "None yet."
       : lastVoted >= start
-        ? "This week. It can change until the week ends."
+        ? `Cast this week, on ${local(lastVoted)} your time. It can change until the week ends.`
         : lastVoted >= start - WEEK
-          ? "Last week."
-          : `The week of ${day(weekStart(lastVoted))}.`,
+          ? `Cast on ${local(lastVoted)} your time, ${countdown(start - lastVoted)} before last week ended.`
+          : `Cast in the week of ${day(weekStart(lastVoted))}.`,
   );
   const total = pools.reduce((sum, pool) => sum + pool.votes, 0n);
   const rows = document.querySelector<HTMLTableElement>(".shares")!.tBodies[0]!;

@@ -1,4 +1,4 @@
-# metadex.cafe
+# metaDEX Café
 
 The static page at <https://metadex.cafe/> for joining and leaving the Klima "Carbon Impact" automation with Hydrex
 accounts on Base. It shows the automation's settings and latest vote, the week, and the accounts of any address with
