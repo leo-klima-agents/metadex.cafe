@@ -19,10 +19,8 @@ function commit(): string {
 const { version } = JSON.parse(readFileSync(`${ROOT}/package.json`, "utf8")) as { version: string };
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT);
-await esbuild.build({
+const common: esbuild.BuildOptions = {
   absWorkingDir: ROOT,
-  entryPoints: ["src/main.ts"],
-  outfile: `${OUT}/main.js`,
   bundle: true,
   format: "esm",
   target: "es2022",
@@ -30,7 +28,16 @@ await esbuild.build({
   charset: "utf8",
   legalComments: "linked",
   logLevel: "warning",
-});
+};
+// Coinbase's SDK is bundled on its own, with the parts of viem it uses, and loaded only when someone picks Coinbase
+// Wallet. Splitting would put those parts in a chunk that every visitor loads.
+const coinbase: esbuild.Plugin = {
+  name: "coinbase",
+  setup: (build) =>
+    build.onResolve({ filter: /^\.\/coinbase\.ts$/ }, () => ({ path: "./coinbase.js", external: true })),
+};
+await esbuild.build({ ...common, entryPoints: ["src/main.ts"], outfile: `${OUT}/main.js`, plugins: [coinbase] });
+await esbuild.build({ ...common, entryPoints: ["src/coinbase.ts"], outfile: `${OUT}/coinbase.js` });
 const html = readFileSync(`${ROOT}/index.html`, "utf8");
 writeFileSync(`${OUT}/index.html`, html.replace("%VERSION%", version).replace("%COMMIT%", commit().slice(0, 7)));
 for (const file of ["manifest.json", "icon.svg", "style.css"]) copyFileSync(`${ROOT}/${file}`, `${OUT}/${file}`);

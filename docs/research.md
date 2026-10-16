@@ -324,6 +324,48 @@ Headers rechecked with `curl`:
 
 Milestone 5 tests the page itself inside Safe{Wallet}.
 
+## Writes
+
+Checked for the wallet milestone on 2026-10-16, on Base at block 52,694,000 and on an anvil fork of it.
+
+- **Members.** 22 accounts, held by 15 owners.
+- **Leaving resets, whatever it names.** `setConduitApproval(conduit, tokenId, false)` sets the delegate back to the
+  owner and clears the claim redirect for any active conduit, whether or not that conduit holds them. Taking an account
+  out of another automation must therefore come before the join: after it, it would undo the join. It also clears that
+  automation's other approvals: leaving Hydrex Lock Maxi clears its ERC-5725 claim approval (action 1), which joining
+  would leave in place. The fork tests show both.
+- **Two errors.** The approval logic reverts with "Invalid conduit type" for an inactive conduit and "Not token owner"
+  when the sender does not own the account.
+- **The payout address.** `setMyPayoutRecipient(address)` stores any address for the sender and never reverts. The zero
+  address means the owner itself.
+- **Simulation.** `eth_simulateV1` runs calls one after the other, each on the state the one before left.
+  `mainnet.base.org` and `base-rpc.publicnode.com` serve it; `base.drpc.org` was rate-limited. Anvil 1.5.1 serves it
+  too.
+- **Old state.** `mainnet.base.org` serves it, so a fork can be pinned to a block without a private RPC. Publicnode asks
+  for a token.
+- **Gas depends on the time.** The VotingEscrow's checkpoints make the gas of a join or a leave depend on the block's
+  time. Base estimated 347,115 gas to take #2439 out of USDC. Anvil estimates at another time than it mines at, and its
+  estimates fell up to 16% short, so the fork tests' wallet sets a fixed limit.
+- **Coinbase's SDK 4.4.0** adds three style elements, for the Coinbase Wallet app's QR code, its snackbar and its
+  redirect dialog; the page's policy allows them by their hashes. It sends a `HEAD` request to the page's own URL to
+  read its `Cross-Origin-Opener-Policy`, so `connect-src` includes `'self'`. It has no telemetry.
+- **Sizes,** gzipped: the first load is 23.1 KB, up from 18.9 KB, and Coinbase's SDK 37.5 KB, loaded only when someone
+  picks it. With esbuild's splitting, the parts of viem that both use went into a chunk on the first load, 38 KB in all,
+  so Coinbase's SDK is now built on its own.
+
+### Choices in the wallet milestone
+
+Made while building it, for the user to confirm:
+
+1. **No wagmi.** The page finds wallets with EIP-6963 and talks to them with EIP-1193 requests. Its runtime packages are
+   `viem` and `@coinbase/wallet-sdk`, not the five of [earlier-design.md](earlier-design.md#packages); milestone 5 adds
+   Safe's two.
+2. **Leaving stays on** when a startup check fails: it only takes the account away from the automation.
+3. **Always out of another automation first,** even one whose approvals the join replaces anyway. It costs one more
+   transaction without batching, and clears whatever else that automation holds.
+4. **Leaving is one account at a time,** from the account's row. Joining takes several, ticked.
+5. **The wallet sets the gas.** The page sends no gas limit.
+
 ## Decisions
 
 Taken by the user on 2026-10-15, after this research:

@@ -1,4 +1,12 @@
-import { decodeFunctionResult, encodeFunctionData, keccak256, type Abi, type Address, type Hex } from "viem";
+import {
+  decodeErrorResult,
+  decodeFunctionResult,
+  encodeFunctionData,
+  keccak256,
+  type Abi,
+  type Address,
+  type Hex,
+} from "viem";
 import { multicall3Abi } from "./abi.ts";
 import { MULTICALL3, RPCS } from "./config.ts";
 
@@ -63,4 +71,43 @@ export const codeHash = async (address: Address): Promise<Hex> =>
 /** The implementation behind an EIP-1967 proxy. */
 export async function implementation(proxy: Address): Promise<Address> {
   return `0x${(await rpc<Hex>("eth_getStorageAt", [proxy, IMPLEMENTATION_SLOT, "latest"])).slice(-40)}`;
+}
+
+/** Runs calls one after the other from an address, without sending them. The first that fails and why, if any. */
+export async function simulate(
+  from: Address,
+  calls: { to: Address; data: Hex }[],
+): Promise<{ index: number; reason: string } | undefined> {
+  type Result = { status: Hex; returnData: Hex; error?: { message?: string } };
+  const [block] = await rpc<{ calls: Result[] }[]>("eth_simulateV1", [
+    { blockStateCalls: [{ calls: calls.map(({ to, data }) => ({ from, to, data })) }] },
+    "latest",
+  ]);
+  const results = block?.calls ?? [];
+  if (results.length !== calls.length) throw new Error("No Base RPC simulated the calls.");
+  const index = results.findIndex(({ status }) => status !== "0x1");
+  if (index < 0) return undefined;
+  const { returnData, error } = results[index]!;
+  return { index, reason: revertReason(returnData) ?? error?.message ?? "no reason given" };
+}
+
+/** The message of a revert with a reason string, such as "Not token owner". */
+function revertReason(data: Hex): string | undefined {
+  try {
+    const { args } = decodeErrorResult({ abi: [], data });
+    return String(args?.[0]);
+  } catch {
+    return undefined;
+  }
+}
+
+export const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Waits until Base includes a transaction, then whether it succeeded. */
+export async function included(hash: Hex): Promise<boolean> {
+  for (;;) {
+    const receipt = await rpc<{ status: Hex } | null>("eth_getTransactionReceipt", [hash]).catch(() => null);
+    if (receipt) return receipt.status === "0x1";
+    await sleep(2_000);
+  }
 }
