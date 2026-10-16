@@ -333,7 +333,8 @@ Checked for the wallet milestone on 2026-10-16, on Base at block 52,694,000 and 
   owner and clears the claim redirect for any active conduit, whether or not that conduit holds them. Taking an account
   out of another automation must therefore come before the join: after it, it would undo the join. It also clears that
   automation's other approvals: leaving Hydrex Lock Maxi clears its ERC-5725 claim approval (action 1), which joining
-  would leave in place. The fork tests show both.
+  would leave in place. The fork tests show both. That approval allows nothing in the VotingEscrow today: its `claim`,
+  which takes the HYDX out of a timed lock, accepts only the owner and ERC-721 approvals.
 - **Two errors.** The approval logic reverts with "Invalid conduit type" for an inactive conduit and "Not token owner"
   when the sender does not own the account.
 - **The payout address.** `setMyPayoutRecipient(address)` stores any address for the sender and never reverts. The zero
@@ -353,18 +354,15 @@ Checked for the wallet milestone on 2026-10-16, on Base at block 52,694,000 and 
   picks it. With esbuild's splitting, the parts of viem that both use went into a chunk on the first load, 38 KB in all,
   so Coinbase's SDK is now built on its own.
 
-### Choices in the wallet milestone
+### Open choices in the wallet milestone
 
-Made while building it, for the user to confirm:
+Made while building it; the user asked why:
 
-1. **No wagmi.** The page finds wallets with EIP-6963 and talks to them with EIP-1193 requests. Its runtime packages are
-   `viem` and `@coinbase/wallet-sdk`, not the five of [earlier-design.md](earlier-design.md#packages); milestone 5 adds
-   Safe's two.
-2. **Leaving stays on** when a startup check fails: it only takes the account away from the automation.
-3. **Always out of another automation first,** even one whose approvals the join replaces anyway. It costs one more
-   transaction without batching, and clears whatever else that automation holds.
-4. **Leaving is one account at a time,** from the account's row. Joining takes several, ticked.
-5. **The wallet sets the gas.** The page sends no gas limit.
+1. **Always out of another automation first,** even one whose approvals the join replaces anyway. For 13 of Hydrex's 14
+   other automations, the end state is the same either way, and without batching it costs one more transaction. Only
+   Lock Maxi holds an approval that joining leaves in place, and the VotingEscrow ignores it today.
+2. **Leaving is one account at a time,** from the account's row, as in the earlier design. Joining takes several,
+   ticked. The large Safe has 5 accounts in the automation: leaving with all of them would take 5 Safe transactions.
 
 ## Decisions
 
@@ -412,6 +410,13 @@ Taken by the user on 2026-10-15, after this research:
 16. **UTC and epochs.** Later that day the user asked for UTC everywhere for now, so the page gives no time in the
     reader's time zone, and for "epoch" rather than "week", as Hydrex says. kVCM needs no gloss, and every address the
     page shows links to its page on Basescan.
+
+17. **No wagmi.** On 2026-10-16 the user confirmed that the page finds wallets with EIP-6963 and talks to them with
+    EIP-1193 requests, without wagmi. Its runtime packages are `viem` and `@coinbase/wallet-sdk`; milestone 5 adds
+    Safe's two.
+18. **Leaving stays on** when a startup check fails: it only takes the account away from the automation. Joining and
+    changing the payout address stay off.
+19. **The wallet sets the gas.** The page sends no gas limit.
 
 Still open: how much an account has not claimed yet. It would need reads of every bribe the account earned in; it is
 left for later.
