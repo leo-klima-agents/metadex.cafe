@@ -35,15 +35,16 @@ views.
 
 ## Contents
 
-| Part                                      | What it holds                                                                                                                                                               |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [1. The site today](1-audit.md)           | Inventory, measurements and screenshots; what must survive; 15 problems rated by severity                                                                                   |
-| [2. Hydrex users](2-personas.md)          | Hydrex in brief; the numbers that shape the audience; four proto-personas; jobs to be done                                                                                  |
-| [3. Comparable products](3-patterns.md)   | Vote automation products, site and app splits, signing research, carbon impact, time and status patterns                                                                    |
-| [4. Organisations](4-organisations.md)    | Six organisations studied (one page reordered, two pages, two pages and a reference, app first, a menu, a wizard) and a scored comparison                                   |
-| [5. Proposal](5-proposal.md)              | The recommended organisation: sitemap, entry points, each page's blocks in order, account groups, the join flow, states, wireframes, phasing                                |
-| [6. Validation](6-validation.md)          | The questions to answer with real users first, methods, test tasks and signals of success                                                                                   |
-| [7. On-chain checks](7-onchain-checks.md) | What happens to accounts in stopped automations, whether the name on retirements can change, and what showing payouts would take, from Hydrex's verified contracts and Base |
+| Part                                          | What it holds                                                                                                                                                               |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [1. The site today](1-audit.md)               | Inventory, measurements and screenshots; what must survive; 15 problems rated by severity                                                                                   |
+| [2. Hydrex users](2-personas.md)              | Hydrex in brief; the numbers that shape the audience; four proto-personas; jobs to be done                                                                                  |
+| [3. Comparable products](3-patterns.md)       | Vote automation products, site and app splits, signing research, carbon impact, time and status patterns                                                                    |
+| [4. Organisations](4-organisations.md)        | Six organisations studied (one page reordered, two pages, two pages and a reference, app first, a menu, a wizard) and a scored comparison                                   |
+| [5. Proposal](5-proposal.md)                  | The recommended organisation: sitemap, entry points, each page's blocks in order, account groups, the join flow, states, wireframes, phasing                                |
+| [6. Validation](6-validation.md)              | The questions to answer with real users first, methods, test tasks and signals of success                                                                                   |
+| [7. On-chain checks](7-onchain-checks.md)     | What happens to accounts in stopped automations, whether the name on retirements can change, and what showing payouts would take, from Hydrex's verified contracts and Base |
+| [8. How the votes did](8-vote-performance.md) | Whether to show what the automation's votes earned last epoch, and how the page can read it from Base without a server                                                      |
 
 ## The personas
 
