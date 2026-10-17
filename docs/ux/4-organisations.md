@@ -1,16 +1,17 @@
 # 3. Organisations studied
 
 Six ways to organise the site, from the smallest change to the largest. Each is described by its pages, the path of a
-first visit and a return visit, and how it serves the personas in [2. Personas](2-personas.md). They are compared at the
-end.
+first visit and a return visit, and how it serves the personas in [2. Hydrex users](2-personas.md). They are compared at
+the end.
 
 All six keep what the audit says must survive (honest disclosures, two calls, checks, leaving always works, Safe App)
 and the constraints of the site: static files, no server, no storage, one official address, a strict Content Security
 Policy and a reproducible build. More than one HTML page is possible within these: each page is a file with its own
 script and stylesheet hashes, served from the same origin.
 
-Throughout, "the three visits" are those from the audit: **deciding** (first visit), **acting** (join or leave) and
-**checking** (return visits).
+Throughout, "the visits" are those from the audit: **deciding** (first visit), **acting** (join or leave) and
+**checking** (return visits), plus a fourth that Hydrex disabling its automations created: **moving**, for a holder
+whose automation stopped and who has to find out, then choose.
 
 ---
 
@@ -129,11 +130,11 @@ metadex.cafe/accounts/                Your accounts, in any automation on the me
 metadex.cafe/how-it-works/            Reference
 ```
 
-| For                                                                               | Against                                                                                                                                                             |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Matches how a Hydrex user already chooses: between automations, on what they pay. | There is one automation today. A menu of one looks empty, and listing Hydrex's own automations would turn the site into a second Hydrex front end, with its checks. |
-| The name "Café" and the brand invite it.                                          | Every automation added widens what the page must check and what a copy could abuse; the "two calls only" promise gets harder to keep.                               |
-| The accounts page already reads which automation each account is in, by name.     | Most of the work would go into comparison and catalogue features before the core flow is fixed.                                                                     |
+| For                                                                                                                                                                   | Against                                                                                                                                                                     |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Matches how Hydrex users learnt to choose: between automations, on what they pay. With Hydrex's own disabled, the site could become where automations on Hydrex live. | There is one automation today. A menu of one looks empty, and listing Hydrex's stopped automations beside it would make the site a status board for someone else's product. |
+| The name "Café" and the brand invite it.                                                                                                                              | Every automation added widens what the page must check and what a copy could abuse; the "two calls only" promise gets harder to keep.                                       |
+| The accounts page already reads which automation each account is in, by name.                                                                                         | Most of the work would go into comparison and catalogue features before the core flow is fixed.                                                                             |
 
 ---
 
@@ -157,22 +158,24 @@ F is better read as a pattern for the join flow inside any of A to E than as an 
 
 ## Comparison
 
-Scores from 1 (poor) to 3 (good), from the audit, the personas and the comparable products in
-[2. Personas](2-personas.md).
+Scores from 1 (poor) to 3 (good), from [the audit](1-audit.md), [the personas](2-personas.md) and
+[the comparable products](3-patterns.md).
 
 | Criterion                                                                      | A   | B   | C   | D   | E   | F   |
 | ------------------------------------------------------------------------------ | --- | --- | --- | --- | --- | --- |
 | Deciding: a first visitor understands what, why, cost and risk before a wallet | 2   | 3   | 3   | 1   | 2   | 3   |
 | Acting: from arrival to a reviewed join or leave                               | 2   | 3   | 3   | 3   | 2   | 2   |
 | Checking: a member sees status and what comes next at once                     | 2   | 3   | 3   | 3   | 3   | 1   |
+| Moving: a holder whose automation stopped learns it, and what to do            | 2   | 3   | 3   | 2   | 3   | 2   |
 | Trust: claims are verifiable and the risks are linkable                        | 2   | 2   | 3   | 1   | 2   | 2   |
 | Safe{Wallet} and wallet browsers                                               | 2   | 3   | 3   | 3   | 2   | 2   |
 | Room for what comes later (history, impact, another automation)                | 1   | 3   | 3   | 2   | 3   | 1   |
 | Keeps the attack surface and the checks small                                  | 3   | 3   | 3   | 3   | 1   | 3   |
 | Cost to build and keep consistent                                              | 3   | 2   | 2   | 2   | 1   | 2   |
-| **Total (of 24)**                                                              | 17  | 22  | 23  | 18  | 16  | 16  |
+| **Total (of 27)**                                                              | 19  | 25  | 26  | 20  | 19  | 18  |
 
 **C scores highest, with B a close second: C is B plus a reference page.** D is right for members and wrong for
-newcomers; E answers a question the site does not have yet; F is the best shape for the join flow, inside the app. The
-recommendation in [4. Proposal](4-proposal.md) is therefore C, built in two steps (B first, then the reference), with
-F's steps inside the app's join flow and E kept open by the URL structure.
+newcomers; E answers a question the site does not have yet, though Hydrex disabling its automations makes it a question
+worth keeping open; F is the best shape for the join flow, inside the app. The recommendation in
+[5. Proposal](5-proposal.md) is therefore C, built in two steps (B first, then the reference), with F's steps inside the
+app's join flow and E kept open by the URL structure.
