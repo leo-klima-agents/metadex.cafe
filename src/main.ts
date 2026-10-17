@@ -20,6 +20,7 @@ import {
 import { LockType, canJoin, canLeave, check, readAccounts, readRelay, status, type Account } from "./hydrex.ts";
 import { close, review, update } from "./review.ts";
 import {
+  NoWallet,
   SAFE,
   connect,
   declined,
@@ -31,9 +32,6 @@ import {
   type Wallet,
 } from "./wallet.ts";
 
-const lookUp = document.getElementById("look-up") as HTMLFormElement;
-const input = lookUp.querySelector("input")!;
-const button = lookUp.querySelector("button")!;
 const payoutForm = document.getElementById("payout-form") as HTMLFormElement;
 const recipient = payoutForm.querySelector("input")!;
 const joinButton = document.getElementById("join") as HTMLButtonElement;
@@ -151,7 +149,6 @@ function showAccounts(keep = false): void {
   fill(document, "empty-count", count(empty.length, "empty account", "empty accounts"));
   show("empty-accounts", empty.length > 0);
   show("none", !full.length);
-  show("not-yours", !!connection && !mine);
   joinButton.hidden = !accounts.some(joinable);
   leaveButton.hidden = !accounts.some(canLeave);
   show("pick-bar", mine && !(joinButton.hidden && leaveButton.hidden));
@@ -171,16 +168,14 @@ let reading = false;
 let wanted: Address | undefined;
 
 /**
- * Reads and shows an address's accounts. A read started later wins: an earlier one that ends after it shows nothing.
- * Quietly keeps the accounts on the page while they are read again.
+ * Reads and shows the accounts of the connected address. A read started later wins: an earlier one that ends after it
+ * shows nothing. Quietly keeps the accounts on the page while they are read again.
  */
-function lookUpAddress(owner: Address, quietly = false): void {
+function readAccountsOf(owner: Address, quietly = false): void {
   const read = ++reads;
   wanted = owner;
   reading = true;
   if (!quietly) {
-    input.value = owner;
-    button.disabled = true;
     show("reading");
     show("accounts", false);
     show("payout", false);
@@ -197,7 +192,6 @@ function lookUpAddress(owner: Address, quietly = false): void {
     .finally(() => {
       if (read !== reads) return;
       reading = false;
-      button.disabled = false;
       show("reading", false);
     });
 }
@@ -214,13 +208,7 @@ function typed(field: HTMLInputElement): Address | undefined {
   return getAddress(text);
 }
 
-for (const field of [input, recipient]) field.addEventListener("input", () => field.setCustomValidity(""));
-
-lookUp.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const owner = typed(input);
-  if (owner) lookUpAddress(owner);
-});
+recipient.addEventListener("input", () => recipient.setCustomValidity(""));
 
 // Joining, leaving and the payout address
 
@@ -248,7 +236,7 @@ const ids = (accounts: Account[]) => list(accounts.map(({ id }) => `#${id}`));
 
 /** Reads an owner's accounts again once a review that sent something closes, unless another address is wanted now. */
 const rereadFor = (owner: Address) => (submitted: boolean) => {
-  if (submitted && wanted && same(wanted, owner)) lookUpAddress(owner, true);
+  if (submitted && wanted && same(wanted, owner)) readAccountsOf(owner, true);
 };
 
 /** Reviews joining or leaving with the ticked accounts it applies to. */
@@ -324,7 +312,7 @@ async function connectTo(wallet: Wallet, ask = true): Promise<void> {
   if (wallet !== SAFE) remember(wallet.id);
   listen(connected);
   showConnection();
-  lookUpAddress(connected.address);
+  readAccountsOf(connected.address);
 }
 
 /** Follows the wallet's changes of account and chain. */
@@ -339,7 +327,7 @@ function listen({ provider }: Connection): void {
     if (!accounts[0]) return disconnect();
     connection.address = getAddress(accounts[0]);
     showConnection();
-    lookUpAddress(connection.address);
+    readAccountsOf(connection.address);
   });
   provider.on?.("chainChanged", (chainId: string) => {
     if (connection?.provider !== provider) return;
@@ -357,7 +345,11 @@ function disconnect(): void {
   remember(undefined);
   close();
   showConnection();
-  showAccounts();
+  // Without a wallet, no accounts: a read on its way shows nothing when it ends.
+  shown = wanted = undefined;
+  reads++;
+  reading = false;
+  for (const id of ["reading", "accounts", "payout"]) show(id, false);
   if (provider?.disconnect) provider.disconnect().catch(() => {});
   else provider?.request({ method: "wallet_revokePermissions", params: [{ eth_accounts: {} }] }).catch(() => {});
 }
@@ -385,8 +377,10 @@ findWallets((wallets) => {
     for (const name of ["pointerdown", "focus"]) button.addEventListener(name, () => wallet.provider().catch(() => {}));
     button.addEventListener("click", () => {
       show("wallet-failed", false);
+      show("no-wallet", false);
       connectTo(wallet).catch((error) => {
         if (declined(error)) return;
+        if (error instanceof NoWallet) return show("no-wallet");
         console.error(error);
         fill(document, "failed-wallet", wallet.name);
         show("wallet-failed");

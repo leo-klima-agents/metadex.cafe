@@ -32,8 +32,8 @@ export function findWallets(found: (wallets: Wallet[]) => void): void {
 }
 
 /**
- * The wallets the browser announces (EIP-6963), else the one at window.ethereum, then Coinbase's SDK unless Coinbase's
- * extension announced itself: the SDK would use the extension.
+ * The wallets the browser announces (EIP-6963), else "Browser wallet", then Coinbase's SDK unless Coinbase's extension
+ * announced itself: the SDK would use the extension.
  */
 function wallets(): Wallet[] {
   const list: Wallet[] = [...announced.values()].map(({ info, provider }) => ({
@@ -42,10 +42,19 @@ function wallets(): Wallet[] {
     ...(info.icon?.startsWith("data:image/") && { icon: info.icon }),
     provider: async () => provider,
   }));
-  const injected = (window as { ethereum?: Provider }).ethereum;
-  if (!list.length && injected) list.push({ id: "injected", name: "Browser wallet", provider: async () => injected });
+  if (!list.length) list.push({ id: "injected", name: "Browser wallet", provider: injected });
   if (!announced.has(COINBASE_RDNS)) list.push({ id: "coinbase", name: "Coinbase Wallet", provider: coinbase });
   return list;
+}
+
+/** No wallet in this browser: none announced itself, and window.ethereum is empty. */
+export class NoWallet extends Error {}
+
+/** The wallet at window.ethereum, read when someone picks it: some wallets put it there late. */
+async function injected(): Promise<Provider> {
+  const provider = (window as { ethereum?: Provider }).ethereum;
+  if (!provider) throw new NoWallet("No wallet in this browser.");
+  return provider;
 }
 
 let sdk: Promise<Provider> | undefined;
