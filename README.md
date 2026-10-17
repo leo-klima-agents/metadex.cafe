@@ -2,8 +2,8 @@
 
 The static page at <https://metadex.cafe/> for joining and leaving the Klima "Carbon Impact" conduit with Hydrex
 accounts on Base; Hydrex's app, and the page, call conduits automations. This repository holds the page: `index.html`,
-`style.css`, and the script in `src/` that reads Base and talks to the wallet, whose dependencies are `viem`, and
-`@safe-global/safe-apps-sdk` for Safe{Wallet}.
+`style.css` and its fonts in `fonts/`, and the script in `src/` that reads Base and talks to the wallet, whose
+dependencies are `viem`, and `@safe-global/safe-apps-sdk` for Safe{Wallet}.
 
 The page has three views, addressed by the hash: Home at `/`, which asks for no wallet; the App at `#app`, with the
 wallet's accounts, where Safe{Wallet} opens the page; and How it works at `#how-it-works`, which states everything in
@@ -41,7 +41,7 @@ tokens, the swap routers, any owner's payout address, and who claims and votes f
   nothing. It cannot show payouts, which are only in the conduit's events.
 - **It reaches nothing but three Base RPCs,** by its Content Security Policy: `https://mainnet.base.org`,
   `https://base-rpc.publicnode.com` and `https://base.drpc.org`. The browser checks the script and the stylesheet
-  against the SHA-384 hashes in `index.html`.
+  against the SHA-384 hashes in `index.html`; the fonts are inside the stylesheet.
 - **It cannot stop copies.** Anyone can host one that approves another conduit: use the official address, and read the
   wallet prompt.
 
@@ -89,6 +89,11 @@ committing. `npm run build` writes the page to `dist/`.
 Safe, the views and what can fail. It needs anvil, and Chromium (`npx playwright-core install chromium`, or `CHROMIUM`).
 `BASE_RPC_URL` is the archive RPC to fork from, and `SCREENSHOTS` a folder for screenshots.
 
+`fonts/` holds Latin subsets of Atkinson Hyperlegible Next and Mono, and Young Serif, made by `scripts/fonts.py` from
+Google Fonts' sources at a pinned commit; it needs Python, with the fontTools and brotli versions it names. The build
+puts them inside `style.css` as `data:` URLs, which the Content Security Policy allows for fonts only.
+`scripts/icons.ts` draws `favicon.ico` and `apple-touch-icon.png` from `icon.svg`, with Chromium.
+
 `src/config.ts` holds what the page trusts about the conduit, its RPCs, and what its prices start from;
 `src/hydrex-conduits.json` names Hydrex's other automations, as `api.hydrex.fi/conduits` lists them. CI runs Prettier,
 the type check, the tests, `reuse lint` and the build, then builds again from a fresh clone and checks that both builds
@@ -102,4 +107,6 @@ are the same; with `BASE_RPC_URL`, it also runs the fork tests. Dependabot updat
 
 ## License
 
-MIT, REUSE compliant.
+MIT, REUSE compliant. The fonts in `fonts/` are under the SIL Open Font License 1.1, and carry their copyright and
+licence in their own metadata. Klima Protocol's logo, `klima-protocol.svg`, is Klima Protocol's, all rights reserved,
+and used with its permission.

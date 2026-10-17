@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { getAddress } from "viem";
 import {
@@ -54,11 +54,31 @@ test("the page may reach its RPCs and nothing else, and the README lists them", 
   for (const origin of connect) assert.ok(readme.includes(`\`${origin}\``), `${origin} is missing from the README`);
 });
 
+test("fonts come only from the stylesheet, which the build makes of the files in fonts/", () => {
+  const csp = /http-equiv="Content-Security-Policy"\s+content="([^"]+)"/.exec(read("index.html"))?.[1] ?? "";
+  assert.ok(csp.split(/;\s*/).includes("font-src data:"));
+  const urls = [...read("style.css").matchAll(/url\(([^)]+)\)/g)].map(([, url]) => url!.replace(/^"|"$/g, ""));
+  assert.ok(urls.length > 0);
+  for (const url of urls) {
+    assert.match(url, /^fonts\/[a-z0-9-]+\.woff2$/);
+    assert.ok(existsSync(new URL(`../${url}`, import.meta.url)), `${url} is missing`);
+  }
+});
+
+test("colours have plain values first, and light-dark() only where the browser supports it", () => {
+  const css = read("style.css").replace(/\/\*[\s\S]*?\*\//g, "");
+  const supported = /@supports \(color: light-dark\(red, red\)\) \{\n[\s\S]*?\n\}\n/.exec(css)?.[0] ?? "";
+  assert.match(supported, /light-dark\(/);
+  assert.doesNotMatch(css.replace(supported, ""), /light-dark\(|\bCanvas(Text)?\b/);
+});
+
 test("the page checks the integrity of its script and stylesheet, and has nothing inline", () => {
   const html = read("index.html");
   assert.doesNotMatch(html, /\sstyle=|<style/);
   assert.deepEqual(html.match(/<(?:link|script)\b[^>]*>/g), [
     '<link rel="icon" href="icon.svg" type="image/svg+xml" />',
+    '<link rel="shortcut icon" href="favicon.ico" sizes="32x32" />',
+    '<link rel="apple-touch-icon" href="apple-touch-icon.png" />',
     '<link rel="stylesheet" href="style.css" integrity="%STYLE_INTEGRITY%" />',
     '<script type="module" src="main.js" integrity="%MAIN_INTEGRITY%">',
   ]);

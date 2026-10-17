@@ -34,10 +34,12 @@ await esbuild.build({
   target: "es2022",
   minify: true,
   charset: "utf8",
+  loader: { ".woff2": "dataurl" },
   legalComments: "linked",
   logLevel: "warning",
 });
-for (const file of ["icon.svg", "manifest.json"]) copyFileSync(`${ROOT}/${file}`, `${OUT}/${file}`);
+for (const file of ["icon.svg", "favicon.ico", "apple-touch-icon.png", "klima-protocol.svg", "manifest.json"])
+  copyFileSync(`${ROOT}/${file}`, `${OUT}/${file}`);
 const values: Record<string, string> = {
   VERSION: version,
   COMMIT: commit().slice(0, 7),
