@@ -17,6 +17,7 @@ import { CONDUIT, RPCS, VOTING_ESCROW } from "../src/config.ts";
 
 const FORK_URL = process.env.BASE_RPC_URL ?? "https://mainnet.base.org";
 const BLOCK = 52_694_000; // Fri 16 Oct 2026, 18:22 UTC
+const FLIP = 1_792_627_200; // Thu 22 Oct 2026, 00:00 UTC, when the epoch after BLOCK's starts
 const PORT = 8546;
 const ANVIL = `http://127.0.0.1:${PORT}`;
 const SITE = "https://metadex.cafe";
@@ -76,8 +77,14 @@ async function expectApprovals(ids: bigint[], delegate: Address, claimer: Addres
   }
 }
 
-type WalletOptions = { owner: Address; chainId: number; decline: boolean; switches: boolean };
-type OpenOptions = { width?: number; height?: number; dark?: boolean; url?: string };
+type WalletOptions = {
+  owner: Address;
+  chainId: number;
+  decline: boolean;
+  switches: boolean;
+  approval?: Promise<void>;
+};
+type OpenOptions = { width?: number; height?: number; dark?: boolean; url?: string; flowing?: boolean };
 type Sent = { to: string; data: string };
 type Opened = {
   page: Page;
@@ -132,10 +139,16 @@ const SAFE_PAGE = `<!doctype html><meta charset="utf-8"><title>Safe{Wallet}</tit
 </script>`;
 
 function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
+  let asking = false;
   return async (method: string, params: any[]): Promise<{ result?: unknown; error?: unknown }> => {
     asked.push(method);
     switch (method) {
       case "eth_requestAccounts":
+        // As MetaMask does while its window is open.
+        if (asking) return { error: { code: -32002, message: "Request already pending." } };
+        asking = true;
+        await options.approval;
+        asking = false;
         return { result: [options.owner] };
       case "eth_chainId":
         return { result: hex(options.chainId) };
@@ -181,7 +194,7 @@ const contexts: BrowserContext[] = [];
 
 async function open(
   wallet: Partial<WalletOptions> | false,
-  { width = 1440, height = 900, dark = false, url = `${SITE}/` }: OpenOptions = {},
+  { width = 1440, height = 900, dark = false, url = `${SITE}/`, flowing = false }: OpenOptions = {},
 ): Promise<Opened> {
   const context = await browser.newContext({
     viewport: { width, height },
@@ -210,7 +223,8 @@ async function open(
   });
   page.on("pageerror", (error) => opened.violations.push(String(error)));
   const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false]);
-  await page.clock.setFixedTime(Number(timestamp) * 1000);
+  const time = Number(timestamp) * 1000;
+  await (flowing ? page.clock.install({ time }) : page.clock.setFixedTime(time));
   await page.goto(url);
   return { page, ...opened };
 }
@@ -461,5 +475,38 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     for (const origin of origins) {
       assert.ok([SITE, SAFE_WALLET, ...RPC_ORIGINS].includes(origin), `unexpected request to ${origin}`);
     }
+  });
+
+  test("a second click while the wallet asks does not lose the first", async () => {
+    let approve = () => {};
+    const approval = new Promise<void>((resolve) => (approve = resolve));
+    const { page } = await open({ owner: NEWCOMER, approval });
+    const button = page.getByRole("button", { name: "Test Wallet" });
+    await button.click();
+    await button.click();
+    await page.getByText("did not connect").waitFor();
+    approve();
+    await page.getByText("Connected with Test Wallet").waitFor();
+    await account(page, 141).waitFor();
+  });
+
+  // Last, as it moves anvil's clock on.
+  test("in a new epoch, Join reads again before any review", async () => {
+    const data = encodeFunctionData({ abi, functionName: "setConduitApproval", args: [CONDUIT, 141n, true] });
+    await anvil("eth_sendTransaction", [{ from: NEWCOMER, to: VOTING_ESCROW, data, gas: GAS }]);
+    const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false]);
+    const { page } = await connected({ owner: NEWCOMER }, { flowing: true });
+    await account(page, 141).getByText("Joined the Carbon Impact automation.").waitFor();
+    await anvil("evm_setNextBlockTimestamp", [FLIP + 60]);
+    await anvil("evm_mine");
+    await page.clock.fastForward((FLIP + 60 - Number(timestamp)) * 1000);
+    await pick(page, 42877);
+    await page.getByRole("button", { name: "Join with 1 account" }).click();
+    await account(page, 141).getByText("In the Carbon Impact automation.").waitFor();
+    await page.getByText(/Thu,? 22 Oct to Thu,? 29 Oct, 00:00 UTC/).waitFor();
+    assert.equal(await review(page).isVisible(), false);
+    await pick(page, 42877);
+    await page.getByRole("button", { name: "Join with 1 account" }).click();
+    assert.match(await review(page).locator(".effects").innerText(), /from the epoch starting Thu,? 29 Oct, 00:00 UTC/);
   });
 });

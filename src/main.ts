@@ -2,7 +2,7 @@ import { getAddress } from "viem";
 import { same } from "./chain.ts";
 import { CHAIN_ID } from "./config.ts";
 import { clone, fill, fillAddress, fillPlural, fillTime, show } from "./dom.ts";
-import { WEEK, bps, count, date, earningPower, list, units } from "./format.ts";
+import { WEEK, bps, count, date, earningPower, list, units, weekStart } from "./format.ts";
 import {
   LockType,
   canJoin,
@@ -36,12 +36,18 @@ const listening = new WeakSet<Provider>();
 
 let connection: Connection | undefined;
 let shown: Holdings | undefined;
+let relayEpoch: number | undefined;
 let trusted = false;
 let retired = "…";
 let reads = 0;
 let reading = false;
 let attempts = 0;
+let stale = 0;
 let clicks = 0;
+// Base's time less the device's, from the latest block read.
+let drift = 0;
+
+const now = () => Math.floor(Date.now() / 1000) + drift;
 
 function failed(error: unknown): void {
   console.error(error);
@@ -49,6 +55,7 @@ function failed(error: unknown): void {
 }
 
 function showRelay({ epochStart, tonnes, retireBps, feeBps, votes, entity }: Relay): void {
+  relayEpoch = epochStart;
   retired = bps(retireBps);
   fill(document, { tonnes: units(tonnes), retired, fee: bps(feeBps), power: earningPower(votes), entity });
   fillTime(document, "week-start", epochStart);
@@ -66,19 +73,19 @@ async function showChecks(): Promise<void> {
   if (!reading) showAccounts(true);
 }
 
-const joinable = (account: Account): boolean => trusted && !!shown && canJoin(account, shown.time);
+const joinable = (account: Account): boolean => trusted && canJoin(account, now());
 
-function kind({ lockType, end }: Account, now: number): string {
+function kind({ lockType, end }: Account): string {
   if (lockType === LockType.permanent) return "Protocol Account";
   if (lockType === LockType.rolling) return "Flex Account, rolling lock";
-  return end ? `Flex Account, lock ${end > now ? "ends" : "ended"} ${date(end)}` : "Flex Account";
+  return end ? `Flex Account, lock ${end > now() ? "ends" : "ended"} ${date(end)}` : "Flex Account";
 }
 
-function accountItem(account: Account, { owner, time, epochStart }: Holdings): DocumentFragment {
+function accountItem(account: Account, { owner, epochStart }: Holdings): DocumentFragment {
   const item = clone("account");
   const name = account.name || "Account";
-  fill(item, { name, id: `#${account.id}`, kind: kind(account, time), votes: earningPower(account.votes) });
-  const state = status(account, owner, time, epochStart);
+  fill(item, { name, id: `#${account.id}`, kind: kind(account), votes: earningPower(account.votes) });
+  const state = status(account, owner, now(), epochStart);
   const line = clone(state.kind);
   if ("date" in state) fillTime(line, "date", state.date);
   if ("name" in state) fill(line, { automation: state.name });
@@ -130,13 +137,21 @@ async function loadAccounts(quietly = false): Promise<void> {
     show("#reading");
     show("#accounts, #payout", false);
   }
-  const [result] = await Promise.allSettled([readAccounts(connection.address)]);
-  if (read !== reads) return;
-  reading = false;
-  show("#reading", false);
-  if (result.status === "rejected") return failed(result.reason);
-  shown = result.value;
-  showAccounts();
+  try {
+    const found = await readAccounts(connection.address);
+    if (read !== reads) return;
+    drift = found.time - Math.floor(Date.now() / 1000);
+    shown = found;
+    showAccounts();
+    if (relayEpoch !== undefined && found.epochStart > relayEpoch) readRelay().then(showRelay).catch(failed);
+  } catch (error) {
+    if (read === reads) failed(error);
+  } finally {
+    if (read === reads) {
+      reading = false;
+      show("#reading", false);
+    }
+  }
 }
 
 function ticked(): Account[] {
@@ -162,8 +177,11 @@ const hooks: Hooks = {
 };
 
 function reviewTicked(leaving: boolean): void {
+  if (!connection || !shown) return;
+  // In a new epoch, the statuses and the review's dates would be last epoch's.
+  if (weekStart(now()) > shown.epochStart) return void loadAccounts();
   const accounts = ticked().filter(leaving ? canLeave : joinable);
-  if (!connection || !shown || !accounts.length) return;
+  if (!accounts.length) return updateButtons();
   const changes = clone(leaving ? "leave-effects" : "join-effects");
   fill(changes, { which: list(accounts.map(({ id }) => `#${id}`)), retired });
   fillTime(changes, "next", shown.epochStart + WEEK);
@@ -181,16 +199,19 @@ function showConnection(): void {
     fillAddress(document, "me", address);
     show("#wrong-chain", chainId !== CHAIN_ID);
     if (chainId === CHAIN_ID) show("#switch-failed", false);
-    show(".to-switch", !wallet.safe);
-    show(".safe-elsewhere", !!wallet.safe);
+    show(".to-switch", !wallet.propose);
+    show(".safe-elsewhere", !!wallet.propose);
   }
   update();
 }
 
+// A later attempt that fails, as when the wallet still asks about an earlier one, does not cancel it.
 async function connectTo(wallet: Wallet): Promise<void> {
   const attempt = ++attempts;
   const connected = await connect(wallet);
-  if (!connected || attempt !== attempts) return;
+  if (!connected || attempt <= stale) return;
+  stale = attempt;
+  show("#wallet-failed, #no-wallet", false);
   listen(connected.provider);
   connection = connected;
   showConnection();
@@ -222,7 +243,7 @@ function listen(provider: Provider): void {
 }
 
 function letGo(): void {
-  attempts++;
+  stale = attempts;
   reads++;
   reading = false;
   connection = undefined;

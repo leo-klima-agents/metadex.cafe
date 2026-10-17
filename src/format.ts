@@ -29,6 +29,6 @@ export const count = (n: number, one: string, other: string): string =>
   `${whole.format(n)} ${plurals.select(n) === "one" ? one : other}`;
 
 // Controls, and the marks that reorder or hide text, which a name could use to pass for another.
-const HIDDEN = /[\p{Cc}؜​-‏‪-‮⁠-⁩﻿]/gu;
+const HIDDEN = /[\p{Cc}\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/gu;
 
 export const clean = (text = ""): string => text.replace(/\s+/g, " ").replace(HIDDEN, "").trim();

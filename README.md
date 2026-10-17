@@ -54,8 +54,7 @@ The page's Content Security Policy lets it reach these origins and nothing else:
 | `https://base.drpc.org`           | Base RPC: reads, and receipts |
 
 Safe's SDK talks to Safe{Wallet} through the frame, and needs no entry. Scripts and styles come only from the page's own
-files, images also as `data:` for wallets' icons, and Trusted Types are required, so no script can write HTML into the
-page.
+files, and images also as `data:` for wallets' icons.
 
 The browser checks the script, Safe's SDK included, and the stylesheet against the SHA-384 hashes in `index.html`
 (Subresource Integrity) before using them.
@@ -127,13 +126,14 @@ Then compare each file in `dist/` with the one at the same path on <https://meta
 - **A failed startup check,** or one that cannot run, turns joining off. The page says why. An open page runs the checks
   again every hour.
 - **The end of an epoch:** the page takes the time from the latest block it read rather than from the device, so it does
-  not wait for Hydrex's minter to move on to the new epoch. An open page does not move on by itself: reload it.
+  not wait for Hydrex's minter to move on to the new epoch. An open page does not move on by itself, but it reads the
+  accounts and the automation again when Join or Leave is clicked in a new epoch, before any review.
 - **The wrong network:** the page says so, and the main button becomes "Switch to Base". If the wallet cannot switch,
   the page asks to pick Base in the wallet.
 - **A call that would fail:** the wallet usually warns while it estimates the gas. If it is sent anyway, Base includes
   it as failed, and the review says so.
 - **A refusal in the wallet, or a transaction that fails:** the review says so, with links to the transactions that went
-  through. The page reads the accounts again when the review closes.
+  through. Once something was sent, the page reads the accounts again when the review closes.
 - **A review closed early:** closing stops the page sending, not following. It follows what it sent for ten minutes and
   reads the accounts again once Base includes it.
 - **A transaction the page cannot follow,** because the wallet replaced it or Base did not include it within ten

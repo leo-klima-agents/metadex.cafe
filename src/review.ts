@@ -4,7 +4,7 @@ import { CHAIN_ID, CONDUIT } from "./config.ts";
 import { clone, fill, txLink } from "./dom.ts";
 import { count } from "./format.ts";
 import type { Step } from "./hydrex.ts";
-import { declined, propose, sendTransaction, switchToBase, type Connection } from "./wallet.ts";
+import { declined, sendTransaction, switchToBase, type Connection, type Wallet } from "./wallet.ts";
 
 export type Hooks = { closed(submitted: boolean): void; switched(): void };
 
@@ -49,7 +49,7 @@ export function review(
     }),
   );
   fill(dialog, { calls: n === 1 ? "this call" : "these calls" });
-  how.textContent = connection.wallet.safe
+  how.textContent = connection.wallet.propose
     ? n === 1
       ? "One Safe transaction:"
       : `One Safe transaction, with ${n} calls:`
@@ -64,7 +64,7 @@ export function review(
 export function update(): void {
   if (!current) return;
   const { connection, steps, done, sending, submitted, finished } = current;
-  const { safe } = connection.wallet;
+  const safe = !!connection.wallet.propose;
   const wrongChain = connection.chainId !== CHAIN_ID;
   confirm.textContent = safe
     ? "Propose in Safe{Wallet}"
@@ -73,7 +73,7 @@ export function update(): void {
       : steps.length === 1
         ? "Confirm in your wallet"
         : `Confirm transaction ${done.length + 1} of ${steps.length}`;
-  confirm.disabled = sending || (!!safe && wrongChain);
+  confirm.disabled = sending || (safe && wrongChain);
   confirm.hidden = finished;
   back.textContent = submitted ? "Close" : "Back";
 }
@@ -100,8 +100,8 @@ function failure(error: unknown): string {
   return message ? `Your wallet answered: “${message}”` : "Your wallet did not answer.";
 }
 
-async function proposeAll(state: Review): Promise<void> {
-  const proposing = propose(state.connection, state.steps);
+async function proposeAll(state: Review, propose: NonNullable<Wallet["propose"]>): Promise<void> {
+  const proposing = propose(state.steps);
   tell(state, "Waiting for your wallet…");
   await proposing;
   state.submitted = state.finished = true;
@@ -135,11 +135,12 @@ confirm.addEventListener("click", () => {
   if (!state) return;
   // The wallet's request comes first, with no wait since the click: a wallet that opens a window opens it only from a
   // click. That is also why each transaction takes a click of its own.
+  const { propose } = state.connection.wallet;
   const sending =
     state.connection.chainId !== CHAIN_ID
       ? switchToBase(state.connection).then(state.hooks.switched)
-      : state.connection.wallet.safe
-        ? proposeAll(state)
+      : propose
+        ? proposeAll(state, propose)
         : sendNext(state);
   state.sending = true;
   update();

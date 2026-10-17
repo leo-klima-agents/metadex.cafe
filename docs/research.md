@@ -616,6 +616,10 @@ Taken by the user on 2026-10-15, after this research:
 29. **One checked script.** Then the user had Safe's SDK bundled into the script, so that the integrity check covers it,
     and the hashed names dropped, as their only use was to keep a cache from pairing files of two versions. For up to
     ten minutes after a deployment, a browser holding the previous script refuses it instead.
+30. **After two code reviews.** The user kept the ten minutes after a deployment, and had Trusted Types removed: they
+    apply to wallets' scripts in the page too, and could break a wallet, while the page's own code writes no HTML. The
+    page keeps Base's time again, so that a lock that ends while the page is open cannot join, and reads again when Join
+    or Leave is clicked in a new epoch.
 
 Still open: how much an account has not claimed yet. It would need reads of every bribe the account earned in; it is
 left for later.

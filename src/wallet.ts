@@ -8,7 +8,13 @@ export type Provider = {
   on?(event: string, listener: (value: any) => void): unknown;
 };
 
-export type Wallet = { name: string; icon?: string; safe?: true; provider: () => Promise<Provider> };
+export type Wallet = {
+  name: string;
+  icon?: string;
+  provider: () => Promise<Provider>;
+  // Only a Safe has it: it proposes calls as one Safe transaction, for the Safe's owners to sign in Safe{Wallet}.
+  propose?(txs: Tx[]): Promise<void>;
+};
 export type Connection = { wallet: Wallet; provider: Provider; address: Address; chainId: number };
 export type Tx = { to: Address; data: Hex };
 
@@ -53,21 +59,22 @@ export async function safeWallet(): Promise<Wallet | undefined> {
   const info = await Promise.race([sdk.safe.getInfo(), timeout]).catch(() => undefined);
   if (!info) return undefined;
   const provider: Provider = {
-    async request({ method, params }) {
+    async request({ method }) {
       if (method === "eth_requestAccounts") return [info.safeAddress];
       if (method === "eth_chainId") return `0x${info.chainId.toString(16)}`;
-      if (method !== "wallet_sendCalls") {
-        throw Object.assign(new Error(`Safe{Wallet} does not answer ${method} here.`), { code: UNSUPPORTED_METHOD });
-      }
-      const [{ calls }] = params as [{ calls: Tx[] }];
-      const txs = calls.map(({ to, data }) => ({ to, data, value: "0" }));
+      throw Object.assign(new Error(`Safe{Wallet} does not answer ${method} here.`), { code: UNSUPPORTED_METHOD });
+    },
+  };
+  return {
+    name: "Safe{Wallet}",
+    provider: async () => provider,
+    async propose(txs) {
       // Safe{Wallet} says "Transaction was rejected" when the user closes its window.
-      await sdk.txs.send({ txs }).catch((error: Error) => {
+      await sdk.txs.send({ txs: txs.map(({ to, data }) => ({ to, data, value: "0" })) }).catch((error: Error) => {
         throw Object.assign(error, /rejected/i.test(error.message) ? { code: USER_REJECTED } : {});
       });
     },
   };
-  return { name: "Safe{Wallet}", safe: true, provider: async () => provider };
 }
 
 export async function connect(wallet: Wallet): Promise<Connection | undefined> {
@@ -106,13 +113,6 @@ export async function switchToBase(connection: Connection): Promise<void> {
     });
   }
   connection.chainId = Number(await provider.request({ method: "eth_chainId" }));
-}
-
-export async function propose({ provider }: Connection, txs: Tx[]): Promise<void> {
-  await provider.request({
-    method: "wallet_sendCalls",
-    params: [{ calls: txs.map(({ to, data }) => ({ to, data })) }],
-  });
 }
 
 // The chain ID makes a wallet on another chain refuse the transaction.
