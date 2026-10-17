@@ -75,14 +75,15 @@ They are proto-personas from desk research, to be tested: [6. Validation](6-vali
 
 ## Decisions
 
-| Question                                              | Decision                                                                                                |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Who runs it?                                          | Anonymous for now: no operator on any page; trust rests on what anyone can check                        |
-| Whose name is on the retirements?                     | Stays "Hydrex": it can change only for every member at once, and a name per member needs a new contract |
-| Smart wallets and WalletConnect outside a wallet app? | Not now: links that reopen the page in a wallet app instead                                             |
-| What happens to an account in a stopped automation?   | Answered on Base: see [7. On-chain checks](7-onchain-checks.md)                                         |
+| Question                                                 | Decision                                                                                                |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Who runs it?                                             | Anonymous for now: no operator on any page; trust rests on what anyone can check                        |
+| Whose name is on the retirements?                        | Stays "Hydrex": it can change only for every member at once, and a name per member needs a new contract |
+| Smart wallets and WalletConnect outside a wallet app?    | Not now: links that reopen the page in a wallet app instead                                             |
+| What happens to an account in a stopped automation?      | Answered on Base: see [7. On-chain checks](7-onchain-checks.md)                                         |
+| How far to go in telling holders of stopped automations? | Level 2: a notice on Home, the explanation in How it works and the status in the App; nothing outbound  |
 
-Still open: how strongly to address holders of stopped automations ([5. Proposal, Decisions](5-proposal.md#decisions)).
+Details and the levels considered: [5. Proposal, Decisions](5-proposal.md#decisions).
 
 ## Method and limits
 
