@@ -56,6 +56,7 @@ const others = conduits.filter(({ address }) => !same(address, CONDUIT));
 export const LockType = { timed: 0, rolling: 1, permanent: 2 } as const;
 
 export type Relay = {
+  time: number;
   epochStart: number;
   retireBps: bigint;
   feeBps: bigint;
@@ -84,10 +85,14 @@ export type Status =
   | { kind: "in" | "partly" | "self" | "ended" | "empty" }
   | { kind: "joined" | "left"; date: number }
   | { kind: "other"; name: string }
+  | { kind: "released"; name: string; date: number }
   | { kind: "stopped"; name: string; voted: number; since: number }
   | { kind: "delegated"; to: Address };
 
-export type Step = Tx & { says: string; on: string; shows: string };
+// Accounts sorted by what their owner can do with them.
+export type Group = "stopped" | "attention" | "in" | "joining" | "leaving" | "open" | "closed";
+
+export type Step = Tx & { says: string; on: string; shows: string; conduit: Address; automation: string };
 
 function required(values: unknown[]): unknown[] {
   if (values.includes(undefined)) throw new Error("A read from Base failed.");
@@ -110,7 +115,7 @@ export async function readRelay(): Promise<Relay> {
   ) as [bigint, bigint, bigint, bigint, string];
   const epochStart = epochAt(time);
   const [votes] = required(await read([escrow("getPastVotes", CONDUIT, BigInt(epochStart))])) as [bigint];
-  return { epochStart, retireBps, feeBps, tonnes, entity: clean(entity), votes };
+  return { time: Number(time), epochStart, retireBps, feeBps, tonnes, entity: clean(entity), votes };
 }
 
 export async function readAccounts(owner: Address): Promise<Holdings> {
@@ -180,7 +185,10 @@ export function status(account: Account, owner: Address, now: number, epochStart
   if (votes && claims) return votedAtStart ? { kind: "in" } : { kind: "joined", date: epochStart + WEEK };
   if (votes || claims) return { kind: "partly" };
   if (votedAtStart) return { kind: "left", date: epochStart + WEEK };
-  if (same(account.delegate, owner) || same(account.delegate, zeroAddress)) return { kind: "self" };
+  if (same(account.delegate, owner) || same(account.delegate, zeroAddress)) {
+    const before = automation(account.delegateAtStart);
+    return before ? { kind: "released", name: before, date: epochStart + WEEK } : { kind: "self" };
+  }
   const name = automation(account.delegate);
   if (!name) return { kind: "delegated", to: account.delegate };
   const voted = account.delegateVoted;
@@ -199,12 +207,38 @@ export function canLeave(account: Account): boolean {
   return votes || claims;
 }
 
-const approval = ({ id }: Account, approve: boolean, says: string): Step => ({
+// Leaving another automation, as one that stopped, is the same call as leaving Carbon Impact, with its address.
+export const canRelease = (account: Account): boolean => automation(account.delegate) !== undefined;
+
+export function group(account: Account, state: Status): Group {
+  switch (state.kind) {
+    case "stopped":
+      return "stopped";
+    case "partly":
+      return "attention";
+    case "in":
+      return "in";
+    case "joined":
+      return "joining";
+    case "left":
+      return "leaving";
+    // Carbon Impact may still hold the approvals of an account it can no longer vote with.
+    case "ended":
+    case "empty":
+      return canLeave(account) ? "in" : "closed";
+    default:
+      return "open";
+  }
+}
+
+const approval = ({ id }: Account, approve: boolean, says: string, conduit = CONDUIT): Step => ({
   to: VOTING_ESCROW,
-  data: encodeFunctionData({ abi: votingEscrowAbi, functionName: "setConduitApproval", args: [CONDUIT, id, approve] }),
+  data: encodeFunctionData({ abi: votingEscrowAbi, functionName: "setConduitApproval", args: [conduit, id, approve] }),
   says: `#${id} ${says}`,
   on: "Hydrex's VotingEscrow",
-  shows: `setConduitApproval(${CONDUIT}, ${id}, ${approve})`,
+  shows: `setConduitApproval(${conduit}, ${id}, ${approve})`,
+  conduit,
+  automation: automation(conduit) ?? "Carbon Impact",
 });
 
 // A join replaces both the delegate and the claimer, which two other automations may hold.
@@ -213,11 +247,16 @@ export const join = (accounts: Account[]): Step[] =>
     const names = [account.delegate, account.claimer].map(automation).filter((name) => name !== undefined);
     const from = [...new Set(names)];
     const leaving = from.length ? `leaves the ${list(from)} automation${from.length > 1 ? "s" : ""} and ` : "";
-    return approval(account, true, `${leaving}joins the Carbon Impact automation.`);
+    return approval(account, true, `${leaving}joins Carbon Impact.`);
   });
 
 export const leave = (accounts: Account[]): Step[] =>
-  accounts.map((account) => approval(account, false, "leaves the Carbon Impact automation."));
+  accounts.map((account) => approval(account, false, "leaves Carbon Impact."));
+
+export const release = (accounts: Account[]): Step[] =>
+  accounts.map((account) =>
+    approval(account, false, `leaves the ${automation(account.delegate)} automation.`, account.delegate),
+  );
 
 // Each check is named by the id of its message on the page.
 export async function check(): Promise<string[]> {

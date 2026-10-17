@@ -17,10 +17,10 @@ export function fill(root: ParentNode, texts: Record<string, string>): void {
   }
 }
 
-export function fillTime(root: ParentNode, name: string, time: number): void {
+export function fillTime(root: ParentNode, name: string, time: number, format = day): void {
   for (const element of root.querySelectorAll<HTMLTimeElement>(`time.${name}`)) {
     element.dateTime = new Date(time * 1000).toISOString();
-    element.textContent = day(time);
+    element.textContent = format(time);
   }
 }
 

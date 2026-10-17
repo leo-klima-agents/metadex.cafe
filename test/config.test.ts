@@ -55,3 +55,11 @@ test("the page checks the integrity of its script and stylesheet, and has nothin
     '<script type="module" src="main.js" integrity="%MAIN_INTEGRITY%">',
   ]);
 });
+
+test("every address within the page has a target, and ids are unique", () => {
+  const html = read("index.html");
+  const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(([, id]) => id!);
+  assert.deepEqual(ids, [...new Set(ids)]);
+  for (const [, id] of html.matchAll(/href="#([^"]+)"/g)) assert.ok(ids.includes(id!), `#${id} has no target`);
+  for (const view of html.match(/<[^>]+class="view"[^>]*>/g) ?? []) assert.match(view, /data-title="[^"]+"/);
+});

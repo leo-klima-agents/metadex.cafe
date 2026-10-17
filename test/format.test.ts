@@ -1,6 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { WEEK, bps, clean, count, date, day, earningPower, short, units, weekStart } from "../src/format.ts";
+import {
+  WEEK,
+  bps,
+  clean,
+  count,
+  date,
+  day,
+  earningPower,
+  share,
+  short,
+  units,
+  until,
+  weekStart,
+  when,
+} from "../src/format.ts";
 
 const FLIP = 1_792_627_200; // Thu 22 Oct 2026, 00:00 UTC
 
@@ -14,6 +28,27 @@ test("dates in UTC; some browsers put a comma after the day of the week", () => 
   assert.match(day(FLIP), /^Thu,? 22 Oct$/);
   assert.match(day(FLIP - 1), /^Wed,? 21 Oct$/);
   assert.equal(date(1_803_945_600), "2 Mar 2027");
+});
+
+test("times in UTC, then in the visitor's zone when it differs", () => {
+  assert.match(when(FLIP, "UTC"), /^Thu,? 22 Oct,? 00:00 UTC$/);
+  assert.match(when(FLIP, "Europe/Paris"), /^Thu,? 22 Oct,? 00:00 UTC \(Thu,? 22 Oct,? 02:00 your time\)$/);
+  assert.match(when(FLIP, "America/New_York"), /^Thu,? 22 Oct,? 00:00 UTC \(Wed,? 21 Oct,? 20:00 your time\)$/);
+});
+
+test("how long until", () => {
+  assert.equal(until(4 * 86_400 + 6 * 3_600 + 59 * 60), "4 d 6 h");
+  assert.equal(until(6 * 3_600 + 12 * 60 + 30), "6 h 12 min");
+  assert.equal(until(61), "1 min");
+  assert.equal(until(59), "less than a minute");
+  assert.equal(until(-5), "less than a minute");
+});
+
+test("shares with a plain name are said in words too", () => {
+  assert.equal(share(3333n), "a third (33.33%)");
+  assert.equal(share(6667n), "two thirds (66.67%)");
+  assert.equal(share(5000n), "half (50%)");
+  assert.equal(share(1234n), "12.34%");
 });
 
 test("numbers", () => {

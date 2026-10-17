@@ -3,7 +3,18 @@ import { test } from "node:test";
 import { encodeFunctionData, parseAbi, zeroAddress, type Address } from "viem";
 import { CONDUIT, VOTING_ESCROW } from "../src/config.ts";
 import { WEEK } from "../src/format.ts";
-import { canJoin, canLeave, join, leave, status, type Account, type Step } from "../src/hydrex.ts";
+import {
+  canJoin,
+  canLeave,
+  canRelease,
+  group,
+  join,
+  leave,
+  release,
+  status,
+  type Account,
+  type Step,
+} from "../src/hydrex.ts";
 
 const OWNER: Address = "0x0208DdBc05a91e1B937E8B3140B62ef22A274C95";
 const LIQUID_HYDREX: Address = "0x809F8175b8F60960dF2bc7a78a7C4Eb04d138AF0";
@@ -32,9 +43,9 @@ const statusOf = (changes: Partial<Account>) => status(account(changes), OWNER, 
 
 // Written apart from src/hydrex.ts, from the verified source on Sourcify.
 const abi = parseAbi(["function setConduitApproval(address conduitAddress, uint256 tokenId, bool approve)"]);
-const approval = (id: bigint, approve: boolean) => ({
+const approval = (id: bigint, approve: boolean, conduit: Address = CONDUIT) => ({
   to: VOTING_ESCROW,
-  data: encodeFunctionData({ abi, functionName: "setConduitApproval", args: [CONDUIT, id, approve] }),
+  data: encodeFunctionData({ abi, functionName: "setConduitApproval", args: [conduit, id, approve] }),
 });
 const txs = (steps: Step[]) => steps.map(({ to, data }) => ({ to, data }));
 
@@ -70,6 +81,29 @@ test("an automation that has not voted since the previous epoch began has stoppe
   assert.ok(canJoin(account({ delegate: USDC, claimer: USDC, delegateVoted: STOPPED }), NOW));
 });
 
+test("an account that left another automation this epoch votes from the next", () => {
+  const released = { kind: "released", name: "USDC", date: START + WEEK };
+  assert.deepEqual(statusOf({ delegateAtStart: USDC }), released);
+  assert.deepEqual(statusOf({ delegate: zeroAddress, delegateAtStart: USDC }), released);
+  assert.deepEqual(statusOf({ delegateAtStart: STRANGER }), { kind: "self" }, "not a known automation");
+});
+
+test("accounts are grouped by what their owner can do with them", () => {
+  const groupOf = (changes: Partial<Account>) => group(account(changes), statusOf(changes));
+  assert.equal(groupOf({ delegate: USDC, delegateAtStart: USDC, delegateVoted: STOPPED }), "stopped");
+  assert.equal(groupOf({ claimer: CONDUIT }), "attention");
+  assert.equal(groupOf({ delegate: CONDUIT, delegateAtStart: CONDUIT, claimer: CONDUIT }), "in");
+  assert.equal(groupOf({ delegate: CONDUIT, claimer: CONDUIT }), "joining");
+  assert.equal(groupOf({ delegateAtStart: CONDUIT }), "leaving");
+  assert.equal(groupOf({}), "open");
+  assert.equal(groupOf({ delegate: USDC, delegateVoted: NOW }), "open", "in a running automation");
+  assert.equal(groupOf({ delegate: STRANGER }), "open");
+  assert.equal(groupOf({ delegateAtStart: USDC }), "open", "left another automation");
+  assert.equal(groupOf({ lockType: 0, end: NOW }), "closed");
+  assert.equal(groupOf({ amount: 0n }), "closed");
+  assert.equal(groupOf({ amount: 0n, delegate: CONDUIT, claimer: CONDUIT }), "in", "empty, but Carbon Impact holds it");
+});
+
 test("an empty account or an ended lock says so first", () => {
   assert.deepEqual(statusOf({ amount: 0n, delegate: CONDUIT, claimer: CONDUIT }), { kind: "empty" });
   assert.deepEqual(statusOf({ lockType: 0, end: NOW }), { kind: "ended" });
@@ -90,12 +124,17 @@ test("who can join and who can leave", () => {
   assert.ok(canLeave(account({ claimer: CONDUIT })), "partly in");
   assert.ok(canLeave(account({ amount: 0n, delegate: CONDUIT, claimer: CONDUIT })), "empty but in");
   assert.ok(!canLeave(account({ delegate: USDC, claimer: USDC })), "in another automation");
+
+  assert.ok(canRelease(account({ delegate: USDC, claimer: USDC })));
+  assert.ok(!canRelease(account({ delegate: CONDUIT, claimer: CONDUIT })), "in Carbon Impact");
+  assert.ok(!canRelease(account({ delegate: STRANGER })), "not a known automation");
+  assert.ok(!canRelease(account()), "its owner's");
 });
 
 test("joining sets the conduit's approval on the VotingEscrow", () => {
   const [step] = join([account()]);
   assert.deepEqual(txs([step!]), [approval(141n, true)]);
-  assert.equal(step!.says, "#141 joins the Carbon Impact automation.");
+  assert.equal(step!.says, "#141 joins Carbon Impact.");
   assert.equal(step!.shows, `setConduitApproval(${CONDUIT}, 141, true)`);
   assert.equal(step!.on, "Hydrex's VotingEscrow");
 });
@@ -110,9 +149,9 @@ test("an account in other automations joins directly, one call per account, nami
   assert.deepEqual(
     steps.map(({ says }) => says),
     [
-      "#141 leaves the Liquid Hydrex automation and joins the Carbon Impact automation.",
-      "#42 leaves the Hydrex Lock Maxi and USDC automations and joins the Carbon Impact automation.",
-      "#7 leaves the USDC automation and joins the Carbon Impact automation.",
+      "#141 leaves the Liquid Hydrex automation and joins Carbon Impact.",
+      "#42 leaves the Hydrex Lock Maxi and USDC automations and joins Carbon Impact.",
+      "#7 leaves the USDC automation and joins Carbon Impact.",
     ],
   );
 });
@@ -120,5 +159,31 @@ test("an account in other automations joins directly, one call per account, nami
 test("leaving clears the conduit's approval", () => {
   const steps = leave([account({ delegate: CONDUIT, claimer: CONDUIT }), account({ id: 42n, claimer: CONDUIT })]);
   assert.deepEqual(txs(steps), [approval(141n, false), approval(42n, false)]);
-  assert.equal(steps[1]!.says, "#42 leaves the Carbon Impact automation.");
+  assert.equal(steps[1]!.says, "#42 leaves Carbon Impact.");
+});
+
+test("leaving another automation clears its approval, named by its address", () => {
+  const steps = release([account({ delegate: USDC, claimer: USDC }), account({ id: 42n, delegate: LOCK_MAXI })]);
+  assert.deepEqual(txs(steps), [approval(141n, false, USDC), approval(42n, false, LOCK_MAXI)]);
+  assert.deepEqual(
+    steps.map(({ says, shows, conduit, automation }) => ({ says, shows, conduit, automation })),
+    [
+      {
+        says: "#141 leaves the USDC automation.",
+        shows: `setConduitApproval(${USDC}, 141, false)`,
+        conduit: USDC,
+        automation: "USDC",
+      },
+      {
+        says: "#42 leaves the Hydrex Lock Maxi automation.",
+        shows: `setConduitApproval(${LOCK_MAXI}, 42, false)`,
+        conduit: LOCK_MAXI,
+        automation: "Hydrex Lock Maxi",
+      },
+    ],
+  );
+  assert.deepEqual(
+    join([account()]).map(({ conduit, automation }) => ({ conduit, automation })),
+    [{ conduit: CONDUIT, automation: "Carbon Impact" }],
+  );
 });
