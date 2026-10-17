@@ -270,3 +270,58 @@ Thin: Reddit refused automated reads, so this comes from blogs, forums and post-
 - The Aerodrome and Velodrome DNS hijacks in Nov 2025 drained users through a cloned front-end
   ([Blockaid](https://www.blockaid.io/blog/how-blockaids-customer-data-network-contained-the-aerodrome-dns-attack)): the
   case for the page's official address, hashes and reproducible build.
+
+## Personas
+
+The evidence behind each persona in the [README](README.md#who-would-pay-and-for-what), and what would show it wrong.
+
+### The stranded holder
+
+- 1,640 owners have an account in a Hydrex automation that stopped on 9 Sep; 1,810 of the 2,348 accounts in Hydrex's
+  automations hold under 1,000 Earning Power, about $19.
+- Hydrex's app greys out their automation and tells them to switch to "No Automation", with no reason or date.
+- At Carbon Impact's rate last epoch, 1,000 Earning Power earned about $0.59 a week. What they lose is small in money;
+  what they lack is a reason to come back and one clear thing to do.
+- **Shown wrong if** few of them act once told: then their attention, not the choice, is the limit, and look-up and
+  batching matter more than comparison.
+
+### The hands-off holder
+
+- 6,170 owners put locks in veAERO Maxi, a public compounder, accepting a four-year re-lock; 323 in Moonwell's relay, 82
+  in Reserve's.
+- On Hydrex, the automations were in effect a choice of payout token: USDC, cbBTC, WETH, EURC, HYDX, a re-lock.
+- 1,646 Hydrex accounts, of at most 1,181 owners, hold between 1,000 and 100,000 Earning Power, about $19 to $1,900.
+- They pay what comparable products charge: Autopilot 5% of rewards, Hydrex 0.5–1%, Llama Airforce 2% and a yield fee.
+- **Shown wrong if** they choose by headline APR rather than by payout token and fee, in tests of the menu.
+
+### The optimiser
+
+- On Base, vfat holds $22.3M and Beefy $19.6M: people already pay for managed farming and liquidity.
+- What they praise is calm interfaces and auto-exit (vfat); what they use to judge is profit against holding, with
+  divergence loss as its own line (Revert).
+- **Shown wrong if** they will not join without a projected APR, which this proposal declines to show for products
+  without a record.
+
+### The treasury
+
+- Ten owners hold 72% of Hydrex's votes; the largest, a 2-of-3 Safe, holds 59.6% and last voted on 16 Sep.
+- On Aerodrome, foundation relays with two or three owners each hold about 40% of veAERO, and partner relays are a
+  category of their own ("Relays run by or for the Protocol Partners"). Hydrex offered "Request Custom Automation".
+- **Shown wrong if** treasuries need to direct their own votes, which a shared automation cannot do: then the product is
+  a custom relay, and the page is its window.
+
+### The impact holder
+
+- Carbon Impact's 11 owners give a third of their rewards to retirements; Klima's two Aerodrome relays hold 705 and 104
+  veAERO.
+- Among today's holders this is a small group; the case for it rests on new holders who come for the retirement.
+- **Shown wrong if** members leave when the share retired is shown in tonnes and dollars, side by side with what reaches
+  them.
+
+### The liquidity provider
+
+- 42,923 Slipstream positions are staked in Aerodrome's gauges; Hydrex lists 293 ICHI vaults and 251 manual strategies.
+- Aero tells users to withdraw from Aerodrome's liquidity managers, which "will not move automatically", and says "The
+  current ALM solution is winding down": many liquidity providers will need a manager after 22 Oct.
+- **Shown wrong if** they prefer pooled vaults with a single token in, over managers that leave the position in their
+  wallet.
