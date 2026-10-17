@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src https://mainnet.base.org https://base-rpc.publicnode.com https://base.drpc.org; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'sha256-4CSX0cSvsqdXksjA6mWUlZWOxhEmilc7TqCXOuzQjd8=' 'sha256-iBi3gvWToeXcPvoJh2Qe00AVDlN+f08gX0MtDVLz5qI=' 'sha256-thB/1uQ6hZv+vTQDSxOw21131dHhE475xakO9wp4pxo='; img-src 'self' data:; connect-src 'self' https://mainnet.base.org https://base-rpc.publicnode.com https://base.drpc.org https://rpc.wallet.coinbase.com https://chain-proxy.wallet.coinbase.com https://www.walletlink.org wss://www.walletlink.org; base-uri 'none'; form-action 'none'"
     />
     <meta name="referrer" content="no-referrer" />
     <title>metaDEX Café</title>
@@ -31,8 +31,8 @@
         <strong>Reading Base failed.</strong> Check the connection and <a href="">try again</a>.
       </p>
       <div id="checks" class="notice" role="alert" hidden>
-        <strong>This page's checks of the Carbon Impact automation failed.</strong> Joining stays off until the page is
-        updated.
+        <strong>This page's checks of the Carbon Impact automation failed.</strong> Joining and changing the payout
+        address stay off until the page is updated. Leaving still works.
         <ul>
           <li id="chain" hidden>The RPC serves another chain than Base.</li>
           <li id="code" hidden>The Carbon Impact automation runs other code than this page knows.</li>
@@ -97,8 +97,30 @@
 
       <section>
         <h2>Accounts</h2>
+        <div id="wallets">
+          <p>Connect a wallet to join or leave with its accounts:</p>
+          <p class="wallets"></p>
+          <p id="wallet-failed" class="notice" role="alert" hidden>
+            <bdi class="failed-wallet" translate="no"></bdi> did not connect. Try again, or use another wallet.
+          </p>
+        </div>
+        <div id="connected" hidden>
+          <p>
+            Connected with <bdi class="wallet" translate="no"></bdi> as <code translate="no"><a class="me"></a></code>.
+            <button type="button" id="disconnect" class="secondary">Disconnect</button>
+          </p>
+          <p id="wrong-chain" class="notice" role="alert" hidden>
+            <span class="to-switch">
+              Your wallet is on another network.
+              <button type="button" class="switch">Switch to Base</button>
+            </span>
+            <span class="safe-elsewhere" hidden
+              >This Safe is on another network. Open the page from a Safe on Base.</span
+            >
+          </p>
+        </div>
         <search>
-          <form>
+          <form id="look-up">
             <p>
               <label for="address">See the accounts of an address:</label>
               <input
@@ -119,12 +141,20 @@
         </search>
         <p id="reading" hidden>Reading the accounts…</p>
         <div id="accounts" hidden>
-          <ul id="full"></ul>
+          <p id="not-yours" hidden>Connect as this address to join or leave with its accounts.</p>
+          <ul id="full" class="accounts"></ul>
           <p id="none" hidden>No account of this address holds HYDX.</p>
           <details id="empty-accounts" hidden>
             <summary class="empty-count"></summary>
-            <ul></ul>
+            <ul class="accounts"></ul>
           </details>
+          <div id="pick-bar" hidden>
+            <p>Tick the accounts to join or leave with, then check what your wallet will ask.</p>
+            <p class="buttons">
+              <button type="button" id="join" disabled>Join</button>
+              <button type="button" id="leave" class="secondary" disabled>Leave</button>
+            </p>
+          </div>
           <p>Earning Power is shown as on Hydrex: 1.3 times the votes.</p>
         </div>
       </section>
@@ -139,6 +169,24 @@
           One address takes the payouts for all of an owner's accounts in the Carbon Impact automation. Hydrex's admin
           can also change it.
         </p>
+        <form id="payout-form" hidden>
+          <p>
+            <label for="recipient">Send the payouts to:</label>
+            <input
+              id="recipient"
+              required
+              pattern="\s*0x[0-9a-fA-F]{40}\s*"
+              title="0x followed by 40 hexadecimal characters"
+              data-typo="This address has a typo: its capital and small letters do not match its checksum."
+              data-zero="Payouts cannot go to the zero address."
+              placeholder="0x…"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+            />
+          </p>
+          <p><button>Change the payout address</button></p>
+        </form>
       </section>
 
       <section>
@@ -171,9 +219,9 @@
             1%), the routers, and your payout address.
           </li>
           <li>
-            <b>You can leave at any time, with one transaction per account.</b> From that moment the Carbon Impact
-            automation can no longer claim the account's rewards; what it has not claimed is yours to claim on Hydrex.
-            Your votes come back to you from the next epoch.
+            <b>You can leave at any time.</b> From that moment the Carbon Impact automation can no longer claim the
+            account's rewards; what it has not claimed is yours to claim on Hydrex. Your votes come back to you from the
+            next epoch.
           </li>
         </ul>
         <p>
@@ -201,13 +249,78 @@
       </p>
     </footer>
 
+    <dialog id="review" aria-labelledby="review-title">
+      <h2 id="review-title"></h2>
+      <div class="effects"></div>
+      <h3>What your wallet will ask</h3>
+      <p class="how"></p>
+      <ol class="steps"></ol>
+      <p class="check" role="status"></p>
+      <p class="progress" role="status"></p>
+      <p class="buttons">
+        <button type="button" class="confirm" disabled>Confirm in your wallet</button>
+        <button type="button" class="back secondary">Back</button>
+      </p>
+    </dialog>
+
     <template id="account">
       <li>
-        <b><bdi class="name" translate="no">Account</bdi> <code class="id" translate="no"></code></b><br /><span
-          class="kind"
-        ></span
-        >, <span class="votes"></span> Earning Power<br /><span class="status"></span>
+        <input type="checkbox" class="pick" hidden />
+        <div>
+          <b><bdi class="name" translate="no">Account</bdi> <code class="id" translate="no"></code></b><br /><span
+            class="kind"
+          ></span
+          >, <span class="votes"></span> Earning Power<br /><span class="status"></span>
+        </div>
       </li>
+    </template>
+    <template id="wallet">
+      <button type="button" class="secondary"><img alt="" hidden /> <bdi class="name" translate="no"></bdi></button>
+    </template>
+    <template id="step">
+      <li><span class="says"></span><br /><code class="shows" translate="no"></code> on <span class="on"></span></li>
+    </template>
+    <template id="join-effects">
+      <ul>
+        <li>
+          <b>The Carbon Impact automation votes with <span class="which"></span></b> from the epoch starting
+          <time class="next"></time>, 00:00 UTC. Until then you can't vote with
+          <span data-one="it" data-many="them"></span>
+          yourself.
+        </li>
+        <li>
+          <strong
+            >It can claim <span data-one="its" data-many="their"></span> rewards as soon as
+            <span data-one="it joins" data-many="they join"></span>, including any you have not claimed from past
+            epochs.</strong
+          >
+          <a href="https://www.hydrex.fi/accounts">Claim them on Hydrex first</a> to keep them as they are.
+        </li>
+        <li>
+          <b>The calls allow voting and claiming, nothing else.</b> Your HYDX stays in your
+          <span data-one="account" data-many="accounts"></span>, and nothing is transferred.
+        </li>
+      </ul>
+    </template>
+    <template id="leave-effects">
+      <ul>
+        <li>
+          <b>The Carbon Impact automation can no longer claim the rewards of <span class="which"></span></b> from the
+          moment <span data-one="it leaves" data-many="they leave"></span>. What it has not claimed is yours to claim on
+          Hydrex.
+        </li>
+        <li><b>Your votes come back to you</b> from the next epoch, starting <time class="next"></time>, 00:00 UTC.</li>
+      </ul>
+    </template>
+    <template id="payout-effects">
+      <ul>
+        <li>
+          <b
+            >The Carbon Impact automation sends the payouts to <code translate="no"><a class="recipient"></a></code
+          ></b>
+          for all your accounts in it, from the next payout on.
+        </li>
+      </ul>
     </template>
     <template id="in">
       <strong>In the Carbon Impact automation.</strong> It votes with this account and claims its rewards.
@@ -225,8 +338,8 @@
       them all.
     </template>
     <template id="other">
-      <strong>In another Hydrex automation: <bdi class="automation" translate="no"></bdi>.</strong> Joining takes it out
-      first.
+      <strong>In another Hydrex automation: <bdi class="automation" translate="no"></bdi>.</strong> Joining moves it to
+      the Carbon Impact automation.
     </template>
     <template id="delegated">
       <strong

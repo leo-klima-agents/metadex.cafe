@@ -5,6 +5,7 @@
   --accent: light-dark(#0b6b64, #5cc8bb);
   --on-accent: light-dark(#ffffff, #06201d);
   --edge: light-dark(#7d8f8b, #5f7470);
+  --accent-soft: light-dark(#e2f3f0, #12302c);
   --bad: light-dark(#b3261e, #ff8c7f);
   --bad-soft: light-dark(#fbe6e3, #3a1b18);
 }
@@ -53,6 +54,71 @@ button {
 button:disabled {
   opacity: 0.5;
   cursor: progress;
+}
+#pick-bar button:disabled {
+  cursor: not-allowed;
+}
+button.secondary {
+  background: transparent;
+  color: var(--accent);
+}
+button img {
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  vertical-align: middle;
+}
+.wallets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+input[type="checkbox"] {
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+/* Accounts the reader can pick: a box beside each, and the picked ones tinted. */
+.accounts:has(.pick:not([hidden])) {
+  padding-inline-start: 0;
+  list-style: none;
+}
+.accounts:has(.pick:not([hidden])) > li {
+  display: grid;
+  grid-template-columns: 1.5rem 1fr;
+  column-gap: 0.75rem;
+  padding: 0.5rem;
+  border-radius: 8px;
+}
+.accounts > li > div {
+  grid-column: 2;
+}
+.accounts > li:has(.pick:checked) {
+  background: var(--accent-soft);
+}
+dialog {
+  max-inline-size: min(40rem, 100% - 2rem);
+  padding-block: 0;
+  padding-inline: 1rem;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+}
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+/* The dialog's buttons stay in view while the rest scrolls. */
+dialog .buttons {
+  position: sticky;
+  inset-block-end: 0;
+  margin: 0;
+  padding-block: 0.75rem;
+  background: Canvas;
 }
 input {
   box-sizing: border-box;

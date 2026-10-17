@@ -196,6 +196,16 @@ export function status(account: Account, owner: Address, now: number, epochStart
   return other ? { kind: "other", name: other.name } : { kind: "delegated", to: account.delegate };
 }
 
+/** Whether joining would change anything: the account holds HYDX, its lock has not ended, and it is not fully in. */
+export const canJoin = (account: Account, now: number): boolean =>
+  account.amount > 0n &&
+  !(account.lockType === LockType.timed && account.end <= now) &&
+  !(same(account.delegate, CONDUIT) && same(account.claimer, CONDUIT));
+
+/** Whether the conduit holds the account's votes or claims. */
+export const canLeave = (account: Account): boolean =>
+  same(account.delegate, CONDUIT) || same(account.claimer, CONDUIT);
+
 /** The checks that fail, by the id of their message on the page; empty when the chain matches config.ts. */
 export async function check(): Promise<string[]> {
   const [chainId, conduitHash, impl, [veToken, voter, payoutToken, config, logic]] = await Promise.all([

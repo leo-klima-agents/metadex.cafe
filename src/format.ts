@@ -23,6 +23,7 @@ const utcTime = new Intl.DateTimeFormat(LANG, {
 });
 const duration = new Intl.DurationFormat(LANG, { style: "long" });
 const plurals = new Intl.PluralRules(LANG);
+const and = new Intl.ListFormat(LANG, { type: "conjunction" });
 
 /** A whole number of 18-decimal units, rounded down: 897042.7e18 → "897,042". */
 export const units = (value: bigint): string => whole.format(value / 10n ** 18n);
@@ -66,6 +67,9 @@ export const short = (address: string): string => `${address.slice(0, 6)}…${ad
 /** A number of things: "1 pool", "1,234 pools". */
 export const count = (n: number, one: string, other: string): string =>
   `${whole.format(n)} ${plurals.select(n) === "one" ? one : other}`;
+
+/** "#1", "#1 and #2", "#1, #2 and #3". */
+export const list = (items: string[]): string => and.format(items);
 
 // Controls, and the marks that reorder or hide text, which a name could use to pass for another.
 const HIDDEN = /[\p{Cc}\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/gu;

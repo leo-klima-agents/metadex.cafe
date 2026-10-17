@@ -40,7 +40,11 @@ test("Hydrex names the conduit Carbon Impact, and the page links to it, the Voti
 
 test("the page may reach every RPC, and the README lists every origin it may reach", () => {
   const csp = /http-equiv="Content-Security-Policy"\s+content="([^"]+)"/.exec(read("index.html"))?.[1] ?? "";
-  const connect = (/connect-src ([^;]+)/.exec(csp)?.[1] ?? "").trim().split(/\s+/);
+  // 'self' is the page's own origin, which Coinbase's SDK asks for its headers.
+  const connect = (/connect-src ([^;]+)/.exec(csp)?.[1] ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter((source) => source !== "'self'");
   for (const rpc of RPCS) {
     assert.ok(rpc.startsWith("https://"), rpc);
     assert.ok(connect.includes(new URL(rpc).origin), `${rpc} is missing from connect-src`);

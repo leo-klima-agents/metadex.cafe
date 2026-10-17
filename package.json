@@ -1,6 +1,6 @@
 {
   "name": "metadex.cafe",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "Static page for joining and leaving the Carbon Impact automation with Hydrex accounts",
   "license": "MIT",
@@ -14,14 +14,18 @@
     "build": "node scripts/build.ts",
     "format": "prettier --write .",
     "test": "node --test",
+    "test:fork": "npm run build && node --test fork/wallets.ts",
     "typecheck": "tsc"
   },
   "dependencies": {
+    "@coinbase/wallet-sdk": "4.4.0",
+    "@safe-global/safe-apps-sdk": "9.1.0",
     "viem": "2.57.7"
   },
   "devDependencies": {
     "@types/node": "26.6.5",
     "esbuild": "0.28.2",
+    "playwright-core": "1.63.0",
     "prettier": "3.9.10",
     "typescript": "7.0.2"
   },

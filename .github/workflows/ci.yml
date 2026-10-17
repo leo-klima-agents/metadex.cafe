@@ -42,10 +42,34 @@ jobs:
         with:
           path: dist
 
+  # The page in Chromium against a fork of Base, when the repository has an archive RPC in its BASE_RPC_URL secret.
+  fork:
+    runs-on: ubuntu-26.04
+    env:
+      BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
+    steps:
+      - if: env.BASE_RPC_URL != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: env.BASE_RPC_URL != ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+          cache: npm
+      - if: env.BASE_RPC_URL != ''
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: v1.5.1
+      - if: env.BASE_RPC_URL != ''
+        run: npm ci --ignore-scripts
+      - if: env.BASE_RPC_URL != ''
+        run: npx playwright-core install --with-deps chromium
+      - if: env.BASE_RPC_URL != ''
+        run: npm run test:fork
+
   # A tag v… publishes the build on GitHub Pages, then checks that Pages serves the same files.
   pages:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [lint, node]
+    needs: [lint, node, fork]
     runs-on: ubuntu-26.04
     permissions:
       pages: write

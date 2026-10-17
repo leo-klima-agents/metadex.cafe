@@ -15,6 +15,7 @@ export const votingEscrowAbi = parseAbi([
   "function getPastVotes(address account, uint256 timepoint) view returns (uint256)",
   "function getConduitApprovalConfig(address conduit) view returns (uint8[] actions, bool active, string description)",
   "function approvalLogic() view returns (address)",
+  "function setConduitApproval(address conduit, uint256 tokenId, bool approve)",
 ]);
 
 export const voterAbi = parseAbi([
@@ -34,6 +35,7 @@ export const conduitAbi = parseAbi([
   "function totalTonnesRetired() view returns (uint256)",
   "function retiringEntityName() view returns (string)",
   "function getEffectiveRecipientForOwner(address owner) view returns (address)",
+  "function setMyPayoutRecipient(address newRecipient)",
 ]);
 
 export const accountNamesAbi = parseAbi(["function getBulkNames(uint256[] tokenIds) view returns (string[])"]);

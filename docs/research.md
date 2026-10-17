@@ -265,8 +265,8 @@ Installed with `npm ci --ignore-scripts`: viem 2.57.7, `@wagmi/core` 3.6.5, `@wa
 - **Coinbase's SDK.** Its popup is `https://keys.coinbase.com/connect`, opened with `window.open`, so no frame is
   needed. It calls `https://rpc.wallet.coinbase.com` for `wallet_getCallsStatus` before a session exists. Once connected
   to a smart wallet, it sends other reads to an RPC URL the wallet gives in its handshake; that origin must be confirmed
-  with a real Base Account. The Coinbase Wallet app's QR flow uses `https://www.walletlink.org` and
-  `wss://www.walletlink.org/rpc`.
+  with a real Base Account. It was found without one on 2026-10-17: see [Writes](#writes). The Coinbase Wallet app's QR
+  flow uses `https://www.walletlink.org` and `wss://www.walletlink.org/rpc`.
 - **Coinbase's styles.** That QR flow injects one `<style>` element (`cssReset`) into the page. `style-src 'self'`
   blocks it; a CSP hash of that exact text would allow it and nothing else.
 - **Telemetry.** Coinbase's SDK 4.4.0 contains no analytics code. Safe's SDK and wagmi contain none.
@@ -324,6 +324,63 @@ Headers rechecked with `curl`:
 
 Milestone 5 tests the page itself inside Safe{Wallet}.
 
+## Writes
+
+Checked for the wallet milestone on 2026-10-16, on Base at block 52,694,000 and on an anvil fork of it.
+
+- **Members.** 22 accounts, held by 15 owners.
+- **Leaving resets, whatever it names.** `setConduitApproval(conduit, tokenId, false)` sets the delegate back to the
+  owner and clears the claim redirect for any active conduit, whether or not that conduit holds them. Sent after a join,
+  it would undo the join.
+- **Joining from another automation.** Joining sets the delegate and the claim redirect, so it replaces another
+  automation's hold on both. Only Hydrex Lock Maxi holds more: an ERC-5725 claim approval (action 1), which joining
+  leaves in place. That approval allows nothing in the VotingEscrow today: its `claim`, which takes the HYDX out of a
+  timed lock, accepts only the owner and ERC-721 approvals. The fork tests show it.
+- **Two errors.** The approval logic reverts with "Invalid conduit type" for an inactive conduit and "Not token owner"
+  when the sender does not own the account.
+- **The payout address.** `setMyPayoutRecipient(address)` stores any address for the sender and never reverts. The zero
+  address means the owner itself.
+- **Simulation.** `eth_simulateV1` runs calls one after the other, each on the state the one before left.
+  `mainnet.base.org` and `base-rpc.publicnode.com` serve it; `base.drpc.org` was rate-limited. Anvil 1.5.1 serves it
+  too.
+- **Old state.** `mainnet.base.org` serves it, so a fork can be pinned to a block without a private RPC. Publicnode asks
+  for a token.
+- **Gas depends on the time.** The VotingEscrow's checkpoints make the gas of a join or a leave depend on the block's
+  time. Base estimated 347,115 gas to take #2439 out of USDC. Anvil estimates at another time than it mines at, and its
+  estimates fell up to 16% short, so the fork tests' wallet sets a fixed limit.
+- **Coinbase's SDK 4.4.0** adds three style elements, for the Coinbase Wallet app's QR code, its snackbar and its
+  redirect dialog; the page's policy allows them by their hashes. It sends a `HEAD` request to the page's own URL to
+  read its `Cross-Origin-Opener-Policy`, so `connect-src` includes `'self'`. It has no telemetry. Once a smart wallet is
+  connected, it sends `wallet_getCallsStatus` and other reads to the RPC that keys.coinbase.com names for the session.
+  keys.coinbase.com builds it from the chains `api.wallet.coinbase.com/rpc/v3/scw/getSupportedChains` lists, as
+  `https://chain-proxy.wallet.coinbase.com/?targetName=base` for Base. Checked on 2026-10-17, without an account: that
+  proxy answers chain `0x2105`, allows any origin, and knows `wallet_getCallsStatus`. The page's policy allows it;
+  should a status still not come, the page says the batch was sent.
+- **Sizes,** gzipped: the first load is 23.5 KB, up from 18.9 KB. Coinbase's SDK is 37.5 KB, loaded only when someone
+  picks it, and Safe's 17.0 KB, loaded only in a frame. With esbuild's splitting, the parts of viem that the page and
+  Coinbase's SDK both use went into a chunk on the first load, 38 KB in all, so each SDK is now built on its own.
+
+### Safe{Wallet}
+
+Checked on 2026-10-17 in Playwright's Chromium, with Safe{Wallet} at `app.safe.global` opened read-only for the large
+Safe on Base, and this build served as `https://metadex.cafe/`:
+
+- **As a Safe App.** The page connected to the Safe on its own and showed its 8 accounts with HYDX. Leaving with #48803
+  was checked against Base from the Safe's address. "Propose in Safe{Wallet}" opened Safe{Wallet}'s "Confirm
+  transaction" with the decoded call, `setConduitApproval` on Hydrex's VotingEscrow with the automation, 48803 and
+  `false`, "No balance change", and 0 of 3 confirmations. Nothing was signed. Discarding it answers "Transaction was
+  rejected", which the page shows as a refusal.
+- **The manifest.** A link with `appUrl` opens an app that is not in Safe{Wallet}'s list behind a warning, without
+  reading the manifest; its transactions then say "unknown". "Add custom Safe App" reads `manifest.json` and `icon.svg`
+  and shows the name and description.
+- **Safe's provider package,** `@safe-global/safe-apps-provider` 0.18.6, is CommonJS. Bundled, it pulled the CommonJS
+  build of Safe's SDK and all of viem: 189 KB gzipped. It also has no `eth_requestAccounts`. The page answers its four
+  requests itself over the SDK: `eth_accounts`, `eth_chainId`, `wallet_getCapabilities` and `wallet_sendCalls`, which
+  returns the Safe transaction's hash.
+- **Safe's SDK** talks only to the parent frame, and the page accepts answers only from `https://app.safe.global`. It
+  re-exports types from Safe's gateway package, whose request code is bundled but never called.
+- **Simulation from a Safe.** `mainnet.base.org` and `base-rpc.publicnode.com` both run calls from the Safe's address.
+
 ## Decisions
 
 Taken by the user on 2026-10-15, after this research:
@@ -370,6 +427,23 @@ Taken by the user on 2026-10-15, after this research:
 16. **UTC and epochs.** Later that day the user asked for UTC everywhere for now, so the page gives no time in the
     reader's time zone, and for "epoch" rather than "week", as Hydrex says. kVCM needs no gloss, and every address the
     page shows links to its page on Basescan.
+
+17. **No wagmi.** On 2026-10-16 the user confirmed that the page finds wallets with EIP-6963 and talks to them with
+    EIP-1193 requests, without wagmi. Its runtime packages are `viem`, `@coinbase/wallet-sdk` and, since milestone 5,
+    `@safe-global/safe-apps-sdk`.
+18. **Leaving stays on** when a startup check fails: it only takes the account away from the automation. Joining and
+    changing the payout address stay off.
+19. **The wallet sets the gas.** The page sends no gas limit.
+20. **Join directly.** The same day, the user agreed that an account in another automation joins without first being
+    taken out of it. The join replaces where its votes and claims go; taking it out first only cleared Lock Maxi's claim
+    approval, which the VotingEscrow does not use, at the cost of one more transaction without batching.
+21. **Leave with several.** Also that day: a box beside every account that can join or leave, with "Join with N
+    accounts" and "Leave with N accounts" under the list, each one transaction where the wallet batches. The large Safe
+    can leave with its five accounts in one Safe transaction rather than five.
+22. **A click per transaction.** On 2026-10-17, after a code review, the user agreed that a wallet without batching
+    sends each transaction from a click of its own: "Confirm transaction 2 of 3" once the one before is included. A
+    wallet that opens a window, such as Coinbase's, can only open it from a click, and closing the review between
+    transactions plainly stops there.
 
 Still open: how much an account has not claimed yet. It would need reads of every bribe the account earned in; it is
 left for later.

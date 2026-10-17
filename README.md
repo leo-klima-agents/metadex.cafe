@@ -2,9 +2,11 @@
 
 The static page at <https://metadex.cafe/> for joining and leaving the Klima "Carbon Impact" automation with Hydrex
 accounts on Base. It shows the automation's settings and latest vote, the epoch, and the accounts of any address with
-where each stands. Klima's keeper, [hydrex-keeper](https://github.com/ldeso/hydrex-keeper), votes with the accounts in
-the automation. The page is `index.html` and `style.css`; a script in `src/` fills in what it reads from Base, and its
-only dependency is `viem`.
+where each stands. With a wallet connected, or inside Safe{Wallet} as a Safe App, it joins, leaves and sets the payout
+address. Klima's keeper, [hydrex-keeper](https://github.com/ldeso/hydrex-keeper), votes with the accounts in the
+automation. The page is `index.html` and `style.css`; a script in `src/` fills in what it reads from Base and talks to
+the wallet. Its dependencies are `viem`, `@coinbase/wallet-sdk` for Coinbase Wallet, and `@safe-global/safe-apps-sdk`
+for Safe{Wallet}.
 
 ## How joining works
 
@@ -28,11 +30,39 @@ Klima's executor Safe, through which the keeper acts, and the automation's deplo
 
 ## What the page can and cannot do
 
-- **It only reads, for now.** It does not talk to wallets yet, so it cannot join or leave.
-- **It has no server.** It runs in the browser and reads Base from `https://mainnet.base.org`,
-  `https://base-rpc.publicnode.com` and `https://base.drpc.org`. Its Content Security Policy allows nothing else.
+- **It sends three calls only:** `setConduitApproval(conduit, tokenId, true)` on Hydrex's VotingEscrow to join, the same
+  with `false` to leave, and `setMyPayoutRecipient(address)` on the Carbon Impact automation. Joining replaces where an
+  account's votes and claims go, so an account in another of Hydrex's automations joins directly.
+- **It checks each call before the wallet asks.** It runs the calls against Base from the owner's address, one after the
+  other (`eth_simulateV1`), shows what they change and the exact calls, and sends nothing that would fail.
+- **It holds no key and has no server.** Each action ends in a wallet prompt. A wallet that sends several calls as one
+  transaction (EIP-5792) asks once. Others ask once per call, each from a click of its own once the one before is
+  included: a wallet that opens a window, such as Coinbase's, can only open it from a click.
+- **It works with the wallets the browser announces** (EIP-6963), or the one at `window.ethereum`, and with Coinbase
+  Wallet through Coinbase's SDK. That SDK loads only when someone picks it.
+- **Inside Safe{Wallet}, it works with the Safe.** It proposes the calls as one Safe transaction, and the Safe's owners
+  sign it in Safe{Wallet}. Safe's SDK loads only when the page runs in a frame.
 - **It checks the automation first.** The chain, the automation's code and settings, and the code of Hydrex's
-  VotingEscrow must match `src/config.ts`. If not, the page says what changed, and joining stays off.
+  VotingEscrow must match `src/config.ts`. If not, the page says what changed, and joining and changing the payout
+  address stay off. Leaving still works.
+- **It cannot stop copies.** Anyone can host a changed copy, for example with another payout address. Use the official
+  address, and read the wallet prompt.
+
+The page's Content Security Policy allows these origins and nothing else:
+
+| Origin                                                   | Why                                                                         |
+| -------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `https://mainnet.base.org`                               | Base RPC: reads, checks of the calls, and receipts                          |
+| `https://base-rpc.publicnode.com`                        | Base RPC: reads, checks of the calls, and receipts                          |
+| `https://base.drpc.org`                                  | Base RPC: reads, checks of the calls, and receipts                          |
+| `https://rpc.wallet.coinbase.com`                        | Coinbase's SDK: call status before a smart-wallet session exists            |
+| `https://chain-proxy.wallet.coinbase.com`                | Coinbase's SDK: a smart-wallet session's reads, such as a batch's status    |
+| `https://www.walletlink.org`, `wss://www.walletlink.org` | Coinbase's SDK: sessions with the Coinbase Wallet app on a phone            |
+| The page's own origin                                    | Coinbase's SDK reads the page's headers to check how it may open its window |
+
+Coinbase's smart wallet opens `https://keys.coinbase.com` in a window of its own, and Safe's SDK talks to Safe{Wallet}
+through the frame; neither needs an entry. The policy also allows the three style elements Coinbase's SDK adds for the
+Coinbase Wallet app, by their hashes, and wallets' icons as `data:` images.
 
 ## Deployment
 
@@ -51,6 +81,17 @@ Set up once, in the repository's settings:
 - **Environments:** `github-pages` allows tags matching `v*`, not only the default branch.
 - **DNS:** `metadex.cafe` has the A and AAAA records that GitHub lists for an apex domain.
 
+## Inside Safe{Wallet}
+
+In Safe{Wallet}, open Apps, then My custom apps, and add `https://metadex.cafe/` as a custom Safe App. Safe{Wallet}
+reads the name, description and icon from `manifest.json`. A link also opens it, after a warning that the app is not in
+Safe{Wallet}'s list: `https://app.safe.global/apps/open?safe=base:<Safe address>&appUrl=https%3A%2F%2Fmetadex.cafe%2F`.
+
+The page connects to the Safe on its own. Joining, leaving and the payout address end in Safe{Wallet}'s own screen,
+which shows the decoded calls; one owner proposes, and the others sign there. The page does not follow the proposal: the
+statuses change once the transaction executes. GitHub Pages lets other sites frame the page and read its manifest, which
+Safe{Wallet} needs.
+
 ## Checking a build
 
 The same commit gives the same files on any machine. To check the official page, build the version in its footer:
@@ -67,18 +108,40 @@ Then compare each file in `dist/` with the one at the same path on <https://meta
 ## Failure modes
 
 - **Base RPC:** a read that fails goes to the next RPC. If none answers, the page says so and offers to try again.
+- **A failed startup check,** or one that cannot run, turns joining and changing the payout address off. The page says
+  why.
+- **The wrong network:** the page says so, and the main button becomes "Switch to Base".
+- **A call that would fail:** the review says which and why, and nothing can be sent.
+- **A refusal in the wallet, or a transaction that fails:** the review says so, with links to the transactions that went
+  through. The page reads the accounts again when the review closes.
+- **A transaction the page cannot follow,** because the wallet replaced it or cannot say where a batch is: the review
+  can be closed at any time, which stops the page following and sending; the wallet shows the rest.
+- **Coinbase's SDK failing to load** affects only Coinbase Wallet; other wallets keep working.
+- **A Safe** proposes the transaction instead of sending it, and its owners sign it in Safe{Wallet}. A Safe on another
+  network cannot switch: the page asks to open it from a Safe on Base.
 
 ## Development
 
 Needs Node 26. Run `npm ci --ignore-scripts`, then `npm run typecheck`, `npm test` and `npm run format` before
 committing. `npm run build` writes the page to `dist/`; serve that folder with any static server to try it.
 
+`npm run test:fork` builds the page and drives it in Chromium against a copy of Base in anvil, pinned at a block. A test
+wallet acts as real owners: one joins with two accounts, one of them from Liquid Hydrex; another joins from Lock Maxi
+and USDC in one batch; a member leaves and changes the payout address; another leaves with two accounts in one batch;
+the owner of an ended lock gets nothing to tick; and, inside a stand-in for Safe{Wallet}, a Safe proposes leaving with
+two accounts. It also checks the wrong network, a refusal in the wallet, a call that would fail, and that Coinbase
+Wallet loads under the page's policy and opens its window. It needs anvil, from Foundry, and Chromium:
+`npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium's path. `BASE_RPC_URL` is the archive RPC to
+fork from, `https://mainnet.base.org` by default. With `SCREENSHOTS` set to a folder, it saves screenshots there at 390
+and 1440 px, light and dark.
+
 `src/config.ts` holds what the page trusts about the automation, and the RPCs it reads from. After a Hydrex upgrade,
 check the new contracts, then update it. `src/hydrex-conduits.json` names Hydrex's other automations, from
 `api.hydrex.fi/conduits`.
 
 CI runs Prettier, the type check, the tests, `reuse lint` and the build, then builds again from a fresh clone and checks
-that both builds are the same. Dependabot updates the pinned Actions and npm packages.
+that both builds are the same. With a `BASE_RPC_URL` secret, it also runs the fork tests. Dependabot updates the pinned
+Actions and npm packages.
 
 ## Limitations
 
