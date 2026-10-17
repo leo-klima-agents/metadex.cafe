@@ -7,6 +7,8 @@ compounders and liquidity managers, each for a fee. Nothing here changes the pag
   <https://claude.ai/artifact/XWN6n3DdJEcgaWbD1GDsA5>. It is private until its owner shares it.
 - **The evidence** is in [research.md](research.md): who uses automations on Base, what comparable products do and
   charge, what changes with Aero, what research says about liquidity providers, trust and disclosure, and the sources.
+- **The brand** is in [brand.md](brand.md): what the name carries, the neighbours' colours and type, what each persona
+  needs from a brand, the rules on environmental claims, and three directions, on the canvas's row 7.
 - **Figures** are read from Base on 17 Oct 2026, unless marked. Mockups mark what is illustrative, and put product
   decisions not yet taken in brackets, such as "[10%] fee".
 
