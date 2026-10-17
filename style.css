@@ -1,6 +1,34 @@
+/* The fonts are subsets made by scripts/fonts.py. The build puts them inside this stylesheet, so that its hash covers
+   them too. */
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("fonts/atkinson-hyperlegible-next-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("fonts/atkinson-hyperlegible-next-700.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible Mono";
+  src: url("fonts/atkinson-hyperlegible-mono-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Young Serif";
+  src: url("fonts/young-serif-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
 :root {
-  font-family: system-ui, sans-serif;
+  font-family: "Atkinson Hyperlegible Next", system-ui, sans-serif;
   line-height: 1.5;
+  --serif: "Young Serif", Georgia, serif;
+  --mono: "Atkinson Hyperlegible Mono", ui-monospace, monospace;
   --accent: light-dark(#0b6b64, #5cc8bb);
   --line: light-dark(#c9d4d1, #3d4d4a);
   --quiet: light-dark(#4f5f5c, #a9b8b5);
@@ -24,10 +52,23 @@ main:has(> .view:target, > .view :target) > .view:not(:target, :has(:target)),
 main:not(:has(> .view:target, > .view :target)) > .view:not(#home) {
   display: none;
 }
+/* Young Serif has one weight: headings use it as it is. */
+h1,
+h2 {
+  font-family: var(--serif);
+  font-weight: 400;
+}
 .view > h1,
 .promise h1 {
   font-size: 1.75rem;
   line-height: 1.25;
+}
+code {
+  font-family: var(--mono);
+}
+table,
+.numbers dd {
+  font-variant-numeric: tabular-nums;
 }
 .view h1:focus {
   outline: none;
@@ -44,8 +85,9 @@ header.site {
 }
 header.site .name {
   color: inherit;
-  font-weight: 700;
-  font-size: 1.125rem;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 1.25rem;
   text-decoration: none;
 }
 header.site nav {

@@ -34,6 +34,7 @@ await esbuild.build({
   target: "es2022",
   minify: true,
   charset: "utf8",
+  loader: { ".woff2": "dataurl" },
   legalComments: "linked",
   logLevel: "warning",
 });

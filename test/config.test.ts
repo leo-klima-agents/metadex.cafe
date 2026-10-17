@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { getAddress } from "viem";
 import {
@@ -52,6 +52,17 @@ test("the page may reach its RPCs and nothing else, and the README lists them", 
   assert.ok(RPCS.every((rpc) => rpc === new URL(rpc).origin && rpc.startsWith("https://")));
   const readme = read("README.md");
   for (const origin of connect) assert.ok(readme.includes(`\`${origin}\``), `${origin} is missing from the README`);
+});
+
+test("fonts come only from the stylesheet, which the build makes of the files in fonts/", () => {
+  const csp = /http-equiv="Content-Security-Policy"\s+content="([^"]+)"/.exec(read("index.html"))?.[1] ?? "";
+  assert.ok(csp.split(/;\s*/).includes("font-src data:"));
+  const urls = [...read("style.css").matchAll(/url\(([^)]+)\)/g)].map(([, url]) => url!.replace(/^"|"$/g, ""));
+  assert.ok(urls.length > 0);
+  for (const url of urls) {
+    assert.match(url, /^fonts\/[a-z0-9-]+\.woff2$/);
+    assert.ok(existsSync(new URL(`../${url}`, import.meta.url)), `${url} is missing`);
+  }
 });
 
 test("the page checks the integrity of its script and stylesheet, and has nothing inline", () => {

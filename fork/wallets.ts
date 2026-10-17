@@ -704,7 +704,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     await page.getByRole("button", { name: "Browser wallet" }).click();
     await page.getByText("No wallet was found in this browser.").waitFor();
     const links = page.locator("#no-wallet a");
-    assert.deepEqual(await links.allTextContents(), ["Base app", "MetaMask"]);
+    assert.deepEqual(await links.allTextContents(), ["Coinbase Wallet", "MetaMask"]);
     assert.deepEqual(await links.evaluateAll((found) => found.map((link) => (link as HTMLAnchorElement).href)), [
       "https://go.cb-w.com/dapp?cb_url=https%3A%2F%2Fmetadex.cafe%2F%23app",
       "https://link.metamask.io/dapp/metadex.cafe/#app",
