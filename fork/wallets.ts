@@ -68,7 +68,8 @@ const approvals = async (id: bigint) => ({
   claimer: await view(VOTING_ESCROW, "getClaimRedirectApproved", [id]),
 });
 
-type WalletOptions = { owner: Address; chainId: number; batch: boolean; decline: boolean };
+/** The owner the wallet acts as, its chain, whether it batches, refuses, and shares the account without asking. */
+type WalletOptions = { owner: Address; chainId: number; batch: boolean; decline: boolean; shares: boolean };
 type Sent = { method: string; calls: { to: string; data: string }[] };
 
 // The test wallet in the page. It announces itself (EIP-6963) and hands each request to Node through testWallet,
@@ -104,8 +105,9 @@ function testWallet(options: WalletOptions, sent: Sent[]) {
   return async (method: string, params: any[]): Promise<{ result?: unknown; error?: unknown }> => {
     switch (method) {
       case "eth_requestAccounts":
-      case "eth_accounts":
         return { result: [options.owner] };
+      case "eth_accounts":
+        return { result: options.shares ? [options.owner] : [] };
       case "eth_chainId":
         return { result: `0x${options.chainId.toString(16)}` };
       case "wallet_switchEthereumChain":
@@ -118,6 +120,10 @@ function testWallet(options: WalletOptions, sent: Sent[]) {
       case "eth_sendTransaction": {
         sent.push({ method, calls: [{ to: params[0].to, data: params[0].data }] });
         if (options.decline) return declined;
+        // As MetaMask does, refuse a transaction meant for another chain than the wallet's.
+        if (params[0].chainId !== `0x${options.chainId.toString(16)}`) {
+          return { error: { code: -32602, message: "The transaction is for another chain." } };
+        }
         return { result: await anvil("eth_sendTransaction", [{ ...params[0], from: options.owner, gas: GAS }]) };
       }
       case "wallet_sendCalls": {
@@ -202,7 +208,7 @@ const contexts: BrowserContext[] = [];
 /** Opens the page, with the test wallet acting as an owner unless wallet is false. */
 async function open(
   wallet: Partial<WalletOptions> | false,
-  { width = 1440, height = 900, dark = false, url = `${SITE}/` } = {},
+  { width = 1440, height = 900, dark = false, url = `${SITE}/`, remembered = "" } = {},
 ): Promise<Opened> {
   const context = await browser.newContext({
     viewport: { width, height },
@@ -216,10 +222,11 @@ async function open(
   const violations: string[] = [];
   await context.route("**/*", (route) => serve(route, origins));
   if (wallet) {
-    const options = { owner: NEWCOMER, chainId: 8453, batch: false, decline: false, ...wallet };
+    const options = { owner: NEWCOMER, chainId: 8453, batch: false, decline: false, shares: true, ...wallet };
     await context.exposeFunction("testWallet", testWallet(options, sent));
     await context.addInitScript(WALLET_SCRIPT);
   }
+  if (remembered) await context.addInitScript(`localStorage.setItem("wallet", ${JSON.stringify(remembered)})`);
   const page = await context.newPage();
   page.on("console", (message) => {
     if (/Content Security Policy/i.test(message.text())) violations.push(message.text());
@@ -314,7 +321,12 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     ]);
     await review(page).getByText("Checked ✓").waitFor();
     await shoot(page, "review-1440-light");
-    await confirm(page);
+    // Each transaction takes a click of its own.
+    await review(page).getByRole("button", { name: "Confirm transaction 1 of 2" }).click();
+    await review(page).getByText("Transaction 1 of 2 is included.").waitFor();
+    await review(page).getByRole("button", { name: "Confirm transaction 2 of 2" }).click();
+    await review(page).getByText("Done.").waitFor();
+    await review(page).getByRole("button", { name: "Close" }).click();
     assert.deepEqual(
       sent.map(({ method }) => method),
       ["eth_sendTransaction", "eth_sendTransaction"],
@@ -325,6 +337,29 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     assert.deepEqual([...origins].sort(), [SITE, ...RPC_ORIGINS].filter((o) => origins.has(o)).sort());
     assert.ok(origins.has(SITE));
     assert.deepEqual(violations, []);
+  });
+
+  test("closing between transactions stops there", async () => {
+    const { page, sent } = await open({ owner: NEWCOMER });
+    await page.getByRole("button", { name: "Test Wallet" }).click();
+    await page.getByRole("checkbox", { name: "Pick Account #141" }).check();
+    await page.getByRole("checkbox", { name: "Pick Account #42877" }).check();
+    await page.getByRole("button", { name: "Join with 2 accounts" }).click();
+    await review(page).getByText("Checked ✓").waitFor();
+    await review(page).getByRole("button", { name: "Confirm transaction 1 of 2" }).click();
+    await review(page).getByText("closing stops here").waitFor();
+    await review(page).getByRole("button", { name: "Close" }).click();
+    await account(page, 141).getByText("Joined the Carbon Impact automation.").waitFor();
+    await account(page, 42877).getByText("In another Hydrex automation: Liquid Hydrex.").waitFor();
+    assert.equal(sent.length, 1);
+    assert.deepEqual((await approvals(42877n)).delegate, getAddress("0x809F8175b8F60960dF2bc7a78a7C4Eb04d138AF0"));
+  });
+
+  test("a remembered wallet that no longer shares an account is forgotten", async () => {
+    const { page } = await open({ owner: NEWCOMER, shares: false }, { remembered: "test.wallet" });
+    await page.getByText("Connect a wallet").waitFor();
+    await page.waitForFunction(() => localStorage.getItem("wallet") === null);
+    assert.equal(await page.getByText("Connected with").isVisible(), false);
   });
 
   test("join in one batch with accounts from Lock Maxi and USDC", async () => {

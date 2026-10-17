@@ -36,7 +36,8 @@ Klima's executor Safe, through which the keeper acts, and the automation's deplo
 - **It checks each call before the wallet asks.** It runs the calls against Base from the owner's address, one after the
   other (`eth_simulateV1`), shows what they change and the exact calls, and sends nothing that would fail.
 - **It holds no key and has no server.** Each action ends in a wallet prompt. A wallet that sends several calls as one
-  transaction (EIP-5792) asks once; others ask once per call, each after the one before is included.
+  transaction (EIP-5792) asks once. Others ask once per call, each from a click of its own once the one before is
+  included: a wallet that opens a window, such as Coinbase's, can only open it from a click.
 - **It works with the wallets the browser announces** (EIP-6963), or the one at `window.ethereum`, and with Coinbase
   Wallet through Coinbase's SDK. That SDK loads only when someone picks it.
 - **Inside Safe{Wallet}, it works with the Safe.** It proposes the calls as one Safe transaction, and the Safe's owners
@@ -112,6 +113,8 @@ Then compare each file in `dist/` with the one at the same path on <https://meta
 - **A call that would fail:** the review says which and why, and nothing can be sent.
 - **A refusal in the wallet, or a transaction that fails:** the review says so, with links to the transactions that went
   through. The page reads the accounts again when the review closes.
+- **A transaction the page cannot follow,** because the wallet replaced it or cannot say where a batch is: the review
+  can be closed at any time, which stops the page following and sending; the wallet shows the rest.
 - **Coinbase's SDK failing to load** affects only Coinbase Wallet; other wallets keep working.
 - **A Safe** proposes the transaction instead of sending it, and its owners sign it in Safe{Wallet}. A Safe on another
   network cannot switch: the page asks to open it from a Safe on Base.

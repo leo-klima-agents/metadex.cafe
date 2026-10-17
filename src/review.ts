@@ -1,10 +1,19 @@
 import type { Hex } from "viem";
 import type { Step } from "./calls.ts";
-import { simulate } from "./chain.ts";
+import { included, simulate } from "./chain.ts";
 import { CHAIN_ID } from "./config.ts";
 import { clone, fill, txLink } from "./dom.ts";
 import { count } from "./format.ts";
-import { Failed, batches, declined, proposes, sendBatch, sendEach, switchToBase, type Connection } from "./wallet.ts";
+import {
+  Failed,
+  batches,
+  declined,
+  proposes,
+  sendBatch,
+  sendTransaction,
+  switchToBase,
+  type Connection,
+} from "./wallet.ts";
 
 const dialog = document.getElementById("review") as HTMLDialogElement;
 const part = (selector: string) => dialog.querySelector<HTMLElement>(selector)!;
@@ -24,10 +33,11 @@ type Review = {
   /** Whether the wallet sends the calls as one transaction; undefined until known. */
   batch?: boolean;
   checked: boolean;
+  /** Whether a request to the wallet, or a transaction, is on its way. */
   sending: boolean;
-  /** Whether the wallet is asking the user. The dialog stays open meanwhile. */
-  asking: boolean;
-  /** Whether the wallet sent anything. */
+  /** Without batching, the transactions Base included so far: the next call to send comes after them. */
+  done: Hex[];
+  /** Whether the wallet took anything. */
   submitted: boolean;
   closed: (submitted: boolean) => void;
 };
@@ -51,7 +61,7 @@ export function review(
     connection,
     checked: false,
     sending: false,
-    asking: false,
+    done: [],
     submitted: false,
     closed,
   };
@@ -105,19 +115,22 @@ export function review(
 }
 
 /**
- * Updates the main button: disabled until the calls are checked, and a switch while the wallet is on another chain. A
- * Safe on another chain cannot switch: its page says so.
+ * Updates the main button: disabled until the calls are checked, a switch while the wallet is on another chain, and,
+ * without batching, one click per transaction. A Safe on another chain cannot switch: its page says so.
  */
 export function update(): void {
   if (!current) return;
-  const wrongChain = current.connection.chainId !== CHAIN_ID;
-  const proposing = proposes(current.connection);
+  const { connection, steps, batch, done, checked, sending } = current;
+  const wrongChain = connection.chainId !== CHAIN_ID;
+  const proposing = proposes(connection);
   confirm.textContent = proposing
     ? "Propose in Safe{Wallet}"
     : wrongChain
       ? "Switch to Base"
-      : "Confirm in your wallet";
-  confirm.disabled = !current.checked || current.batch === undefined || current.sending || (proposing && wrongChain);
+      : batch || steps.length === 1
+        ? "Confirm in your wallet"
+        : `Confirm transaction ${done.length + 1} of ${steps.length}`;
+  confirm.disabled = !checked || batch === undefined || sending || (proposing && wrongChain);
 }
 
 /** Closes the review, as when the wallet changes account. */
@@ -125,11 +138,76 @@ export function close(): void {
   if (dialog.open) dialog.close();
 }
 
-/** The second button: off while the wallet asks, then "Close" once anything was sent. */
+/** The second button: "Close" once the wallet took anything. Closing stops what the page follows, not the wallet. */
 function showBack(state: Review): void {
-  if (current !== state) return;
-  back.disabled = state.asking;
-  back.textContent = state.submitted ? "Close" : "Back";
+  if (current === state) back.textContent = state.submitted ? "Close" : "Back";
+}
+
+const PROPOSED = "Proposed. The Safe's owners sign it in Safe{Wallet}; the accounts here change once it executes.";
+
+/** Shows a message in this review only: it may have closed, and another opened. */
+function tell(state: Review, message: string, hashes: Hex[] = []): void {
+  if (current === state) say(message, hashes);
+}
+
+/** Notes that the wallet took a request. */
+function sent(state: Review, message: string, hashes: Hex[] = []): void {
+  state.submitted = true;
+  showBack(state);
+  tell(state, message, hashes);
+}
+
+/** Hides the main button: what was checked is no longer what is left to send. */
+function finished(state: Review): void {
+  if (current === state) confirm.hidden = true;
+}
+
+const calls = (state: Review) => state.steps.map(({ to, data }) => ({ to, data }));
+
+/** Sends every call as one transaction, or proposes it in a Safe, and follows it until Base includes it. */
+async function sendAll(state: Review): Promise<void> {
+  const { provider, address } = state.connection;
+  // A Safe's owners sign in Safe{Wallet}, maybe days later: the page does not follow the proposal.
+  const proposing = proposes(state.connection);
+  const sending = sendBatch(
+    provider,
+    address,
+    calls(state),
+    () => sent(state, proposing ? PROPOSED : "Sent. Waiting for Base to include it…"),
+    () => !proposing && current === state,
+  );
+  tell(state, "Waiting for your wallet…");
+  const hashes = await sending;
+  if (!proposing) {
+    tell(
+      state,
+      hashes ? "Done." : "Sent. Your wallet shows when Base includes it; the accounts here change then.",
+      hashes,
+    );
+  }
+  finished(state);
+}
+
+/** Sends the next call as a transaction of its own, and follows it until Base includes it. */
+async function sendNext(state: Review): Promise<void> {
+  const { provider, address } = state.connection;
+  const [index, total] = [state.done.length, state.steps.length];
+  const sending = sendTransaction(provider, address, calls(state)[index]!);
+  tell(state, "Waiting for your wallet…", state.done);
+  const hash = await sending;
+  const which = total === 1 ? "Sent" : `Transaction ${index + 1} of ${total} sent`;
+  sent(state, `${which}. Waiting for Base to include it…`, [...state.done, hash]);
+  const ok = await included(hash, () => current === state);
+  if (ok === undefined) return;
+  if (!ok) throw new Failed([...state.done, hash]);
+  state.done.push(hash);
+  if (state.done.length < total) {
+    const next = `Confirm transaction ${index + 2} when you are ready; closing stops here.`;
+    tell(state, `Transaction ${index + 1} of ${total} is included. ${next}`, state.done);
+  } else {
+    tell(state, "Done.", state.done);
+    finished(state);
+  }
 }
 
 confirm.addEventListener("click", () => {
@@ -139,62 +217,22 @@ confirm.addEventListener("click", () => {
     switchToBase(state.connection).then(update, (error) => say(failure(error)));
     return;
   }
-  const { provider, address } = state.connection;
-  const calls = state.steps.map(({ to, data }) => ({ to, data }));
-  const total = calls.length;
-  const hashes: Hex[] = [];
-  // Messages go to this review only: it may have closed, and another opened.
-  const tell = (message: string, links: Hex[] = []) => current === state && say(message, links);
-  const asking = (index: number) => {
-    if (current !== state) return false;
-    state.asking = true;
-    showBack(state);
-    tell(index ? `${index} of ${total} included. Waiting for your wallet…` : "Waiting for your wallet…");
-    return true;
-  };
-  const sent = (hash?: Hex) => {
-    if (hash) hashes.push(hash);
-    state.asking = false;
-    state.submitted = true;
-    showBack(state);
-    tell(
-      state.batch || total === 1 ? "Sent. Waiting for Base to include it…" : `${hashes.length} of ${total} sent…`,
-      hashes,
-    );
-  };
+  // The wallet's request comes first, with no wait since the click: a wallet that opens a window, such as Coinbase's,
+  // opens it only from a click. Without batching, each transaction takes a click of its own for the same reason.
+  const sending = state.batch ? sendAll(state) : sendNext(state);
   state.sending = true;
-  // A Safe's owners sign in Safe{Wallet}, maybe days later: the page does not follow the proposal.
-  const proposing = proposes(state.connection);
-  // The wallet's request comes first, with no wait since the click: Coinbase's window only opens from a click.
-  const sending = state.batch
-    ? (asking(0), sendBatch(provider, address, calls, () => sent(), !proposing))
-    : sendEach(provider, address, calls, asking, sent);
   update();
   sending
-    .then((all) => {
-      tell(
-        proposing
-          ? "Proposed. The Safe's owners sign it in Safe{Wallet}; the accounts here change once it executes."
-          : "Done.",
-        all,
-      );
-      if (current === state) confirm.hidden = true;
-    })
     .catch((error) => {
-      const links = error instanceof Failed ? error.hashes : hashes;
-      const partly =
-        hashes.length && hashes.length < total ? ` ${hashes.length} of ${total} transactions went through.` : "";
-      tell(`${failure(error)}${partly}`, links);
-      // Once anything went through, the calls checked are no longer the ones to send.
-      if (current === state && state.submitted) confirm.hidden = true;
+      const [n, total] = [state.done.length, state.steps.length];
+      const partly = n ? ` ${n} of ${total} transactions went through.` : "";
+      tell(state, `${failure(error)}${partly}`, error instanceof Failed ? error.hashes : state.done);
+      if (error instanceof Failed) finished(state);
     })
     .finally(() => {
       state.sending = false;
-      state.asking = false;
-      if (current === state) {
-        update();
-        showBack(state);
-      } else if (state.submitted) state.closed(true);
+      if (current === state) update();
+      else if (state.submitted) state.closed(true);
     });
 });
 
@@ -217,11 +255,6 @@ function say(message: string, hashes: Hex[] = []): void {
 }
 
 back.addEventListener("click", () => dialog.close());
-
-// Escape closes the dialog, but not while the wallet asks.
-dialog.addEventListener("cancel", (event) => {
-  if (current?.asking) event.preventDefault();
-});
 
 dialog.addEventListener("close", () => {
   const state = current;

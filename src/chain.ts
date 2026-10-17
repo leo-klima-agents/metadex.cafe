@@ -103,11 +103,15 @@ function revertReason(data: Hex): string | undefined {
 
 export const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Waits until Base includes a transaction, then whether it succeeded. */
-export async function included(hash: Hex): Promise<boolean> {
-  for (;;) {
+/**
+ * Waits until Base includes a transaction, while following says to, then whether it succeeded; undefined once the page
+ * stops following. A transaction the wallet replaced never comes: the page stops when its review closes.
+ */
+export async function included(hash: Hex, following: () => boolean): Promise<boolean | undefined> {
+  while (following()) {
     const receipt = await rpc<{ status: Hex } | null>("eth_getTransactionReceipt", [hash]).catch(() => null);
     if (receipt) return receipt.status === "0x1";
     await sleep(2_000);
   }
+  return undefined;
 }

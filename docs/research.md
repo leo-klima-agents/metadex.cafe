@@ -350,7 +350,10 @@ Checked for the wallet milestone on 2026-10-16, on Base at block 52,694,000 and 
   estimates fell up to 16% short, so the fork tests' wallet sets a fixed limit.
 - **Coinbase's SDK 4.4.0** adds three style elements, for the Coinbase Wallet app's QR code, its snackbar and its
   redirect dialog; the page's policy allows them by their hashes. It sends a `HEAD` request to the page's own URL to
-  read its `Cross-Origin-Opener-Policy`, so `connect-src` includes `'self'`. It has no telemetry.
+  read its `Cross-Origin-Opener-Policy`, so `connect-src` includes `'self'`. It has no telemetry. Once a smart wallet is
+  connected, it sends `wallet_getCallsStatus` to the RPC that keys.coinbase.com names for the session, whose origin the
+  page's policy does not list yet: until a real Base Account shows it, the page stops following a batch it cannot get
+  the status of.
 - **Sizes,** gzipped: the first load is 23.5 KB, up from 18.9 KB. Coinbase's SDK is 37.5 KB, loaded only when someone
   picks it, and Safe's 17.0 KB, loaded only in a frame. With esbuild's splitting, the parts of viem that the page and
   Coinbase's SDK both use went into a chunk on the first load, 38 KB in all, so each SDK is now built on its own.
@@ -435,6 +438,10 @@ Taken by the user on 2026-10-15, after this research:
 21. **Leave with several.** Also that day: a box beside every account that can join or leave, with "Join with N
     accounts" and "Leave with N accounts" under the list, each one transaction where the wallet batches. The large Safe
     can leave with its five accounts in one Safe transaction rather than five.
+22. **A click per transaction.** On 2026-10-17, after a code review, the user agreed that a wallet without batching
+    sends each transaction from a click of its own: "Confirm transaction 2 of 3" once the one before is included. A
+    wallet that opens a window, such as Coinbase's, can only open it from a click, and closing the review between
+    transactions plainly stops there.
 
 Still open: how much an account has not claimed yet. It would need reads of every bribe the account earned in; it is
 left for later.

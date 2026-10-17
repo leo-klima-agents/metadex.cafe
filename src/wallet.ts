@@ -1,5 +1,5 @@
 import { getAddress, type Address, type Hex } from "viem";
-import { included, sleep } from "./chain.ts";
+import { sleep } from "./chain.ts";
 import { CHAIN_ID, RPCS } from "./config.ts";
 import { clean } from "./format.ts";
 
@@ -114,18 +114,15 @@ export async function switchToBase(connection: Connection): Promise<void> {
 
 /**
  * Whether the wallet sends several calls as one transaction (EIP-5792). A wallet that would first ask to upgrade the
- * account ("ready") sends them one by one instead, and so does one that does not answer. Safe's provider answers in an
- * older shape.
+ * account ("ready") sends them one by one instead, and so does one that does not answer.
  */
 export async function batches(provider: Provider, address: Address): Promise<boolean> {
   try {
-    type Capabilities = { atomic?: { status?: string }; atomicBatch?: { supported?: boolean } };
     const all = (await Promise.race([
       provider.request({ method: "wallet_getCapabilities", params: [address, [HEX_CHAIN_ID]] }),
       sleep(5_000).then(() => null),
-    ])) as Record<string, Capabilities> | null;
-    const capabilities = { ...all?.["0x0"], ...all?.[HEX_CHAIN_ID] };
-    return capabilities.atomic?.status === "supported" || capabilities.atomicBatch?.supported === true;
+    ])) as Record<string, { atomic?: { status?: string } }> | null;
+    return (all?.[HEX_CHAIN_ID]?.atomic ?? all?.["0x0"]?.atomic)?.status === "supported";
   } catch {
     return false;
   }
@@ -134,17 +131,17 @@ export async function batches(provider: Provider, address: Address): Promise<boo
 export type Call = { to: Address; data: Hex };
 
 /**
- * Sends calls as one transaction, and waits until it is included, unless follow is false. The first await is the
- * wallet's request, so a wallet that opens a window, such as Coinbase's, opens it from the click. Returns the transaction
- * hashes.
+ * Sends calls as one transaction, then follows it while following says to, until Base includes it. The first await is
+ * the wallet's request, so a wallet that opens a window, such as Coinbase's, opens it from the click. Returns the
+ * transaction hashes, or undefined when the page stopped following or the wallet cannot say where the batch is.
  */
 export async function sendBatch(
   provider: Provider,
   from: Address,
   calls: Call[],
   sent: () => void,
-  follow = true,
-): Promise<Hex[]> {
+  following: () => boolean,
+): Promise<Hex[] | undefined> {
   const reply = (await provider.request({
     method: "wallet_sendCalls",
     params: [
@@ -158,14 +155,14 @@ export async function sendBatch(
     ],
   })) as string | { id: string };
   sent();
-  if (!follow) return [];
   const id = typeof reply === "string" ? reply : reply.id;
-  for (;;) {
-    type Status = { status: number | string; receipts?: { transactionHash: Hex; status: Hex | number }[] };
-    const { status, receipts = [] } = (await provider.request({
-      method: "wallet_getCallsStatus",
-      params: [id],
-    })) as Status;
+  type Status = { status: number | string; receipts?: { transactionHash: Hex; status: Hex | number }[] };
+  while (following()) {
+    const answer = (await provider
+      .request({ method: "wallet_getCallsStatus", params: [id] })
+      .catch(() => undefined)) as Status | undefined;
+    if (!answer) return undefined;
+    const { status, receipts = [] } = answer;
     if (status === 100 || status === "PENDING") {
       await sleep(2_000);
       continue;
@@ -175,29 +172,18 @@ export async function sendBatch(
     if (!ok) throw new Failed(hashes);
     return hashes;
   }
+  return undefined;
 }
 
 /**
- * Sends calls one transaction at a time, each once the one before is included, while asking says to go on. Returns the
- * hashes of the transactions sent.
+ * Sends one call as a transaction on Base: a wallet on another chain refuses it. The first await is the wallet's
+ * request. Returns the transaction's hash.
  */
-export async function sendEach(
-  provider: Provider,
-  from: Address,
-  calls: Call[],
-  asking: (index: number) => boolean,
-  sent: (hash: Hex, index: number) => void,
-): Promise<Hex[]> {
-  const hashes: Hex[] = [];
-  for (const [index, { to, data }] of calls.entries()) {
-    if (!asking(index)) break;
-    const hash = (await provider.request({ method: "eth_sendTransaction", params: [{ from, to, data }] })) as Hex;
-    hashes.push(hash);
-    sent(hash, index);
-    if (!(await included(hash))) throw new Failed(hashes);
-  }
-  return hashes;
-}
+export const sendTransaction = async (provider: Provider, from: Address, { to, data }: Call): Promise<Hex> =>
+  (await provider.request({
+    method: "eth_sendTransaction",
+    params: [{ from, to, data, chainId: HEX_CHAIN_ID }],
+  })) as Hex;
 
 /** A transaction that Base included but that reverted. */
 export class Failed extends Error {

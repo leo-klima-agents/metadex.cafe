@@ -99,7 +99,8 @@ async function showChecks(): Promise<void> {
   for (const id of failing) show(id);
   show("checks", failing.length > 0);
   trusted = !failing.length;
-  showAccounts();
+  // A read on its way shows its accounts with the checks' result when it ends.
+  if (!reading) showAccounts(true);
 }
 
 function kind({ lockType, end }: Account): string {
@@ -130,16 +131,23 @@ function accountItem(account: Account, owner: Address, epochStart: number, mine:
   return item;
 }
 
-/** Shows the accounts read last, with controls when the connected wallet owns them. */
-function showAccounts(): void {
+/**
+ * Shows the accounts read last, with controls when the connected wallet owns them. To show the same accounts again, as
+ * when the checks end or a wallet connects, keep says to keep the boxes ticked.
+ */
+function showAccounts(keep = false): void {
   if (!shown) return;
   const { owner, accounts, payout, epochStart } = shown;
+  const kept = keep ? new Set(ticked().map(({ id }) => String(id))) : new Set<string>();
   const mine = !!connection && same(connection.address, owner);
   const full = accounts.filter(({ amount }) => amount > 0n);
   const empty = accounts.filter(({ amount }) => amount === 0n);
   const items = (list: Account[]) => list.map((account) => accountItem(account, owner, epochStart, mine));
   document.getElementById("full")!.replaceChildren(...items(full));
   document.querySelector("#empty-accounts ul")!.replaceChildren(...items(empty));
+  for (const box of document.querySelectorAll<HTMLInputElement>("#accounts .pick:not([hidden])")) {
+    box.checked = kept.has(box.value);
+  }
   fill(document, "empty-count", count(empty.length, "empty account", "empty accounts"));
   show("empty-accounts", empty.length > 0);
   show("none", !full.length);
@@ -157,26 +165,38 @@ function showAccounts(): void {
 }
 
 let reads = 0;
+/** Whether a read of accounts is on its way. */
+let reading = false;
+/** The address whose accounts are shown, or on their way. */
+let wanted: Address | undefined;
 
-/** Reads and shows an owner's accounts, unless another read started meanwhile. */
-async function readAndShow(owner: Address): Promise<void> {
+/**
+ * Reads and shows an address's accounts. A read started later wins: an earlier one that ends after it shows nothing.
+ * Quietly keeps the accounts on the page while they are read again.
+ */
+function lookUpAddress(owner: Address, quietly = false): void {
   const read = ++reads;
-  const found = await readAccounts(owner);
-  if (read !== reads) return;
-  shown = { owner, ...found };
-  showAccounts();
-}
-
-/** Reads and shows an address's accounts. */
-function lookUpAddress(owner: Address): void {
-  input.value = owner;
-  button.disabled = true;
-  show("reading");
-  show("accounts", false);
-  show("payout", false);
-  readAndShow(owner)
-    .catch(failed)
+  wanted = owner;
+  reading = true;
+  if (!quietly) {
+    input.value = owner;
+    button.disabled = true;
+    show("reading");
+    show("accounts", false);
+    show("payout", false);
+  }
+  readAccounts(owner)
+    .then((found) => {
+      if (read !== reads) return;
+      shown = { owner, ...found };
+      showAccounts();
+    })
+    .catch((error) => {
+      if (read === reads) failed(error);
+    })
     .finally(() => {
+      if (read !== reads) return;
+      reading = false;
       button.disabled = false;
       show("reading", false);
     });
@@ -226,9 +246,9 @@ document.getElementById("accounts")!.addEventListener("change", updateButtons);
 
 const ids = (accounts: Account[]) => list(accounts.map(({ id }) => `#${id}`));
 
-/** Reads the accounts again once a review that sent something closes. */
-const reread = (submitted: boolean) => {
-  if (submitted && shown) readAndShow(shown.owner).catch(failed);
+/** Reads an owner's accounts again once a review that sent something closes, unless another address is wanted now. */
+const rereadFor = (owner: Address) => (submitted: boolean) => {
+  if (submitted && wanted && same(wanted, owner)) lookUpAddress(owner, true);
 };
 
 /** Reviews joining or leaving with the ticked accounts it applies to. */
@@ -242,7 +262,7 @@ function reviewTicked(leaving: boolean): void {
   const [title, steps] = leaving
     ? ["Leave the Carbon Impact automation", calls.leave(accounts)]
     : ["Join the Carbon Impact automation", calls.join(accounts)];
-  review(title, changes, steps, connection, reread);
+  review(title, changes, steps, connection, rereadFor(shown.owner));
 }
 
 joinButton.addEventListener("click", () => reviewTicked(false));
@@ -254,7 +274,7 @@ payoutForm.addEventListener("submit", (event) => {
   if (!to || !connection) return;
   const changes = clone("payout-effects");
   fillAddress(changes, "recipient", to, to);
-  review("Change the payout address", changes, [calls.payout(to)], connection, reread);
+  review("Change the payout address", changes, [calls.payout(to)], connection, rereadFor(connection.address));
 });
 
 // Wallets
@@ -295,7 +315,11 @@ function showConnection(): void {
 
 async function connectTo(wallet: Wallet, ask = true): Promise<void> {
   const connected = await connect(wallet, ask);
-  if (!connected) return;
+  if (!connected) {
+    // A wallet that no longer shares an account is not tried again on the next visit.
+    if (!ask && wallet !== SAFE) remember(undefined);
+    return;
+  }
   connection = connected;
   if (wallet !== SAFE) remember(wallet.id);
   listen(connected);
@@ -309,6 +333,8 @@ function listen({ provider }: Connection): void {
   listening.add(provider);
   provider.on?.("accountsChanged", (accounts: string[]) => {
     if (connection?.provider !== provider) return;
+    // Wallets also say so when the account stays the same, as when they unlock.
+    if (accounts[0] && same(accounts[0], connection.address)) return;
     close();
     if (!accounts[0]) return disconnect();
     connection.address = getAddress(accounts[0]);
@@ -372,7 +398,12 @@ findWallets((wallets) => {
   const last = wallets.find(({ id }) => id === remembered());
   if (last && !connection && !reconnecting) {
     reconnecting = true;
-    inSafe.then((found) => (found ? undefined : connectTo(last, false))).catch(console.error);
+    inSafe
+      .then((found) => (found ? undefined : connectTo(last, false)))
+      .catch((error) => {
+        console.error(error);
+        remember(undefined);
+      });
   }
 });
 
