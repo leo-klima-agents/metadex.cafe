@@ -31,7 +31,8 @@
 
     <main>
       <p id="error" class="notice" role="alert" hidden>
-        <strong>Reading Base failed.</strong> Check the connection and <a href="">try again</a>.
+        <strong>Reading Base failed.</strong> Check the connection, then
+        <button type="button" class="again secondary">Try again</button>
       </p>
 
       <!-- Views: the one holding the address's target shows, or Home. See style.css. -->
@@ -87,6 +88,7 @@
 
         <section class="numbers" aria-labelledby="numbers-title">
           <h2 id="numbers-title">Carbon Impact today</h2>
+          <p class="needs-script small">These numbers are read from Base by the page's script, which has not run.</p>
           <dl>
             <div>
               <dt>Retired so far</dt>
@@ -277,7 +279,7 @@
 
       <div id="app" class="view" data-title="Your accounts · metaDEX Café">
         <h1 tabindex="-1">Your accounts</h1>
-        <p id="needs-script" class="notice">
+        <p class="needs-script notice">
           This part of the page needs its script, which has not run. Reload the page, and check that JavaScript is on.
         </p>
         <div id="checks" class="notice" role="alert" hidden>

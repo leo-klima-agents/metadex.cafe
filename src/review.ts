@@ -2,7 +2,7 @@ import type { Hex } from "viem";
 import { included } from "./chain.ts";
 import { CHAIN_ID } from "./config.ts";
 import { clone, fill, txLink } from "./dom.ts";
-import { count } from "./format.ts";
+import { count, listParts } from "./format.ts";
 import type { Step } from "./hydrex.ts";
 import { declined, sendTransaction, switchToBase, type Connection, type Wallet } from "./wallet.ts";
 
@@ -29,7 +29,7 @@ const dialog = document.getElementById("review") as HTMLDialogElement;
 const part = <T extends HTMLElement = HTMLElement>(selector: string) => dialog.querySelector<T>(selector)!;
 const title = part("h2");
 const stepCount = part(".step-count");
-const pages = part(".pages");
+const pageList = part(".pages");
 const calls = part(".calls");
 const callsTitle = part(".calls h3");
 const how = part(".how");
@@ -45,26 +45,30 @@ let current: Review | undefined;
 // Names each automation in the calls by its address, as the wallet will show it.
 function explain(steps: Step[]): void {
   const conduits = [...new Map(steps.map((step) => [step.conduit.toLowerCase(), step])).values()];
-  key.replaceChildren(`In ${steps.length === 1 ? "this call" : "these calls"}, `);
-  conduits.forEach(({ conduit, automation }, i) => {
-    if (i) key.append(i === conduits.length - 1 ? " and " : ", ");
+  const named = conduits.map(({ conduit, automation }) => {
     const code = document.createElement("code");
     code.translate = false;
     code.textContent = conduit;
-    key.append(code, ` is ${automation === "Carbon Impact" ? "Carbon Impact" : `the ${automation} automation`}`);
+    return [code, ` is ${automation ? `the ${automation} automation` : "Carbon Impact"}`];
   });
+  key.replaceChildren(`In ${steps.length === 1 ? "this call" : "these calls"}, `);
+  // The list's words come from list(); its items are the addresses and their names.
+  let i = 0;
+  for (const { type, value } of listParts(named.map((_, n) => String(n)))) {
+    key.append(...(type === "element" ? named[i++]! : [value]));
+  }
   key.append(".");
 }
 
 export function review(
   name: string,
-  shown: Page[],
+  pages: Page[],
   steps: Step[],
   connection: Connection,
   hooks: Hooks,
   outcome?: DocumentFragment,
 ): void {
-  const titles = shown.map(({ title }) => title);
+  const titles = pages.map(({ title }) => title);
   current = {
     name,
     titles,
@@ -79,14 +83,14 @@ export function review(
     finished: false,
   };
   const n = steps.length;
-  pages.replaceChildren(
-    ...shown.map(({ body }) => {
+  pageList.replaceChildren(
+    ...pages.map(({ body }) => {
       const page = document.createElement("div");
       if (body) page.append(body);
       return page;
     }),
   );
-  callsTitle.hidden = !shown.at(-1)?.body;
+  callsTitle.hidden = !pages.at(-1)?.body;
   doneBox.replaceChildren();
   doneBox.hidden = true;
   stepList.replaceChildren(
@@ -116,7 +120,7 @@ function turn(page: number): void {
   title.textContent = titles[page]!;
   stepCount.textContent = `${name}: step ${page + 1} of ${titles.length}`;
   stepCount.hidden = titles.length === 1;
-  [...pages.children].forEach((element, i) => ((element as HTMLElement).hidden = i !== page));
+  [...pageList.children].forEach((element, i) => ((element as HTMLElement).hidden = i !== page));
   calls.hidden = page < titles.length - 1;
   update();
   if (dialog.open) title.focus();
@@ -223,8 +227,10 @@ confirm.addEventListener("click", () => {
 
 next.addEventListener("click", () => current && turn(current.page + 1));
 
+// While the wallet is asked, or once something was sent, Back closes the review: the page sends nothing more, and
+// follows what it sent.
 back.addEventListener("click", () => {
-  if (current && !current.submitted && current.page > 0) turn(current.page - 1);
+  if (current && !current.sending && !current.submitted && current.page > 0) turn(current.page - 1);
   else close();
 });
 

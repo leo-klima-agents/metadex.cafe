@@ -140,13 +140,16 @@ Then compare each file in `dist/` with the one at the same path on <https://meta
 - **Right after a deployment:** GitHub Pages lets a browser keep each file for ten minutes. A browser that gets the new
   page with the previous script or stylesheet from its cache refuses that file, as it does not match the page's hashes,
   until its copy expires.
-- **Base RPC:** a read that fails goes to the next RPC. If none answers, the page says so and offers to try again.
+- **Base RPC:** a read that fails goes to the next RPC. If none answers, the page says so and offers to try again, on
+  the same view. An open page reads the automation's settings again every half minute until they answer; leaving never
+  waits for them. When Hydrex's other automations last voted only adds to the statuses: if it cannot be read, accounts
+  show as in those automations, without saying whether they stopped.
 - **A failed startup check,** or one that cannot run, turns joining off. The page says why. An open page runs the checks
   again every hour.
-- **The end of an epoch:** the page takes the time from the latest block it read rather than from the device, so it does
+- **The end of an epoch:** the page takes the time from the newest block it read rather than from the device, so it does
   not wait for Hydrex's minter to move on to the new epoch. An open page moves on by itself within half a minute of the
-  end, and reads the accounts and the automation again. Join and Leave also read them again in a new epoch, before any
-  review.
+  end, and reads the accounts and the automation again, as it does if a read answers from the epoch before. Join and
+  Leave also read them again in a new epoch, before any review.
 - **The wrong network:** the page says so, and the main button becomes "Switch to Base". If the wallet cannot switch,
   the page asks to pick Base in the wallet.
 - **A call that would fail:** the wallet usually warns while it estimates the gas. If it is sent anyway, Base includes
@@ -170,13 +173,14 @@ committing. `npm run build` writes the page to `dist/`; serve that folder with a
 wallet acts as real owners: one joins with two accounts from Lock Maxi and USDC, which stopped, or leaves USDC; another
 joins with an account of its own; a member leaves; the owner of an ended lock gets nothing to tick; and, inside a
 stand-in for Safe{Wallet}, a Safe proposes leaving with two accounts. It checks Home, the App at its address, Back and
-Forward, a section's address, and the views with scripts off. It also checks that the page asks the wallet nothing until
-it is picked, and only for its account, its chain and transactions then; the wrong network, a wallet that cannot switch,
-a refusal in the wallet, a transaction that fails on Base, a review closed before Base includes the transaction, a
-wallet that locks, a browser without a wallet, and that nothing breaches the page's policy. It needs anvil, from
-Foundry, and Chromium: `npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium's path. `BASE_RPC_URL` is
-the archive RPC to fork from, `https://mainnet.base.org` by default. With `SCREENSHOTS` set to a folder, it saves
-screenshots there at 390 and 1440 px, light and dark.
+Forward, a section's address, one it cannot decode, and the views with scripts off. It also checks that the page asks
+the wallet nothing until it is picked, and only for its account, its chain and transactions then; the wrong network, a
+wallet that cannot switch, a refusal in the wallet, a transaction that fails on Base, a review closed before Base
+includes the transaction, Back while the wallet asks, a wallet that locks, a browser without a wallet, reads of Base
+that fail, a Voter that cannot be read, and that nothing breaches the page's policy. It needs anvil, from Foundry, and
+Chromium: `npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium's path. `BASE_RPC_URL` is the archive
+RPC to fork from, `https://mainnet.base.org` by default. With `SCREENSHOTS` set to a folder, it saves screenshots there
+at 390 and 1440 px, light and dark.
 
 `src/config.ts` holds what the page trusts about the automation, and the RPCs it reads from. After an upgrade, check the
 new contracts, then update it. `src/hydrex-conduits.json` names the other automations that Hydrex lists at

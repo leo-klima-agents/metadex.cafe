@@ -51,14 +51,21 @@ let relay: Relay | undefined;
 let trusted = false;
 let reads = 0;
 let reading = false;
-let movingOn = false;
+let relayRead: Promise<void> | undefined;
 let attempts = 0;
 let stale = 0;
 let clicks = 0;
-// Base's time less the device's, from the latest block read.
+// Base's time less the device's, from the newest block read: a read that started earlier may answer from an older one.
 let drift = 0;
+let newest = 0;
 
 const now = () => Math.floor(Date.now() / 1000) + drift;
+
+function sawBlock(time: number): void {
+  if (time < newest) return;
+  newest = time;
+  drift = time - Math.floor(Date.now() / 1000);
+}
 
 function failed(error: unknown): void {
   console.error(error);
@@ -67,7 +74,7 @@ function failed(error: unknown): void {
 
 function showRelay(found: Relay): void {
   relay = found;
-  drift = found.time - Math.floor(Date.now() / 1000);
+  sawBlock(found.time);
   const { epochStart, tonnes, retireBps, feeBps, votes, entity } = found;
   fill(document, {
     tonnes: units(tonnes),
@@ -86,12 +93,12 @@ function showRelay(found: Relay): void {
   tick();
 }
 
-// The countdown, and the next epoch once this one ends.
 function tick(): void {
+  catchUp();
   if (!relay) return;
   const time = now();
   const end = relay.epochStart + WEEK;
-  if (time >= end) return moveOn();
+  if (time >= end) return;
   fill(document, { countdown: `in ${until(end - time)}` });
   fillTime(document, "today", time);
   for (const bar of document.querySelectorAll<HTMLProgressElement>("progress.elapsed")) {
@@ -99,13 +106,17 @@ function tick(): void {
   }
 }
 
-function moveOn(): void {
-  if (shown && !reading && weekStart(now()) > shown.epochStart) loadAccounts(true);
-  if (movingOn) return;
-  movingOn = true;
-  readRelay()
-    .then(showRelay, console.error)
-    .finally(() => (movingOn = false));
+// One read of the automation at a time.
+const readRelayAgain = (): Promise<void> =>
+  (relayRead ??= readRelay()
+    .then(showRelay)
+    .finally(() => (relayRead = undefined)));
+
+// Reads again what is missing or from an epoch that has ended: the page moves on by itself.
+function catchUp(): void {
+  const epoch = weekStart(now());
+  if (shown && !reading && epoch > shown.epochStart) loadAccounts(true);
+  if (!relay || epoch > relay.epochStart) readRelayAgain().catch(console.error);
 }
 
 async function showChecks(): Promise<void> {
@@ -171,8 +182,8 @@ function showAccounts(keepTicked = false): void {
     const able = members
       .map(({ account }) => account)
       .filter((account) => buttons(section).some((button) => can[actionOf(button)](account)));
-    const items = (shown: typeof members) =>
-      shown.map(({ account, state }) => accountItem(account, state, able.length > 1 && able.includes(account)));
+    const items = (listed: typeof members) =>
+      listed.map(({ account, state }) => accountItem(account, state, able.length > 1 && able.includes(account)));
     section.querySelector(".accounts")!.replaceChildren(...items(members.filter((member) => !folded.includes(member))));
     const fold = section.querySelector<HTMLDetailsElement>(".empty-accounts");
     if (fold) {
@@ -222,10 +233,10 @@ async function loadAccounts(quietly = false): Promise<void> {
   try {
     const found = await readAccounts(connection.address);
     if (read !== reads) return;
-    drift = found.time - Math.floor(Date.now() / 1000);
+    sawBlock(found.time);
     shown = found;
     showAccounts();
-    if (relay && found.epochStart > relay.epochStart) moveOn();
+    catchUp();
   } catch (error) {
     if (read === reads) failed(error);
   } finally {
@@ -236,12 +247,11 @@ async function loadAccounts(quietly = false): Promise<void> {
   }
 }
 
-// A group's ticked accounts, or the one account it can act on.
+// A group's ticked accounts, or the one account it can act on, which has no box.
 function picked(section: HTMLElement): Account[] {
   const accounts = actionable.get(section) ?? [];
-  const boxes = [...section.querySelectorAll<HTMLInputElement>(".pick:not([hidden])")];
-  if (!boxes.length) return accounts;
-  const ids = new Set(boxes.filter(({ checked }) => checked).map(({ value }) => value));
+  if (accounts.length <= 1) return accounts;
+  const ids = new Set([...section.querySelectorAll<HTMLInputElement>(".pick:checked")].map(({ value }) => value));
   return accounts.filter(({ id }) => ids.has(String(id)));
 }
 
@@ -257,12 +267,8 @@ function updateButtons(): void {
       button.disabled = !n;
       button.textContent = able.length > 1 && n ? `${verb} with ${count(n, "account", "accounts")}` : verb;
     }
-    for (const [selector, shown] of [
-      [".buttons", able.length > 0],
-      [".pick-hint", able.length > 1 && !accounts.length],
-    ] as const) {
-      for (const element of section.querySelectorAll<HTMLElement>(selector)) element.hidden = !shown;
-    }
+    show(".buttons", able.length > 0, section);
+    show(".pick-hint", able.length > 1 && !accounts.length, section);
   }
 }
 
@@ -272,24 +278,30 @@ const hooks: Hooks = {
 };
 
 function reviewPicked(section: HTMLElement, action: Action): void {
-  if (!connection || !shown || !relay) return;
+  if (!connection || !shown) return;
   // In a new epoch, the statuses and the review's dates would be last epoch's.
   if (weekStart(now()) > shown.epochStart) return void loadAccounts();
+  // A join says what share is retired, from the automation's settings. Leaving never waits for them.
+  if (action === "join" && !relay) return void readRelayAgain().then(() => reviewPicked(section, action), failed);
   const accounts = picked(section).filter(can[action]);
   if (!accounts.length) return updateButtons();
-  const { retireBps, feeBps, entity } = relay;
+  const { owner, epochStart } = shown;
+  const settings = relay;
   const which = list(accounts.map(({ id }) => `#${id}`));
   const prepare = (id: string): DocumentFragment => {
     const part = clone(id);
-    fill(part, { which, "retired-share": share(retireBps), fee: bps(feeBps), entity });
-    fillTime(part, "next", shown!.epochStart + WEEK, when);
+    fill(part, { which });
+    fillTime(part, "next", epochStart + WEEK, when);
     fillPlural(part, accounts.length);
-    for (const element of part.querySelectorAll<HTMLElement>(".with-fee")) element.hidden = feeBps === 0n;
+    if (settings) {
+      const { retireBps, feeBps, entity } = settings;
+      fill(part, { "retired-share": share(retireBps), fee: bps(feeBps), entity });
+      show(".with-fee", feeBps > 0n, part);
+    }
     return part;
   };
   if (action === "join") {
     const before = prepare("join-before");
-    const { owner, epochStart } = shown;
     const from = (kind: Status["kind"]) =>
       accounts.filter((account) => status(account, owner, now(), epochStart).kind === kind);
     const [stopped, running] = [from("stopped"), from("other")];
@@ -297,12 +309,8 @@ function reviewPicked(section: HTMLElement, action: Action): void {
       "stopped-which": list(stopped.map(({ id, delegate }) => `#${id} is in ${automation(delegate)}`)),
       "running-which": list(running.map(({ id, delegate }) => `#${id} out of ${automation(delegate)}`)),
     });
-    for (const [name, found] of [
-      ["from-stopped", stopped],
-      ["from-running", running],
-    ] as const) {
-      before.querySelector<HTMLElement>(`.${name}`)!.hidden = !found.length;
-    }
+    show(".from-stopped", stopped.length > 0, before);
+    show(".from-running", running.length > 0, before);
     const pages = [
       { title: "Before you join", body: before },
       { title: "What changes", body: prepare("join-changes") },
@@ -314,10 +322,11 @@ function reviewPicked(section: HTMLElement, action: Action): void {
     const title = "Leave Carbon Impact";
     return review(title, [{ title, body: prepare("leave-effects") }], leave(accounts), connection, hooks);
   }
+  const steps = release(accounts);
+  const names = list([...new Set(steps.flatMap(({ automation }) => automation ?? []))]);
   const effects = prepare("release-effects");
-  const names = list([...new Set(accounts.map(({ delegate }) => automation(delegate) ?? ""))]);
   fill(effects, { automations: names });
-  review(`Leave ${names}`, [{ title: `Leave ${names}`, body: effects }], release(accounts), connection, hooks);
+  review(`Leave ${names}`, [{ title: `Leave ${names}`, body: effects }], steps, connection, hooks);
 }
 
 function showConnection(): void {
@@ -409,7 +418,9 @@ function walletButton(wallet: Wallet): DocumentFragment {
   return item;
 }
 
-show("#needs-script", false);
+show(".needs-script", false);
+// A reload keeps the address, and so the view.
+document.querySelector("#error .again")!.addEventListener("click", () => location.reload());
 document.getElementById("accounts")!.addEventListener("change", updateButtons);
 for (const section of groups) {
   for (const button of buttons(section))
@@ -429,7 +440,7 @@ findWallets((wallets) => document.querySelector("#wallets .buttons")!.replaceChi
 safeWallet()
   .then((wallet) => wallet && connectTo(wallet))
   .catch(console.error);
-readRelay().then(showRelay).catch(failed);
+readRelayAgain().catch(failed);
 showChecks().catch(failed);
 setInterval(() => showChecks().catch(console.error), 3_600_000);
 setInterval(tick, 30_000);

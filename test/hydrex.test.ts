@@ -182,8 +182,8 @@ test("leaving another automation clears its approval, named by its address", () 
       },
     ],
   );
-  assert.deepEqual(
-    join([account()]).map(({ conduit, automation }) => ({ conduit, automation })),
-    [{ conduit: CONDUIT, automation: "Carbon Impact" }],
-  );
+  assert.deepEqual(release([account({ delegate: STRANGER })]), [], "not on Hydrex's list");
+  const [joining] = join([account({ delegate: USDC })]);
+  assert.equal(joining!.conduit, CONDUIT);
+  assert.ok(!("automation" in joining!), "Carbon Impact's call names no other automation");
 });

@@ -92,7 +92,8 @@ export type Status =
 // Accounts sorted by what their owner can do with them.
 export type Group = "stopped" | "attention" | "in" | "joining" | "leaving" | "open" | "closed";
 
-export type Step = Tx & { says: string; on: string; shows: string; conduit: Address; automation: string };
+// A step names the automation its call is about only when it is not Carbon Impact.
+export type Step = Tx & { says: string; on: string; shows: string; conduit: Address; automation?: string };
 
 function required(values: unknown[]): unknown[] {
   if (values.includes(undefined)) throw new Error("A read from Base failed.");
@@ -119,16 +120,18 @@ export async function readRelay(): Promise<Relay> {
 }
 
 export async function readAccounts(owner: Address): Promise<Holdings> {
-  const [count, payout, time, ...voted] = required(
-    await read([
-      escrow("balanceOf", owner),
-      conduit("getEffectiveRecipientForOwner", owner),
-      blockTime,
-      ...others.map(({ address }) => call(VOTER, voterAbi, "lastVoted", address)),
-    ]),
-  ) as [bigint, Address, bigint, ...bigint[]];
+  const replies = await read([
+    escrow("balanceOf", owner),
+    conduit("getEffectiveRecipientForOwner", owner),
+    blockTime,
+    ...others.map(({ address }) => call(VOTER, voterAbi, "lastVoted", address)),
+  ]);
+  const [count, payout, time] = required(replies.slice(0, 3)) as [bigint, Address, bigint];
   const epochStart = epochAt(time);
-  const lastVoted = new Map(others.map(({ address }, i) => [address.toLowerCase(), Number(voted[i])]));
+  // When the other automations last voted only adds to the statuses: one that cannot be read is not known to have
+  // stopped.
+  const voted = replies.slice(3) as (bigint | undefined)[];
+  const lastVoted = new Map(others.map(({ address }, i) => [address.toLowerCase(), Number(voted[i] ?? 0n)]));
   const indexes = Array.from({ length: Number(count) }, (_, i) => BigInt(i));
   const ids = required(await read(indexes.map((i) => escrow("tokenOfOwnerByIndex", owner, i)))) as bigint[];
   const details = await read([
@@ -231,15 +234,24 @@ export function group(account: Account, state: Status): Group {
   }
 }
 
-const approval = ({ id }: Account, approve: boolean, says: string, conduit = CONDUIT): Step => ({
-  to: VOTING_ESCROW,
-  data: encodeFunctionData({ abi: votingEscrowAbi, functionName: "setConduitApproval", args: [conduit, id, approve] }),
-  says: `#${id} ${says}`,
-  on: "Hydrex's VotingEscrow",
-  shows: `setConduitApproval(${conduit}, ${id}, ${approve})`,
-  conduit,
-  automation: automation(conduit) ?? "Carbon Impact",
-});
+type Other = { address: Address; name: string };
+
+const approval = ({ id }: Account, approve: boolean, says: string, other?: Other): Step => {
+  const conduit = other?.address ?? CONDUIT;
+  return {
+    to: VOTING_ESCROW,
+    data: encodeFunctionData({
+      abi: votingEscrowAbi,
+      functionName: "setConduitApproval",
+      args: [conduit, id, approve],
+    }),
+    says: `#${id} ${says}`,
+    on: "Hydrex's VotingEscrow",
+    shows: `setConduitApproval(${conduit}, ${id}, ${approve})`,
+    conduit,
+    ...(other && { automation: other.name }),
+  };
+};
 
 // A join replaces both the delegate and the claimer, which two other automations may hold.
 export const join = (accounts: Account[]): Step[] =>
@@ -253,10 +265,13 @@ export const join = (accounts: Account[]): Step[] =>
 export const leave = (accounts: Account[]): Step[] =>
   accounts.map((account) => approval(account, false, "leaves Carbon Impact."));
 
+// Only from an automation on Hydrex's list, so that every call names the automation it is about.
 export const release = (accounts: Account[]): Step[] =>
-  accounts.map((account) =>
-    approval(account, false, `leaves the ${automation(account.delegate)} automation.`, account.delegate),
-  );
+  accounts.flatMap((account) => {
+    const name = automation(account.delegate);
+    if (!name) return [];
+    return [approval(account, false, `leaves the ${name} automation.`, { address: account.delegate, name })];
+  });
 
 // Each check is named by the id of its message on the page.
 export async function check(): Promise<string[]> {

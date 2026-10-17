@@ -9,11 +9,12 @@ import {
   encodeFunctionData,
   getAddress,
   parseAbi,
+  toFunctionSelector,
   zeroAddress,
   type Address,
   type Hex,
 } from "viem";
-import { CONDUIT, RPCS, VOTING_ESCROW } from "../src/config.ts";
+import { CONDUIT, RPCS, VOTER, VOTING_ESCROW } from "../src/config.ts";
 import { WEEK } from "../src/format.ts";
 
 const FORK_URL = process.env.BASE_RPC_URL ?? "https://mainnet.base.org";
@@ -85,7 +86,11 @@ type WalletOptions = {
   decline: boolean;
   switches: boolean;
   approval?: Promise<void>;
+  // The wallet answers a transaction once it settles, as while its window is open.
+  sending?: Promise<void>;
 };
+// Reads of Base whose request body it matches fail.
+type Rpc = { refuse?: ((body: string) => boolean) | undefined };
 type OpenOptions = {
   width?: number;
   height?: number;
@@ -93,6 +98,7 @@ type OpenOptions = {
   url?: string;
   flowing?: boolean;
   script?: boolean;
+  refuse?: Rpc["refuse"];
 };
 type Sent = { to: string; data: string };
 type Opened = {
@@ -102,6 +108,7 @@ type Opened = {
   asked: string[];
   origins: Set<string>;
   violations: string[];
+  rpc: Rpc;
 };
 
 // The page's policy cannot block testWallet, which hands each request of the announced wallet to Node.
@@ -168,6 +175,7 @@ function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
       case "eth_sendTransaction": {
         const { to, data, chainId } = params[0];
         sent.push({ to, data });
+        await options.sending;
         if (options.decline) return { error: { code: 4001, message: "User rejected the request." } };
         // As MetaMask does.
         if (chainId !== hex(options.chainId)) return { error: { code: -32602, message: "Wrong chain." } };
@@ -179,7 +187,7 @@ function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
   };
 }
 
-async function serve(route: Route, origins: Set<string>): Promise<void> {
+async function serve(route: Route, { origins, rpc }: Pick<Opened, "origins" | "rpc">): Promise<void> {
   const request = route.request();
   const { origin, pathname } = new URL(request.url());
   origins.add(origin);
@@ -189,6 +197,7 @@ async function serve(route: Route, origins: Set<string>): Promise<void> {
   }
   if (RPC_ORIGINS.includes(origin)) {
     if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: CORS });
+    if (rpc.refuse?.(request.postData() ?? "")) return route.abort();
     const body = await post(request.postData() ?? "");
     return route.fulfill({ headers: { ...CORS, "content-type": "application/json" }, body });
   }
@@ -203,7 +212,15 @@ const contexts: BrowserContext[] = [];
 
 async function open(
   wallet: Partial<WalletOptions> | false,
-  { width = 1440, height = 900, dark = false, url = `${SITE}/`, flowing = false, script = true }: OpenOptions = {},
+  {
+    width = 1440,
+    height = 900,
+    dark = false,
+    url = `${SITE}/`,
+    flowing = false,
+    script = true,
+    refuse,
+  }: OpenOptions = {},
 ): Promise<Opened> {
   const context = await browser.newContext({
     viewport: { width, height },
@@ -220,8 +237,9 @@ async function open(
     asked: [] as string[],
     origins: new Set<string>(),
     violations: [] as string[],
+    rpc: { refuse } as Rpc,
   };
-  await context.route("**/*", (route) => serve(route, opened.origins));
+  await context.route("**/*", (route) => serve(route, opened));
   await context.addInitScript(POLICY_SCRIPT);
   if (wallet) {
     await context.exposeFunction("testWallet", testWallet(options, opened.sent, opened.asked));
@@ -324,6 +342,7 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     assert.equal(await appTitle(page).isVisible(), false);
     assert.equal(await page.title(), "metaDEX Café");
     const numbers = page.locator(".numbers");
+    assert.equal(await numbers.locator(".needs-script").isVisible(), false);
     await numbers.getByText(/a third \(33\.33%\) retired,\s+two thirds \(66\.67%\) paid to you/).waitFor();
     await numbers
       .locator(".countdown")
@@ -368,6 +387,21 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await page.getByRole("link", { name: "metaDEX Café" }).click();
     await homeTitle(page).waitFor();
     assert.equal(await appTitle(page).isVisible(), false);
+    await page.getByText("These numbers are read from Base by the page's script, which has not run.").waitFor();
+  });
+
+  test("an address the page cannot decode opens Home, and the script still runs", async () => {
+    const { page, violations } = await open(false, { url: `${SITE}/#100%` });
+    await homeTitle(page).waitFor();
+    await page
+      .locator(".numbers .tonnes")
+      .filter({ hasText: /^\d[\d,]*$/ })
+      .waitFor();
+    await page.goto(`${SITE}/#%E0%A4`);
+    await page.getByRole("link", { name: "Check my accounts" }).click();
+    await appTitle(page).waitFor();
+    await page.getByRole("button", { name: "Browser wallet" }).waitFor();
+    assert.deepEqual(violations, []);
   });
 
   test("join with two accounts from automations that stopped, one transaction at a time", async () => {
@@ -590,6 +624,54 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await review(page).getByText("A transaction failed on Base.").waitFor();
     assert.equal(await review(page).locator(".confirm").isVisible(), false);
     assert.equal(sent.length, 2);
+  });
+
+  test("if the Voter cannot be read, the accounts still show", async () => {
+    await anvil("anvil_setCode", [VOTER, "0x"]);
+    const { page } = await connected({ owner: ELSEWHERE });
+    await account(page, 2439).getByText("In another Hydrex automation: USDC.").waitFor();
+    await group(page, "Can join").getByText("#2435").waitFor();
+    assert.equal(await page.locator("#error").isVisible(), false);
+  });
+
+  test("Back while the wallet asks closes the review, which still follows what it sent", async () => {
+    let answer = () => {};
+    const sending = new Promise<void>((resolve) => (answer = resolve));
+    const { page, sent } = await connected({ owner: NEWCOMER, sending });
+    await group(page, "Can join").getByRole("button", { name: "Join", exact: true }).click();
+    await toWallet(page);
+    await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
+    await review(page).getByText("Waiting for your wallet…").waitFor();
+    await review(page).getByRole("button", { name: "Back" }).click();
+    assert.equal(await review(page).isVisible(), false);
+    answer();
+    await account(page, 141).getByText("Joined Carbon Impact.").waitFor();
+    assert.equal(sent.length, 1);
+    await expectApprovals([141n], CONDUIT, CONDUIT);
+  });
+
+  test("when the automation cannot be read, leaving does not wait, the page reads again, and Try again keeps the view", async () => {
+    const tonnes = toFunctionSelector("function totalTonnesRetired()").slice(2);
+    const opened = await open(
+      { owner: MEMBER },
+      { width: 390, height: 844, url: `${SITE}/#app`, flowing: true, refuse: (body) => body.includes(tonnes) },
+    );
+    const { page } = opened;
+    await page.locator("#error").getByText("Reading Base failed.").waitFor();
+    await shoot(page, "error-390-light");
+    await page.getByRole("button", { name: "Test Wallet" }).click();
+    await account(page, 9540).getByText("In Carbon Impact.").waitFor();
+    await group(page, "In Carbon Impact").getByRole("button", { name: "Leave" }).click();
+    await review(page).getByRole("heading", { name: "Leave Carbon Impact" }).waitFor();
+    await page.keyboard.press("Escape");
+    assert.equal(await page.locator("#epoch time.week-start").innerText(), "…");
+    opened.rpc.refuse = undefined;
+    await page.clock.runFor(30_000);
+    await page.locator("#epoch time.week-start").getByText(/Thu/).waitFor();
+    await page.getByRole("button", { name: "Try again" }).click();
+    await page.getByRole("button", { name: "Test Wallet" }).waitFor();
+    await appTitle(page).waitFor();
+    assert.equal(new URL(page.url()).hash, "#app");
   });
 
   test("a wallet that cannot switch to Base says so", async () => {

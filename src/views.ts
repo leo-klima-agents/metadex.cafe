@@ -6,9 +6,15 @@ const views = [...document.querySelectorAll<HTMLElement>(".view")];
 const home = views[0]!;
 let current: HTMLElement | undefined;
 
+// As the browser finds the target: the fragment as it is, then decoded. A stray "%" cannot be decoded.
 function target(): HTMLElement | null {
-  const id = decodeURIComponent(location.hash.slice(1));
-  return id ? document.getElementById(id) : null;
+  const fragment = location.hash.slice(1);
+  if (!fragment) return null;
+  let decoded = fragment;
+  try {
+    decoded = decodeURIComponent(fragment);
+  } catch {}
+  return document.getElementById(fragment) ?? document.getElementById(decoded);
 }
 
 function showView(moved: boolean): void {

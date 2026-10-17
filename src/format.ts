@@ -69,6 +69,8 @@ export function until(seconds: number): string {
 
 export const short = (address: string): string => `${address.slice(0, 6)}…${address.slice(-4)}`;
 export const list = (items: string[]): string => and.format(items);
+// The same list in parts, for one that holds elements.
+export const listParts = (items: string[]) => and.formatToParts(items);
 
 export const count = (n: number, one: string, other: string): string =>
   `${whole.format(n)} ${plurals.select(n) === "one" ? one : other}`;
