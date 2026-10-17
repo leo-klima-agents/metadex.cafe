@@ -33,6 +33,23 @@ to cover, one stable URL for Safe ([3. Comparable products](3-patterns.md#a-site
 - **Footer:** the official address `https://metadex.cafe/` · version and commit · source · contracts · Hydrex · Klima ·
   where to ask a question. No operator is named (a decision for now).
 
+## Hosting on IPFS and eth.limo
+
+The three pages are plain directories, each with its own `index.html`, which is the form IPFS gateways serve best.
+Checked on eth.limo on 17 October 2026:
+
+| Question                               | On `*.eth.limo`                                                                                                                                                                                        | What it means                                                                                                                               |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Do `/app/` and `/how-it-works/` work?  | Yes: a directory serves its `index.html`, and `/app` redirects to `/app/`                                                                                                                              | The multi-page organisation works as it is. Links and asset paths should be relative, so that a path gateway (`/ipfs/<cid>/`) serves it too |
+| Would a single-page app's routes work? | Only with hash routes (`/#/app`). Routes like `/app` without a directory need the gateway to rewrite them (an IPFS `_redirects` file), and eth.limo does not document support for it                   | A single-page app gains nothing here, and hash routes would clash with How it works' anchors and make Home depend on the script             |
+| Can Safe{Wallet} open it?              | **No.** Every eth.limo site is sent with `X-Frame-Options: SAMEORIGIN` and `frame-ancestors 'self'`, which forbid Safe{Wallet}'s frame. Seen on `vitalik.eth`, `ens.eth`, `app.ens.eth`, `uniswap.eth` | Single-page app or not, the Safe App must stay at `https://metadex.cafe/`, which GitHub Pages lets Safe{Wallet} frame                       |
+| Can Safe read `manifest.json`?         | Yes, with `Access-Control-Allow-Origin: *`; moot while framing is forbidden                                                                                                                            | —                                                                                                                                           |
+| What does it add?                      | A content address: the ENS name points to one CID, and the CID is the build                                                                                                                            | Checking the official site becomes comparing one hash with the release's; a copy of the site cannot have the same CID                       |
+
+So `metadexcafe.eth.limo` can be a mirror for browser wallets, with `metadex.cafe` staying the address for Safes. Both
+then count as official: the footer and the README name both, and say which one a Safe uses. A connection does not carry
+from one to the other, as they are different origins.
+
 ## Entry points
 
 Where people come from, and where each should land. Links the team publishes should point to the landing given here.
