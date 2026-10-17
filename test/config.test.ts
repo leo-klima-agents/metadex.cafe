@@ -65,11 +65,20 @@ test("fonts come only from the stylesheet, which the build makes of the files in
   }
 });
 
+test("colours have plain values first, and light-dark() only where the browser supports it", () => {
+  const css = read("style.css").replace(/\/\*[\s\S]*?\*\//g, "");
+  const supported = /@supports \(color: light-dark\(red, red\)\) \{\n[\s\S]*?\n\}\n/.exec(css)?.[0] ?? "";
+  assert.match(supported, /light-dark\(/);
+  assert.doesNotMatch(css.replace(supported, ""), /light-dark\(|\bCanvas(Text)?\b/);
+});
+
 test("the page checks the integrity of its script and stylesheet, and has nothing inline", () => {
   const html = read("index.html");
   assert.doesNotMatch(html, /\sstyle=|<style/);
   assert.deepEqual(html.match(/<(?:link|script)\b[^>]*>/g), [
     '<link rel="icon" href="icon.svg" type="image/svg+xml" />',
+    '<link rel="shortcut icon" href="favicon.ico" sizes="32x32" />',
+    '<link rel="apple-touch-icon" href="apple-touch-icon.png" />',
     '<link rel="stylesheet" href="style.css" integrity="%STYLE_INTEGRITY%" />',
     '<script type="module" src="main.js" integrity="%MAIN_INTEGRITY%">',
   ]);

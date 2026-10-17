@@ -29,9 +29,38 @@
   line-height: 1.5;
   --serif: "Young Serif", Georgia, serif;
   --mono: "Atkinson Hyperlegible Mono", ui-monospace, monospace;
-  --accent: light-dark(#0b6b64, #5cc8bb);
-  --line: light-dark(#c9d4d1, #3d4d4a);
-  --quiet: light-dark(#4f5f5c, #a9b8b5);
+  /* The colours, Roast: plain values first, the light ones, for a browser without light-dark(). */
+  color-scheme: light;
+  --paper: #fdfcf9;
+  --ink: #251a15;
+  --quiet: #645850;
+  --line: #d9d3cc;
+  --accent: #6b3818;
+  --on-accent: #fdfcf9;
+  --tint: #f9eee4;
+  --edge: #645850;
+  --notice: #fbe6e3;
+  --callout: #fdf1e2;
+  --warn: #944e00;
+}
+/* Then light and dark, where light-dark() works. A custom property holding it, where it does not, would make every use
+   of the property invalid: links would lose their colour, and buttons their fill. In dark, the accent is milk, as crema
+   looked like the warning's amber. */
+@supports (color: light-dark(red, red)) {
+  :root {
+    color-scheme: light dark;
+    --paper: light-dark(#fdfcf9, #18120f);
+    --ink: light-dark(#251a15, #f1eee9);
+    --quiet: light-dark(#645850, #b7b0a7);
+    --line: light-dark(#d9d3cc, #413933);
+    --accent: light-dark(#6b3818, #e7d4bf);
+    --on-accent: light-dark(#fdfcf9, #18120f);
+    --tint: light-dark(#f9eee4, #2e2118);
+    --edge: light-dark(#645850, #b7b0a7);
+    --notice: light-dark(#fbe6e3, #3a1b18);
+    --callout: light-dark(#fdf1e2, #33240f);
+    --warn: light-dark(#944e00, #efb062);
+  }
 }
 body {
   max-inline-size: 40rem;
@@ -39,8 +68,8 @@ body {
   padding-inline: 1rem;
   padding-block-end: 2rem;
   overflow-wrap: anywhere;
-  background: Canvas;
-  color: CanvasText;
+  background: var(--paper);
+  color: var(--ink);
 }
 [hidden] {
   display: none !important;
@@ -131,7 +160,7 @@ summary {
   padding-block: 0.5rem;
   padding-inline: 0.75rem;
   border-radius: 8px;
-  background: light-dark(#fbe6e3, #3a1b18);
+  background: var(--notice);
 }
 .notice > p:first-child {
   margin-block-start: 0;
@@ -142,9 +171,9 @@ summary {
 .callout {
   padding-block: 0.25rem 0.75rem;
   padding-inline: 1rem;
-  border-inline-start: 4px solid light-dark(#b25e00, #f0a54a);
+  border-inline-start: 4px solid var(--warn);
   border-radius: 8px;
-  background: light-dark(#fdf1e2, #33240f);
+  background: var(--callout);
 }
 .callout h2 {
   font-size: 1.125rem;
@@ -175,7 +204,7 @@ button,
   border: 1px solid var(--accent);
   border-radius: 999px;
   background: var(--accent);
-  color: light-dark(#ffffff, #06201d);
+  color: var(--on-accent);
   font: inherit;
   font-weight: 600;
   line-height: 1.5;
@@ -375,7 +404,7 @@ progress.elapsed {
   cursor: pointer;
 }
 .accounts label:has(.pick:checked) {
-  background: light-dark(#e2f3f0, #12302c);
+  background: var(--tint);
 }
 input[type="checkbox"] {
   inline-size: 1.5rem;
@@ -410,8 +439,10 @@ dialog {
   max-inline-size: min(40rem, 100% - 2rem);
   padding-block: 0;
   padding-inline: 1rem;
-  border: 1px solid light-dark(#7d8f8b, #5f7470);
+  border: 1px solid var(--edge);
   border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
 }
 dialog::backdrop {
   background: rgb(0 0 0 / 0.5);
@@ -428,7 +459,7 @@ dialog .foot {
   position: sticky;
   inset-block-end: 0;
   padding-block: 0.75rem;
-  background: Canvas;
+  background: var(--paper);
 }
 dialog .foot p {
   margin-block: 0 0.5rem;
