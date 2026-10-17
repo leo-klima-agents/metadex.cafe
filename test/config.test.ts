@@ -23,9 +23,8 @@ const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.ur
 
 test("addresses are checksummed, and code hashes are 32 bytes", () => {
   const contracts = [MULTICALL3, CONDUIT, KVCM, VOTING_ESCROW, VOTING_ESCROW_IMPLEMENTATION, APPROVAL_LOGIC, VOTER];
-  for (const address of [...contracts, ACCOUNT_NAMES, ...conduits.map(({ address }) => address)]) {
-    assert.equal(getAddress(address), address);
-  }
+  const addresses = [...contracts, ACCOUNT_NAMES, ...conduits.map(({ address }) => address)];
+  for (const address of addresses) assert.equal(getAddress(address), address);
   for (const hash of [CONDUIT_CODE_HASH, VOTING_ESCROW_IMPLEMENTATION_CODE_HASH, APPROVAL_LOGIC_CODE_HASH]) {
     assert.match(hash, /^0x[0-9a-f]{64}$/);
   }
@@ -41,11 +40,8 @@ test("Hydrex names the conduit Carbon Impact, and the page links to it, the Voti
 test("the page may reach its RPCs and nothing else, and the README lists them", () => {
   const csp = /http-equiv="Content-Security-Policy"\s+content="([^"]+)"/.exec(read("index.html"))?.[1] ?? "";
   const connect = (/connect-src ([^;]+)/.exec(csp)?.[1] ?? "").trim().split(/\s+/);
-  for (const rpc of RPCS) assert.ok(rpc.startsWith("https://"), rpc);
-  assert.deepEqual(
-    connect,
-    RPCS.map((rpc) => new URL(rpc).origin),
-  );
+  assert.deepEqual(connect, RPCS);
+  assert.ok(RPCS.every((rpc) => rpc === new URL(rpc).origin && rpc.startsWith("https://")));
   const readme = read("README.md");
   for (const origin of connect) assert.ok(readme.includes(`\`${origin}\``), `${origin} is missing from the README`);
 });

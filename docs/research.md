@@ -607,6 +607,9 @@ Taken by the user on 2026-10-15, after this research:
     calls with `eth_simulateV1`; and remembering the wallet, reconnecting to it and Disconnect. With them went the
     page's own clock, the countdown and moving on to a new epoch by itself, and the reads every 15 seconds after a
     transaction the page could not follow. The policy now requires Trusted Types.
+27. **Refactored, with few comments.** The same day, the user asked for the code to be refactored for style, simplicity
+    and duplication, keeping only plain comments for what the code cannot say. `src/abi.ts` and `src/calls.ts` went into
+    `src/hydrex.ts` and `src/chain.ts`, and their tests into `test/hydrex.test.ts`.
 
 Still open: how much an account has not claimed yet. It would need reads of every bribe the account earned in; it is
 left for later.

@@ -1,12 +1,7 @@
-/* The browser's own look, light or dark. Only the controls are styled. */
 :root {
   font-family: system-ui, sans-serif;
   line-height: 1.5;
   --accent: light-dark(#0b6b64, #5cc8bb);
-  --on-accent: light-dark(#ffffff, #06201d);
-  --edge: light-dark(#7d8f8b, #5f7470);
-  --accent-soft: light-dark(#e2f3f0, #12302c);
-  --bad-soft: light-dark(#fbe6e3, #3a1b18);
 }
 body {
   max-inline-size: 40rem;
@@ -27,8 +22,6 @@ td {
 li + li {
   margin-block-start: 0.5rem;
 }
-
-/* Controls */
 a {
   color: var(--accent);
 }
@@ -36,6 +29,16 @@ a {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
 }
+summary {
+  cursor: pointer;
+}
+.notice {
+  padding-block: 0.5rem;
+  padding-inline: 0.75rem;
+  border-radius: 8px;
+  background: light-dark(#fbe6e3, #3a1b18);
+}
+
 button {
   min-block-size: 2.75rem;
   padding-block: 0.5rem;
@@ -43,7 +46,7 @@ button {
   border: 1px solid var(--accent);
   border-radius: 999px;
   background: var(--accent);
-  color: var(--on-accent);
+  color: light-dark(#ffffff, #06201d);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -64,11 +67,12 @@ button img {
   block-size: 1.5rem;
   vertical-align: middle;
 }
-.wallets {
+.buttons {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+
 input[type="checkbox"] {
   inline-size: 1.5rem;
   block-size: 1.5rem;
@@ -76,7 +80,6 @@ input[type="checkbox"] {
   accent-color: var(--accent);
   cursor: pointer;
 }
-/* Accounts the reader can pick: a box beside each, the whole row a label for it, and the picked ones tinted. */
 .accounts:has(.pick:not([hidden])) {
   padding-inline-start: 0;
   list-style: none;
@@ -95,24 +98,19 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 .accounts label:has(.pick:checked) {
-  background: var(--accent-soft);
+  background: light-dark(#e2f3f0, #12302c);
 }
+
 dialog {
   max-inline-size: min(40rem, 100% - 2rem);
   padding-block: 0;
   padding-inline: 1rem;
-  border: 1px solid var(--edge);
+  border: 1px solid light-dark(#7d8f8b, #5f7470);
   border-radius: 8px;
 }
 dialog::backdrop {
   background: rgb(0 0 0 / 0.5);
 }
-.buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-/* What the review is doing and its buttons stay in view while the rest scrolls, unless the screen is short. */
 dialog .foot {
   position: sticky;
   inset-block-end: 0;
@@ -130,16 +128,7 @@ dialog .foot :is(p:empty, .buttons) {
     position: static;
   }
 }
-/* The title takes the focus when the review opens, so that it is read first; it needs no ring. */
+/* The title takes the focus when the review opens, so that it is read first. */
 #review-title:focus {
   outline: none;
-}
-summary {
-  cursor: pointer;
-}
-.notice {
-  padding-block: 0.5rem;
-  padding-inline: 0.75rem;
-  border-radius: 8px;
-  background: var(--bad-soft);
 }

@@ -1,6 +1,5 @@
-import { zeroAddress, type Address } from "viem";
-import { accountNamesAbi, conduitAbi, multicall3Abi, votingEscrowAbi } from "./abi.ts";
-import { call, codeHash, implementation, read, rpc, same } from "./chain.ts";
+import { encodeFunctionData, parseAbi, zeroAddress, type Address } from "viem";
+import { blockTime, call, codeHash, implementation, read, rpc, same } from "./chain.ts";
 import {
   ACCOUNT_NAMES,
   ACTIONS,
@@ -10,27 +9,54 @@ import {
   CONDUIT,
   CONDUIT_CODE_HASH,
   KVCM,
-  MULTICALL3,
   VOTER,
   VOTING_ESCROW,
   VOTING_ESCROW_IMPLEMENTATION,
   VOTING_ESCROW_IMPLEMENTATION_CODE_HASH,
 } from "./config.ts";
-import { WEEK, clean, weekStart } from "./format.ts";
+import { WEEK, clean, list, weekStart } from "./format.ts";
 import conduits from "./hydrex-conduits.json" with { type: "json" };
+import type { Tx } from "./wallet.ts";
+
+const votingEscrowAbi = parseAbi([
+  "function balanceOf(address owner) view returns (uint256)",
+  "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
+  "function lockDetails(uint256 tokenId) view returns ((uint256 amount, uint256 startTime, uint256 endTime, uint8 lockType))",
+  "function balanceOfNFT(uint256 tokenId) view returns (uint256)",
+  "function getLockDelegatee(uint256 tokenId) view returns (address)",
+  "function delegates(uint256 tokenId, uint48 timestamp) view returns (address)",
+  "function getClaimRedirectApproved(uint256 tokenId) view returns (address)",
+  "function getPastVotes(address account, uint256 timepoint) view returns (uint256)",
+  "function getConduitApprovalConfig(address conduit) view returns (uint8[] actions, bool active, string description)",
+  "function approvalLogic() view returns (address)",
+  "function setConduitApproval(address conduit, uint256 tokenId, bool approve)",
+]);
+
+const conduitAbi = parseAbi([
+  "function veToken() view returns (address)",
+  "function voter() view returns (address)",
+  "function kvcm() view returns (address)",
+  "function retireBps() view returns (uint256)",
+  "function treasuryFeeBps() view returns (uint256)",
+  "function totalTonnesRetired() view returns (uint256)",
+  "function retiringEntityName() view returns (string)",
+  "function getEffectiveRecipientForOwner(address owner) view returns (address)",
+]);
+
+const accountNamesAbi = parseAbi(["function getBulkNames(uint256[] tokenIds) view returns (string[])"]);
+
+const escrow = (functionName: string, ...args: unknown[]) =>
+  call(VOTING_ESCROW, votingEscrowAbi, functionName, ...args);
+const conduit = (functionName: string, ...args: unknown[]) => call(CONDUIT, conduitAbi, functionName, ...args);
 
 export const LockType = { timed: 0, rolling: 1, permanent: 2 } as const;
 
 export type Relay = {
-  /** The start of the epoch at Base's latest block. */
   epochStart: number;
   retireBps: bigint;
   feeBps: bigint;
-  /** Tonnes retired so far, with 18 decimals. */
   tonnes: bigint;
-  /** The name retirements are made in. */
   entity: string;
-  /** The conduit's votes this epoch. */
   votes: bigint;
 };
 
@@ -42,10 +68,11 @@ export type Account = {
   lockType: number;
   votes: bigint;
   delegate: Address;
-  /** The delegate at the start of the epoch: the votes count for it this epoch. */
   delegateAtStart: Address;
   claimer: Address;
 };
+
+export type Holdings = { owner: Address; accounts: Account[]; payout: Address; time: number; epochStart: number };
 
 export type Status =
   | { kind: "in" | "partly" | "self" | "ended" | "empty" }
@@ -53,97 +80,69 @@ export type Status =
   | { kind: "other"; name: string }
   | { kind: "delegated"; to: Address };
 
-function all(values: unknown[]): unknown[] {
+export type Step = Tx & { says: string; on: string; shows: string };
+
+function required(values: unknown[]): unknown[] {
   if (values.includes(undefined)) throw new Error("A read from Base failed.");
   return values;
 }
 
-/** The time of Base's latest block, read alongside the rest. */
-const now = () => call(MULTICALL3, multicall3Abi, "getCurrentBlockTimestamp");
-
-/**
- * The epoch at Base's latest block: the Thursday 00:00 UTC before it. The Voter's own _epochTimestamp() moves only once
- * someone calls Hydrex's minter after that time, so it can lag the calendar for a while; a join sent meanwhile counts
- * from the next Thursday all the same.
- */
+// By the calendar: the Voter's own epoch moves only once someone calls Hydrex's minter, and joins count from the next
+// Thursday all the same.
 const epochAt = (time: unknown): number => weekStart(Number(time));
 
 export async function readRelay(): Promise<Relay> {
-  const [time, retireBps, feeBps, tonnes, entity] = all(
+  const [time, retireBps, feeBps, tonnes, entity] = required(
     await read([
-      now(),
-      call(CONDUIT, conduitAbi, "retireBps"),
-      call(CONDUIT, conduitAbi, "treasuryFeeBps"),
-      call(CONDUIT, conduitAbi, "totalTonnesRetired"),
-      call(CONDUIT, conduitAbi, "retiringEntityName"),
+      blockTime,
+      conduit("retireBps"),
+      conduit("treasuryFeeBps"),
+      conduit("totalTonnesRetired"),
+      conduit("retiringEntityName"),
     ]),
   ) as [bigint, bigint, bigint, bigint, string];
   const epochStart = epochAt(time);
-  const [votes] = all(
-    await read([call(VOTING_ESCROW, votingEscrowAbi, "getPastVotes", CONDUIT, BigInt(epochStart))]),
-  ) as [bigint];
+  const [votes] = required(await read([escrow("getPastVotes", CONDUIT, BigInt(epochStart))])) as [bigint];
   return { epochStart, retireBps, feeBps, tonnes, entity: clean(entity), votes };
 }
 
-/**
- * An owner's accounts, where its payouts go, and the time of Base's latest block with the start of the epoch their
- * delegates are read at.
- */
-export async function readAccounts(
-  owner: Address,
-): Promise<{ accounts: Account[]; payout: Address; time: number; epochStart: number }> {
-  const [count, payout, time] = all(
-    await read([
-      call(VOTING_ESCROW, votingEscrowAbi, "balanceOf", owner),
-      call(CONDUIT, conduitAbi, "getEffectiveRecipientForOwner", owner),
-      now(),
-    ]),
+export async function readAccounts(owner: Address): Promise<Holdings> {
+  const [count, payout, time] = required(
+    await read([escrow("balanceOf", owner), conduit("getEffectiveRecipientForOwner", owner), blockTime]),
   ) as [bigint, Address, bigint];
   const epochStart = epochAt(time);
-  const ids = all(
-    await read(
-      Array.from({ length: Number(count) }, (_, i) =>
-        call(VOTING_ESCROW, votingEscrowAbi, "tokenOfOwnerByIndex", owner, BigInt(i)),
-      ),
-    ),
-  ) as bigint[];
+  const indexes = Array.from({ length: Number(count) }, (_, i) => BigInt(i));
+  const ids = required(await read(indexes.map((i) => escrow("tokenOfOwnerByIndex", owner, i)))) as bigint[];
   const details = await read([
     ...ids.flatMap((id) => [
-      call(VOTING_ESCROW, votingEscrowAbi, "lockDetails", id),
-      call(VOTING_ESCROW, votingEscrowAbi, "balanceOfNFT", id),
-      call(VOTING_ESCROW, votingEscrowAbi, "getLockDelegatee", id),
-      call(VOTING_ESCROW, votingEscrowAbi, "delegates", id, epochStart),
-      call(VOTING_ESCROW, votingEscrowAbi, "getClaimRedirectApproved", id),
+      escrow("lockDetails", id),
+      escrow("balanceOfNFT", id),
+      escrow("getLockDelegatee", id),
+      escrow("delegates", id, epochStart),
+      escrow("getClaimRedirectApproved", id),
     ]),
     call(ACCOUNT_NAMES, accountNamesAbi, "getBulkNames", ids),
   ]);
   const names = (details.at(-1) as readonly string[] | undefined) ?? [];
-  const accounts = ids.map((id, i) => {
-    const [lock, votes, delegate, delegateAtStart, claimer] = all(details.slice(5 * i, 5 * i + 5)) as [
-      { amount: bigint; endTime: bigint; lockType: number },
-      bigint,
-      Address,
-      Address,
-      Address,
-    ];
-    const { amount, endTime, lockType } = lock;
+  const accounts = ids.map((id, i): Account => {
+    const [{ amount, endTime, lockType }, votes, delegate, delegateAtStart, claimer] = required(
+      details.slice(5 * i, 5 * i + 5),
+    ) as [{ amount: bigint; endTime: bigint; lockType: number }, bigint, Address, Address, Address];
     const name = clean(names[i]);
     return { id, name, amount, end: Number(endTime), lockType, votes, delegate, delegateAtStart, claimer };
   });
   accounts.sort((a, b) => (a.votes === b.votes ? Number(a.id - b.id) : a.votes > b.votes ? -1 : 1));
-  return { accounts, payout, time: Number(time), epochStart };
+  return { owner, accounts, payout, time: Number(time), epochStart };
 }
 
-/** Whether the account is a timed lock that has ended: it has no votes to give. */
 const ended = (account: Account, now: number): boolean => account.lockType === LockType.timed && account.end <= now;
 
-/** What the conduit holds of the account: its votes, its claims, both or neither. */
 const held = (account: Account) => ({ votes: same(account.delegate, CONDUIT), claims: same(account.claimer, CONDUIT) });
 
-/**
- * Where an account stands. Joining makes the conduit the account's delegate and claimer. The Voter counts the delegate
- * at the start of the epoch, so joining and leaving count from the next epoch.
- */
+export const automation = (address: Address): string | undefined =>
+  conduits.find((conduit) => same(conduit.address, address) && !same(conduit.address, CONDUIT))?.name;
+
+// The Voter counts the delegate at the start of the epoch, so joins and leaves count from the next one.
 export function status(account: Account, owner: Address, now: number, epochStart: number): Status {
   if (account.amount === 0n) return { kind: "empty" };
   if (ended(account, now)) return { kind: "ended" };
@@ -157,34 +156,48 @@ export function status(account: Account, owner: Address, now: number, epochStart
   return other ? { kind: "other", name: other } : { kind: "delegated", to: account.delegate };
 }
 
-/** The name of another automation, from Hydrex's list, if the address is one. */
-export const automation = (address: Address): string | undefined =>
-  conduits.find((conduit) => same(conduit.address, address) && !same(conduit.address, CONDUIT))?.name;
-
-/** Whether joining would change anything: the account holds HYDX, its lock has not ended, and it is not fully in. */
 export function canJoin(account: Account, now: number): boolean {
   const { votes, claims } = held(account);
   return account.amount > 0n && !ended(account, now) && !(votes && claims);
 }
 
-/** Whether the conduit holds the account's votes or claims. */
 export function canLeave(account: Account): boolean {
   const { votes, claims } = held(account);
   return votes || claims;
 }
 
-/** The checks that fail, by the id of their message on the page; empty when the chain matches config.ts. */
+const approval = ({ id }: Account, approve: boolean, says: string): Step => ({
+  to: VOTING_ESCROW,
+  data: encodeFunctionData({ abi: votingEscrowAbi, functionName: "setConduitApproval", args: [CONDUIT, id, approve] }),
+  says: `#${id} ${says}`,
+  on: "Hydrex's VotingEscrow",
+  shows: `setConduitApproval(${CONDUIT}, ${id}, ${approve})`,
+});
+
+// A join replaces both the delegate and the claimer, which two other automations may hold.
+export const join = (accounts: Account[]): Step[] =>
+  accounts.map((account) => {
+    const names = [account.delegate, account.claimer].map(automation).filter((name) => name !== undefined);
+    const from = [...new Set(names)];
+    const leaving = from.length ? `leaves the ${list(from)} automation${from.length > 1 ? "s" : ""} and ` : "";
+    return approval(account, true, `${leaving}joins the Carbon Impact automation.`);
+  });
+
+export const leave = (accounts: Account[]): Step[] =>
+  accounts.map((account) => approval(account, false, "leaves the Carbon Impact automation."));
+
+// Each check is named by the id of its message on the page.
 export async function check(): Promise<string[]> {
   const [chainId, conduitHash, impl, [veToken, voter, payoutToken, config, logic]] = await Promise.all([
     rpc<string>("eth_chainId", []),
     codeHash(CONDUIT),
     implementation(VOTING_ESCROW),
     read([
-      call(CONDUIT, conduitAbi, "veToken"),
-      call(CONDUIT, conduitAbi, "voter"),
-      call(CONDUIT, conduitAbi, "kvcm"),
-      call(VOTING_ESCROW, votingEscrowAbi, "getConduitApprovalConfig", CONDUIT),
-      call(VOTING_ESCROW, votingEscrowAbi, "approvalLogic"),
+      conduit("veToken"),
+      conduit("voter"),
+      conduit("kvcm"),
+      escrow("getConduitApprovalConfig", CONDUIT),
+      escrow("approvalLogic"),
     ]),
   ]);
   const [implHash, logicHash] = await Promise.all([codeHash(impl), logic ? codeHash(logic as Address) : undefined]);
@@ -198,5 +211,5 @@ export async function check(): Promise<string[]> {
     upgrade: !same(impl, VOTING_ESCROW_IMPLEMENTATION) || implHash !== VOTING_ESCROW_IMPLEMENTATION_CODE_HASH,
     logic: !same(String(logic), APPROVAL_LOGIC) || logicHash !== APPROVAL_LOGIC_CODE_HASH,
   };
-  return Object.keys(failed).filter((id) => failed[id as keyof typeof failed]);
+  return Object.entries(failed).flatMap(([id, failing]) => (failing ? [id] : []));
 }

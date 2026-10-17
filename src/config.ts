@@ -1,6 +1,5 @@
 import type { Address, Hex } from "viem";
 
-// What the page trusts. The checks compare it with the chain.
 export const CHAIN_ID = 8453;
 export const RPCS = ["https://mainnet.base.org", "https://base-rpc.publicnode.com", "https://base.drpc.org"];
 export const MULTICALL3: Address = "0xcA11bde05977b3631167028862bE2a173976CA11";

@@ -28,13 +28,10 @@ test("numbers", () => {
   assert.equal(short("0x5a1C2f3A4b5C6d7E8f9A0b1C2d3E4f5A6b7C7e40"), "0x5a1C…7e40");
 });
 
-test("text from the chain loses hidden marks", () => {
+test("text from the chain loses hidden marks, and its line breaks and tabs become spaces", () => {
   assert.equal(clean("\u202eevil\u202c name"), "evil name");
   assert.equal(clean("zero\u200bwidth\u0000"), "zerowidth");
   assert.equal(clean("  spaced \n  out  "), "spaced out");
-});
-
-test("line breaks and tabs in text from the chain become spaces", () => {
   assert.equal(clean("Main\nAccount"), "Main Account");
   assert.equal(clean("Main\tProtocol\r\nAccount"), "Main Protocol Account");
 });
