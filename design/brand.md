@@ -199,9 +199,10 @@ What follows for the café:
   café's own that could pass for a label.
 - The claim is specific and next to its proof: "Retired 75 kVCM, ≈ 19 t of carbon credits, in the name "Hydrex"", with
   the transaction. "Your share of what was retired", never "your footprint", "neutral" or "offset".
-- **Words to review on today's page:** the home heading, "Your Hydrex votes, working for the climate", is a claim of
-  climate benefit in general; something as specific as "Your Hydrex votes, retiring carbon credits every week" says what
-  happens. "Carbon Impact" is a product name the rules cover: say what it does in the same place, as the page does now.
+- **The home heading** was "Your Hydrex votes, working for the climate", a claim of climate benefit in general. It is
+  now "Your Hydrex votes, retiring carbon credits and paying you": what happens, which anyone can check on Basescan,
+  with the share retired in the lead below it. "Carbon Impact" is a product name the rules cover: say what it does in
+  the same place, as the page does.
 
 ## Type
 
@@ -359,23 +360,40 @@ C's layout, in A's faces and colours, wherever someone checks figures or address
 
 ### Klima's mark
 
-Klima agrees to the café using its logo where it makes sense.
+Klima agrees to the café using its logo where it makes sense. A trade mark is "generally unlikely" to be taken for a
+sustainability label, the Commission says, unless it is a certification mark
+([Commission](https://commission.europa.eu/document/download/3c257883-bb2a-4dd9-a6dc-501d587bb34f_en), Q3); placed
+beside a specific retirement, Klima's mark says who retires, and nothing more.
 
-- **Beside a retirement only:** on the receipt's retirement line, "Retired through" and the logo, and where an
-  automation's page says who retires its credits. Never on its own as a badge, on Home's heading, or next to "impact"
-  without a figure: placed next to a claim, a logo can read as a trust mark.
-- **From Klima's own file,** unaltered, with its clear space: the black and green one on light grounds, and on dark
-  grounds the version Klima's media kit gives for them.
-- **In the repository,** the file needs an entry of its own in `REUSE.toml`, with Klima's terms rather than MIT.
+- **On the page now:** under "Retired so far" on Home, "through Klima Protocol", with the icon at 24 px.
+- **On the canvas:** on the receipt's retirement line, in both themes.
+- **Beside a retirement only,** and where an automation's page says who retires its credits. Never on its own as a
+  badge, on Home's heading, or next to "impact" without a figure.
+- **Klima's own icon,** from its brand guidelines, unaltered: the green mark on its black disc, which reads on both
+  themes. Its guidelines keep the height of the mark's "X" clear around it, about a third of its size: 8 px at 24 px.
+- **In the repository,** `klima-protocol.svg` is Klima Protocol's, all rights reserved, under
+  `LICENSES/LicenseRef-KlimaProtocol.txt` and an entry of its own in `REUSE.toml`.
+
+### Colour
+
+Five palettes are on the canvas, row 9, each on the same piece of Home in both themes: roast, ink only, claret, ink
+blue, and today's teal. Each keeps the same status colours, with their shapes and words; green is left out, as beside
+"carbon" it reads as a claim.
+
+- **Roast needs milk in dark.** The crema drawn on A's board, `#e6b285`, is nearly the warning amber, `#efb062`: a
+  distance of 3.8 in OKLab, where under about 10 a button and a warning look alike. Milk, `#e7d4bf`, is 11.6 from it, at
+  12.9:1 on the dark paper.
+- **Ink blue takes the joining blue's place,** 5.3 from it in light and 3.6 in dark: joining and leaving would need
+  another colour.
+- **Ink only** is the furthest from every status colour, so that a stopped automation stands out most; it is also the
+  plainest.
 
 ## To decide
 
-- **A's colours on the page:** ink and roast for today's teal, and plain values before `light-dark()`, so that links
-  keep their colour where it is unsupported.
-- **The mark:** the "é" tile for `icon.svg`, with `favicon.ico`, `apple-touch-icon.png` and a `shortcut icon` link.
-- **The home heading,** "Your Hydrex votes, working for the climate", for something as specific as "Your Hydrex votes,
-  retiring carbon credits every week".
-- **Klima's file for dark grounds,** and its licence entry.
+- **A's colours on the page,** from row 9, and plain values before `light-dark()`, so that links keep their colour where
+  it is unsupported.
+- **The mark:** the "é" tile or one of the alternatives on row 8 for `icon.svg`, with `favicon.ico`,
+  `apple-touch-icon.png` and a `shortcut icon` link.
 - **A trademark check** on "metaDEX Café" against Dromos's "MetaDEX™".
 - **A test with people,** five seconds on Home for each persona: what is this, who is it for, would you trust it with
   your account. Rate warmth and competence, as the studies above did.
