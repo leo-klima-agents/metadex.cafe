@@ -81,6 +81,7 @@ export function review(
   );
   // Joining and leaving name the conduit by its address, which the wallet shows too.
   key.hidden = !calls.some(({ shows }) => shows.includes(CONDUIT));
+  fill(key, "calls", calls.length === 1 ? "this call" : "these calls");
   how.textContent = "";
   check.textContent = "Checking each call against Base…";
   progress.replaceChildren();
@@ -109,7 +110,7 @@ export function review(
       state.checked = !failure;
       check.textContent = failure
         ? `Call ${failure.index + 1} would fail on Base, so nothing can be sent. The chain says: “${failure.reason}”.`
-        : "Checked ✓ Each call was run against Base from your address: it would succeed.";
+        : "Checked ✓ Each call was tried on Base from your address, without sending it: it would succeed.";
       update();
     })
     .catch((error) => {

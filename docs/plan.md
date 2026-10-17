@@ -24,7 +24,7 @@ on. [research.md](research.md) keeps the findings and the decisions taken since.
    in Playwright against a stand-in for Safe{Wallet}, and against Safe{Wallet} itself, read-only. Left: the first
    deployment, and the user's test with a real Safe.
 6. **Polish:** all states, copy, accessibility, the cold-read loop, mobile, and the in-wallet browsers. Done, and in
-   review: the findings and the two rounds of cold reads are in [research.md](research.md#polish). Not done: tests in
+   review: the findings and the three rounds of cold reads are in [research.md](research.md#polish). Not done: tests in
    WebKit and in real wallet apps, which this environment does not have.
 7. **Release:** the first deployment from a tag, and the verification steps written down. The steps are written down, in
    the README's [Deployment](../README.md#deployment), and the version is 0.3.0. Left for the user: the repository's

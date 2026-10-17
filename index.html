@@ -22,7 +22,8 @@
     <header>
       <h1>metaDEX Café</h1>
       <p>
-        Let an automation vote with your Hydrex accounts every epoch and claim their rewards. You can leave at any time.
+        Let an automation vote with your Hydrex accounts every epoch, claim their rewards, retire a share as carbon
+        credits and pay you the rest. You can leave at any time.
       </p>
     </header>
     <main>
@@ -76,8 +77,8 @@
         <p>
           <time class="week-start">…</time> to <time class="week-end">…</time>, 00:00 UTC. Each epoch lasts a week, and
           the next one starts in <span class="countdown">…</span>. Klima's keeper votes just before the epoch ends and
-          pays out right after. A join or a leave changes who votes with an account from the next epoch, and who can
-          claim its rewards at once.
+          pays out right after. A join or a leave changes who can claim an account's rewards right away, and who votes
+          with it from the next epoch.
         </p>
 
         <h3>Latest vote</h3>
@@ -157,8 +158,8 @@
           <code translate="no"><a class="payout"></a></code><span id="itself">, your own address</span>.
         </p>
         <p>
-          One address takes the payouts for all of an owner's accounts in the Carbon Impact automation. Hydrex's admin
-          key can change it too, as it can any owner's.
+          This address takes the payouts of all your accounts in the Carbon Impact automation. Hydrex's admin key can
+          change it too, as it can any owner's.
         </p>
         <form id="payout-form" hidden>
           <p>
@@ -185,8 +186,9 @@
         <p>From the contracts' current settings:</p>
         <ul>
           <li>
-            <b>The Carbon Impact automation votes with the account</b> from the next epoch, which starts on Thursday at
-            00:00 UTC. While the account is in, you can't vote with it yourself.
+            <b>The Carbon Impact automation votes with the account</b> from the next epoch, which starts on
+            <time class="week-end">…</time> at 00:00 UTC. Once the account joins, you can't vote with it yourself, until
+            the epoch after it leaves.
           </li>
           <li>
             <b>It swaps, retires and pays.</b> Right after each epoch ends, Klima's keeper has the Carbon Impact
@@ -200,15 +202,16 @@
           <li>
             <strong
               >The Carbon Impact automation can claim the account's rewards from the moment it joins, even those your
-              own votes earned: any you have not claimed yet, and this epoch's once the epoch ends.</strong
+              own votes earned.</strong
             >
-            They are swapped and retired like the rest: to keep them as they are,
+            That is any you have not claimed yet, and this epoch's once the epoch ends. They are swapped and retired
+            like the rest. To keep them as they are,
             <a href="https://www.hydrex.fi/accounts">claim them on Hydrex</a> before joining.
           </li>
           <li><b>Your HYDX stays in your account,</b> and the account stays in your wallet. Neither is transferred.</li>
           <li>
-            <b>Hydrex can change these settings:</b> the share retired (up to 100%), the payout tokens, its fee on the
-            payouts (up to 1%), the routers, and your payout address.
+            <b>Hydrex can change these settings:</b> the share retired (up to 100%), the tokens it pays out in, its fee
+            on the payouts (up to 1%), the routers, and your payout address.
           </li>
           <li>
             <b>You can leave at any time.</b> From that moment the Carbon Impact automation can no longer claim the
@@ -248,7 +251,8 @@
       <p class="how"></p>
       <ol class="steps"></ol>
       <p class="key" hidden>
-        In these calls, <code class="conduit" translate="no"></code> is the Carbon Impact automation.
+        In <span class="calls">these calls</span>, <code class="conduit" translate="no"></code> is the Carbon Impact
+        automation.
       </p>
       <div class="foot">
         <p class="check" role="status"></p>
@@ -283,8 +287,9 @@
       <ul>
         <li>
           <b>The Carbon Impact automation votes with <span class="which"></span></b> from the epoch starting
-          <time class="next"></time>, 00:00 UTC. While <span data-one="it is" data-many="they are"></span> in, you can't
-          vote with <span data-one="it" data-many="them"></span> yourself.
+          <time class="next"></time>, 00:00 UTC. Once <span data-one="it joins" data-many="they join"></span>, you can't
+          vote with <span data-one="it" data-many="them"></span> yourself, until the epoch after
+          <span data-one="it leaves" data-many="they leave"></span>.
         </li>
         <li>
           <b
@@ -297,14 +302,14 @@
         <li>
           <strong
             >It can claim <span data-one="its" data-many="their"></span> rewards as soon as
-            <span data-one="it joins" data-many="they join"></span>, even those your own votes earned: any you have not
-            claimed yet, and this epoch's once the epoch ends.</strong
+            <span data-one="it joins" data-many="they join"></span>, even those your own votes earned.</strong
           >
-          They are swapped and retired like the rest: to keep them as they are,
-          <a href="https://www.hydrex.fi/accounts">claim them on Hydrex</a> before joining.
+          That is any you have not claimed yet, and this epoch's once the epoch ends. They are swapped and retired like
+          the rest. To keep them as they are, <a href="https://www.hydrex.fi/accounts">claim them on Hydrex</a> before
+          joining.
         </li>
         <li>
-          <b>The calls allow voting and claiming, nothing else.</b> Your HYDX stays in your
+          <b>The calls let the automation vote and claim, nothing more.</b> Your HYDX stays in your
           <span data-one="account" data-many="accounts"></span>, and
           <span data-one="it stays" data-many="they stay"></span>
           in your wallet.
@@ -338,8 +343,8 @@
       <strong>In the Carbon Impact automation.</strong> It votes with this account and claims its rewards.
     </template>
     <template id="joined">
-      <strong>Joined the Carbon Impact automation.</strong> It counts from the epoch starting
-      <time class="date"></time>.
+      <strong>Joined the Carbon Impact automation.</strong> It can claim this account's rewards already, and votes with
+      it from the epoch starting <time class="date"></time>.
     </template>
     <template id="left">
       <strong>Left the Carbon Impact automation.</strong> Its votes count for the automation until this epoch ends on

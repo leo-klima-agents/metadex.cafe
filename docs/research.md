@@ -487,6 +487,25 @@ with an account while it is in, and that this epoch's rewards go too. Fixed afte
 - **Smaller ones.** "Earning Power this epoch" was nobody's; it is now "Its Earning Power this epoch". "The address
   itself" is now "your own address". Hydrex's admin key can change a payout address "as it can any owner's".
 
+**Round three,** with two new readers. Both again got all of it right. Fixed after it, without a fourth round:
+
+- **Could they still vote** between joining and Thursday? Now "Once the account joins, you can't vote with it yourself,
+  until the epoch after it leaves", and the next epoch is named by its date rather than "Thursday".
+- **"At once"** could cover both votes and rewards. The sentence now gives the claims first, "right away", then the
+  votes.
+- **"The calls allow voting and claiming, nothing else"** sounded too reassuring next to Hydrex's admin key. Now "The
+  calls let the automation vote and claim, nothing more."
+- **The bold warning about rewards** took three reads. It now stops at "even those your own votes earned", and the next
+  sentences say which and how to keep them.
+- **"Each call was run against Base"** sounded as if it had been sent. Now "tried on Base from your address, without
+  sending it".
+- **Smaller ones.** "Joined" now says the automation can claim already. The lead names the share retired. "In these
+  calls" is "In this call" for one call. "The payout tokens" is now "the tokens it pays out in".
+
+Across the three rounds, all six readers got the purpose, the timing, how to leave and the statuses right. None would
+join with their main account yet: all six named Hydrex's admin key, which can redirect payouts and retire up to 100%,
+and most asked how much they had not claimed and who publishes the page.
+
 ## Decisions
 
 Taken by the user on 2026-10-15, after this research:
