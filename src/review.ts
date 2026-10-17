@@ -4,7 +4,7 @@ import { simulate } from "./chain.ts";
 import { CHAIN_ID } from "./config.ts";
 import { clone, fill, txLink } from "./dom.ts";
 import { count } from "./format.ts";
-import { Failed, batches, declined, sendBatch, sendEach, switchToBase, type Connection } from "./wallet.ts";
+import { Failed, batches, declined, proposes, sendBatch, sendEach, switchToBase, type Connection } from "./wallet.ts";
 
 const dialog = document.getElementById("review") as HTMLDialogElement;
 const part = (selector: string) => dialog.querySelector<HTMLElement>(selector)!;
@@ -75,14 +75,17 @@ export function review(
   update();
   dialog.showModal();
   const { address, provider } = connection;
+  // A Safe always takes the calls as one Safe transaction.
+  const proposing = proposes(connection);
   batches(provider, address).then((batch) => {
     if (current !== state) return;
-    state.batch = batch;
+    state.batch = proposing || batch;
+    const one = proposing ? "One Safe transaction" : "One transaction";
     how.textContent =
       calls.length === 1
-        ? "One transaction:"
-        : batch
-          ? `One transaction, with ${calls.length} calls:`
+        ? `${one}:`
+        : state.batch
+          ? `${one}, with ${calls.length} calls:`
           : `${count(calls.length, "transaction", "transactions")}, one after the other:`;
     update();
   });
@@ -101,12 +104,20 @@ export function review(
     });
 }
 
-/** Updates the main button: disabled until the calls are checked, and a switch while the wallet is on another chain. */
+/**
+ * Updates the main button: disabled until the calls are checked, and a switch while the wallet is on another chain. A
+ * Safe on another chain cannot switch: its page says so.
+ */
 export function update(): void {
   if (!current) return;
   const wrongChain = current.connection.chainId !== CHAIN_ID;
-  confirm.textContent = wrongChain ? "Switch to Base" : "Confirm in your wallet";
-  confirm.disabled = !current.checked || current.batch === undefined || current.sending;
+  const proposing = proposes(current.connection);
+  confirm.textContent = proposing
+    ? "Propose in Safe{Wallet}"
+    : wrongChain
+      ? "Switch to Base"
+      : "Confirm in your wallet";
+  confirm.disabled = !current.checked || current.batch === undefined || current.sending || (proposing && wrongChain);
 }
 
 /** Closes the review, as when the wallet changes account. */
@@ -152,14 +163,21 @@ confirm.addEventListener("click", () => {
     );
   };
   state.sending = true;
+  // A Safe's owners sign in Safe{Wallet}, maybe days later: the page does not follow the proposal.
+  const proposing = proposes(state.connection);
   // The wallet's request comes first, with no wait since the click: Coinbase's window only opens from a click.
   const sending = state.batch
-    ? (asking(0), sendBatch(provider, address, calls, () => sent()))
+    ? (asking(0), sendBatch(provider, address, calls, () => sent(), !proposing))
     : sendEach(provider, address, calls, asking, sent);
   update();
   sending
     .then((all) => {
-      tell("Done.", all);
+      tell(
+        proposing
+          ? "Proposed. The Safe's owners sign it in Safe{Wallet}; the accounts here change once it executes."
+          : "Done.",
+        all,
+      );
       if (current === state) confirm.hidden = true;
     })
     .catch((error) => {

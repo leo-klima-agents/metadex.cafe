@@ -351,9 +351,30 @@ Checked for the wallet milestone on 2026-10-16, on Base at block 52,694,000 and 
 - **Coinbase's SDK 4.4.0** adds three style elements, for the Coinbase Wallet app's QR code, its snackbar and its
   redirect dialog; the page's policy allows them by their hashes. It sends a `HEAD` request to the page's own URL to
   read its `Cross-Origin-Opener-Policy`, so `connect-src` includes `'self'`. It has no telemetry.
-- **Sizes,** gzipped: the first load is 23.1 KB, up from 18.9 KB, and Coinbase's SDK 37.5 KB, loaded only when someone
-  picks it. With esbuild's splitting, the parts of viem that both use went into a chunk on the first load, 38 KB in all,
-  so Coinbase's SDK is now built on its own.
+- **Sizes,** gzipped: the first load is 23.5 KB, up from 18.9 KB. Coinbase's SDK is 37.5 KB, loaded only when someone
+  picks it, and Safe's 17.0 KB, loaded only in a frame. With esbuild's splitting, the parts of viem that the page and
+  Coinbase's SDK both use went into a chunk on the first load, 38 KB in all, so each SDK is now built on its own.
+
+### Safe{Wallet}
+
+Checked on 2026-10-17 in Playwright's Chromium, with Safe{Wallet} at `app.safe.global` opened read-only for the large
+Safe on Base, and this build served as `https://metadex.cafe/`:
+
+- **As a Safe App.** The page connected to the Safe on its own and showed its 8 accounts with HYDX. Leaving with #48803
+  was checked against Base from the Safe's address. "Propose in Safe{Wallet}" opened Safe{Wallet}'s "Confirm
+  transaction" with the decoded call, `setConduitApproval` on Hydrex's VotingEscrow with the automation, 48803 and
+  `false`, "No balance change", and 0 of 3 confirmations. Nothing was signed. Discarding it answers "Transaction was
+  rejected", which the page shows as a refusal.
+- **The manifest.** A link with `appUrl` opens an app that is not in Safe{Wallet}'s list behind a warning, without
+  reading the manifest; its transactions then say "unknown". "Add custom Safe App" reads `manifest.json` and `icon.svg`
+  and shows the name and description.
+- **Safe's provider package,** `@safe-global/safe-apps-provider` 0.18.6, is CommonJS. Bundled, it pulled the CommonJS
+  build of Safe's SDK and all of viem: 189 KB gzipped. It also has no `eth_requestAccounts`. The page answers its four
+  requests itself over the SDK: `eth_accounts`, `eth_chainId`, `wallet_getCapabilities` and `wallet_sendCalls`, which
+  returns the Safe transaction's hash.
+- **Safe's SDK** talks only to the parent frame, and the page accepts answers only from `https://app.safe.global`. It
+  re-exports types from Safe's gateway package, whose request code is bundled but never called.
+- **Simulation from a Safe.** `mainnet.base.org` and `base-rpc.publicnode.com` both run calls from the Safe's address.
 
 ## Decisions
 
@@ -403,8 +424,8 @@ Taken by the user on 2026-10-15, after this research:
     page shows links to its page on Basescan.
 
 17. **No wagmi.** On 2026-10-16 the user confirmed that the page finds wallets with EIP-6963 and talks to them with
-    EIP-1193 requests, without wagmi. Its runtime packages are `viem` and `@coinbase/wallet-sdk`; milestone 5 adds
-    Safe's two.
+    EIP-1193 requests, without wagmi. Its runtime packages are `viem`, `@coinbase/wallet-sdk` and, since milestone 5,
+    `@safe-global/safe-apps-sdk`.
 18. **Leaving stays on** when a startup check fails: it only takes the account away from the automation. Joining and
     changing the payout address stay off.
 19. **The wallet sets the gas.** The page sends no gas limit.

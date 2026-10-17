@@ -19,7 +19,9 @@ on. [research.md](research.md) keeps the findings and the decisions taken since.
    the startup checks. Then the fork and Coinbase tests. Built without wagmi ([decision 17](research.md#decisions)), and
    in review.
 5. **Safe:** the Safe App manifest, the `safe` connector and a first deployment to GitHub Pages, tested in Playwright
-   and then by the user with a real Safe. Next.
+   and then by the user with a real Safe. Built, and in review: the page runs as a Safe App and proposes; it was tested
+   in Playwright against a stand-in for Safe{Wallet}, and against Safe{Wallet} itself, read-only. Left: the first
+   deployment, and the user's test with a real Safe.
 6. **Polish:** all states, copy, accessibility, the cold-read loop, mobile, and the in-wallet browsers.
 7. **Release:** the first deployment from a tag, and the verification steps written down. The tag workflow and the steps
    to check a build are in place already.

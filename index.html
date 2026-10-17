@@ -110,8 +110,13 @@
             <button type="button" id="disconnect" class="secondary">Disconnect</button>
           </p>
           <p id="wrong-chain" class="notice" role="alert" hidden>
-            Your wallet is on another network.
-            <button type="button" class="switch">Switch to Base</button>
+            <span class="to-switch">
+              Your wallet is on another network.
+              <button type="button" class="switch">Switch to Base</button>
+            </span>
+            <span class="safe-elsewhere" hidden
+              >This Safe is on another network. Open the page from a Safe on Base.</span
+            >
           </p>
         </div>
         <search>

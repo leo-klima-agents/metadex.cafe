@@ -15,6 +15,7 @@ const BLOCK = 52_694_000; // Fri 16 Oct 2026, 18:22 UTC
 const PORT = 8546;
 const ANVIL = `http://127.0.0.1:${PORT}`;
 const SITE = "https://metadex.cafe";
+const SAFE_WALLET = "https://app.safe.global";
 const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 const SCREENSHOTS = process.env.SCREENSHOTS;
 
@@ -145,6 +146,26 @@ function testWallet(options: WalletOptions, sent: Sent[]) {
   };
 }
 
+// A stand-in for Safe{Wallet}: it frames the page and answers Safe's SDK as a Safe at LEAVER would, recording what the
+// page asks.
+const SAFE_PAGE = `<!doctype html><meta charset="utf-8"><title>Safe{Wallet}</title>
+<iframe src="${SITE}/" style="inline-size: 100%; block-size: 95vh; border: 0"></iframe>
+<script>
+  window.received = [];
+  addEventListener("message", ({ origin, source, data }) => {
+    if (origin !== "${SITE}" || !data?.method) return;
+    window.received.push({ method: data.method, params: data.params });
+    const answers = {
+      getSafeInfo: { safeAddress: "${LEAVER}", chainId: 8453, threshold: 2, owners: [], isReadOnly: false },
+      sendTransactions: { safeTxHash: "0x${"ab".repeat(32)}" },
+    };
+    const reply = data.method in answers
+      ? { id: data.id, success: true, version: "9.1.0", data: answers[data.method] }
+      : { id: data.id, success: false, version: "9.1.0", error: data.method + " is not answered here" };
+    source.postMessage(reply, origin);
+  });
+</script>`;
+
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type" };
 const RPC_ORIGINS = new Set(RPCS.map((url) => new URL(url).origin));
 
@@ -167,6 +188,7 @@ async function serve(route: Route, origins: Set<string>): Promise<void> {
     return route.fulfill({ headers: { ...CORS, "content-type": "application/json" }, body: await response.text() });
   }
   if (url.origin === "https://keys.coinbase.com") return route.fulfill({ contentType: "text/html", body: "Coinbase" });
+  if (url.origin === SAFE_WALLET) return route.fulfill({ contentType: "text/html", body: SAFE_PAGE });
   return route.abort();
 }
 
@@ -180,7 +202,7 @@ const contexts: BrowserContext[] = [];
 /** Opens the page, with the test wallet acting as an owner unless wallet is false. */
 async function open(
   wallet: Partial<WalletOptions> | false,
-  { width = 1440, height = 900, dark = false } = {},
+  { width = 1440, height = 900, dark = false, url = `${SITE}/` } = {},
 ): Promise<Opened> {
   const context = await browser.newContext({
     viewport: { width, height },
@@ -206,7 +228,7 @@ async function open(
   // The page's clock at the fork block, for the statuses that depend on the time.
   const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false]);
   await page.clock.setFixedTime(Number(timestamp) * 1000);
-  await page.goto(`${SITE}/`);
+  await page.goto(url);
   return { page, context, sent, origins, violations };
 }
 
@@ -411,6 +433,40 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await review(page).getByText("would fail on Base").waitFor();
     assert.match((await review(page).locator(".check").textContent()) ?? "", /“Not token owner”/);
     assert.equal(await review(page).getByRole("button", { name: "Confirm in your wallet" }).isDisabled(), true);
+  });
+
+  test("inside Safe{Wallet}, a Safe proposes leaving with two accounts as one Safe transaction", async () => {
+    const { page, origins, violations } = await open(false, { url: `${SAFE_WALLET}/` });
+    const app = page.frameLocator("iframe");
+    await app.getByText("Connected with Safe{Wallet}").waitFor();
+    assert.equal(await app.locator("#disconnect").isVisible(), false);
+    await app.getByRole("checkbox", { name: "Pick Account #53350" }).check();
+    await app.getByRole("checkbox", { name: "Pick Account #82206" }).check();
+    await app.getByRole("button", { name: "Leave with 2 accounts" }).click();
+    const dialog = app.locator("#review");
+    await dialog.getByText("One Safe transaction, with 2 calls:").waitFor();
+    await dialog.getByText("Checked ✓").waitFor();
+    await dialog.getByRole("button", { name: "Propose in Safe{Wallet}" }).click();
+    await dialog.getByText("Proposed.").waitFor();
+    const received = await page.evaluate(() => (window as unknown as { received: Sent[] }).received);
+    const proposal = received.find(({ method }) => method === "sendTransactions") as unknown as {
+      params: { txs: { to: string; data: string; value: string }[] };
+    };
+    const leave = (id: bigint) =>
+      encodeFunctionData({
+        abi: parseAbi(["function setConduitApproval(address, uint256, bool)"]),
+        args: [CONDUIT, id, false],
+      });
+    assert.deepEqual(proposal.params.txs, [
+      { to: VOTING_ESCROW, data: leave(53350n), value: "0" },
+      { to: VOTING_ESCROW, data: leave(82206n), value: "0" },
+    ]);
+    // A proposal changes nothing until the owners sign it and it executes.
+    for (const id of [53350n, 82206n]) assert.deepEqual(await approvals(id), { delegate: CONDUIT, claimer: CONDUIT });
+    assert.deepEqual(violations, []);
+    for (const origin of origins) {
+      assert.ok([SITE, SAFE_WALLET, ...RPC_ORIGINS].includes(origin), `unexpected request to ${origin}`);
+    }
   });
 
   test("Coinbase Wallet loads its code under the page's policy and opens its window", async () => {

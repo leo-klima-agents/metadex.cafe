@@ -57,6 +57,21 @@ export function coinbase(): Promise<Provider> {
   return sdk;
 }
 
+let safeSdk: Promise<Provider | undefined> | undefined;
+
+/** Safe{Wallet}'s provider when the page runs in it as a Safe App, else undefined. Safe's code loads only in a frame. */
+export function safe(): Promise<Provider | undefined> {
+  if (window.parent === window) return Promise.resolve(undefined);
+  safeSdk ??= import("./safe.ts").then(({ provider }) => provider()).catch(() => undefined);
+  return safeSdk;
+}
+
+/** Safe{Wallet}, which the page connects to on its own when it runs in it. Its provider shares the Safe without asking. */
+export const SAFE: Wallet = { id: "safe", name: "Safe{Wallet}", provider: async () => (await safe())! };
+
+/** Whether the wallet is a Safe, which proposes calls for its owners to sign in Safe{Wallet} rather than sending them. */
+export const proposes = ({ wallet }: Connection): boolean => wallet === SAFE;
+
 /** Asks the wallet for its account; with ask false, only reads an account it already shares. */
 export async function connect(wallet: Wallet, ask = true): Promise<Connection | undefined> {
   const provider = await wallet.provider();
@@ -119,10 +134,17 @@ export async function batches(provider: Provider, address: Address): Promise<boo
 export type Call = { to: Address; data: Hex };
 
 /**
- * Sends calls as one transaction, and waits until it is included. The first await is the wallet's request, so a wallet
- * that opens a window, such as Coinbase's, opens it from the click. Returns the transaction hashes.
+ * Sends calls as one transaction, and waits until it is included, unless follow is false. The first await is the
+ * wallet's request, so a wallet that opens a window, such as Coinbase's, opens it from the click. Returns the transaction
+ * hashes.
  */
-export async function sendBatch(provider: Provider, from: Address, calls: Call[], sent: () => void): Promise<Hex[]> {
+export async function sendBatch(
+  provider: Provider,
+  from: Address,
+  calls: Call[],
+  sent: () => void,
+  follow = true,
+): Promise<Hex[]> {
   const reply = (await provider.request({
     method: "wallet_sendCalls",
     params: [
@@ -136,6 +158,7 @@ export async function sendBatch(provider: Provider, from: Address, calls: Call[]
     ],
   })) as string | { id: string };
   sent();
+  if (!follow) return [];
   const id = typeof reply === "string" ? reply : reply.id;
   for (;;) {
     type Status = { status: number | string; receipts?: { transactionHash: Hex; status: Hex | number }[] };

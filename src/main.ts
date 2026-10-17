@@ -19,7 +19,17 @@ import {
 } from "./format.ts";
 import { LockType, canJoin, canLeave, check, readAccounts, readRelay, status, type Account } from "./hydrex.ts";
 import { close, review, update } from "./review.ts";
-import { connect, declined, findWallets, switchToBase, type Connection, type Wallet } from "./wallet.ts";
+import {
+  SAFE,
+  connect,
+  declined,
+  findWallets,
+  proposes,
+  safe,
+  switchToBase,
+  type Connection,
+  type Wallet,
+} from "./wallet.ts";
 
 const lookUp = document.getElementById("look-up") as HTMLFormElement;
 const input = lookUp.querySelector("input")!;
@@ -272,9 +282,13 @@ function showConnection(): void {
   show("wallets", !connection);
   show("connected", !!connection);
   if (connection) {
+    const inSafe = proposes(connection);
     fill(document, "wallet", connection.wallet.name);
     fillAddress(document, "me", connection.address, short(connection.address));
+    show("disconnect", !inSafe);
     show("wrong-chain", connection.chainId !== CHAIN_ID);
+    showAll("to-switch", !inSafe);
+    showAll("safe-elsewhere", inSafe);
   }
   update();
 }
@@ -283,7 +297,7 @@ async function connectTo(wallet: Wallet, ask = true): Promise<void> {
   const connected = await connect(wallet, ask);
   if (!connected) return;
   connection = connected;
-  remember(wallet.id);
+  if (wallet !== SAFE) remember(wallet.id);
   listen(connected);
   showConnection();
   lookUpAddress(connected.address);
@@ -328,6 +342,11 @@ document.querySelector("#wrong-chain .switch")!.addEventListener("click", () => 
   if (connection) switchToBase(connection).then(showConnection, console.error);
 });
 
+// Inside Safe{Wallet}, the page connects to the Safe on its own: it is the only wallet there.
+const inSafe = safe().then(async (provider) => {
+  if (provider) await connectTo(SAFE, false);
+  return !!provider;
+});
 let reconnecting = false;
 
 findWallets((wallets) => {
@@ -353,7 +372,7 @@ findWallets((wallets) => {
   const last = wallets.find(({ id }) => id === remembered());
   if (last && !connection && !reconnecting) {
     reconnecting = true;
-    connectTo(last, false).catch(console.error);
+    inSafe.then((found) => (found ? undefined : connectTo(last, false))).catch(console.error);
   }
 });
 
