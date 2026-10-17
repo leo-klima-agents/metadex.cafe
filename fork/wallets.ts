@@ -429,18 +429,24 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await account(page, 53350).getByText("Left the Carbon Impact automation.").waitFor();
   });
 
-  test("an ended lock and another owner's accounts offer nothing to tick", async () => {
+  test("an ended lock offers nothing to tick, and disconnecting clears the accounts", async () => {
     const { page } = await open({ owner: ENDED });
     await page.getByRole("button", { name: "Test Wallet" }).click();
     await account(page, 123351).getByText("Lock ended.").waitFor();
     assert.equal(await account(page, 123351).locator(".pick").isVisible(), false);
     assert.equal(await account(page, 123364).locator(".pick").isVisible(), true);
-    await page.getByLabel("See the accounts of an address:").fill(MEMBER);
-    await page.getByRole("button", { name: "Show the accounts" }).click();
-    await page.getByText("Connect as this address to join or leave with its accounts.").waitFor();
-    assert.equal(await page.locator(".pick:visible").count(), 0);
-    assert.equal(await page.locator("#pick-bar").isVisible(), false);
-    assert.equal(await page.locator("#payout-form").isVisible(), false);
+    await page.getByRole("button", { name: "Disconnect" }).click();
+    await page.getByText("Connect a wallet").waitFor();
+    assert.equal(await page.locator("#accounts").isVisible(), false);
+    assert.equal(await page.locator("#payout").isVisible(), false);
+  });
+
+  test("without a wallet in the browser, Browser wallet says how to get one", async () => {
+    const { page } = await open(false, { width: 390, height: 844 });
+    await page.getByRole("button", { name: "Browser wallet" }).click();
+    await page.getByText("No wallet was found in this browser.").waitFor();
+    await shoot(page, "no-wallet-390-light");
+    assert.equal(await page.locator("#accounts").isVisible(), false);
   });
 
   test("the wrong network, a refusal in the wallet, and a call that would fail", async () => {

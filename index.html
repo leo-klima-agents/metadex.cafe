@@ -98,8 +98,12 @@
       <section>
         <h2>Accounts</h2>
         <div id="wallets">
-          <p>Connect a wallet to join or leave with its accounts:</p>
+          <p>Connect a wallet to see its accounts, and to join or leave with them:</p>
           <p class="wallets"></p>
+          <p id="no-wallet" class="notice" role="alert" hidden>
+            No wallet was found in this browser. Install a browser wallet, or open this page in your wallet app's own
+            browser. Coinbase Wallet works without one.
+          </p>
           <p id="wallet-failed" class="notice" role="alert" hidden>
             <bdi class="failed-wallet" translate="no"></bdi> did not connect. Try again, or use another wallet.
           </p>
@@ -119,31 +123,10 @@
             >
           </p>
         </div>
-        <search>
-          <form id="look-up">
-            <p>
-              <label for="address">See the accounts of an address:</label>
-              <input
-                id="address"
-                required
-                pattern="\s*0x[0-9a-fA-F]{40}\s*"
-                title="0x followed by 40 hexadecimal characters"
-                data-typo="This address has a typo: its capital and small letters do not match its checksum."
-                placeholder="0x…"
-                autocomplete="off"
-                autocapitalize="off"
-                spellcheck="false"
-                enterkeyhint="search"
-              />
-            </p>
-            <p><button>Show the accounts</button></p>
-          </form>
-        </search>
         <p id="reading" hidden>Reading the accounts…</p>
         <div id="accounts" hidden>
-          <p id="not-yours" hidden>Connect as this address to join or leave with its accounts.</p>
           <ul id="full" class="accounts"></ul>
-          <p id="none" hidden>No account of this address holds HYDX.</p>
+          <p id="none" hidden>No account of this wallet holds HYDX.</p>
           <details id="empty-accounts" hidden>
             <summary class="empty-count"></summary>
             <ul class="accounts"></ul>

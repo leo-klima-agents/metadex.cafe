@@ -444,6 +444,11 @@ Taken by the user on 2026-10-15, after this research:
     sends each transaction from a click of its own: "Confirm transaction 2 of 3" once the one before is included. A
     wallet that opens a window, such as Coinbase's, can only open it from a click, and closing the review between
     transactions plainly stops there.
+23. **No address look-up.** Later that day, the user dropped the field that showed any address's accounts: the page
+    shows the accounts of the connected wallet, and before a wallet connects, only the automation and the epoch.
+24. **"Browser wallet" without a wallet.** Also that day: when no wallet announces itself and `window.ethereum` is
+    empty, the page still offers "Browser wallet". Picking it says that no wallet was found, how to get one, and that
+    Coinbase Wallet works without one.
 
 Still open: how much an account has not claimed yet. It would need reads of every bribe the account earned in; it is
 left for later.

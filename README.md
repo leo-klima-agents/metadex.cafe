@@ -1,8 +1,8 @@
 # metaDEX Café
 
 The static page at <https://metadex.cafe/> for joining and leaving the Klima "Carbon Impact" automation with Hydrex
-accounts on Base. It shows the automation's settings and latest vote, the epoch, and the accounts of any address with
-where each stands. With a wallet connected, or inside Safe{Wallet} as a Safe App, it joins, leaves and sets the payout
+accounts on Base. It shows the automation's settings and latest vote, and the epoch. With a wallet connected, or inside
+Safe{Wallet} as a Safe App, it shows the wallet's accounts with where each stands, and joins, leaves and sets the payout
 address. Klima's keeper, [hydrex-keeper](https://github.com/ldeso/hydrex-keeper), votes with the accounts in the
 automation. The page is `index.html` and `style.css`; a script in `src/` fills in what it reads from Base and talks to
 the wallet. Its dependencies are `viem`, `@coinbase/wallet-sdk` for Coinbase Wallet, and `@safe-global/safe-apps-sdk`
@@ -39,7 +39,8 @@ Klima's executor Safe, through which the keeper acts, and the automation's deplo
   transaction (EIP-5792) asks once. Others ask once per call, each from a click of its own once the one before is
   included: a wallet that opens a window, such as Coinbase's, can only open it from a click.
 - **It works with the wallets the browser announces** (EIP-6963), or the one at `window.ethereum`, and with Coinbase
-  Wallet through Coinbase's SDK. That SDK loads only when someone picks it.
+  Wallet through Coinbase's SDK. That SDK loads only when someone picks it. With no wallet in the browser, "Browser
+  wallet" still shows, and says how to get one.
 - **Inside Safe{Wallet}, it works with the Safe.** It proposes the calls as one Safe transaction, and the Safe's owners
   sign it in Safe{Wallet}. Safe's SDK loads only when the page runs in a frame.
 - **It checks the automation first.** The chain, the automation's code and settings, and the code of Hydrex's
@@ -129,11 +130,11 @@ committing. `npm run build` writes the page to `dist/`; serve that folder with a
 wallet acts as real owners: one joins with two accounts, one of them from Liquid Hydrex; another joins from Lock Maxi
 and USDC in one batch; a member leaves and changes the payout address; another leaves with two accounts in one batch;
 the owner of an ended lock gets nothing to tick; and, inside a stand-in for Safe{Wallet}, a Safe proposes leaving with
-two accounts. It also checks the wrong network, a refusal in the wallet, a call that would fail, and that Coinbase
-Wallet loads under the page's policy and opens its window. It needs anvil, from Foundry, and Chromium:
-`npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium's path. `BASE_RPC_URL` is the archive RPC to
-fork from, `https://mainnet.base.org` by default. With `SCREENSHOTS` set to a folder, it saves screenshots there at 390
-and 1440 px, light and dark.
+two accounts. It also checks the wrong network, a refusal in the wallet, a call that would fail, a browser without a
+wallet, and that Coinbase Wallet loads under the page's policy and opens its window. It needs anvil, from Foundry, and
+Chromium: `npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium's path. `BASE_RPC_URL` is the archive
+RPC to fork from, `https://mainnet.base.org` by default. With `SCREENSHOTS` set to a folder, it saves screenshots there
+at 390 and 1440 px, light and dark.
 
 `src/config.ts` holds what the page trusts about the automation, and the RPCs it reads from. After a Hydrex upgrade,
 check the new contracts, then update it. `src/hydrex-conduits.json` names Hydrex's other automations, from

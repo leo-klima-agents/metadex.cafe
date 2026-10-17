@@ -14,7 +14,8 @@ on. [research.md](research.md) keeps the findings and the decisions taken since.
    bundled on its own instead.
 
 3. **Read-only page:** the registry, live relay numbers, this week's vote, and the read-only address view, all from
-   public RPCs. Done; the registry became `src/config.ts`.
+   public RPCs. Done; the registry became `src/config.ts`, and the address view went with
+   [decision 23](research.md#decisions).
 4. **Wallets:** `injected` and `coinbaseWallet`, account statuses, join, leave and payout, with simulation, batching and
    the startup checks. Then the fork and Coinbase tests. Built without wagmi ([decision 17](research.md#decisions)), and
    in review.
