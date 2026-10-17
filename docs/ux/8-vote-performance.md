@@ -61,12 +61,21 @@ RPC to the next.
 The prototype priced the tokens at today's prices. Prices at the end of the epoch can be read too, without the archive
 reads most RPCs refuse, since each source keeps its own history in current state:
 
-| Source                   | History it keeps                                                     | Checked                                                                              |
-| ------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Chainlink feeds          | Every past round, by `getRoundData`                                  | ETH / USD at the flip, $2,415.46, found in 13 reads; $2,411.64 today                 |
-| Algebra pools            | A price oracle in each pool's plugin, by `getTimepoints(secondsAgo)` | All 21 of the automation's Algebra pools reach back past the flip, 64 hours ago      |
-| Classic pools            | Price observations, as Solidly-style pairs keep                      | The HYDX / USDC pool holds 11,768 of them                                            |
-| A read at the flip block | Only with archive state                                              | mainnet.base.org answered 7 and 8 days back; publicnode refused without a paid token |
+| Source                   | History it keeps                                                                                                                             | Checked                                                                                                                                                                           |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chainlink feeds          | Every past round, by `getRoundData`                                                                                                          | ETH / USD at the flip, $2,415.46, found in 13 reads; $2,411.64 today                                                                                                              |
+| Algebra pools            | A price oracle in each pool's plugin, by `getTimepoints(secondsAgo)`. It keeps a fixed number of points, so a busy pool's history is shorter | The automation's 21 reach back 2.7, 9.7 and 16.7 days (the flips of 15, 8 and 1 Oct). Of all 238, 236 reach 9.7 days and 234 reach 16.7: the four that do not are long-tail pairs |
+| Classic pools            | Price observations, as Solidly-style pairs keep, from the pool's start                                                                       | All 25 reach back to all three flips; the HYDX / USDC pool holds 11,768                                                                                                           |
+| A read at the flip block | Only with archive state                                                                                                                      | mainnet.base.org answered 7 and 8 days back; publicnode refused without a paid token                                                                                              |
+
+The other 163 gauges are on vault tokens (156 ICHI vaults, 7 lending vaults), which hold tokens priced elsewhere: they
+are not price sources, and need not be.
+
+**Checked end to end, two epochs back.** For the epoch from 1 to 8 October, the page would find the automation's 21
+pools by scanning the 852 reward contracts for its votes, since `poolVote` holds only the latest vote. Of the 28 tokens
+its votes earned, 27 were priced at the 8 October flip from history alone; WFRAX, which has no usable pool, was not. The
+total came to ≈ $705 at the flip and ≈ $704 at today's prices, as USDC dominated again, but single prices moved more
+over the 9.7 days: ETH by −6%, wtMSTR by −12%, DRB by −13%. The older the epoch, the more the choice of prices matters.
 
 **Recommended: prices averaged over the half hour before the flip.**
 
