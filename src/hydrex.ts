@@ -218,7 +218,7 @@ export function status(account: Account, owner: Address, now: number, epochStart
   return other ? { kind: "other", name: other } : { kind: "delegated", to: account.delegate };
 }
 
-/** The name of another of Hydrex's automations, from Hydrex's list, if the address is one. */
+/** The name of another automation, from Hydrex's list, if the address is one. */
 export const automation = (address: Address): string | undefined =>
   conduits.find((conduit) => same(conduit.address, address) && !same(conduit.address, CONDUIT))?.name;
 

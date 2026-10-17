@@ -12,9 +12,9 @@ Not copied: the two HTML mock-ups of Directions A and B, `scripts/members.ts`, w
 ## The page as designed
 
 A static page where holders of vote-escrowed accounts on metaDEXes hand their votes and rewards to a relay, and take
-them back. Version 1 supports one relay: Hydrex's "Carbon Impact" automation on Base, whose votes Klima's keeper,
-[hydrex-keeper](https://github.com/ldeso/hydrex-keeper), casts. The page runs in the browser, from GitHub Pages or
-inside Safe{Wallet} as a Safe App, and talks only to public Base RPCs and the user's wallet.
+them back. Version 1 supports one relay: the "Carbon Impact" automation on Base, whose votes a keeper casts. The page
+runs in the browser, from GitHub Pages or inside Safe{Wallet} as a Safe App, and talks only to public Base RPCs and the
+user's wallet.
 
 ### What the page can and cannot do
 
@@ -193,8 +193,6 @@ member's address, answers reads through a public RPC and rejects every signature
   Impact Protocol Account" as the subtitle of an account in the conduit, and an "Auto" badge.
 - **Timing.** "You won't earn for the current epoch, but will start earning weekly from the next epoch."
 - **Fees.** "Automation Strategies take a 0.5% fee on earnings to cover gas." Carbon Impact's fee is 0% on chain.
-- **The old conduit card.** "Carbon Impact allocation: Part of the value from this automation supports Klima Protocol's
-  voluntary carbon offset program."
 - **Empty accounts.** A setting: "Hide 0 earning power veTokens".
 
 ### Layout and look
@@ -235,8 +233,7 @@ whose `src/` trees are identical), their deployed Voters on Sourcify, and their 
 
 The Aero upgrade guide (aero.xyz/aero-upgrade) says that all veNFTs should be withdrawn from relays and other vaults by
 20 October. Aero launches on 22 October at 00:00 UTC: all gauges are deactivated, veAERO and veVELO upgrade to sAERO,
-and "Your veNFT is retired during the upgrade". Relays become "Autopilot", whose contracts are not public yet. Two Klima
-relays exist on Aerodrome: "KLIMA veAERO" and "Balanced Klimate veAERO".
+and "Your veNFT is retired during the upgrade". Relays become "Autopilot", whose contracts are not public yet.
 
 So the next relay this page may support is Autopilot or another protocol's, not today's Aerodrome relay. The shared
 types should describe an account handed to an automation in general terms, and nothing should be built for managed
@@ -355,7 +352,7 @@ tripped them, and the fix:
 - **"Take them back at any time"** clashed with "from the next Thursday". The lead now says that joining and leaving
   count from the next week.
 - **Jargon:** "flip", "conduit", "keeper", "votes as the contracts count them". The page now says "the next week
-  starts", calls the relay a Hydrex automation, introduces Klima's keeper once, and notes Hydrex's Earning Power.
+  starts", calls the relay a Hydrex automation, introduces the keeper once, and notes Hydrex's Earning Power.
 - **"USDC"** read as a token. The status now says "Hydrex's USDC automation".
 - **"Delegated to 0x3547…"**: whose address? It now says "an address, not a known automation".
 - **The review** showed the calls but not the consequences, and on a phone the past-rewards note sat behind the buttons.
@@ -378,8 +375,8 @@ timing, how to leave and every status right, and found the warning about past re
 - **"Leave USDC"** read like leaving a currency. The step now says "Take #51007 out of the USDC automation".
 - **What else the calls permit.** The review now says: voting and claiming, nothing else, and nothing is transferred.
 - **"Simulated"** puzzled one reader. Now "Checked ✓", with "each call was checked against the chain: it would succeed".
-- **Units and costs.** "5,691 t" is now "5,691 tonnes"; "fee 0%" is now "Hydrex takes no fee today; swaps have their
-  usual costs"; the keeper chooses the mix of kVCM and AZUSD.
+- **Units and costs.** "5,691 t" is now "5,691 tonnes"; "fee 0%" is now "no fee today; swaps have their usual costs";
+  the keeper chooses the mix of kVCM and AZUSD.
 - **"One transaction" against "one transaction per account".** Now the same everywhere.
 
 Still open after round two: who publishes the page, when the keeper claims and pays, and how much an account has not

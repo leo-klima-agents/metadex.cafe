@@ -16,7 +16,7 @@ Everything the plan states about the contracts held. These findings are new or m
 - **"Lock ended" is rare.** Only one account on all of Hydrex is a timed lock that ended with HYDX still in it. The
   members' two zero-power timed locks are empty.
 - **The conduit's admin is one key.** `DEFAULT_ADMIN_ROLE` sits with an externally owned account. Two addresses hold
-  `EXECUTOR_ROLE`: Klima's executor Safe and the conduit's deployer.
+  `EXECUTOR_ROLE`: an executor Safe and the conduit's deployer.
 - **Claims have been manual.** The last claim was on 2026-09-23, sent by hand through the executor Safe. Hydrex's API
   says payouts split 60% kVCM and 40% AZUSD; that claim paid kVCM only. The page takes the payout token and timing from
   the [decisions](#decisions) and live settings, never from Hydrex's API.
@@ -35,20 +35,20 @@ Everything the plan states about the contracts held. These findings are new or m
 
 All facts in the plan's tables still hold. Checked by reading the chain:
 
-| Fact                                       | Value on 2026-10-15                                                                     |
-| ------------------------------------------ | --------------------------------------------------------------------------------------- |
-| VotingEscrow implementation (EIP-1967)     | `0x0FC6…F231`, `VotingEscrowV2Upgradeable`, partial match on Sourcify                   |
-| Its `approvalLogic()`                      | `0x4B0B…f63D`, `VotingEscrowV2_ApprovalLogic`                                           |
-| Conduit source                             | identical to `contracts/conduits/KlimaVeTokenConduit.sol` at hydrex-periphery `4d7cb27` |
-| `getConduitApprovalConfig(conduit)`        | actions `[3, 5]`, active, description empty                                             |
-| `retireBps`, `treasuryFeeBps`              | 3333, 0 (`MAX_TREASURY_FEE_BPS` 100)                                                    |
-| `distributionTokens`                       | kVCM, AZUSD                                                                             |
-| `approvedRouters`                          | KyberSwap's `MetaAggregationRouterV2` (`0x6131…37b5`), listed twice                     |
-| `totalTonnesRetired`, `totalKvcmRetired`   | 5,691.40 t, 22,140.85 kVCM (both 18 decimals)                                           |
-| `retiringEntityName`, `beneficiaryString`  | "Hydrex", empty                                                                         |
-| Conduit votes, `getPastVotes` at the epoch | 897,042.93                                                                              |
-| Voter `_epochTimestamp()`                  | 1792022400, Thursday 2026-10-15 00:00 UTC                                               |
-| Conduit `lastVoted`                        | 1792022397, three seconds before that flip                                              |
+| Fact                                       | Value on 2026-10-15                                                   |
+| ------------------------------------------ | --------------------------------------------------------------------- |
+| VotingEscrow implementation (EIP-1967)     | `0x0FC6…F231`, `VotingEscrowV2Upgradeable`, partial match on Sourcify |
+| Its `approvalLogic()`                      | `0x4B0B…f63D`, `VotingEscrowV2_ApprovalLogic`                         |
+| Conduit source                             | identical to its source in hydrex-periphery at `4d7cb27`              |
+| `getConduitApprovalConfig(conduit)`        | actions `[3, 5]`, active, description empty                           |
+| `retireBps`, `treasuryFeeBps`              | 3333, 0 (`MAX_TREASURY_FEE_BPS` 100)                                  |
+| `distributionTokens`                       | kVCM, AZUSD                                                           |
+| `approvedRouters`                          | KyberSwap's `MetaAggregationRouterV2` (`0x6131…37b5`), listed twice   |
+| `totalTonnesRetired`, `totalKvcmRetired`   | 5,691.40 t, 22,140.85 kVCM (both 18 decimals)                         |
+| `retiringEntityName`, `beneficiaryString`  | "Hydrex", empty                                                       |
+| Conduit votes, `getPastVotes` at the epoch | 897,042.93                                                            |
+| Voter `_epochTimestamp()`                  | 1792022400, Thursday 2026-10-15 00:00 UTC                             |
+| Conduit `lastVoted`                        | 1792022397, three seconds before that flip                            |
 
 Action 3 is `CLAIM_REDIRECT_APPROVAL` and action 5 is `VOTING_DELEGATE` in `IVotingEscrowV2_Data.sol`.
 
@@ -73,10 +73,10 @@ Code hashes (keccak-256 of runtime code), for the registry's pins:
   holds it. It is the role admin of `EXECUTOR_ROLE` too. It can change payout tokens, the retired share, the fee up to
   1%, the routers, the retirement details, any owner's payout address (`adminSetPayoutRecipient`), and withdraw tokens
   the conduit holds between steps.
-- **Executors.** `EXECUTOR_ROLE` is held by Klima's executor Safe `0x17f5…1B12` (Safe 1.5.0, 2 of 3), whose only module
-  is `KlimaVeTokenConduitExecutor`, and by the deployer `0x40FB…92f0`, an account with MetaMask's EIP-7702 code.
+- **Executors.** `EXECUTOR_ROLE` is held by an executor Safe `0x17f5…1B12` (Safe 1.5.0, 2 of 3), whose only module is
+  the conduit's executor, and by the deployer `0x40FB…92f0`, an account with MetaMask's EIP-7702 code.
 - **The VotingEscrow.** It is an upgradeable proxy. The approval logic has no way to turn a conduit's config off: the
-  config can only be set once, and only to active. Hydrex could still change it through an upgrade.
+  config can only be set once, and only to active. An upgrade could still change it.
 
 ### What a join and a leave do
 
@@ -116,7 +116,7 @@ Two more properties, from the code:
   Thursday 00:00 UTC, so it can lag the calendar for a while. A join sent meanwhile still counts only from the next
   Thursday, so the page reads delegates and votes at the Thursday before Base's latest block instead. A fork test moves
   anvil past the flip without calling the minter and checks it.
-- **The keeper's vote.** hydrex-keeper votes on Tuesday at 23:50 UTC and again in the last two blocks before the flip.
+- **The keeper's vote.** The keeper votes on Tuesday at 23:50 UTC and again in the last two blocks before the flip.
   Until Tuesday, the conduit's latest vote is last week's: `lastVoted` is before `_epochTimestamp()`. The page says
   "latest vote" and whether it was last week's or this week's.
 
@@ -170,7 +170,7 @@ These names go into `hydrex-conduits.json`, by address:
 | `0x809f…8af0` | Liquid Hydrex       | 2,004,398 | `VeTokenConduit`          |
 | `0xe57b…bd1d` | USDC                | 2,312,384 | `VeTokenConduit`          |
 | `0x65cd…f829` | Bitcoin             | 500,823   | `VeTokenConduit`          |
-| `0xde91…317c` | Carbon Impact       | 897,043   | `KlimaVeTokenConduit`     |
+| `0xde91…317c` | Carbon Impact       | 897,043   | a conduit of its own      |
 | `0x24a0…3244` | TGN                 | 520       | `VeTokenConduit`          |
 | `0xf34f…692a` | Ethereum            | 759,020   | `VeTokenConduit`          |
 | `0xd656…dddd` | WMTX                | 26        | `VeTokenConduit`          |
@@ -316,8 +316,8 @@ Headers rechecked with `curl`:
 - **eth.limo** (`cowswap.eth.limo`) sends `X-Frame-Options: SAMEORIGIN` and
   `Content-Security-Policy: frame-ancestors 'self'`, with `Access-Control-Allow-Origin: *`. Safe{Wallet} could read a
   manifest there but not frame the page.
-- **GitHub Pages** (`pages-themes.github.io/minimal`, `ldeso.github.io`) sends `Access-Control-Allow-Origin: *` and no
-  framing header. Its 404 pages carry a strict CSP of their own, which does not matter for an existing file.
+- **GitHub Pages** (`pages-themes.github.io/minimal`) sends `Access-Control-Allow-Origin: *` and no framing header. Its
+  404 pages carry a strict CSP of their own, which does not matter for an existing file.
 
 - **Safe{Wallet}**, opened read-only in Playwright's Chromium for the large Safe with a custom app URL, framed the
   GitHub Pages site and refused `cowswap.eth.limo` with "Refused to frame 'https://cowswap.eth.limo/' because an
@@ -479,22 +479,20 @@ when, how to leave, what the statuses mean and what the wallet will ask, then li
   leaving moves an account's votes from the next epoch, and its rewards at once."
 - **"To keep them as they are"** hid what happens otherwise, and left this epoch's rewards out. Now the rewards "you
   have not claimed yet, and this epoch's once the epoch ends" are "swapped and retired like the rest".
-- **"Klima runs it"** against "Hydrex can change these settings": whose is it? Now "One of Hydrex's automations, run by
-  Klima", and "Hydrex controls its settings". "Klima's keeper claims the rewards" became "has the Carbon Impact
-  automation claim the rewards".
+- **Who runs it,** and who can change its settings? Now the lead says what the automation does every epoch, and that one
+  admin key controls its settings. The automation itself claims the rewards.
 - **Who votes after a leave,** until Thursday? The leave now says that the votes count for the automation until then.
 - **"Joining moves it"** out of another automation said nothing of leaving it. Now "Joining takes it out of that
   automation and into the Carbon Impact automation."
 - **Is `0xdE91…` the automation?** The review now says so under the calls.
-- **The join's review left out the share retired and Hydrex's powers,** and on a phone people tap Join before reading
-  "What joining allows". The review now says what each payout does, the share retired, and that Hydrex can change it and
-  the payout address.
+- **The join's review left out the share retired and the admin key's powers,** and on a phone people tap Join before
+  reading "What joining allows". The review now says what each payout does, the share retired, and that the admin key
+  can change it and the payout address.
 - **"The fee (up to 1%)":** a fee on what? Now "its fee on the payouts".
 
 Not changed: kVCM and Hydrex's account kinds stay without a gloss ([decision 16](#decisions)); the numbers of an
 account's unclaimed rewards and of past payouts stay [open](#decisions); who publishes the page is for the user to say.
-Both readers would try a small account first, and asked for safeguards on Hydrex's admin key, which the page cannot
-give.
+Both readers would try a small account first, and asked for safeguards on the admin key, which the page cannot give.
 
 **Round two,** on the revised page, with two new readers. Both again got all of it right, among it that they cannot vote
 with an account while it is in, and that this epoch's rewards go too. Fixed after it:
@@ -508,9 +506,9 @@ with an account while it is in, and that this epoch's rewards go too. Fixed afte
 - **"Put #141 in the Carbon Impact automation"** sounded like a transfer, and the review did not say that #42877 left
   Liquid Hydrex. The steps now say "#141 joins the Carbon Impact automation" and "#42877 leaves the Liquid Hydrex
   automation and joins the Carbon Impact automation".
-- **The review named two of Hydrex's settings** where the page names five. It now adds "and its other settings".
+- **The review named two of the automation's settings** where the page names five. It now adds "and its other settings".
 - **Smaller ones.** "Earning Power this epoch" was nobody's; it is now "Its Earning Power this epoch". "The address
-  itself" is now "your own address". Hydrex's admin key can change a payout address "as it can any owner's".
+  itself" is now "your own address". The admin key can change a payout address "as it can any owner's".
 
 **Round three,** with two new readers. Both again got all of it right. Fixed after it, without a fourth round:
 
@@ -518,8 +516,8 @@ with an account while it is in, and that this epoch's rewards go too. Fixed afte
   until the epoch after it leaves", and the next epoch is named by its date rather than "Thursday".
 - **"At once"** could cover both votes and rewards. The sentence now gives the claims first, "right away", then the
   votes.
-- **"The calls allow voting and claiming, nothing else"** sounded too reassuring next to Hydrex's admin key. Now "The
-  calls let the automation vote and claim, nothing more."
+- **"The calls allow voting and claiming, nothing else"** sounded too reassuring next to the admin key. Now "The calls
+  let the automation vote and claim, nothing more."
 - **The bold warning about rewards** took three reads. It now stops at "even those your own votes earned", and the next
   sentences say which and how to keep them.
 - **"Each call was run against Base"** sounded as if it had been sent. Now "tried on Base from your address, without
@@ -528,8 +526,8 @@ with an account while it is in, and that this epoch's rewards go too. Fixed afte
   calls" is "In this call" for one call. "The payout tokens" is now "the tokens it pays out in".
 
 Across the three rounds, all six readers got the purpose, the timing, how to leave and the statuses right. None would
-join with their main account yet: all six named Hydrex's admin key, which can redirect payouts and retire up to 100%,
-and most asked how much they had not claimed and who publishes the page.
+join with their main account yet: all six named the admin key, which can redirect payouts and retire up to 100%, and
+most asked how much they had not claimed and who publishes the page.
 
 ## Decisions
 
@@ -547,11 +545,10 @@ Taken by the user on 2026-10-15, after this research:
 5. **Upgrade pins.** The startup checks also pin the VotingEscrow's implementation and its approval logic, by address
    and code hash. An upgrade of either turns writes off until `relays.json` is updated.
 6. **Names.** The product was first "metaDEX Relays", in a repository named `metadex-relays`. On 2026-10-16 the user
-   named both after the domain: `relays.metadex.cafe` at first, then, the same day, `metadex.cafe`. The repository is
-   published from `ldeso`. Later that day the user named the product metaDEX Café; the domain, the repository and the
-   package keep `metadex.cafe`.
-7. **GitHub Pages.** `ldeso` publishes it on GitHub Pages. First planned at `https://ldeso.github.io/metadex-relays/`,
-   it is served at `https://metadex.cafe/` since 2026-10-16.
+   named both after the domain: `relays.metadex.cafe` at first, then, the same day, `metadex.cafe`. Later that day the
+   user named the product metaDEX Café; the domain, the repository and the package keep `metadex.cafe`.
+7. **GitHub Pages.** It is published on GitHub Pages. First planned at a `github.io` address, it is served at
+   `https://metadex.cafe/` since 2026-10-16.
 8. **Earning Power, like Hydrex.** The page shows votes × 1.3 and says so once. Vote shares are unaffected.
 9. **A plain page.** After seeing the read-only page, the user asked for the simplest CSS, even at the cost of the
    visual identity. The page is now headings, paragraphs, tables and lists in the browser's own style, light or dark as
@@ -572,8 +569,8 @@ Taken by the user on 2026-10-15, after this research:
 14. **The vote's time.** On 2026-10-16 the user read "Last week" for a vote cast three seconds before the flip, when it
     was already Thursday in their time zone. The latest vote now also gives its time and how long before the epoch's end
     it was cast.
-15. **No "0%" fee.** When Hydrex takes no fee, the payouts row says only "kVCM", and what joining allows says "Hydrex
-    takes no fee today". A fee shows only when there is one.
+15. **No "0%" fee.** When the automation takes no fee, the payouts row says only "kVCM", and what joining allows says
+    "It takes no fee today". A fee shows only when there is one.
 16. **UTC and epochs.** Later that day the user asked for UTC everywhere for now, so the page gives no time in the
     reader's time zone, and for "epoch" rather than "week", as Hydrex says. kVCM needs no gloss, and every address the
     page shows links to its page on Basescan.

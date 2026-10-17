@@ -7,8 +7,8 @@ on. [research.md](research.md) keeps the findings and the decisions taken since.
    Done; the personas, the note and the directions are now in [earlier-design.md](earlier-design.md).
 2. **Skeleton:**
    - **Set-up:** the repository, CI, REUSE, Prettier, tsconfig, the build with splitting, and the budget.
-   - **README:** in hydrex-keeper's sections: what it does, what it can and cannot do, deployment, development, failure
-     modes, limitations, licence.
+   - **README:** in the same sections as the keeper's: what it does, what it can and cannot do, deployment, development,
+     failure modes, limitations, licence.
 
    Done. The budget went with [decision 13](research.md#decisions). The build no longer splits: Coinbase's SDK is
    bundled on its own instead.
