@@ -3,7 +3,8 @@
 Research for the brand of metaDEX Café, before anything changes on the page: what the name carries, the neighbours on
 Base, what the five personas need from a brand, the rules on environmental claims, and type and colour within the page's
 own rules. Three directions follow, drawn on the design canvas, row 7:
-<https://claude.ai/artifact/XWN6n3DdJEcgaWbD1GDsA5>. Sites and figures were checked on 17 Oct 2026.
+<https://claude.ai/artifact/XWN6n3DdJEcgaWbD1GDsA5>. Direction A, "The Course", is chosen, and the page now uses its
+three faces. Sites and figures were checked on 17 Oct 2026.
 
 ## In short
 
@@ -30,14 +31,14 @@ own rules. Three directions follow, drawn on the design canvas, row 7:
    in fours.
 7. **Type that reads figures and hex.** A slashed zero, distinct 1, l and I, tabular figures, small files. Atkinson
    Hyperlegible Next and Mono do all of it by default, in about 34 KB, and no DeFi site checked uses them.
-8. **Fonts change the page's rules.** Self-hosted fonts need `font-src 'self'` and OFL-1.1 in `LICENSES/`, and would be
-   the only files the page loads without a hash in `index.html`. Google Fonts' files drop the features that matter here:
-   subset from the sources.
+8. **Fonts change the page's rules.** The page carries its fonts inside its stylesheet, so its hash covers them: the CSP
+   allows fonts as `data:` only, and `LICENSES/` holds OFL-1.1. Google Fonts' files drop the features that matter here,
+   so `scripts/fonts.py` subsets the sources.
 9. **Both themes, set explicitly.** Wallet browsers on Android follow the wallet's theme and may darken a page that
    declares none; `Canvas` differs between browsers; and where `light-dark()` is unsupported, today's links lose their
    colour.
-10. **Recommended:** direction A, "The Course", with C's receipt layout for receipts and calls. To test with people
-    before building, in the sessions the [README](README.md#how-to-know-it-works) plans.
+10. **Chosen:** direction A, "The Course", with C's layout for receipts and wallet calls: [A, as chosen](#a-as-chosen).
+    Its faces are on the page; its colours are not yet.
 
 ## The name
 
@@ -106,11 +107,10 @@ Read from brand kits, stylesheets and logo files.
 - **The crowded faces:** Inter, DM Sans, Satoshi, Roobert, Base Sans, Geist, JetBrains Mono, and Instrument Serif on
   Klima's site.
 - **Klima, the parent:** its guidelines allow its logo green on black, dark or grey only, unaltered, with clear space.
-  Carbon Impact can carry it as an endorsement, at its rules, beside a specific statement; Klima's green stays Klima's
-  and does not become the café's.
+  Klima agrees to the café using it where it makes sense: beside a retirement, as who retires, never as a badge
+  ([Klima's mark](#klimas-mark)). Klima's green stays Klima's and does not become the café's.
 - **Words:** Aero replaces Aerodrome and Velodrome on 22 Oct, so "Aero relays", not "Aerodrome". The Base app is
-  Coinbase Wallet again since 10 Sep 2026: today's page links to it as "Base app" (`index.html`), as do the UX
-  directions.
+  Coinbase Wallet again since 10 Sep 2026, and the page and these documents now say so.
 
 ## What each persona needs from a brand
 
@@ -215,22 +215,24 @@ wallet's browser.
 - **Small files:** about 60 KB in all, two files on the first paint at most
   ([web.dev](https://web.dev/learn/performance/optimize-web-fonts)).
 
-### What the page's rules need
+### Within the page's rules
 
-- **CSP:** `font-src 'self'`, which also governs a preload; a preload needs `crossorigin`.
-- **Hashes:** `@font-face` cannot carry `integrity`, so a font would be the only file loaded without a hash in
-  `index.html`. The reproducible build still covers it, as it covers every file in `dist/`. To keep the mono face, the
-  one that draws addresses, under the stylesheet's hash, inline it in `style.css` as a `data:` URI (`font-src data:`),
-  at a third more bytes.
+What the page does now, with A's three faces:
+
+- **Hashes:** `@font-face` cannot carry `integrity`, so a font file would be the only one the page loads without a hash
+  in `index.html`. Instead, the build puts each font inside `style.css` as a `data:` URL, with esbuild's `dataurl`
+  loader: the stylesheet's hash covers them, as it covers the rest. The cost is weight before the first paint: the
+  stylesheet grows from 2 KB to 54 KB compressed. In exchange, text never changes face once drawn.
+- **CSP:** `font-src data:`, so that fonts can come from the stylesheet only; a test checks it, and that each font the
+  stylesheet names is in `fonts/`.
 - **Features:** the files Google Fonts and Fontsource serve have no `zero`, `ss` or `cv` features, and some lack `tnum`
-  ([Marussy](https://marussy.com/variable-css-font-features)). Subset from the sources with `pyftsubset`, keeping
-  `kern,liga,calt,tnum,lnum,zero,case,frac`; the output is the same on every run, so committing the files keeps the
-  build reproducible.
-- **Licences:** OFL-1.1 in `LICENSES/`, and a `fonts/**` entry after the MIT entry in `REUSE.toml`. IBM Plex reserves
-  "Plex" and Source reserves "Source": a subset is a modified version, which may not carry the name
-  ([SIL](https://openfontlicense.org/webfonts-and-reserved-font-names/)). Avoid both, or rename them.
-- **Loading:** `font-display: swap` for the mono face and headings; a body face with `optional` may rarely show in a
-  wallet's browser, whose cache starts cold.
+  ([Marussy](https://marussy.com/variable-css-font-features)). `scripts/fonts.py` makes the subsets from Google Fonts'
+  sources at a pinned commit, checks their hashes, keeps `tnum`, `zero`, `case`, `frac` and the other figure features,
+  and gives the same files on every run.
+- **Licences:** all three are under OFL-1.1, in `LICENSES/`, with an entry each in `REUSE.toml`. None reserves a name,
+  so the subsets keep theirs; each keeps its copyright and licence in its own metadata. IBM Plex and Source, had they
+  been chosen, reserve theirs: a subset is a modified version, which may not carry the name
+  ([SIL](https://openfontlicense.org/webfonts-and-reserved-font-names/)).
 
 ### Candidates
 
@@ -320,16 +322,60 @@ Carbon Impact's last epoch for a sample account, as on the canvas's receipt. All
 | **Best for**   | The treasury, the impact holder, the optimiser                                                                | The stranded holder, the hands-off holder                                                        | The optimiser, the treasury                                                                    |
 | **Risk**       | Serif on warm paper is a common editorial look; Klima's site has a serif too                                  | Casual lettering near money reads less competent; chalk tips into kitsch; dark first reads worse | Cold for a $3 holder; reads as a developer's tool; violet sits near PancakeSwap's and Hydrex's |
 
-**Recommended: A, with C's receipt layout.** It tells the name's best story, puts competence first for those who pay
-most, and its faces are the most legible, the lightest after C's, and used by no neighbour. Its receipts and calls take
-C's structure in Atkinson Hyperlegible Mono: monospace amounts, rules, the total last. B's warmth is better carried in
-words than in lettering.
+**Chosen: A, with C's layout for receipts and calls.** It tells the name's best story, puts competence first for those
+who pay most, and its faces are the most legible, the lightest after C's, and used by no neighbour. Its receipts and
+calls take C's structure in Atkinson Hyperlegible Mono: monospace amounts, rules, the total last. B's warmth is better
+carried in words than in lettering.
+
+## A, as chosen
+
+On the canvas, row 7: the receipt in both themes, a call as the wallet will ask it, and the same call in a Safe.
+
+### On the page now
+
+- **Young Serif** for the name and the `h1` and `h2` headings, at its one weight; **Atkinson Hyperlegible Next** for
+  text, at 400 and 700, where 600 takes 700; **Atkinson Hyperlegible Mono** for `code`: addresses, hashes and calls.
+  Tables and key figures use tabular figures.
+- Atkinson Hyperlegible Next draws a slashed zero in text too, as in "Thu 10 Sep": it is the face's legibility, not an
+  option.
+- The colours are today's, teal included, until A's palette is applied.
+
+### Receipts and calls
+
+C's layout, in A's faces and colours, wherever someone checks figures or addresses: receipts, statements, the review's
+"What your wallet will ask", and the brief for co-signers. Everything else is plain A.
+
+- **The header,** centred: the name in Young Serif, then what the slip is, the account and the dates.
+- **One row per line,** the label on the left in small capitals, the value on the right; both in Atkinson Hyperlegible
+  Mono, so that figures line up. No dot leaders.
+- **Rules:** a dashed rule between sections, a double rule above the total. The total last and larger, then the time and
+  the transaction.
+- **The same lines in the same order** every week, so that a change shows.
+- **A call** opens with the page's own words, "#9540 joins Carbon Impact.", then one row per field: To, with the name of
+  the contract under it; Call; Conduit, with its name; Account; Approve; Value. Each address in full, checksummed, in
+  groups of four; copying it gives it without spaces.
+- **In a Safe,** the fields Safe{Wallet} shows, in its order: To, Value, Data, Operation, Nonce. Data is the selector,
+  then one 32-byte word per line, with the call decoded above it, so that co-signers can compare like with like.
+
+### Klima's mark
+
+Klima agrees to the café using its logo where it makes sense.
+
+- **Beside a retirement only:** on the receipt's retirement line, "Retired through" and the logo, and where an
+  automation's page says who retires its credits. Never on its own as a badge, on Home's heading, or next to "impact"
+  without a figure: placed next to a claim, a logo can read as a trust mark.
+- **From Klima's own file,** unaltered, with its clear space: the black and green one on light grounds, and on dark
+  grounds the version Klima's media kit gives for them.
+- **In the repository,** the file needs an entry of its own in `REUSE.toml`, with Klima's terms rather than MIT.
 
 ## To decide
 
-- **A direction,** after a five-second test with each persona: what is this, who is it for, would you trust it with your
-  account. Rate warmth and competence, as the studies above did.
+- **A's colours on the page:** ink and roast for today's teal, and plain values before `light-dark()`, so that links
+  keep their colour where it is unsupported.
+- **The mark:** the "é" tile for `icon.svg`, with `favicon.ico`, `apple-touch-icon.png` and a `shortcut icon` link.
+- **The home heading,** "Your Hydrex votes, working for the climate", for something as specific as "Your Hydrex votes,
+  retiring carbon credits every week".
+- **Klima's file for dark grounds,** and its licence entry.
 - **A trademark check** on "metaDEX Café" against Dromos's "MetaDEX™".
-- **Klima's endorsement:** whether Carbon Impact carries Klima's mark, and Klima's approval of its use.
-- **Fonts or system faces:** what a font costs in the page's rules, against what it gives.
-- **The page's words:** the home heading, and "Base app", now Coinbase Wallet.
+- **A test with people,** five seconds on Home for each persona: what is this, who is it for, would you trust it with
+  your account. Rate warmth and competence, as the studies above did.

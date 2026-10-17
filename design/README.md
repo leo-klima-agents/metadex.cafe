@@ -8,7 +8,8 @@ compounders and liquidity managers, each for a fee. Nothing here changes the pag
 - **The evidence** is in [research.md](research.md): who uses automations on Base, what comparable products do and
   charge, what changes with Aero, what research says about liquidity providers, trust and disclosure, and the sources.
 - **The brand** is in [brand.md](brand.md): what the name carries, the neighbours' colours and type, what each persona
-  needs from a brand, the rules on environmental claims, and three directions, on the canvas's row 7.
+  needs from a brand, the rules on environmental claims, and three directions, on the canvas's row 7, of which A is
+  chosen.
 - **Figures** are read from Base on 17 Oct 2026, unless marked. Mockups mark what is illustrative, and put product
   decisions not yet taken in brackets, such as "[10%] fee".
 
@@ -93,7 +94,7 @@ to test, not findings.
 
 - **The liquidity provider** is the optimiser with a concentrated position: what they fear most is a position out of
   range, and a manager that does worse than holding.
-- **On a phone,** any of them: in the Base app, one atomic batch can carry several calls, but a file download may not
+- **On a phone,** any of them: in Coinbase Wallet, one atomic batch can carry several calls, but a file download may not
   work inside a wallet's browser, so every export has a copy option.
 
 ## The moments that matter
@@ -278,7 +279,7 @@ The page holds no key, has no server, stores nothing, and reaches only three Bas
 | Receipts, payout history     | Read the automation's events with `eth_getLogs`, one epoch at a time                                  | About 30 calls an epoch at 10,000 blocks a call; slow the first time |
 | Value of a position          | Prices as the page already computes them for what votes earned                                        | None new                                                             |
 | Change watch                 | Read the settings' events, as for receipts                                                            | As for receipts                                                      |
-| One prompt for many accounts | EIP-5792 `wallet_sendCalls` where `wallet_getCapabilities` says so: MetaMask, Safe, the Base app      | Rabby, Zerion and Phantom do not support it: one by one              |
+| One prompt for many accounts | EIP-5792 `wallet_sendCalls` where `wallet_getCapabilities` says so: MetaMask, Safe, Coinbase Wallet   | Rabby, Zerion and Phantom do not support it: one by one              |
 | Look up an address           | The same reads, without a wallet                                                                      | None                                                                 |
 | Brief for co-signers         | The accounts and the automation in the URL fragment                                                   | Check everything read from it                                        |
 | Calendar file, CSV, image    | Made in the browser, downloaded                                                                       | In-app browsers on iOS may not download: offer to copy instead       |

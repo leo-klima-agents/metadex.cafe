@@ -482,7 +482,9 @@ prices. For context: 716M people hold crypto, 40–70M of them active each month
 
 ### On a phone
 
-- The Base app, Coinbase Wallet's July 2025 rebrand, comes with a smart wallet and supports EIP-5792 atomic batches; in
-  July 2026 it dropped social for trading, payments and agents
-  ([Cryptopolitan](https://www.cryptopolitan.com/coinbase-admit-trust-gap-base-faces-backlash/)).
+- Coinbase Wallet, called the Base app from July 2025, comes with a smart wallet and supports EIP-5792 atomic batches.
+  In July 2026 it dropped social for trading, payments and agents
+  ([Cryptopolitan](https://www.cryptopolitan.com/coinbase-admit-trust-gap-base-faces-backlash/)), and on 10 Sep 2026 it
+  took back the name Coinbase Wallet
+  ([The Block](https://theblock.co/news/defi/2026-09-10-coinbase-rebrands-base-app-back-to-coinbase-wallet-after-just-over-a-year-as-social-experiment-falls-short-414115)).
 - Downloads may not work in its browser on iOS: everything the page makes should be readable on screen, and copyable.
