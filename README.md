@@ -1,12 +1,11 @@
 # metaDEX Café
 
-The static page at <https://metadex.cafe/> for joining and leaving the Klima "Carbon Impact" automation with Hydrex
-accounts on Base. It shows the automation's settings and latest vote, and the epoch. With a wallet connected, or inside
+The static page at <https://metadex.cafe/> for joining and leaving the "Carbon Impact" automation with Hydrex accounts
+on Base. It shows the automation's settings and latest vote, and the epoch. With a wallet connected, or inside
 Safe{Wallet} as a Safe App, it shows the wallet's accounts with where each stands, and joins, leaves and sets the payout
-address. Klima's keeper, [hydrex-keeper](https://github.com/ldeso/hydrex-keeper), votes with the accounts in the
-automation. The page is `index.html` and `style.css`; a script in `src/` fills in what it reads from Base and talks to
-the wallet. Its dependencies are `viem`, `@coinbase/wallet-sdk` for Coinbase Wallet, and `@safe-global/safe-apps-sdk`
-for Safe{Wallet}.
+address. A keeper votes with the accounts in the automation. The page is `index.html` and `style.css`; a script in
+`src/` fills in what it reads from Base and talks to the wallet. Its dependencies are `viem`, `@coinbase/wallet-sdk` for
+Coinbase Wallet, and `@safe-global/safe-apps-sdk` for Safe{Wallet}.
 
 ## How joining works
 
@@ -18,22 +17,22 @@ Hydrex's VotingEscrow, once per account. Then:
 - **Rewards.** The automation can claim the account's rewards at once, including any the owner has not claimed yet, and
   the current epoch's once it ends. They are swapped and retired like the rest: claim them on Hydrex first to keep them
   as they are.
-- **Payouts.** Right after each epoch ends, Klima's keeper claims the rewards. The automation swaps them into kVCM,
-  retires a share as carbon credits and sends the rest to the owner's payout address.
+- **Payouts.** Right after each epoch ends, the automation claims the rewards, swaps them into kVCM, retires a share as
+  carbon credits and sends the rest to the owner's payout address.
 - **The account** stays in the owner's wallet, with its HYDX. Nothing is transferred.
 
 Leaving is the same call with `false`, at any time. The automation can no longer claim from then on, and the votes come
 back to the owner from the next epoch.
 
-Hydrex controls the automation with a single key. It can change the share retired up to 100%, the payout tokens, the fee
-up to 1%, the swap routers and any owner's payout address, and choose who claims and votes for the automation: today
-Klima's executor Safe, through which the keeper acts, and the automation's deployer.
+A single admin key controls the automation. It can change the share retired up to 100%, the payout tokens, the fee up to
+1%, the swap routers and any owner's payout address, and choose who claims and votes for the automation: today an
+executor Safe, through which the keeper acts, and the automation's deployer.
 
 ## What the page can and cannot do
 
 - **It sends three calls only:** `setConduitApproval(conduit, tokenId, true)` on Hydrex's VotingEscrow to join, the same
   with `false` to leave, and `setMyPayoutRecipient(address)` on the Carbon Impact automation. Joining replaces where an
-  account's votes and claims go, so an account in another of Hydrex's automations joins directly.
+  account's votes and claims go, so an account in another automation joins directly.
 - **It checks each call before the wallet asks.** It runs the calls against Base from the owner's address, one after the
   other (`eth_simulateV1`), shows what they change and the exact calls, and sends nothing that would fail.
 - **It holds no key and has no server.** Each action ends in a wallet prompt. A wallet that sends several calls as one
@@ -88,8 +87,8 @@ Set up once, in the repository's settings:
 
 1. Bump the version in `package.json` and `package-lock.json`, and commit.
 2. Run `npm run test:fork` with an archive RPC, unless CI runs it. It is the only test of the wallets.
-3. Build, serve `dist/` and open it with a wallet. No check of the automation should fail: if one does, Hydrex changed
-   something, and `src/config.ts` needs the new contracts checked first.
+3. Build, serve `dist/` and open it with a wallet. No check of the automation should fail: if one does, a contract
+   changed, and `src/config.ts` needs the new contracts checked first.
 
 ### After the deployment
 
@@ -114,10 +113,10 @@ Safe{Wallet} needs.
 
 ## Checking a build
 
-The same commit gives the same files on any machine. To check the official page, build the version in its footer:
+The same commit gives the same files on any machine. To check the official page, build the version in its footer from a
+fresh clone of this repository:
 
 ```sh
-git clone https://github.com/ldeso/metadex.cafe && cd metadex.cafe
 git checkout v0.3.0
 npm ci --ignore-scripts
 npm run build
@@ -164,8 +163,8 @@ epoch before Hydrex's minter does. It needs anvil, from Foundry, and Chromium: `
 or set `CHROMIUM` to a Chromium's path. `BASE_RPC_URL` is the archive RPC to fork from, `https://mainnet.base.org` by
 default. With `SCREENSHOTS` set to a folder, it saves screenshots there at 390 and 1440 px, light and dark.
 
-`src/config.ts` holds what the page trusts about the automation, and the RPCs it reads from. After a Hydrex upgrade,
-check the new contracts, then update it. `src/hydrex-conduits.json` names Hydrex's other automations, from
+`src/config.ts` holds what the page trusts about the automation, and the RPCs it reads from. After an upgrade, check the
+new contracts, then update it. `src/hydrex-conduits.json` names the other automations that Hydrex lists at
 `api.hydrex.fi/conduits`.
 
 CI runs Prettier, the type check, the tests, `reuse lint` and the build, then builds again from a fresh clone and checks

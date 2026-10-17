@@ -2,5 +2,5 @@ version = 1
 
 [[annotations]]
 path = "**"
-SPDX-FileCopyrightText = "2026 Léo de Souza"
+SPDX-FileCopyrightText = "2026 metaDEX Café contributors"
 SPDX-License-Identifier = "MIT"

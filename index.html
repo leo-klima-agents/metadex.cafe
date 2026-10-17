@@ -39,7 +39,7 @@
           <li id="code" hidden>The Carbon Impact automation runs other code than this page knows.</li>
           <li id="contracts" hidden>The Carbon Impact automation points to another VotingEscrow or Voter.</li>
           <li id="token" hidden>The Carbon Impact automation pays in another token than kVCM.</li>
-          <li id="approvals" hidden>Hydrex changed what joining the Carbon Impact automation approves.</li>
+          <li id="approvals" hidden>What joining the Carbon Impact automation approves has changed.</li>
           <li id="upgrade" hidden>Hydrex upgraded its VotingEscrow.</li>
           <li id="logic" hidden>Hydrex changed its VotingEscrow's approval logic.</li>
         </ul>
@@ -48,9 +48,9 @@
       <section>
         <h2>The Carbon Impact automation</h2>
         <p>
-          One of Hydrex's automations, run by Klima. Every epoch, Klima's keeper votes with the accounts in it, then has
-          the Carbon Impact automation claim their rewards, swap them into kVCM, retire a share as carbon credits and
-          pay the rest to their owners. Hydrex controls its settings.
+          An automation for Hydrex accounts. Every epoch, it votes with the accounts in it, then claims their rewards,
+          swaps them into kVCM, retires a share as carbon credits and pays the rest to their owners. One admin key
+          controls its settings.
         </p>
         <table>
           <tr>
@@ -64,7 +64,7 @@
           <tr>
             <th scope="row">Pays out</th>
             <td>
-              kVCM<span class="with-fee" hidden>, after a fee of <span class="fee">…</span> to Hydrex</span>
+              kVCM<span class="with-fee" hidden>, after a fee of <span class="fee">…</span></span>
             </td>
           </tr>
           <tr>
@@ -76,7 +76,7 @@
         <h3>This epoch</h3>
         <p>
           <time class="week-start">…</time> to <time class="week-end">…</time>, 00:00 UTC. Each epoch lasts a week, and
-          the next one starts in <span class="countdown">…</span>. Klima's keeper votes just before the epoch ends and
+          the next one starts in <span class="countdown">…</span>. The automation votes just before the epoch ends and
           pays out right after. A join or a leave changes who can claim an account's rewards right away, and who votes
           with it from the next epoch.
         </p>
@@ -158,8 +158,8 @@
           <code translate="no"><a class="payout"></a></code><span id="itself">, your own address</span>.
         </p>
         <p>
-          This address takes the payouts of all your accounts in the Carbon Impact automation. Hydrex's admin key can
-          change it too, as it can any owner's.
+          This address takes the payouts of all your accounts in the Carbon Impact automation. The automation's admin
+          key can change it too, as it can any owner's.
         </p>
         <form id="payout-form" hidden>
           <p>
@@ -191,13 +191,12 @@
             the epoch after it leaves.
           </li>
           <li>
-            <b>It swaps, retires and pays.</b> Right after each epoch ends, Klima's keeper has the Carbon Impact
-            automation claim the rewards. It swaps them into kVCM through routers Hydrex approved, retires
-            <span class="retired">…</span> of it as carbon credits in the name "<bdi class="entity" translate="no"
-              >…</bdi
-            >", and sends the rest to your payout address. <span class="no-fee" hidden>Hydrex takes no fee today.</span
-            ><span class="with-fee" hidden>Hydrex's fee is <span class="fee">…</span> today.</span> Swaps have their
-            usual costs.
+            <b>It swaps, retires and pays.</b> Right after each epoch ends, the Carbon Impact automation claims the
+            rewards. It swaps them into kVCM through approved routers, retires <span class="retired">…</span> of it as
+            carbon credits in the name "<bdi class="entity" translate="no">…</bdi>", and sends the rest to your payout
+            address. <span class="no-fee" hidden>It takes no fee today.</span
+            ><span class="with-fee" hidden>Its fee is <span class="fee">…</span> today.</span> Swaps have their usual
+            costs.
           </li>
           <li>
             <strong
@@ -210,8 +209,8 @@
           </li>
           <li><b>Your HYDX stays in your account,</b> and the account stays in your wallet. Neither is transferred.</li>
           <li>
-            <b>Hydrex can change these settings:</b> the share retired (up to 100%), the tokens it pays out in, its fee
-            on the payouts (up to 1%), the routers, and your payout address.
+            <b>The automation's admin key can change these settings:</b> the share retired (up to 100%), the tokens it
+            pays out in, its fee on the payouts (up to 1%), the routers, and your payout address.
           </li>
           <li>
             <b>You can leave at any time.</b> From that moment the Carbon Impact automation can no longer claim the
@@ -226,22 +225,15 @@
           >,
           <a href="https://basescan.org/address/0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1">Hydrex's VotingEscrow</a>
           and <a href="https://basescan.org/address/0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b">Hydrex's Voter</a>.
-          Code: <a href="https://github.com/hydrexfi/hydrex-periphery">the automation's source</a> and
-          <a href="https://github.com/ldeso/hydrex-keeper">Klima's keeper</a>.
+          Code: <a href="https://github.com/hydrexfi/hydrex-periphery">the automation's source</a>.
         </p>
       </section>
     </main>
 
     <footer>
       <hr />
-      <p>
-        Open source, published from <code translate="no">github.com/ldeso/metadex.cafe</code>. Official address:
-        <code translate="no">https://metadex.cafe/</code>
-      </p>
-      <p>
-        Version %VERSION%, commit <code translate="no">%COMMIT%</code>.
-        <a href="https://github.com/ldeso/metadex.cafe#checking-a-build">Check that this is the official build</a>.
-      </p>
+      <p>Open source. Official address: <code translate="no">https://metadex.cafe/</code></p>
+      <p>Version %VERSION%, commit <code translate="no">%COMMIT%</code>.</p>
     </footer>
 
     <dialog id="review" aria-labelledby="review-title">
@@ -296,7 +288,7 @@
             >Right after each epoch ends, it swaps the rewards into kVCM, retires <span class="retired">…</span> of it
             as carbon credits</b
           >
-          and sends the rest to your payout address. Hydrex can change the share retired, up to 100%, your payout
+          and sends the rest to your payout address. Its admin key can change the share retired, up to 100%, your payout
           address and its other settings.
         </li>
         <li>

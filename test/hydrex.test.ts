@@ -36,7 +36,7 @@ test("votes without claims, or claims without votes, is only partly in", () => {
   assert.deepEqual(statusOf({ claimer: conduit }), { kind: "partly" });
 });
 
-test("other delegates: the owner, nobody, another of Hydrex's automations, any other address", () => {
+test("other delegates: the owner, nobody, another automation on Hydrex's list, any other address", () => {
   assert.deepEqual(statusOf({}), { kind: "self" });
   assert.deepEqual(statusOf({ delegate: zeroAddress }), { kind: "self" });
   assert.deepEqual(statusOf({ delegate: USDC_CONDUIT.toLowerCase() as Address }), { kind: "other", name: "USDC" });

@@ -6,7 +6,6 @@
   "license": "MIT",
   "type": "module",
   "homepage": "https://metadex.cafe/",
-  "repository": "github:ldeso/metadex.cafe",
   "engines": {
     "node": "26"
   },

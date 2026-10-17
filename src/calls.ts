@@ -15,8 +15,8 @@ const approval = (conduit: Address, id: bigint, approve: boolean) => ({
 });
 
 /**
- * Joins the conduit with each account. An account in another of Hydrex's automations moves: the join replaces both its
- * delegate and its claimer, which two automations may hold apart.
+ * Joins the conduit with each account. An account in another automation moves: the join replaces both its delegate
+ * and its claimer, which two automations may hold apart.
  */
 export const join = (accounts: Account[]): Step[] =>
   accounts.map((account) => {
