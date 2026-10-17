@@ -265,8 +265,8 @@ Installed with `npm ci --ignore-scripts`: viem 2.57.7, `@wagmi/core` 3.6.5, `@wa
 - **Coinbase's SDK.** Its popup is `https://keys.coinbase.com/connect`, opened with `window.open`, so no frame is
   needed. It calls `https://rpc.wallet.coinbase.com` for `wallet_getCallsStatus` before a session exists. Once connected
   to a smart wallet, it sends other reads to an RPC URL the wallet gives in its handshake; that origin must be confirmed
-  with a real Base Account. The Coinbase Wallet app's QR flow uses `https://www.walletlink.org` and
-  `wss://www.walletlink.org/rpc`.
+  with a real Base Account. It was found without one on 2026-10-17: see [Writes](#writes). The Coinbase Wallet app's QR
+  flow uses `https://www.walletlink.org` and `wss://www.walletlink.org/rpc`.
 - **Coinbase's styles.** That QR flow injects one `<style>` element (`cssReset`) into the page. `style-src 'self'`
   blocks it; a CSP hash of that exact text would allow it and nothing else.
 - **Telemetry.** Coinbase's SDK 4.4.0 contains no analytics code. Safe's SDK and wagmi contain none.
@@ -351,9 +351,11 @@ Checked for the wallet milestone on 2026-10-16, on Base at block 52,694,000 and 
 - **Coinbase's SDK 4.4.0** adds three style elements, for the Coinbase Wallet app's QR code, its snackbar and its
   redirect dialog; the page's policy allows them by their hashes. It sends a `HEAD` request to the page's own URL to
   read its `Cross-Origin-Opener-Policy`, so `connect-src` includes `'self'`. It has no telemetry. Once a smart wallet is
-  connected, it sends `wallet_getCallsStatus` to the RPC that keys.coinbase.com names for the session, whose origin the
-  page's policy does not list yet: until a real Base Account shows it, the page stops following a batch it cannot get
-  the status of.
+  connected, it sends `wallet_getCallsStatus` and other reads to the RPC that keys.coinbase.com names for the session.
+  keys.coinbase.com builds it from the chains `api.wallet.coinbase.com/rpc/v3/scw/getSupportedChains` lists, as
+  `https://chain-proxy.wallet.coinbase.com/?targetName=base` for Base. Checked on 2026-10-17, without an account: that
+  proxy answers chain `0x2105`, allows any origin, and knows `wallet_getCallsStatus`. The page's policy allows it;
+  should a status still not come, the page says the batch was sent.
 - **Sizes,** gzipped: the first load is 23.5 KB, up from 18.9 KB. Coinbase's SDK is 37.5 KB, loaded only when someone
   picks it, and Safe's 17.0 KB, loaded only in a frame. With esbuild's splitting, the parts of viem that the page and
   Coinbase's SDK both use went into a chunk on the first load, 38 KB in all, so each SDK is now built on its own.

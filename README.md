@@ -56,6 +56,7 @@ The page's Content Security Policy allows these origins and nothing else:
 | `https://base-rpc.publicnode.com`                        | Base RPC: reads, checks of the calls, and receipts                          |
 | `https://base.drpc.org`                                  | Base RPC: reads, checks of the calls, and receipts                          |
 | `https://rpc.wallet.coinbase.com`                        | Coinbase's SDK: call status before a smart-wallet session exists            |
+| `https://chain-proxy.wallet.coinbase.com`                | Coinbase's SDK: a smart-wallet session's reads, such as a batch's status    |
 | `https://www.walletlink.org`, `wss://www.walletlink.org` | Coinbase's SDK: sessions with the Coinbase Wallet app on a phone            |
 | The page's own origin                                    | Coinbase's SDK reads the page's headers to check how it may open its window |
 
