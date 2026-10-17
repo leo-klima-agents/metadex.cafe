@@ -290,11 +290,11 @@ Every direction below shares the status colours, each at least 5.5:1 on its back
 
 - **Readable at 16 px:** three shapes at most, no text but a letter, one colour, on its own tile so the wallet's theme
   does not matter.
-- **Files:** `icon.svg` as today, which Safe{Wallet} shows at 48 px from `manifest.json`; a 32 px `favicon.ico`; a 180
-  px `apple-touch-icon.png`. MetaMask reads a dapp's icon from `link[rel="shortcut icon"]`
-  ([MetaMask](https://docs.metamask.io/metamask-connect/evm/guides/best-practices/display.md)), which the page lacks;
-  `test/config.test.ts` checks today's `<link>`.
-- **Today's mark,** two arrows on teal, says "swap": what any DEX says, and not what the page does.
+- **Files:** `icon.svg`, which Safe{Wallet} shows at 48 px from `manifest.json`; a 32 px `favicon.ico`; a 180 px
+  `apple-touch-icon.png`. MetaMask reads a dapp's icon from `link[rel="shortcut icon"]` only
+  ([MetaMask](https://docs.metamask.io/metamask-connect/evm/guides/best-practices/display.md)).
+- **The old mark,** two arrows on teal, said "swap": what any DEX says, and not what the page does. The new one is under
+  [A, as chosen](#the-mark-chosen).
 
 ## Voice
 
@@ -339,7 +339,7 @@ On the canvas, row 7: the receipt in both themes, a call as the wallet will ask 
   Tables and key figures use tabular figures.
 - Atkinson Hyperlegible Next draws a slashed zero in text too, as in "Thu 10 Sep": it is the face's legibility, not an
   option.
-- The colours are today's, teal included, until A's palette is applied.
+- The colours are Roast's, with milk in dark, and the mark is the figures and the total: see below.
 
 ### Receipts and calls
 
@@ -374,11 +374,28 @@ beside a specific retirement, Klima's mark says who retires, and nothing more.
 - **In the repository,** `klima-protocol.svg` is Klima Protocol's, all rights reserved, under
   `LICENSES/LicenseRef-KlimaProtocol.txt` and an entry of its own in `REUSE.toml`.
 
+### The mark, chosen
+
+**Figures and the total**, from the alternatives on the canvas, row 8: two figures and a total, right-aligned, as on the
+receipt and on the posted list. Three shapes on the ink tile, the total in crema; it holds at 16 px, has no letters to
+blur, claims nothing, and reads in one colour.
+
+- `icon.svg` is the mark; `scripts/icons.ts` draws `favicon.ico`, at 16 and 32 px, and `apple-touch-icon.png`, at 180 px
+  and opaque, from it, with Chromium, and gives the same files on every run.
+- `index.html` links all three, the `.ico` as `shortcut icon` for MetaMask; `manifest.json` still names `icon.svg` for
+  Safe{Wallet}.
+
 ### Colour
 
-Five palettes are on the canvas, row 9, each on the same piece of Home in both themes: roast, ink only, claret, ink
-blue, and today's teal. Each keeps the same status colours, with their shapes and words; green is left out, as beside
-"carbon" it reads as a claim.
+**Roast, with milk in dark,** is on the page: ink `#251a15` and roast `#6b3818` on paper `#fdfcf9`; in dark, ink
+`#f1eee9` and milk `#e7d4bf` on `#18120f`. Each colour is a custom property with its light value first; the light and
+dark pairs follow inside `@supports (color: light-dark(red, red))`, so that a browser without `light-dark()` keeps the
+light palette whole, links and buttons included, rather than losing them. A test checks that `light-dark()` appears
+nowhere else, and that nothing still uses the system's `Canvas`.
+
+Five palettes were drawn, on the canvas, row 9, each on the same piece of Home in both themes: roast, ink only, claret,
+ink blue, and today's teal. Each keeps the same status colours, with their shapes and words; green is left out, as
+beside "carbon" it reads as a claim.
 
 - **Roast needs milk in dark.** The crema drawn on A's board, `#e6b285`, is nearly the warning amber, `#efb062`: a
   distance of 3.8 in OKLab, where under about 10 a button and a warning look alike. Milk, `#e7d4bf`, is 11.6 from it, at
@@ -390,10 +407,6 @@ blue, and today's teal. Each keeps the same status colours, with their shapes an
 
 ## To decide
 
-- **A's colours on the page,** from row 9, and plain values before `light-dark()`, so that links keep their colour where
-  it is unsupported.
-- **The mark:** the "é" tile or one of the alternatives on row 8 for `icon.svg`, with `favicon.ico`,
-  `apple-touch-icon.png` and a `shortcut icon` link.
 - **A trademark check** on "metaDEX Café" against Dromos's "MetaDEX™".
 - **A test with people,** five seconds on Home for each persona: what is this, who is it for, would you trust it with
   your account. Rate warmth and competence, as the studies above did.
