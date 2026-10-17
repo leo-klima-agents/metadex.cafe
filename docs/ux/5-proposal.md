@@ -30,7 +30,7 @@ to cover, one stable URL for Safe ([3. Comparable products](3-patterns.md#a-site
 
 - **Header:** the name (to Home) · How it works · a button to the App ("Open the app"; on the App, the wallet's state).
 - **Footer:** the official address `https://metadex.cafe/` · version and commit · source · contracts · Hydrex · Klima ·
-  who runs it · where to ask a question.
+  where to ask a question. No operator is named (a decision for now).
 
 ## Entry points
 
@@ -56,17 +56,17 @@ Safe has paused new listings, so this URL is the one the README and How it works
 try, and can choose to go on. A holder whose automation stopped learns that first. Nothing on Home asks for a wallet,
 and all of it reads in the HTML, without the script; only the live numbers are filled in.
 
-| Order | Block                        | Content                                                                                                                                                                                                                                                                            | Answers                                |
-| ----- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| 1     | Promise                      | One sentence of benefit, one of mechanism ("votes every week, retires a share of the rewards as carbon credits, pays you the rest; your HYDX never leaves your wallet"). Who runs it, in a line. [Open the app] · [How it works]                                                   | What is it? Is it for me? Whose is it? |
-| 2     | Your automation stopped?     | A short notice: "Hydrex has stopped its automations. If your account was in one, it no longer votes or claims for you." [Check my accounts] → `/app/` · [What it means] → `#if-your-automation-stopped`                                                                            | What happened to mine?                 |
-| 3     | The numbers                  | Tonnes retired so far · the split, in words and percent ("a third retired, two thirds paid to you") · the Earning Power in it this epoch · this epoch ends in 4 d 6 h                                                                                                              | Is it real? Is it alive?               |
-| 4     | How it works, in three steps | 1 It votes with your accounts each week. 2 It claims their rewards and swaps them into kVCM. 3 It retires a share as carbon credits and sends you the rest. Under the steps, one line on timing: "Joins count from the next Thursday."                                             | What happens to my votes and rewards?  |
-| 5     | What you keep, what you give | Three columns, plain: **You keep** your HYDX, your account, the right to leave at any time. **You give** a third of the rewards, retired; your own vote while in. **You get** the rest in kVCM, every week, with nothing to do. Link: what kVCM is and how to swap it.             | What does it cost me?                  |
-| 6     | Compared with                | A short, honest table: voting yourself every week · staying in a stopped automation · Carbon Impact. Rows: who votes, what you are paid in, share retired, fee, weekly effort. It may say: "If you only want the most yield and have time each Thursday, vote yourself."           | Why this rather than the others?       |
-| 7     | Safe to try                  | Nothing is transferred, and you can check it on Basescan · leave at any time, even if the page's checks fail · two calls, both shown before your wallet asks · the page checks the contracts before it lets you join · one admin key can change the settings, within limits (link) | Can I trust it?                        |
-| 8     | Questions                    | Three or four: "Can I still vote myself?" · "What happens to rewards I have not claimed?" · "What carbon credits, and where can I see them?" · "Can a DAO join from a Safe?" Each links to How it works.                                                                           | The objection I still have             |
-| 9     | Go on                        | [Open the app] again, and "You need a Hydrex account: lock HYDX on Hydrex" for those without one.                                                                                                                                                                                  | What now?                              |
+| Order | Block                        | Content                                                                                                                                                                                                                                                                                                                                                              | Answers                                   |
+| ----- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| 1     | Promise                      | One sentence of benefit, one of mechanism ("votes every week, retires a share of the rewards as carbon credits, pays you the rest; your HYDX never leaves your wallet"). One line on what anyone can check, in place of an operator's name: the automation is Hydrex's own code, it retires through Klima, this page is open source. [Open the app] · [How it works] | What is it? Is it for me? Can I check it? |
+| 2     | Your automation stopped?     | A short notice: "Hydrex's automations stopped voting on 9 Sep. If your account is in one, it has earned nothing from voting since 10 Sep." [Check my accounts] → `/app/` · [What it means] → `#if-your-automation-stopped`                                                                                                                                           | What happened to mine?                    |
+| 3     | The numbers                  | Tonnes retired so far · the split, in words and percent ("a third retired, two thirds paid to you") · the Earning Power in it this epoch · this epoch ends in 4 d 6 h                                                                                                                                                                                                | Is it real? Is it alive?                  |
+| 4     | How it works, in three steps | 1 It votes with your accounts each week. 2 It claims their rewards and swaps them into kVCM. 3 It retires a share as carbon credits and sends you the rest. Under the steps, one line on timing: "Joins count from the next Thursday."                                                                                                                               | What happens to my votes and rewards?     |
+| 5     | What you keep, what you give | Three columns, plain: **You keep** your HYDX, your account, the right to leave at any time. **You give** a third of the rewards, retired; your own vote while in. **You get** the rest in kVCM, every week, with nothing to do. Link: what kVCM is and how to swap it.                                                                                               | What does it cost me?                     |
+| 6     | Compared with                | A short, honest table: voting yourself every week · staying in a stopped automation · Carbon Impact. Rows: who votes, what you are paid in, share retired, fee, weekly effort. It may say: "If you only want the most yield and have time each Thursday, vote yourself."                                                                                             | Why this rather than the others?          |
+| 7     | Safe to try                  | Nothing is transferred, and you can check it on Basescan · leave at any time, even if the page's checks fail · two calls, both shown before your wallet asks · the page checks the contracts before it lets you join · one admin key can change the settings, within limits (link)                                                                                   | Can I trust it?                           |
+| 8     | Questions                    | Three or four: "Can I still vote myself?" · "What happens to rewards I have not claimed?" · "What carbon credits, and where can I see them?" · "Can a DAO join from a Safe?" Each links to How it works.                                                                                                                                                             | The objection I still have                |
+| 9     | Go on                        | [Open the app] again, and "You need a Hydrex account: lock HYDX on Hydrex" for those without one.                                                                                                                                                                                                                                                                    | What now?                                 |
 
 Blocks 1 to 3 fill the first screen on a phone. Blocks 5 and 6 are where the current page is silent and where the
 decision is made. Block 2 is temporary: it goes once the holders of stopped automations have moved or stopped coming.
@@ -85,9 +85,9 @@ decision is made. Block 2 is temporary: it goes once the holders of stopped auto
 │                                     │
 │ [ Open the app ]    How it works ›  │
 ├─────────────────────────────────────┤
-│ ! Hydrex has stopped its            │
-│ automations. Was your account in    │
-│ one? It no longer votes or claims.  │
+│ ! Hydrex's automations stopped      │
+│ voting on 9 Sep. Is your account in │
+│ one? It has earned nothing since.   │
 │ Check accounts ›    What it means › │
 ├─────────────────────────────────────┤
 │  5,691 t           1/3 retired      │
@@ -128,18 +128,23 @@ Today's statuses, sorted into groups by what the user can do, in this order. A g
 Every status says what it means for votes and rewards, in words, with the date of the next change; colour, if any, comes
 later and never alone.
 
-| Group                         | Statuses today                     | Action               | Line under each account                                                           |
-| ----------------------------- | ---------------------------------- | -------------------- | --------------------------------------------------------------------------------- |
-| In an automation that stopped | other (a stopped automation)       | Join                 | "In USDC, which Hydrex no longer runs: nothing votes or claims for this account." |
-| Needs attention               | partly                             | Join (sets the rest) | "Only some of its approvals are set."                                             |
-| In Carbon Impact              | in                                 | Leave                | "Votes with Carbon Impact. Next payout Thu 22 Oct."                               |
-| Joining                       | joined                             | Leave                | "Votes with Carbon Impact from Thu 22 Oct. It can claim rewards already."         |
-| Leaving                       | left                               | Join                 | "Votes count for Carbon Impact until Thu 22 Oct. It no longer claims."            |
-| Can join                      | self · other (running) · delegated | Join                 | "You vote with it." · "In …" · "Delegated to 0x12…ab."                            |
-| Can't join                    | ended · empty                      | Link to Hydrex       | "Lock ended: extend it on Hydrex." · "Empty."                                     |
+| Group                         | Statuses today                     | Action               | Line under each account                                                                               |
+| ----------------------------- | ---------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------- |
+| In an automation that stopped | other (a stopped automation)       | Join, or leave it    | "In USDC, which has not voted since 9 Sep: this account has earned nothing from voting since 10 Sep." |
+| Needs attention               | partly                             | Join (sets the rest) | "Only some of its approvals are set."                                                                 |
+| In Carbon Impact              | in                                 | Leave                | "Votes with Carbon Impact. Last payout 23 Sep." (once the page can read payouts)                      |
+| Joining                       | joined                             | Leave                | "Votes with Carbon Impact from Thu 22 Oct. It can claim rewards already."                             |
+| Leaving                       | left                               | Join                 | "Votes count for Carbon Impact until Thu 22 Oct. It no longer claims."                                |
+| Can join                      | self · other (running) · delegated | Join                 | "You vote with it." · "In …" · "Delegated to 0x12…ab."                                                |
+| Can't join                    | ended · empty                      | Link to Hydrex       | "Lock ended: extend it on Hydrex." · "Empty."                                                         |
 
-To tell a stopped automation from a running one, the page's list of Hydrex's automations (`src/hydrex-conduits.json`)
-needs to say which still run; today it holds names only.
+The page can tell a stopped automation from a running one without keeping a list: Hydrex's Voter exposes
+`lastVoted(address)`, and an automation that has not voted since the start of the previous epoch has stopped. "Leave it"
+is the same call as leaving Carbon Impact, with the stopped automation's address; it gives the votes back to the owner
+from the next epoch ([7. On-chain checks](7-onchain-checks.md)).
+
+The App states the last payout it can see rather than promising the next one: Base shows no Carbon Impact payout since
+23 September. Until the page can read payouts (phase 3), the line says only what the automation does and when it votes.
 
 Ticks stay, but **inside a group**, so that one selection is always one action: "Join with 2 accounts" under a group
 that can join, "Leave with 1 account" under In Carbon Impact. A group with one account shows a plain button and no tick.
@@ -160,13 +165,14 @@ The account card keeps today's facts: name, number, kind (Flex or Protocol, lock
 ├─────────────────────────────────────┤
 │ In an automation that stopped       │
 │ ☐ Account #2439      102 EP         │
-│   Protocol · in USDC, which no      │
-│   longer votes or claims            │
+│   Protocol · in USDC, which has not │
+│   voted since 9 Sep: earns nothing  │
 │ ☐ Account #2435       20 EP         │
 │   Flex, rolling · in Lock Maxi,     │
-│   which no longer votes or claims   │
+│   stopped 9 Sep: earns nothing      │
 │ [ Join with 0 accounts ] (off)      │
 │   Tick the accounts to join.        │
+│   Or leave them, to vote yourself › │
 ├─────────────────────────────────────┤
 │ How joining works ›    Questions ›  │
 └─────────────────────────────────────┘
@@ -180,8 +186,9 @@ Confirm, since the wallet will show only a raw or decoded call that moves no tok
 
 1. **Before you join.** Shown first because it can only be acted on before: "Carbon Impact can claim rewards these
    accounts have not claimed yet, even those your own votes earned. To keep them as they are, claim them on Hydrex
-   first." [Claim on Hydrex] · [Continue]. For an account from a stopped automation, this step says so, and says that
-   rewards may have built up since it stopped. For an account in a running automation, it says the account leaves it.
+   first." [Claim on Hydrex] · [Continue]. For an account from a stopped automation, it says that what the automation
+   left unclaimed before it stopped can still be claimed on Hydrex, and that nothing has accrued since. For an account
+   in a running automation, it says the account leaves it.
 2. **What changes.** A timeline for the ticked accounts: **now** Carbon Impact can claim · **Thu 22 Oct** it votes with
    them, and you can't · **every Thursday after** a third of the rewards retired, the rest to your payout address. Then
    one line on the admin key, with a link to `#who-controls-what`.
@@ -202,11 +209,11 @@ until it executes, and a link to `#for-co-signers` to send them.
 │ will be claimed by   │   │ ● Thu 22 it votes;   │   │ one after the other  │
 │ Carbon Impact, and   │   │          you can't   │   │ 1 #2439 leaves USDC  │
 │ swapped and retired  │   │ ● weekly 1/3 retired │   │   and joins …        │
-│ like the rest. Both  │   │          2/3 to you  │   │   setConduitApp…     │
-│ accounts were in an  │   │ Admin key can change │   │ 2 #2435 …            │
-│ automation that      │   │ settings, within     │   │                      │
-│ stopped: rewards may │   │ limits. More ›       │   │ [Confirm 1 of 2]     │
-│ have built up.       │   │ [Continue]  Back     │   │  Back                │
+│ like the rest. What  │   │          2/3 to you  │   │   setConduitApp…     │
+│ the stopped          │   │ Admin key can change │   │ 2 #2435 …            │
+│ automations left     │   │ settings, within     │   │                      │
+│ unclaimed can still  │   │ limits. More ›       │   │ [Confirm 1 of 2]     │
+│ be claimed first.    │   │ [Continue]  Back     │   │  Back                │
 │ [Claim on Hydrex ↗]  │   └──────────────────────┘   └──────────────────────┘
 │ [Continue]  Back     │
 └──────────────────────┘
@@ -242,17 +249,17 @@ All exist today; the reorganisation gives each a place.
 co-signers, where a DAO proposal links to, and where an announcement about Hydrex's automations points. It is not where
 warnings live: anything a user must know before confirming is in the review too.
 
-| Section                       | From today's page                                   | New                                                                                                                                                                                    |
-| ----------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `#if-your-automation-stopped` | —                                                   | What Hydrex stopped; what it means for an account still pointing at a stopped automation; the choices: vote yourself on Hydrex, or join here; what joining changes for such an account |
-| `#what-joining-allows`        | The six disclosures of "What joining allows"        | One heading each, so each can be linked from the review                                                                                                                                |
-| `#timing`                     | "This epoch"                                        | A worked example over two epochs: join on a Monday, what happens each day after; join on a Thursday                                                                                    |
-| `#who-controls-what`          | The admin key and what it can change                | Who holds it; the limits (up to 100% retired, up to 1% fee); how a change would show                                                                                                   |
-| `#carbon`                     | "Retires … in the name Hydrex"                      | What kVCM is; what is retired and where each retirement's certificate can be seen; why the name is Hydrex                                                                              |
-| `#for-co-signers`             | —                                                   | One screen for a second reader: what the Safe transaction does, what it allows, how to undo it                                                                                         |
-| `#verify`                     | Contracts, source, the official address, the checks | How to check a build; what each check guards against; how to see on Basescan that nothing was transferred                                                                              |
-| `#questions`                  | —                                                   | The FAQ, including the ones Home links to                                                                                                                                              |
-| `#words`                      | —                                                   | Account, Flex, Protocol, Earning Power, epoch, kVCM, retire, conduit, admin key                                                                                                        |
+| Section                       | From today's page                                   | New                                                                                                                                                                                                                                                                                             |
+| ----------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `#if-your-automation-stopped` | —                                                   | When each automation last voted; that an account in one has earned nothing from voting since 10 Sep, and its old votes count for nothing; that the stopped automation still holds its approvals; that leftovers can be claimed on Hydrex; the choices: leave it and vote yourself, or join here |
+| `#what-joining-allows`        | The six disclosures of "What joining allows"        | One heading each, so each can be linked from the review                                                                                                                                                                                                                                         |
+| `#timing`                     | "This epoch"                                        | A worked example over two epochs: join on a Monday, what happens each day after; join on a Thursday                                                                                                                                                                                             |
+| `#who-controls-what`          | The admin key and what it can change                | The limits (up to 100% retired, up to 1% fee); how a change would show on Base; that the page names no operator                                                                                                                                                                                 |
+| `#carbon`                     | "Retires … in the name Hydrex"                      | What kVCM is; what is retired and where each retirement's certificate can be seen; the names on each retirement ("Hydrex", no beneficiary name) and why they are the same for every member                                                                                                      |
+| `#for-co-signers`             | —                                                   | One screen for a second reader: what the Safe transaction does, what it allows, how to undo it                                                                                                                                                                                                  |
+| `#verify`                     | Contracts, source, the official address, the checks | How to check a build; what each check guards against; how to see on Basescan that nothing was transferred                                                                                                                                                                                       |
+| `#questions`                  | —                                                   | The FAQ, including the ones Home links to                                                                                                                                                                                                                                                       |
+| `#words`                      | —                                                   | Account, Flex, Protocol, Earning Power, epoch, kVCM, retire, conduit, admin key                                                                                                                                                                                                                 |
 
 ## Content rules for all pages
 
@@ -273,32 +280,36 @@ warnings live: anything a user must know before confirming is in the review too.
 
 Problem numbers refer to [the audit](1-audit.md).
 
-| Phase | Ships                                                                                                                                                                                                                         | Fixes             |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| 0     | Now, on today's page: say when an account is in an automation Hydrex no longer runs                                                                                                                                           | P1                |
-| 1     | Home and App as separate pages (option B), with Home's notice for stopped automations; disclosures moved into a three-step review; account groups; the epoch timeline; wallet-app links; Safe App on `/app/`                  | P2 – P7, P11, P13 |
-| 2     | How it works with anchors, linked from Home, the review and announcements; the carbon section; who controls what; for co-signers; FAQ and glossary                                                                            | P9, P10, P12, P14 |
-| 3     | Data the page does not read yet: past payouts and retirements per account, with links to certificates, and an impact page; the read-only lookup by address; batched signing where wallets allow; a Base or Farcaster mini app | P8, P15           |
-| Later | A page per automation, only if there is a second one                                                                                                                                                                          | —                 |
+| Phase   | Ships                                                                                                                                                                                                                                                         | Fixes             |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| 0       | Now, on today's page: say when an account is in an automation that has stopped voting, read from Hydrex's Voter                                                                                                                                               | P1                |
+| 1       | Home and App as separate pages (option B), with Home's notice for stopped automations; disclosures moved into a three-step review; account groups; the epoch timeline; wallet-app links; Safe App on `/app/`                                                  | P2 – P7, P11, P13 |
+| 2       | How it works with anchors, linked from Home, the review and announcements; the carbon section; who controls what; for co-signers; FAQ and glossary                                                                                                            | P9, P10, P12, P14 |
+| 3       | Data the page does not read yet: past payouts and retirements per account, with links to certificates, and an impact page (needs an RPC that serves logs); the read-only lookup by address; batched signing where wallets allow; a Base or Farcaster mini app | P8, P15           |
+| Not now | "Sign in with Base" and WalletConnect outside a wallet app's browser (an SDK and a relay, against "no server")                                                                                                                                                | P11, in part      |
+| Later   | A page per automation, only if there is a second one                                                                                                                                                                                                          | —                 |
 
-Phase 0 is a status line and the list of which automations still run; it helps the holders arriving now, before any
-reorganisation. Phase 3 depends on what Base and Klima expose without a server; it is listed so that the organisation
-leaves room for it, not as a commitment.
+Phase 0 is a status line and one read of Hydrex's Voter; it helps the holders arriving now, before any reorganisation.
+Phase 3 depends on what Base and Klima expose without a server; it is listed so that the organisation leaves room for
+it, not as a commitment.
 
-## Decisions for the team
+## Decisions
 
-The organisation does not settle these; each changes what a page says.
+Taken by the team, or answered on Base ([7. On-chain checks](7-onchain-checks.md)):
 
-1. **Who runs it,** in one line on every page: Home's "Whose is it?" has no answer today.
-2. **The name on the retirements.** Retired "in the name Hydrex", the member who gave up a third of their rewards is on
-   no certificate. Personal attribution would change the contract; the site can at least say whose name it is and why.
-3. **Wallets beyond the browser's.** Supporting "Sign in with Base" and WalletConnect outside a wallet app means an SDK
-   and a relay, against "no server". Links that reopen the page in a wallet app need neither.
-4. **How strongly to address holders of stopped automations,** and with Hydrex's agreement or not: a notice on Home, an
+| Question                                              | Decision                                                                                                                                                                                                                     | What it changes                                                                                                                                  |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Who runs it?                                          | Anonymous for now.                                                                                                                                                                                                           | No operator on any page. Trust rests on what anyone can check, so "Safe to try" on Home and `#verify` carry more weight (P10 stays partly open). |
+| Whose name is on the retirements?                     | Stays "Hydrex". The admin key can change the names, but only for every member at once; a name per member would need a new automation contract.                                                                               | `#carbon` says whose names they are and why. No personal certificate in the App.                                                                 |
+| Smart wallets and WalletConnect outside a wallet app? | Not now.                                                                                                                                                                                                                     | Links that reopen the page in a wallet app instead.                                                                                              |
+| What happens to an account in a stopped automation?   | Its old votes count for nothing and it has earned nothing from voting since 10 Sep; the stopped automation still holds its approvals; the owner can claim what was left unclaimed, and can leave or join another automation. | The wording of Home's notice, the App's first group and step 1 of the review, as above.                                                          |
+
+Still open:
+
+1. **How strongly to address holders of stopped automations,** and with Hydrex's agreement or not: a notice on Home, an
    announcement, a link from Hydrex's own app.
-5. **What exactly happens to an account left in a stopped automation**: whether its last votes still count, and whether
-   its owner can claim its rewards on Hydrex while the claim approval points at the stopped automation. The wording of
-   the notice, the status and step 1 of the review depends on it.
+2. **Payouts.** Base shows no Carbon Impact payout since 23 September. That is for the team to look into, not for the
+   site to organise around; but until payouts can be read, the App must not promise a next one.
 
 ## What does not change
 

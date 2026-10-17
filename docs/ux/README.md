@@ -15,9 +15,10 @@ metadex.cafe/how-it-works/    How it works   every disclosure, the timing, the a
 ```
 
 1. **Most visitors are holders whose automation stopped.** Hydrex has disabled its automations; about 11.5 M Earning
-   Power still points at the 13 that no longer run, and Carbon Impact is the one still voting. Today the page shows such
-   an account as "In another Hydrex automation: USDC", as if it still ran. Fixing that line is the first thing to ship,
-   before any reorganisation.
+   Power still points at the 13 that no longer run, and Carbon Impact is the one still voting. On Base, such an account
+   has earned nothing from voting since 10 September, and its owner cannot vote with it while the stopped automation
+   holds its delegation. Today the page shows it as "In another Hydrex automation: USDC", as if it still ran. Fixing
+   that line is the first thing to ship, before any reorganisation.
 2. **One scroll serves four visits badly.** Deciding, moving from a stopped automation, acting and checking each need a
    different order. On a phone, the wallet button is below the fold, after about 170 words of mechanics.
 3. **The decision is a comparison the page never makes.** Against voting by hand every Thursday, or staying in a stopped
@@ -31,14 +32,15 @@ metadex.cafe/how-it-works/    How it works   every disclosure, the timing, the a
 
 ## Contents
 
-| Part                                    | What it holds                                                                                                                                |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| [1. The site today](1-audit.md)         | Inventory, measurements and screenshots; what must survive; 15 problems rated by severity                                                    |
-| [2. Hydrex users](2-personas.md)        | Hydrex in brief; the numbers that shape the audience; four proto-personas; jobs to be done                                                   |
-| [3. Comparable products](3-patterns.md) | Vote automation products, site and app splits, signing research, carbon impact, time and status patterns                                     |
-| [4. Organisations](4-organisations.md)  | Six organisations studied (one page reordered, two pages, two pages and a reference, app first, a menu, a wizard) and a scored comparison    |
-| [5. Proposal](5-proposal.md)            | The recommended organisation: sitemap, entry points, each page's blocks in order, account groups, the join flow, states, wireframes, phasing |
-| [6. Validation](6-validation.md)        | The questions to answer with real users first, methods, test tasks and signals of success                                                    |
+| Part                                      | What it holds                                                                                                                                                     |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [1. The site today](1-audit.md)           | Inventory, measurements and screenshots; what must survive; 15 problems rated by severity                                                                         |
+| [2. Hydrex users](2-personas.md)          | Hydrex in brief; the numbers that shape the audience; four proto-personas; jobs to be done                                                                        |
+| [3. Comparable products](3-patterns.md)   | Vote automation products, site and app splits, signing research, carbon impact, time and status patterns                                                          |
+| [4. Organisations](4-organisations.md)    | Six organisations studied (one page reordered, two pages, two pages and a reference, app first, a menu, a wizard) and a scored comparison                         |
+| [5. Proposal](5-proposal.md)              | The recommended organisation: sitemap, entry points, each page's blocks in order, account groups, the join flow, states, wireframes, phasing                      |
+| [6. Validation](6-validation.md)          | The questions to answer with real users first, methods, test tasks and signals of success                                                                         |
+| [7. On-chain checks](7-onchain-checks.md) | What happens to accounts in stopped automations, whether the name on retirements can change, and when payouts last ran, from Hydrex's verified contracts and Base |
 
 ## The personas
 
@@ -66,13 +68,22 @@ They are proto-personas from desk research, to be tested: [6. Validation](6-vali
 
 | Phase | Ships                                                                                                                                 |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| 0     | On today's page, say when an account is in an automation Hydrex no longer runs                                                        |
+| 0     | On today's page, say when an account is in an automation that has stopped voting, read from Hydrex's Voter                            |
 | 1     | Home and the App as separate pages; the three-step review; account groups; the epoch timeline; Safe App on `/app/`                    |
 | 2     | How it works, with anchors linked from Home, the review and announcements                                                             |
 | 3     | Payout and retirement history, an impact page, a read-only lookup by address, batched signing: as far as data without a server allows |
 
-Five decisions are left to the team, from who runs it to whose name is on the retirements:
-[5. Proposal, Decisions for the team](5-proposal.md#decisions-for-the-team).
+## Decisions
+
+| Question                                              | Decision                                                                                                |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Who runs it?                                          | Anonymous for now: no operator on any page; trust rests on what anyone can check                        |
+| Whose name is on the retirements?                     | Stays "Hydrex": it can change only for every member at once, and a name per member needs a new contract |
+| Smart wallets and WalletConnect outside a wallet app? | Not now: links that reopen the page in a wallet app instead                                             |
+| What happens to an account in a stopped automation?   | Answered on Base: see [7. On-chain checks](7-onchain-checks.md)                                         |
+
+Still open: how strongly to address holders of stopped automations, and payouts, of which Base shows none since 23
+September ([5. Proposal, Decisions](5-proposal.md#decisions)).
 
 ## Method and limits
 
@@ -85,5 +96,8 @@ Five decisions are left to the team, from who runs it to whose name is on the re
   secondary source are marked in [3. Comparable products](3-patterns.md).
 - **From the team:** Hydrex has disabled its automations, and AZUSD no longer works, so Carbon Impact no longer claims
   it. Hydrex's public API still lists Carbon Impact as paying 60% kVCM and 40% AZUSD.
+- **On Base:** Hydrex's Voter, VotingEscrow, reward contracts and the automation were read from their verified source on
+  Sourcify, then checked with reads, simulated claims and a scan of four weeks of the automation's events
+  ([7. On-chain checks](7-onchain-checks.md)).
 - **Not done:** no interviews or tests with Hydrex users. The personas and the scores are hypotheses until
   [6. Validation](6-validation.md) has run.

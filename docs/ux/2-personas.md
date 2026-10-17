@@ -28,6 +28,11 @@ Earning Power delegated to each at the current epoch, but only Carbon Impact sti
 before the 15 October flip, while most others last voted on 9 September. The holders who used them have learnt the
 vocabulary of automations (output asset, next payout, automated or manual) and have lost the thing it described.
 
+On Base, an account left in one of them has earned nothing from voting since the epoch that began on 10 September: its
+old votes count for nothing, and its owner cannot vote with it while the stopped automation holds its delegation. The
+owner can still claim what was left unclaimed before it stopped, and can still leave or join another automation. The
+detail is in [7. On-chain checks](7-onchain-checks.md).
+
 ## The numbers that shape the audience
 
 From Hydrex's public API and community channels in October 2026 (sources at the end).
@@ -72,15 +77,15 @@ them: the organisation of the site should answer them in that order.
 > "I picked the USDC automation so I would never have to vote. Now it has stopped, and I don't have time to vote every
 > Thursday. I just want it to pay me."
 
-|                     |                                                                                                                                                                                                                                           |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Who                 | One Flex Account on a rolling lock, 5,000 to 20,000 Earning Power. Came to Hydrex through Base: signed in with Base on a phone. Not a DeFi professional; knows "Account" and "Earning Power" from Hydrex's app, not "conduit" or "veNFT". |
-| Today               | Was in the USDC or Liquid Hydrex automation, picked when the account was created. Hydrex has since disabled it: nobody runs it, and the account's votes and claims still point at it. Maya may not know.                                  |
-| Weekly stake        | A few dollars. Giving up a third of it changes little; losing the account would change a lot.                                                                                                                                             |
-| Arrives from        | A post from Hydrex or Klima about automations ending, a friend's link, X or Farcaster. On a phone, often in an in-app browser.                                                                                                            |
-| Asks, in order      | 1. My automation stopped: what happens to my account now? 2. What is this, and is it connected to Hydrex? 3. Can it take my HYDX? 4. What do I get, and when? 5. Can I stop? 6. How do I do it from my phone?                             |
-| Needs from the site | A first screen that answers 1 to 5 without jargon; a wallet connection that works with the wallet they have; a join that is one decision; reassurance after, in their own time zone.                                                      |
-| Lost by             | A page that starts with contract addresses; a status that says "In another Hydrex automation: USDC" as if it still ran; a "connect" step that does not find their smart wallet; a review they cannot read on a small screen.              |
+|                     |                                                                                                                                                                                                                                                                         |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who                 | One Flex Account on a rolling lock, 5,000 to 20,000 Earning Power. Came to Hydrex through Base: signed in with Base on a phone. Not a DeFi professional; knows "Account" and "Earning Power" from Hydrex's app, not "conduit" or "veNFT".                               |
+| Today               | Was in the USDC or Liquid Hydrex automation, picked when the account was created. Hydrex has since disabled it: it has not voted since 9 September, so the account has earned nothing from voting since, and its votes and claims still point at it. Maya may not know. |
+| Weekly stake        | A few dollars. Giving up a third of it changes little; losing the account would change a lot.                                                                                                                                                                           |
+| Arrives from        | A post from Hydrex or Klima about automations ending, a friend's link, X or Farcaster. On a phone, often in an in-app browser.                                                                                                                                          |
+| Asks, in order      | 1. My automation stopped: what happens to my account now? 2. What is this, and is it connected to Hydrex? 3. Can it take my HYDX? 4. What do I get, and when? 5. Can I stop? 6. How do I do it from my phone?                                                           |
+| Needs from the site | A first screen that answers 1 to 5 without jargon; a wallet connection that works with the wallet they have; a join that is one decision; reassurance after, in their own time zone.                                                                                    |
+| Lost by             | A page that starts with contract addresses; a status that says "In another Hydrex automation: USDC" as if it still ran; a "connect" step that does not find their smart wallet; a review they cannot read on a small screen.                                            |
 
 ### Theo, the weekly optimiser
 
