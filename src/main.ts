@@ -105,13 +105,12 @@ function failed(error: unknown): void {
 function showRelay(found: Relay): void {
   relay = found;
   sawBlock(found.time);
-  const { epochStart, tonnes, retireBps, feeBps, votes, entity, beneficiary, beneficiaryAddress, message } = found;
+  const { epochStart, tonnes, retireBps, votes, entity, beneficiary, beneficiaryAddress, message } = found;
   fill(document, {
     tonnes: units(tonnes),
     retired: bps(retireBps),
     "retired-share": share(retireBps),
     "paid-share": share(10_000n - retireBps),
-    fee: bps(feeBps),
     power: earningPower(votes),
     entity,
     beneficiary: beneficiary || "No name",
@@ -122,7 +121,6 @@ function showRelay(found: Relay): void {
   fillTime(document, "week-end", epochStart + WEEK);
   fillTime(document, "week-end-when", epochStart + WEEK, when);
   fillTime(document, "vote-day", epochStart + WEEK - 1);
-  show(".with-fee", feeBps > 0n);
   tick();
 }
 
@@ -178,19 +176,18 @@ const comparison = {
   failed: document.querySelector<HTMLElement>("#last-epoch .all-failed")!,
   versus: document.querySelector<HTMLElement>("#last-epoch .versus")!,
 };
-// Dollars per 1,000 votes, from votes with 18 decimals.
-const perThousand = (value: number, votes: bigint): number => (votes > 0n ? value / (Number(votes) / 1e21) : 0);
+// Dollars per 1,000 Earning Power, from votes with 18 decimals: Hydrex shows 1.3 times the votes.
+const perThousand = (value: number, votes: bigint): number => (votes > 0n ? value / ((Number(votes) * 1.3) / 1e21) : 0);
 
 function showColumn(column: "ours" | "all", { votes, pools }: Earnings, value: Value | undefined): void {
   const per = value && perThousand(value.usd, votes);
   const texts = {
-    votes: `${compact(votes)}, or ${compact((votes * 13n) / 10n)} Earning Power`,
+    "earning-power": compact((votes * 13n) / 10n),
     pools: count(pools.length, "pool", "pools"),
     earned: value ? usd(value.usd) : "…",
     fees: value ? usd(value.fees) : "…",
     incentives: value ? usd(value.incentives) : "…",
-    "per-votes": per === undefined ? "…" : usd(per),
-    "per-power": per === undefined ? "…" : usd(per / 1.3),
+    "per-power": per === undefined ? "…" : usd(per),
   };
   for (const [name, text] of Object.entries(texts)) {
     for (const cell of earningsTable.querySelectorAll(`.${column}.${name}`)) cell.textContent = text;
@@ -216,7 +213,7 @@ function showEarnings(found: Earnings): void {
   const per = perThousand(value.usd, found.votes);
   fillTime(document, "last-start", found.start);
   fillTime(document, "last-end", found.start + WEEK);
-  fill(document, { "last-per-votes": usd(per), "last-per-power": usd(per / 1.3) });
+  fill(document, { "last-per-power": usd(per) });
   showColumn("ours", found, value);
   showPools(found, value);
   comparison.status.textContent = comparison.status.dataset.text ?? "";
@@ -246,8 +243,8 @@ function compare(): void {
       const ratio = perThousand(ours.usd, mine.votes) / perThousand(average.usd, all.votes);
       comparison.versus.textContent =
         Math.abs(ratio - 1) < 0.005
-          ? "Last epoch, a vote with Carbon Impact earned about as much as the average vote on Hydrex, at the same prices."
-          : `Last epoch, a vote with Carbon Impact earned ${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "more" : "less"} than the average vote on Hydrex, at the same prices. Tokens left unpriced count for nothing in either.`;
+          ? "Last epoch, Carbon Impact earned about as much per 1,000 Earning Power as the average on Hydrex, at the same prices."
+          : `Last epoch, Carbon Impact earned ${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "more" : "less"} per 1,000 Earning Power than the average on Hydrex, at the same prices. Tokens left unpriced count for nothing in either.`;
       comparison.status.hidden = true;
       comparison.versus.hidden = !Number.isFinite(ratio);
     },
@@ -465,9 +462,8 @@ function reviewPicked(section: HTMLElement, action: Action): void {
     fillTime(part, "next", epochStart + WEEK, when);
     fillPlural(part, accounts.length);
     if (settings) {
-      const { retireBps, feeBps, entity } = settings;
-      fill(part, { "retired-share": share(retireBps), fee: bps(feeBps), entity });
-      show(".with-fee", feeBps > 0n, part);
+      const { retireBps, entity } = settings;
+      fill(part, { "retired-share": share(retireBps), entity });
     }
     return part;
   };

@@ -79,13 +79,7 @@
             </div>
             <div>
               <dt>Of the rewards</dt>
-              <dd>
-                <span class="retired-share">…</span> retired, <span class="paid-share">…</span> paid to you<span
-                  class="with-fee"
-                  hidden
-                  >, less a fee of <span class="fee">…</span></span
-                >
-              </dd>
+              <dd><span class="retired-share">…</span> retired, <span class="paid-share">…</span> paid to you</dd>
             </div>
             <div>
               <dt>Its Earning Power</dt>
@@ -98,9 +92,7 @@
             <div>
               <dt>Last epoch, <time class="last-start">…</time> to <time class="last-end">…</time></dt>
               <dd>
-                <span class="earnings-read"
-                  >Its votes earned <span class="last-per-votes">…</span> per 1,000 votes</span
-                >
+                <span class="earnings-read"><span class="last-per-power">…</span> earned per 1,000 Earning Power</span>
                 <span class="earnings-failed" hidden
                   >Not read from Base yet. The page tries again in a few minutes.</span
                 >
@@ -193,12 +185,6 @@
                   <td><span class="retired">…</span> of the rewards</td>
                 </tr>
                 <tr>
-                  <th scope="row">Fee</th>
-                  <td>None</td>
-                  <td>None</td>
-                  <td><span class="fee">…</span> today, up to 1%</td>
-                </tr>
-                <tr>
                   <th scope="row">Each week, you</th>
                   <td>Vote before Thursday, 00:00 UTC, and claim</td>
                   <td>Do nothing, and earn nothing</td>
@@ -206,7 +192,7 @@
                 </tr>
                 <tr>
                   <th scope="row">Last epoch, per 1,000 Earning Power</th>
-                  <td>Depends on your pools: see <a href="#last-epoch">the average vote</a></td>
+                  <td>Depends on your pools: see <a href="#last-epoch">the average on Hydrex</a></td>
                   <td>Nothing</td>
                   <td>
                     <span class="last-per-power">…</span> earned, <span class="paid-share">…</span> paid to you in kVCM
@@ -240,7 +226,7 @@
             </li>
             <li>
               <b>One admin key controls the automation's settings, within limits:</b> the share retired (up to 100%),
-              its fee on the payouts (up to 1%), the tokens it pays out in, the swap routers and your payout address.
+              the tokens it pays out in, the swap routers and your payout address.
               <a href="#who-controls-what">Who controls what</a>
             </li>
           </ul>
@@ -632,9 +618,8 @@
           <p>
             Right after each epoch ends, Carbon Impact claims the rewards and swaps them into kVCM, through routers its
             admin key approved. It retires <span class="retired-share">a share</span> of the kVCM as carbon credits, and
-            sends the rest to your payout address<span class="with-fee" hidden
-              >, less a fee of <span class="fee">…</span></span
-            >. Swaps have their usual costs. <a href="#carbon">The carbon credits</a>
+            sends the rest to your payout address. Swaps have their usual costs.
+            <a href="#carbon">The carbon credits</a>
           </p>
           <h3 id="your-hydx">Your HYDX stays in your account, and the account in your wallet</h3>
           <p>
@@ -644,8 +629,8 @@
           </p>
           <h3 id="settings-can-change">One admin key can change the settings</h3>
           <p>
-            The share retired (up to 100%), the tokens it pays out in, its fee on the payouts (up to 1%), the routers,
-            and your payout address. <a href="#who-controls-what">Who controls what</a>
+            The share retired (up to 100%), the tokens it pays out in, the routers, and your payout address.
+            <a href="#who-controls-what">Who controls what</a>
           </p>
           <h3 id="leaving-at-any-time">You can leave at any time</h3>
           <p>
@@ -711,8 +696,8 @@
           <h2 id="last-epoch-title">How the votes did last epoch</h2>
           <p>
             What Carbon Impact's votes earned in the epoch from <time class="last-start">…</time> to
-            <time class="last-end">…</time>, read from Hydrex's reward contracts on Base, and what the average vote on
-            Hydrex earned. Once an epoch has ended, what each vote earned is final.
+            <time class="last-end">…</time>, read from Hydrex's reward contracts on Base, and what all of Hydrex's
+            Earning Power earned on average. Once an epoch has ended, what each vote earned is final.
           </p>
           <p class="needs-script small">
             What the votes earned is read from Base by the page's script, which has not run.
@@ -731,9 +716,9 @@
               </thead>
               <tbody>
                 <tr>
-                  <th scope="row">Votes</th>
-                  <td class="ours votes">…</td>
-                  <td class="all votes">…</td>
+                  <th scope="row">Earning Power</th>
+                  <td class="ours earning-power">…</td>
+                  <td class="all earning-power">…</td>
                 </tr>
                 <tr>
                   <th scope="row">Pools voted for</th>
@@ -754,11 +739,6 @@
                   <th scope="row">Of which incentives</th>
                   <td class="ours incentives">…</td>
                   <td class="all incentives">…</td>
-                </tr>
-                <tr>
-                  <th scope="row">Per 1,000 votes</th>
-                  <td class="ours per-votes">…</td>
-                  <td class="all per-votes">…</td>
                 </tr>
                 <tr>
                   <th scope="row">Per 1,000 Earning Power</th>
@@ -793,8 +773,8 @@
               is lower.
             </li>
             <li>
-              <b>Compared with the average vote,</b> not with the best pool: a pool's yield falls as votes move to it,
-              and the average is what a vote actually earned. One epoch is noisy, as incentives change every week.
+              <b>Compared with the average,</b> not with the best pool: a pool's yield falls as votes move to it, and
+              the average is what Earning Power actually earned. One epoch is noisy, as incentives change every week.
             </li>
           </ul>
           <details class="earned-pools">
@@ -804,7 +784,7 @@
                 <thead>
                   <tr>
                     <th scope="col">Pool</th>
-                    <th scope="col">Share of its votes</th>
+                    <th scope="col">Share of its Earning Power</th>
                     <th scope="col">Earned</th>
                   </tr>
                 </thead>
@@ -848,9 +828,8 @@
             Every change is a transaction from the admin key to
             <a href="https://basescan.org/address/0xdE91885cF35ac57DF0c4A75c16862127dBe8317c"
               >the automation, on Basescan</a
-            >. This page reads the share retired, the fee and the name on the retirements from the automation each time
-            it opens, and shows them as they are. It checks what joining approves, and turns joining off if that
-            changed.
+            >. This page reads the share retired and the name on the retirements from the automation each time it opens,
+            and shows them as they are. It checks what joining approves, and turns joining off if that changed.
           </p>
           <p>
             This page names no operator, and asks you to trust no one: what it says is read from Base, and
@@ -907,11 +886,6 @@
             They are the same for every member: the automation keeps one set for all its retirements, and only its admin
             key can change them, for everyone at once. A retirement does not carry your name or address; a name per
             member would need a new automation, which every member would have to join again.
-          </p>
-          <p class="small">
-            Hydrex's app and its public list of automations may still show Carbon Impact as paying 60% in kVCM and 40%
-            in AZUSD. AZUSD no longer works, and Carbon Impact pays in kVCM. AZUSD is still in its list of payout
-            tokens, which its admin key can change.
           </p>
         </section>
 
@@ -1042,9 +1016,8 @@
           <details>
             <summary>What does it cost?</summary>
             <p>
-              Carbon Impact retires <span class="retired-share">a share</span> of the rewards as carbon credits, and
-              takes a fee of <span class="fee">…</span> on the payouts today, which can rise to 1%. Swaps have their
-              usual costs, and each account takes the gas of one transaction to join, and one to leave.
+              Carbon Impact retires <span class="retired-share">a share</span> of the rewards as carbon credits. Swaps
+              have their usual costs, and each account takes the gas of one transaction to join, and one to leave.
             </p>
           </details>
           <details>
@@ -1080,11 +1053,7 @@
           </details>
           <details>
             <summary>Why does Hydrex show other numbers?</summary>
-            <p>
-              Hydrex's weekly rewards leave out the incentives, and its list of automations may still show Carbon Impact
-              as paying partly in AZUSD, which no longer works. This page reads Carbon Impact's settings from the
-              contract itself.
-            </p>
+            <p>Hydrex's weekly rewards leave out the incentives, which this page counts with the fees.</p>
           </details>
           <details>
             <summary>What if this page goes away?</summary>
@@ -1233,15 +1202,14 @@
         </li>
         <li>
           <b>Right after each epoch ends.</b> It retires <span class="retired-share"></span> of the rewards as carbon
-          credits, in the name "<bdi class="entity" translate="no"></bdi>", and sends the rest to your payout
-          address<span class="with-fee" hidden>, less a fee of <span class="fee"></span></span>.
+          credits, in the name "<bdi class="entity" translate="no"></bdi>", and sends the rest to your payout address.
         </li>
       </ol>
       <p>
         Your HYDX stays in your <span data-one="account" data-many="accounts"></span>, and
         <span data-one="it stays" data-many="they stay"></span> in your wallet. One admin key controls Carbon Impact's
-        settings: it can change the share retired (up to 100%), its fee (up to 1%), the payout tokens, the swap routers
-        and your payout address. <a href="#who-controls-what">Who controls what</a> ·
+        settings: it can change the share retired (up to 100%), the payout tokens, the swap routers and your payout
+        address. <a href="#who-controls-what">Who controls what</a> ·
         <a href="#timing">When things happen</a>
       </p>
     </template>

@@ -38,7 +38,6 @@ const conduitAbi = parseAbi([
   "function voter() view returns (address)",
   "function kvcm() view returns (address)",
   "function retireBps() view returns (uint256)",
-  "function treasuryFeeBps() view returns (uint256)",
   "function totalTonnesRetired() view returns (uint256)",
   "function retiringEntityName() view returns (string)",
   "function beneficiaryString() view returns (string)",
@@ -63,7 +62,6 @@ export type Relay = {
   time: number;
   epochStart: number;
   retireBps: bigint;
-  feeBps: bigint;
   tonnes: bigint;
   entity: string;
   // Who the retirements are on behalf of, by name and address, and their message: one set for every member.
@@ -113,25 +111,23 @@ function required(values: unknown[]): unknown[] {
 const epochAt = (time: unknown): number => weekStart(Number(time));
 
 export async function readRelay(): Promise<Relay> {
-  const [time, retireBps, feeBps, tonnes, entity, beneficiary, beneficiaryAddress, message] = required(
+  const [time, retireBps, tonnes, entity, beneficiary, beneficiaryAddress, message] = required(
     await read([
       blockTime,
       conduit("retireBps"),
-      conduit("treasuryFeeBps"),
       conduit("totalTonnesRetired"),
       conduit("retiringEntityName"),
       conduit("beneficiaryString"),
       conduit("impactBeneficiaryAddress"),
       conduit("retirementMessage"),
     ]),
-  ) as [bigint, bigint, bigint, bigint, string, string, Address, string];
+  ) as [bigint, bigint, bigint, string, string, Address, string];
   const epochStart = epochAt(time);
   const [votes] = required(await read([escrow("getPastVotes", CONDUIT, BigInt(epochStart))])) as [bigint];
   return {
     time: Number(time),
     epochStart,
     retireBps,
-    feeBps,
     tonnes,
     entity: clean(entity),
     beneficiary: clean(beneficiary),

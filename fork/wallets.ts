@@ -479,15 +479,15 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     await shoot(page, "member-earned-390-light");
     await page.getByRole("link", { name: "metaDEX Café" }).click();
     const numbers = page.locator(".numbers");
-    assert.match(await numbers.locator(".last-per-votes").innerText(), /^≈\s\$0\.7\d$/);
+    assert.match(await numbers.locator(".last-per-power").innerText(), /^≈\s\$0\.5\d$/);
     assert.match(await numbers.locator("time.last-start").innerText(), /^Thu,? 8 Oct$/);
     assert.match(await page.locator("#compared .last-per-power").innerText(), /^≈\s\$0\.\d\d$/);
     assert.equal(compared, false, "all of Hydrex waits until its table is on the screen");
     await page.goto(`${SITE}/#last-epoch`);
     const table = page.locator("#last-epoch .earnings");
-    assert.equal(await table.locator(".ours.votes").innerText(), "897k, or 1.17M Earning Power");
+    assert.equal(await table.locator(".ours.earning-power").innerText(), "1.17M");
     assert.equal(await table.locator(".ours.pools").innerText(), "27 pools");
-    assert.match(await table.locator(".ours.per-votes").innerText(), /^≈\s\$0\.7\d$/);
+    assert.match(await table.locator(".ours.per-power").innerText(), /^≈\s\$0\.5\d$/);
     await page.locator("#last-epoch .all-failed").getByText("Reading all of Hydrex failed.").waitFor();
     assert.equal(compared, true);
     assert.equal(await page.locator("#error").isVisible(), false, "the rest of the page is as it was");
