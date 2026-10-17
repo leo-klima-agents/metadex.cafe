@@ -1,7 +1,8 @@
 # 7. On-chain checks
 
-Three questions the proposal depended on, answered from Hydrex's verified contracts and from Base itself on 17 October
-2026 (block 52,725,716). The method is at the end, so that each answer can be checked again.
+Two questions the proposal depended on, and what showing payouts would take, answered from Hydrex's verified contracts
+and from Base itself on 17 October 2026 (block 52,725,716). The method is at the end, so that each answer can be checked
+again.
 
 ## Accounts left in a stopped automation
 
@@ -37,7 +38,7 @@ Hydrex's `hydrex-periphery` repository.
 | Beneficiary name                         | Empty                                                                             |
 | Beneficiary address                      | `0xcba0000027bd78edf6714DE3bCC312360E469502`, an address with no code             |
 | Message                                  | "Programmatic carbon retirement via Hydrex's Carbon Strategy on the Base network" |
-| Credit retired, in the 23 September run  | UCR-320-2022                                                                      |
+| Credit retired, in a recent run          | UCR-320-2022                                                                      |
 
 - **It can be changed, for everyone at once.** The admin key can call `setRetirementDetails` to set the retiring entity,
   the beneficiary name and address, and the message. Today's values are the ones the contract was deployed with.
@@ -48,22 +49,17 @@ Hydrex's `hydrex-periphery` repository.
 So the name stays "Hydrex". One thing the team may still want to look at: with the beneficiary name empty, a
 certificate's "On behalf of" can only show the beneficiary address, or nothing.
 
-## Payouts
+## Reading payouts
 
-The proposal shows a member when their next payout comes. Base shows when the last ones were:
+The proposal would show a member their last payout rather than promise the next one.
 
-- **The last payouts were on 23 September 2026, at 17:44 UTC**, in one transaction for four accounts (#14247, #26432,
-  #35366 and #82774), each paid in kVCM and 0 AZUSD, with four retirements.
-- **There have been none since**, through the epoch flips of 24 September and 1, 8 and 15 October, although the
-  automation kept voting. The automation holds no kVCM or AZUSD.
-- **AZUSD is still in the contract's list of payout tokens**, which is likely where Hydrex's "60% kVCM, 40% AZUSD" comes
+- **The history is on Base.** Each payout emits an event that names the account and its owner, with what was claimed and
+  paid.
+- **The page's RPCs cannot serve it today.** Of its three public RPCs, one has a request limit, one needs a token for
+  history, and one allows 10,000 blocks per query, about five and a half hours. Showing "last payout" needs an RPC that
+  serves logs, added to the page's Content Security Policy, or many small queries.
+- **AZUSD is still in the contract's list of payout tokens,** which is likely where Hydrex's "60% kVCM, 40% AZUSD" comes
   from. The admin key can change the list.
-
-For the site, this means "next payout" is a promise the page cannot check, and a member has no way to see that payouts
-have stopped (audit, P8). The payout event names each account and owner, so the history exists on Base; but none of the
-page's three public RPCs serves it in a usable way today (one has a request limit, one needs a token for history, one
-allows 10,000 blocks per query, about five and a half hours). Showing "last payout" needs an RPC that serves logs, added
-to the page's Content Security Policy, or many small queries.
 
 ## Method
 
@@ -76,5 +72,5 @@ to the page's Content Security Policy, or many small queries.
   the retirement fields on the automation.
 - **Simulations:** `eth_simulateV1` with transfer tracing, from the owner of #2439 and from an unrelated address, of
   `getReward` on a reward contract and `claimBribes` on the Voter.
-- **Logs:** every event of the Carbon Impact automation from block 51,525,716 (19 September) to 52,725,716 (17 October),
-  in 121 ranges with no errors.
+- **Logs:** the Carbon Impact automation's events from block 51,525,716 (19 September) to 52,725,716 (17 October), for a
+  recent retirement's details and the shape of the payout event.

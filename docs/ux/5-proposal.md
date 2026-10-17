@@ -132,7 +132,7 @@ later and never alone.
 | ----------------------------- | ---------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------- |
 | In an automation that stopped | other (a stopped automation)       | Join, or leave it    | "In USDC, which has not voted since 9 Sep: this account has earned nothing from voting since 10 Sep." |
 | Needs attention               | partly                             | Join (sets the rest) | "Only some of its approvals are set."                                                                 |
-| In Carbon Impact              | in                                 | Leave                | "Votes with Carbon Impact. Last payout 23 Sep." (once the page can read payouts)                      |
+| In Carbon Impact              | in                                 | Leave                | "Votes with Carbon Impact. Last payout on …" (once the page can read payouts)                         |
 | Joining                       | joined                             | Leave                | "Votes with Carbon Impact from Thu 22 Oct. It can claim rewards already."                             |
 | Leaving                       | left                               | Join                 | "Votes count for Carbon Impact until Thu 22 Oct. It no longer claims."                                |
 | Can join                      | self · other (running) · delegated | Join                 | "You vote with it." · "In …" · "Delegated to 0x12…ab."                                                |
@@ -143,8 +143,8 @@ The page can tell a stopped automation from a running one without keeping a list
 is the same call as leaving Carbon Impact, with the stopped automation's address; it gives the votes back to the owner
 from the next epoch ([7. On-chain checks](7-onchain-checks.md)).
 
-The App states the last payout it can see rather than promising the next one: Base shows no Carbon Impact payout since
-23 September. Until the page can read payouts (phase 3), the line says only what the automation does and when it votes.
+The App states the last payout it can see rather than promising the next one, which the page cannot check. Until it can
+read payouts (phase 3), the line says only what the automation does and when it votes.
 
 Ticks stay, but **inside a group**, so that one selection is always one action: "Join with 2 accounts" under a group
 that can join, "Leave with 1 account" under In Carbon Impact. A group with one account shows a plain button and no tick.
@@ -304,12 +304,20 @@ Taken by the team, or answered on Base ([7. On-chain checks](7-onchain-checks.md
 | Smart wallets and WalletConnect outside a wallet app? | Not now.                                                                                                                                                                                                                     | Links that reopen the page in a wallet app instead.                                                                                              |
 | What happens to an account in a stopped automation?   | Its old votes count for nothing and it has earned nothing from voting since 10 Sep; the stopped automation still holds its approvals; the owner can claim what was left unclaimed, and can leave or join another automation. | The wording of Home's notice, the App's first group and step 1 of the review, as above.                                                          |
 
-Still open:
+Still open: **how far to go in telling holders of stopped automations.** About 11.5 M Earning Power sits in automations
+that stopped voting on 9 Sep, and most of its holders may not know. The site can wait for them to arrive, or go and tell
+them:
 
-1. **How strongly to address holders of stopped automations,** and with Hydrex's agreement or not: a notice on Home, an
-   announcement, a link from Hydrex's own app.
-2. **Payouts.** Base shows no Carbon Impact payout since 23 September. That is for the team to look into, not for the
-   site to organise around; but until payouts can be read, the App must not promise a next one.
+| Level             | What                                                                                           | Reaches                                         | Needs or risks                                                                                                    |
+| ----------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 1. In the App     | The status line and the first group, once a wallet connects                                    | Only holders who already came to the site       | Nothing                                                                                                           |
+| 2. On the site    | Also Home's notice (block 2) and `#if-your-automation-stopped`, before any wallet              | Anyone who visits                               | Wording checked against Base, and removed once it has done its job                                                |
+| 3. In channels    | Posts in Hydrex's Discord, on X and Farcaster, in Klima's channels, linking to the explanation | Holders who have never heard of the site        | Someone to post. From an anonymous site, "your automation stopped, connect here" has the shape of a phishing lure |
+| 4. Through Hydrex | Hydrex announces it, or links to the explanation from its own app or account view              | Most holders, where they already look and trust | Hydrex's agreement                                                                                                |
+
+Recommendation: level 2 with the reorganisation, as the proposal has it. Go further only through Hydrex's or Klima's
+official accounts, never from new or anonymous ones. At every level, the explanation gives leaving and voting on Hydrex
+the same weight as joining Carbon Impact: it informs first, and recruits second.
 
 ## What does not change
 
