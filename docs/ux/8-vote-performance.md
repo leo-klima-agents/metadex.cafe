@@ -79,7 +79,7 @@ reads most RPCs refuse, since each source keeps its own history in current state
 It costs one oracle read per pool (27 for the automation, 426 for the comparison) and about 13 per Chainlink feed:
 little next to the rest. Where a pool's oracle does not reach back far enough, the page uses today's price for that
 token, or leaves it unpriced, and says so. Last epoch it would have made little difference: ETH moved by 0.2% and the
-AVNT / USDC pool by 0.2%, and USDC was 98% of the value.
+USDC / cbBTC pool by 0.2%, and USDC was 98% of the value.
 
 ## How to show it honestly
 
