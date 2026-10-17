@@ -613,6 +613,9 @@ Taken by the user on 2026-10-15, after this research:
 28. **Fingerprinted files.** Then the user asked for best practice, such as no inline CSS and fingerprinting. The page
     had no inline CSS already. The build now names the scripts, the stylesheet and the icon after a hash of their
     content, minifies the stylesheet, and puts Subresource Integrity hashes on the script and stylesheet tags.
+29. **One checked script.** Then the user had Safe's SDK bundled into the script, so that the integrity check covers it,
+    and the hashed names dropped, as their only use was to keep a cache from pairing files of two versions. For up to
+    ten minutes after a deployment, a browser holding the previous script refuses it instead.
 
 Still open: how much an account has not claimed yet. It would need reads of every bribe the account earned in; it is
 left for later.

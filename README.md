@@ -38,7 +38,7 @@ executor Safe, through which the keeper acts, and the automation's deployer.
 - **It works with the wallets the browser announces** (EIP-6963), or the one at `window.ethereum`. With no wallet in the
   browser, "Browser wallet" still shows, and says how to get one.
 - **Inside Safe{Wallet}, it works with the Safe.** It proposes the calls as one Safe transaction, and the Safe's owners
-  sign it in Safe{Wallet}. Safe's SDK loads only when the page runs in a frame.
+  sign it in Safe{Wallet}. Safe's SDK is part of the script, and runs only when the page is in a frame.
 - **It checks the automation first.** The chain, the automation's code and settings, and the code of Hydrex's
   VotingEscrow must match `src/config.ts`. If not, the page says what changed, and joining stays off. Leaving still
   works.
@@ -57,10 +57,8 @@ Safe's SDK talks to Safe{Wallet} through the frame, and needs no entry. Scripts 
 files, images also as `data:` for wallets' icons, and Trusted Types are required, so no script can write HTML into the
 page.
 
-The page's own files, except `index.html` and `manifest.json`, are named after a hash of their content, so a browser or
-a cache never pairs a page with files from another version. The browser checks the script and the stylesheet against the
-SHA-384 hashes in `index.html` (Subresource Integrity) before using them. Safe's SDK, which the script imports in
-Safe{Wallet}, has a hashed name but no such check: an import cannot carry one under this policy.
+The browser checks the script, Safe's SDK included, and the stylesheet against the SHA-384 hashes in `index.html`
+(Subresource Integrity) before using them.
 
 ## Deployment
 
@@ -122,6 +120,9 @@ Then compare each file in `dist/` with the one at the same path on <https://meta
 
 ## Failure modes
 
+- **Right after a deployment:** GitHub Pages lets a browser keep each file for ten minutes. A browser that gets the new
+  page with the previous script or stylesheet from its cache refuses that file, as it does not match the page's hashes,
+  until its copy expires.
 - **Base RPC:** a read that fails goes to the next RPC. If none answers, the page says so and offers to try again.
 - **A failed startup check,** or one that cannot run, turns joining off. The page says why. An open page runs the checks
   again every hour.

@@ -1,3 +1,4 @@
+import SafeAppsSDK from "@safe-global/safe-apps-sdk";
 import { getAddress, type Address, type Hex } from "viem";
 import { CHAIN_ID, RPCS } from "./config.ts";
 import { clean } from "./format.ts";
@@ -15,6 +16,7 @@ type Announcement = { info: { name: string; icon: string; rdns: string }; provid
 
 const HEX_CHAIN_ID = `0x${CHAIN_ID.toString(16)}`;
 const USER_REJECTED = 4001;
+const UNSUPPORTED_METHOD = 4200;
 const UNKNOWN_CHAIN = 4902;
 
 export class NoWallet extends Error {}
@@ -45,8 +47,27 @@ async function injected(): Promise<Provider> {
 
 export async function safeWallet(): Promise<Wallet | undefined> {
   if (window.parent === window) return undefined;
-  const provider = await import("./safe.ts").then((safe) => safe.provider()).catch(() => undefined);
-  return provider && { name: "Safe{Wallet}", safe: true, provider: async () => provider };
+  const sdk = new SafeAppsSDK({ allowedDomains: [/^https:\/\/app\.safe\.global$/] });
+  // In any other frame, nothing answers.
+  const timeout = new Promise<undefined>((resolve) => setTimeout(resolve, 1_000));
+  const info = await Promise.race([sdk.safe.getInfo(), timeout]).catch(() => undefined);
+  if (!info) return undefined;
+  const provider: Provider = {
+    async request({ method, params }) {
+      if (method === "eth_requestAccounts") return [info.safeAddress];
+      if (method === "eth_chainId") return `0x${info.chainId.toString(16)}`;
+      if (method !== "wallet_sendCalls") {
+        throw Object.assign(new Error(`Safe{Wallet} does not answer ${method} here.`), { code: UNSUPPORTED_METHOD });
+      }
+      const [{ calls }] = params as [{ calls: Tx[] }];
+      const txs = calls.map(({ to, data }) => ({ to, data, value: "0" }));
+      // Safe{Wallet} says "Transaction was rejected" when the user closes its window.
+      await sdk.txs.send({ txs }).catch((error: Error) => {
+        throw Object.assign(error, /rejected/i.test(error.message) ? { code: USER_REJECTED } : {});
+      });
+    },
+  };
+  return { name: "Safe{Wallet}", safe: true, provider: async () => provider };
 }
 
 export async function connect(wallet: Wallet): Promise<Connection | undefined> {
