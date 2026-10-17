@@ -22,19 +22,25 @@ export const call = (address: Address, abi: Abi, functionName: string, ...args: 
   args,
 });
 
-/** Asks each RPC in turn until one answers. */
+/** Asks each RPC in turn until one answers, giving each five seconds. */
 export async function rpc<T>(method: string, params: unknown[]): Promise<T> {
   for (const url of RPCS) {
+    // Not AbortSignal.timeout(), which the browsers inside older wallet apps lack.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5_000);
     try {
       const response = await fetch(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        signal: AbortSignal.timeout(5_000),
+        signal: controller.signal,
       });
       const { result } = (await response.json()) as { result?: T };
       if (result !== undefined) return result;
-    } catch {}
+    } catch {
+    } finally {
+      clearTimeout(timer);
+    }
   }
   throw new Error(`No Base RPC answered ${method}.`);
 }

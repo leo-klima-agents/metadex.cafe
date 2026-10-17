@@ -2,6 +2,7 @@ import { parseAbi } from "viem";
 
 export const multicall3Abi = parseAbi([
   "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
+  "function getCurrentBlockTimestamp() view returns (uint256 timestamp)",
 ]);
 
 export const votingEscrowAbi = parseAbi([
@@ -19,7 +20,6 @@ export const votingEscrowAbi = parseAbi([
 ]);
 
 export const voterAbi = parseAbi([
-  "function _epochTimestamp() view returns (uint256)",
   "function lastVoted(address voter) view returns (uint256)",
   "function poolVoteLength(address voter) view returns (uint256)",
   "function poolVote(address voter, uint256 index) view returns (address)",

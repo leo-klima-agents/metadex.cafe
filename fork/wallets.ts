@@ -8,16 +8,18 @@ import { after, afterEach, before, beforeEach, describe, test } from "node:test"
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright-core";
 import { decodeFunctionResult, encodeFunctionData, getAddress, parseAbi, type Address, type Hex } from "viem";
-import { CONDUIT, RPCS, VOTING_ESCROW } from "../src/config.ts";
+import { CONDUIT, RPCS, VOTER, VOTING_ESCROW } from "../src/config.ts";
 
 const FORK_URL = process.env.BASE_RPC_URL ?? "https://mainnet.base.org";
 const BLOCK = 52_694_000; // Fri 16 Oct 2026, 18:22 UTC
+const FLIP = 1_792_627_200; // Thu 22 Oct 2026, 00:00 UTC, when the epoch after BLOCK's starts
 const PORT = 8546;
 const ANVIL = `http://127.0.0.1:${PORT}`;
 const SITE = "https://metadex.cafe";
 const SAFE_WALLET = "https://app.safe.global";
 const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 const SCREENSHOTS = process.env.SCREENSHOTS;
+const WEEK = 604_800;
 
 // Owners at BLOCK.
 const MEMBER = getAddress("0x388b2d29e7919d45b1b8f6e88b8a13a392f97b40"); // #9540 in Carbon Impact, #14485 its own
@@ -34,6 +36,8 @@ const abi = parseAbi([
   "function getClaimApproved(uint256 tokenId) view returns (address)",
   "function getEffectiveRecipientForOwner(address owner) view returns (address)",
   "function transferFrom(address from, address to, uint256 tokenId)",
+  "function setConduitApproval(address conduit, uint256 tokenId, bool approve)",
+  "function _epochTimestamp() view returns (uint256)",
 ]);
 
 async function anvil<T>(method: string, params: unknown[] = []): Promise<T> {
@@ -68,8 +72,18 @@ const approvals = async (id: bigint) => ({
   claimer: await view(VOTING_ESCROW, "getClaimRedirectApproved", [id]),
 });
 
-/** The owner the wallet acts as, its chain, whether it batches, refuses, and shares the account without asking. */
-type WalletOptions = { owner: Address; chainId: number; batch: boolean; decline: boolean; shares: boolean };
+/**
+ * The owner the wallet acts as, its chain, whether it batches, refuses, shares the account without asking, and can
+ * switch to Base.
+ */
+type WalletOptions = {
+  owner: Address;
+  chainId: number;
+  batch: boolean;
+  decline: boolean;
+  shares: boolean;
+  switches: boolean;
+};
 type Sent = { method: string; calls: { to: string; data: string }[] };
 
 // The test wallet in the page. It announces itself (EIP-6963) and hands each request to Node through testWallet,
@@ -111,6 +125,7 @@ function testWallet(options: WalletOptions, sent: Sent[]) {
       case "eth_chainId":
         return { result: `0x${options.chainId.toString(16)}` };
       case "wallet_switchEthereumChain":
+        if (!options.switches) return { error: { code: -32603, message: "Unrecognized chain ID." } };
         options.chainId = Number(params[0].chainId);
         return { result: null };
       case "wallet_getCapabilities":
@@ -222,7 +237,15 @@ async function open(
   const violations: string[] = [];
   await context.route("**/*", (route) => serve(route, origins));
   if (wallet) {
-    const options = { owner: NEWCOMER, chainId: 8453, batch: false, decline: false, shares: true, ...wallet };
+    const options = {
+      owner: NEWCOMER,
+      chainId: 8453,
+      batch: false,
+      decline: false,
+      shares: true,
+      switches: true,
+      ...wallet,
+    };
     await context.exposeFunction("testWallet", testWallet(options, sent));
     await context.addInitScript(WALLET_SCRIPT);
   }
@@ -316,8 +339,8 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await page.getByRole("button", { name: "Join with 2 accounts" }).click();
     await review(page).getByText("2 transactions, one after the other:").waitFor();
     assert.deepEqual(await review(page).locator(".says").allTextContents(), [
-      "Put #141 in the Carbon Impact automation.",
-      "Put #42877 in the Carbon Impact automation.",
+      "#141 joins the Carbon Impact automation.",
+      "#42877 leaves the Liquid Hydrex automation and joins the Carbon Impact automation.",
     ]);
     await review(page).getByText("Checked ✓").waitFor();
     await shoot(page, "review-1440-light");
@@ -476,6 +499,13 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     assert.equal(await review(page).getByRole("button", { name: "Confirm in your wallet" }).isDisabled(), true);
   });
 
+  test("a wallet that cannot switch to Base says so", async () => {
+    const { page } = await open({ owner: NEWCOMER, chainId: 1, switches: false });
+    await page.getByRole("button", { name: "Test Wallet" }).click();
+    await page.locator("#wrong-chain").getByRole("button", { name: "Switch to Base" }).click();
+    await page.getByText("Your wallet did not switch.").waitFor();
+  });
+
   test("inside Safe{Wallet}, a Safe proposes leaving with two accounts as one Safe transaction", async () => {
     const { page, origins, violations } = await open(false, { url: `${SAFE_WALLET}/` });
     const app = page.frameLocator("iframe");
@@ -524,5 +554,25 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
         `unexpected request to ${origin}`,
       );
     }
+  });
+
+  // Last, as it moves anvil's clock on.
+  test("once an epoch ends, the page counts from Thursday even before Hydrex's minter moves", async () => {
+    // #141 joins before the epoch ends, then the epoch ends without anyone calling the minter.
+    const data = encodeFunctionData({ abi, functionName: "setConduitApproval", args: [CONDUIT, 141n, true] });
+    await mined(await anvil<Hex>("eth_sendTransaction", [{ from: NEWCOMER, to: VOTING_ESCROW, data, gas: GAS }]));
+    await anvil("evm_setNextBlockTimestamp", [FLIP + 300]);
+    await anvil("evm_mine");
+    const epoch = encodeFunctionData({ abi, functionName: "_epochTimestamp" });
+    assert.equal(BigInt(await anvil<Hex>("eth_call", [{ to: VOTER, data: epoch }, "latest"])), BigInt(FLIP - WEEK));
+
+    const { page } = await open({ owner: NEWCOMER });
+    await page.getByText(/Thu,? 22 Oct to Thu,? 29 Oct, 00:00 UTC/).waitFor();
+    await page.getByRole("button", { name: "Test Wallet" }).click();
+    await account(page, 141).getByText("In the Carbon Impact automation.").waitFor();
+    await page.getByRole("checkbox", { name: "Pick Account #42877" }).check();
+    await page.getByRole("button", { name: "Join with 1 account" }).click();
+    await review(page).getByText("Checked ✓").waitFor();
+    assert.match(await review(page).locator(".effects").innerText(), /from the epoch starting Thu,? 29 Oct, 00:00 UTC/);
   });
 });

@@ -2,12 +2,23 @@
 :root {
   font-family: system-ui, sans-serif;
   line-height: 1.5;
-  --accent: light-dark(#0b6b64, #5cc8bb);
-  --on-accent: light-dark(#ffffff, #06201d);
-  --edge: light-dark(#7d8f8b, #5f7470);
-  --accent-soft: light-dark(#e2f3f0, #12302c);
-  --bad: light-dark(#b3261e, #ff8c7f);
-  --bad-soft: light-dark(#fbe6e3, #3a1b18);
+  --accent: #0b6b64;
+  --on-accent: #ffffff;
+  --edge: #7d8f8b;
+  --accent-soft: #e2f3f0;
+  --bad: #b3261e;
+  --bad-soft: #fbe6e3;
+}
+/* A media query rather than light-dark(), which the browsers inside older wallet apps lack. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #5cc8bb;
+    --on-accent: #06201d;
+    --edge: #5f7470;
+    --accent-soft: #12302c;
+    --bad: #ff8c7f;
+    --bad-soft: #3a1b18;
+  }
 }
 body {
   max-inline-size: 40rem;
@@ -15,6 +26,8 @@ body {
   padding-inline: 1rem;
   padding-block-end: 2rem;
   overflow-wrap: anywhere;
+  background: Canvas;
+  color: CanvasText;
 }
 th,
 td {
@@ -79,22 +92,25 @@ input[type="checkbox"] {
   accent-color: var(--accent);
   cursor: pointer;
 }
-/* Accounts the reader can pick: a box beside each, and the picked ones tinted. */
-.accounts:has(.pick:not([hidden])) {
+/* Accounts the reader can pick: a box beside each, the whole row a label for it, and the picked ones tinted. */
+.accounts.pickable {
   padding-inline-start: 0;
   list-style: none;
 }
-.accounts:has(.pick:not([hidden])) > li {
+.accounts.pickable label {
   display: grid;
   grid-template-columns: 1.5rem 1fr;
   column-gap: 0.75rem;
   padding: 0.5rem;
   border-radius: 8px;
 }
-.accounts > li > div {
+.accounts .about {
   grid-column: 2;
 }
-.accounts > li:has(.pick:checked) {
+.accounts label:has(.pick:not([hidden])) {
+  cursor: pointer;
+}
+.accounts label:has(.pick:checked) {
   background: var(--accent-soft);
 }
 dialog {
@@ -112,13 +128,27 @@ dialog::backdrop {
   flex-wrap: wrap;
   gap: 0.5rem;
 }
-/* The dialog's buttons stay in view while the rest scrolls. */
-dialog .buttons {
+/* What the review is doing and its buttons stay in view while the rest scrolls, unless the screen is short. */
+dialog .foot {
   position: sticky;
   inset-block-end: 0;
-  margin: 0;
   padding-block: 0.75rem;
   background: Canvas;
+}
+dialog .foot p {
+  margin-block: 0 0.5rem;
+}
+dialog .foot :is(p:empty, .buttons) {
+  margin: 0;
+}
+@media (max-height: 30rem) {
+  dialog .foot {
+    position: static;
+  }
+}
+/* The title takes the focus when the review opens, so that it is read first; it needs no ring. */
+#review-title:focus {
+  outline: none;
 }
 input {
   box-sizing: border-box;

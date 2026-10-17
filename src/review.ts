@@ -1,7 +1,7 @@
 import type { Hex } from "viem";
 import type { Step } from "./calls.ts";
 import { included, simulate } from "./chain.ts";
-import { CHAIN_ID } from "./config.ts";
+import { CHAIN_ID, CONDUIT } from "./config.ts";
 import { clone, fill, txLink } from "./dom.ts";
 import { count } from "./format.ts";
 import {
@@ -17,13 +17,15 @@ import {
 
 const dialog = document.getElementById("review") as HTMLDialogElement;
 const part = (selector: string) => dialog.querySelector<HTMLElement>(selector)!;
-const [effects, how, steps, check, progress] = [
+const [effects, how, steps, key, check, progress] = [
   part(".effects"),
   part(".how"),
   part(".steps"),
+  part(".key"),
   part(".check"),
   part(".progress"),
 ];
+fill(key, "conduit", CONDUIT);
 const confirm = dialog.querySelector<HTMLButtonElement>(".confirm")!;
 const back = dialog.querySelector<HTMLButtonElement>(".back")!;
 
@@ -77,6 +79,8 @@ export function review(
       return item;
     }),
   );
+  // Joining and leaving name the conduit by its address, which the wallet shows too.
+  key.hidden = !calls.some(({ shows }) => shows.includes(CONDUIT));
   how.textContent = "";
   check.textContent = "Checking each call against Base…";
   progress.replaceChildren();
@@ -110,7 +114,8 @@ export function review(
     })
     .catch((error) => {
       console.error(error);
-      if (current === state) check.textContent = "The calls could not be checked: no Base RPC answered. Try again.";
+      if (current !== state) return;
+      check.textContent = "The calls could not be checked: no Base RPC answered. Go back and try again.";
     });
 }
 

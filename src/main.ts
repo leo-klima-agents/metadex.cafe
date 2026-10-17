@@ -46,6 +46,8 @@ let connection: Connection | undefined;
 let shown: { owner: Address; accounts: Account[]; payout: Address; epochStart: number } | undefined;
 /** Whether the startup checks passed. Until they do, joining and changing the payout address stay off. */
 let trusted = false;
+/** The share of the kVCM the automation retires, as read last, for the review of a join. */
+let retired = "…";
 
 function failed(error: unknown): void {
   console.error(error);
@@ -61,15 +63,15 @@ function showWeek(): void {
 }
 
 async function showRelay(): Promise<void> {
-  const { tonnes, retireBps, feeBps, votes, entity, lastVoted, pools } = await readRelay();
+  const { epochStart: start, tonnes, retireBps, feeBps, votes, entity, lastVoted, pools } = await readRelay();
   fill(document, "tonnes", units(tonnes));
-  fill(document, "retired", bps(retireBps));
+  retired = bps(retireBps);
+  fill(document, "retired", retired);
   fill(document, "fee", bps(feeBps));
   showAll("no-fee", feeBps === 0n);
   showAll("with-fee", feeBps > 0n);
   fill(document, "power", earningPower(votes));
   fill(document, "entity", entity);
-  const start = weekStart(seconds());
   fill(
     document,
     "voted",
@@ -83,6 +85,7 @@ async function showRelay(): Promise<void> {
   );
   const total = pools.reduce((sum, pool) => sum + pool.votes, 0n);
   const rows = document.querySelector<HTMLTableElement>(".shares")!.tBodies[0]!;
+  rows.replaceChildren();
   for (const pool of pools) {
     const row = rows.insertRow();
     row.insertCell().textContent = pool.name;
@@ -124,7 +127,7 @@ function accountItem(account: Account, owner: Address, epochStart: number, mine:
     const box = item.querySelector<HTMLInputElement>(".pick")!;
     box.hidden = false;
     box.value = String(account.id);
-    box.ariaLabel = `Pick ${account.name || "Account"} #${account.id}`;
+    box.setAttribute("aria-label", `Pick ${account.name || "Account"} #${account.id}`);
   }
   return item;
 }
@@ -146,6 +149,9 @@ function showAccounts(keep = false): void {
   for (const box of document.querySelectorAll<HTMLInputElement>("#accounts .pick:not([hidden])")) {
     box.checked = kept.has(box.value);
   }
+  for (const list of document.querySelectorAll("#accounts .accounts")) {
+    list.classList.toggle("pickable", !!list.querySelector(".pick:not([hidden])"));
+  }
   fill(document, "empty-count", count(empty.length, "empty account", "empty accounts"));
   show("empty-accounts", empty.length > 0);
   show("none", !full.length);
@@ -158,7 +164,8 @@ function showAccounts(keep = false): void {
   show("itself", same(payout, owner));
   show("payout-form", mine && trusted);
   show("accounts");
-  show("payout");
+  // Payouts matter to an owner with HYDX in an account.
+  show("payout", full.length > 0);
 }
 
 let reads = 0;
@@ -245,6 +252,7 @@ function reviewTicked(leaving: boolean): void {
   const accounts = ticked().filter(leaving ? canLeave : joinable);
   const changes = clone(leaving ? "leave-effects" : "join-effects");
   fill(changes, "which", ids(accounts));
+  fill(changes, "retired", retired);
   fillTime(changes, "next", shown.epochStart + WEEK, day);
   fillPlural(changes, accounts.length);
   const [title, steps] = leaving
@@ -295,6 +303,7 @@ function showConnection(): void {
     fillAddress(document, "me", connection.address, short(connection.address));
     show("disconnect", !inSafe);
     show("wrong-chain", connection.chainId !== CHAIN_ID);
+    if (connection.chainId === CHAIN_ID) show("switch-failed", false);
     showAll("to-switch", !inSafe);
     showAll("safe-elsewhere", inSafe);
   }
@@ -357,7 +366,13 @@ function disconnect(): void {
 document.getElementById("disconnect")!.addEventListener("click", disconnect);
 
 document.querySelector("#wrong-chain .switch")!.addEventListener("click", () => {
-  if (connection) switchToBase(connection).then(showConnection, console.error);
+  if (!connection) return;
+  show("switch-failed", false);
+  switchToBase(connection).then(showConnection, (error) => {
+    if (declined(error)) return;
+    console.error(error);
+    show("switch-failed");
+  });
 });
 
 // Inside Safe{Wallet}, the page connects to the Safe on its own: it is the only wallet there.
@@ -366,6 +381,8 @@ const inSafe = safe().then(async (provider) => {
   return !!provider;
 });
 let reconnecting = false;
+/** The wallet clicked last: only its request says when it ends. */
+let clicks = 0;
 
 findWallets((wallets) => {
   const buttons = wallets.map((wallet) => {
@@ -376,15 +393,22 @@ findWallets((wallets) => {
     // Coinbase's code loads when the pointer goes down, so that its window opens closer to the click.
     for (const name of ["pointerdown", "focus"]) button.addEventListener(name, () => wallet.provider().catch(() => {}));
     button.addEventListener("click", () => {
+      const click = ++clicks;
       show("wallet-failed", false);
       show("no-wallet", false);
-      connectTo(wallet).catch((error) => {
-        if (declined(error)) return;
-        if (error instanceof NoWallet) return show("no-wallet");
-        console.error(error);
-        fill(document, "failed-wallet", wallet.name);
-        show("wallet-failed");
-      });
+      fill(document, "connecting-wallet", wallet.name);
+      show("connecting");
+      connectTo(wallet)
+        .catch((error) => {
+          if (click !== clicks || declined(error)) return;
+          if (error instanceof NoWallet) return show("no-wallet");
+          console.error(error);
+          fill(document, "failed-wallet", wallet.name);
+          show("wallet-failed");
+        })
+        .finally(() => {
+          if (click === clicks) show("connecting", false);
+        });
     });
     return item;
   });
@@ -400,6 +424,16 @@ findWallets((wallets) => {
       });
   }
 });
+
+// The countdown moves every half minute. When an epoch ends, the page reads the automation and the accounts again.
+let epoch = weekStart(seconds());
+setInterval(() => {
+  showWeek();
+  if (weekStart(seconds()) === epoch) return;
+  epoch = weekStart(seconds());
+  showRelay().catch(failed);
+  if (wanted) readAccountsOf(wanted, true);
+}, 30_000);
 
 showWeek();
 showRelay().catch(failed);

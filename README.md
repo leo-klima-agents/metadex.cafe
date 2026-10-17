@@ -14,9 +14,10 @@ In Hydrex's contracts, an automation is a conduit. Joining calls `setConduitAppr
 Hydrex's VotingEscrow, once per account. Then:
 
 - **Votes.** The account's votes count for the automation from the next epoch, which starts on Thursday at 00:00 UTC.
-  Meanwhile its owner cannot vote with it.
-- **Rewards.** The automation can claim the account's rewards at once, including any from past epochs that the owner has
-  not claimed. Claim them on Hydrex first to keep them as they are.
+  While the account is in, its owner cannot vote with it.
+- **Rewards.** The automation can claim the account's rewards at once, including any the owner has not claimed yet, and
+  the current epoch's once it ends. They are swapped and retired like the rest: claim them on Hydrex first to keep them
+  as they are.
 - **Payouts.** Right after each epoch ends, Klima's keeper claims the rewards. The automation swaps them into kVCM,
   retires a share as carbon credits and sends the rest to the owner's payout address.
 - **The account** stays in the owner's wallet, with its HYDX. Nothing is transferred.
@@ -70,7 +71,7 @@ Coinbase Wallet app, by their hashes, and wallets' icons as `data:` images.
 A tag deploys the page. Tag a commit with the version in `package.json` and push the tag:
 
 ```sh
-git tag v0.1.0 && git push origin v0.1.0
+git tag v0.3.0 && git push origin v0.3.0
 ```
 
 CI runs its checks, publishes `dist/` on GitHub Pages, then checks that Pages serves the same files. A tag that does not
@@ -81,6 +82,24 @@ Set up once, in the repository's settings:
 - **Pages:** the source is GitHub Actions, the custom domain is `metadex.cafe`, and HTTPS is enforced.
 - **Environments:** `github-pages` allows tags matching `v*`, not only the default branch.
 - **DNS:** `metadex.cafe` has the A and AAAA records that GitHub lists for an apex domain.
+- **Secrets:** `BASE_RPC_URL`, an archive RPC for Base, so that CI runs the fork tests before it deploys.
+
+### Before tagging
+
+1. Bump the version in `package.json` and `package-lock.json`, and commit.
+2. Run `npm run test:fork` with an archive RPC, unless CI runs it. It is the only test of the wallets.
+3. Build, serve `dist/` and open it with a wallet. No check of the automation should fail: if one does, Hydrex changed
+   something, and `src/config.ts` needs the new contracts checked first.
+
+### After the deployment
+
+1. CI's last step compares every file Pages serves with the build. It must pass.
+2. Open <https://metadex.cafe/>. The footer shows the tag's version and the tagged commit.
+3. Check the build from a fresh clone, as in [Checking a build](#checking-a-build).
+4. Connect a wallet in a browser, and in a phone wallet's own browser, and open the review of a join without confirming
+   it.
+5. In Safe{Wallet}, add `https://metadex.cafe/` as a custom Safe App and check that its name and icon show. With a Safe
+   on Base, open the review of a leave or a join, propose it, and reject it in Safe{Wallet}.
 
 ## Inside Safe{Wallet}
 
@@ -99,7 +118,7 @@ The same commit gives the same files on any machine. To check the official page,
 
 ```sh
 git clone https://github.com/ldeso/metadex.cafe && cd metadex.cafe
-git checkout v0.1.0
+git checkout v0.3.0
 npm ci --ignore-scripts
 npm run build
 ```
@@ -111,7 +130,10 @@ Then compare each file in `dist/` with the one at the same path on <https://meta
 - **Base RPC:** a read that fails goes to the next RPC. If none answers, the page says so and offers to try again.
 - **A failed startup check,** or one that cannot run, turns joining and changing the payout address off. The page says
   why.
-- **The wrong network:** the page says so, and the main button becomes "Switch to Base".
+- **The end of an epoch:** the page counts epochs from the time of Base's latest block, so it does not wait for Hydrex's
+  minter to move on to the new epoch. An open page moves on by itself and reads the automation and the accounts again.
+- **The wrong network:** the page says so, and the main button becomes "Switch to Base". If the wallet cannot switch,
+  the page asks to pick Base in the wallet.
 - **A call that would fail:** the review says which and why, and nothing can be sent.
 - **A refusal in the wallet, or a transaction that fails:** the review says so, with links to the transactions that went
   through. The page reads the accounts again when the review closes.
@@ -130,11 +152,12 @@ committing. `npm run build` writes the page to `dist/`; serve that folder with a
 wallet acts as real owners: one joins with two accounts, one of them from Liquid Hydrex; another joins from Lock Maxi
 and USDC in one batch; a member leaves and changes the payout address; another leaves with two accounts in one batch;
 the owner of an ended lock gets nothing to tick; and, inside a stand-in for Safe{Wallet}, a Safe proposes leaving with
-two accounts. It also checks the wrong network, a refusal in the wallet, a call that would fail, a browser without a
-wallet, and that Coinbase Wallet loads under the page's policy and opens its window. It needs anvil, from Foundry, and
-Chromium: `npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium's path. `BASE_RPC_URL` is the archive
-RPC to fork from, `https://mainnet.base.org` by default. With `SCREENSHOTS` set to a folder, it saves screenshots there
-at 390 and 1440 px, light and dark.
+two accounts. It also checks the wrong network, a wallet that cannot switch, a refusal in the wallet, a call that would
+fail, a browser without a wallet, that Coinbase Wallet loads under the page's policy and opens its window, and an epoch
+that ends before Hydrex's minter moves. It needs anvil, from Foundry, and Chromium:
+`npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium's path. `BASE_RPC_URL` is the archive RPC to
+fork from, `https://mainnet.base.org` by default. With `SCREENSHOTS` set to a folder, it saves screenshots there at 390
+and 1440 px, light and dark.
 
 `src/config.ts` holds what the page trusts about the automation, and the RPCs it reads from. After a Hydrex upgrade,
 check the new contracts, then update it. `src/hydrex-conduits.json` names Hydrex's other automations, from

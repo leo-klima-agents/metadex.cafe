@@ -39,7 +39,7 @@ const calls = (steps: { to: Address; data: string }[]) => steps.map(({ to, data 
 test("joining sets the conduit's approval on the VotingEscrow", () => {
   const steps = join([account()]);
   assert.deepEqual(calls(steps), [approval(CONDUIT, 141n, true)]);
-  assert.equal(steps[0]!.says, "Put #141 in the Carbon Impact automation.");
+  assert.equal(steps[0]!.says, "#141 joins the Carbon Impact automation.");
   assert.equal(steps[0]!.shows, `setConduitApproval(${CONDUIT}, 141, true)`);
   assert.equal(steps[0]!.on, "Hydrex's VotingEscrow");
 });
@@ -50,12 +50,14 @@ test("an account in another automation joins directly, one call per account", ()
     account({ id: 42n, delegate: LOCK_MAXI, claimer: USDC_CONDUIT }),
   ]);
   assert.deepEqual(calls(steps), [approval(CONDUIT, 141n, true), approval(CONDUIT, 42n, true)]);
+  assert.equal(steps[0]!.says, "#141 leaves the Liquid Hydrex automation and joins the Carbon Impact automation.");
+  assert.equal(steps[1]!.says, "#42 leaves the Hydrex Lock Maxi automation and joins the Carbon Impact automation.");
 });
 
 test("leaving clears the conduit's approval, and the payout address is set on the conduit", () => {
   const steps = leave([account({ delegate: CONDUIT, claimer: CONDUIT }), account({ id: 42n, claimer: CONDUIT })]);
   assert.deepEqual(calls(steps), [approval(CONDUIT, 141n, false), approval(CONDUIT, 42n, false)]);
-  assert.equal(steps[1]!.says, "Take #42 out of the Carbon Impact automation.");
+  assert.equal(steps[1]!.says, "#42 leaves the Carbon Impact automation.");
   const step = payout(OWNER);
   assert.deepEqual(calls([step]), [
     { to: CONDUIT, data: encodeFunctionData({ abi, functionName: "setMyPayoutRecipient", args: [OWNER] }) },

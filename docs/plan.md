@@ -23,6 +23,10 @@ on. [research.md](research.md) keeps the findings and the decisions taken since.
    and then by the user with a real Safe. Built, and in review: the page runs as a Safe App and proposes; it was tested
    in Playwright against a stand-in for Safe{Wallet}, and against Safe{Wallet} itself, read-only. Left: the first
    deployment, and the user's test with a real Safe.
-6. **Polish:** all states, copy, accessibility, the cold-read loop, mobile, and the in-wallet browsers.
-7. **Release:** the first deployment from a tag, and the verification steps written down. The tag workflow and the steps
-   to check a build are in place already.
+6. **Polish:** all states, copy, accessibility, the cold-read loop, mobile, and the in-wallet browsers. Done, and in
+   review: the findings and the two rounds of cold reads are in [research.md](research.md#polish). Not done: tests in
+   WebKit and in real wallet apps, which this environment does not have.
+7. **Release:** the first deployment from a tag, and the verification steps written down. The steps are written down, in
+   the README's [Deployment](../README.md#deployment), and the version is 0.3.0. Left for the user: the repository's
+   settings, then the tag `v0.3.0`, which deploys, then the steps after the deployment, among them the test with a real
+   Safe that milestone 5 left.

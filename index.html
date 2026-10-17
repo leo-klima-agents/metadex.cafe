@@ -47,9 +47,9 @@
       <section>
         <h2>The Carbon Impact automation</h2>
         <p>
-          Klima runs it. Every epoch, Klima's keeper votes with the accounts in it, then the Carbon Impact automation
-          claims their rewards, swaps them into kVCM, retires a share as carbon credits and pays the rest to their
-          owners.
+          One of Hydrex's automations, run by Klima. Every epoch, Klima's keeper votes with the accounts in it, then has
+          the Carbon Impact automation claim their rewards, swap them into kVCM, retire a share as carbon credits and
+          pay the rest to their owners. Hydrex controls its settings.
         </p>
         <table>
           <tr>
@@ -67,7 +67,7 @@
             </td>
           </tr>
           <tr>
-            <th scope="row">Earning Power this epoch</th>
+            <th scope="row">Its Earning Power this epoch</th>
             <td class="power">…</td>
           </tr>
         </table>
@@ -76,7 +76,8 @@
         <p>
           <time class="week-start">…</time> to <time class="week-end">…</time>, 00:00 UTC. Each epoch lasts a week, and
           the next one starts in <span class="countdown">…</span>. Klima's keeper votes just before the epoch ends and
-          pays out right after. Joining and leaving count from the next epoch.
+          pays out right after. A join or a leave changes who votes with an account from the next epoch, and who can
+          claim its rewards at once.
         </p>
 
         <h3>Latest vote</h3>
@@ -100,6 +101,9 @@
         <div id="wallets">
           <p>Connect a wallet to see its accounts, and to join or leave with them:</p>
           <p class="wallets"></p>
+          <p id="connecting" role="status" hidden>
+            Waiting for <bdi class="connecting-wallet" translate="no"></bdi> to answer…
+          </p>
           <p id="no-wallet" class="notice" role="alert" hidden>
             No wallet was found in this browser. Install a browser wallet, or open this page in your wallet app's own
             browser. Coinbase Wallet works without one.
@@ -117,16 +121,20 @@
             <span class="to-switch">
               Your wallet is on another network.
               <button type="button" class="switch">Switch to Base</button>
+              <span id="switch-failed" hidden>Your wallet did not switch. Pick Base in your wallet itself.</span>
             </span>
             <span class="safe-elsewhere" hidden
               >This Safe is on another network. Open the page from a Safe on Base.</span
             >
           </p>
         </div>
-        <p id="reading" hidden>Reading the accounts…</p>
+        <p id="reading" role="status" hidden>Reading the accounts…</p>
         <div id="accounts" hidden>
           <ul id="full" class="accounts"></ul>
-          <p id="none" hidden>No account of this wallet holds HYDX.</p>
+          <p id="none" hidden>
+            No account of this wallet holds HYDX. <a href="https://www.hydrex.fi/accounts">Lock HYDX on Hydrex</a> to
+            make one.
+          </p>
           <details id="empty-accounts" hidden>
             <summary class="empty-count"></summary>
             <ul class="accounts"></ul>
@@ -146,11 +154,11 @@
         <h2>Payout address</h2>
         <p>
           Payouts for <code translate="no"><a class="owner"></a></code> go to
-          <code translate="no"><a class="payout"></a></code><span id="itself">, the address itself</span>.
+          <code translate="no"><a class="payout"></a></code><span id="itself">, your own address</span>.
         </p>
         <p>
           One address takes the payouts for all of an owner's accounts in the Carbon Impact automation. Hydrex's admin
-          can also change it.
+          key can change it too, as it can any owner's.
         </p>
         <form id="payout-form" hidden>
           <p>
@@ -178,33 +186,34 @@
         <ul>
           <li>
             <b>The Carbon Impact automation votes with the account</b> from the next epoch, which starts on Thursday at
-            00:00 UTC. Meanwhile you can't vote with it yourself.
+            00:00 UTC. While the account is in, you can't vote with it yourself.
           </li>
           <li>
-            <strong
-              >The Carbon Impact automation can claim the account's rewards from the moment it joins, including any you
-              have not claimed from past epochs.</strong
-            >
-            <a href="https://www.hydrex.fi/accounts">Claim them on Hydrex first</a> to keep them as they are.
-          </li>
-          <li>
-            <b>It swaps, retires and pays.</b> Right after each epoch ends, Klima's keeper claims the rewards. The
-            Carbon Impact automation swaps them into kVCM through routers Hydrex approved, retires
+            <b>It swaps, retires and pays.</b> Right after each epoch ends, Klima's keeper has the Carbon Impact
+            automation claim the rewards. It swaps them into kVCM through routers Hydrex approved, retires
             <span class="retired">…</span> of it as carbon credits in the name "<bdi class="entity" translate="no"
               >…</bdi
             >", and sends the rest to your payout address. <span class="no-fee" hidden>Hydrex takes no fee today.</span
             ><span class="with-fee" hidden>Hydrex's fee is <span class="fee">…</span> today.</span> Swaps have their
             usual costs.
           </li>
-          <li><b>Your HYDX stays in your account,</b> and the account stays in your wallet. Nothing is transferred.</li>
           <li>
-            <b>Hydrex can change these settings:</b> the share retired (up to 100%), the payout tokens, the fee (up to
-            1%), the routers, and your payout address.
+            <strong
+              >The Carbon Impact automation can claim the account's rewards from the moment it joins, even those your
+              own votes earned: any you have not claimed yet, and this epoch's once the epoch ends.</strong
+            >
+            They are swapped and retired like the rest: to keep them as they are,
+            <a href="https://www.hydrex.fi/accounts">claim them on Hydrex</a> before joining.
+          </li>
+          <li><b>Your HYDX stays in your account,</b> and the account stays in your wallet. Neither is transferred.</li>
+          <li>
+            <b>Hydrex can change these settings:</b> the share retired (up to 100%), the payout tokens, its fee on the
+            payouts (up to 1%), the routers, and your payout address.
           </li>
           <li>
             <b>You can leave at any time.</b> From that moment the Carbon Impact automation can no longer claim the
             account's rewards; what it has not claimed is yours to claim on Hydrex. Your votes come back to you from the
-            next epoch.
+            next epoch; until then they count for the Carbon Impact automation.
           </li>
         </ul>
         <p>
@@ -233,28 +242,35 @@
     </footer>
 
     <dialog id="review" aria-labelledby="review-title">
-      <h2 id="review-title"></h2>
+      <h2 id="review-title" tabindex="-1" autofocus></h2>
       <div class="effects"></div>
       <h3>What your wallet will ask</h3>
       <p class="how"></p>
       <ol class="steps"></ol>
-      <p class="check" role="status"></p>
-      <p class="progress" role="status"></p>
-      <p class="buttons">
-        <button type="button" class="confirm" disabled>Confirm in your wallet</button>
-        <button type="button" class="back secondary">Back</button>
+      <p class="key" hidden>
+        In these calls, <code class="conduit" translate="no"></code> is the Carbon Impact automation.
       </p>
+      <div class="foot">
+        <p class="check" role="status"></p>
+        <p class="progress" role="status"></p>
+        <p class="buttons">
+          <button type="button" class="confirm" disabled>Confirm in your wallet</button>
+          <button type="button" class="back secondary">Back</button>
+        </p>
+      </div>
     </dialog>
 
     <template id="account">
       <li>
-        <input type="checkbox" class="pick" hidden />
-        <div>
-          <b><bdi class="name" translate="no">Account</bdi> <code class="id" translate="no"></code></b><br /><span
-            class="kind"
-          ></span
-          >, <span class="votes"></span> Earning Power<br /><span class="status"></span>
-        </div>
+        <label>
+          <input type="checkbox" class="pick" hidden />
+          <span class="about">
+            <b><bdi class="name" translate="no">Account</bdi> <code class="id" translate="no"></code></b><br /><span
+              class="kind"
+            ></span
+            >, <span class="votes"></span> Earning Power<br /><span class="status"></span>
+          </span>
+        </label>
       </li>
     </template>
     <template id="wallet">
@@ -267,21 +283,31 @@
       <ul>
         <li>
           <b>The Carbon Impact automation votes with <span class="which"></span></b> from the epoch starting
-          <time class="next"></time>, 00:00 UTC. Until then you can't vote with
-          <span data-one="it" data-many="them"></span>
-          yourself.
+          <time class="next"></time>, 00:00 UTC. While <span data-one="it is" data-many="they are"></span> in, you can't
+          vote with <span data-one="it" data-many="them"></span> yourself.
+        </li>
+        <li>
+          <b
+            >Right after each epoch ends, it swaps the rewards into kVCM, retires <span class="retired">…</span> of it
+            as carbon credits</b
+          >
+          and sends the rest to your payout address. Hydrex can change the share retired, up to 100%, your payout
+          address and its other settings.
         </li>
         <li>
           <strong
             >It can claim <span data-one="its" data-many="their"></span> rewards as soon as
-            <span data-one="it joins" data-many="they join"></span>, including any you have not claimed from past
-            epochs.</strong
+            <span data-one="it joins" data-many="they join"></span>, even those your own votes earned: any you have not
+            claimed yet, and this epoch's once the epoch ends.</strong
           >
-          <a href="https://www.hydrex.fi/accounts">Claim them on Hydrex first</a> to keep them as they are.
+          They are swapped and retired like the rest: to keep them as they are,
+          <a href="https://www.hydrex.fi/accounts">claim them on Hydrex</a> before joining.
         </li>
         <li>
           <b>The calls allow voting and claiming, nothing else.</b> Your HYDX stays in your
-          <span data-one="account" data-many="accounts"></span>, and nothing is transferred.
+          <span data-one="account" data-many="accounts"></span>, and
+          <span data-one="it stays" data-many="they stay"></span>
+          in your wallet.
         </li>
       </ul>
     </template>
@@ -292,7 +318,10 @@
           moment <span data-one="it leaves" data-many="they leave"></span>. What it has not claimed is yours to claim on
           Hydrex.
         </li>
-        <li><b>Your votes come back to you</b> from the next epoch, starting <time class="next"></time>, 00:00 UTC.</li>
+        <li>
+          <b>Your votes come back to you</b> from the next epoch, starting <time class="next"></time>, 00:00 UTC. Until
+          then they count for the Carbon Impact automation.
+        </li>
       </ul>
     </template>
     <template id="payout-effects">
@@ -321,8 +350,8 @@
       them all.
     </template>
     <template id="other">
-      <strong>In another Hydrex automation: <bdi class="automation" translate="no"></bdi>.</strong> Joining moves it to
-      the Carbon Impact automation.
+      <strong>In another Hydrex automation: <bdi class="automation" translate="no"></bdi>.</strong> Joining takes it out
+      of that automation and into the Carbon Impact automation.
     </template>
     <template id="delegated">
       <strong
