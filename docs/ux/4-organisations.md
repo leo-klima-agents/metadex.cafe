@@ -6,8 +6,9 @@ the end.
 
 All six keep what the audit says must survive (honest disclosures, two calls, checks, leaving always works, Safe App)
 and the constraints of the site: static files, no server, no storage, one official address, a strict Content Security
-Policy and a reproducible build. More than one HTML page is possible within these: each page is a file with its own
-script and stylesheet hashes, served from the same origin.
+Policy and a reproducible build. Here a "page" is a screen with its own address. Whether pages are separate HTML files
+or views of one file is a question of how to build it, settled in [5. Proposal](5-proposal.md#building-it-as-one-page):
+one file at the root, with the views addressed by the hash.
 
 Throughout, "the visits" are those from the audit: **deciding** (first visit), **acting** (join or leave) and
 **checking** (return visits), plus a fourth that Hydrex disabling its automations created: **moving**, for a holder
@@ -177,5 +178,5 @@ Scores from 1 (poor) to 3 (good), from [the audit](1-audit.md), [the personas](2
 **C scores highest, with B a close second: C is B plus a reference page.** D is right for members and wrong for
 newcomers; E answers a question the site does not have yet, though Hydrex disabling its automations makes it a question
 worth keeping open; F is the best shape for the join flow, inside the app. The recommendation in
-[5. Proposal](5-proposal.md) is therefore C, built in two steps (B first, then the reference), with F's steps inside the
-app's join flow and E kept open by the URL structure.
+[5. Proposal](5-proposal.md) is therefore C, built in two steps (B first, then the reference) as views of one page at
+the root, with F's steps inside the app's join flow and E kept open by the addresses.

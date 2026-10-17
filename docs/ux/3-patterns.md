@@ -97,8 +97,9 @@ Hydrex offers one again.
 
 ## What the evidence means for the organisation
 
-1. **Two pages, one origin.** The closest analogue (Autopilot) and most DeFi products split explaining from acting; a
-   path on the same domain (`/app/`) keeps one official address against phishing and gives Safe one stable URL.
+1. **Explaining apart from acting, at one address.** The closest analogue (Autopilot) and most DeFi products split
+   explaining from acting; keeping both on the same domain keeps one official address against phishing and gives Safe
+   one stable URL.
 2. **Explain before connecting, in static HTML.** Home must work, and be indexable, without a wallet or a script.
 3. **Disclosures where the decision is.** The review is the only place a wallet user will get a plain explanation of
    this call; the long version belongs on a linkable reference page, split by audience.

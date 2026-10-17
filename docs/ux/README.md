@@ -5,14 +5,17 @@ users, and comparable products. It covers organisation and behaviour only: desig
 
 ## In short
 
-**Split the page in three, on one origin: Home to decide, the App to act and check, How it works to read and verify.**
+**One page at the root, in three views: Home to decide, the App to act and check, How it works to read and verify.**
 
 ```
 metadex.cafe/                 Home           why, what you get, what you give, why it is safe        no wallet; Safe App URL
-metadex.cafe/app/             App            your accounts, grouped by what you can do; join, leave  a Safe lands here
-metadex.cafe/how-it-works/    How it works   every disclosure, the timing, the admin key, carbon,    linkable
-                                             verification, questions, words
+metadex.cafe/#app             App            your accounts, grouped by what you can do; join, leave  a Safe opens here
+metadex.cafe/#how-it-works    How it works   every disclosure, the timing, the admin key, carbon,    each section has
+                                             verification, questions, words                          its own address
 ```
+
+The views are sections of one HTML file, as today: the build stays as it is, and the wallet stays connected between
+views.
 
 1. **Most visitors are holders whose automation stopped.** Hydrex has disabled its automations; about 11.5 M Earning
    Power still points at the 13 that no longer run, and Carbon Impact is the one still voting. On Base, such an account
@@ -59,7 +62,7 @@ They are proto-personas from desk research, to be tested: [6. Validation](6-vali
 | --------------------------------- | ------------- | ----------------------------------------------------------------------- |
 | A. One page, reordered            | 19            | Smallest change; still one scroll for every visit                       |
 | B. Two pages: explain, then use   | 25            | The split the brief suggested; each page has one job                    |
-| **C. Two pages and a reference**  | **26**        | **B, plus a linkable page for the full disclosures: recommended**       |
+| **C. Two pages and a reference**  | **26**        | **B, plus a linkable view for the full disclosures: recommended**       |
 | D. App first, learning in context | 20            | Fast for members, weak for newcomers; cannot remember a dismissed intro |
 | E. A menu of automations          | 19            | Right if there is ever a second automation; one today                   |
 | F. A guided flow                  | 18            | Wrong for the site, right for the join flow inside the App              |
@@ -69,8 +72,8 @@ They are proto-personas from desk research, to be tested: [6. Validation](6-vali
 | Phase | Ships                                                                                                                                 |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | 0     | On today's page, say when an account is in an automation that has stopped voting, read from Hydrex's Voter                            |
-| 1     | Home and the App as separate pages; the three-step review; account groups; the epoch timeline; the Safe App kept at `/`               |
-| 2     | How it works, with anchors linked from Home, the review and announcements                                                             |
+| 1     | Home and the App as views of one page; the three-step review; account groups; the epoch timeline; the Safe App kept at `/`            |
+| 2     | How it works as a third view, with section addresses linked from Home, the review and announcements                                   |
 | 3     | Payout and retirement history, an impact page, a read-only lookup by address, batched signing: as far as data without a server allows |
 
 ## Decisions
@@ -80,6 +83,7 @@ They are proto-personas from desk research, to be tested: [6. Validation](6-vali
 | Who runs it?                                             | Anonymous for now: no operator on any page; trust rests on what anyone can check                        |
 | Whose name is on the retirements?                        | Stays "Hydrex": it can change only for every member at once, and a name per member needs a new contract |
 | Smart wallets and WalletConnect outside a wallet app?    | Not now: links that reopen the page in a wallet app instead                                             |
+| One page or three?                                       | One page at the root, in three views, addressed by the hash                                             |
 | What happens to an account in a stopped automation?      | Answered on Base: see [7. On-chain checks](7-onchain-checks.md)                                         |
 | How far to go in telling holders of stopped automations? | Level 2: a notice on Home, the explanation in How it works and the status in the App; nothing outbound  |
 

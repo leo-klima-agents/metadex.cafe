@@ -1,16 +1,17 @@
 # 5. Proposal
 
-**Three pages: Home to decide, the App to act and check, How it works to read and verify.** This is option C in
-[4. Organisations](4-organisations.md), built in two steps, with a guided join flow inside the App and, because Hydrex
-has disabled its automations, a clear path for holders whose automation stopped. Design and branding come later: the
-wireframes below fix order, content and behaviour, not looks, and the copy in them is a placeholder that shows intent.
+**One page at the root, in three views: Home to decide, the App to act and check, How it works to read and verify.**
+This is option C in [4. Organisations](4-organisations.md), built as a single-page app at `https://metadex.cafe/`, with
+a guided join flow inside the App and, because Hydrex has disabled its automations, a clear path for holders whose
+automation stopped. Design and branding come later: the wireframes below fix order, content and behaviour, not looks,
+and the copy in them is a placeholder that shows intent.
 
 ## Sitemap
 
 ```
-metadex.cafe/                     Home            decide, move   public, no wallet, readable without the script; the Safe App's URL
-metadex.cafe/app/                 App             act, check     connects on a click; a Safe lands here
-metadex.cafe/how-it-works/        How it works    read, verify   public, every section has an anchor
+metadex.cafe/                     Home            decide, move   no wallet; reads without the script; the Safe App's URL
+metadex.cafe/#app                 App             act, check     connects on a click; a Safe lands here
+metadex.cafe/#how-it-works        How it works    read, verify   every section has its own address:
     #if-your-automation-stopped  #what-joining-allows  #timing  #who-controls-what
     #carbon  #for-co-signers  #verify  #questions  #words
 ```
@@ -18,33 +19,50 @@ metadex.cafe/how-it-works/        How it works    read, verify   public, every s
 Kept open, not built now:
 
 ```
-metadex.cafe/app/?address=0x…     the App, read-only, for any address                    (phase 3)
-metadex.cafe/impact/              impact over time: tonnes per epoch, retirements          (phase 3, needs data)
-metadex.cafe/<automation>/        a page per automation, if there is ever a second          (only then)
+metadex.cafe/?address=0x…#app     the App, read-only, for any address                    (phase 3)
+metadex.cafe/#impact              impact over time: tonnes per epoch, retirements          (phase 3, needs data)
+metadex.cafe/#<automation>        a view per automation, if there is ever a second          (only then)
 ```
 
-One origin, paths rather than subdomains: one official address to learn and check, one place for the reproducible build
-to cover, one stable URL for Safe ([3. Comparable products](3-patterns.md#a-site-and-an-app)).
+One address for everything: one official address to learn and check, one HTML file for the reproducible build to cover,
+one URL for Safe ([3. Comparable products](3-patterns.md#a-site-and-an-app)).
 
-**Every page** has the same header and footer:
+**Every view** has the same header and footer:
 
-- **Header:** the name (to Home) · How it works · a button to the App ("Open the app"; on the App, the wallet's state).
-  In a Safe{Wallet} frame, every page shows the Safe, which connects without a click.
+- **Header:** the name (to Home) · How it works · a button to the App ("Open the app"; once connected, the wallet's
+  state, on every view). In a Safe{Wallet} frame, it shows the Safe.
 - **Footer:** the official address `https://metadex.cafe/` · version and commit · source · contracts · Hydrex · Klima ·
   where to ask a question. No operator is named (a decision for now).
 
+## Building it as one page
+
+The three views are three sections of one `index.html`, one script and one stylesheet, as today. This keeps the build,
+its integrity hashes and its reproducibility as they are, and it keeps the wallet connected while the visitor moves
+between views, which three separate pages could not do without storing anything.
+
+| Rule                                                                                      | Why                                                                                                                                                                                                                         |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Views are addressed by the hash** (`#app`, `#how-it-works`), never by paths like `/app` | Paths would need the host to send every address to one file: GitHub Pages only through its 404 page, eth.limo only with a redirect file it does not document. A hash works on both, and on any IPFS gateway.                |
+| **Every section's address opens its view**                                                | `#timing` shows How it works and scrolls to Timing: each `id` is unique in the page, and the view is the one that contains it. Links from the review, Discord or a DAO proposal keep working.                               |
+| **All text is in the HTML**                                                               | Home and How it works read without the script: for search engines, link previews, reader modes, and the ten minutes after a deployment when a browser may refuse a cached script. The App, which needs the script, says so. |
+| **Views switch even if the script is refused**                                            | CSS can show the view that holds the target (`:target`, with `:has()`), and Home when there is none. The script then only adds what CSS cannot.                                                                             |
+| **The script moves focus and sets the title** on each view change                         | So that screen readers announce the new view and the tab says where the visitor is, as a new page would. The page already does this for the review.                                                                         |
+| **Back and Forward move between views**                                                   | Each view change is a hash change, so the browser keeps the history. Inside Safe{Wallet} too.                                                                                                                               |
+| **The wallet is asked nothing until it is picked**                                        | Home and How it works share the page with the App, but never show wallet buttons or ask a wallet anything. This is now a design rule rather than a file boundary.                                                           |
+
+What this gives up: How it works has no title, link preview or search result of its own, only the page's. With nothing
+promoted outside the site, that matters little.
+
 ## Hosting on IPFS and eth.limo
 
-The three pages are plain directories, each with its own `index.html`, which is the form IPFS gateways serve best.
 Checked on eth.limo on 17 October 2026:
 
-| Question                               | On `*.eth.limo`                                                                                                                                                                                        | What it means                                                                                                                                                                               |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Do `/app/` and `/how-it-works/` work?  | Yes: a directory serves its `index.html`, and `/app` redirects to `/app/`                                                                                                                              | The multi-page organisation works as it is. Links and asset paths should be relative, so that a path gateway (`/ipfs/<cid>/`) serves it too                                                 |
-| Would a single-page app's routes work? | Only with hash routes (`/#/app`). Routes like `/app` without a directory need the gateway to rewrite them (an IPFS `_redirects` file), and eth.limo does not document support for it                   | A single-page app works here only with hash routes; How it works' anchors would then have to open their view, and every view's text would have to be in the HTML to read without the script |
-| Can Safe{Wallet} open it?              | **No.** Every eth.limo site is sent with `X-Frame-Options: SAMEORIGIN` and `frame-ancestors 'self'`, which forbid Safe{Wallet}'s frame. Seen on `vitalik.eth`, `ens.eth`, `app.ens.eth`, `uniswap.eth` | Single-page app or not, the Safe App must stay at `https://metadex.cafe/`, which GitHub Pages lets Safe{Wallet} frame                                                                       |
-| Can Safe read `manifest.json`?         | Yes, with `Access-Control-Allow-Origin: *`; moot while framing is forbidden                                                                                                                            | —                                                                                                                                                                                           |
-| What does it add?                      | A content address: the ENS name points to one CID, and the CID is the build                                                                                                                            | Checking the official site becomes comparing one hash with the release's; a copy of the site cannot have the same CID                                                                       |
+| Question                       | On `*.eth.limo`                                                                                                                                                                                        | What it means                                                                                                         |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Do the views work?             | Yes: they are one `index.html` with hash addresses, and the gateway has nothing to resolve beyond the root                                                                                             | The page works as it is. Asset paths should stay relative, so that a path gateway (`/ipfs/<cid>/`) serves it too      |
+| Can Safe{Wallet} open it?      | **No.** Every eth.limo site is sent with `X-Frame-Options: SAMEORIGIN` and `frame-ancestors 'self'`, which forbid Safe{Wallet}'s frame. Seen on `vitalik.eth`, `ens.eth`, `app.ens.eth`, `uniswap.eth` | The Safe App must stay at `https://metadex.cafe/`, which GitHub Pages lets Safe{Wallet} frame                         |
+| Can Safe read `manifest.json`? | Yes, with `Access-Control-Allow-Origin: *`; moot while framing is forbidden                                                                                                                            | —                                                                                                                     |
+| What does it add?              | A content address: the ENS name points to one CID, and the CID is the build                                                                                                                            | Checking the official site becomes comparing one hash with the release's; a copy of the site cannot have the same CID |
 
 So `metadexcafe.eth.limo` can be a mirror for browser wallets, with `metadex.cafe` staying the address for Safes. Both
 then count as official: the footer and the README name both, and say which one a Safe uses. A connection does not carry
@@ -54,27 +72,25 @@ from one to the other, as they are different origins.
 
 Where people come from, and where each should land. Links the team publishes should point to the landing given here.
 
-| Arrives from                                           | Who          | Lands on                                                |
-| ------------------------------------------------------ | ------------ | ------------------------------------------------------- |
-| An announcement that Hydrex's automations have stopped | Maya, Theo   | `/how-it-works/#if-your-automation-stopped`, or `/app/` |
-| The address typed, a search, X or Farcaster            | Everyone     | `/`                                                     |
-| A bookmark, after a first visit                        | Members      | `/app/`                                                 |
-| A wallet app's own browser (the Base app, MetaMask)    | Maya         | `/app/`, from a deep link                               |
-| Safe{Wallet}, as a custom Safe App                     | Rafael       | `/`, which goes straight on to `/app/`                  |
-| Klima's site or community                              | Sofia        | `/`, then `/how-it-works/#carbon`                       |
-| A question in Discord, a DAO proposal, a co-signer     | Theo, Rafael | An anchor in `/how-it-works/`                           |
+| Arrives from                                           | Who          | Lands on                                  |
+| ------------------------------------------------------ | ------------ | ----------------------------------------- |
+| An announcement that Hydrex's automations have stopped | Maya, Theo   | `#if-your-automation-stopped`, or `#app`  |
+| The address typed, a search, X or Farcaster            | Everyone     | `/`                                       |
+| A bookmark, after a first visit                        | Members      | `#app`                                    |
+| A wallet app's own browser (the Base app, MetaMask)    | Maya         | `#app`, from a deep link                  |
+| Safe{Wallet}, as a custom Safe App                     | Rafael       | `/`, which opens on the App view          |
+| Klima's site or community                              | Sofia        | `/`, then `#carbon`                       |
+| A question in Discord, a DAO proposal, a co-signer     | Theo, Rafael | A section of How it works, by its address |
 
 **Safe{Wallet}:** the Safe App's URL stays `https://metadex.cafe/`, the official address, with its `manifest.json` where
-it is today. In a frame, Home sends the visitor straight on to the App, before showing anything. Safes that already
+it is today. In a frame, the page opens on the App view rather than Home, with nothing in between. Safes that already
 added the site keep working, and one address serves people and Safes alike: the one the footer gives, and the one to
-check. Safe has paused new listings, so this URL is the one the README and How it works give. A copy of `manifest.json`
-at `/app/` covers anyone who adds that URL instead.
+check. Safe has paused new listings, so this URL is the one the README and How it works give.
 
-**Connecting on every page.** In a Safe frame, every page is connected anyway: the Safe connects without a click, on
-each page it opens. For browser wallets, connecting stays in the App. The page stores nothing and forgets the wallet on
-reload, so a wallet picked on Home would be forgotten on the way to the App, and asked for again. Keeping it connected
-across pages would mean making the three pages views of one document, a single-page app at the root: the same
-organisation, built differently. Every page's header still leads to the App in one click, and shows the wallet there.
+**Connecting.** The wallet is picked once, in the App view, and stays connected while the visitor moves to How it works
+and back, until they reload. Ticked accounts survive a look at a section too. The review is a dialog over the page, so a
+link in it closes it and shows the section, and Back returns to the App with the same accounts ticked. Every view's
+header shows the wallet. In a Safe frame, the Safe connects without a click, as today.
 
 ## Home: decide
 
@@ -85,7 +101,7 @@ and all of it reads in the HTML, without the script; only the live numbers are f
 | Order | Block                        | Content                                                                                                                                                                                                                                                                                                                                                              | Answers                                   |
 | ----- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | 1     | Promise                      | One sentence of benefit, one of mechanism ("votes every week, retires a share of the rewards as carbon credits, pays you the rest; your HYDX never leaves your wallet"). One line on what anyone can check, in place of an operator's name: the automation is Hydrex's own code, it retires through Klima, this page is open source. [Open the app] · [How it works] | What is it? Is it for me? Can I check it? |
-| 2     | Your automation stopped?     | A short notice: "Hydrex's automations stopped voting on 9 Sep. If your account is in one, it has earned nothing from voting since 10 Sep." [Check my accounts] → `/app/` · [What it means] → `#if-your-automation-stopped`                                                                                                                                           | What happened to mine?                    |
+| 2     | Your automation stopped?     | A short notice: "Hydrex's automations stopped voting on 9 Sep. If your account is in one, it has earned nothing from voting since 10 Sep." [Check my accounts] → `#app` · [What it means] → `#if-your-automation-stopped`                                                                                                                                            | What happened to mine?                    |
 | 3     | The numbers                  | Tonnes retired so far · the split, in words and percent ("a third retired, two thirds paid to you") · the Earning Power in it this epoch · this epoch ends in 4 d 6 h                                                                                                                                                                                                | Is it real? Is it alive?                  |
 | 4     | How it works, in three steps | 1 It votes with your accounts each week. 2 It claims their rewards and swaps them into kVCM. 3 It retires a share as carbon credits and sends you the rest. Under the steps, one line on timing: "Joins count from the next Thursday."                                                                                                                               | What happens to my votes and rewards?     |
 | 5     | What you keep, what you give | Three columns, plain: **You keep** your HYDX, your account, the right to leave at any time. **You give** a third of the rewards, retired; your own vote while in. **You get** the rest in kVCM, every week, with nothing to do. Link: what kVCM is and how to swap it.                                                                                               | What does it cost me?                     |
@@ -287,7 +303,7 @@ warnings live: anything a user must know before confirming is in the review too.
 | `#questions`                  | —                                                   | The FAQ, including the ones Home links to                                                                                                                                                                                                                                                       |
 | `#words`                      | —                                                   | Account, Flex, Protocol, Earning Power, epoch, kVCM, retire, conduit, admin key                                                                                                                                                                                                                 |
 
-## Content rules for all pages
+## Content rules for all views
 
 - **Lead with what happens to the user, then how.** "A third of your rewards are retired" before "retireBps 3333".
 - **Hydrex's words for Hydrex things** (Account, Earning Power, Flex, Protocol, epoch, payout): this audience knows
@@ -309,11 +325,11 @@ Problem numbers refer to [the audit](1-audit.md).
 | Phase   | Ships                                                                                                                                                                                                                                                         | Fixes             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | 0       | Now, on today's page: say when an account is in an automation that has stopped voting, read from Hydrex's Voter                                                                                                                                               | P1                |
-| 1       | Home and App as separate pages (option B), with Home's notice for stopped automations; disclosures moved into a three-step review; account groups; the epoch timeline; wallet-app links; the Safe App kept at `/`, opening on the App                         | P2 – P7, P11, P13 |
-| 2       | How it works with anchors, linked from Home, the review and announcements; the carbon section; who controls what; for co-signers; FAQ and glossary                                                                                                            | P9, P10, P12, P14 |
+| 1       | Home and the App as views of one page at the root, with Home's notice for stopped automations; disclosures moved into a three-step review; account groups; the epoch timeline; wallet-app links; the Safe App kept at `/`, opening on the App view            | P2 – P7, P11, P13 |
+| 2       | How it works as a third view, each section with its own address, linked from Home, the review and announcements; the carbon section; who controls what; for co-signers; FAQ and glossary                                                                      | P9, P10, P12, P14 |
 | 3       | Data the page does not read yet: past payouts and retirements per account, with links to certificates, and an impact page (needs an RPC that serves logs); the read-only lookup by address; batched signing where wallets allow; a Base or Farcaster mini app | P8, P15           |
 | Not now | "Sign in with Base" and WalletConnect outside a wallet app's browser (an SDK and a relay, against "no server")                                                                                                                                                | P11, in part      |
-| Later   | A page per automation, only if there is a second one                                                                                                                                                                                                          | —                 |
+| Later   | A view per automation, only if there is a second one                                                                                                                                                                                                          | —                 |
 
 Phase 0 is a status line and one read of Hydrex's Voter; it helps the holders arriving now, before any reorganisation.
 Phase 3 depends on what Base and Klima expose without a server; it is listed so that the organisation leaves room for
@@ -328,6 +344,7 @@ Taken by the team, or answered on Base ([7. On-chain checks](7-onchain-checks.md
 | Who runs it?                                             | Anonymous for now.                                                                                                                                                                                                           | No operator on any page. Trust rests on what anyone can check, so "Safe to try" on Home and `#verify` carry more weight (P10 stays partly open). |
 | Whose name is on the retirements?                        | Stays "Hydrex". The admin key can change the names, but only for every member at once; a name per member would need a new automation contract.                                                                               | `#carbon` says whose names they are and why. No personal certificate in the App.                                                                 |
 | Smart wallets and WalletConnect outside a wallet app?    | Not now.                                                                                                                                                                                                                     | Links that reopen the page in a wallet app instead.                                                                                              |
+| One page or three?                                       | One page at the root, in three views (a single-page app), addressed by the hash.                                                                                                                                             | The build stays as it is; the wallet stays connected between views; the rules in Building it as one page apply.                                  |
 | What happens to an account in a stopped automation?      | Its old votes count for nothing and it has earned nothing from voting since 10 Sep; the stopped automation still holds its approvals; the owner can claim what was left unclaimed, and can leave or join another automation. | The wording of Home's notice, the App's first group and step 1 of the review, as above.                                                          |
 | How far to go in telling holders of stopped automations? | Level 2: in the App and on the site, nothing outbound.                                                                                                                                                                       | Home's notice (block 2), `#if-your-automation-stopped` and the App's first group, as above. No posts or announcements from the site.             |
 
@@ -348,5 +365,5 @@ Impact: it informs first, and recruits second.
 ## What does not change
 
 Two calls only; the checks, with leaving always on; no key, no server, no storage; a click before any wallet request;
-the official address in the footer; the reproducible build. The reorganisation moves content, it does not add trust the
-page has not earned.
+the official address in the footer; one HTML file, one script and one stylesheet, with their hashes; the reproducible
+build. The reorganisation moves content, it does not add trust the page has not earned.

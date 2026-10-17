@@ -62,5 +62,5 @@ The proposal is working if, in the second round of task tests:
   answer may be "if you only want the most yield and have the time, you should".
 - **A notice about Hydrex's automations is a statement about someone else's product.** Its wording should be checked
   with Hydrex, and it should come down once it has done its job.
-- **Two URLs are two things a copy can imitate.** The footer's official address and the README's advice ("use the
-  official address, read the wallet prompt") apply to both pages.
+- **A mirror is a second address a copy can imitate.** If the site is also served from `metadexcafe.eth.limo`, the
+  footer and the README name both official addresses, and say that a Safe uses `metadex.cafe`.
