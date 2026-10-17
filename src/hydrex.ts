@@ -63,6 +63,7 @@ export type Relay = {
   time: number;
   epochStart: number;
   retireBps: bigint;
+  // None today: the page mentions it only once it is not.
   feeBps: bigint;
   tonnes: bigint;
   entity: string;
