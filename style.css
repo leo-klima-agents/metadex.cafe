@@ -2,6 +2,8 @@
   font-family: system-ui, sans-serif;
   line-height: 1.5;
   --accent: light-dark(#0b6b64, #5cc8bb);
+  --line: light-dark(#c9d4d1, #3d4d4a);
+  --quiet: light-dark(#4f5f5c, #a9b8b5);
 }
 body {
   max-inline-size: 40rem;
@@ -12,6 +14,51 @@ body {
   background: Canvas;
   color: CanvasText;
 }
+[hidden] {
+  display: none !important;
+}
+
+/* The views of the page: the one holding the address's target, or Home when it holds none. A browser without :has()
+   drops both rules, and shows every view as one page. */
+main:has(> .view:target, > .view :target) > .view:not(:target, :has(:target)),
+main:not(:has(> .view:target, > .view :target)) > .view:not(#home) {
+  display: none;
+}
+.view > h1,
+.promise h1 {
+  font-size: 1.75rem;
+  line-height: 1.25;
+}
+.view h1:focus {
+  outline: none;
+}
+
+header.site {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding-block: 0.75rem;
+  border-block-end: 1px solid var(--line);
+}
+header.site .name {
+  color: inherit;
+  font-weight: 700;
+  font-size: 1.125rem;
+  text-decoration: none;
+}
+.wallet-state::before {
+  content: "";
+  display: inline-block;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  margin-inline-end: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+}
+
 th,
 td {
   padding-block: 0.25rem;
@@ -38,8 +85,42 @@ summary {
   border-radius: 8px;
   background: light-dark(#fbe6e3, #3a1b18);
 }
+.notice > p:first-child {
+  margin-block-start: 0;
+}
+.notice > p:last-child {
+  margin-block-end: 0;
+}
+.callout {
+  padding-block: 0.25rem 0.75rem;
+  padding-inline: 1rem;
+  border-inline-start: 4px solid light-dark(#b25e00, #f0a54a);
+  border-radius: 8px;
+  background: light-dark(#fdf1e2, #33240f);
+}
+.callout h2 {
+  font-size: 1.125rem;
+}
+.small {
+  color: var(--quiet);
+  font-size: 0.875rem;
+}
+.lead {
+  font-size: 1.125rem;
+}
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
-button {
+button,
+.button {
+  display: inline-block;
+  box-sizing: border-box;
   min-block-size: 2.75rem;
   padding-block: 0.5rem;
   padding-inline: 1.25rem;
@@ -49,18 +130,25 @@ button {
   color: light-dark(#ffffff, #06201d);
   font: inherit;
   font-weight: 600;
+  line-height: 1.5;
+  text-decoration: none;
   cursor: pointer;
 }
 button:disabled {
   opacity: 0.5;
   cursor: progress;
 }
-#pick-bar button:disabled {
+.group button:disabled {
   cursor: not-allowed;
 }
-button.secondary {
+:is(button, .button).secondary {
   background: transparent;
   color: var(--accent);
+}
+header.site .button {
+  min-block-size: 2.5rem;
+  padding-block: 0.375rem;
+  padding-inline: 1rem;
 }
 button img {
   inline-size: 1.5rem;
@@ -70,21 +158,96 @@ button img {
 .buttons {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
 }
 
-input[type="checkbox"] {
-  inline-size: 1.5rem;
-  block-size: 1.5rem;
+.numbers dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.75rem 1rem;
   margin: 0;
-  accent-color: var(--accent);
-  cursor: pointer;
 }
-.accounts:has(.pick:not([hidden])) {
+.numbers dt {
+  color: var(--quiet);
+  font-size: 0.875rem;
+}
+.numbers dd {
+  margin: 0;
+  font-weight: 600;
+}
+.numbers .countdown {
+  display: block;
+  color: var(--quiet);
+  font-weight: normal;
+}
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
+  gap: 0 1.5rem;
+}
+.columns h3 {
+  margin-block-end: 0;
+}
+.columns ul {
+  padding-inline-start: 1.25rem;
+}
+.scroll {
+  overflow-x: auto;
+}
+/* Words stay whole: on a narrow screen, the table scrolls instead. */
+#compared table {
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  overflow-wrap: normal;
+}
+#compared :is(th, td) {
+  padding-block: 0.375rem;
+  padding-inline-end: 0.5rem;
+  border-block-end: 1px solid var(--line);
+}
+#questions details {
+  padding-block: 0.25rem;
+  border-block-end: 1px solid var(--line);
+}
+
+progress.elapsed {
+  inline-size: 100%;
+  block-size: 0.5rem;
+  accent-color: var(--accent);
+}
+.timeline {
+  padding-inline-start: 1.25rem;
+  list-style: none;
+  border-inline-start: 2px solid var(--line);
+}
+.timeline li {
+  position: relative;
+}
+.timeline li::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: calc(-1.25rem - 6px);
+  inset-block-start: 0.45em;
+  inline-size: 10px;
+  block-size: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.group {
+  margin-block: 1.5rem;
+  padding-block-start: 0.25rem;
+  border-block-start: 1px solid var(--line);
+}
+.group h2 {
+  font-size: 1.125rem;
+}
+.group .accounts {
   padding-inline-start: 0;
   list-style: none;
 }
-.accounts:has(.pick:not([hidden])) label {
+.accounts label {
   display: grid;
   grid-template-columns: 1.5rem 1fr;
   column-gap: 0.75rem;
@@ -100,6 +263,34 @@ input[type="checkbox"] {
 .accounts label:has(.pick:checked) {
   background: light-dark(#e2f3f0, #12302c);
 }
+input[type="checkbox"] {
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.accounts:not(:has(.pick:not([hidden]))) label {
+  grid-template-columns: 1fr;
+  padding-inline: 0;
+}
+.accounts:not(:has(.pick:not([hidden]))) .about {
+  grid-column: 1;
+}
+#summary .summary-line {
+  font-weight: 600;
+}
+.help {
+  margin-block: 2rem 0;
+}
+
+footer {
+  margin-block-start: 2rem;
+  padding-block-start: 0.5rem;
+  border-block-start: 1px solid var(--line);
+  color: var(--quiet);
+  font-size: 0.875rem;
+}
 
 dialog {
   max-inline-size: min(40rem, 100% - 2rem);
@@ -110,6 +301,14 @@ dialog {
 }
 dialog::backdrop {
   background: rgb(0 0 0 / 0.5);
+}
+dialog .step-count {
+  margin-block: 1rem 0;
+  color: var(--quiet);
+  font-size: 0.875rem;
+}
+dialog .step-count:not([hidden]) + h2 {
+  margin-block-start: 0.25rem;
 }
 dialog .foot {
   position: sticky;

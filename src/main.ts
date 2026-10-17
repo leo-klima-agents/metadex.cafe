@@ -1,21 +1,28 @@
 import { getAddress } from "viem";
+import "./views.ts";
 import { same } from "./chain.ts";
 import { CHAIN_ID } from "./config.ts";
 import { clone, fill, fillAddress, fillPlural, fillTime, show } from "./dom.ts";
-import { WEEK, bps, count, date, earningPower, list, units, weekStart } from "./format.ts";
+import { WEEK, bps, count, date, earningPower, list, share, short, units, until, weekStart, when } from "./format.ts";
 import {
   LockType,
+  automation,
   canJoin,
   canLeave,
+  canRelease,
   check,
+  group,
   join,
   leave,
   readAccounts,
   readRelay,
+  release,
   status,
   type Account,
+  type Group,
   type Holdings,
   type Relay,
+  type Status,
 } from "./hydrex.ts";
 import { close, review, update, type Hooks } from "./review.ts";
 import {
@@ -30,38 +37,86 @@ import {
   type Wallet,
 } from "./wallet.ts";
 
-const joinButton = document.getElementById("join") as HTMLButtonElement;
-const leaveButton = document.getElementById("leave") as HTMLButtonElement;
+// What a group's buttons do: join Carbon Impact, leave it, or leave another automation.
+type Action = "join" | "leave" | "release";
+
+const groups = [...document.querySelectorAll<HTMLElement>("#accounts .group")];
 const listening = new WeakSet<Provider>();
+// The accounts of each group that its buttons can act on.
+const actionable = new WeakMap<HTMLElement, Account[]>();
 
 let connection: Connection | undefined;
 let shown: Holdings | undefined;
-let relayEpoch: number | undefined;
+let relay: Relay | undefined;
 let trusted = false;
-let retired = "…";
 let reads = 0;
 let reading = false;
+let relayRead: Promise<void> | undefined;
 let attempts = 0;
 let stale = 0;
 let clicks = 0;
-// Base's time less the device's, from the latest block read.
+// Base's time less the device's, from the newest block read: a read that started earlier may answer from an older one.
 let drift = 0;
+let newest = 0;
 
 const now = () => Math.floor(Date.now() / 1000) + drift;
+
+function sawBlock(time: number): void {
+  if (time < newest) return;
+  newest = time;
+  drift = time - Math.floor(Date.now() / 1000);
+}
 
 function failed(error: unknown): void {
   console.error(error);
   show("#error");
 }
 
-function showRelay({ epochStart, tonnes, retireBps, feeBps, votes, entity }: Relay): void {
-  relayEpoch = epochStart;
-  retired = bps(retireBps);
-  fill(document, { tonnes: units(tonnes), retired, fee: bps(feeBps), power: earningPower(votes), entity });
+function showRelay(found: Relay): void {
+  relay = found;
+  sawBlock(found.time);
+  const { epochStart, tonnes, retireBps, feeBps, votes, entity } = found;
+  fill(document, {
+    tonnes: units(tonnes),
+    retired: bps(retireBps),
+    "retired-share": share(retireBps),
+    "paid-share": share(10_000n - retireBps),
+    fee: bps(feeBps),
+    power: earningPower(votes),
+    entity,
+  });
   fillTime(document, "week-start", epochStart);
   fillTime(document, "week-end", epochStart + WEEK);
-  show(".no-fee", feeBps === 0n);
+  fillTime(document, "week-end-when", epochStart + WEEK, when);
+  fillTime(document, "vote-day", epochStart + WEEK - 1);
   show(".with-fee", feeBps > 0n);
+  tick();
+}
+
+function tick(): void {
+  catchUp();
+  if (!relay) return;
+  const time = now();
+  const end = relay.epochStart + WEEK;
+  if (time >= end) return;
+  fill(document, { countdown: `in ${until(end - time)}` });
+  fillTime(document, "today", time);
+  for (const bar of document.querySelectorAll<HTMLProgressElement>("progress.elapsed")) {
+    bar.value = time - relay.epochStart;
+  }
+}
+
+// One read of the automation at a time.
+const readRelayAgain = (): Promise<void> =>
+  (relayRead ??= readRelay()
+    .then(showRelay)
+    .finally(() => (relayRead = undefined)));
+
+// Reads again what is missing or from an epoch that has ended: the page moves on by itself.
+function catchUp(): void {
+  const epoch = weekStart(now());
+  if (shown && !reading && epoch > shown.epochStart) loadAccounts(true);
+  if (!relay || epoch > relay.epochStart) readRelayAgain().catch(console.error);
 }
 
 async function showChecks(): Promise<void> {
@@ -74,6 +129,9 @@ async function showChecks(): Promise<void> {
 }
 
 const joinable = (account: Account): boolean => trusted && canJoin(account, now());
+const can: Record<Action, (account: Account) => boolean> = { join: joinable, leave: canLeave, release: canRelease };
+const buttons = (section: HTMLElement) => [...section.querySelectorAll<HTMLButtonElement>("button[data-action]")];
+const actionOf = (button: HTMLButtonElement) => button.dataset.action as Action;
 
 function kind({ lockType, end }: Account): string {
   if (lockType === LockType.permanent) return "Protocol Account";
@@ -81,17 +139,20 @@ function kind({ lockType, end }: Account): string {
   return end ? `Flex Account, lock ${end > now() ? "ends" : "ended"} ${date(end)}` : "Flex Account";
 }
 
-function accountItem(account: Account, { owner, epochStart }: Holdings): DocumentFragment {
+function accountItem(account: Account, state: Status, pickable: boolean): DocumentFragment {
   const item = clone("account");
   const name = account.name || "Account";
   fill(item, { name, id: `#${account.id}`, kind: kind(account), votes: earningPower(account.votes) });
-  const state = status(account, owner, now(), epochStart);
   const line = clone(state.kind);
   if ("date" in state) fillTime(line, "date", state.date);
+  if ("voted" in state) {
+    fillTime(line, "voted", state.voted);
+    fillTime(line, "since", state.since);
+  }
   if ("name" in state) fill(line, { automation: state.name });
   if ("to" in state) fillAddress(line, "address", state.to);
   item.querySelector(".status")!.replaceWith(line);
-  if (joinable(account) || canLeave(account)) {
+  if (pickable) {
     const box = item.querySelector<HTMLInputElement>(".pick")!;
     // A hidden box stays disabled, so that a click on its row's label cannot tick it.
     box.hidden = box.disabled = false;
@@ -101,31 +162,63 @@ function accountItem(account: Account, { owner, epochStart }: Holdings): Documen
   return item;
 }
 
+// Each group lists its accounts, with ticks when its buttons could act on more than one, so that one selection is
+// always one action.
 function showAccounts(keepTicked = false): void {
   const holdings = shown;
   if (!holdings) return;
-  const { owner, accounts, payout } = holdings;
-  const kept = new Set(keepTicked ? ticked().map(({ id }) => String(id)) : []);
-  const full = accounts.filter(({ amount }) => amount > 0n);
-  const empty = accounts.filter(({ amount }) => amount === 0n);
-  const items = (accounts: Account[]) => accounts.map((account) => accountItem(account, holdings));
-  document.getElementById("full")!.replaceChildren(...items(full));
-  document.querySelector("#empty-accounts ul")!.replaceChildren(...items(empty));
+  const { owner, accounts, payout, epochStart } = holdings;
+  const ticked = document.querySelectorAll<HTMLInputElement>("#accounts .pick:checked");
+  const kept = new Set(keepTicked ? [...ticked].map(({ value }) => value) : []);
+  const time = now();
+  const sorted = accounts.map((account) => {
+    const state = status(account, owner, time, epochStart);
+    return { account, state, group: group(account, state) };
+  });
+  for (const section of groups) {
+    const members = sorted.filter((member) => member.group === section.dataset.group);
+    // Some wallets hold many empty accounts, which can do nothing.
+    const folded = section.dataset.group === "closed" ? members.filter(({ account }) => account.amount === 0n) : [];
+    const able = members
+      .map(({ account }) => account)
+      .filter((account) => buttons(section).some((button) => can[actionOf(button)](account)));
+    const items = (listed: typeof members) =>
+      listed.map(({ account, state }) => accountItem(account, state, able.length > 1 && able.includes(account)));
+    section.querySelector(".accounts")!.replaceChildren(...items(members.filter((member) => !folded.includes(member))));
+    const fold = section.querySelector<HTMLDetailsElement>(".empty-accounts");
+    if (fold) {
+      fold.querySelector(".accounts")!.replaceChildren(...items(folded));
+      fill(fold, { "empty-count": count(folded.length, "empty account", "empty accounts") });
+      fold.hidden = !folded.length;
+    }
+    actionable.set(section, able);
+    section.hidden = !members.length;
+  }
   for (const box of document.querySelectorAll<HTMLInputElement>("#accounts .pick:not([hidden])")) {
     box.checked = kept.has(box.value);
   }
-  fill(document, { "empty-count": count(empty.length, "empty account", "empty accounts") });
-  show("#empty-accounts", empty.length > 0);
-  show("#none", !full.length);
-  joinButton.hidden = !accounts.some(joinable);
-  leaveButton.hidden = !accounts.some(canLeave);
-  show("#pick-bar", !(joinButton.hidden && leaveButton.hidden));
   updateButtons();
+  const full = sorted.filter(({ account }) => account.amount > 0n);
+  const inGroups = (...names: Group[]) => full.filter((member) => names.includes(member.group)).length;
+  const [members, stopped] = [inGroups("in", "joining"), inGroups("stopped")];
+  const power = full.reduce((sum, { account }) => sum + account.votes, 0n);
+  fill(document, {
+    "summary-line": [
+      count(full.length, "account", "accounts"),
+      ...(members ? [count(members, "in Carbon Impact", "in Carbon Impact")] : []),
+      ...(stopped ? [count(stopped, "in an automation that stopped", "in automations that stopped")] : []),
+      `${earningPower(power)} Earning Power`,
+    ].join(" · "),
+  });
+  const own = same(payout, owner);
+  show(".payout-own, #itself", own);
+  show(".payout-other", !own);
+  fillAddress(document, "payout-short", payout);
   fillAddress(document, "owner", owner);
   fillAddress(document, "payout", payout, payout);
-  show("#itself", same(payout, owner));
+  show("#summary, #payout", full.length > 0);
+  show("#none", !full.length);
   show("#accounts");
-  show("#payout", full.length > 0);
 }
 
 async function loadAccounts(quietly = false): Promise<void> {
@@ -135,15 +228,15 @@ async function loadAccounts(quietly = false): Promise<void> {
   if (!quietly) {
     shown = undefined;
     show("#reading");
-    show("#accounts, #payout", false);
+    show("#accounts, #summary, #none, #payout", false);
   }
   try {
     const found = await readAccounts(connection.address);
     if (read !== reads) return;
-    drift = found.time - Math.floor(Date.now() / 1000);
+    sawBlock(found.time);
     shown = found;
     showAccounts();
-    if (relayEpoch !== undefined && found.epochStart > relayEpoch) readRelay().then(showRelay).catch(failed);
+    catchUp();
   } catch (error) {
     if (read === reads) failed(error);
   } finally {
@@ -154,21 +247,29 @@ async function loadAccounts(quietly = false): Promise<void> {
   }
 }
 
-function ticked(): Account[] {
-  const boxes = document.querySelectorAll<HTMLInputElement>("#accounts .pick:checked");
-  const ids = new Set([...boxes].map(({ value }) => value));
-  return shown?.accounts.filter(({ id }) => ids.has(String(id))) ?? [];
-}
-
-function label(button: HTMLButtonElement, verb: string, n: number): void {
-  button.disabled = !n;
-  button.textContent = n ? `${verb} with ${count(n, "account", "accounts")}` : verb;
+// A group's ticked accounts, or the one account it can act on, which has no box.
+function picked(section: HTMLElement): Account[] {
+  const accounts = actionable.get(section) ?? [];
+  if (accounts.length <= 1) return accounts;
+  const ids = new Set([...section.querySelectorAll<HTMLInputElement>(".pick:checked")].map(({ value }) => value));
+  return accounts.filter(({ id }) => ids.has(String(id)));
 }
 
 function updateButtons(): void {
-  const picked = ticked();
-  label(joinButton, "Join", picked.filter(joinable).length);
-  label(leaveButton, "Leave", picked.filter(canLeave).length);
+  for (const section of groups) {
+    const able = actionable.get(section) ?? [];
+    const accounts = picked(section);
+    for (const button of buttons(section)) {
+      const allowed = can[actionOf(button)];
+      const verb = (button.dataset.verb ??= button.textContent ?? "");
+      const n = accounts.filter(allowed).length;
+      button.hidden = !able.some(allowed);
+      button.disabled = !n;
+      button.textContent = able.length > 1 && n ? `${verb} with ${count(n, "account", "accounts")}` : verb;
+    }
+    show(".buttons", able.length > 0, section);
+    show(".pick-hint", able.length > 1 && !accounts.length, section);
+  }
 }
 
 const hooks: Hooks = {
@@ -176,26 +277,66 @@ const hooks: Hooks = {
   switched: showConnection,
 };
 
-function reviewTicked(leaving: boolean): void {
+function reviewPicked(section: HTMLElement, action: Action): void {
   if (!connection || !shown) return;
   // In a new epoch, the statuses and the review's dates would be last epoch's.
   if (weekStart(now()) > shown.epochStart) return void loadAccounts();
-  const accounts = ticked().filter(leaving ? canLeave : joinable);
+  // A join says what share is retired, from the automation's settings. Leaving never waits for them.
+  if (action === "join" && !relay) return void readRelayAgain().then(() => reviewPicked(section, action), failed);
+  const accounts = picked(section).filter(can[action]);
   if (!accounts.length) return updateButtons();
-  const changes = clone(leaving ? "leave-effects" : "join-effects");
-  fill(changes, { which: list(accounts.map(({ id }) => `#${id}`)), retired });
-  fillTime(changes, "next", shown.epochStart + WEEK);
-  fillPlural(changes, accounts.length);
-  const title = `${leaving ? "Leave" : "Join"} the Carbon Impact automation`;
-  review(title, changes, leaving ? leave(accounts) : join(accounts), connection, hooks);
+  const { owner, epochStart } = shown;
+  const settings = relay;
+  const which = list(accounts.map(({ id }) => `#${id}`));
+  const prepare = (id: string): DocumentFragment => {
+    const part = clone(id);
+    fill(part, { which });
+    fillTime(part, "next", epochStart + WEEK, when);
+    fillPlural(part, accounts.length);
+    if (settings) {
+      const { retireBps, feeBps, entity } = settings;
+      fill(part, { "retired-share": share(retireBps), fee: bps(feeBps), entity });
+      show(".with-fee", feeBps > 0n, part);
+    }
+    return part;
+  };
+  if (action === "join") {
+    const before = prepare("join-before");
+    const from = (kind: Status["kind"]) =>
+      accounts.filter((account) => status(account, owner, now(), epochStart).kind === kind);
+    const [stopped, running] = [from("stopped"), from("other")];
+    fill(before, {
+      "stopped-which": list(stopped.map(({ id, delegate }) => `#${id} is in ${automation(delegate)}`)),
+      "running-which": list(running.map(({ id, delegate }) => `#${id} out of ${automation(delegate)}`)),
+    });
+    show(".from-stopped", stopped.length > 0, before);
+    show(".from-running", running.length > 0, before);
+    const pages = [
+      { title: "Before you join", body: before },
+      { title: "What changes", body: prepare("join-changes") },
+      { title: "What your wallet will ask" },
+    ];
+    return review("Join Carbon Impact", pages, join(accounts), connection, hooks, prepare("join-done"));
+  }
+  if (action === "leave") {
+    const title = "Leave Carbon Impact";
+    return review(title, [{ title, body: prepare("leave-effects") }], leave(accounts), connection, hooks);
+  }
+  const steps = release(accounts);
+  const names = list([...new Set(steps.flatMap(({ automation }) => automation ?? []))]);
+  const effects = prepare("release-effects");
+  fill(effects, { automations: names });
+  review(`Leave ${names}`, [{ title: `Leave ${names}`, body: effects }], steps, connection, hooks);
 }
 
 function showConnection(): void {
   show("#wallets", !connection);
   show("#connected", !!connection);
+  show(".to-app .open", !connection);
+  show(".to-app .wallet-state", !!connection);
   if (connection) {
     const { wallet, address, chainId } = connection;
-    fill(document, { wallet: wallet.name });
+    fill(document, { wallet: wallet.name, "wallet-short": short(address) });
     fillAddress(document, "me", address);
     show("#wrong-chain", chainId !== CHAIN_ID);
     if (chainId === CHAIN_ID) show("#switch-failed", false);
@@ -250,7 +391,7 @@ function letGo(): void {
   shown = undefined;
   close();
   showConnection();
-  show("#reading, #accounts, #payout", false);
+  show("#reading, #accounts, #summary, #none, #payout", false);
 }
 
 function walletButton(wallet: Wallet): DocumentFragment {
@@ -277,9 +418,14 @@ function walletButton(wallet: Wallet): DocumentFragment {
   return item;
 }
 
+show(".needs-script", false);
+// A reload keeps the address, and so the view.
+document.querySelector("#error .again")!.addEventListener("click", () => location.reload());
 document.getElementById("accounts")!.addEventListener("change", updateButtons);
-joinButton.addEventListener("click", () => reviewTicked(false));
-leaveButton.addEventListener("click", () => reviewTicked(true));
+for (const section of groups) {
+  for (const button of buttons(section))
+    button.addEventListener("click", () => reviewPicked(section, actionOf(button)));
+}
 document.querySelector("#wrong-chain .switch")!.addEventListener("click", () => {
   if (!connection) return;
   show("#switch-failed", false);
@@ -294,6 +440,7 @@ findWallets((wallets) => document.querySelector("#wallets .buttons")!.replaceChi
 safeWallet()
   .then((wallet) => wallet && connectTo(wallet))
   .catch(console.error);
-readRelay().then(showRelay).catch(failed);
+readRelayAgain().catch(failed);
 showChecks().catch(failed);
 setInterval(() => showChecks().catch(console.error), 3_600_000);
+setInterval(tick, 30_000);

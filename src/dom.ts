@@ -3,8 +3,8 @@ import { day, short } from "./format.ts";
 
 const BASESCAN = "https://basescan.org";
 
-export function show(selector: string, shown = true): void {
-  for (const element of document.querySelectorAll<HTMLElement>(selector)) element.hidden = !shown;
+export function show(selector: string, shown = true, root: ParentNode = document): void {
+  for (const element of root.querySelectorAll<HTMLElement>(selector)) element.hidden = !shown;
 }
 
 export function clone(id: string): DocumentFragment {
@@ -17,10 +17,10 @@ export function fill(root: ParentNode, texts: Record<string, string>): void {
   }
 }
 
-export function fillTime(root: ParentNode, name: string, time: number): void {
+export function fillTime(root: ParentNode, name: string, time: number, format = day): void {
   for (const element of root.querySelectorAll<HTMLTimeElement>(`time.${name}`)) {
     element.dateTime = new Date(time * 1000).toISOString();
-    element.textContent = day(time);
+    element.textContent = format(time);
   }
 }
 

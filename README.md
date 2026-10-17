@@ -1,10 +1,21 @@
 # metaDEX Café
 
 The static page at <https://metadex.cafe/> for joining and leaving the "Carbon Impact" automation with Hydrex accounts
-on Base. It shows the automation's settings and the epoch. With a wallet connected, or inside Safe{Wallet} as a Safe
-App, it shows the wallet's accounts with where each stands and where their payouts go, and joins and leaves. A keeper
-votes with the accounts in the automation. The page is `index.html` and `style.css`; a script in `src/` fills in what it
-reads from Base and talks to the wallet. Its dependencies are `viem`, and `@safe-global/safe-apps-sdk` for Safe{Wallet}.
+on Base. A keeper votes with the accounts in the automation. The page is `index.html` and `style.css`; a script in
+`src/` fills in what it reads from Base and talks to the wallet. Its dependencies are `viem`, and
+`@safe-global/safe-apps-sdk` for Safe{Wallet}.
+
+The page has two views, addressed by the hash:
+
+| Address                     | View | What it holds                                                                                                                                         |
+| --------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `https://metadex.cafe/`     | Home | What the automation does, its numbers, what you keep and give, a comparison, why it is safe to try, questions. No wallet                              |
+| `https://metadex.cafe/#app` | App  | The wallet's accounts, grouped by what can be done with them, the epoch's timeline, and joining and leaving. Inside Safe{Wallet}, the page opens here |
+
+Every `id` in the page is an address that shows the view holding it, such as `#if-your-automation-stopped` or
+`#questions`. CSS shows the view (`:target` and `:has()`), so views switch even without the script, and Back and Forward
+move between them; the script sets the title and moves the focus. The wallet stays connected between views, until a
+reload. Design and wording follow [the UX proposal](docs/ux/5-proposal.md), phases 0 and 1.
 
 ## How joining works
 
@@ -21,7 +32,8 @@ Hydrex's VotingEscrow, once per account. Then:
 - **The account** stays in the owner's wallet, with its HYDX. Nothing is transferred.
 
 Leaving is the same call with `false`, at any time. The automation can no longer claim from then on, and the votes come
-back to the owner from the next epoch.
+back to the owner from the next epoch. Leaving another automation, such as one of Hydrex's that stopped, is the same
+call with that automation's address.
 
 A single admin key controls the automation. It can change the share retired up to 100%, the payout tokens, the fee up to
 1%, the swap routers and any owner's payout address, and choose who claims and votes for the automation: today an
@@ -30,8 +42,10 @@ executor Safe, through which the keeper acts, and the automation's deployer.
 ## What the page can and cannot do
 
 - **It sends two calls only:** `setConduitApproval(conduit, tokenId, true)` on Hydrex's VotingEscrow to join, and the
-  same with `false` to leave. Joining replaces where an account's votes and claims go, so an account in another
-  automation joins directly. The page shows what the calls change and the exact calls before the wallet asks.
+  same with `false` to leave, with Carbon Impact's address or, for an account in one of Hydrex's other automations, that
+  automation's. Joining replaces where an account's votes and claims go, so an account in another automation joins
+  directly. The page shows what the calls change and the exact calls before the wallet asks: a join in three steps (what
+  to do first, what changes and when, then the calls), a leave in one.
 - **It holds no key, has no server and stores nothing.** Each action ends in a wallet prompt, once per call, each from a
   click of its own once the one before is included: a wallet that opens a window can only open it from a click. The page
   connects to a wallet only from a click, and forgets it on reload.
@@ -39,6 +53,9 @@ executor Safe, through which the keeper acts, and the automation's deployer.
   browser, "Browser wallet" still shows, and says how to get one.
 - **Inside Safe{Wallet}, it works with the Safe.** It proposes the calls as one Safe transaction, and the Safe's owners
   sign it in Safe{Wallet}. Safe's SDK is part of the script, and runs only when the page is in a frame.
+- **It says when an account's automation has stopped.** It reads from Hydrex's Voter when each of Hydrex's other
+  automations last voted. The Voter counts a vote only in the epoch it is cast, so an automation that has not voted
+  since the previous epoch began earns its accounts nothing from voting.
 - **It checks the automation first.** The chain, the automation's code and settings, and the code of Hydrex's
   VotingEscrow must match `src/config.ts`. If not, the page says what changed, and joining stays off. Leaving still
   works.
@@ -100,9 +117,10 @@ In Safe{Wallet}, open Apps, then My custom apps, and add `https://metadex.cafe/`
 reads the name, description and icon from `manifest.json`. A link also opens it, after a warning that the app is not in
 Safe{Wallet}'s list: `https://app.safe.global/apps/open?safe=base:<Safe address>&appUrl=https%3A%2F%2Fmetadex.cafe%2F`.
 
-The page connects to the Safe on its own. Joining and leaving end in Safe{Wallet}'s own screen, which shows the decoded
-calls; one owner proposes, and the others sign there. The page does not follow the proposal: the statuses change once
-the transaction executes. GitHub Pages lets other sites frame the page and read its manifest, which Safe{Wallet} needs.
+The page opens on the App and connects to the Safe on its own. Joining and leaving end in Safe{Wallet}'s own screen,
+which shows the decoded calls; one owner proposes, and the others sign there. The page does not follow the proposal: the
+statuses change once the transaction executes. GitHub Pages lets other sites frame the page and read its manifest, which
+Safe{Wallet} needs.
 
 ## Checking a build
 
@@ -122,12 +140,16 @@ Then compare each file in `dist/` with the one at the same path on <https://meta
 - **Right after a deployment:** GitHub Pages lets a browser keep each file for ten minutes. A browser that gets the new
   page with the previous script or stylesheet from its cache refuses that file, as it does not match the page's hashes,
   until its copy expires.
-- **Base RPC:** a read that fails goes to the next RPC. If none answers, the page says so and offers to try again.
+- **Base RPC:** a read that fails goes to the next RPC. If none answers, the page says so and offers to try again, on
+  the same view. An open page reads the automation's settings again every half minute until they answer; leaving never
+  waits for them. When Hydrex's other automations last voted only adds to the statuses: if it cannot be read, accounts
+  show as in those automations, without saying whether they stopped.
 - **A failed startup check,** or one that cannot run, turns joining off. The page says why. An open page runs the checks
   again every hour.
-- **The end of an epoch:** the page takes the time from the latest block it read rather than from the device, so it does
-  not wait for Hydrex's minter to move on to the new epoch. An open page does not move on by itself, but it reads the
-  accounts and the automation again when Join or Leave is clicked in a new epoch, before any review.
+- **The end of an epoch:** the page takes the time from the newest block it read rather than from the device, so it does
+  not wait for Hydrex's minter to move on to the new epoch. An open page moves on by itself within half a minute of the
+  end, and reads the accounts and the automation again, as it does if a read answers from the epoch before. Join and
+  Leave also read them again in a new epoch, before any review.
 - **The wrong network:** the page says so, and the main button becomes "Switch to Base". If the wallet cannot switch,
   the page asks to pick Base in the wallet.
 - **A call that would fail:** the wallet usually warns while it estimates the gas. If it is sent anyway, Base includes
@@ -148,15 +170,17 @@ Needs Node 26. Run `npm ci --ignore-scripts`, then `npm run typecheck`, `npm tes
 committing. `npm run build` writes the page to `dist/`; serve that folder with any static server to try it.
 
 `npm run test:fork` builds the page and drives it in Chromium against a copy of Base in anvil, pinned at a block. A test
-wallet acts as real owners: one joins with two accounts, one of them from Liquid Hydrex; another joins from Lock Maxi
-and USDC; a member leaves; the owner of an ended lock gets nothing to tick; and, inside a stand-in for Safe{Wallet}, a
-Safe proposes leaving with two accounts. It also checks that the page asks the wallet nothing until it is picked, and
-only for its account, its chain and transactions then; the wrong network, a wallet that cannot switch, a refusal in the
-wallet, a transaction that fails on Base, a review closed before Base includes the transaction, a wallet that locks, a
-browser without a wallet, and that nothing breaches the page's policy. It needs anvil, from Foundry, and Chromium:
-`npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium's path. `BASE_RPC_URL` is the archive RPC to
-fork from, `https://mainnet.base.org` by default. With `SCREENSHOTS` set to a folder, it saves screenshots there at 390
-and 1440 px, light and dark.
+wallet acts as real owners: one joins with two accounts from Lock Maxi and USDC, which stopped, or leaves USDC; another
+joins with an account of its own; a member leaves; the owner of an ended lock gets nothing to tick; and, inside a
+stand-in for Safe{Wallet}, a Safe proposes leaving with two accounts. It checks Home, the App at its address, Back and
+Forward, a section's address, one it cannot decode, and the views with scripts off. It also checks that the page asks
+the wallet nothing until it is picked, and only for its account, its chain and transactions then; the wrong network, a
+wallet that cannot switch, a refusal in the wallet, a transaction that fails on Base, a review closed before Base
+includes the transaction, Back while the wallet asks, a wallet that locks, a browser without a wallet, reads of Base
+that fail, a Voter that cannot be read, and that nothing breaches the page's policy. It needs anvil, from Foundry, and
+Chromium: `npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium's path. `BASE_RPC_URL` is the archive
+RPC to fork from, `https://mainnet.base.org` by default. With `SCREENSHOTS` set to a folder, it saves screenshots there
+at 390 and 1440 px, light and dark.
 
 `src/config.ts` holds what the page trusts about the automation, and the RPCs it reads from. After an upgrade, check the
 new contracts, then update it. `src/hydrex-conduits.json` names the other automations that Hydrex lists at
