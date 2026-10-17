@@ -610,6 +610,9 @@ Taken by the user on 2026-10-15, after this research:
 27. **Refactored, with few comments.** The same day, the user asked for the code to be refactored for style, simplicity
     and duplication, keeping only plain comments for what the code cannot say. `src/abi.ts` and `src/calls.ts` went into
     `src/hydrex.ts` and `src/chain.ts`, and their tests into `test/hydrex.test.ts`.
+28. **Fingerprinted files.** Then the user asked for best practice, such as no inline CSS and fingerprinting. The page
+    had no inline CSS already. The build now names the scripts, the stylesheet and the icon after a hash of their
+    content, minifies the stylesheet, and puts Subresource Integrity hashes on the script and stylesheet tags.
 
 Still open: how much an account has not claimed yet. It would need reads of every bribe the account earned in; it is
 left for later.

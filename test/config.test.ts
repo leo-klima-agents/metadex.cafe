@@ -45,3 +45,13 @@ test("the page may reach its RPCs and nothing else, and the README lists them", 
   const readme = read("README.md");
   for (const origin of connect) assert.ok(readme.includes(`\`${origin}\``), `${origin} is missing from the README`);
 });
+
+test("the page loads its own files by hashed name, checks their integrity, and has nothing inline", () => {
+  const html = read("index.html");
+  assert.doesNotMatch(html, /\sstyle=|<style/);
+  assert.deepEqual(html.match(/<(?:link|script)\b[^>]*>/g), [
+    '<link rel="icon" href="%ICON%" type="image/svg+xml" />',
+    '<link rel="stylesheet" href="%STYLE%" integrity="%STYLE_INTEGRITY%" />',
+    '<script type="module" src="%MAIN%" integrity="%MAIN_INTEGRITY%">',
+  ]);
+});

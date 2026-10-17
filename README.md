@@ -57,6 +57,11 @@ Safe's SDK talks to Safe{Wallet} through the frame, and needs no entry. Scripts 
 files, images also as `data:` for wallets' icons, and Trusted Types are required, so no script can write HTML into the
 page.
 
+The page's own files, except `index.html` and `manifest.json`, are named after a hash of their content, so a browser or
+a cache never pairs a page with files from another version. The browser checks the script and the stylesheet against the
+SHA-384 hashes in `index.html` (Subresource Integrity) before using them. Safe's SDK, which the script imports in
+Safe{Wallet}, has a hashed name but no such check: an import cannot carry one under this policy.
+
 ## Deployment
 
 A tag deploys the page. Tag a commit with the version in `package.json` and push the tag:
