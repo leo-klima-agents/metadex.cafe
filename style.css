@@ -2,23 +2,12 @@
 :root {
   font-family: system-ui, sans-serif;
   line-height: 1.5;
-  --accent: #0b6b64;
-  --on-accent: #ffffff;
-  --edge: #7d8f8b;
-  --accent-soft: #e2f3f0;
-  --bad: #b3261e;
-  --bad-soft: #fbe6e3;
-}
-/* A media query rather than light-dark(), which the browsers inside older wallet apps lack. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --accent: #5cc8bb;
-    --on-accent: #06201d;
-    --edge: #5f7470;
-    --accent-soft: #12302c;
-    --bad: #ff8c7f;
-    --bad-soft: #3a1b18;
-  }
+  --accent: light-dark(#0b6b64, #5cc8bb);
+  --on-accent: light-dark(#ffffff, #06201d);
+  --edge: light-dark(#7d8f8b, #5f7470);
+  --accent-soft: light-dark(#e2f3f0, #12302c);
+  --bad: light-dark(#b3261e, #ff8c7f);
+  --bad-soft: light-dark(#fbe6e3, #3a1b18);
 }
 body {
   max-inline-size: 40rem;
@@ -93,11 +82,11 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 /* Accounts the reader can pick: a box beside each, the whole row a label for it, and the picked ones tinted. */
-.accounts.pickable {
+.accounts:has(.pick:not([hidden])) {
   padding-inline-start: 0;
   list-style: none;
 }
-.accounts.pickable label {
+.accounts:has(.pick:not([hidden])) label {
   display: grid;
   grid-template-columns: 1.5rem 1fr;
   column-gap: 0.75rem;

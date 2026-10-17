@@ -427,17 +427,20 @@ Fixed:
 ### Browsers inside wallets
 
 Wallet apps show pages in the system's web view: on iOS, WKWebView, which follows the iOS version; on Android, the
-WebView that Google Play updates.
+WebView that Google Play updates. Almost every phone has a recent one. The exceptions are iPhones that stopped at iOS 15
+or 16, the iPhone X and older, and Android 7, whose WebView stopped at Chrome 119.
 
-- **Too new.** The page used `Intl.DurationFormat` (Safari 16.4, Chrome 129), `light-dark()` (Safari 17.5, Chrome 123),
-  `AbortSignal.timeout()` (Safari 16, Chrome 103) and ARIA reflection (Firefox 119). The first threw as the script
-  loaded, so an older web view showed "…" everywhere. The page now does without all four, and lays the accounts out
-  without `:has()`, which now only tints a ticked row.
-- **The floor** is `<dialog>`: Safari 15.4 and Chrome 100, from March 2022. esbuild's output is the same for that
-  target, so the build is unchanged.
+- **Too new.** The page used `Intl.DurationFormat`, which came late: Safari 16.4 (March 2023), Chrome 129
+  (September 2024) and Firefox 136 (March 2025). It threw as the script loaded, so a Chrome or Firefox a year or two old
+  showed "…" everywhere. The countdown now uses plural rules instead.
+- **Kept as they are** ([decision 25](#decisions)): `light-dark()` (Safari 17.5, Chrome 123, Firefox 120),
+  `AbortSignal.timeout()` (Safari 16, Chrome 103, Firefox 100), ARIA reflection (Firefox 119) and `:has()` (Safari 15.4,
+  Chrome 105, Firefox 121). Older browsers lose the controls' colours, the reads, a box's spoken label or the accounts'
+  layout. The phones among them are from 2017 or before.
 - **A wallet that only sets `window.ethereum`,** as some in-app browsers do, shows as "Browser wallet" and connects.
 - **Not tested:** WebKit itself, and real wallet apps.
-- **Size.** The first load is 24.1 KB gzipped, up from 23.7 KB; the two SDKs are unchanged.
+- **Size.** With the code review's fixes, the first load is 24.5 KB gzipped, up from 23.7 KB; the two SDKs are
+  unchanged.
 
 ### Code review
 
@@ -596,6 +599,9 @@ Taken by the user on 2026-10-15, after this research:
 24. **"Browser wallet" without a wallet.** Also that day: when no wallet announces itself and `window.ethereum` is
     empty, the page still offers "Browser wallet". Picking it says that no wallet was found, how to get one, and that
     Coinbase Wallet works without one.
+25. **Minimal code over old browsers.** Later that day, after the polish, the user chose to keep the code minimal rather
+    than support browsers from before 2022 to 2024. The page does without `Intl.DurationFormat` only, which Chrome and
+    Firefox gained in 2024 and 2025.
 
 Still open: how much an account has not claimed yet. It would need reads of every bribe the account earned in; it is
 left for later.

@@ -153,7 +153,7 @@ function accountItem(account: Account, owner: Address, epochStart: number, mine:
     // A hidden box stays disabled, so that a click on its row's label cannot tick it.
     box.hidden = box.disabled = false;
     box.value = String(account.id);
-    box.setAttribute("aria-label", `Pick ${account.name || "Account"} #${account.id}`);
+    box.ariaLabel = `Pick ${account.name || "Account"} #${account.id}`;
   }
   return item;
 }
@@ -174,9 +174,6 @@ function showAccounts(keep = false): void {
   document.querySelector("#empty-accounts ul")!.replaceChildren(...items(empty));
   for (const box of document.querySelectorAll<HTMLInputElement>("#accounts .pick:not([hidden])")) {
     box.checked = kept.has(box.value);
-  }
-  for (const list of document.querySelectorAll("#accounts .accounts")) {
-    list.classList.toggle("pickable", !!list.querySelector(".pick:not([hidden])"));
   }
   fill(document, "empty-count", count(empty.length, "empty account", "empty accounts"));
   show("empty-accounts", empty.length > 0);

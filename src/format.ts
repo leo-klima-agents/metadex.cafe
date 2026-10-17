@@ -50,7 +50,7 @@ export const dayTime = (time: number): string => utcTime.format(time * 1000);
 
 /**
  * The two largest units: "6 days, 2 hours", "3 hours, 5 minutes", "less than a minute". Built from plural rules rather
- * than Intl.DurationFormat, which the browsers inside older wallet apps lack.
+ * than Intl.DurationFormat, which Chrome has had only since 2024 and Firefox since 2025.
  */
 export function countdown(seconds: number): string {
   const [days, hours, minutes] = [
