@@ -19,13 +19,6 @@ export const votingEscrowAbi = parseAbi([
   "function setConduitApproval(address conduit, uint256 tokenId, bool approve)",
 ]);
 
-export const voterAbi = parseAbi([
-  "function lastVoted(address voter) view returns (uint256)",
-  "function poolVoteLength(address voter) view returns (uint256)",
-  "function poolVote(address voter, uint256 index) view returns (address)",
-  "function votes(address voter, address pool) view returns (uint256)",
-]);
-
 export const conduitAbi = parseAbi([
   "function veToken() view returns (address)",
   "function voter() view returns (address)",
@@ -35,13 +28,6 @@ export const conduitAbi = parseAbi([
   "function totalTonnesRetired() view returns (uint256)",
   "function retiringEntityName() view returns (string)",
   "function getEffectiveRecipientForOwner(address owner) view returns (address)",
-  "function setMyPayoutRecipient(address newRecipient)",
 ]);
 
 export const accountNamesAbi = parseAbi(["function getBulkNames(uint256[] tokenIds) view returns (string[])"]);
-
-export const poolAbi = parseAbi([
-  "function token0() view returns (address)",
-  "function token1() view returns (address)",
-  "function symbol() view returns (string)",
-]);

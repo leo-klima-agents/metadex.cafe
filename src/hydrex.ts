@@ -1,5 +1,5 @@
 import { zeroAddress, type Address } from "viem";
-import { accountNamesAbi, conduitAbi, multicall3Abi, poolAbi, voterAbi, votingEscrowAbi } from "./abi.ts";
+import { accountNamesAbi, conduitAbi, multicall3Abi, votingEscrowAbi } from "./abi.ts";
 import { call, codeHash, implementation, read, rpc, same } from "./chain.ts";
 import {
   ACCOUNT_NAMES,
@@ -16,16 +16,13 @@ import {
   VOTING_ESCROW_IMPLEMENTATION,
   VOTING_ESCROW_IMPLEMENTATION_CODE_HASH,
 } from "./config.ts";
-import { WEEK, clean, short, weekStart } from "./format.ts";
+import { WEEK, clean, weekStart } from "./format.ts";
 import conduits from "./hydrex-conduits.json" with { type: "json" };
 
 export const LockType = { timed: 0, rolling: 1, permanent: 2 } as const;
 
-export type Pool = { address: Address; name: string; votes: bigint };
-
 export type Relay = {
-  /** The time of Base's latest block, and the start of its epoch. */
-  time: number;
+  /** The start of the epoch at Base's latest block. */
   epochStart: number;
   retireBps: bigint;
   feeBps: bigint;
@@ -35,9 +32,6 @@ export type Relay = {
   entity: string;
   /** The conduit's votes this epoch. */
   votes: bigint;
-  lastVoted: number;
-  /** The latest vote, largest first. */
-  pools: Pool[];
 };
 
 export type Account = {
@@ -75,75 +69,20 @@ const now = () => call(MULTICALL3, multicall3Abi, "getCurrentBlockTimestamp");
 const epochAt = (time: unknown): number => weekStart(Number(time));
 
 export async function readRelay(): Promise<Relay> {
-  const [time, retireBps, feeBps, tonnes, entity, lastVoted, length] = all(
+  const [time, retireBps, feeBps, tonnes, entity] = all(
     await read([
       now(),
       call(CONDUIT, conduitAbi, "retireBps"),
       call(CONDUIT, conduitAbi, "treasuryFeeBps"),
       call(CONDUIT, conduitAbi, "totalTonnesRetired"),
       call(CONDUIT, conduitAbi, "retiringEntityName"),
-      call(VOTER, voterAbi, "lastVoted", CONDUIT),
-      call(VOTER, voterAbi, "poolVoteLength", CONDUIT),
     ]),
-  ) as [bigint, bigint, bigint, bigint, string, bigint, bigint];
+  ) as [bigint, bigint, bigint, bigint, string];
   const epochStart = epochAt(time);
-  const [votes, ...pools] = all(
-    await read([
-      call(VOTING_ESCROW, votingEscrowAbi, "getPastVotes", CONDUIT, BigInt(epochStart)),
-      ...Array.from({ length: Number(length) }, (_, i) => call(VOTER, voterAbi, "poolVote", CONDUIT, BigInt(i))),
-    ]),
-  ) as [bigint, ...Address[]];
-  return {
-    time: Number(time),
-    epochStart,
-    retireBps,
-    feeBps,
-    tonnes,
-    entity: clean(entity),
-    votes,
-    lastVoted: Number(lastVoted),
-    pools: await readPools(pools),
-  };
-}
-
-async function readPools(addresses: Address[]): Promise<Pool[]> {
-  const reads = await read(
-    addresses.flatMap((pool) => [
-      call(VOTER, voterAbi, "votes", CONDUIT, pool),
-      call(pool, poolAbi, "token0"),
-      call(pool, poolAbi, "token1"),
-      call(pool, poolAbi, "symbol"),
-    ]),
-  );
-  const rows = addresses.map((address, i) => {
-    const [votes, token0, token1, symbol] = reads.slice(4 * i, 4 * i + 4) as [bigint?, Address?, Address?, string?];
-    return { address, votes: votes ?? 0n, token0, token1, symbol };
-  });
-  const tokens = [...new Set(rows.flatMap(({ token0, token1 }) => (token0 && token1 ? [token0, token1] : [])))];
-  const symbols = await read(tokens.map((token) => call(token, poolAbi, "symbol")));
-  const symbolOf = new Map(tokens.map((token, i) => [token, symbols[i] as string | undefined]));
-  return rows
-    .map(({ address, votes, token0, token1, symbol }) => ({
-      address,
-      votes,
-      name: poolName(address, {
-        token0: token0 && symbolOf.get(token0),
-        token1: token1 && symbolOf.get(token1),
-        symbol,
-      }),
-    }))
-    .sort((a, b) => (a.votes === b.votes ? 0 : a.votes > b.votes ? -1 : 1));
-}
-
-/** A pool's pair and kind ("GOO/cbBTC · vAMM"), else its symbol ("steakEURC", for a vault), else its short address. */
-export function poolName(
-  address: Address,
-  found: { token0?: string | undefined; token1?: string | undefined; symbol?: string | undefined },
-): string {
-  const [token0, token1, symbol] = [clean(found.token0), clean(found.token1), clean(found.symbol)];
-  const kind = symbol.split("-")[0] ?? "";
-  if (token0 && token1) return kind ? `${token0}/${token1} · ${kind}` : `${token0}/${token1}`;
-  return symbol || short(address);
+  const [votes] = all(
+    await read([call(VOTING_ESCROW, votingEscrowAbi, "getPastVotes", CONDUIT, BigInt(epochStart))]),
+  ) as [bigint];
+  return { epochStart, retireBps, feeBps, tonnes, entity: clean(entity), votes };
 }
 
 /**

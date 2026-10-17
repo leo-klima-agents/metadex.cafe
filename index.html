@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self' 'sha256-4CSX0cSvsqdXksjA6mWUlZWOxhEmilc7TqCXOuzQjd8=' 'sha256-iBi3gvWToeXcPvoJh2Qe00AVDlN+f08gX0MtDVLz5qI=' 'sha256-thB/1uQ6hZv+vTQDSxOw21131dHhE475xakO9wp4pxo='; img-src 'self' data:; connect-src 'self' https://mainnet.base.org https://base-rpc.publicnode.com https://base.drpc.org https://rpc.wallet.coinbase.com https://chain-proxy.wallet.coinbase.com https://www.walletlink.org wss://www.walletlink.org; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://mainnet.base.org https://base-rpc.publicnode.com https://base.drpc.org; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'; trusted-types 'none'"
     />
     <meta name="referrer" content="no-referrer" />
     <title>metaDEX Café</title>
@@ -32,8 +32,8 @@
         <strong>Reading Base failed.</strong> Check the connection and <a href="">try again</a>.
       </p>
       <div id="checks" class="notice" role="alert" hidden>
-        <strong>This page's checks of the Carbon Impact automation failed.</strong> Joining and changing the payout
-        address stay off until the page is updated. Leaving still works.
+        <strong>This page's checks of the Carbon Impact automation failed.</strong> Joining stays off until the page is
+        updated. Leaving still works.
         <ul>
           <li id="chain" hidden>The RPC serves another chain than Base.</li>
           <li id="code" hidden>The Carbon Impact automation runs other code than this page knows.</li>
@@ -75,26 +75,10 @@
 
         <h3>This epoch</h3>
         <p>
-          <time class="week-start">…</time> to <time class="week-end">…</time>, 00:00 UTC. Each epoch lasts a week, and
-          the next one starts in <span class="countdown">…</span>. The automation votes just before the epoch ends and
-          pays out right after. A join or a leave changes who can claim an account's rewards right away, and who votes
-          with it from the next epoch.
+          <time class="week-start">…</time> to <time class="week-end">…</time>, 00:00 UTC. Each epoch lasts a week. The
+          automation votes just before the epoch ends and pays out right after. A join or a leave changes who can claim
+          an account's rewards right away, and who votes with it from the next epoch.
         </p>
-
-        <h3>Latest vote</h3>
-        <p class="voted">…</p>
-        <details id="split" hidden>
-          <summary>How it split across <span class="pools">…</span></summary>
-          <table class="shares">
-            <thead>
-              <tr>
-                <th>Pool</th>
-                <th>Share</th>
-              </tr>
-            </thead>
-            <tbody translate="no"></tbody>
-          </table>
-        </details>
       </section>
 
       <section>
@@ -107,7 +91,7 @@
           </p>
           <p id="no-wallet" class="notice" role="alert" hidden>
             No wallet was found in this browser. Install a browser wallet, or open this page in your wallet app's own
-            browser. Coinbase Wallet works without one.
+            browser.
           </p>
           <p id="wallet-failed" class="notice" role="alert" hidden>
             <bdi class="failed-wallet" translate="no"></bdi> did not connect. Try again, or use another wallet.
@@ -116,7 +100,6 @@
         <div id="connected" hidden>
           <p>
             Connected with <bdi class="wallet" translate="no"></bdi> as <code translate="no"><a class="me"></a></code>.
-            <button type="button" id="disconnect" class="secondary">Disconnect</button>
           </p>
           <p id="wrong-chain" class="notice" role="alert" hidden>
             <span class="to-switch">
@@ -159,26 +142,8 @@
         </p>
         <p>
           This address takes the payouts of all your accounts in the Carbon Impact automation. The automation's admin
-          key can change it too, as it can any owner's.
+          key can change it, as it can any owner's.
         </p>
-        <form id="payout-form" hidden>
-          <p>
-            <label for="recipient">Send the payouts to:</label>
-            <input
-              id="recipient"
-              required
-              pattern="\s*0x[0-9a-fA-F]{40}\s*"
-              title="0x followed by 40 hexadecimal characters"
-              data-typo="This address has a typo: its capital and small letters do not match its checksum."
-              data-zero="Payouts cannot go to the zero address."
-              placeholder="0x…"
-              autocomplete="off"
-              autocapitalize="off"
-              spellcheck="false"
-            />
-          </p>
-          <p><button>Change the payout address</button></p>
-        </form>
       </section>
 
       <section>
@@ -247,7 +212,6 @@
         automation.
       </p>
       <div class="foot">
-        <p class="check" role="status"></p>
         <p class="progress" role="status"></p>
         <p class="buttons">
           <button type="button" class="confirm" disabled>Confirm in your wallet</button>
@@ -318,16 +282,6 @@
         <li>
           <b>Your votes come back to you</b> from the next epoch, starting <time class="next"></time>, 00:00 UTC. Until
           then they count for the Carbon Impact automation.
-        </li>
-      </ul>
-    </template>
-    <template id="payout-effects">
-      <ul>
-        <li>
-          <b
-            >The Carbon Impact automation sends the payouts to <code translate="no"><a class="recipient"></a></code
-          ></b>
-          for all your accounts in it, from the next payout on.
         </li>
       </ul>
     </template>

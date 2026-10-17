@@ -17,7 +17,6 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "@coinbase/wallet-sdk": "4.4.0",
     "@safe-global/safe-apps-sdk": "9.1.0",
     "viem": "2.57.7"
   },

@@ -29,22 +29,14 @@ const common: esbuild.BuildOptions = {
   legalComments: "linked",
   logLevel: "warning",
 };
-// Coinbase's SDK and Safe's are bundled on their own, each with the parts of viem it uses, and loaded only when someone
-// picks Coinbase Wallet or the page runs in Safe{Wallet}. Splitting would put those parts in a chunk that every visitor
-// loads.
-const SDKS = ["coinbase", "safe"];
-const sdks: esbuild.Plugin = {
-  name: "sdks",
-  setup: (build) =>
-    build.onResolve({ filter: new RegExp(`^\\./(${SDKS.join("|")})\\.ts$`) }, ({ path }) => ({
-      path: path.replace(/\.ts$/, ".js"),
-      external: true,
-    })),
+// Safe's SDK is bundled on its own, with the parts of viem it uses, and loaded only when the page runs in Safe{Wallet}.
+// Splitting would put those parts in a chunk that every visitor loads.
+const safe: esbuild.Plugin = {
+  name: "safe",
+  setup: (build) => build.onResolve({ filter: /^\.\/safe\.ts$/ }, () => ({ path: "./safe.js", external: true })),
 };
-await esbuild.build({ ...common, entryPoints: ["src/main.ts"], outfile: `${OUT}/main.js`, plugins: [sdks] });
-for (const sdk of SDKS) {
-  await esbuild.build({ ...common, entryPoints: [`src/${sdk}.ts`], outfile: `${OUT}/${sdk}.js` });
-}
+await esbuild.build({ ...common, entryPoints: ["src/main.ts"], outfile: `${OUT}/main.js`, plugins: [safe] });
+await esbuild.build({ ...common, entryPoints: ["src/safe.ts"], outfile: `${OUT}/safe.js` });
 const html = readFileSync(`${ROOT}/index.html`, "utf8");
 writeFileSync(`${OUT}/index.html`, html.replace("%VERSION%", version).replace("%COMMIT%", commit().slice(0, 7)));
 for (const file of ["manifest.json", "icon.svg", "style.css"]) copyFileSync(`${ROOT}/${file}`, `${OUT}/${file}`);

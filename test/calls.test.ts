@@ -1,15 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { encodeFunctionData, parseAbi, zeroAddress, type Address } from "viem";
-import { join, leave, payout } from "../src/calls.ts";
+import { join, leave } from "../src/calls.ts";
 import { CONDUIT, VOTING_ESCROW } from "../src/config.ts";
 import { canJoin, canLeave, type Account } from "../src/hydrex.ts";
 
 // Written apart from src/abi.ts, from the verified sources on Sourcify and in hydrex-periphery.
-const abi = parseAbi([
-  "function setConduitApproval(address conduitAddress, uint256 tokenId, bool approve)",
-  "function setMyPayoutRecipient(address newRecipient)",
-]);
+const abi = parseAbi(["function setConduitApproval(address conduitAddress, uint256 tokenId, bool approve)"]);
 const approval = (conduit: Address, id: bigint, approve: boolean) => ({
   to: VOTING_ESCROW,
   data: encodeFunctionData({ abi, functionName: "setConduitApproval", args: [conduit, id, approve] }),
@@ -62,15 +59,10 @@ test("an account in other automations joins directly, one call per account, nami
   assert.equal(steps[2]!.says, "#7 leaves the USDC automation and joins the Carbon Impact automation.");
 });
 
-test("leaving clears the conduit's approval, and the payout address is set on the conduit", () => {
+test("leaving clears the conduit's approval", () => {
   const steps = leave([account({ delegate: CONDUIT, claimer: CONDUIT }), account({ id: 42n, claimer: CONDUIT })]);
   assert.deepEqual(calls(steps), [approval(CONDUIT, 141n, false), approval(CONDUIT, 42n, false)]);
   assert.equal(steps[1]!.says, "#42 leaves the Carbon Impact automation.");
-  const step = payout(OWNER);
-  assert.deepEqual(calls([step]), [
-    { to: CONDUIT, data: encodeFunctionData({ abi, functionName: "setMyPayoutRecipient", args: [OWNER] }) },
-  ]);
-  assert.equal(step.shows, `setMyPayoutRecipient(${OWNER})`);
 });
 
 test("who can join and who can leave", () => {

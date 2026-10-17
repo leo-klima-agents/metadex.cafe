@@ -1,5 +1,5 @@
 import { encodeFunctionData, type Address, type Hex } from "viem";
-import { conduitAbi, votingEscrowAbi } from "./abi.ts";
+import { votingEscrowAbi } from "./abi.ts";
 import { CONDUIT, VOTING_ESCROW } from "./config.ts";
 import { list } from "./format.ts";
 import { automation, type Account } from "./hydrex.ts";
@@ -34,12 +34,3 @@ export const leave = (accounts: Account[]): Step[] =>
     ...approval(CONDUIT, account.id, false),
     says: `#${account.id} leaves the Carbon Impact automation.`,
   }));
-
-/** Sends the owner's payouts to an address. */
-export const payout = (recipient: Address): Step => ({
-  to: CONDUIT,
-  data: encodeFunctionData({ abi: conduitAbi, functionName: "setMyPayoutRecipient", args: [recipient] }),
-  says: `Send the payouts to ${recipient}.`,
-  on: "the Carbon Impact automation",
-  shows: `setMyPayoutRecipient(${recipient})`,
-});

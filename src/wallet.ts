@@ -1,5 +1,4 @@
 import { getAddress, type Address, type Hex } from "viem";
-import { sleep } from "./chain.ts";
 import { CHAIN_ID, RPCS } from "./config.ts";
 import { clean } from "./format.ts";
 
@@ -7,8 +6,6 @@ import { clean } from "./format.ts";
 export type Provider = {
   request(args: { method: string; params?: unknown }): Promise<unknown>;
   on?(event: string, listener: (value: any) => void): unknown;
-  /** Ends the session, for the wallets that have one, such as Coinbase's SDK; it may not return a promise. */
-  disconnect?(): unknown;
 };
 
 export type Wallet = { id: string; name: string; icon?: string; provider: () => Promise<Provider> };
@@ -18,7 +15,6 @@ export type Connection = { wallet: Wallet; provider: Provider; address: Address;
 type Announcement = { info: { name: string; icon: string; rdns: string }; provider: Provider };
 
 const HEX_CHAIN_ID = `0x${CHAIN_ID.toString(16)}`;
-const COINBASE_RDNS = "com.coinbase.wallet";
 const announced = new Map<string, Announcement>();
 
 /** Calls back with the wallets to offer now, and again each time a wallet announces itself. */
@@ -32,10 +28,7 @@ export function findWallets(found: (wallets: Wallet[]) => void): void {
   found(wallets());
 }
 
-/**
- * The wallets the browser announces (EIP-6963), else "Browser wallet", then Coinbase's SDK unless Coinbase's extension
- * announced itself: the SDK would use the extension.
- */
+/** The wallets the browser announces (EIP-6963), else "Browser wallet". */
 function wallets(): Wallet[] {
   const list: Wallet[] = [...announced.values()].map(({ info, provider }) => ({
     id: info.rdns,
@@ -43,9 +36,7 @@ function wallets(): Wallet[] {
     ...(info.icon?.startsWith("data:image/") && { icon: info.icon }),
     provider: async () => provider,
   }));
-  if (!list.length) list.push({ id: "injected", name: "Browser wallet", provider: injected });
-  if (!announced.has(COINBASE_RDNS)) list.push({ id: "coinbase", name: "Coinbase Wallet", provider: coinbase });
-  return list;
+  return list.length ? list : [{ id: "injected", name: "Browser wallet", provider: injected }];
 }
 
 /** No wallet in this browser: none announced itself, and window.ethereum is empty. */
@@ -56,15 +47,6 @@ async function injected(): Promise<Provider> {
   const provider = (window as { ethereum?: Provider }).ethereum;
   if (!provider) throw new NoWallet("No wallet in this browser.");
   return provider;
-}
-
-let sdk: Promise<Provider> | undefined;
-
-/** Coinbase's SDK, loaded the first time someone picks it. */
-export function coinbase(): Promise<Provider> {
-  sdk ??= import("./coinbase.ts").then(({ provider }) => provider());
-  sdk.catch(() => (sdk = undefined));
-  return sdk;
 }
 
 let safeSdk: Promise<Provider | undefined> | undefined;
@@ -82,10 +64,10 @@ export const SAFE: Wallet = { id: "safe", name: "Safe{Wallet}", provider: async 
 /** Whether the wallet is a Safe, which proposes calls for its owners to sign in Safe{Wallet} rather than sending them. */
 export const proposes = ({ wallet }: Connection): boolean => wallet === SAFE;
 
-/** Asks the wallet for its account; with ask false, only reads an account it already shares. */
-export async function connect(wallet: Wallet, ask = true): Promise<Connection | undefined> {
+/** Asks the wallet for its account. */
+export async function connect(wallet: Wallet): Promise<Connection | undefined> {
   const provider = await wallet.provider();
-  const [address] = (await provider.request({ method: ask ? "eth_requestAccounts" : "eth_accounts" })) as string[];
+  const [address] = (await provider.request({ method: "eth_requestAccounts" })) as string[];
   if (!address) return undefined;
   const chainId = Number(await provider.request({ method: "eth_chainId" }));
   return { wallet, provider, address: getAddress(address), chainId };
@@ -122,85 +104,19 @@ export async function switchToBase(connection: Connection): Promise<void> {
   connection.chainId = Number(await provider.request({ method: "eth_chainId" }));
 }
 
-/**
- * Whether the wallet sends several calls as one transaction (EIP-5792). A wallet that would first ask to upgrade the
- * account ("ready") sends them one by one instead, and so does one that does not answer.
- */
-export async function batches(provider: Provider, address: Address): Promise<boolean> {
-  try {
-    const all = (await Promise.race([
-      provider.request({ method: "wallet_getCapabilities", params: [address, [HEX_CHAIN_ID]] }),
-      sleep(5_000).then(() => null),
-    ])) as Record<string, { atomic?: { status?: string } }> | null;
-    return (all?.[HEX_CHAIN_ID]?.atomic ?? all?.["0x0"]?.atomic)?.status === "supported";
-  } catch {
-    return false;
-  }
-}
-
 export type Call = { to: Address; data: Hex };
 
-/**
- * Sends calls as one transaction, then follows it while following says to, until Base includes it. The first await is
- * the wallet's request, so a wallet that opens a window, such as Coinbase's, opens it from the click. Returns the
- * transaction hashes, or undefined when the page stopped following or the wallet cannot say where the batch is.
- */
-export async function sendBatch(
-  provider: Provider,
-  from: Address,
-  calls: Call[],
-  sent: () => void,
-  following: () => boolean,
-): Promise<Hex[] | undefined> {
-  const reply = (await provider.request({
-    method: "wallet_sendCalls",
-    params: [
-      {
-        version: "2.0.0",
-        chainId: HEX_CHAIN_ID,
-        from,
-        atomicRequired: true,
-        calls: calls.map(({ to, data }) => ({ to, data, value: "0x0" })),
-      },
-    ],
-  })) as string | { id: string };
-  sent();
-  const id = typeof reply === "string" ? reply : reply.id;
-  type Status = { status: number | string; receipts?: { transactionHash: Hex; status: Hex | number }[] };
-  // A wallet may fail to answer once in a while; one that fails five times in a row cannot say where the batch is.
-  for (let misses = 0; following() && misses < 5;) {
-    const answer = (await provider
-      .request({ method: "wallet_getCallsStatus", params: [id] })
-      .catch(() => undefined)) as Status | undefined;
-    misses = answer ? 0 : misses + 1;
-    if (!answer || answer.status === 100 || answer.status === "PENDING") {
-      await sleep(2_000);
-      continue;
-    }
-    const { status, receipts = [] } = answer;
-    const hashes = receipts.map(({ transactionHash }) => transactionHash);
-    const ok = (status === 200 || status === "CONFIRMED") && receipts.every((r) => Number(r.status) === 1);
-    if (!ok) throw new Failed(hashes);
-    return hashes;
-  }
-  return undefined;
-}
+/** Proposes calls as one Safe transaction, for the Safe's owners to sign in Safe{Wallet}. */
+export const propose = async (provider: Provider, calls: Call[]): Promise<void> => {
+  await provider.request({ method: "wallet_sendCalls", params: [{ calls }] });
+};
 
 /**
  * Sends one call as a transaction on Base: a wallet on another chain refuses it. The first await is the wallet's
- * request. Returns the transaction's hash.
+ * request, so a wallet that opens a window opens it from the click. Returns the transaction's hash.
  */
 export const sendTransaction = async (provider: Provider, from: Address, { to, data }: Call): Promise<Hex> =>
   (await provider.request({
     method: "eth_sendTransaction",
     params: [{ from, to, data, chainId: HEX_CHAIN_ID }],
   })) as Hex;
-
-/** A transaction that Base included but that reverted. */
-export class Failed extends Error {
-  hashes: Hex[];
-  constructor(hashes: Hex[]) {
-    super("A transaction failed on Base.");
-    this.hashes = hashes;
-  }
-}

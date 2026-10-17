@@ -599,6 +599,14 @@ Taken by the user on 2026-10-15, after this research:
 25. **Minimal code over old browsers.** Later that day, after the polish, the user chose to keep the code minimal rather
     than support browsers from before 2022 to 2024. The page does without `Intl.DurationFormat` only, which Chrome and
     Firefox gained in 2024 and 2025.
+26. **The smallest attack surface.** On 2026-10-17 the user asked for the code to be cut back to the smallest attack
+    surface. Kept, by the user's choice: the Safe App, the EIP-6963 wallet picker, account names, other automations'
+    names, the three RPCs and the switch to Base. Removed: Coinbase's SDK, with its four origins, the page's own origin
+    and three style hashes in the policy; batching for wallets other than a Safe; the payout address form and
+    `setMyPayoutRecipient`; the latest vote and its split, which read symbols from any pool and token; the check of the
+    calls with `eth_simulateV1`; and remembering the wallet, reconnecting to it and Disconnect. With them went the
+    page's own clock, the countdown and moving on to a new epoch by itself, and the reads every 15 seconds after a
+    transaction the page could not follow. The policy now requires Trusted Types.
 
 Still open: how much an account has not claimed yet. It would need reads of every bribe the account earned in; it is
 left for later.

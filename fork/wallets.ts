@@ -16,18 +16,16 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { CONDUIT, RPCS, VOTER, VOTING_ESCROW } from "../src/config.ts";
+import { CONDUIT, RPCS, VOTING_ESCROW } from "../src/config.ts";
 
 const FORK_URL = process.env.BASE_RPC_URL ?? "https://mainnet.base.org";
 const BLOCK = 52_694_000; // Fri 16 Oct 2026, 18:22 UTC
-const FLIP = 1_792_627_200; // Thu 22 Oct 2026, 00:00 UTC, when the epoch after BLOCK's starts
 const PORT = 8546;
 const ANVIL = `http://127.0.0.1:${PORT}`;
 const SITE = "https://metadex.cafe";
 const SAFE_WALLET = "https://app.safe.global";
 const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 const SCREENSHOTS = process.env.SCREENSHOTS;
-const WEEK = 604_800;
 
 // Owners at BLOCK.
 const MEMBER = getAddress("0x388b2d29e7919d45b1b8f6e88b8a13a392f97b40"); // #9540 in Carbon Impact, #14485 its own
@@ -42,10 +40,7 @@ const abi = parseAbi([
   "function getLockDelegatee(uint256 tokenId) view returns (address)",
   "function getClaimRedirectApproved(uint256 tokenId) view returns (address)",
   "function getClaimApproved(uint256 tokenId) view returns (address)",
-  "function getEffectiveRecipientForOwner(address owner) view returns (address)",
   "function transferFrom(address from, address to, uint256 tokenId)",
-  "function setConduitApproval(address conduit, uint256 tokenId, bool approve)",
-  "function _epochTimestamp() view returns (uint256)",
 ]);
 
 async function anvil<T>(method: string, params: unknown[] = []): Promise<T> {
@@ -65,42 +60,22 @@ async function view(to: Address, functionName: string, args: unknown[]): Promise
   return decodeFunctionResult({ abi, functionName, data: reply } as never) as Address;
 }
 
-/** Waits until anvil has mined a transaction, and returns its receipt. */
-async function mined(hash: Hex): Promise<{ status: Hex; transactionHash: Hex }> {
-  for (;;) {
-    const receipt = await anvil<{ status: Hex; transactionHash: Hex } | null>("eth_getTransactionReceipt", [hash]);
-    if (receipt) return receipt;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-}
-
 /** Where an account's votes and claims go. */
 const approvals = async (id: bigint) => ({
   delegate: await view(VOTING_ESCROW, "getLockDelegatee", [id]),
   claimer: await view(VOTING_ESCROW, "getClaimRedirectApproved", [id]),
 });
 
-/**
- * The owner the wallet acts as, its chain, whether it batches, refuses, shares the account without asking, and can
- * switch to Base.
- */
-type WalletOptions = {
-  owner: Address;
-  chainId: number;
-  batch: boolean;
-  decline: boolean;
-  shares: boolean;
-  switches: boolean;
-};
+/** The owner the wallet acts as, its chain, whether it refuses, and whether it can switch to Base. */
+type WalletOptions = { owner: Address; chainId: number; decline: boolean; switches: boolean };
 type Sent = { method: string; calls: { to: string; data: string }[] };
 
 // The test wallet in the page. It announces itself (EIP-6963) and hands each request to Node through testWallet,
 // which the page's Content Security Policy cannot block. Tests make it emit events, as when it locks, with
-// testWalletEmit, once testWalletListens says that the page listens.
+// testWalletEmit.
 const WALLET_SCRIPT = `(() => {
   const listeners = {};
   window.testWalletEmit = (event, value) => { for (const l of listeners[event] ?? []) l(value); };
-  window.testWalletListens = () => (listeners.accountsChanged ?? []).length > 0;
   const provider = {
     async request({ method, params }) {
       const { result, error } = await window.testWallet(method, params ?? []);
@@ -119,31 +94,28 @@ const WALLET_SCRIPT = `(() => {
   announce();
 })();`;
 
+// Every breach of the page's Content Security Policy, Trusted Types included, in the console of each frame.
+const POLICY_SCRIPT = `document.addEventListener("securitypolicyviolation", (event) =>
+  console.error("Content Security Policy: " + event.violatedDirective + " " + event.blockedURI));`;
+
 // The VotingEscrow's gas depends on the block's time, and anvil estimates at another time than it mines at, so the test
 // wallet sets a limit as a wallet's margin would.
 const GAS = "0xf4240";
 
 /** Answers the page's wallet requests as the owner, sending transactions to anvil, and notes every method asked. */
 function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
-  const batches = new Map<string, Hex[]>();
   const declined = { error: { code: 4001, message: "User rejected the request." } };
   return async (method: string, params: any[]): Promise<{ result?: unknown; error?: unknown }> => {
     asked.push(method);
     switch (method) {
       case "eth_requestAccounts":
         return { result: [options.owner] };
-      case "eth_accounts":
-        return { result: options.shares ? [options.owner] : [] };
       case "eth_chainId":
         return { result: `0x${options.chainId.toString(16)}` };
       case "wallet_switchEthereumChain":
         if (!options.switches) return { error: { code: -32603, message: "Unrecognized chain ID." } };
         options.chainId = Number(params[0].chainId);
         return { result: null };
-      case "wallet_getCapabilities":
-        return options.batch
-          ? { result: { "0x2105": { atomic: { status: "supported" } } } }
-          : { error: { code: -32601, message: "Method not found" } };
       case "eth_sendTransaction": {
         sent.push({ method, calls: [{ to: params[0].to, data: params[0].data }] });
         if (options.decline) return declined;
@@ -152,26 +124,6 @@ function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
           return { error: { code: -32602, message: "The transaction is for another chain." } };
         }
         return { result: await anvil("eth_sendTransaction", [{ ...params[0], from: options.owner, gas: GAS }]) };
-      }
-      case "wallet_sendCalls": {
-        const { calls, from, atomicRequired } = params[0];
-        assert.equal(atomicRequired, true);
-        assert.equal(getAddress(from), options.owner);
-        sent.push({ method, calls: calls.map(({ to, data }: { to: string; data: string }) => ({ to, data })) });
-        if (options.decline) return declined;
-        // One transaction per call, in order.
-        const hashes: Hex[] = [];
-        for (const { to, data } of calls) {
-          hashes.push(await anvil<Hex>("eth_sendTransaction", [{ from, to, data, gas: GAS }]));
-          await mined(hashes.at(-1)!);
-        }
-        const id = `0x${batches.size + 1}`;
-        batches.set(id, hashes);
-        return { result: { id } };
-      }
-      case "wallet_getCallsStatus": {
-        const receipts = await Promise.all((batches.get(params[0]) ?? []).map(mined));
-        return { result: { status: receipts.every(({ status }) => status === "0x1") ? 200 : 500, receipts } };
       }
       default:
         return { error: { code: 4200, message: `The test wallet does not answer ${method}.` } };
@@ -202,7 +154,7 @@ const SAFE_PAGE = `<!doctype html><meta charset="utf-8"><title>Safe{Wallet}</tit
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type" };
 const RPC_ORIGINS = new Set(RPCS.map((url) => new URL(url).origin));
 
-/** The page's own files from dist/, its RPCs from anvil, Coinbase's window as a stub, and nothing else. */
+/** The page's own files from dist/, its RPCs from anvil, and nothing else. */
 async function serve(route: Route, origins: Set<string>): Promise<void> {
   const request = route.request();
   const url = new URL(request.url());
@@ -220,7 +172,6 @@ async function serve(route: Route, origins: Set<string>): Promise<void> {
     });
     return route.fulfill({ headers: { ...CORS, "content-type": "application/json" }, body: await response.text() });
   }
-  if (url.origin === "https://keys.coinbase.com") return route.fulfill({ contentType: "text/html", body: "Coinbase" });
   if (url.origin === SAFE_WALLET) return route.fulfill({ contentType: "text/html", body: SAFE_PAGE });
   return route.abort();
 }
@@ -241,13 +192,10 @@ let node: ChildProcess;
 let snapshot: Hex;
 const contexts: BrowserContext[] = [];
 
-/**
- * Opens the page, with the test wallet acting as an owner unless wallet is false. The page's clock stands still at the
- * fork's time, unless flowing says to let it run, so that a test can move it on.
- */
+/** Opens the page, with the test wallet acting as an owner unless wallet is false. */
 async function open(
   wallet: Partial<WalletOptions> | false,
-  { width = 1440, height = 900, dark = false, url = `${SITE}/`, remembered = "", flowing = false } = {},
+  { width = 1440, height = 900, dark = false, url = `${SITE}/` } = {},
 ): Promise<Opened> {
   const context = await browser.newContext({
     viewport: { width, height },
@@ -261,29 +209,20 @@ async function open(
   const asked: string[] = [];
   const violations: string[] = [];
   await context.route("**/*", (route) => serve(route, origins));
-  const options: WalletOptions = {
-    owner: NEWCOMER,
-    chainId: 8453,
-    batch: false,
-    decline: false,
-    shares: true,
-    switches: true,
-    ...wallet,
-  };
+  await context.addInitScript(POLICY_SCRIPT);
+  const options: WalletOptions = { owner: NEWCOMER, chainId: 8453, decline: false, switches: true, ...wallet };
   if (wallet) {
     await context.exposeFunction("testWallet", testWallet(options, sent, asked));
     await context.addInitScript(WALLET_SCRIPT);
   }
-  if (remembered) await context.addInitScript(`localStorage.setItem("wallet", ${JSON.stringify(remembered)})`);
   const page = await context.newPage();
   page.on("console", (message) => {
     if (/Content Security Policy/i.test(message.text())) violations.push(message.text());
   });
   page.on("pageerror", (error) => violations.push(String(error)));
-  // The page's clock at the fork block, for the statuses that depend on the time.
+  // The page's clock at the fork block, for the ten minutes it follows a transaction.
   const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false]);
-  const time = Number(timestamp) * 1000;
-  await (flowing ? page.clock.install({ time }) : page.clock.setFixedTime(time));
+  await page.clock.setFixedTime(Number(timestamp) * 1000);
   await page.goto(url);
   return { page, context, wallet: options, sent, asked, origins, violations };
 }
@@ -300,14 +239,13 @@ const account = (page: Page, id: number) =>
   page.locator("#full > li, #empty-accounts li").filter({ hasText: `#${id}` });
 const review = (page: Page) => page.locator("#review");
 
-/** Waits for the check, confirms, and waits for the end; says what the review shows if that does not come. */
+/** Confirms, and waits for the end; says what the review shows if that does not come. */
 async function confirm(page: Page): Promise<void> {
   try {
-    await review(page).getByText("Checked ✓").waitFor({ timeout: 15_000 });
     await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
     await review(page).getByText("Done.").waitFor({ timeout: 15_000 });
   } catch (error) {
-    const shown = await review(page).locator(".check, .progress").allTextContents();
+    const shown = await review(page).locator(".progress").allTextContents();
     throw new Error(`The review shows: ${JSON.stringify(shown)}`, { cause: error });
   }
   await review(page).getByRole("button", { name: "Close" }).click();
@@ -350,8 +288,11 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
   });
 
   test("join with two accounts, one from another automation, one transaction at a time", async () => {
-    const { page, sent, origins, violations } = await open({ owner: NEWCOMER });
+    const { page, sent, asked, origins, violations } = await open({ owner: NEWCOMER });
     await page.getByText("Connect a wallet").waitFor();
+    // The page asks the wallet nothing until someone picks it.
+    await page.locator("time.week-start").getByText(/Thu/).waitFor();
+    assert.deepEqual(asked, []);
     await page.getByRole("button", { name: "Test Wallet" }).click();
     await page.getByText("Connected with Test Wallet").waitFor();
     await account(page, 141).getByText("Not in an automation.").waitFor();
@@ -370,7 +311,6 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
       "#141 joins the Carbon Impact automation.",
       "#42877 leaves the Liquid Hydrex automation and joins the Carbon Impact automation.",
     ]);
-    await review(page).getByText("Checked ✓").waitFor();
     await shoot(page, "review-1440-light");
     // Each transaction takes a click of its own.
     await review(page).getByRole("button", { name: "Confirm transaction 1 of 2" }).click();
@@ -385,6 +325,8 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     for (const id of [141n, 42877n]) assert.deepEqual(await approvals(id), { delegate: CONDUIT, claimer: CONDUIT });
     await account(page, 141).getByText("Joined the Carbon Impact automation.").waitFor();
     await account(page, 42877).getByText("Joined the Carbon Impact automation.").waitFor();
+    // The page asks the wallet for its account and chain, and sends transactions, nothing more.
+    assert.deepEqual([...new Set(asked)].sort(), ["eth_chainId", "eth_requestAccounts", "eth_sendTransaction"]);
     assert.deepEqual([...origins].sort(), [SITE, ...RPC_ORIGINS].filter((o) => origins.has(o)).sort());
     assert.ok(origins.has(SITE));
     assert.deepEqual(violations, []);
@@ -396,7 +338,6 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await page.getByRole("checkbox", { name: "Pick Account #141" }).check();
     await page.getByRole("checkbox", { name: "Pick Account #42877" }).check();
     await page.getByRole("button", { name: "Join with 2 accounts" }).click();
-    await review(page).getByText("Checked ✓").waitFor();
     await review(page).getByRole("button", { name: "Confirm transaction 1 of 2" }).click();
     await review(page).getByText("closing stops here").waitFor();
     await review(page).getByRole("button", { name: "Close" }).click();
@@ -406,24 +347,16 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     assert.deepEqual((await approvals(42877n)).delegate, getAddress("0x809F8175b8F60960dF2bc7a78a7C4Eb04d138AF0"));
   });
 
-  test("a locked wallet stays remembered, and connects once unlocked", async () => {
-    // Locked as the page opens: it shares no account, and the page waits for one.
-    const { page, wallet, asked } = await open({ owner: NEWCOMER, shares: false }, { remembered: "test.wallet" });
-    const emit = (accounts: Address[]) =>
-      page.evaluate((value) => (window as any).testWalletEmit("accountsChanged", value), accounts);
-    await page.waitForFunction(() => (window as any).testWalletListens());
-    assert.equal(await page.getByText("Connected with").isVisible(), false);
-    wallet.shares = true;
-    await emit([NEWCOMER]);
-    await page.getByText("Connected with Test Wallet").waitFor();
+  test("a wallet that locks is let go, and connects again from a click", async () => {
+    const { page } = await open({ owner: NEWCOMER });
+    await page.getByRole("button", { name: "Test Wallet" }).click();
     await account(page, 141).waitFor();
-    // Locked again: the page lets go of it, but neither forgets it nor gives up its permission.
-    wallet.shares = false;
-    await emit([]);
+    await page.evaluate(() => (window as any).testWalletEmit("accountsChanged", []));
     await page.getByText("Connect a wallet").waitFor();
     assert.equal(await page.locator("#accounts").isVisible(), false);
-    assert.equal(await page.evaluate(() => localStorage.getItem("wallet")), "test.wallet");
-    assert.ok(!asked.includes("wallet_revokePermissions"));
+    assert.equal(await page.locator("#payout").isVisible(), false);
+    await page.getByRole("button", { name: "Test Wallet" }).click();
+    await account(page, 141).waitFor();
   });
 
   test("closing the review before Base includes the transaction still updates the account", async () => {
@@ -431,7 +364,6 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await page.getByRole("button", { name: "Test Wallet" }).click();
     await page.getByRole("checkbox", { name: "Pick Account #141" }).check();
     await page.getByRole("button", { name: "Join with 1 account" }).click();
-    await review(page).getByText("Checked ✓").waitFor();
     await anvil("evm_setAutomine", [false]);
     try {
       await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
@@ -448,25 +380,23 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await account(page, 141).getByText("Joined the Carbon Impact automation.").waitFor();
   });
 
-  test("join in one batch with accounts from Lock Maxi and USDC", async () => {
-    const { page, sent } = await open({ owner: ELSEWHERE, batch: true });
+  test("join with accounts from Lock Maxi and USDC", async () => {
+    const { page, sent } = await open({ owner: ELSEWHERE });
     await page.getByRole("button", { name: "Test Wallet" }).click();
     await page.getByRole("checkbox", { name: "Pick Account #2435" }).check();
     await page.getByRole("checkbox", { name: "Pick Account #2439" }).check();
     await page.getByRole("button", { name: "Join with 2 accounts" }).click();
-    await review(page).getByText("One transaction, with 2 calls:").waitFor();
-    await confirm(page);
-    assert.deepEqual(
-      sent.map(({ method, calls }) => [method, calls.length]),
-      [["wallet_sendCalls", 2]],
-    );
+    await review(page).getByRole("button", { name: "Confirm transaction 1 of 2" }).click();
+    await review(page).getByRole("button", { name: "Confirm transaction 2 of 2" }).click();
+    await review(page).getByText("Done.").waitFor();
+    assert.equal(sent.length, 2);
     for (const id of [2435n, 2439n]) assert.deepEqual(await approvals(id), { delegate: CONDUIT, claimer: CONDUIT });
     // Joining leaves Lock Maxi's ERC-5725 claim approval in place; the VotingEscrow's own claim does not accept it.
     assert.equal(await view(VOTING_ESCROW, "getClaimApproved", [2435n]), getAddress(LOCK_MAXI));
   });
 
-  test("leave with one account, then send the payouts elsewhere", async () => {
-    const { page, sent } = await open({ owner: MEMBER, batch: true }, { width: 390, height: 844, dark: true });
+  test("leave with one account", async () => {
+    const { page, sent } = await open({ owner: MEMBER }, { width: 390, height: 844, dark: true });
     await page.getByRole("button", { name: "Test Wallet" }).click();
     await account(page, 9540).getByText("In the Carbon Impact automation.").waitFor();
     await account(page, 14485).getByRole("checkbox").waitFor();
@@ -475,7 +405,6 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     assert.equal(await page.getByRole("button", { name: "Join" }).isDisabled(), true);
     await page.getByRole("button", { name: "Leave with 1 account" }).click();
     await review(page).getByText("One transaction:").waitFor();
-    await review(page).getByText("Checked ✓").waitFor();
     await shoot(page, "leave-390-dark");
     await confirm(page);
     assert.deepEqual(await approvals(9540n), {
@@ -483,40 +412,11 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
       claimer: zeroAddress,
     });
     await account(page, 9540).getByText("Left the Carbon Impact automation.").waitFor();
-
-    await page.getByLabel("Send the payouts to:").fill(RECIPIENT);
-    await page.getByRole("button", { name: "Change the payout address" }).click();
-    await review(page).getByText(`setMyPayoutRecipient(${RECIPIENT})`).waitFor();
-    await confirm(page);
-    assert.equal(await view(CONDUIT, "getEffectiveRecipientForOwner", [MEMBER]), RECIPIENT);
-    await page.locator("#payout a.payout").getByText(RECIPIENT).waitFor();
-    assert.equal(sent.length, 2);
+    assert.equal(sent.length, 1);
   });
 
-  test("leave with two accounts in one batch", async () => {
-    const { page, sent } = await open({ owner: LEAVER, batch: true });
-    await page.getByRole("button", { name: "Test Wallet" }).click();
-    await page.getByRole("checkbox", { name: "Pick Account #53350" }).check();
-    await page.getByRole("checkbox", { name: "Pick Account #82206" }).check();
-    await page.getByRole("button", { name: "Leave with 2 accounts" }).click();
-    await review(page).getByText("One transaction, with 2 calls:").waitFor();
-    await review(page).getByText("can no longer claim the rewards of #53350 and #82206").waitFor();
-    await confirm(page);
-    assert.deepEqual(
-      sent.map(({ method, calls }) => [method, calls.length]),
-      [["wallet_sendCalls", 2]],
-    );
-    for (const id of [53350n, 82206n]) {
-      assert.deepEqual(await approvals(id), {
-        delegate: LEAVER,
-        claimer: zeroAddress,
-      });
-    }
-    await account(page, 53350).getByText("Left the Carbon Impact automation.").waitFor();
-  });
-
-  test("an ended lock offers nothing to tick, and disconnecting forgets the wallet", async () => {
-    const { page, asked } = await open({ owner: ENDED });
+  test("an ended lock offers nothing to tick", async () => {
+    const { page } = await open({ owner: ENDED });
     await page.getByRole("button", { name: "Test Wallet" }).click();
     await account(page, 123351).getByText("Lock ended.").waitFor();
     assert.equal(await account(page, 123351).locator(".pick").isVisible(), false);
@@ -524,12 +424,6 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     // A click on the row cannot tick its hidden box.
     await account(page, 123351).click();
     assert.equal(await account(page, 123351).locator(".pick").isChecked(), false);
-    await page.getByRole("button", { name: "Disconnect" }).click();
-    await page.getByText("Connect a wallet").waitFor();
-    assert.equal(await page.locator("#accounts").isVisible(), false);
-    assert.equal(await page.locator("#payout").isVisible(), false);
-    assert.equal(await page.evaluate(() => localStorage.getItem("wallet")), null);
-    assert.ok(asked.includes("wallet_revokePermissions"));
   });
 
   test("without a wallet in the browser, Browser wallet says how to get one", async () => {
@@ -540,13 +434,12 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     assert.equal(await page.locator("#accounts").isVisible(), false);
   });
 
-  test("the wrong network, a refusal in the wallet, and a call that would fail", async () => {
-    const { page, sent } = await open({ owner: NEWCOMER, chainId: 1, decline: true });
+  test("the wrong network, a refusal in the wallet, and a transaction that fails", async () => {
+    const { page, wallet, sent } = await open({ owner: NEWCOMER, chainId: 1, decline: true });
     await page.getByRole("button", { name: "Test Wallet" }).click();
     await page.getByText("Your wallet is on another network.").waitFor();
     await page.getByRole("checkbox", { name: "Pick Account #141" }).check();
     await page.getByRole("button", { name: "Join with 1 account" }).click();
-    await review(page).getByText("Checked ✓").waitFor();
     await review(page).getByRole("button", { name: "Switch to Base" }).click();
     await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
     await review(page).getByText("You said no in your wallet.").waitFor();
@@ -558,13 +451,15 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await review(page).getByRole("button", { name: "Back" }).click();
     assert.equal(await page.getByText("Your wallet is on another network.").isVisible(), false);
 
-    // The account changes hands after the page read it: the check fails, and nothing can be sent.
+    // The account changes hands after the page read it: the transaction fails on Base, and the review says so.
     const data = encodeFunctionData({ abi, functionName: "transferFrom", args: [NEWCOMER, RECIPIENT, 141n] });
     await anvil("eth_sendTransaction", [{ from: NEWCOMER, to: VOTING_ESCROW, data }]);
+    wallet.decline = false;
     await page.getByRole("button", { name: "Join with 1 account" }).click();
-    await review(page).getByText("would fail on Base").waitFor();
-    assert.match((await review(page).locator(".check").textContent()) ?? "", /“Not token owner”/);
-    assert.equal(await review(page).getByRole("button", { name: "Confirm in your wallet" }).isDisabled(), true);
+    await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
+    await review(page).getByText("A transaction failed on Base.").waitFor();
+    assert.equal(await review(page).locator(".confirm").isVisible(), false);
+    assert.equal(sent.length, 2);
   });
 
   test("a wallet that cannot switch to Base says so", async () => {
@@ -578,13 +473,11 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     const { page, origins, violations } = await open(false, { url: `${SAFE_WALLET}/` });
     const app = page.frameLocator("iframe");
     await app.getByText("Connected with Safe{Wallet}").waitFor();
-    assert.equal(await app.locator("#disconnect").isVisible(), false);
     await app.getByRole("checkbox", { name: "Pick Account #53350" }).check();
     await app.getByRole("checkbox", { name: "Pick Account #82206" }).check();
     await app.getByRole("button", { name: "Leave with 2 accounts" }).click();
     const dialog = app.locator("#review");
     await dialog.getByText("One Safe transaction, with 2 calls:").waitFor();
-    await dialog.getByText("Checked ✓").waitFor();
     await dialog.getByRole("button", { name: "Propose in Safe{Wallet}" }).click();
     await dialog.getByText("Proposed.").waitFor();
     const received = await page.evaluate(() => (window as unknown as { received: Sent[] }).received);
@@ -606,57 +499,5 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     for (const origin of origins) {
       assert.ok([SITE, SAFE_WALLET, ...RPC_ORIGINS].includes(origin), `unexpected request to ${origin}`);
     }
-  });
-
-  test("Coinbase Wallet loads its code under the page's policy and opens its window", async () => {
-    const { page, context, origins, violations } = await open(false, { width: 390, height: 844 });
-    const popup = context.waitForEvent("page");
-    await page.getByRole("button", { name: "Coinbase Wallet" }).click();
-    const window = await popup;
-    await window.waitForURL(/^https:\/\/keys\.coinbase\.com\/connect/);
-    assert.deepEqual(violations, []);
-    assert.ok(origins.has(SITE));
-    for (const origin of origins) {
-      assert.ok(
-        [SITE, ...RPC_ORIGINS, "https://keys.coinbase.com"].includes(origin),
-        `unexpected request to ${origin}`,
-      );
-    }
-  });
-
-  // Last, as it moves anvil's clock on.
-  test("an open page moves on to the next epoch by itself, even before Hydrex's minter does", async () => {
-    // #141 joins before the epoch ends.
-    const data = encodeFunctionData({ abi, functionName: "setConduitApproval", args: [CONDUIT, 141n, true] });
-    await mined(await anvil<Hex>("eth_sendTransaction", [{ from: NEWCOMER, to: VOTING_ESCROW, data, gas: GAS }]));
-    const { page } = await open({ owner: NEWCOMER }, { flowing: true });
-    await page.getByRole("button", { name: "Test Wallet" }).click();
-    await account(page, 141).getByText("Joined the Carbon Impact automation.").waitFor();
-
-    // The page's clock passes the end of the epoch before an RPC's latest block does: the page reads Base, which is
-    // still in the old epoch, and tries again later. Its reads ask Multicall3 for the block's time (0x0f28c97d).
-    const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false]);
-    const read = page.waitForResponse((response) => !!response.request().postData()?.includes("0f28c97d"));
-    await page.clock.fastForward((FLIP + 90 - Number(timestamp)) * 1000);
-    await read;
-    await page.getByText(/Thu,? 22 Oct to Thu,? 29 Oct, 00:00 UTC/).waitFor();
-    assert.equal(await account(page, 141).getByText("Joined the Carbon Impact automation.").isVisible(), true);
-
-    // Then Base's epoch ends too, without anyone calling the minter, and the page moves on at its next try.
-    await anvil("evm_setNextBlockTimestamp", [FLIP + 300]);
-    await anvil("evm_mine");
-    const epoch = encodeFunctionData({ abi, functionName: "_epochTimestamp" });
-    assert.equal(BigInt(await anvil<Hex>("eth_call", [{ to: VOTER, data: epoch }, "latest"])), BigInt(FLIP - WEEK));
-    const moved = account(page, 141).getByText("In the Carbon Impact automation.");
-    for (let tries = 0; tries < 10 && !(await moved.isVisible()); tries++) {
-      // A tick that comes while the page still reads skips: the page tries again half a minute later.
-      await page.clock.fastForward(30_000);
-      await page.waitForTimeout(1_000);
-    }
-    await moved.waitFor({ timeout: 1_000 });
-    await page.getByRole("checkbox", { name: "Pick Account #42877" }).check();
-    await page.getByRole("button", { name: "Join with 1 account" }).click();
-    await review(page).getByText("Checked ✓").waitFor();
-    assert.match(await review(page).locator(".effects").innerText(), /from the epoch starting Thu,? 29 Oct, 00:00 UTC/);
   });
 });

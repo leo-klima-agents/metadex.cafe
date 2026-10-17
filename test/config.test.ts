@@ -38,17 +38,14 @@ test("Hydrex names the conduit Carbon Impact, and the page links to it, the Voti
   for (const address of [CONDUIT, VOTING_ESCROW, VOTER]) assert.ok(html.includes(`/address/${address}"`), address);
 });
 
-test("the page may reach every RPC, and the README lists every origin it may reach", () => {
+test("the page may reach its RPCs and nothing else, and the README lists them", () => {
   const csp = /http-equiv="Content-Security-Policy"\s+content="([^"]+)"/.exec(read("index.html"))?.[1] ?? "";
-  // 'self' is the page's own origin, which Coinbase's SDK asks for its headers.
-  const connect = (/connect-src ([^;]+)/.exec(csp)?.[1] ?? "")
-    .trim()
-    .split(/\s+/)
-    .filter((source) => source !== "'self'");
-  for (const rpc of RPCS) {
-    assert.ok(rpc.startsWith("https://"), rpc);
-    assert.ok(connect.includes(new URL(rpc).origin), `${rpc} is missing from connect-src`);
-  }
+  const connect = (/connect-src ([^;]+)/.exec(csp)?.[1] ?? "").trim().split(/\s+/);
+  for (const rpc of RPCS) assert.ok(rpc.startsWith("https://"), rpc);
+  assert.deepEqual(
+    connect,
+    RPCS.map((rpc) => new URL(rpc).origin),
+  );
   const readme = read("README.md");
   for (const origin of connect) assert.ok(readme.includes(`\`${origin}\``), `${origin} is missing from the README`);
 });

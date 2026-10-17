@@ -18,12 +18,10 @@ export async function provider(): Promise<Provider | undefined> {
   return {
     async request({ method, params }) {
       switch (method) {
-        case "eth_accounts":
+        case "eth_requestAccounts":
           return [info.safeAddress];
         case "eth_chainId":
           return chainId;
-        case "wallet_getCapabilities":
-          return { [chainId]: { atomic: { status: "supported" } } };
         case "wallet_sendCalls": {
           const [{ calls }] = params as [{ calls: { to: string; data: string }[] }];
           const txs = calls.map(({ to, data }) => ({ to, data, value: "0" }));
