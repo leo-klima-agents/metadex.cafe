@@ -92,6 +92,7 @@ Safe, the views and what can fail. It needs anvil, and Chromium (`npx playwright
 `fonts/` holds Latin subsets of Atkinson Hyperlegible Next and Mono, and Young Serif, made by `scripts/fonts.py` from
 Google Fonts' sources at a pinned commit; it needs Python, with the fontTools and brotli versions it names. The build
 puts them inside `style.css` as `data:` URLs, which the Content Security Policy allows for fonts only.
+`scripts/icons.ts` draws `favicon.ico` and `apple-touch-icon.png` from `icon.svg`, with Chromium.
 
 `src/config.ts` holds what the page trusts about the conduit, its RPCs, and what its prices start from;
 `src/hydrex-conduits.json` names Hydrex's other automations, as `api.hydrex.fi/conduits` lists them. CI runs Prettier,

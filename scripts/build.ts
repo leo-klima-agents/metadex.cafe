@@ -38,7 +38,7 @@ await esbuild.build({
   legalComments: "linked",
   logLevel: "warning",
 });
-for (const file of ["icon.svg", "klima-protocol.svg", "manifest.json"])
+for (const file of ["icon.svg", "favicon.ico", "apple-touch-icon.png", "klima-protocol.svg", "manifest.json"])
   copyFileSync(`${ROOT}/${file}`, `${OUT}/${file}`);
 const values: Record<string, string> = {
   VERSION: version,
