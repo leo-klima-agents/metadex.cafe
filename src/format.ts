@@ -21,7 +21,6 @@ const utcTime = new Intl.DateTimeFormat(LANG, {
   minute: "2-digit",
   timeZone: "UTC",
 });
-const duration = new Intl.DurationFormat(LANG, { style: "long" });
 const plurals = new Intl.PluralRules(LANG);
 const and = new Intl.ListFormat(LANG, { type: "conjunction" });
 
@@ -49,16 +48,25 @@ export const date = (time: number): string => utcDate.format(time * 1000);
 /** "Wed 14 Oct, 23:59", in UTC. */
 export const dayTime = (time: number): string => utcTime.format(time * 1000);
 
-/** The two largest units: "6 days, 2 hours", "3 hours, 5 minutes", "less than a minute". */
+/**
+ * The two largest units: "6 days, 2 hours", "3 hours, 5 minutes", "less than a minute". Built from plural rules rather
+ * than Intl.DurationFormat, which Chrome has had only since 2024 and Firefox since 2025.
+ */
 export function countdown(seconds: number): string {
   const [days, hours, minutes] = [
     Math.floor(seconds / 86_400),
     Math.floor(seconds / 3600) % 24,
     Math.floor(seconds / 60) % 60,
   ];
-  if (days) return duration.format({ days, hours });
-  if (hours) return duration.format({ hours, minutes });
-  return minutes ? duration.format({ minutes }) : "less than a minute";
+  const values = [days, hours, minutes];
+  const parts = [count(days, "day", "days"), count(hours, "hour", "hours"), count(minutes, "minute", "minutes")];
+  const first = values.findIndex((n) => n > 0);
+  if (first < 0) return "less than a minute";
+  // The largest unit, and the next one unless it is zero.
+  return parts
+    .slice(first, first + 2)
+    .filter((_, i) => values[first + i])
+    .join(", ");
 }
 
 /** "0x5a1C…7e40". */

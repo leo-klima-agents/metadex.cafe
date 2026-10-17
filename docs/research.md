@@ -113,7 +113,9 @@ Two more properties, from the code:
 - **Statuses.** `delegates(tokenId, epochStart)` on the VotingEscrow tells the delegate at the epoch start. Comparing it
   with `getLockDelegatee(tokenId)` gives "joined, counts from Thursday" and "left, counts until Thursday".
 - **The flip.** `_epochTimestamp()` is the minter's `active_period()`. It moves when someone calls the minter after
-  Thursday 00:00 UTC, so it can lag the calendar for a while.
+  Thursday 00:00 UTC, so it can lag the calendar for a while. A join sent meanwhile still counts only from the next
+  Thursday, so the page reads delegates and votes at the Thursday before Base's latest block instead. A fork test moves
+  anvil past the flip without calling the minter and checks it.
 - **The keeper's vote.** hydrex-keeper votes on Tuesday at 23:50 UTC and again in the last two blocks before the flip.
   Until Tuesday, the conduit's latest vote is last week's: `lastVoted` is before `_epochTimestamp()`. The page says
   "latest vote" and whether it was last week's or this week's.
@@ -381,6 +383,154 @@ Safe on Base, and this build served as `https://metadex.cafe/`:
   re-exports types from Safe's gateway package, whose request code is bundled but never called.
 - **Simulation from a Safe.** `mainnet.base.org` and `base-rpc.publicnode.com` both run calls from the Safe's address.
 
+## Polish
+
+Checked for milestone 6 on 2026-10-17. The build ran in Playwright's Chromium against an anvil fork of block 52,694,000,
+at 320, 390 and 1440 px, light and dark.
+
+### States
+
+Every state was opened and looked at:
+
+- loading, with no RPC answering, and with a failed check;
+- the wrong network, and a Safe on another network;
+- no wallet, and a wallet's prompt left open;
+- no account, and empty and ended accounts, with every status;
+- the review while checking, failing, sending, between transactions and done;
+- a refusal, and a Safe's proposal.
+
+Fixed:
+
+- **The review's status was out of sight on a phone.** "Checked ✓", "Transaction 1 of 2 is included" and "Done." sat
+  under the calls, behind the pinned buttons, so after a join a phone showed only "Close". The status lines are now
+  pinned with the buttons, except on screens less than 30rem high.
+- **"Switch to Base" could fail silently.** A wallet that cannot switch now gets "Your wallet did not switch. Pick Base
+  in your wallet itself."
+- **A wallet's prompt gave no sign.** While it is open, the page says "Waiting for … to answer…".
+- **The page stood still.** The countdown never moved, and a page left open across the flip kept the old epoch. It now
+  moves every half minute, and reads the automation and the accounts again when an epoch ends.
+- **The minter's lag.** A join sent between Thursday 00:00 UTC and the minter's move counted, on the review, from that
+  same Thursday; see [Timing](#timing).
+- **No account.** A wallet with no HYDX in any account gets a link to lock HYDX on Hydrex, and no payout address.
+
+### Accessibility
+
+- **axe-core 4.14,** with WCAG 2.2 AA and best practices, found nothing in any of those states, light or dark, once the
+  page set its own background. Without one, axe read the dark page as white and flagged every link.
+- **Contrast.** The lowest pair of text and background is a link on a notice, 5.3:1 in the light theme. Field edges are
+  3.4:1 or more.
+- **Focus.** The review gives the focus to its title, so a screen reader starts at the top rather than on the link to
+  Hydrex.
+- **Targets.** Each account's row is the label of its box, so tapping anywhere on the row ticks it.
+- **Live regions.** "Reading the accounts…" and "Waiting for … to answer…" are announced.
+
+### Browsers inside wallets
+
+Wallet apps show pages in the system's web view: on iOS, WKWebView, which follows the iOS version; on Android, the
+WebView that Google Play updates. Almost every phone has a recent one. The exceptions are iPhones that stopped at iOS 15
+or 16, the iPhone X and older, and Android 7, whose WebView stopped at Chrome 119.
+
+- **Too new.** The page used `Intl.DurationFormat`, which came late: Safari 16.4 (March 2023), Chrome 129
+  (September 2024) and Firefox 136 (March 2025). It threw as the script loaded, so a Chrome or Firefox a year or two old
+  showed "…" everywhere. The countdown now uses plural rules instead.
+- **Kept as they are** ([decision 25](#decisions)): `light-dark()` (Safari 17.5, Chrome 123, Firefox 120),
+  `AbortSignal.timeout()` (Safari 16, Chrome 103, Firefox 100), ARIA reflection (Firefox 119) and `:has()` (Safari 15.4,
+  Chrome 105, Firefox 121). Older browsers lose the controls' colours, the reads, a box's spoken label or the accounts'
+  layout. The phones among them are from 2017 or before.
+- **A wallet that only sets `window.ethereum`,** as some in-app browsers do, shows as "Browser wallet" and connects.
+- **Not tested:** WebKit itself, and real wallet apps.
+- **Size.** With the code review's fixes, the first load is 24.5 KB gzipped, up from 23.7 KB; the two SDKs are
+  unchanged.
+
+### Code review
+
+A review of this milestone's diff, on 2026-10-17, found these, now fixed:
+
+- **Two clocks.** The page saw a new epoch by the device's clock but read it from Base's, so an RPC a few seconds behind
+  at the flip left the page in the old epoch for a week. The page now keeps Base's time, from the latest block it read,
+  and waits a minute into a new epoch, when every RPC has its blocks, before reading again. Until a read answers from
+  the new epoch, it tries again every half minute. The checks also run again then, and every hour.
+- **A lock was a disconnection.** A wallet that locks shares no account, and the page used to forget it and revoke its
+  own permission, so the next visit asked to connect again. It now lets go of the wallet on the page only, and connects
+  again once the wallet shares an account. Only Disconnect forgets it.
+- **A connection could be overwritten** by an older attempt that answered late. Only the latest attempt connects now.
+- **Closing a review stopped the following,** so the accounts were read before Base included what was sent. The page now
+  follows it in the background for ten minutes, and reads the accounts once it is included. When it cannot know, it
+  reads them again every 15 seconds for five minutes.
+- **Smaller ones.**
+  - A click on a row whose box was hidden ticked that box; hidden boxes are now disabled.
+  - A lock that ended after its box was ticked could open an empty review.
+  - The review's "Switch to Base" had no busy state and left the page's notice in place.
+  - A join named only the automation that held the votes, not the one that held the claims.
+  - A fork test checked a box that could never show.
+
+### Cold read
+
+The method of [earlier-design.md](earlier-design.md#cold-read): fresh readers, with no context, saw the page on arrival,
+with a wallet and two accounts ticked, the join's review, its end, the page after it, a member's page and the review of
+a leave. One reader saw them at 1440 px, the other at 390 px. Both answered what the page does, what joining changes,
+when, how to leave, what the statuses mean and what the wallet will ask, then listed what tripped them.
+
+**Round one.** Both got the purpose, the timing, how to leave and every status right. What tripped them, and the fix:
+
+- **"Until then you can't vote with them yourself"** read as a limit that ends on Thursday. Now "While they are in, you
+  can't vote with them yourself."
+- **"Joining and leaving count from the next epoch"** clashed with claims "from the moment it joins". Now "Joining or
+  leaving moves an account's votes from the next epoch, and its rewards at once."
+- **"To keep them as they are"** hid what happens otherwise, and left this epoch's rewards out. Now the rewards "you
+  have not claimed yet, and this epoch's once the epoch ends" are "swapped and retired like the rest".
+- **"Klima runs it"** against "Hydrex can change these settings": whose is it? Now "One of Hydrex's automations, run by
+  Klima", and "Hydrex controls its settings". "Klima's keeper claims the rewards" became "has the Carbon Impact
+  automation claim the rewards".
+- **Who votes after a leave,** until Thursday? The leave now says that the votes count for the automation until then.
+- **"Joining moves it"** out of another automation said nothing of leaving it. Now "Joining takes it out of that
+  automation and into the Carbon Impact automation."
+- **Is `0xdE91…` the automation?** The review now says so under the calls.
+- **The join's review left out the share retired and Hydrex's powers,** and on a phone people tap Join before reading
+  "What joining allows". The review now says what each payout does, the share retired, and that Hydrex can change it and
+  the payout address.
+- **"The fee (up to 1%)":** a fee on what? Now "its fee on the payouts".
+
+Not changed: kVCM and Hydrex's account kinds stay without a gloss ([decision 16](#decisions)); the numbers of an
+account's unclaimed rewards and of past payouts stay [open](#decisions); who publishes the page is for the user to say.
+Both readers would try a small account first, and asked for safeguards on Hydrex's admin key, which the page cannot
+give.
+
+**Round two,** on the revised page, with two new readers. Both again got all of it right, among it that they cannot vote
+with an account while it is in, and that this epoch's rewards go too. Fixed after it:
+
+- **"Moves an account's votes from the next epoch"** read as taking votes away. Now "A join or a leave changes who votes
+  with an account from the next epoch, and who can claim its rewards at once."
+- **"Nothing is transferred"** clashed with rewards being claimed and swapped. Now the HYDX and the account stay where
+  they are: "Neither is transferred."
+- **Rewards from an epoch the automation did not vote in** seemed a contradiction. They are now "even those your own
+  votes earned".
+- **"Put #141 in the Carbon Impact automation"** sounded like a transfer, and the review did not say that #42877 left
+  Liquid Hydrex. The steps now say "#141 joins the Carbon Impact automation" and "#42877 leaves the Liquid Hydrex
+  automation and joins the Carbon Impact automation".
+- **The review named two of Hydrex's settings** where the page names five. It now adds "and its other settings".
+- **Smaller ones.** "Earning Power this epoch" was nobody's; it is now "Its Earning Power this epoch". "The address
+  itself" is now "your own address". Hydrex's admin key can change a payout address "as it can any owner's".
+
+**Round three,** with two new readers. Both again got all of it right. Fixed after it, without a fourth round:
+
+- **Could they still vote** between joining and Thursday? Now "Once the account joins, you can't vote with it yourself,
+  until the epoch after it leaves", and the next epoch is named by its date rather than "Thursday".
+- **"At once"** could cover both votes and rewards. The sentence now gives the claims first, "right away", then the
+  votes.
+- **"The calls allow voting and claiming, nothing else"** sounded too reassuring next to Hydrex's admin key. Now "The
+  calls let the automation vote and claim, nothing more."
+- **The bold warning about rewards** took three reads. It now stops at "even those your own votes earned", and the next
+  sentences say which and how to keep them.
+- **"Each call was run against Base"** sounded as if it had been sent. Now "tried on Base from your address, without
+  sending it".
+- **Smaller ones.** "Joined" now says the automation can claim already. The lead names the share retired. "In these
+  calls" is "In this call" for one call. "The payout tokens" is now "the tokens it pays out in".
+
+Across the three rounds, all six readers got the purpose, the timing, how to leave and the statuses right. None would
+join with their main account yet: all six named Hydrex's admin key, which can redirect payouts and retire up to 100%,
+and most asked how much they had not claimed and who publishes the page.
+
 ## Decisions
 
 Taken by the user on 2026-10-15, after this research:
@@ -449,6 +599,9 @@ Taken by the user on 2026-10-15, after this research:
 24. **"Browser wallet" without a wallet.** Also that day: when no wallet announces itself and `window.ethereum` is
     empty, the page still offers "Browser wallet". Picking it says that no wallet was found, how to get one, and that
     Coinbase Wallet works without one.
+25. **Minimal code over old browsers.** Later that day, after the polish, the user chose to keep the code minimal rather
+    than support browsers from before 2022 to 2024. The page does without `Intl.DurationFormat` only, which Chrome and
+    Firefox gained in 2024 and 2025.
 
 Still open: how much an account has not claimed yet. It would need reads of every bribe the account earned in; it is
 left for later.

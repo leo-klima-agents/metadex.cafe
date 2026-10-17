@@ -36,7 +36,7 @@ const SDKS = ["coinbase", "safe"];
 const sdks: esbuild.Plugin = {
   name: "sdks",
   setup: (build) =>
-    build.onResolve({ filter: /^\.\/(coinbase|safe)\.ts$/ }, ({ path }) => ({
+    build.onResolve({ filter: new RegExp(`^\\./(${SDKS.join("|")})\\.ts$`) }, ({ path }) => ({
       path: path.replace(/\.ts$/, ".js"),
       external: true,
     })),

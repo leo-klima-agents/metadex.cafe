@@ -7,7 +7,8 @@ import { clean } from "./format.ts";
 export type Provider = {
   request(args: { method: string; params?: unknown }): Promise<unknown>;
   on?(event: string, listener: (value: any) => void): unknown;
-  disconnect?(): Promise<void>;
+  /** Ends the session, for the wallets that have one, such as Coinbase's SDK; it may not return a promise. */
+  disconnect?(): unknown;
 };
 
 export type Wallet = { id: string; name: string; icon?: string; provider: () => Promise<Provider> };
@@ -166,16 +167,17 @@ export async function sendBatch(
   sent();
   const id = typeof reply === "string" ? reply : reply.id;
   type Status = { status: number | string; receipts?: { transactionHash: Hex; status: Hex | number }[] };
-  while (following()) {
+  // A wallet may fail to answer once in a while; one that fails five times in a row cannot say where the batch is.
+  for (let misses = 0; following() && misses < 5;) {
     const answer = (await provider
       .request({ method: "wallet_getCallsStatus", params: [id] })
       .catch(() => undefined)) as Status | undefined;
-    if (!answer) return undefined;
-    const { status, receipts = [] } = answer;
-    if (status === 100 || status === "PENDING") {
+    misses = answer ? 0 : misses + 1;
+    if (!answer || answer.status === 100 || answer.status === "PENDING") {
       await sleep(2_000);
       continue;
     }
+    const { status, receipts = [] } = answer;
     const hashes = receipts.map(({ transactionHash }) => transactionHash);
     const ok = (status === 200 || status === "CONFIRMED") && receipts.every((r) => Number(r.status) === 1);
     if (!ok) throw new Failed(hashes);

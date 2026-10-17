@@ -38,6 +38,7 @@ test("times in UTC, to the minute", () => {
 test("countdowns keep the two largest units", () => {
   assert.equal(countdown(6 * 86_400 + 2 * 3600 + 59), "6 days, 2 hours");
   assert.equal(countdown(86_400), "1 day");
+  assert.equal(countdown(2 * 86_400 + 60), "2 days");
   assert.equal(countdown(3 * 3600 + 300), "3 hours, 5 minutes");
   assert.equal(countdown(3600), "1 hour");
   assert.equal(countdown(61), "1 minute");
