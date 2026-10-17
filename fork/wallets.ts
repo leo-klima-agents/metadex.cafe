@@ -64,6 +64,7 @@ const abi = parseAbi([
   "function getClaimApproved(uint256 tokenId) view returns (address)",
   "function transferFrom(address from, address to, uint256 tokenId)",
   "function setConduitApproval(address conduit, uint256 tokenId, bool approve)",
+  "function setTreasuryFeeBps(uint256 treasuryFeeBps)",
 ]);
 
 const hex = (n: number) => `0x${n.toString(16)}`;
@@ -382,6 +383,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
       await numbers.locator("time.week-end-when").innerText(),
       /^Thu,? 22 Oct,? 00:00 UTC \(Thu,? 22 Oct,? 02:00 your time\)$/,
     );
+    assert.equal(await page.locator(".with-fee:visible").count(), 0, "no fee, no word of one");
     await shoot(page, "home-390-light");
     await page.getByRole("link", { name: "Check my accounts" }).click();
     await appTitle(page).waitFor();
@@ -495,6 +497,29 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     await page.locator("#last-epoch .earned-pools tr").filter({ hasText: "AVNT / USDC" }).waitFor();
     await shoot(page, "last-epoch-390-light");
     assert.deepEqual(violations, []);
+  });
+
+  test("a fee above zero is mentioned wherever the payouts are", async () => {
+    // The automation's admin key, at BLOCK.
+    const admin = getAddress("0x74266f2b206d1359b83fc74949ef07176fb3ae03");
+    await anvil("anvil_setBalance", [admin, "0x16345785d8a0000"]);
+    const data = encodeFunctionData({ abi, functionName: "setTreasuryFeeBps", args: [50n] });
+    await anvil("eth_sendTransaction", [{ from: admin, to: CONDUIT, data }]);
+    const { page } = await open({ owner: NEWCOMER });
+    await page
+      .locator(".numbers")
+      .getByText(/paid to you,\s+less a fee of 0\.5%/)
+      .waitFor();
+    await page.locator("#compared tr").filter({ hasText: "Fee" }).getByText("0.5% of the payouts").waitFor();
+    await page.goto(`${SITE}/#app`);
+    await page.getByRole("button", { name: "Test Wallet" }).click();
+    await group(page, "Can join").getByRole("button", { name: "Join", exact: true }).click();
+    await review(page).getByRole("button", { name: "Continue" }).click();
+    await review(page).getByRole("heading", { name: "What changes" }).waitFor();
+    assert.match(
+      await review(page).locator(".pages").innerText(),
+      /sends the rest to your payout address, less a fee of 0\.5%\./,
+    );
   });
 
   test("an address the page cannot decode opens Home, and the script still runs", async () => {

@@ -105,12 +105,13 @@ function failed(error: unknown): void {
 function showRelay(found: Relay): void {
   relay = found;
   sawBlock(found.time);
-  const { epochStart, tonnes, retireBps, votes, entity, beneficiary, beneficiaryAddress, message } = found;
+  const { epochStart, tonnes, retireBps, feeBps, votes, entity, beneficiary, beneficiaryAddress, message } = found;
   fill(document, {
     tonnes: units(tonnes),
     retired: bps(retireBps),
     "retired-share": share(retireBps),
     "paid-share": share(10_000n - retireBps),
+    fee: bps(feeBps),
     power: earningPower(votes),
     entity,
     beneficiary: beneficiary || "No name",
@@ -121,6 +122,8 @@ function showRelay(found: Relay): void {
   fillTime(document, "week-end", epochStart + WEEK);
   fillTime(document, "week-end-when", epochStart + WEEK, when);
   fillTime(document, "vote-day", epochStart + WEEK - 1);
+  // The fee is mentioned only once it is above zero.
+  show(".with-fee", feeBps > 0n);
   tick();
 }
 
@@ -462,8 +465,9 @@ function reviewPicked(section: HTMLElement, action: Action): void {
     fillTime(part, "next", epochStart + WEEK, when);
     fillPlural(part, accounts.length);
     if (settings) {
-      const { retireBps, entity } = settings;
-      fill(part, { "retired-share": share(retireBps), entity });
+      const { retireBps, feeBps, entity } = settings;
+      fill(part, { "retired-share": share(retireBps), fee: bps(feeBps), entity });
+      show(".with-fee", feeBps > 0n, part);
     }
     return part;
   };

@@ -79,7 +79,13 @@
             </div>
             <div>
               <dt>Of the rewards</dt>
-              <dd><span class="retired-share">…</span> retired, <span class="paid-share">…</span> paid to you</dd>
+              <dd>
+                <span class="retired-share">…</span> retired, <span class="paid-share">…</span> paid to you<span
+                  class="with-fee"
+                  hidden
+                  >, less a fee of <span class="fee">…</span></span
+                >
+              </dd>
             </div>
             <div>
               <dt>Its Earning Power</dt>
@@ -183,6 +189,12 @@
                   <td>None</td>
                   <td>None</td>
                   <td><span class="retired">…</span> of the rewards</td>
+                </tr>
+                <tr class="with-fee" hidden>
+                  <th scope="row">Fee</th>
+                  <td>None</td>
+                  <td>None</td>
+                  <td><span class="fee">…</span> of the payouts</td>
                 </tr>
                 <tr>
                   <th scope="row">Each week, you</th>
@@ -618,7 +630,9 @@
           <p>
             Right after each epoch ends, Carbon Impact claims the rewards and swaps them into kVCM, through routers its
             admin key approved. It retires <span class="retired-share">a share</span> of the kVCM as carbon credits, and
-            sends the rest to your payout address. Swaps have their usual costs.
+            sends the rest to your payout address<span class="with-fee" hidden
+              >, less a fee of <span class="fee">…</span></span
+            >. Swaps have their usual costs.
             <a href="#carbon">The carbon credits</a>
           </p>
           <h3 id="your-hydx">Your HYDX stays in your account, and the account in your wallet</h3>
@@ -1016,7 +1030,8 @@
           <details>
             <summary>What does it cost?</summary>
             <p>
-              Carbon Impact retires <span class="retired-share">a share</span> of the rewards as carbon credits. Swaps
+              Carbon Impact retires <span class="retired-share">a share</span> of the rewards as carbon credits.
+              <span class="with-fee" hidden>It takes a fee of <span class="fee">…</span> of the payouts.</span> Swaps
               have their usual costs, and each account takes the gas of one transaction to join, and one to leave.
             </p>
           </details>
@@ -1202,7 +1217,8 @@
         </li>
         <li>
           <b>Right after each epoch ends.</b> It retires <span class="retired-share"></span> of the rewards as carbon
-          credits, in the name "<bdi class="entity" translate="no"></bdi>", and sends the rest to your payout address.
+          credits, in the name "<bdi class="entity" translate="no"></bdi>", and sends the rest to your payout
+          address<span class="with-fee" hidden>, less a fee of <span class="fee"></span></span>.
         </li>
       </ol>
       <p>
