@@ -1,0 +1,5 @@
+Copyright Klima Protocol. All rights reserved.
+
+The Klima Protocol logo is used by metaDEX Café with Klima Protocol's permission, as Klima Protocol's brand guidelines
+allow. It is not covered by the MIT License of this repository, and may not be reused without Klima Protocol's
+permission.

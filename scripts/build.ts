@@ -38,7 +38,8 @@ await esbuild.build({
   legalComments: "linked",
   logLevel: "warning",
 });
-for (const file of ["icon.svg", "manifest.json"]) copyFileSync(`${ROOT}/${file}`, `${OUT}/${file}`);
+for (const file of ["icon.svg", "klima-protocol.svg", "manifest.json"])
+  copyFileSync(`${ROOT}/${file}`, `${OUT}/${file}`);
 const values: Record<string, string> = {
   VERSION: version,
   COMMIT: commit().slice(0, 7),

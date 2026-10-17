@@ -293,7 +293,8 @@ const account = (page: Page, id: number) => page.locator("#accounts li").filter(
 const group = (page: Page, name: string) =>
   page.locator(".group").filter({ has: page.getByRole("heading", { name, exact: true }) });
 const review = (page: Page) => page.locator("#review");
-const homeTitle = (page: Page) => page.getByRole("heading", { name: "Your Hydrex votes, working for the climate" });
+const homeTitle = (page: Page) =>
+  page.getByRole("heading", { name: "Your Hydrex votes, retiring carbon credits and paying you" });
 const appTitle = (page: Page) => page.getByRole("heading", { name: "Your accounts", level: 1 });
 const howTitle = (page: Page) => page.getByRole("heading", { name: "How it works", level: 1 });
 
@@ -800,7 +801,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     await app.getByText("Connected with Safe{Wallet}").waitFor();
     assert.equal(await app.getByRole("heading", { name: "Your accounts", level: 1 }).isVisible(), true);
     assert.equal(
-      await app.getByRole("heading", { name: "Your Hydrex votes, working for the climate" }).isVisible(),
+      await app.getByRole("heading", { name: "Your Hydrex votes, retiring carbon credits and paying you" }).isVisible(),
       false,
     );
     await app.getByRole("checkbox", { name: "Pick Account #53350" }).check();

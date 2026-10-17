@@ -107,4 +107,5 @@ are the same; with `BASE_RPC_URL`, it also runs the fork tests. Dependabot updat
 ## License
 
 MIT, REUSE compliant. The fonts in `fonts/` are under the SIL Open Font License 1.1, and carry their copyright and
-licence in their own metadata.
+licence in their own metadata. Klima Protocol's logo, `klima-protocol.svg`, is Klima Protocol's, all rights reserved,
+and used with its permission.

@@ -224,6 +224,16 @@ button img {
   margin: 0;
   font-weight: 600;
 }
+/* Klima Protocol's logo keeps a third of its size clear around it, as its guidelines ask. */
+.numbers .through {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block-start: 0.5rem;
+  color: var(--quiet);
+  font-size: 0.875rem;
+  font-weight: normal;
+}
 .numbers .countdown {
   display: block;
   color: var(--quiet);
