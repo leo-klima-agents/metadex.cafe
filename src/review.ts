@@ -29,9 +29,21 @@ fill(key, "conduit", CONDUIT);
 const confirm = dialog.querySelector<HTMLButtonElement>(".confirm")!;
 const back = dialog.querySelector<HTMLButtonElement>(".back")!;
 
+/** What a review tells the page. */
+export type Hooks = {
+  /**
+   * Once the review has closed and nothing it asked for is on its way: whether the wallet took anything, and whether the
+   * page stopped following it before Base included it, as when the wallet cannot say where a batch is.
+   */
+  closed(submitted: boolean, unsure: boolean): void;
+  /** The wallet switched to Base from the review. */
+  switched(): void;
+};
+
 type Review = {
   steps: Step[];
   connection: Connection;
+  hooks: Hooks;
   /** Whether the wallet sends the calls as one transaction; undefined until known. */
   batch?: boolean;
   checked: boolean;
@@ -41,31 +53,41 @@ type Review = {
   done: Hex[];
   /** Whether the wallet took anything. */
   submitted: boolean;
-  closed: (submitted: boolean) => void;
+  /** Whether the page stopped following what the wallet took before Base included it. */
+  unsure: boolean;
 };
 
 let current: Review | undefined;
 
 /**
+ * Whether to go on following a transaction, or a batch: for ten minutes from the first time it is asked. The page goes
+ * on following after the review closes, so that it reads the accounts again once Base includes what was sent.
+ */
+function following(): () => boolean {
+  let end: number | undefined;
+  return () => Date.now() < (end ??= Date.now() + 10 * 60_000);
+}
+
+/**
  * Shows what the calls change and the calls themselves, checks them against Base from the owner's address, and sends
- * them when the user confirms. Calls closed when the dialog closes, and again when what it sent is over if the dialog
- * closed before.
+ * them when the user confirms. Tells the page once it has closed and what it sent is over.
  */
 export function review(
   title: string,
   changes: DocumentFragment,
   calls: Step[],
   connection: Connection,
-  closed: (submitted: boolean) => void,
+  hooks: Hooks,
 ): void {
   const state: Review = {
     steps: calls,
     connection,
+    hooks,
     checked: false,
     sending: false,
     done: [],
     submitted: false,
-    closed,
+    unsure: false,
   };
   current = state;
   dialog.querySelector("h2")!.textContent = title;
@@ -144,12 +166,16 @@ export function close(): void {
   if (dialog.open) dialog.close();
 }
 
-/** The second button: "Close" once the wallet took anything. Closing stops what the page follows, not the wallet. */
+/**
+ * The second button: "Close" once the wallet took anything. Closing stops the page sending more, not what it sent: the
+ * page follows that in the background.
+ */
 function showBack(state: Review): void {
   if (current === state) back.textContent = state.submitted ? "Close" : "Back";
 }
 
 const PROPOSED = "Proposed. The Safe's owners sign it in Safe{Wallet}; the accounts here change once it executes.";
+const UNSURE = "Sent. Your wallet shows when Base includes it; the accounts here change then.";
 
 /** Shows a message in this review only: it may have closed, and another opened. */
 function tell(state: Review, message: string, hashes: Hex[] = []): void {
@@ -180,16 +206,13 @@ async function sendAll(state: Review): Promise<void> {
     address,
     calls(state),
     () => sent(state, proposing ? PROPOSED : "Sent. Waiting for Base to include it…"),
-    () => !proposing && current === state,
+    proposing ? () => false : following(),
   );
   tell(state, "Waiting for your wallet…");
   const hashes = await sending;
   if (!proposing) {
-    tell(
-      state,
-      hashes ? "Done." : "Sent. Your wallet shows when Base includes it; the accounts here change then.",
-      hashes,
-    );
+    state.unsure = !hashes;
+    tell(state, hashes ? "Done." : UNSURE, hashes);
   }
   finished(state);
 }
@@ -203,8 +226,13 @@ async function sendNext(state: Review): Promise<void> {
   const hash = await sending;
   const which = total === 1 ? "Sent" : `Transaction ${index + 1} of ${total} sent`;
   sent(state, `${which}. Waiting for Base to include it…`, [...state.done, hash]);
-  const ok = await included(hash, () => current === state);
-  if (ok === undefined) return;
+  const ok = await included(hash, following());
+  if (ok === undefined) {
+    // Base has not included it after a while, as when the wallet replaced it: the wallet knows the rest.
+    state.unsure = true;
+    tell(state, UNSURE, [...state.done, hash]);
+    return finished(state);
+  }
   if (!ok) throw new Failed([...state.done, hash]);
   state.done.push(hash);
   if (state.done.length < total) {
@@ -219,12 +247,15 @@ async function sendNext(state: Review): Promise<void> {
 confirm.addEventListener("click", () => {
   const state = current;
   if (!state) return;
-  if (state.connection.chainId !== CHAIN_ID) {
-    switchToBase(state.connection).then(update, (error) => say(failure(error)));
-    return;
-  }
   // The wallet's request comes first, with no wait since the click: a wallet that opens a window, such as Coinbase's,
   // opens it only from a click. Without batching, each transaction takes a click of its own for the same reason.
+  if (state.connection.chainId !== CHAIN_ID) {
+    const switching = switchToBase(state.connection);
+    state.sending = true;
+    update();
+    switching.then(state.hooks.switched, (error) => tell(state, failure(error))).finally(() => ended(state));
+    return;
+  }
   const sending = state.batch ? sendAll(state) : sendNext(state);
   state.sending = true;
   update();
@@ -235,12 +266,15 @@ confirm.addEventListener("click", () => {
       tell(state, `${failure(error)}${partly}`, error instanceof Failed ? error.hashes : state.done);
       if (error instanceof Failed) finished(state);
     })
-    .finally(() => {
-      state.sending = false;
-      if (current === state) update();
-      else if (state.submitted) state.closed(true);
-    });
+    .finally(() => ended(state));
 });
+
+/** Ends a request to the wallet: the review shows what comes next, or, if it closed meanwhile, tells the page. */
+function ended(state: Review): void {
+  state.sending = false;
+  if (current === state) update();
+  else state.hooks.closed(state.submitted, state.unsure);
+}
 
 function failure(error: unknown): string {
   if (declined(error)) return "You said no in your wallet.";
@@ -265,5 +299,6 @@ back.addEventListener("click", () => dialog.close());
 dialog.addEventListener("close", () => {
   const state = current;
   current = undefined;
-  state?.closed(state.submitted);
+  // A request still on its way tells the page when it ends.
+  if (state && !state.sending) state.hooks.closed(state.submitted, state.unsure);
 });

@@ -439,6 +439,28 @@ WebView that Google Play updates.
 - **Not tested:** WebKit itself, and real wallet apps.
 - **Size.** The first load is 24.1 KB gzipped, up from 23.7 KB; the two SDKs are unchanged.
 
+### Code review
+
+A review of this milestone's diff, on 2026-10-17, found these, now fixed:
+
+- **Two clocks.** The page saw a new epoch by the device's clock but read it from Base's, so an RPC a few seconds behind
+  at the flip left the page in the old epoch for a week. The page now keeps Base's time, from the latest block it read,
+  and waits a minute into a new epoch, when every RPC has its blocks, before reading again. Until a read answers from
+  the new epoch, it tries again every half minute. The checks also run again then, and every hour.
+- **A lock was a disconnection.** A wallet that locks shares no account, and the page used to forget it and revoke its
+  own permission, so the next visit asked to connect again. It now lets go of the wallet on the page only, and connects
+  again once the wallet shares an account. Only Disconnect forgets it.
+- **A connection could be overwritten** by an older attempt that answered late. Only the latest attempt connects now.
+- **Closing a review stopped the following,** so the accounts were read before Base included what was sent. The page now
+  follows it in the background for ten minutes, and reads the accounts once it is included. When it cannot know, it
+  reads them again every 15 seconds for five minutes.
+- **Smaller ones.**
+  - A click on a row whose box was hidden ticked that box; hidden boxes are now disabled.
+  - A lock that ended after its box was ticked could open an empty review.
+  - The review's "Switch to Base" had no busy state and left the page's notice in place.
+  - A join named only the automation that held the votes, not the one that held the claims.
+  - A fork test checked a box that could never show.
+
 ### Cold read
 
 The method of [earlier-design.md](earlier-design.md#cold-read): fresh readers, with no context, saw the page on arrival,

@@ -15,6 +15,12 @@ const IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a92
 
 export type Call = { address: Address; abi: Abi; functionName: string; args: unknown[] };
 
+/**
+ * Whether two addresses are the same, whatever their case. Unlike viem's isAddressEqual, it never throws, as for the
+ * "undefined" of a read that failed.
+ */
+export const same = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
+
 export const call = (address: Address, abi: Abi, functionName: string, ...args: unknown[]): Call => ({
   address,
   abi,

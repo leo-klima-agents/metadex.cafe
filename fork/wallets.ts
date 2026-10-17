@@ -7,7 +7,15 @@ import { existsSync, mkdirSync } from "node:fs";
 import { after, afterEach, before, beforeEach, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright-core";
-import { decodeFunctionResult, encodeFunctionData, getAddress, parseAbi, type Address, type Hex } from "viem";
+import {
+  decodeFunctionResult,
+  encodeFunctionData,
+  getAddress,
+  parseAbi,
+  zeroAddress,
+  type Address,
+  type Hex,
+} from "viem";
 import { CONDUIT, RPCS, VOTER, VOTING_ESCROW } from "../src/config.ts";
 
 const FORK_URL = process.env.BASE_RPC_URL ?? "https://mainnet.base.org";
@@ -87,9 +95,12 @@ type WalletOptions = {
 type Sent = { method: string; calls: { to: string; data: string }[] };
 
 // The test wallet in the page. It announces itself (EIP-6963) and hands each request to Node through testWallet,
-// which the page's Content Security Policy cannot block.
+// which the page's Content Security Policy cannot block. Tests make it emit events, as when it locks, with
+// testWalletEmit, once testWalletListens says that the page listens.
 const WALLET_SCRIPT = `(() => {
   const listeners = {};
+  window.testWalletEmit = (event, value) => { for (const l of listeners[event] ?? []) l(value); };
+  window.testWalletListens = () => (listeners.accountsChanged ?? []).length > 0;
   const provider = {
     async request({ method, params }) {
       const { result, error } = await window.testWallet(method, params ?? []);
@@ -112,11 +123,12 @@ const WALLET_SCRIPT = `(() => {
 // wallet sets a limit as a wallet's margin would.
 const GAS = "0xf4240";
 
-/** Answers the page's wallet requests as the owner, sending transactions to anvil. */
-function testWallet(options: WalletOptions, sent: Sent[]) {
+/** Answers the page's wallet requests as the owner, sending transactions to anvil, and notes every method asked. */
+function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
   const batches = new Map<string, Hex[]>();
   const declined = { error: { code: 4001, message: "User rejected the request." } };
   return async (method: string, params: any[]): Promise<{ result?: unknown; error?: unknown }> => {
+    asked.push(method);
     switch (method) {
       case "eth_requestAccounts":
         return { result: [options.owner] };
@@ -213,17 +225,29 @@ async function serve(route: Route, origins: Set<string>): Promise<void> {
   return route.abort();
 }
 
-type Opened = { page: Page; context: BrowserContext; sent: Sent[]; origins: Set<string>; violations: string[] };
+/** The page, what the test wallet sent and was asked, its options to change on the way, and where the page went. */
+type Opened = {
+  page: Page;
+  context: BrowserContext;
+  wallet: WalletOptions;
+  sent: Sent[];
+  asked: string[];
+  origins: Set<string>;
+  violations: string[];
+};
 
 let browser: Browser;
 let node: ChildProcess;
 let snapshot: Hex;
 const contexts: BrowserContext[] = [];
 
-/** Opens the page, with the test wallet acting as an owner unless wallet is false. */
+/**
+ * Opens the page, with the test wallet acting as an owner unless wallet is false. The page's clock stands still at the
+ * fork's time, unless flowing says to let it run, so that a test can move it on.
+ */
 async function open(
   wallet: Partial<WalletOptions> | false,
-  { width = 1440, height = 900, dark = false, url = `${SITE}/`, remembered = "" } = {},
+  { width = 1440, height = 900, dark = false, url = `${SITE}/`, remembered = "", flowing = false } = {},
 ): Promise<Opened> {
   const context = await browser.newContext({
     viewport: { width, height },
@@ -234,19 +258,20 @@ async function open(
   contexts.push(context);
   const origins = new Set<string>();
   const sent: Sent[] = [];
+  const asked: string[] = [];
   const violations: string[] = [];
   await context.route("**/*", (route) => serve(route, origins));
+  const options: WalletOptions = {
+    owner: NEWCOMER,
+    chainId: 8453,
+    batch: false,
+    decline: false,
+    shares: true,
+    switches: true,
+    ...wallet,
+  };
   if (wallet) {
-    const options = {
-      owner: NEWCOMER,
-      chainId: 8453,
-      batch: false,
-      decline: false,
-      shares: true,
-      switches: true,
-      ...wallet,
-    };
-    await context.exposeFunction("testWallet", testWallet(options, sent));
+    await context.exposeFunction("testWallet", testWallet(options, sent, asked));
     await context.addInitScript(WALLET_SCRIPT);
   }
   if (remembered) await context.addInitScript(`localStorage.setItem("wallet", ${JSON.stringify(remembered)})`);
@@ -257,9 +282,10 @@ async function open(
   page.on("pageerror", (error) => violations.push(String(error)));
   // The page's clock at the fork block, for the statuses that depend on the time.
   const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false]);
-  await page.clock.setFixedTime(Number(timestamp) * 1000);
+  const time = Number(timestamp) * 1000;
+  await (flowing ? page.clock.install({ time }) : page.clock.setFixedTime(time));
   await page.goto(url);
-  return { page, context, sent, origins, violations };
+  return { page, context, wallet: options, sent, asked, origins, violations };
 }
 
 /** Saves a screenshot to $SCREENSHOTS, if set: the whole page, or only the screen while a dialog is open. */
@@ -332,7 +358,9 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await assert.doesNotReject(
       account(page, 42877).getByText("In another Hydrex automation: Liquid Hydrex.").waitFor(),
     );
-    assert.equal(await account(page, 329).locator(".pick").isVisible(), false, "an empty account has no box");
+    await page.locator("#empty-accounts summary").click();
+    await page.locator("#empty-accounts li").getByText("Empty.").waitFor();
+    assert.equal(await page.locator("#empty-accounts .pick").isVisible(), false, "an empty account has no box");
     await page.getByRole("checkbox", { name: "Pick Account #141" }).check();
     await page.getByRole("checkbox", { name: "Pick Account #42877" }).check();
     await shoot(page, "picked-1440-light");
@@ -378,11 +406,46 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     assert.deepEqual((await approvals(42877n)).delegate, getAddress("0x809F8175b8F60960dF2bc7a78a7C4Eb04d138AF0"));
   });
 
-  test("a remembered wallet that no longer shares an account is forgotten", async () => {
-    const { page } = await open({ owner: NEWCOMER, shares: false }, { remembered: "test.wallet" });
-    await page.getByText("Connect a wallet").waitFor();
-    await page.waitForFunction(() => localStorage.getItem("wallet") === null);
+  test("a locked wallet stays remembered, and connects once unlocked", async () => {
+    // Locked as the page opens: it shares no account, and the page waits for one.
+    const { page, wallet, asked } = await open({ owner: NEWCOMER, shares: false }, { remembered: "test.wallet" });
+    const emit = (accounts: Address[]) =>
+      page.evaluate((value) => (window as any).testWalletEmit("accountsChanged", value), accounts);
+    await page.waitForFunction(() => (window as any).testWalletListens());
     assert.equal(await page.getByText("Connected with").isVisible(), false);
+    wallet.shares = true;
+    await emit([NEWCOMER]);
+    await page.getByText("Connected with Test Wallet").waitFor();
+    await account(page, 141).waitFor();
+    // Locked again: the page lets go of it, but neither forgets it nor gives up its permission.
+    wallet.shares = false;
+    await emit([]);
+    await page.getByText("Connect a wallet").waitFor();
+    assert.equal(await page.locator("#accounts").isVisible(), false);
+    assert.equal(await page.evaluate(() => localStorage.getItem("wallet")), "test.wallet");
+    assert.ok(!asked.includes("wallet_revokePermissions"));
+  });
+
+  test("closing the review before Base includes the transaction still updates the account", async () => {
+    const { page } = await open({ owner: NEWCOMER });
+    await page.getByRole("button", { name: "Test Wallet" }).click();
+    await page.getByRole("checkbox", { name: "Pick Account #141" }).check();
+    await page.getByRole("button", { name: "Join with 1 account" }).click();
+    await review(page).getByText("Checked ✓").waitFor();
+    await anvil("evm_setAutomine", [false]);
+    try {
+      await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
+      await review(page).getByText("Waiting for Base to include it").waitFor();
+      await review(page).getByRole("button", { name: "Close" }).click();
+      await account(page, 141).getByText("Not in an automation.").waitFor();
+      // Base includes it later than the page's next look, two seconds on, which a page that stopped following used to
+      // take as its last.
+      await page.waitForTimeout(5_000);
+      await anvil("evm_mine");
+    } finally {
+      await anvil("evm_setAutomine", [true]);
+    }
+    await account(page, 141).getByText("Joined the Carbon Impact automation.").waitFor();
   });
 
   test("join in one batch with accounts from Lock Maxi and USDC", async () => {
@@ -417,7 +480,7 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await confirm(page);
     assert.deepEqual(await approvals(9540n), {
       delegate: MEMBER,
-      claimer: "0x0000000000000000000000000000000000000000",
+      claimer: zeroAddress,
     });
     await account(page, 9540).getByText("Left the Carbon Impact automation.").waitFor();
 
@@ -446,22 +509,27 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     for (const id of [53350n, 82206n]) {
       assert.deepEqual(await approvals(id), {
         delegate: LEAVER,
-        claimer: "0x0000000000000000000000000000000000000000",
+        claimer: zeroAddress,
       });
     }
     await account(page, 53350).getByText("Left the Carbon Impact automation.").waitFor();
   });
 
-  test("an ended lock offers nothing to tick, and disconnecting clears the accounts", async () => {
-    const { page } = await open({ owner: ENDED });
+  test("an ended lock offers nothing to tick, and disconnecting forgets the wallet", async () => {
+    const { page, asked } = await open({ owner: ENDED });
     await page.getByRole("button", { name: "Test Wallet" }).click();
     await account(page, 123351).getByText("Lock ended.").waitFor();
     assert.equal(await account(page, 123351).locator(".pick").isVisible(), false);
     assert.equal(await account(page, 123364).locator(".pick").isVisible(), true);
+    // A click on the row cannot tick its hidden box.
+    await account(page, 123351).click();
+    assert.equal(await account(page, 123351).locator(".pick").isChecked(), false);
     await page.getByRole("button", { name: "Disconnect" }).click();
     await page.getByText("Connect a wallet").waitFor();
     assert.equal(await page.locator("#accounts").isVisible(), false);
     assert.equal(await page.locator("#payout").isVisible(), false);
+    assert.equal(await page.evaluate(() => localStorage.getItem("wallet")), null);
+    assert.ok(asked.includes("wallet_revokePermissions"));
   });
 
   test("without a wallet in the browser, Browser wallet says how to get one", async () => {
@@ -485,7 +553,7 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     assert.equal(sent.length, 1);
     assert.deepEqual(await approvals(141n), {
       delegate: NEWCOMER,
-      claimer: "0x0000000000000000000000000000000000000000",
+      claimer: zeroAddress,
     });
     await review(page).getByRole("button", { name: "Back" }).click();
     assert.equal(await page.getByText("Your wallet is on another network.").isVisible(), false);
@@ -557,19 +625,35 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
   });
 
   // Last, as it moves anvil's clock on.
-  test("once an epoch ends, the page counts from Thursday even before Hydrex's minter moves", async () => {
-    // #141 joins before the epoch ends, then the epoch ends without anyone calling the minter.
+  test("an open page moves on to the next epoch by itself, even before Hydrex's minter does", async () => {
+    // #141 joins before the epoch ends.
     const data = encodeFunctionData({ abi, functionName: "setConduitApproval", args: [CONDUIT, 141n, true] });
     await mined(await anvil<Hex>("eth_sendTransaction", [{ from: NEWCOMER, to: VOTING_ESCROW, data, gas: GAS }]));
+    const { page } = await open({ owner: NEWCOMER }, { flowing: true });
+    await page.getByRole("button", { name: "Test Wallet" }).click();
+    await account(page, 141).getByText("Joined the Carbon Impact automation.").waitFor();
+
+    // The page's clock passes the end of the epoch before an RPC's latest block does: the page reads Base, which is
+    // still in the old epoch, and tries again later. Its reads ask Multicall3 for the block's time (0x0f28c97d).
+    const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false]);
+    const read = page.waitForResponse((response) => !!response.request().postData()?.includes("0f28c97d"));
+    await page.clock.fastForward((FLIP + 90 - Number(timestamp)) * 1000);
+    await read;
+    await page.getByText(/Thu,? 22 Oct to Thu,? 29 Oct, 00:00 UTC/).waitFor();
+    assert.equal(await account(page, 141).getByText("Joined the Carbon Impact automation.").isVisible(), true);
+
+    // Then Base's epoch ends too, without anyone calling the minter, and the page moves on at its next try.
     await anvil("evm_setNextBlockTimestamp", [FLIP + 300]);
     await anvil("evm_mine");
     const epoch = encodeFunctionData({ abi, functionName: "_epochTimestamp" });
     assert.equal(BigInt(await anvil<Hex>("eth_call", [{ to: VOTER, data: epoch }, "latest"])), BigInt(FLIP - WEEK));
-
-    const { page } = await open({ owner: NEWCOMER });
-    await page.getByText(/Thu,? 22 Oct to Thu,? 29 Oct, 00:00 UTC/).waitFor();
-    await page.getByRole("button", { name: "Test Wallet" }).click();
-    await account(page, 141).getByText("In the Carbon Impact automation.").waitFor();
+    const moved = account(page, 141).getByText("In the Carbon Impact automation.");
+    for (let tries = 0; tries < 10 && !(await moved.isVisible()); tries++) {
+      // A tick that comes while the page still reads skips: the page tries again half a minute later.
+      await page.clock.fastForward(30_000);
+      await page.waitForTimeout(1_000);
+    }
+    await moved.waitFor({ timeout: 1_000 });
     await page.getByRole("checkbox", { name: "Pick Account #42877" }).check();
     await page.getByRole("button", { name: "Join with 1 account" }).click();
     await review(page).getByText("Checked ✓").waitFor();

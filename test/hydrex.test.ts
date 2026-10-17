@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Address } from "viem";
+import { zeroAddress, type Address } from "viem";
 import { CONDUIT as conduit } from "../src/config.ts";
 import { WEEK } from "../src/format.ts";
 import { poolName, status, type Account } from "../src/hydrex.ts";
@@ -8,7 +8,6 @@ import { poolName, status, type Account } from "../src/hydrex.ts";
 const OWNER: Address = "0x96107D30577872Ee4c572A2B6E6fD254a89bBD20";
 const USDC_CONDUIT: Address = "0xE57b3Ea02336B9b418cA523aB5aD6f479d93bD1D";
 const STRANGER: Address = "0x000000000000000000000000000000000000dEaD";
-const ZERO: Address = "0x0000000000000000000000000000000000000000";
 const START = 1_792_022_400; // Thu 15 Oct 2026, 00:00 UTC
 const NOW = START + 86_400;
 
@@ -21,7 +20,7 @@ const account = (changes: Partial<Account> = {}): Account => ({
   votes: 10n ** 18n,
   delegate: OWNER,
   delegateAtStart: OWNER,
-  claimer: ZERO,
+  claimer: zeroAddress,
   ...changes,
 });
 const statusOf = (changes: Partial<Account>) => status(account(changes), OWNER, NOW, START);
@@ -39,7 +38,7 @@ test("votes without claims, or claims without votes, is only partly in", () => {
 
 test("other delegates: the owner, nobody, another of Hydrex's automations, any other address", () => {
   assert.deepEqual(statusOf({}), { kind: "self" });
-  assert.deepEqual(statusOf({ delegate: ZERO }), { kind: "self" });
+  assert.deepEqual(statusOf({ delegate: zeroAddress }), { kind: "self" });
   assert.deepEqual(statusOf({ delegate: USDC_CONDUIT.toLowerCase() as Address }), { kind: "other", name: "USDC" });
   assert.deepEqual(statusOf({ delegate: STRANGER }), { kind: "delegated", to: STRANGER });
 });

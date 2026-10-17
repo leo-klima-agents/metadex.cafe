@@ -59,11 +59,11 @@ export function countdown(seconds: number): string {
     Math.floor(seconds / 60) % 60,
   ];
   const values = [days, hours, minutes];
-  const units = [count(days, "day", "days"), count(hours, "hour", "hours"), count(minutes, "minute", "minutes")];
+  const parts = [count(days, "day", "days"), count(hours, "hour", "hours"), count(minutes, "minute", "minutes")];
   const first = values.findIndex((n) => n > 0);
   if (first < 0) return "less than a minute";
   // The largest unit, and the next one unless it is zero.
-  return units
+  return parts
     .slice(first, first + 2)
     .filter((_, i) => values[first + i])
     .join(", ");

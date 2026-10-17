@@ -1,6 +1,6 @@
-import type { Address } from "viem";
+import { zeroAddress, type Address } from "viem";
 import { accountNamesAbi, conduitAbi, multicall3Abi, poolAbi, voterAbi, votingEscrowAbi } from "./abi.ts";
-import { call, codeHash, implementation, read, rpc } from "./chain.ts";
+import { call, codeHash, implementation, read, rpc, same } from "./chain.ts";
 import {
   ACCOUNT_NAMES,
   ACTIONS,
@@ -19,14 +19,13 @@ import {
 import { WEEK, clean, short, weekStart } from "./format.ts";
 import conduits from "./hydrex-conduits.json" with { type: "json" };
 
-const ZERO = "0x0000000000000000000000000000000000000000";
-
 export const LockType = { timed: 0, rolling: 1, permanent: 2 } as const;
 
 export type Pool = { address: Address; name: string; votes: bigint };
 
 export type Relay = {
-  /** The start of the epoch at Base's latest block. */
+  /** The time of Base's latest block, and the start of its epoch. */
+  time: number;
   epochStart: number;
   retireBps: bigint;
   feeBps: bigint;
@@ -59,8 +58,6 @@ export type Status =
   | { kind: "joined" | "left"; date: number }
   | { kind: "other"; name: string }
   | { kind: "delegated"; to: Address };
-
-const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 function all(values: unknown[]): unknown[] {
   if (values.includes(undefined)) throw new Error("A read from Base failed.");
@@ -97,6 +94,7 @@ export async function readRelay(): Promise<Relay> {
     ]),
   ) as [bigint, ...Address[]];
   return {
+    time: Number(time),
     epochStart,
     retireBps,
     feeBps,
@@ -148,10 +146,13 @@ export function poolName(
   return symbol || short(address);
 }
 
-/** An owner's accounts, where its payouts go, and the start of the epoch their delegates are read at. */
+/**
+ * An owner's accounts, where its payouts go, and the time of Base's latest block with the start of the epoch their
+ * delegates are read at.
+ */
 export async function readAccounts(
   owner: Address,
-): Promise<{ accounts: Account[]; payout: Address; epochStart: number }> {
+): Promise<{ accounts: Account[]; payout: Address; time: number; epochStart: number }> {
   const [count, payout, time] = all(
     await read([
       call(VOTING_ESCROW, votingEscrowAbi, "balanceOf", owner),
@@ -191,8 +192,14 @@ export async function readAccounts(
     return { id, name, amount, end: Number(endTime), lockType, votes, delegate, delegateAtStart, claimer };
   });
   accounts.sort((a, b) => (a.votes === b.votes ? Number(a.id - b.id) : a.votes > b.votes ? -1 : 1));
-  return { accounts, payout, epochStart };
+  return { accounts, payout, time: Number(time), epochStart };
 }
+
+/** Whether the account is a timed lock that has ended: it has no votes to give. */
+const ended = (account: Account, now: number): boolean => account.lockType === LockType.timed && account.end <= now;
+
+/** What the conduit holds of the account: its votes, its claims, both or neither. */
+const held = (account: Account) => ({ votes: same(account.delegate, CONDUIT), claims: same(account.claimer, CONDUIT) });
 
 /**
  * Where an account stands. Joining makes the conduit the account's delegate and claimer. The Voter counts the delegate
@@ -200,14 +207,13 @@ export async function readAccounts(
  */
 export function status(account: Account, owner: Address, now: number, epochStart: number): Status {
   if (account.amount === 0n) return { kind: "empty" };
-  if (account.lockType === LockType.timed && account.end <= now) return { kind: "ended" };
-  const [votesNow, claims, votedAtStart] = [account.delegate, account.claimer, account.delegateAtStart].map((a) =>
-    same(a, CONDUIT),
-  );
-  if (votesNow && claims) return votedAtStart ? { kind: "in" } : { kind: "joined", date: epochStart + WEEK };
-  if (votesNow || claims) return { kind: "partly" };
+  if (ended(account, now)) return { kind: "ended" };
+  const { votes, claims } = held(account);
+  const votedAtStart = same(account.delegateAtStart, CONDUIT);
+  if (votes && claims) return votedAtStart ? { kind: "in" } : { kind: "joined", date: epochStart + WEEK };
+  if (votes || claims) return { kind: "partly" };
   if (votedAtStart) return { kind: "left", date: epochStart + WEEK };
-  if (same(account.delegate, owner) || same(account.delegate, ZERO)) return { kind: "self" };
+  if (same(account.delegate, owner) || same(account.delegate, zeroAddress)) return { kind: "self" };
   const other = automation(account.delegate);
   return other ? { kind: "other", name: other } : { kind: "delegated", to: account.delegate };
 }
@@ -217,14 +223,16 @@ export const automation = (address: Address): string | undefined =>
   conduits.find((conduit) => same(conduit.address, address) && !same(conduit.address, CONDUIT))?.name;
 
 /** Whether joining would change anything: the account holds HYDX, its lock has not ended, and it is not fully in. */
-export const canJoin = (account: Account, now: number): boolean =>
-  account.amount > 0n &&
-  !(account.lockType === LockType.timed && account.end <= now) &&
-  !(same(account.delegate, CONDUIT) && same(account.claimer, CONDUIT));
+export function canJoin(account: Account, now: number): boolean {
+  const { votes, claims } = held(account);
+  return account.amount > 0n && !ended(account, now) && !(votes && claims);
+}
 
 /** Whether the conduit holds the account's votes or claims. */
-export const canLeave = (account: Account): boolean =>
-  same(account.delegate, CONDUIT) || same(account.claimer, CONDUIT);
+export function canLeave(account: Account): boolean {
+  const { votes, claims } = held(account);
+  return votes || claims;
+}
 
 /** The checks that fail, by the id of their message on the page; empty when the chain matches config.ts. */
 export async function check(): Promise<string[]> {

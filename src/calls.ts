@@ -1,6 +1,7 @@
 import { encodeFunctionData, type Address, type Hex } from "viem";
 import { conduitAbi, votingEscrowAbi } from "./abi.ts";
 import { CONDUIT, VOTING_ESCROW } from "./config.ts";
+import { list } from "./format.ts";
 import { automation, type Account } from "./hydrex.ts";
 
 /** A call the wallet sends: what it does in words, and the contract, function and arguments the wallet shows. */
@@ -13,15 +14,18 @@ const approval = (conduit: Address, id: bigint, approve: boolean) => ({
   shows: `setConduitApproval(${conduit}, ${id}, ${approve})`,
 });
 
-/** Joins the conduit with each account. An account in another of Hydrex's automations moves: the join replaces both. */
+/**
+ * Joins the conduit with each account. An account in another of Hydrex's automations moves: the join replaces both its
+ * delegate and its claimer, which two automations may hold apart.
+ */
 export const join = (accounts: Account[]): Step[] =>
   accounts.map((account) => {
-    const from = automation(account.delegate);
+    const names = [account.delegate, account.claimer].map(automation).filter((name) => name !== undefined);
+    const from = [...new Set(names)];
+    const leaving = from.length ? `leaves the ${list(from)} automation${from.length > 1 ? "s" : ""} and ` : "";
     return {
       ...approval(CONDUIT, account.id, true),
-      says: from
-        ? `#${account.id} leaves the ${from} automation and joins the Carbon Impact automation.`
-        : `#${account.id} joins the Carbon Impact automation.`,
+      says: `#${account.id} ${leaving}joins the Carbon Impact automation.`,
     };
   });
 

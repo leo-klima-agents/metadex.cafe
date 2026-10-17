@@ -129,16 +129,21 @@ Then compare each file in `dist/` with the one at the same path on <https://meta
 
 - **Base RPC:** a read that fails goes to the next RPC. If none answers, the page says so and offers to try again.
 - **A failed startup check,** or one that cannot run, turns joining and changing the payout address off. The page says
-  why.
-- **The end of an epoch:** the page counts epochs from the time of Base's latest block, so it does not wait for Hydrex's
-  minter to move on to the new epoch. An open page moves on by itself and reads the automation and the accounts again.
+  why. An open page runs the checks again every hour and at each new epoch.
+- **The end of an epoch:** the page keeps Base's time, from the latest block it read, rather than the device's, so it
+  does not wait for Hydrex's minter to move on to the new epoch. A minute into a new epoch, an open page reads the
+  automation, the checks and the accounts again, every half minute until the RPC answers from the new epoch.
 - **The wrong network:** the page says so, and the main button becomes "Switch to Base". If the wallet cannot switch,
   the page asks to pick Base in the wallet.
 - **A call that would fail:** the review says which and why, and nothing can be sent.
 - **A refusal in the wallet, or a transaction that fails:** the review says so, with links to the transactions that went
   through. The page reads the accounts again when the review closes.
+- **A review closed early:** closing stops the page sending, not following. It follows what it sent for ten minutes and
+  reads the accounts again once Base includes it.
 - **A transaction the page cannot follow,** because the wallet replaced it or cannot say where a batch is: the review
-  can be closed at any time, which stops the page following and sending; the wallet shows the rest.
+  says so, and the page reads the accounts again every 15 seconds for five minutes. The wallet shows the rest.
+- **A wallet that locks:** the page lets go of it, keeps it in mind, and connects again once it is unlocked. Only
+  Disconnect forgets it, and asks it to drop the page's permission.
 - **Coinbase's SDK failing to load** affects only Coinbase Wallet; other wallets keep working.
 - **A Safe** proposes the transaction instead of sending it, and its owners sign it in Safe{Wallet}. A Safe on another
   network cannot switch: the page asks to open it from a Safe on Base.
@@ -153,11 +158,11 @@ wallet acts as real owners: one joins with two accounts, one of them from Liquid
 and USDC in one batch; a member leaves and changes the payout address; another leaves with two accounts in one batch;
 the owner of an ended lock gets nothing to tick; and, inside a stand-in for Safe{Wallet}, a Safe proposes leaving with
 two accounts. It also checks the wrong network, a wallet that cannot switch, a refusal in the wallet, a call that would
-fail, a browser without a wallet, that Coinbase Wallet loads under the page's policy and opens its window, and an epoch
-that ends before Hydrex's minter moves. It needs anvil, from Foundry, and Chromium:
-`npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium's path. `BASE_RPC_URL` is the archive RPC to
-fork from, `https://mainnet.base.org` by default. With `SCREENSHOTS` set to a folder, it saves screenshots there at 390
-and 1440 px, light and dark.
+fail, a review closed before Base includes the transaction, a wallet that locks and unlocks, a browser without a wallet,
+that Coinbase Wallet loads under the page's policy and opens its window, and an open page that moves on to the next
+epoch before Hydrex's minter does. It needs anvil, from Foundry, and Chromium: `npx playwright-core install chromium`,
+or set `CHROMIUM` to a Chromium's path. `BASE_RPC_URL` is the archive RPC to fork from, `https://mainnet.base.org` by
+default. With `SCREENSHOTS` set to a folder, it saves screenshots there at 390 and 1440 px, light and dark.
 
 `src/config.ts` holds what the page trusts about the automation, and the RPCs it reads from. After a Hydrex upgrade,
 check the new contracts, then update it. `src/hydrex-conduits.json` names Hydrex's other automations, from
