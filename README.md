@@ -3,9 +3,9 @@
 The static page at <https://metadex.cafe/> for joining and leaving the "Carbon Impact" automation with Hydrex accounts
 on Base. It shows the automation's settings and latest vote, and the epoch. With a wallet connected, or inside
 Safe{Wallet} as a Safe App, it shows the wallet's accounts with where each stands, and joins, leaves and sets the payout
-address. A keeper votes with the accounts in the automation. The page is `index.html` and `style.css`; a script in
-`src/` fills in what it reads from Base and talks to the wallet. Its dependencies are `viem`, `@coinbase/wallet-sdk` for
-Coinbase Wallet, and `@safe-global/safe-apps-sdk` for Safe{Wallet}.
+address. The page is `index.html` and `style.css`; a script in `src/` fills in what it reads from Base and talks to the
+wallet. Its dependencies are `viem`, `@coinbase/wallet-sdk` for Coinbase Wallet, and `@safe-global/safe-apps-sdk` for
+Safe{Wallet}.
 
 ## How joining works
 
@@ -25,8 +25,8 @@ Leaving is the same call with `false`, at any time. The automation can no longer
 back to the owner from the next epoch.
 
 A single admin key controls the automation. It can change the share retired up to 100%, the payout tokens, the fee up to
-1%, the swap routers and any owner's payout address, and choose who claims and votes for the automation: today an
-executor Safe, through which the keeper acts, and the automation's deployer.
+1%, the swap routers and any owner's payout address, and choose who claims and votes for the automation: today a Safe
+and the automation's deployer.
 
 ## What the page can and cannot do
 
