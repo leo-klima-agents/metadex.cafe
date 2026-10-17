@@ -8,8 +8,8 @@ wireframes below fix order, content and behaviour, not looks, and the copy in th
 ## Sitemap
 
 ```
-metadex.cafe/                     Home            decide, move   public, no wallet, readable without the script
-metadex.cafe/app/                 App             act, check     connects on a click; the Safe App opens here
+metadex.cafe/                     Home            decide, move   public, no wallet, readable without the script; the Safe App's URL
+metadex.cafe/app/                 App             act, check     connects on a click; a Safe lands here
 metadex.cafe/how-it-works/        How it works    read, verify   public, every section has an anchor
     #if-your-automation-stopped  #what-joining-allows  #timing  #who-controls-what
     #carbon  #for-co-signers  #verify  #questions  #words
@@ -29,6 +29,7 @@ to cover, one stable URL for Safe ([3. Comparable products](3-patterns.md#a-site
 **Every page** has the same header and footer:
 
 - **Header:** the name (to Home) · How it works · a button to the App ("Open the app"; on the App, the wallet's state).
+  In a Safe{Wallet} frame, every page shows the Safe, which connects without a click.
 - **Footer:** the official address `https://metadex.cafe/` · version and commit · source · contracts · Hydrex · Klima ·
   where to ask a question. No operator is named (a decision for now).
 
@@ -42,13 +43,21 @@ Where people come from, and where each should land. Links the team publishes sho
 | The address typed, a search, X or Farcaster            | Everyone     | `/`                                                     |
 | A bookmark, after a first visit                        | Members      | `/app/`                                                 |
 | A wallet app's own browser (the Base app, MetaMask)    | Maya         | `/app/`, from a deep link                               |
-| Safe{Wallet}, as a custom Safe App                     | Rafael       | `/app/`                                                 |
+| Safe{Wallet}, as a custom Safe App                     | Rafael       | `/`, which goes straight on to `/app/`                  |
 | Klima's site or community                              | Sofia        | `/`, then `/how-it-works/#carbon`                       |
 | A question in Discord, a DAO proposal, a co-signer     | Theo, Rafael | An anchor in `/how-it-works/`                           |
 
-**Safe{Wallet}:** the Safe App's URL becomes `https://metadex.cafe/app/`, with its `manifest.json` there. A Safe that
-added the root as a custom app keeps working: in a Safe{Wallet} frame, Home sends the visitor straight on to the App.
-Safe has paused new listings, so this URL is the one the README and How it works give.
+**Safe{Wallet}:** the Safe App's URL stays `https://metadex.cafe/`, the official address, with its `manifest.json` where
+it is today. In a frame, Home sends the visitor straight on to the App, before showing anything. Safes that already
+added the site keep working, and one address serves people and Safes alike: the one the footer gives, and the one to
+check. Safe has paused new listings, so this URL is the one the README and How it works give. A copy of `manifest.json`
+at `/app/` covers anyone who adds that URL instead.
+
+**Connecting on every page.** In a Safe frame, every page is connected anyway: the Safe connects without a click, on
+each page it opens. For browser wallets, connecting stays in the App. The page stores nothing and forgets the wallet on
+reload, so a wallet picked on Home would be forgotten on the way to the App, and asked for again. Keeping it connected
+across pages would mean making Home and the App one document, which brings back option A's single scroll. Every page's
+header still leads to the App in one click, and shows the wallet there.
 
 ## Home: decide
 
@@ -283,7 +292,7 @@ Problem numbers refer to [the audit](1-audit.md).
 | Phase   | Ships                                                                                                                                                                                                                                                         | Fixes             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | 0       | Now, on today's page: say when an account is in an automation that has stopped voting, read from Hydrex's Voter                                                                                                                                               | P1                |
-| 1       | Home and App as separate pages (option B), with Home's notice for stopped automations; disclosures moved into a three-step review; account groups; the epoch timeline; wallet-app links; Safe App on `/app/`                                                  | P2 – P7, P11, P13 |
+| 1       | Home and App as separate pages (option B), with Home's notice for stopped automations; disclosures moved into a three-step review; account groups; the epoch timeline; wallet-app links; the Safe App kept at `/`, opening on the App                         | P2 – P7, P11, P13 |
 | 2       | How it works with anchors, linked from Home, the review and announcements; the carbon section; who controls what; for co-signers; FAQ and glossary                                                                                                            | P9, P10, P12, P14 |
 | 3       | Data the page does not read yet: past payouts and retirements per account, with links to certificates, and an impact page (needs an RPC that serves logs); the read-only lookup by address; batched signing where wallets allow; a Base or Farcaster mini app | P8, P15           |
 | Not now | "Sign in with Base" and WalletConnect outside a wallet app's browser (an SDK and a relay, against "no server")                                                                                                                                                | P11, in part      |

@@ -52,7 +52,7 @@ metadex.cafe/                 Home: explain and decide
 ├── Safe to try: nothing transferred · leave any time · two calls, shown before your wallet asks
 └── [Open the app]
 
-metadex.cafe/app/             App: act and check            ← Safe App URL
+metadex.cafe/app/             App: act and check            ← a Safe lands here
 ├── Connect (wallet buttons, or Safe{Wallet} on its own)
 ├── Your accounts: summary bar · list grouped by status · Join / Leave per selection
 ├── This epoch: timeline (now → vote → payout → next epoch)
@@ -62,13 +62,13 @@ metadex.cafe/app/             App: act and check            ← Safe App URL
 
 - **Deciding:** Home only; nothing asks for a wallet until the visitor chooses to go on.
 - **Acting:** the app opens on the accounts; disclosures move into the review, where the decision is.
-- **Checking:** a bookmark or the Safe App opens the app directly.
+- **Checking:** a bookmark opens the app directly; a Safe opens the root and goes straight on to it.
 
 | For                                                                                                    | Against                                                                                                 |
 | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
 | Each page has one job, and its order can be designed for it.                                           | Two pages repeat a little: the app still needs the numbers and a short reminder of what joining allows. |
 | Home can be read, shared and indexed without a wallet; the app can be dense without scaring newcomers. | A visitor who types the address to check status lands on Home, one click from where they meant to go.   |
-| The familiar DeFi pattern (a site, then an app) that Hydrex users already know.                        | Two pages to build, hash and test; the Safe App URL moves to `/app/`.                                   |
+| The familiar DeFi pattern (a site, then an app) that Hydrex users already know.                        | Two pages to build, hash and test.                                                                      |
 | The app becomes the place for what comes later (history, impact) without lengthening Home.             |                                                                                                         |
 
 ---

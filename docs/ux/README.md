@@ -8,8 +8,8 @@ users, and comparable products. It covers organisation and behaviour only: desig
 **Split the page in three, on one origin: Home to decide, the App to act and check, How it works to read and verify.**
 
 ```
-metadex.cafe/                 Home           why, what you get, what you give, why it is safe        no wallet
-metadex.cafe/app/             App            your accounts, grouped by what you can do; join, leave  Safe App URL
+metadex.cafe/                 Home           why, what you get, what you give, why it is safe        no wallet; Safe App URL
+metadex.cafe/app/             App            your accounts, grouped by what you can do; join, leave  a Safe lands here
 metadex.cafe/how-it-works/    How it works   every disclosure, the timing, the admin key, carbon,    linkable
                                              verification, questions, words
 ```
@@ -69,7 +69,7 @@ They are proto-personas from desk research, to be tested: [6. Validation](6-vali
 | Phase | Ships                                                                                                                                 |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | 0     | On today's page, say when an account is in an automation that has stopped voting, read from Hydrex's Voter                            |
-| 1     | Home and the App as separate pages; the three-step review; account groups; the epoch timeline; Safe App on `/app/`                    |
+| 1     | Home and the App as separate pages; the three-step review; account groups; the epoch timeline; the Safe App kept at `/`               |
 | 2     | How it works, with anchors linked from Home, the review and announcements                                                             |
 | 3     | Payout and retirement history, an impact page, a read-only lookup by address, batched signing: as far as data without a server allows |
 
