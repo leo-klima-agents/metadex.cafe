@@ -45,9 +45,13 @@ const conduitAbi = parseAbi([
 
 const accountNamesAbi = parseAbi(["function getBulkNames(uint256[] tokenIds) view returns (string[])"]);
 
+const voterAbi = parseAbi(["function lastVoted(address voter) view returns (uint256)"]);
+
 const escrow = (functionName: string, ...args: unknown[]) =>
   call(VOTING_ESCROW, votingEscrowAbi, functionName, ...args);
 const conduit = (functionName: string, ...args: unknown[]) => call(CONDUIT, conduitAbi, functionName, ...args);
+
+const others = conduits.filter(({ address }) => !same(address, CONDUIT));
 
 export const LockType = { timed: 0, rolling: 1, permanent: 2 } as const;
 
@@ -69,6 +73,8 @@ export type Account = {
   votes: bigint;
   delegate: Address;
   delegateAtStart: Address;
+  // When the automation that holds its votes last voted, or 0.
+  delegateVoted: number;
   claimer: Address;
 };
 
@@ -78,6 +84,7 @@ export type Status =
   | { kind: "in" | "partly" | "self" | "ended" | "empty" }
   | { kind: "joined" | "left"; date: number }
   | { kind: "other"; name: string }
+  | { kind: "stopped"; name: string; voted: number; since: number }
   | { kind: "delegated"; to: Address };
 
 export type Step = Tx & { says: string; on: string; shows: string };
@@ -107,10 +114,16 @@ export async function readRelay(): Promise<Relay> {
 }
 
 export async function readAccounts(owner: Address): Promise<Holdings> {
-  const [count, payout, time] = required(
-    await read([escrow("balanceOf", owner), conduit("getEffectiveRecipientForOwner", owner), blockTime]),
-  ) as [bigint, Address, bigint];
+  const [count, payout, time, ...voted] = required(
+    await read([
+      escrow("balanceOf", owner),
+      conduit("getEffectiveRecipientForOwner", owner),
+      blockTime,
+      ...others.map(({ address }) => call(VOTER, voterAbi, "lastVoted", address)),
+    ]),
+  ) as [bigint, Address, bigint, ...bigint[]];
   const epochStart = epochAt(time);
+  const lastVoted = new Map(others.map(({ address }, i) => [address.toLowerCase(), Number(voted[i])]));
   const indexes = Array.from({ length: Number(count) }, (_, i) => BigInt(i));
   const ids = required(await read(indexes.map((i) => escrow("tokenOfOwnerByIndex", owner, i)))) as bigint[];
   const details = await read([
@@ -129,7 +142,19 @@ export async function readAccounts(owner: Address): Promise<Holdings> {
       details.slice(5 * i, 5 * i + 5),
     ) as [{ amount: bigint; endTime: bigint; lockType: number }, bigint, Address, Address, Address];
     const name = clean(names[i]);
-    return { id, name, amount, end: Number(endTime), lockType, votes, delegate, delegateAtStart, claimer };
+    const delegateVoted = lastVoted.get(delegate.toLowerCase()) ?? 0;
+    return {
+      id,
+      name,
+      amount,
+      end: Number(endTime),
+      lockType,
+      votes,
+      delegate,
+      delegateAtStart,
+      delegateVoted,
+      claimer,
+    };
   });
   accounts.sort((a, b) => (a.votes === b.votes ? Number(a.id - b.id) : a.votes > b.votes ? -1 : 1));
   return { owner, accounts, payout, time: Number(time), epochStart };
@@ -140,7 +165,11 @@ const ended = (account: Account, now: number): boolean => account.lockType === L
 const held = (account: Account) => ({ votes: same(account.delegate, CONDUIT), claims: same(account.claimer, CONDUIT) });
 
 export const automation = (address: Address): string | undefined =>
-  conduits.find((conduit) => same(conduit.address, address) && !same(conduit.address, CONDUIT))?.name;
+  others.find((conduit) => same(conduit.address, address))?.name;
+
+// The Voter counts a vote only in the epoch it is cast, so an automation that has not voted since the previous epoch
+// began earns its accounts nothing. One that has never voted may be new.
+const stopped = (voted: number, epochStart: number): boolean => voted > 0 && voted < epochStart - WEEK;
 
 // The Voter counts the delegate at the start of the epoch, so joins and leaves count from the next one.
 export function status(account: Account, owner: Address, now: number, epochStart: number): Status {
@@ -152,8 +181,12 @@ export function status(account: Account, owner: Address, now: number, epochStart
   if (votes || claims) return { kind: "partly" };
   if (votedAtStart) return { kind: "left", date: epochStart + WEEK };
   if (same(account.delegate, owner) || same(account.delegate, zeroAddress)) return { kind: "self" };
-  const other = automation(account.delegate);
-  return other ? { kind: "other", name: other } : { kind: "delegated", to: account.delegate };
+  const name = automation(account.delegate);
+  if (!name) return { kind: "delegated", to: account.delegate };
+  const voted = account.delegateVoted;
+  return stopped(voted, epochStart)
+    ? { kind: "stopped", name, voted, since: weekStart(voted) + WEEK }
+    : { kind: "other", name };
 }
 
 export function canJoin(account: Account, now: number): boolean {

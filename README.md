@@ -39,6 +39,9 @@ executor Safe, through which the keeper acts, and the automation's deployer.
   browser, "Browser wallet" still shows, and says how to get one.
 - **Inside Safe{Wallet}, it works with the Safe.** It proposes the calls as one Safe transaction, and the Safe's owners
   sign it in Safe{Wallet}. Safe's SDK is part of the script, and runs only when the page is in a frame.
+- **It says when an account's automation has stopped.** It reads from Hydrex's Voter when each of Hydrex's other
+  automations last voted. The Voter counts a vote only in the epoch it is cast, so an automation that has not voted
+  since the previous epoch began earns its accounts nothing from voting.
 - **It checks the automation first.** The chain, the automation's code and settings, and the code of Hydrex's
   VotingEscrow must match `src/config.ts`. If not, the page says what changed, and joining stays off. Leaving still
   works.

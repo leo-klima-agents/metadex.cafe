@@ -88,6 +88,10 @@ function accountItem(account: Account, { owner, epochStart }: Holdings): Documen
   const state = status(account, owner, now(), epochStart);
   const line = clone(state.kind);
   if ("date" in state) fillTime(line, "date", state.date);
+  if ("voted" in state) {
+    fillTime(line, "voted", state.voted);
+    fillTime(line, "since", state.since);
+  }
   if ("name" in state) fill(line, { automation: state.name });
   if ("to" in state) fillAddress(line, "address", state.to);
   item.querySelector(".status")!.replaceWith(line);

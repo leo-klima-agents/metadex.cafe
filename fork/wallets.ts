@@ -304,7 +304,9 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await page.getByRole("button", { name: "Test Wallet" }).click();
     await page.getByText("Connected with Test Wallet").waitFor();
     await account(page, 141).getByText("Not in an automation.").waitFor();
-    await account(page, 42877).getByText("In another Hydrex automation: Liquid Hydrex.").waitFor();
+    await account(page, 42877)
+      .getByText(/In Liquid Hydrex, which has not voted since Wed,? 9 Sept?\./)
+      .waitFor();
     await page.locator("#empty-accounts summary").click();
     await page.locator("#empty-accounts li").getByText("Empty.").waitFor();
     assert.equal(await page.locator("#empty-accounts .pick").isVisible(), false, "an empty account has no box");
@@ -340,7 +342,9 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
     await review(page).getByText("closing stops here").waitFor();
     await review(page).getByRole("button", { name: "Close" }).click();
     await account(page, 141).getByText("Joined the Carbon Impact automation.").waitFor();
-    await account(page, 42877).getByText("In another Hydrex automation: Liquid Hydrex.").waitFor();
+    await account(page, 42877)
+      .getByText(/In Liquid Hydrex, which has not voted since Wed,? 9 Sept?\./)
+      .waitFor();
     assert.equal(sent.length, 1);
     await expectApprovals([42877n], LIQUID_HYDREX, LIQUID_HYDREX);
   });
@@ -377,6 +381,12 @@ describe("the page against a fork of Base", { timeout: 300_000 }, () => {
 
   test("join with accounts from Lock Maxi and USDC", async () => {
     const { page, sent } = await connected({ owner: ELSEWHERE });
+    await account(page, 2439)
+      .getByText(/In USDC, which has not voted since Wed,? 9 Sept?\./)
+      .waitFor();
+    await account(page, 2439)
+      .getByText(/earned nothing from voting since Thu,? 10 Sept?,/)
+      .waitFor();
     await pick(page, 2435, 2439);
     await page.getByRole("button", { name: "Join with 2 accounts" }).click();
     await review(page).getByRole("button", { name: "Confirm transaction 1 of 2" }).click();

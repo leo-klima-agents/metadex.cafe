@@ -12,6 +12,8 @@ const USDC: Address = "0xE57b3Ea02336B9b418cA523aB5aD6f479d93bD1D";
 const STRANGER: Address = "0x000000000000000000000000000000000000dEaD";
 const START = 1_792_022_400; // Thu 15 Oct 2026, 00:00 UTC
 const NOW = START + 86_400;
+const STOPPED = 1_788_955_299; // Wed 9 Sep 2026, 12:01 UTC, when USDC last voted
+const SINCE = 1_788_998_400; // Thu 10 Sep 2026, 00:00 UTC
 
 const account = (changes: Partial<Account> = {}): Account => ({
   id: 141n,
@@ -22,6 +24,7 @@ const account = (changes: Partial<Account> = {}): Account => ({
   votes: 10n ** 18n,
   delegate: OWNER,
   delegateAtStart: OWNER,
+  delegateVoted: 0,
   claimer: zeroAddress,
   ...changes,
 });
@@ -51,6 +54,20 @@ test("other delegates: the owner, nobody, another automation on Hydrex's list, a
   assert.deepEqual(statusOf({ delegate: zeroAddress }), { kind: "self" });
   assert.deepEqual(statusOf({ delegate: USDC.toLowerCase() as Address }), { kind: "other", name: "USDC" });
   assert.deepEqual(statusOf({ delegate: STRANGER }), { kind: "delegated", to: STRANGER });
+});
+
+test("an automation that has not voted since the previous epoch began has stopped", () => {
+  const stopped = { kind: "stopped", name: "USDC", voted: STOPPED, since: SINCE };
+  assert.deepEqual(statusOf({ delegate: USDC, delegateAtStart: USDC, delegateVoted: STOPPED }), stopped);
+  assert.deepEqual(statusOf({ delegate: USDC, delegateVoted: START - WEEK - 1 }), {
+    kind: "stopped",
+    name: "USDC",
+    voted: START - WEEK - 1,
+    since: START - WEEK,
+  });
+  assert.deepEqual(statusOf({ delegate: USDC, delegateVoted: START - WEEK }), { kind: "other", name: "USDC" });
+  assert.deepEqual(statusOf({ delegate: USDC, delegateVoted: 0 }), { kind: "other", name: "USDC" }, "never voted");
+  assert.ok(canJoin(account({ delegate: USDC, claimer: USDC, delegateVoted: STOPPED }), NOW));
 });
 
 test("an empty account or an ended lock says so first", () => {
