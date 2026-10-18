@@ -1,6 +1,6 @@
 import { getAddress } from "viem";
 import "./views.ts";
-import { same } from "./chain.ts";
+import { readLater, same } from "./chain.ts";
 import { CHAIN_ID, CONDUIT, KVCM } from "./config.ts";
 import { clone, fill, fillAddress, fillPlural, fillTime, groupHex, show, showHex } from "./dom.ts";
 import { readAllEarnings, readEarnings, sharesOf, tokensOf, valueOf, type Earnings } from "./earnings.ts";
@@ -381,7 +381,10 @@ async function loadReceipts(quietly = false): Promise<void> {
   let times: Map<number, number>;
   try {
     [tokens, times] = await Promise.all([
-      tokensOf(all.map(({ token }) => token)),
+      tokensOf(
+        all.map(({ token }) => token),
+        readLater,
+      ),
       blockTimes(mine.map(({ block }) => block)),
     ]);
   } catch (error) {
@@ -399,10 +402,12 @@ async function loadReceipts(quietly = false): Promise<void> {
   fillTime(receipts, "run-flip", weekStart(found.time));
   receiptsState("found");
   // The dollars follow, from many more reads; without them, the receipts show the tokens alone.
-  const prices = await pricesAt([...tokens.values()], totals, weekStart(found.time), now()).catch((error) => {
-    console.error(error);
-    return undefined;
-  });
+  const prices = await pricesAt([...tokens.values()], totals, weekStart(found.time), now(), readLater).catch(
+    (error) => {
+      console.error(error);
+      return undefined;
+    },
+  );
   if (prices && current()) draw(prices);
 }
 

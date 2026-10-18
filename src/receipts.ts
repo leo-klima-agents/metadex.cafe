@@ -133,8 +133,9 @@ export function payouts(logs: Log[]): Payout[] {
 
 const hex = (n: number): Hex => `0x${n.toString(16)}`;
 
+// Every read of the search is in the background, behind the page's own.
 async function tonnesAt(block: number | "latest"): Promise<bigint> {
-  const [total] = await read([call(CONDUIT, conduitAbi, "totalTonnesRetired")], block);
+  const [total] = await read([call(CONDUIT, conduitAbi, "totalTonnesRetired")], block, true);
   if (total === undefined) throw new Error("A read from Base failed.");
   return total as bigint;
 }
@@ -145,7 +146,7 @@ export const totalRetired = (): Promise<bigint> => tonnesAt("latest");
 // The automation's last payout, for all its accounts. Some 20 reads to find the run, and about 4 more for each of its
 // transactions: 17 to 118 for the six runs from Aug to Sept 2026.
 export async function lastRun(): Promise<Search> {
-  const top = Number(await rpc<Hex>("eth_blockNumber", [])) - SETTLED;
+  const top = Number(await rpc<Hex>("eth_blockNumber", [], true)) - SETTLED;
   const now = await tonnesAt(top);
   let [lower, below] = [top, now];
   for (let week = 1; below === now; week++) {
@@ -162,7 +163,7 @@ export async function lastRun(): Promise<Search> {
   ];
   const logs = await Promise.all(
     stretches.map(([first, end]) =>
-      rpc<Log[]>("eth_getLogs", [{ address: CONDUIT, fromBlock: hex(first), toBlock: hex(end) }]),
+      rpc<Log[]>("eth_getLogs", [{ address: CONDUIT, fromBlock: hex(first), toBlock: hex(end) }], true),
     ),
   );
   const found = payouts(logs.flat());
@@ -178,7 +179,9 @@ export async function blockTimes(blocks: number[]): Promise<Map<number, number>>
   const unique = [...new Set(blocks)];
   const found = await Promise.all(
     unique.map((block) =>
-      rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [hex(block), false]).then(({ timestamp }) => Number(timestamp)),
+      rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [hex(block), false], true).then(({ timestamp }) =>
+        Number(timestamp),
+      ),
     ),
   );
   return new Map(unique.map((block, i) => [block, found[i]!]));

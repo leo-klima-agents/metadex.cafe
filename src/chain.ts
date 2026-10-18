@@ -24,118 +24,162 @@ export const blockTime = call(MULTICALL3, multicall3Abi, "getCurrentBlockTimesta
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-// Every request to Base goes through one queue: at most AT_ONCE at a time, started SPACING ms apart at least, which keeps
-// under the 25 a second that mainnet.base.org allows (it says so when it refuses one).
+// What each RPC is asked in any second, at most: mainnet.base.org allows a visitor 25 requests, of which 5 eth_getLogs,
+// and says so when it refuses one. The other two publish no figure a second, and are held to the same.
+const PER_SECOND = 25;
+const LOGS_PER_SECOND = 5;
+// An RPC that refuses for its limits is left alone for a second, mainnet.base.org's window, by every request of that
+// kind: they go to the next RPC instead, or wait for it if none is free.
+const REST = 1_000;
+// Requests in flight at once. The page's own reads go first; reads in the background, such as the receipts' search or
+// all of Hydrex, wait for them.
 const AT_ONCE = 6;
-const SPACING = 50;
-let running = 0;
-const waiting: (() => void)[] = [];
-// Each start waits for the one before it, and then for SPACING after it, as it happened rather than as planned.
-let turns = Promise.resolve();
-let started = -Infinity;
 
-function turn(): Promise<void> {
-  turns = turns.then(async () => {
-    await sleep(started + SPACING - performance.now());
-    started = performance.now();
-  });
-  return turns;
+type Kind = "all" | "logs";
+const started = new Map<string, number[]>();
+const resting = new Map<string, number>();
+
+// When the RPC can take a request of this kind, at the earliest: once it has rested, and once the requests of the last
+// second number fewer than its limits.
+function freeAt(url: string, kind: Kind, now: number): number {
+  const limits: [string, number][] = [[`${url} all`, PER_SECOND]];
+  if (kind === "logs") limits.push([`${url} logs`, LOGS_PER_SECOND]);
+  let at = Math.max(now, resting.get(`${url} all`) ?? 0, resting.get(`${url} ${kind}`) ?? 0);
+  for (const [key, limit] of limits) {
+    const times = (started.get(key) ?? []).filter((time) => time > now - 1_000);
+    started.set(key, times);
+    if (times.length >= limit) at = Math.max(at, times[times.length - limit]! + 1_000);
+  }
+  return at;
 }
 
-async function queued<T>(task: () => Promise<T>): Promise<T> {
+// For tests: what the RPCs were asked, and which rest.
+export function forgetLimits(): void {
+  started.clear();
+  resting.clear();
+}
+
+function start(url: string, kind: Kind, now: number): void {
+  for (const key of kind === "logs" ? [`${url} all`, `${url} logs`] : [`${url} all`])
+    started.set(key, [...(started.get(key) ?? []), now]);
+}
+
+let running = 0;
+const waiting = { now: [] as (() => void)[], later: [] as (() => void)[] };
+
+async function take(later: boolean): Promise<void> {
   if (running < AT_ONCE) running++;
-  else await new Promise<void>((go) => waiting.push(go));
-  try {
-    await turn();
-    return await task();
-  } finally {
-    const next = waiting.shift();
-    if (next) next();
-    else running--;
-  }
+  else await new Promise<void>((go) => waiting[later ? "later" : "now"].push(go));
+}
+
+function give(): void {
+  const next = waiting.now.shift() ?? waiting.later.shift();
+  if (next) next();
+  else running--;
 }
 
 // When no RPC answers and one of them was busy or out of reach, the request is asked again after a truncated exponential
-// backoff with full jitter, as RPC providers advise: up to RETRIES times, at random within 250 ms, 500 ms, 1 s and 2 s,
-// and never sooner than an RPC's Retry-After, up to MAX_WAIT. What an RPC would answer the same again, such as a call
-// that reverts or a block it does not keep, is not asked again.
+// backoff with full jitter, as RPC providers advise: up to RETRIES times, at random within 250 ms, 500 ms, 1 s and 2 s.
+// What an RPC would answer the same again, such as a call that reverts, a block it does not keep or a request too slow
+// for it, goes to the next RPC but is not asked again.
 const RETRIES = 4;
 const BACKOFF = 250;
-const MAX_WAIT = 10_000;
 const BUSY_CODES = [429, -32005, -32007, -32011, -32090];
-const BUSY =
-  /request limit|rate limit|limit reached|too many requests|busy|timeout|timed out|try again|header not found/i;
+const BUSY = /request limit|rate limit|too many requests/i;
 
-type Reply = { result?: unknown; error?: { code?: number; message?: string } };
-type Outcome = { answered: true; result: unknown } | { answered: false; busy: boolean; wait: number };
+type Reply = { result?: unknown; error?: { code?: number; message?: string } } | null;
+type Answer = { answered: true; result: unknown };
+type Outcome = Answer | { answered: false; busy: boolean };
 
-// Seconds, or a date.
-function retryAfter(header: string | null): number {
-  if (!header) return 0;
-  const ms = /^\d+$/.test(header) ? Number(header) * 1000 : Date.parse(header) - Date.now();
-  return Number.isFinite(ms) ? Math.min(Math.max(ms, 0), MAX_WAIT) : 0;
+async function ask(url: string, body: string): Promise<Outcome> {
+  let busy = false;
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+      signal: AbortSignal.timeout(5_000),
+    });
+    busy = response.status === 429 || response.status >= 500;
+    const reply = (await response.json()) as Reply;
+    // An RPC answers null for a block or a transaction it does not have yet.
+    if (reply?.result != null) return { answered: true, result: reply.result };
+    const { code = 0, message = "" } = reply?.error ?? {};
+    return { answered: false, busy: busy || BUSY_CODES.includes(code) || BUSY.test(message) };
+  } catch (error) {
+    // Out of reach, or cut off, is asked again; too slow, or not JSON, is not.
+    return { answered: false, busy: busy || error instanceof TypeError };
+  }
 }
 
-const ask = (url: string, body: string): Promise<Outcome> =>
-  queued(async () => {
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body,
-        signal: AbortSignal.timeout(5_000),
-      });
-    } catch {
-      return { answered: false, busy: true, wait: 0 };
+// Each RPC at most once, the first free in order taking the request, without leaving its turn in the queue. The RPCs
+// that were busy are what to ask again.
+async function round(
+  urls: string[],
+  method: string,
+  body: string,
+): Promise<Answer | { answered: false; busy: string[] }> {
+  const kind: Kind = method === "eth_getLogs" ? "logs" : "all";
+  const left = [...urls];
+  const busy: string[] = [];
+  while (left.length) {
+    const now = performance.now();
+    const free = left.map((url) => freeAt(url, kind, now));
+    const i = free.findIndex((at) => at <= now);
+    if (i < 0) {
+      await sleep(Math.min(...free) - now);
+      continue;
     }
-    const wait = retryAfter(response.headers.get("retry-after"));
-    const busy = response.status === 408 || response.status === 429 || response.status >= 500;
-    let reply: Reply;
-    try {
-      reply = (await response.json()) as Reply;
-    } catch {
-      return { answered: false, busy, wait };
+    const [url] = left.splice(i, 1) as [string];
+    start(url, kind, now);
+    const outcome = await ask(url, body);
+    if (outcome.answered) return outcome;
+    if (outcome.busy) {
+      busy.push(url);
+      resting.set(`${url} ${kind}`, performance.now() + REST);
     }
-    if (reply.result !== undefined) return { answered: true, result: reply.result };
-    const { code = 0, message = "" } = reply.error ?? {};
-    return { answered: false, busy: busy || BUSY_CODES.includes(code) || BUSY.test(message), wait };
-  });
+  }
+  return { answered: false, busy };
+}
 
-export async function rpc<T>(method: string, params: unknown[]): Promise<T> {
+export async function rpc<T>(method: string, params: unknown[], later = false): Promise<T> {
   const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
   // Only the RPCs that were busy are asked again.
   let urls = RPCS;
   for (let attempt = 0; ; attempt++) {
-    const busy: string[] = [];
-    let wait = 0;
-    for (const url of urls) {
-      const outcome = await ask(url, body);
-      if (outcome.answered) return outcome.result as T;
-      if (outcome.busy) busy.push(url);
-      wait = Math.max(wait, outcome.wait);
+    await take(later);
+    let outcome;
+    try {
+      outcome = await round(urls, method, body);
+    } finally {
+      give();
     }
+    if (outcome.answered) return outcome.result as T;
+    const { busy } = outcome;
     if (!busy.length || attempt === RETRIES) throw new Error(`No Base RPC answered ${method}.`);
-    urls = busy;
-    await sleep(Math.max(wait, Math.random() * BACKOFF * 2 ** attempt));
+    urls = RPCS.filter((url) => busy.includes(url));
+    await sleep(Math.random() * BACKOFF * 2 ** attempt);
   }
 }
 
 // At the newest block, or at an earlier one, which only the RPCs that keep Base's history can answer.
-export async function read(calls: Call[], block: number | "latest" = "latest"): Promise<unknown[]> {
+export async function read(calls: Call[], block: number | "latest" = "latest", later = false): Promise<unknown[]> {
   const chunks: Promise<unknown[]>[] = [];
-  for (let i = 0; i < calls.length; i += CHUNK) chunks.push(aggregate(calls.slice(i, i + CHUNK), block));
+  for (let i = 0; i < calls.length; i += CHUNK) chunks.push(aggregate(calls.slice(i, i + CHUNK), block, later));
   return (await Promise.all(chunks)).flat();
 }
 
-async function aggregate(calls: Call[], block: number | "latest"): Promise<unknown[]> {
+// The same, behind the page's own reads.
+export const readLater: typeof read = (calls, block = "latest") => read(calls, block, true);
+
+async function aggregate(calls: Call[], block: number | "latest", later: boolean): Promise<unknown[]> {
   const data = encodeFunctionData({
     abi: multicall3Abi,
     functionName: "aggregate3",
     args: [calls.map((c) => ({ target: c.address, allowFailure: true, callData: encodeFunctionData(c as never) }))],
   });
   const tag = block === "latest" ? block : `0x${block.toString(16)}`;
-  const reply = await rpc<Hex>("eth_call", [{ to: MULTICALL3, data }, tag]);
+  const reply = await rpc<Hex>("eth_call", [{ to: MULTICALL3, data }, tag], later);
   const results = decodeFunctionResult({ abi: multicall3Abi, functionName: "aggregate3", data: reply });
   return results.map(({ success, returnData }, i) => {
     if (!success || returnData === "0x") return undefined;
@@ -156,9 +200,10 @@ export const implementation = async (proxy: Address): Promise<Address> =>
 export async function included(hash: Hex): Promise<boolean | undefined> {
   const end = Date.now() + 10 * 60_000;
   while (Date.now() < end) {
-    const receipt = await rpc<{ status: Hex } | null>("eth_getTransactionReceipt", [hash]).catch(() => null);
+    // Each RPC answers null until it has the transaction.
+    const receipt = await rpc<{ status: Hex }>("eth_getTransactionReceipt", [hash]).catch(() => null);
     if (receipt) return receipt.status === "0x1";
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    await sleep(2_000);
   }
   return undefined;
 }

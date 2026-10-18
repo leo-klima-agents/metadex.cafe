@@ -77,14 +77,17 @@ The same commit gives the same files on any machine. Check out the version in th
 
 - **Right after a deployment,** a browser may keep the previous script or stylesheet for ten minutes, and refuses it
   until then, as it does not match the page's hashes.
-- **Base RPC:** every request goes through one queue, at most six at a time and started at least 50 ms apart, under the
-  25 a second that `https://mainnet.base.org` allows. A read that fails goes to the next RPC. When none answers, the
-  page asks those that were busy or out of reach again, up to four times, after an exponential backoff with full jitter
-  and never sooner than a `Retry-After`; a read that would fail the same way, as one that reverts, is not asked again.
-  If none answers in the end, the page says so and offers to try again. Leaving never waits for the conduit's settings.
-  If the Voter cannot be read, accounts in other automations show without saying whether those stopped; if what the
-  votes earned cannot be read, the page says so where the figures go, and tries again every five minutes. If the last
-  payout cannot be read, the page says so and offers to try again; one without prices shows its tokens alone.
+- **Base RPC:** every request goes through one queue in `src/chain.ts`, six at a time at most, the page's own reads
+  before those in the background (the last payout's search, all of Hydrex, prices). Each RPC is asked 25 times a second
+  at most, 5 of them for logs, as `https://mainnet.base.org` allows a visitor; a request goes to the first RPC in order
+  with room, and waits only when none has. A read that fails goes to the next RPC at once, in the same turn. An RPC that
+  refuses for its limits is left alone for a second by every request. When none answers, the page asks those that were
+  busy or out of reach again, up to four times, after an exponential backoff with full jitter; a read that would fail
+  the same way, as one that reverts or one too slow, is not asked again. If none answers in the end, the page says so
+  and offers to try again. Leaving never waits for the conduit's settings. If the Voter cannot be read, accounts in
+  other automations show without saying whether those stopped; if what the votes earned cannot be read, the page says so
+  where the figures go, and tries again every five minutes. If the last payout cannot be read, the page says so and
+  offers to try again; one without prices shows its tokens alone.
 - **A failed check** turns joining off and says why. An open page runs the checks again every hour.
 - **The end of an epoch:** the page takes the time from Base's newest block, and reads the accounts and the conduit
   again within half a minute.
