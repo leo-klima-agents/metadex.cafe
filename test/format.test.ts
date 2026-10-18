@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   WEEK,
+  amount,
   bps,
   clean,
   compact,
@@ -10,6 +11,8 @@ import {
   day,
   earningPower,
   fraction,
+  hexLines,
+  listWith,
   share,
   short,
   units,
@@ -98,4 +101,29 @@ test("large numbers of votes, and shares", () => {
   assert.equal(compact(999n * 10n ** 18n), "999");
   assert.equal(compact(0n), "0");
   assert.equal(fraction(0.1667), "16.7%");
+});
+
+test("hex in groups of four: an address or a hash on one line, calldata a line for each word", () => {
+  assert.deepEqual(hexLines("0xdE91885cF35ac57DF0c4A75c16862127dBe8317c"), [
+    ["0xdE91", "885c", "F35a", "c57D", "F0c4", "A75c", "1686", "2127", "dBe8", "317c"],
+  ]);
+  assert.equal(hexLines(`0x${"ab".repeat(32)}`)[0]!.length, 16);
+  const data = `0x84dbc448${"0".repeat(24)}de91885cf35ac57df0c4a75c16862127dbe8317c${"0".repeat(60)}2544${"0".repeat(63)}1`;
+  const lines = hexLines(data);
+  assert.deepEqual(lines[0], ["0x84dbc448"]);
+  assert.equal(lines.length, 4);
+  assert.deepEqual(lines[2]!.slice(-2), ["0000", "2544"]);
+  assert.equal(lines.flat().join(""), data, "the groups are the hex, with nothing added");
+});
+
+test("amounts of a token, from its decimals", () => {
+  assert.equal(amount(18_686_451_234_567_890_000_000n, 18), "18,686.45");
+  assert.equal(amount(1_500_000n, 6), "1.50");
+  assert.equal(amount(1n, 18), "< 0.01");
+  assert.equal(amount(0n, 18), "0");
+});
+
+test("a list's items with the words between them, whatever the items are", () => {
+  assert.deepEqual(listWith([1, 2, 3]), [1, ", ", 2, " and ", 3]);
+  assert.deepEqual(listWith(["a"]), ["a"]);
 });

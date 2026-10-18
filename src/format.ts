@@ -22,6 +22,15 @@ const and = new Intl.ListFormat(LANG, { type: "conjunction" });
 
 export const units = (value: bigint): string => whole.format(value / 10n ** 18n);
 
+const hundredths = new Intl.NumberFormat(LANG, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// A token's amount, from its decimals, with two decimals so that a receipt's figures line up: "18,686.45", "1.50",
+// "< 0.01", "0".
+export function amount(value: bigint, decimals: number): string {
+  const number = Number(value) / 10 ** decimals;
+  if (number === 0) return "0";
+  return number < 0.005 ? "< 0.01" : hundredths.format(number);
+}
+
 const threeDigits = new Intl.NumberFormat(LANG, { maximumSignificantDigits: 3 });
 const SCALES: [number, string][] = [
   [1e9, "G"],
@@ -101,9 +110,24 @@ export function until(seconds: number): string {
 }
 
 export const short = (address: string): string => `${address.slice(0, 6)}…${address.slice(-4)}`;
+
+// Hex in groups of four, as people compare it: "0xdE91", "885c", … An address or a hash is one line of groups; calldata
+// is its selector, then a line for each 32-byte word.
+export function hexLines(hex: string): string[][] {
+  const groups = (digits: string): string[] => digits.match(/.{1,4}/g) ?? [];
+  if (hex.length === 42 || hex.length === 66) {
+    const [first = "", ...rest] = groups(hex.slice(2));
+    return [[`0x${first}`, ...rest]];
+  }
+  return [[hex.slice(0, 10)], ...(hex.slice(10).match(/.{1,64}/g) ?? []).map(groups)];
+}
+
 export const list = (items: string[]): string => and.format(items);
-// The same list in parts, for one that holds elements.
-export const listParts = (items: string[]) => and.formatToParts(items);
+// The items of a list with the words between them, as list() writes them: [a, ", ", b, " and ", c].
+export const listWith = <T>(items: T[]): (T | string)[] =>
+  and
+    .formatToParts(items.map((_, i) => String(i)))
+    .map(({ type, value }) => (type === "element" ? items[Number(value)]! : value));
 
 export const count = (n: number, one: string, other: string): string =>
   `${whole.format(n)} ${plurals.select(n) === "one" ? one : other}`;

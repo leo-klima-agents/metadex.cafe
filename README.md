@@ -2,8 +2,8 @@
 
 The static page at <https://metadex.cafe/> for joining and leaving the Klima "Carbon Impact" conduit with Hydrex
 accounts on Base; Hydrex's app, and the page, call conduits automations. This repository holds the page: `index.html`,
-`style.css`, and the script in `src/` that reads Base and talks to the wallet, whose dependencies are `viem`, and
-`@safe-global/safe-apps-sdk` for Safe{Wallet}.
+`style.css` and its fonts in `fonts/`, and the script in `src/` that reads Base and talks to the wallet, whose
+dependencies are `viem`, and `@safe-global/safe-apps-sdk` for Safe{Wallet}.
 
 The page has three views, addressed by the hash: Home at `/`, which asks for no wallet; the App at `#app`, with the
 wallet's accounts, where Safe{Wallet} opens the page; and How it works at `#how-it-works`, which states everything in
@@ -28,8 +28,10 @@ tokens, the swap routers, any owner's payout address, and who claims and votes f
 
 ## What the page can and cannot do
 
-- **It sends two calls only,** `setConduitApproval` with `true` or `false`, and shows what they change and the exact
-  calls before the wallet asks, each from a click of its own.
+- **It sends two calls only,** `setConduitApproval` with `true` or `false`, and shows what they change and each call
+  before the wallet asks, field by field, as the wallet will show it, each from a click of its own. Inside Safe{Wallet},
+  it also shows the Safe transaction's fields and its calldata, each 32-byte word on two lines of 16 bytes. Addresses
+  are in full, in groups of four, and copy without spaces.
 - **It holds no key, has no server and stores nothing.** It connects to a wallet only from a click: one the browser
   announces (EIP-6963), or `window.ethereum`. Inside Safe{Wallet}, it proposes the calls as one Safe transaction.
 - **It checks the conduit first.** The chain, the conduit's code and settings, and the code of Hydrex's VotingEscrow
@@ -38,10 +40,19 @@ tokens, the swap routers, any owner's payout address, and who claims and votes f
 - **It shows what the votes earned last epoch,** from Hydrex's reward contracts: for the conduit, for each account in
   it, and, once that section shows, for all of Hydrex. Tokens are priced at their average over the half hour before the
   epoch ended, in Hydrex's pools, with Chainlink for WETH and cbBTC; a token without a deep enough pool counts for
-  nothing. It cannot show payouts, which are only in the conduit's events.
+  nothing.
+- **It shows the last payout,** as a receipt for each of the owner's accounts in it: what was earned, swapped into kVCM,
+  retired and paid, the fee, when and the transaction, from the conduit's events. A run is mostly a transaction for each
+  account, over up to half a day, and Base's free RPCs give the logs of 100 blocks at a time at most, so the page finds
+  the payout by its effect: `totalTonnesRetired` only grows, and a search of past blocks finds the stretches of 100
+  blocks in which it changed, then reads their logs. That was 17 to 118 requests for the six runs from Aug to Sept 2026.
+  It looks back eight weeks, and only for an owner with an account in the conduit. An open page checks the total every
+  five minutes, and once it has grown, searches only the blocks after its last search. A payout takes up to half a day:
+  while one is under way and has not reached the owner's accounts, the page keeps the last receipts, and says a new
+  payout has begun. Each stretch's logs must hold a retirement, or the next RPC is asked for them.
 - **It reaches nothing but three Base RPCs,** by its Content Security Policy: `https://mainnet.base.org`,
-  `https://base-rpc.publicnode.com` and `https://base.drpc.org`. The browser checks the script and the stylesheet
-  against the SHA-384 hashes in `index.html`.
+  `https://base.drpc.org` and `https://base-rpc.publicnode.com`. The browser checks the script and the stylesheet
+  against the SHA-384 hashes in `index.html`; the fonts are inside the stylesheet.
 - **It cannot stop copies.** Anyone can host one that approves another conduit: use the official address, and read the
   wallet prompt.
 
@@ -68,10 +79,20 @@ The same commit gives the same files on any machine. Check out the version in th
 
 - **Right after a deployment,** a browser may keep the previous script or stylesheet for ten minutes, and refuses it
   until then, as it does not match the page's hashes.
-- **Base RPC:** a read that fails goes to the next RPC; if none answers, the page says so and offers to try again.
-  Leaving never waits for the conduit's settings. If the Voter cannot be read, accounts in other automations show
-  without saying whether those stopped; if what the votes earned cannot be read, the page says so where the figures go,
-  and tries again every five minutes.
+- **Base RPC:** every request goes through one queue in `src/chain.ts`, six at a time at most, the page's own reads
+  before those in the background (the last payout's search, all of Hydrex, prices). Each RPC is asked 25 times a second
+  at most, 5 of them for logs, as `https://mainnet.base.org` allows a visitor; a request goes to the first RPC with
+  room, asking mainnet.base.org, then drpc, then publicnode: drpc keeps Base's history for free, where publicnode asks a
+  token for it. It waits only when none has room. While the first two are full, a read of a past block still reaches
+  publicnode, which refuses it, and goes on. A read that fails goes to the next RPC at once, in the same turn. An RPC
+  that refuses for its limits is left alone for a second by every request. When none answers, the page asks those that
+  were busy or out of reach again, up to four times, after an exponential backoff with full jitter; a read that would
+  fail the same way, as one that reverts or one too slow, is not asked again. If none answers in the end, the page says
+  so and offers to try again. Leaving never waits for the conduit's settings. If the Voter cannot be read, accounts in
+  other automations show without saying whether those stopped; if what the votes earned cannot be read, the page says so
+  where the figures go, and tries again every five minutes. If the last payout cannot be read, the page says so and
+  offers to try again; one without prices shows its tokens alone. Read again in the background, a payout that cannot be
+  read leaves what is shown, and is tried again five minutes later.
 - **A failed check** turns joining off and says why. An open page runs the checks again every hour.
 - **The end of an epoch:** the page takes the time from Base's newest block, and reads the accounts and the conduit
   again within half a minute.
@@ -89,6 +110,11 @@ committing. `npm run build` writes the page to `dist/`.
 Safe, the views and what can fail. It needs anvil, and Chromium (`npx playwright-core install chromium`, or `CHROMIUM`).
 `BASE_RPC_URL` is the archive RPC to fork from, and `SCREENSHOTS` a folder for screenshots.
 
+`fonts/` holds Latin subsets of Atkinson Hyperlegible Next and Mono, and Young Serif, made by `scripts/fonts.py` from
+Google Fonts' sources at a pinned commit; it needs Python, with the fontTools and brotli versions it names. The build
+puts them inside `style.css` as `data:` URLs, which the Content Security Policy allows for fonts only.
+`scripts/icons.ts` draws `favicon.ico` and `apple-touch-icon.png` from `icon.svg`, with Chromium.
+
 `src/config.ts` holds what the page trusts about the conduit, its RPCs, and what its prices start from;
 `src/hydrex-conduits.json` names Hydrex's other automations, as `api.hydrex.fi/conduits` lists them. CI runs Prettier,
 the type check, the tests, `reuse lint` and the build, then builds again from a fresh clone and checks that both builds
@@ -96,10 +122,14 @@ are the same; with `BASE_RPC_URL`, it also runs the fork tests. Dependabot updat
 
 ## Limitations
 
-- No payout history, and no unclaimed rewards per account: the page cannot check that payouts happen.
+- The last payout only, and no unclaimed rewards per account. A payout that retires nothing does not move
+  `totalTonnesRetired`: the page finds it only within 100 blocks of one that does. In Aug and Sept 2026, 2 of 71 payouts
+  retired nothing, both paying nothing, and one of them was that close.
 - What the votes earned is for the last epoch only, at approximate prices.
 - Only the admin key, or a call from the owner's address made elsewhere, can change a payout address.
 
 ## License
 
-MIT, REUSE compliant.
+MIT, REUSE compliant. The fonts in `fonts/` are under the SIL Open Font License 1.1, and carry their copyright and
+licence in their own metadata. Klima Protocol's logo, `klima-protocol.svg`, is Klima Protocol's, all rights reserved,
+and used with its permission.

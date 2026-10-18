@@ -55,6 +55,9 @@ type Measured = { pool: Pool; usd: number; depth: number; plugin?: Address; leng
 
 const key = (address: string): string => address.toLowerCase();
 const whole = (amount: bigint, decimals: number): number => Number(amount) / 10 ** decimals;
+// What an amount of a token is worth, in dollars.
+export const usdOf = (amount: bigint, token: { decimals: number }, price: Price): number =>
+  whole(amount, token.decimals) * price.usd;
 
 // Concentrated pools price token0 in token1 as 1.0001^tick, in their smallest units.
 export const tickPrice = (tick: number, decimals0: number, decimals1: number): number =>
@@ -123,8 +126,8 @@ export async function narrow(searches: Search[], reader: typeof read = read): Pr
 }
 
 // Chainlink's feeds are an aggregate already: the round in effect at the flip, or today's if it cannot be found.
-async function feedAt(feed: Address, flip: number): Promise<Price | undefined> {
-  const [decimals, latest] = (await read([
+async function feedAt(feed: Address, flip: number, reader: typeof read): Promise<Price | undefined> {
+  const [decimals, latest] = (await reader([
     call(feed, feedAbi, "decimals"),
     call(feed, feedAbi, "latestRoundData"),
   ])) as [number | undefined, Round | undefined];
@@ -140,7 +143,7 @@ async function feedAt(feed: Address, flip: number): Promise<Price | undefined> {
     passes: (round) => Number((round as Round)[3]) > flip,
     seen: new Map(),
   };
-  await narrow([search]);
+  await narrow([search], reader);
   const before = search.seen.get(search.hi - 1) as Round | undefined;
   return !search.failed && before
     ? { usd: usd(before), at: "flip", via: "Chainlink" }
@@ -148,11 +151,11 @@ async function feedAt(feed: Address, flip: number): Promise<Price | undefined> {
 }
 
 // The pools of Hydrex's two factories that pair a token with an anchor.
-async function candidates(tokens: Token[], anchors: Anchor[]): Promise<Pool[]> {
+async function candidates(tokens: Token[], anchors: Anchor[], reader: typeof read): Promise<Pool[]> {
   const options = tokens.flatMap((token) =>
     anchors.flatMap((anchor) => (["algebra", "volatile", "stable"] as const).map((kind) => ({ token, anchor, kind }))),
   );
-  const found = (await read(
+  const found = (await reader(
     options.map(({ token, anchor, kind }) =>
       kind === "algebra"
         ? call(ALGEBRA_FACTORY, algebraFactoryAbi, "poolByPair", token.address, anchor.address)
@@ -173,8 +176,13 @@ const decimalsOf = (pool: Pool): [number, number] =>
 const inAnchor = (pool: Pool, price0: number): number => (tokenFirst(pool) ? price0 : 1 / price0);
 
 // Today's price and depth of each pool, with what its history needs. A pool that is too thin for the amount is dropped.
-async function measure(pools: Pool[], prices: Map<string, Price>, amounts: Map<string, bigint>): Promise<Measured[]> {
-  const state = await read(
+async function measure(
+  pools: Pool[],
+  prices: Map<string, Price>,
+  amounts: Map<string, bigint>,
+  reader: typeof read,
+): Promise<Measured[]> {
+  const state = await reader(
     pools.flatMap(({ address, kind }) =>
       kind === "algebra"
         ? ["getReserves", "globalState", "plugin"].map((name) => call(address, algebraPoolAbi, name))
@@ -210,16 +218,23 @@ async function measure(pools: Pool[], prices: Map<string, Price>, amounts: Map<s
 // Prices each token at the flip that ended an epoch, as far as Hydrex's own pools allow. USDC counts as a dollar; WETH
 // and cbBTC take Chainlink's ETH / USD and BTC / USD. Every other token takes the deepest pool that pairs it with one of
 // them: its average over the half hour before the flip, or today's price where the pool's history does not reach back
-// that far. A token without a deep enough pool stays unpriced. Amounts are what is to be priced, by token.
-export async function pricesAt(tokens: Token[], amounts: Map<string, bigint>, flip: number, now: number) {
+// that far. A token without a deep enough pool stays unpriced. Amounts are what is to be priced, by token. Reads go
+// through reader, which may keep them behind the page's own.
+export async function pricesAt(
+  tokens: Token[],
+  amounts: Map<string, bigint>,
+  flip: number,
+  now: number,
+  reader: typeof read = read,
+) {
   const prices = new Map<string, Price>();
   const found = await Promise.all(
-    ANCHORS.map(({ feed }) => (feed ? feedAt(feed, flip) : ({ usd: 1, at: "flip", via: "USDC" } as const))),
+    ANCHORS.map(({ feed }) => (feed ? feedAt(feed, flip, reader) : ({ usd: 1, at: "flip", via: "USDC" } as const))),
   );
   ANCHORS.forEach(({ address }, i) => found[i] && prices.set(key(address), found[i]!));
   const anchors = ANCHORS.filter(({ address }) => prices.has(key(address)));
   const others = tokens.filter(({ address }) => !ANCHORS.some((anchor) => same(anchor.address, address)));
-  const measured = await measure(await candidates(others, anchors), prices, amounts);
+  const measured = await measure(await candidates(others, anchors, reader), prices, amounts, reader);
   const deepest = new Map<string, Measured>();
   for (const entry of measured) {
     const held = deepest.get(key(entry.pool.token.address));
@@ -230,7 +245,9 @@ export async function pricesAt(tokens: Token[], amounts: Map<string, bigint>, fl
 
   // Concentrated pools: the average tick over the window, from their plugin's history.
   const algebra = chosen.filter(({ plugin }) => plugin);
-  const timepoints = read(algebra.map(({ plugin }) => call(plugin!, pluginAbi, "getTimepoints", [ago + WINDOW, ago])));
+  const timepoints = reader(
+    algebra.map(({ plugin }) => call(plugin!, pluginAbi, "getTimepoints", [ago + WINDOW, ago])),
+  );
   // Classic pairs: the observations either side of the window. A pair records one at most every half hour, which
   // bounds how far back from its last one the window can be.
   const classic = chosen.filter(({ length }) => length !== undefined);
@@ -243,7 +260,7 @@ export async function pricesAt(tokens: Token[], amounts: Map<string, bigint>, fl
       { lo, hi: length!, probe, passes: from(flip), seen: new Map() },
     ];
   });
-  const [ticks] = await Promise.all([timepoints, narrow(searches)]);
+  const [ticks] = await Promise.all([timepoints, narrow(searches, reader)]);
 
   // A pool whose history gives no price, or none above zero, as one nearly empty at the flip, gives today's.
   const set = ({ pool, usd }: Measured, price0: number | undefined) => {

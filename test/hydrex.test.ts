@@ -135,7 +135,7 @@ test("joining sets the conduit's approval on the VotingEscrow", () => {
   const [step] = join([account()]);
   assert.deepEqual(txs([step!]), [approval(141n, true)]);
   assert.equal(step!.says, "#141 joins Carbon Impact.");
-  assert.equal(step!.shows, `setConduitApproval(${CONDUIT}, 141, true)`);
+  assert.deepEqual([step!.conduit, step!.id, step!.approve], [CONDUIT, 141n, true]);
   assert.equal(step!.on, "Hydrex's VotingEscrow");
 });
 
@@ -166,17 +166,19 @@ test("leaving another automation clears its approval, named by its address", () 
   const steps = release([account({ delegate: USDC, claimer: USDC }), account({ id: 42n, delegate: LOCK_MAXI })]);
   assert.deepEqual(txs(steps), [approval(141n, false, USDC), approval(42n, false, LOCK_MAXI)]);
   assert.deepEqual(
-    steps.map(({ says, shows, conduit, automation }) => ({ says, shows, conduit, automation })),
+    steps.map(({ says, id, approve, conduit, automation }) => ({ says, id, approve, conduit, automation })),
     [
       {
         says: "#141 leaves the USDC automation.",
-        shows: `setConduitApproval(${USDC}, 141, false)`,
+        id: 141n,
+        approve: false,
         conduit: USDC,
         automation: "USDC",
       },
       {
         says: "#42 leaves the Hydrex Lock Maxi automation.",
-        shows: `setConduitApproval(${LOCK_MAXI}, 42, false)`,
+        id: 42n,
+        approve: false,
         conduit: LOCK_MAXI,
         automation: "Hydrex Lock Maxi",
       },

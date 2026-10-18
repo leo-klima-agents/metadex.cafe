@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://mainnet.base.org https://base-rpc.publicnode.com https://base.drpc.org; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; font-src data:; img-src 'self' data:; connect-src https://mainnet.base.org https://base.drpc.org https://base-rpc.publicnode.com; base-uri 'none'; form-action 'none'"
     />
     <meta name="referrer" content="no-referrer" />
     <title>metaDEX Café</title>
@@ -15,6 +15,8 @@
       content="Let Carbon Impact vote with your Hydrex accounts every week, retire a share of the rewards as carbon credits and pay you the rest. Your HYDX never leaves your wallet, and you can leave at any time."
     />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="shortcut icon" href="favicon.ico" sizes="32x32" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <link rel="stylesheet" href="style.css" integrity="%STYLE_INTEGRITY%" />
     <script type="module" src="main.js" integrity="%MAIN_INTEGRITY%"></script>
   </head>
@@ -41,7 +43,7 @@
       <!-- Views: the one holding the address's target shows, or Home. See style.css. -->
       <div id="home" class="view" data-title="metaDEX Café">
         <section class="promise">
-          <h1 tabindex="-1">Your Hydrex votes, working for the climate</h1>
+          <h1 tabindex="-1">Your Hydrex votes, retiring carbon credits and paying you</h1>
           <p class="lead">
             Carbon Impact is an automation for Hydrex accounts. It votes with your accounts every week, retires a share
             of the rewards as carbon credits and pays you the rest. Your HYDX never leaves your wallet.
@@ -76,6 +78,9 @@
             <div>
               <dt>Retired so far</dt>
               <dd><span class="tonnes">…</span> tonnes of carbon credits</dd>
+              <dd class="through">
+                <img src="klima-protocol.svg" alt="" width="24" height="24" /> through Klima Protocol
+              </dd>
             </div>
             <div>
               <dt>Of the rewards</dt>
@@ -285,7 +290,8 @@
           This part of the page needs its script, which has not run. Reload the page, and check that JavaScript is on.
         </p>
         <div id="checks" class="notice" role="alert" hidden>
-          <strong>This page's checks of Carbon Impact failed.</strong> Joining stays off until the page is updated.
+          <span class="shape failed" aria-hidden="true"></span
+          ><strong>This page's checks of Carbon Impact failed.</strong> Joining stays off until the page is updated.
           Leaving still works. <a href="#verify">What each check guards against</a>
           <ul>
             <li id="chain" hidden>The RPC serves another chain than Base.</li>
@@ -308,7 +314,7 @@
             <p>No wallet was found in this browser. On a phone, open this page in your wallet app:</p>
             <p class="buttons">
               <a class="button secondary" href="https://go.cb-w.com/dapp?cb_url=https%3A%2F%2Fmetadex.cafe%2F%23app"
-                >Base app</a
+                >Coinbase Wallet</a
               >
               <a class="button secondary" href="https://link.metamask.io/dapp/metadex.cafe/#app">MetaMask</a>
             </p>
@@ -339,7 +345,7 @@
           <p class="summary-line"></p>
           <p>
             Carbon Impact pays out to <span class="payout-own">your address</span
-            ><code class="payout-other" translate="no"><a class="payout-short"></a></code>.
+            ><code class="payout-other" translate="no"><a class="payout-to"></a></code>.
           </p>
         </section>
         <p id="none" hidden>
@@ -432,6 +438,37 @@
           </section>
           <p class="small">Earning Power is shown as on Hydrex: 1.3 times the votes.</p>
         </div>
+
+        <section id="receipts" aria-labelledby="receipts-title" hidden>
+          <h2 id="receipts-title">Last payout</h2>
+          <p class="receipts-reading" role="status">Reading Carbon Impact's last payout from Base…</p>
+          <p class="receipts-none" hidden>Carbon Impact has made no payout in the last eight weeks.</p>
+          <p class="receipts-other" hidden>
+            Carbon Impact's last payout, on <time class="run-day"></time>, paid none of your accounts.
+          </p>
+          <p class="receipts-underway" hidden>
+            Carbon Impact's payout of <time class="run-day"></time> is under way, and has not reached your accounts yet.
+            A payout takes up to half a day.
+          </p>
+          <p class="receipts-failed notice" hidden>
+            The last payout could not be read from Base.
+            <button type="button" class="receipts-again secondary">Read the payout again</button>
+          </p>
+          <div class="receipts-found" hidden>
+            <p>
+              For <span class="receipt-which"></span>, in Carbon Impact's payout of <time class="run-day"></time>. Read
+              from the automation's events on Base. Dollars are at the prices of <time class="run-flip"></time>; a token
+              without a deep enough pool counts for nothing.
+            </p>
+            <p class="receipts-more" hidden>
+              The payout may still be under way: receipts for more of your accounts may follow.
+            </p>
+            <p class="receipts-next" hidden>
+              A new payout began on <time class="run-next"></time>, and has not reached your accounts yet.
+            </p>
+            <div class="receipt-list"></div>
+          </div>
+        </section>
 
         <details id="payout" hidden>
           <summary>Payout address</summary>
@@ -987,7 +1024,7 @@
           <h3>What it reads, and from where</h3>
           <p>
             Everything comes from Base, through public RPCs: <code translate="no">mainnet.base.org</code>,
-            <code translate="no">base-rpc.publicnode.com</code> and <code translate="no">base.drpc.org</code>. The page
+            <code translate="no">base.drpc.org</code> and <code translate="no">base-rpc.publicnode.com</code>. The page
             has no server, stores nothing, and asks your wallet nothing until you pick it.
           </p>
         </section>
@@ -1132,7 +1169,6 @@
         <h3>What your wallet will ask</h3>
         <p class="how"></p>
         <ol class="steps"></ol>
-        <p class="key"></p>
         <p class="small"><a href="#verify">How to check these calls</a></p>
       </div>
       <div class="done" hidden></div>
@@ -1164,7 +1200,44 @@
       <button type="button" class="secondary"><img alt="" hidden /> <bdi class="name" translate="no"></bdi></button>
     </template>
     <template id="step">
-      <li><span class="says"></span><br /><code class="shows" translate="no"></code> on <span class="on"></span></li>
+      <li class="slip">
+        <p class="count label" hidden></p>
+        <p class="says"></p>
+        <dl class="fields">
+          <div>
+            <dt>To</dt>
+            <dd><code class="to" translate="no"></code><br /><span class="on"></span></dd>
+          </div>
+          <div>
+            <dt>Call</dt>
+            <dd><code translate="no">setConduitApproval</code></dd>
+          </div>
+          <div>
+            <dt>Conduit</dt>
+            <dd><code class="conduit" translate="no"></code><br /><span class="conduit-name"></span></dd>
+          </div>
+          <div>
+            <dt>Account</dt>
+            <dd><code class="account" translate="no"></code></dd>
+          </div>
+          <div>
+            <dt>Approve</dt>
+            <dd><code class="approve" translate="no"></code></dd>
+          </div>
+          <div>
+            <dt>Value</dt>
+            <dd><code translate="no">0</code> ETH</dd>
+          </div>
+          <div class="raw" hidden>
+            <dt>Data</dt>
+            <dd><span class="call"></span> <code class="data" translate="no"></code></dd>
+          </div>
+          <div class="operation" hidden>
+            <dt>Operation</dt>
+            <dd><code translate="no">0</code>, a call</dd>
+          </div>
+        </dl>
+      </li>
     </template>
 
     <template id="join-before">
@@ -1227,6 +1300,48 @@
         >.
       </p>
     </template>
+    <template id="receipt">
+      <article class="slip receipt">
+        <p class="receipt-name">metaDEX Café</p>
+        <p class="label">Receipt · <span class="receipt-id"></span> · Carbon Impact</p>
+        <p class="receipt-day"><time class="receipt-date"></time></p>
+        <dl class="lines">
+          <div>
+            <dt>Earned</dt>
+            <dd class="value receipt-earned-usd"></dd>
+            <dd class="detail receipt-earned"></dd>
+          </div>
+          <div>
+            <dt>Swapped</dt>
+            <dd class="value receipt-swapped"></dd>
+            <dd class="detail">Into kVCM</dd>
+          </div>
+          <div>
+            <dt>Retired</dt>
+            <dd class="value receipt-retired"></dd>
+            <dd class="detail receipt-tonnes"></dd>
+            <dd class="detail through">
+              <img src="klima-protocol.svg" alt="" width="24" height="24" /> through Klima Protocol
+            </dd>
+          </div>
+          <div>
+            <dt>Fee</dt>
+            <dd class="value receipt-fee"></dd>
+          </div>
+        </dl>
+        <dl class="total">
+          <div>
+            <dt>Paid</dt>
+            <dd class="value receipt-paid"></dd>
+            <dd class="detail receipt-paid-usd"></dd>
+          </div>
+        </dl>
+        <p class="receipt-foot">
+          To <code translate="no"><a class="receipt-recipient"></a></code>, <time class="receipt-time"></time>.
+          <a class="receipt-tx">Transaction</a>
+        </p>
+      </article>
+    </template>
     <template id="earned-pool">
       <tr>
         <td><a class="pool" translate="no"></a></td>
@@ -1260,18 +1375,25 @@
       </ol>
     </template>
 
-    <template id="in"> <strong>In Carbon Impact.</strong> It votes with this account and claims its rewards. </template>
+    <template id="in">
+      <span class="shape running" aria-hidden="true"></span><strong>In Carbon Impact.</strong> It votes with this
+      account and claims its rewards.
+    </template>
     <template id="joined">
-      <strong>Joined Carbon Impact.</strong> It can claim this account's rewards already, and votes with it from
-      <time class="date"></time>.
+      <span class="shape joining" aria-hidden="true"></span><strong>Joined Carbon Impact.</strong> It can claim this
+      account's rewards already, and votes with it from <time class="date"></time>.
     </template>
     <template id="left">
-      <strong>Left Carbon Impact.</strong> It can no longer claim this account's rewards, but its votes count for Carbon
-      Impact until this epoch ends on <time class="date"></time>.
+      <span class="shape leaving" aria-hidden="true"></span><strong>Left Carbon Impact.</strong> It can no longer claim
+      this account's rewards, but its votes count for Carbon Impact until this epoch ends on <time class="date"></time>.
     </template>
-    <template id="partly"> <strong>Partly in Carbon Impact.</strong> Only some of its approvals are set. </template>
+    <template id="partly">
+      <span class="shape stopped" aria-hidden="true"></span><strong>Partly in Carbon Impact.</strong> Only some of its
+      approvals are set.
+    </template>
     <template id="stopped">
-      <strong
+      <span class="shape stopped" aria-hidden="true"></span
+      ><strong
         >In <bdi class="automation" translate="no"></bdi>, which has not voted since
         <time class="voted"></time>.</strong
       >
@@ -1279,23 +1401,32 @@
       that automation holds its votes.
     </template>
     <template id="other">
-      <strong>In another Hydrex automation: <bdi class="automation" translate="no"></bdi>.</strong> Joining takes it out
-      of that automation.
+      <span class="shape elsewhere" aria-hidden="true"></span
+      ><strong>In another Hydrex automation: <bdi class="automation" translate="no"></bdi>.</strong> Joining takes it
+      out of that automation.
     </template>
     <template id="released">
-      <strong>Left <bdi class="automation" translate="no"></bdi>.</strong> You vote with it from
+      <span class="shape leaving" aria-hidden="true"></span
+      ><strong>Left <bdi class="automation" translate="no"></bdi>.</strong> You vote with it from
       <time class="date"></time>.
     </template>
     <template id="delegated">
-      <strong
+      <span class="shape elsewhere" aria-hidden="true"></span
+      ><strong
         >Delegated to <code translate="no"><a class="address"></a></code>.</strong
       >
       Not a known automation. Joining moves its votes to Carbon Impact.
     </template>
-    <template id="self"><strong>Not in an automation.</strong> You vote with it.</template>
+    <template id="self"
+      ><span class="shape idle" aria-hidden="true"></span><strong>Not in an automation.</strong> You vote with
+      it.</template
+    >
     <template id="ended">
-      <strong>Lock ended.</strong> No votes to give. <a href="https://www.hydrex.fi/accounts">Extend it on Hydrex</a>.
+      <span class="shape idle" aria-hidden="true"></span><strong>Lock ended.</strong> No votes to give.
+      <a href="https://www.hydrex.fi/accounts">Extend it on Hydrex</a>.
     </template>
-    <template id="empty"><strong>Empty.</strong> No HYDX in it.</template>
+    <template id="empty"
+      ><span class="shape idle" aria-hidden="true"></span><strong>Empty.</strong> No HYDX in it.</template
+    >
   </body>
 </html>

@@ -1,8 +1,8 @@
 import { parseAbi, type Address } from "viem";
-import { blockTime, call, read, same } from "./chain.ts";
+import { blockTime, call, read, readLater, same } from "./chain.ts";
 import { CONDUIT, VOTER, VOTING_ESCROW } from "./config.ts";
 import { WEEK, clean } from "./format.ts";
-import { pricesAt, type Price, type Token } from "./prices.ts";
+import { pricesAt, usdOf, type Price, type Token } from "./prices.ts";
 
 // What votes earned in an epoch that has ended, as Hydrex's reward contracts keep it. Each pool's gauge has two: one
 // for the pool's fees, one for incentives. Each keeps, per epoch, the votes cast for the pool, each voter's share and
@@ -64,17 +64,19 @@ async function lastEpoch(): Promise<{ start: number; now: number }> {
   return { start: Number(active) - WEEK, now: Number(now) };
 }
 
-async function allPools(): Promise<Address[]> {
-  const [length] = required(await read([voter("length")])) as bigint[];
-  return required(await read(Array.from({ length: Number(length) }, (_, i) => voter("pools", BigInt(i))))) as Address[];
+async function allPools(reader: typeof read = read): Promise<Address[]> {
+  const [length] = required(await reader([voter("length")])) as bigint[];
+  return required(
+    await reader(Array.from({ length: Number(length) }, (_, i) => voter("pools", BigInt(i)))),
+  ) as Address[];
 }
 
 type Bribes = { pool: Address; fees: Address; incentives: Address };
 
-async function bribesOf(pools: Address[]): Promise<Bribes[]> {
-  const gauges = required(await read(pools.map((pool) => voter("gauges", pool)))) as Address[];
+async function bribesOf(pools: Address[], reader: typeof read = read): Promise<Bribes[]> {
+  const gauges = required(await reader(pools.map((pool) => voter("gauges", pool)))) as Address[];
   const bribes = required(
-    await read(gauges.flatMap((gauge) => [voter("internal_bribes", gauge), voter("external_bribes", gauge)])),
+    await reader(gauges.flatMap((gauge) => [voter("internal_bribes", gauge), voter("external_bribes", gauge)])),
   ) as Address[];
   return pools.map((pool, i) => ({ pool, fees: bribes[2 * i]!, incentives: bribes[2 * i + 1]! }));
 }
@@ -90,13 +92,13 @@ type Found = {
 
 // What the votes of one voter, or all votes, earned through each pool's two reward contracts in the epoch from start,
 // computed as the contracts do, and its votes for each pool. Pools without its votes are left out.
-async function rewardsOf(all: Bribes[], start: number, holder?: Address): Promise<Found> {
+async function rewardsOf(all: Bribes[], start: number, holder?: Address, reader: typeof read = read): Promise<Found> {
   const contracts = all.flatMap(({ pool, fees, incentives }) => [
     { pool, address: fees, fee: true },
     { pool, address: incentives, fee: false },
   ]);
   const totals = required(
-    await read(
+    await reader(
       contracts.flatMap(({ address }) => [
         call(address, rewardsAbi, "totalSupplyAt", start),
         call(address, rewardsAbi, "rewardsListLength"),
@@ -112,7 +114,7 @@ async function rewardsOf(all: Bribes[], start: number, holder?: Address): Promis
     })
     .filter(({ supply, balance }) => supply > 0n && balance > 0n);
   const tokens = required(
-    await read(
+    await reader(
       voted.flatMap(({ address, length }) =>
         Array.from({ length }, (_, i) => call(address, rewardsAbi, "rewardTokens", BigInt(i))),
       ),
@@ -121,7 +123,7 @@ async function rewardsOf(all: Bribes[], start: number, holder?: Address): Promis
   let k = 0;
   const listed = voted.map((contract) => ({ ...contract, tokens: tokens.slice(k, (k += contract.length)) }));
   const data = required(
-    await read(
+    await reader(
       listed.flatMap(({ address, tokens }) =>
         tokens.map((token) => call(address, rewardsAbi, "rewardData", token, start)),
       ),
@@ -139,9 +141,10 @@ async function rewardsOf(all: Bribes[], start: number, holder?: Address): Promis
   return { rewards, votes: new Map(voted.map(({ pool, balance }) => [pool, balance])) };
 }
 
-async function tokensOf(addresses: Address[]): Promise<Map<string, Token>> {
+// Each token's symbol, cleaned, and decimals, by its address in lower case; a token without decimals is left out.
+export async function tokensOf(addresses: Address[], reader: typeof read = read): Promise<Map<string, Token>> {
   const unique = [...new Set(addresses.map((address) => address.toLowerCase()))] as Address[];
-  const found = await read(
+  const found = await reader(
     unique.flatMap((address) => [call(address, tokenAbi, "symbol"), call(address, tokenAbi, "decimals")]),
   );
   return new Map(
@@ -160,6 +163,7 @@ async function priced(
   pools: Pool[],
   found: Found,
   tokens: Map<string, Token>,
+  reader: typeof read = read,
 ): Promise<Earnings> {
   const rewards = found.rewards.flatMap(({ pool, token, amount, fee }) => {
     const known = tokens.get(token.toLowerCase());
@@ -169,7 +173,7 @@ async function priced(
   for (const { token, amount } of rewards) amounts.set(token.address, (amounts.get(token.address) ?? 0n) + amount);
   // Only what was earned: the tokens of the pools are read only to name them.
   const earned = [...tokens.values()].filter(({ address }) => amounts.has(address));
-  const prices = await pricesAt(earned, amounts, start + WEEK, now);
+  const prices = await pricesAt(earned, amounts, start + WEEK, now, reader);
   return { start, votes, pools, rewards, prices };
 }
 
@@ -218,15 +222,19 @@ export async function readEarnings(known?: number): Promise<Earnings | undefined
   return priced(start, now, votes!, named, found, tokens);
 }
 
-// What all votes on Hydrex earned in the same epoch: the average vote.
+// What all votes on Hydrex earned in the same epoch: the average vote. A thousand reads, behind the page's own.
 export async function readAllEarnings(start: number): Promise<Earnings> {
   const [[now, votes], pools] = await Promise.all([
-    read([blockTime, voter("totalWeightAt", start)]).then((values) => required(values) as bigint[]),
-    allPools(),
+    readLater([blockTime, voter("totalWeightAt", start)]).then((values) => required(values) as bigint[]),
+    allPools(readLater),
   ]);
-  const found = await rewardsOf(await bribesOf(pools), start);
+  const found = await rewardsOf(await bribesOf(pools, readLater), start, undefined, readLater);
   const voted = [...found.votes].map(([address, poolVotes]) => ({ address, name: "", votes: poolVotes }));
-  return priced(start, Number(now), votes!, voted, found, await tokensOf(found.rewards.map(({ token }) => token)));
+  const tokens = await tokensOf(
+    found.rewards.map(({ token }) => token),
+    readLater,
+  );
+  return priced(start, Number(now), votes!, voted, found, tokens, readLater);
 }
 
 // Each account's share of the automation's votes in the epoch from start, as the reward contracts count it: its votes
@@ -253,7 +261,7 @@ export function valueOf({ rewards, prices }: Earnings) {
   for (const { pool, token, amount, fee } of rewards) {
     const price = prices.get(token.address.toLowerCase());
     if (!price) continue;
-    const usd = (Number(amount) / 10 ** token.decimals) * price.usd;
+    const usd = usdOf(amount, token, price);
     byPool.set(pool.toLowerCase(), (byPool.get(pool.toLowerCase()) ?? 0) + usd);
     if (fee) fees += usd;
     else incentives += usd;

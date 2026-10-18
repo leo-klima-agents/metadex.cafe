@@ -1,11 +1,12 @@
 import { getAddress } from "viem";
 import "./views.ts";
-import { same } from "./chain.ts";
-import { CHAIN_ID } from "./config.ts";
-import { clone, fill, fillAddress, fillPlural, fillTime, show } from "./dom.ts";
-import { readAllEarnings, readEarnings, sharesOf, valueOf, type Earnings } from "./earnings.ts";
+import { readLater, same } from "./chain.ts";
+import { CHAIN_ID, CONDUIT, KVCM } from "./config.ts";
+import { clone, fill, fillAddress, fillPlural, fillTime, groupHex, show, showHex } from "./dom.ts";
+import { readAllEarnings, readEarnings, sharesOf, tokensOf, valueOf, type Earnings } from "./earnings.ts";
 import {
   WEEK,
+  amount,
   bps,
   compact,
   count,
@@ -13,6 +14,7 @@ import {
   earningPower,
   fraction,
   list,
+  listWith,
   share,
   short,
   units,
@@ -43,6 +45,8 @@ import {
   type Relay,
   type Status,
 } from "./hydrex.ts";
+import { pricesAt, usdOf, type Price, type Token } from "./prices.ts";
+import { blockTimes, lastRun, totalRetired, type Amount, type Payout, type Run, type Search } from "./receipts.ts";
 import { close, review, update, type Hooks } from "./review.ts";
 import {
   NoWallet,
@@ -86,6 +90,13 @@ let shares: { holdings: Holdings; start: number; of: Map<bigint, number> } | und
 // The epoch the comparison with all of Hydrex is read for, and whether its table is on the screen.
 let compared: number | undefined;
 let onScreen = false;
+// Carbon Impact's last payout, read again once the total retired has grown, when it was last checked, and the accounts
+// whose receipts are shown.
+let search: Promise<Search> | undefined;
+let searchChecked = 0;
+let receiptsFor: Holdings | undefined;
+// The owner whose last payout the section shows, and whether as receipts.
+let showing: { owner: string; drawn: boolean } | undefined;
 
 type Value = ReturnType<typeof valueOf>;
 
@@ -151,6 +162,7 @@ function catchUp(): void {
   if (!relay || epoch > relay.epochStart) readRelayAgain().catch(console.error);
   const stale = !earned || earned.found.start < epoch - WEEK;
   if (stale && Date.now() - earningsTried > 300_000) loadEarnings();
+  checkSearch();
 }
 
 function loadEarnings(): void {
@@ -269,6 +281,185 @@ async function loadShares(): Promise<void> {
   showAccounts(true);
 }
 
+const receipts = document.getElementById("receipts")!;
+
+const RECEIPT_STATES = ["reading", "none", "other", "underway", "failed", "found"] as const;
+
+function receiptsState(state: (typeof RECEIPT_STATES)[number]): void {
+  for (const name of RECEIPT_STATES) show(`.receipts-${name}`, name === state, receipts);
+}
+
+const tokenOf = (tokens: Map<string, Token>, address: string) => tokens.get(address.toLowerCase());
+
+// A line's tokens, by name; one without decimals by its address, in its smallest units.
+function showAmounts(element: Element, found: Amount[], tokens: Map<string, Token>, sign = ""): void {
+  if (!found.length) return void element.replaceChildren("0 kVCM");
+  const items = found.map(({ token, amount: value }) => {
+    const known = tokenOf(tokens, token);
+    if (known) return `${amount(value, known.decimals)} ${known.symbol}`;
+    const address = document.createElement("code");
+    address.translate = false;
+    showHex(address, token);
+    const unknown = document.createElement("span");
+    unknown.append(`${value} base units of `, address);
+    return unknown;
+  });
+  element.replaceChildren(sign, ...listWith<Node | string>(items));
+}
+
+function worth(found: Amount[], tokens: Map<string, Token>, prices: Map<string, Price> | undefined): string {
+  if (!prices) return "";
+  const usdValue = found.reduce((sum, { token, amount: value }) => {
+    const [known, price] = [tokenOf(tokens, token), prices.get(token.toLowerCase())];
+    return known && price ? sum + usdOf(value, known, price) : sum;
+  }, 0);
+  return usdValue > 0 ? usd(usdValue) : "";
+}
+
+const kvcm = (found: Amount[]): bigint => found.find(({ token }) => same(token, KVCM))?.amount ?? 0n;
+
+// Its fields have names of their own: the automation's figures, such as the tonnes it retired, are filled by name
+// across the whole page.
+function receipt(payout: Payout, time: number, tokens: Map<string, Token>, prices?: Map<string, Price>) {
+  const item = clone("receipt");
+  // What was claimed as kVCM was not swapped.
+  const swapped = kvcm(payout.paid) + kvcm(payout.fees) + payout.retiredKvcm - kvcm(payout.earned);
+  fill(item, {
+    "receipt-id": `#${payout.id}`,
+    "receipt-earned-usd": worth(payout.earned, tokens, prices),
+    "receipt-swapped": `${amount(swapped > 0n ? swapped : 0n, 18)} kVCM`,
+    "receipt-retired": `${payout.retiredKvcm ? "−" : ""}${amount(payout.retiredKvcm, 18)} kVCM`,
+    "receipt-tonnes": `${amount(payout.tonnes, 18)} t of carbon credits`,
+    "receipt-paid-usd": worth(payout.paid, tokens, prices),
+  });
+  showAmounts(item.querySelector(".receipt-earned")!, payout.earned, tokens);
+  showAmounts(item.querySelector(".receipt-fee")!, payout.fees, tokens, payout.fees.length ? "−" : "");
+  showAmounts(item.querySelector(".receipt-paid")!, payout.paid, tokens);
+  show(".receipt-tonnes, .through", payout.tonnes > 0n, item);
+  fillTime(item, "receipt-date", time);
+  fillTime(item, "receipt-time", time, when);
+  fillAddress(item, "receipt-recipient", payout.recipient);
+  item.querySelector<HTMLAnchorElement>(".receipt-tx")!.href = `https://basescan.org/tx/${payout.tx}`;
+  return item;
+}
+
+// A run takes up to half a day: one whose last payout is more recent may still be under way.
+const UNDER_WAY = 12 * 3600;
+
+// A receipt for each of the owner's accounts in Carbon Impact's last payout. Only for an owner with an account that is
+// in it, or was at the start of this epoch: finding the payout takes some 20 to 120 reads. Read again quietly, what is
+// shown stays until there is something new to show: a run under way that has not reached the owner's accounts leaves
+// the receipts of the last one, and a read that fails leaves them all.
+async function loadReceipts(quietly = false): Promise<void> {
+  const holdings = shown;
+  if (!holdings || receiptsFor?.owner === holdings.owner) return;
+  const member = holdings.accounts.some(({ delegate, claimer, delegateAtStart }) =>
+    [delegate, claimer, delegateAtStart].some((address) => same(address, CONDUIT)),
+  );
+  receipts.hidden = !member;
+  if (!member) return;
+  receiptsFor = holdings;
+  const owner = holdings.owner.toLowerCase();
+  const kept = quietly && showing?.owner === owner;
+  if (!kept) receiptsState("reading");
+  // Another owner, or a read started since, takes over.
+  const current = () => receiptsFor === holdings && shown?.owner === holdings.owner;
+  const fail = (error: unknown) => {
+    console.error(error);
+    if (!current() || kept) return;
+    receiptsFor = undefined;
+    receiptsState("failed");
+  };
+  const settle = (state: "none" | "other" | "underway") => {
+    showing = { owner, drawn: false };
+    receiptsState(state);
+  };
+  if (!search) searchChecked = Date.now();
+  const reading = (search ??= lastRun());
+  let found: Run | undefined;
+  try {
+    ({ run: found } = await reading);
+  } catch (error) {
+    // Only a search that failed is dropped: the receipts' other reads failing keeps it.
+    if (search === reading) search = undefined;
+    return fail(error);
+  }
+  if (!current()) return;
+  if (!found) return settle("none");
+  const underway = now() - found.time < UNDER_WAY;
+  const mine = found.payouts.filter((payout) => same(payout.owner, owner));
+  if (!mine.length) {
+    if (underway && kept && showing?.drawn) {
+      fillTime(receipts, "run-next", found.time);
+      show(".receipts-more", false, receipts);
+      show(".receipts-next", true, receipts);
+      return;
+    }
+    fillTime(receipts, "run-day", found.time);
+    return settle(underway ? "underway" : "other");
+  }
+  const all = mine.flatMap(({ earned, paid, fees }) => [...earned, ...paid, ...fees]);
+  let tokens: Map<string, Token>;
+  let times: Map<number, number>;
+  try {
+    [tokens, times] = await Promise.all([
+      tokensOf(
+        all.map(({ token }) => token),
+        readLater,
+      ),
+      blockTimes(mine.map(({ block }) => block)),
+    ]);
+  } catch (error) {
+    return fail(error);
+  }
+  if (!current()) return;
+  // Each token is priced for the largest amount of it a receipt shows in dollars, earned or paid.
+  const amounts = new Map<string, bigint>();
+  for (const { token, amount: value } of mine.flatMap(({ earned, paid }) => [...earned, ...paid]))
+    if (value > (amounts.get(token.toLowerCase()) ?? 0n)) amounts.set(token.toLowerCase(), value);
+  const shelf = receipts.querySelector(".receipt-list")!;
+  const draw = (prices?: Map<string, Price>) =>
+    shelf.replaceChildren(...mine.map((payout) => receipt(payout, times.get(payout.block)!, tokens, prices)));
+  draw();
+  fill(receipts, { "receipt-which": list(mine.map(({ id }) => `#${id}`)) });
+  fillTime(receipts, "run-day", found.time);
+  fillTime(receipts, "run-flip", weekStart(found.time));
+  show(".receipts-more", underway, receipts);
+  show(".receipts-next", false, receipts);
+  showing = { owner, drawn: true };
+  receiptsState("found");
+  // The dollars follow, from many more reads; without them, the receipts show the tokens alone.
+  const prices = await pricesAt([...tokens.values()], amounts, weekStart(found.time), now(), readLater).catch(
+    (error) => {
+      console.error(error);
+      return undefined;
+    },
+  );
+  if (prices && current()) draw(prices);
+}
+
+// A run takes hours after each flip, and the page may have read one half done: once the total retired has grown, the
+// search goes on from where it stopped, and the receipts are read again. A search that failed is done again. One read
+// every five minutes.
+async function checkSearch(): Promise<void> {
+  if (!receiptsFor || Date.now() - searchChecked < 300_000) return;
+  searchChecked = Date.now();
+  const reading = search;
+  let previous: Search | undefined;
+  if (reading) {
+    try {
+      const [done, latest] = await Promise.all([reading, totalRetired()]);
+      if (latest <= done.total || search !== reading) return;
+      previous = done;
+    } catch (error) {
+      return void console.error(error);
+    }
+  }
+  search = lastRun(previous);
+  receiptsFor = undefined;
+  loadReceipts(true);
+}
+
 function showAutomations(found: Automation[]): void {
   for (const row of document.querySelectorAll<HTMLElement>("tr[data-automation]")) {
     const automation = found.find(({ address }) => same(address, row.dataset.automation ?? ""));
@@ -380,9 +571,9 @@ function showAccounts(keepTicked = false): void {
   const own = same(payout, owner);
   show(".payout-own, #itself", own);
   show(".payout-other", !own);
-  fillAddress(document, "payout-short", payout);
+  fillAddress(document, "payout-to", payout);
   fillAddress(document, "owner", owner);
-  fillAddress(document, "payout", payout, payout);
+  fillAddress(document, "payout", payout);
   show("#summary, #payout", full.length > 0);
   show("#none", !full.length);
   show("#accounts");
@@ -393,9 +584,9 @@ async function loadAccounts(quietly = false): Promise<void> {
   const read = ++reads;
   reading = true;
   if (!quietly) {
-    shown = undefined;
+    shown = receiptsFor = showing = undefined;
     show("#reading");
-    show("#accounts, #summary, #none, #payout", false);
+    show("#accounts, #summary, #none, #payout, #receipts", false);
   }
   try {
     const found = await readAccounts(connection.address);
@@ -405,6 +596,7 @@ async function loadAccounts(quietly = false): Promise<void> {
     showAccounts();
     catchUp();
     loadShares();
+    loadReceipts();
   } catch (error) {
     if (read === reads) failed(error);
   } finally {
@@ -555,10 +747,10 @@ function letGo(): void {
   reads++;
   reading = false;
   connection = undefined;
-  shown = undefined;
+  shown = receiptsFor = showing = undefined;
   close();
   showConnection();
-  show("#reading, #accounts, #summary, #none, #payout", false);
+  show("#reading, #accounts, #summary, #none, #payout, #receipts", false);
 }
 
 function walletButton(wallet: Wallet): DocumentFragment {
@@ -586,6 +778,7 @@ function walletButton(wallet: Wallet): DocumentFragment {
 }
 
 show(".needs-script", false);
+groupHex(document);
 // A reload keeps the address, and so the view.
 document.querySelector("#error .again")!.addEventListener("click", () => location.reload());
 document.getElementById("accounts")!.addEventListener("change", updateButtons);
@@ -617,5 +810,6 @@ new IntersectionObserver((entries) => {
   if (onScreen) compare();
 }).observe(earningsTable);
 document.querySelector("#last-epoch .compare-again")!.addEventListener("click", compare);
+receipts.querySelector(".receipts-again")!.addEventListener("click", () => loadReceipts());
 setInterval(() => showChecks().catch(console.error), 3_600_000);
 setInterval(tick, 30_000);

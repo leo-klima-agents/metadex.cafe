@@ -98,8 +98,16 @@ export type Status =
 // Accounts sorted by what their owner can do with them.
 export type Group = "stopped" | "attention" | "in" | "joining" | "leaving" | "open" | "closed";
 
-// A step names the automation its call is about only when it is not Carbon Impact.
-export type Step = Tx & { says: string; on: string; shows: string; conduit: Address; automation?: string };
+// A call's arguments, for the review to show one by one. A step names the automation its call is about only when it is
+// not Carbon Impact.
+export type Step = Tx & {
+  says: string;
+  on: string;
+  id: bigint;
+  approve: boolean;
+  conduit: Address;
+  automation?: string;
+};
 
 function required(values: unknown[]): unknown[] {
   if (values.includes(undefined)) throw new Error("A read from Base failed.");
@@ -265,7 +273,8 @@ const approval = ({ id }: Account, approve: boolean, says: string, other?: Other
     }),
     says: `#${id} ${says}`,
     on: "Hydrex's VotingEscrow",
-    shows: `setConduitApproval(${conduit}, ${id}, ${approve})`,
+    id,
+    approve,
     conduit,
     ...(other && { automation: other.name }),
   };

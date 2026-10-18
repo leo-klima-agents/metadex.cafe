@@ -1,8 +1,8 @@
 import type { Hex } from "viem";
 import { included } from "./chain.ts";
 import { CHAIN_ID } from "./config.ts";
-import { clone, fill, txLink } from "./dom.ts";
-import { count, listParts } from "./format.ts";
+import { clone, fill, show, showHex, txLink } from "./dom.ts";
+import { count } from "./format.ts";
 import type { Step } from "./hydrex.ts";
 import { declined, sendTransaction, switchToBase, type Connection, type Wallet } from "./wallet.ts";
 
@@ -34,7 +34,6 @@ const calls = part(".calls");
 const callsTitle = part(".calls h3");
 const how = part(".how");
 const stepList = part(".steps");
-const key = part(".key");
 const doneBox = part(".done");
 const progress = part(".progress");
 const next = part<HTMLButtonElement>(".next");
@@ -42,22 +41,26 @@ const confirm = part<HTMLButtonElement>(".confirm");
 const back = part(".back");
 let current: Review | undefined;
 
-// Names each automation in the calls by its address, as the wallet will show it.
-function explain(steps: Step[]): void {
-  const conduits = [...new Map(steps.map((step) => [step.conduit.toLowerCase(), step])).values()];
-  const named = conduits.map(({ conduit, automation }) => {
-    const code = document.createElement("code");
-    code.translate = false;
-    code.textContent = conduit;
-    return [code, ` is ${automation ? `the ${automation} automation` : "Carbon Impact"}`];
+// Each call as the wallet will show it: its arguments one by one, each address in full and named. In a Safe, the fields
+// of a Safe transaction follow, with the calldata word by word, so that co-signers can compare both with Safe{Wallet}.
+function slip(step: Step, i: number, n: number, safe: boolean): DocumentFragment {
+  const item = clone("step");
+  fill(item, {
+    count: `${safe ? "Call" : "Transaction"} ${i + 1} of ${n}`,
+    says: step.says,
+    on: step.on,
+    "conduit-name": step.automation ? `The ${step.automation} automation` : "Carbon Impact",
+    account: String(step.id),
+    approve: String(step.approve),
+    call: `The call above, in ${(step.data.length - 2) / 2} bytes:`,
   });
-  key.replaceChildren(`In ${steps.length === 1 ? "this call" : "these calls"}, `);
-  // The list's words come from list(); its items are the addresses and their names.
-  let i = 0;
-  for (const { type, value } of listParts(named.map((_, n) => String(n)))) {
-    key.append(...(type === "element" ? named[i++]! : [value]));
-  }
-  key.append(".");
+  showHex(item.querySelector(".to")!, step.to);
+  showHex(item.querySelector(".conduit")!, step.conduit);
+  showHex(item.querySelector(".data")!, step.data);
+  show(".count", n > 1, item);
+  show(".raw", safe, item);
+  show(".operation", safe && n === 1, item);
+  return item;
 }
 
 export function review(
@@ -93,18 +96,13 @@ export function review(
   callsTitle.hidden = !pages.at(-1)?.body;
   doneBox.replaceChildren();
   doneBox.hidden = true;
-  stepList.replaceChildren(
-    ...steps.map(({ says, shows, on }) => {
-      const item = clone("step");
-      fill(item, { says, shows, on });
-      return item;
-    }),
-  );
-  explain(steps);
-  how.textContent = connection.wallet.propose
+  const safe = !!connection.wallet.propose;
+  stepList.replaceChildren(...steps.map((step, i) => slip(step, i, n, safe)));
+  // Safe{Wallet} puts several calls in one, through its MultiSend contract, and numbers the transaction itself.
+  how.textContent = safe
     ? n === 1
-      ? "One Safe transaction:"
-      : `One Safe transaction, with ${n} calls:`
+      ? "One Safe transaction. Safe{Wallet} sets its nonce; its other fields are these:"
+      : `One Safe transaction, with ${n} calls. Safe{Wallet} sends them through its MultiSend contract, with operation 1, and sets the nonce. The calls:`
     : n === 1
       ? "One transaction:"
       : `${count(n, "transaction", "transactions")}, one after the other:`;

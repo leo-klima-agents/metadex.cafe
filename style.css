@@ -1,9 +1,70 @@
+/* The fonts are subsets made by scripts/fonts.py. The build puts them inside this stylesheet, so that its hash covers
+   them too. */
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("fonts/atkinson-hyperlegible-next-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("fonts/atkinson-hyperlegible-next-700.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible Mono";
+  src: url("fonts/atkinson-hyperlegible-mono-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Young Serif";
+  src: url("fonts/young-serif-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
 :root {
-  font-family: system-ui, sans-serif;
+  font-family: "Atkinson Hyperlegible Next", system-ui, sans-serif;
   line-height: 1.5;
-  --accent: light-dark(#0b6b64, #5cc8bb);
-  --line: light-dark(#c9d4d1, #3d4d4a);
-  --quiet: light-dark(#4f5f5c, #a9b8b5);
+  --serif: "Young Serif", Georgia, serif;
+  --mono: "Atkinson Hyperlegible Mono", ui-monospace, monospace;
+  /* The colours, Roast: plain values first, the light ones, for a browser without light-dark(). */
+  color-scheme: light;
+  --paper: #fdfcf9;
+  --ink: #251a15;
+  --quiet: #645850;
+  --line: #d9d3cc;
+  --accent: #6b3818;
+  --on-accent: #fdfcf9;
+  --tint: #f9eee4;
+  --edge: #645850;
+  --notice: #fbe6e3;
+  --callout: #fdf1e2;
+  --warn: #944e00;
+  --info: #234e82;
+  --danger: #ab331f;
+}
+/* Then light and dark, where light-dark() works. A custom property holding it, where it does not, would make every use
+   of the property invalid: links would lose their colour, and buttons their fill. In dark, the accent is milk, as crema
+   looked like the warning's amber. */
+@supports (color: light-dark(red, red)) {
+  :root {
+    color-scheme: light dark;
+    --paper: light-dark(#fdfcf9, #18120f);
+    --ink: light-dark(#251a15, #f1eee9);
+    --quiet: light-dark(#645850, #b7b0a7);
+    --line: light-dark(#d9d3cc, #413933);
+    --accent: light-dark(#6b3818, #e7d4bf);
+    --on-accent: light-dark(#fdfcf9, #18120f);
+    --tint: light-dark(#f9eee4, #2e2118);
+    --edge: light-dark(#645850, #b7b0a7);
+    --notice: light-dark(#fbe6e3, #3a1b18);
+    --callout: light-dark(#fdf1e2, #33240f);
+    --warn: light-dark(#944e00, #efb062);
+    --info: light-dark(#234e82, #85b6e9);
+    --danger: light-dark(#ab331f, #ef816b);
+  }
 }
 body {
   max-inline-size: 40rem;
@@ -11,8 +72,8 @@ body {
   padding-inline: 1rem;
   padding-block-end: 2rem;
   overflow-wrap: anywhere;
-  background: Canvas;
-  color: CanvasText;
+  background: var(--paper);
+  color: var(--ink);
 }
 [hidden] {
   display: none !important;
@@ -24,10 +85,49 @@ main:has(> .view:target, > .view :target) > .view:not(:target, :has(:target)),
 main:not(:has(> .view:target, > .view :target)) > .view:not(#home) {
   display: none;
 }
+/* Young Serif has one weight: headings use it as it is. */
+h1,
+h2 {
+  font-family: var(--serif);
+  font-weight: 400;
+}
 .view > h1,
 .promise h1 {
   font-size: 1.75rem;
   line-height: 1.25;
+}
+code {
+  font-family: var(--mono);
+}
+/* Hex in groups of four, apart with no space between them, so that a copy is the plain hex. See hexGroups(). The gap
+   follows each group, so that a group that wraps starts its line. */
+.hex {
+  overflow-wrap: normal;
+}
+.hex > span:not(:last-child) {
+  margin-inline-end: 0.4ch;
+}
+.hex > .line::before {
+  content: "\A";
+  white-space: pre;
+}
+/* Small capitals in the mono face, for what names a figure, a field or a step. */
+.label,
+.numbers dt,
+dl.details dt,
+dialog .step-count,
+.fields dt,
+.lines dt,
+.total dt {
+  color: var(--quiet);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+table,
+.numbers dd {
+  font-variant-numeric: tabular-nums;
 }
 .view h1:focus {
   outline: none;
@@ -44,8 +144,9 @@ header.site {
 }
 header.site .name {
   color: inherit;
-  font-weight: 700;
-  font-size: 1.125rem;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 1.25rem;
   text-decoration: none;
 }
 header.site nav {
@@ -63,6 +164,43 @@ header.site nav {
   border-radius: 50%;
   background: currentColor;
   vertical-align: middle;
+}
+/* Each status has a shape, and words: never colour alone. Running is filled; joining and leaving half filled; not
+   looked after hollow; stopped, or needing attention, a triangle; checks that failed, a square. */
+.shape {
+  display: inline-block;
+  box-sizing: border-box;
+  inline-size: 0.75em;
+  block-size: 0.75em;
+  margin-inline-end: 0.375em;
+  border-radius: 50%;
+  vertical-align: -0.05em;
+}
+.shape.running {
+  background: var(--accent);
+}
+.shape.elsewhere {
+  background: var(--quiet);
+}
+.shape.joining {
+  border: 2px solid var(--info);
+  background: linear-gradient(90deg, var(--info) 50%, transparent 50%);
+}
+.shape.leaving {
+  border: 2px solid var(--quiet);
+  background: linear-gradient(90deg, transparent 50%, var(--quiet) 50%);
+}
+.shape.idle {
+  border: 2px solid var(--quiet);
+}
+.shape.stopped {
+  border-radius: 0;
+  background: var(--warn);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+.shape.failed {
+  border-radius: 0;
+  background: var(--danger);
 }
 
 th,
@@ -89,7 +227,7 @@ summary {
   padding-block: 0.5rem;
   padding-inline: 0.75rem;
   border-radius: 8px;
-  background: light-dark(#fbe6e3, #3a1b18);
+  background: var(--notice);
 }
 .notice > p:first-child {
   margin-block-start: 0;
@@ -100,9 +238,9 @@ summary {
 .callout {
   padding-block: 0.25rem 0.75rem;
   padding-inline: 1rem;
-  border-inline-start: 4px solid light-dark(#b25e00, #f0a54a);
+  border-inline-start: 4px solid var(--warn);
   border-radius: 8px;
-  background: light-dark(#fdf1e2, #33240f);
+  background: var(--callout);
 }
 .callout h2 {
   font-size: 1.125rem;
@@ -133,7 +271,7 @@ button,
   border: 1px solid var(--accent);
   border-radius: 999px;
   background: var(--accent);
-  color: light-dark(#ffffff, #06201d);
+  color: var(--on-accent);
   font: inherit;
   font-weight: 600;
   line-height: 1.5;
@@ -174,13 +312,19 @@ button img {
   gap: 0.75rem 1rem;
   margin: 0;
 }
-.numbers dt {
-  color: var(--quiet);
-  font-size: 0.875rem;
-}
 .numbers dd {
   margin: 0;
   font-weight: 600;
+}
+/* Klima Protocol's logo keeps a third of its size clear around it, as its guidelines ask. */
+.numbers .through {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block-start: 0.5rem;
+  color: var(--quiet);
+  font-size: 0.875rem;
+  font-weight: normal;
 }
 .numbers .countdown {
   display: block;
@@ -244,29 +388,25 @@ button img {
   white-space: nowrap;
 }
 .earnings td:not(:first-child) {
+  font-family: var(--mono);
   text-align: end;
 }
 .earned-pools {
   margin-block: 0.75rem;
 }
 .earned-pools td + td {
+  font-family: var(--mono);
   text-align: end;
 }
 dl.details > div {
   margin-block-end: 0.5rem;
 }
-dl.details dt,
-dl.words dt {
-  color: var(--quiet);
-  font-size: 0.875rem;
-}
+
 dl.details dd {
   margin: 0;
 }
 dl.words dt {
   margin-block-start: 0.75rem;
-  color: inherit;
-  font-size: inherit;
   font-weight: 600;
 }
 dl.words dd {
@@ -323,7 +463,7 @@ progress.elapsed {
   cursor: pointer;
 }
 .accounts label:has(.pick:checked) {
-  background: light-dark(#e2f3f0, #12302c);
+  background: var(--tint);
 }
 input[type="checkbox"] {
   inline-size: 1.5rem;
@@ -358,25 +498,152 @@ dialog {
   max-inline-size: min(40rem, 100% - 2rem);
   padding-block: 0;
   padding-inline: 1rem;
-  border: 1px solid light-dark(#7d8f8b, #5f7470);
+  border: 1px solid var(--edge);
   border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
 }
 dialog::backdrop {
   background: rgb(0 0 0 / 0.5);
 }
 dialog .step-count {
   margin-block: 1rem 0;
-  color: var(--quiet);
-  font-size: 0.875rem;
 }
 dialog .step-count:not([hidden]) + h2 {
   margin-block-start: 0.25rem;
+}
+/* Each call as a slip: the page's own words, then its fields, as the wallet shows them. */
+.steps {
+  padding-inline-start: 0;
+  list-style: none;
+}
+.slip {
+  margin-block: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.slip .count {
+  margin: 0;
+}
+.slip .says {
+  margin-block: 0.25rem 0.75rem;
+  font-weight: 700;
+}
+.fields {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding-block-start: 0.75rem;
+  border-block-start: 2px dashed var(--ink);
+}
+.fields > div {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: baseline;
+}
+.fields dd {
+  margin: 0;
+}
+.fields .on,
+.fields .conduit-name,
+.fields .call {
+  color: var(--quiet);
+  font-size: 0.875rem;
+}
+/* Eight groups a line, wide enough on a phone: each 32-byte word of the calldata takes two lines of 16 bytes. */
+.fields .data {
+  display: block;
+  max-inline-size: 36ch;
+  margin-block-start: 0.25rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  background: var(--tint);
+  font-size: 0.8125rem;
+}
+/* A receipt for each account in the last payout, laid out as the call slips are. */
+.receipt {
+  max-inline-size: 28rem;
+}
+.receipt-name {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  text-align: center;
+}
+.receipt .label,
+.receipt-day {
+  margin-block: 0.25rem 0;
+  text-align: center;
+}
+.lines,
+.total {
+  margin: 0;
+}
+.lines {
+  margin-block-start: 0.75rem;
+  padding-block: 0.375rem;
+  border-block-start: 2px dashed var(--ink);
+}
+.lines > div,
+.total > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 1rem;
+  align-items: baseline;
+  padding-block: 0.25rem;
+}
+.lines dd,
+.total dd {
+  margin: 0;
+}
+.lines .value,
+.total .value {
+  font-family: var(--mono);
+  text-align: end;
+}
+.lines .detail,
+.total .detail {
+  grid-column: 1 / -1;
+  color: var(--quiet);
+  font-size: 0.875rem;
+}
+/* Klima Protocol's logo keeps a third of its size clear around it, as its guidelines ask. */
+.lines .through {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block: 0.5rem;
+}
+.total {
+  padding-block-start: 0.5rem;
+  border-block-start: 4px double var(--ink);
+}
+.total dt {
+  color: var(--ink);
+}
+.total .value {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+.receipt-foot {
+  margin-block: 0.75rem 0;
+  padding-block-start: 0.5rem;
+  border-block-start: 2px dashed var(--ink);
+  font-size: 0.875rem;
+}
+@media (max-width: 30rem) {
+  .fields > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
 }
 dialog .foot {
   position: sticky;
   inset-block-end: 0;
   padding-block: 0.75rem;
-  background: Canvas;
+  background: var(--paper);
 }
 dialog .foot p {
   margin-block: 0 0.5rem;

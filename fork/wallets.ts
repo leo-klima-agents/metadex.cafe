@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { after, afterEach, before, beforeEach, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright-core";
+import { chromium, type Browser, type BrowserContext, type Locator, type Page, type Route } from "playwright-core";
 import {
   decodeFunctionResult,
   encodeFunctionData,
@@ -17,6 +17,8 @@ import {
 import { CONDUIT, RPCS, VOTER, VOTING_ESCROW } from "../src/config.ts";
 import { readEarnings, sharesOf } from "../src/earnings.ts";
 import { WEEK } from "../src/format.ts";
+import { readAccounts } from "../src/hydrex.ts";
+import { lastRun } from "../src/receipts.ts";
 
 const FORK_URL = process.env.BASE_RPC_URL ?? "https://mainnet.base.org";
 const BLOCK = 52_694_000; // Fri 16 Oct 2026, 18:22 UTC
@@ -36,6 +38,7 @@ const NEWCOMER = getAddress("0x0208ddbc05a91e1b937e8b3140b62ef22a274c95"); // #1
 const ELSEWHERE = getAddress("0x69707a120ade8239f07595165e180c61395ea655"); // #2435 in Lock Maxi, #2439 in USDC
 const LEAVER = getAddress("0x2573264b8e690ca6b2128c113890f42198840b16"); // #53350 and #82206 in Carbon Impact
 const ENDED = getAddress("0x2518820268e4079e90446b93020dfad7dd54e84d"); // #123351 ended with HYDX in it, #123364
+const PAYEE = getAddress("0x60924601e73ebc5c2bd9244c788d93e0710a6c93"); // #82774 in Carbon Impact, paid Wed 23 Sep
 const LIQUID_HYDREX = getAddress("0x809F8175b8F60960dF2bc7a78a7C4Eb04d138AF0");
 const LOCK_MAXI = getAddress("0x53388a4E98Bb56F8571433F5461010Fc287929d3");
 const USDC = getAddress("0xE57b3Ea02336B9b418cA523aB5aD6f479d93bD1D");
@@ -293,7 +296,8 @@ const account = (page: Page, id: number) => page.locator("#accounts li").filter(
 const group = (page: Page, name: string) =>
   page.locator(".group").filter({ has: page.getByRole("heading", { name, exact: true }) });
 const review = (page: Page) => page.locator("#review");
-const homeTitle = (page: Page) => page.getByRole("heading", { name: "Your Hydrex votes, working for the climate" });
+const homeTitle = (page: Page) =>
+  page.getByRole("heading", { name: "Your Hydrex votes, retiring carbon credits and paying you" });
 const appTitle = (page: Page) => page.getByRole("heading", { name: "Your accounts", level: 1 });
 const howTitle = (page: Page) => page.getByRole("heading", { name: "How it works", level: 1 });
 
@@ -309,9 +313,10 @@ async function pick(page: Page, ...ids: number[]): Promise<void> {
   for (const id of ids) await page.getByRole("checkbox", { name: `Pick Account #${id}` }).check();
 }
 
-async function shoot(page: Page, name: string): Promise<void> {
+async function shoot(page: Page, name: string, part?: Locator): Promise<void> {
   if (!SCREENSHOTS) return;
   mkdirSync(SCREENSHOTS, { recursive: true });
+  if (part) return void (await part.screenshot({ path: `${SCREENSHOTS}/${name}.png` }));
   const fullPage = !(await review(page).isVisible());
   await page.screenshot({ path: `${SCREENSHOTS}/${name}.png`, fullPage });
 }
@@ -480,7 +485,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     await page.getByRole("link", { name: "metaDEX Café" }).click();
     const numbers = page.locator(".numbers");
     assert.match(await numbers.locator(".last-per-power").innerText(), /^≈\s\$0\.5\d$/);
-    assert.match(await numbers.locator("time.last-start").innerText(), /^Thu,? 8 Oct$/);
+    assert.match((await numbers.locator("time.last-start").textContent()) ?? "", /^Thu,? 8 Oct$/);
     assert.match(await page.locator("#compared .last-per-power").innerText(), /^≈\s\$0\.\d\d$/);
     assert.equal(compared, false, "all of Hydrex waits until its table is on the screen");
     await page.goto(`${SITE}/#last-epoch`);
@@ -547,7 +552,14 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
       "#2439 leaves the USDC automation and joins Carbon Impact.",
       "#2435 leaves the Hydrex Lock Maxi automation and joins Carbon Impact.",
     ]);
-    assert.equal(await review(page).locator(".key").innerText(), `In these calls, ${CONDUIT} is Carbon Impact.`);
+    assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["Carbon Impact", "Carbon Impact"]);
+    assert.deepEqual(await review(page).locator(".account").allTextContents(), ["2439", "2435"]);
+    assert.deepEqual(await review(page).locator(".approve").allTextContents(), ["true", "true"]);
+    // In groups of four, an address still reads, and copies, whole.
+    assert.equal(await review(page).locator(".conduit").first().innerText(), CONDUIT);
+    assert.equal(await review(page).locator(".to").first().innerText(), VOTING_ESCROW);
+    assert.equal(await review(page).locator(".count").first().textContent(), "Transaction 1 of 2");
+    assert.equal(await review(page).locator(".data").first().isVisible(), false, "the wallet shows the call's fields");
     await shoot(page, "join-3-1440-light");
     await review(page).getByRole("button", { name: "Confirm transaction 1 of 2" }).click();
     await review(page).getByText("Transaction 1 of 2 is included.").waitFor();
@@ -566,6 +578,57 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     assert.deepEqual([...origins].sort(), [SITE, ...RPC_ORIGINS].filter((o) => origins.has(o)).sort());
     assert.ok(origins.has(SITE));
     assert.deepEqual(violations, []);
+  });
+
+  test("a receipt for each of the owner's accounts in the last payout, read from the automation's events", async () => {
+    // PAYEE has 93 accounts: anvil reads them from FORK_URL for most of a minute the first time.
+    await warm(() => Promise.all([readAccounts(PAYEE), lastRun()]));
+    const { page, violations } = await connected(
+      { owner: PAYEE },
+      { width: 390, height: 844, dark: true, flowing: true },
+    );
+    const receipt = page.locator("#receipts .receipt");
+    await receipt.first().waitFor({ timeout: 120_000 });
+    assert.equal(await receipt.count(), 1);
+    assert.match(
+      await page.locator("#receipts .receipts-found").innerText(),
+      /^For #82774, in Carbon Impact's payout of Wed,? 23 Sept?\./,
+    );
+    assert.equal(await receipt.locator(".receipt-id").innerText(), "#82774");
+    assert.equal(await receipt.locator(".receipt-earned").innerText(), "8.56 USDC and 89.04 HYDX");
+    assert.equal(await receipt.locator(".receipt-swapped").innerText(), "1,053.92 kVCM");
+    assert.equal(await receipt.locator(".receipt-retired").innerText(), "−326.80 kVCM");
+    assert.equal(await receipt.locator(".receipt-tonnes").innerText(), "65.26 t of carbon credits");
+    assert.equal(await receipt.locator(".receipt-fee").innerText(), "0 kVCM");
+    assert.equal(await receipt.locator(".receipt-paid").innerText(), "727.11 kVCM");
+    assert.equal(await receipt.locator(".receipt-recipient").innerText(), PAYEE);
+    assert.match(await receipt.locator("time.receipt-time").innerText(), /^Wed,? 23 Sept?,? 17:44 UTC/);
+    assert.equal(
+      await receipt.locator(".through img").isVisible(),
+      true,
+      "Klima Protocol's mark, beside the retirement",
+    );
+    assert.equal(
+      await receipt.getByRole("link", { name: "Transaction" }).getAttribute("href"),
+      "https://basescan.org/tx/0x0932e5a24f24e45bfd1021764d94abc1d920754c4dc17128dd89f44bd086e899",
+    );
+    await shoot(page, "receipt-390-dark", page.locator("#receipts"));
+    // Past the flip, the page reads the automation again and fills its figures, such as the tonnes retired, across the
+    // page: the receipts keep their own.
+    const relay = toFunctionSelector("function retiringEntityName()").slice(2);
+    const readAgain = page.waitForResponse((response) => !!response.request().postData()?.includes(relay));
+    await page.clock.setSystemTime((FLIP + 60) * 1000);
+    await page.clock.runFor(30_000);
+    await readAgain;
+    await page.waitForTimeout(500);
+    assert.equal(await receipt.locator(".receipt-retired").innerText(), "−326.80 kVCM");
+    assert.equal(await receipt.locator(".receipt-tonnes").innerText(), "65.26 t of carbon credits");
+    const member = await connected({ owner: MEMBER }, { width: 390, height: 844 });
+    await member.page
+      .locator("#receipts")
+      .getByText(/Carbon Impact's last payout, on Wed,? 23 Sept?, paid none of your accounts\./)
+      .waitFor({ timeout: 120_000 });
+    assert.deepEqual([...violations, ...member.violations], []);
   });
 
   test("join with an account of its own; the header shows the wallet on every view", async () => {
@@ -675,7 +738,10 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     await review(page).getByRole("heading", { name: "Leave USDC" }).waitFor();
     await review(page).getByText("USDC can no longer claim the rewards of #2439.").waitFor();
     assert.deepEqual(await review(page).locator(".says").allTextContents(), ["#2439 leaves the USDC automation."]);
-    assert.equal(await review(page).locator(".key").innerText(), `In this call, ${USDC} is the USDC automation.`);
+    assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["The USDC automation"]);
+    assert.equal(await review(page).locator(".conduit").innerText(), USDC);
+    assert.equal(await review(page).locator(".approve").innerText(), "false");
+    assert.equal(await review(page).locator(".count").isVisible(), false, "one call has no count");
     await shoot(page, "release-390-light");
     await confirm(page);
     assert.equal(sent.length, 1);
@@ -704,7 +770,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     await page.getByRole("button", { name: "Browser wallet" }).click();
     await page.getByText("No wallet was found in this browser.").waitFor();
     const links = page.locator("#no-wallet a");
-    assert.deepEqual(await links.allTextContents(), ["Base app", "MetaMask"]);
+    assert.deepEqual(await links.allTextContents(), ["Coinbase Wallet", "MetaMask"]);
     assert.deepEqual(await links.evaluateAll((found) => found.map((link) => (link as HTMLAnchorElement).href)), [
       "https://go.cb-w.com/dapp?cb_url=https%3A%2F%2Fmetadex.cafe%2F%23app",
       "https://link.metamask.io/dapp/metadex.cafe/#app",
@@ -800,13 +866,21 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     await app.getByText("Connected with Safe{Wallet}").waitFor();
     assert.equal(await app.getByRole("heading", { name: "Your accounts", level: 1 }).isVisible(), true);
     assert.equal(
-      await app.getByRole("heading", { name: "Your Hydrex votes, working for the climate" }).isVisible(),
+      await app.getByRole("heading", { name: "Your Hydrex votes, retiring carbon credits and paying you" }).isVisible(),
       false,
     );
     await app.getByRole("checkbox", { name: "Pick Account #53350" }).check();
     await app.getByRole("checkbox", { name: "Pick Account #82206" }).check();
     await app.getByRole("button", { name: "Leave with 2 accounts" }).click();
-    await dialog.getByText("One Safe transaction, with 2 calls:").waitFor();
+    await dialog
+      .getByText(/^One Safe transaction, with 2 calls\. Safe\{Wallet\} sends them through its MultiSend contract/)
+      .waitFor();
+    const call = dialog.locator(".slip").first();
+    assert.equal(await call.locator(".conduit").innerText(), CONDUIT, "co-signers see the address, not only its name");
+    assert.equal(await call.locator(".conduit-name").innerText(), "Carbon Impact");
+    assert.equal(await call.locator(".call").innerText(), "The call above, in 100 bytes:");
+    assert.equal(await dialog.locator(".operation").first().isVisible(), false, "Safe{Wallet} sets the operation");
+    await shoot(page, "safe-calls-1440-light");
     await dialog.getByRole("button", { name: "Propose in Safe{Wallet}" }).click();
     await dialog.getByText("Proposed.").waitFor();
     await dialog.getByRole("link", { name: "https://metadex.cafe/#for-co-signers" }).waitFor();
@@ -819,6 +893,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     });
     const proposal = received.find(({ method }) => method === "sendTransactions");
     assert.deepEqual(proposal?.params.txs, [leave(53350n), leave(82206n)]);
+    assert.deepEqual(await dialog.locator(".data").allInnerTexts(), [leave(53350n).data, leave(82206n).data]);
     await expectApprovals([53350n, 82206n], CONDUIT, CONDUIT);
     assert.deepEqual(violations, []);
     for (const origin of origins) {
