@@ -118,18 +118,18 @@ wallet's browser, so every export also offers a copy.
 
 One static page, as today, with views addressed by the hash. Today's addresses keep working.
 
-| View                    | Address                                                            | Today             |
-| ----------------------- | ------------------------------------------------------------------ | ----------------- |
-| Menu (Home)             | `/`                                                                | Home              |
-| Your positions          | `#positions`                                                       | `#app`            |
-| An automation's page    | One each, such as `#carbon-impact`                                 | `#how-it-works`   |
-| Choose for a position   | `#choose`, a dialog                                                | The group buttons |
-| Review                  | A dialog                                                           | The review        |
-| Receipts and statements | `#receipts`                                                        | `#last-payout`    |
-| Help me choose          | `#help-me-choose`                                                  | —                 |
-| Check it yourself       | `#verify`, for every product                                       | `#verify`         |
-| Brief for co-signers    | `#for-co-signers`, with the accounts and automation in the address | `#for-co-signers` |
-| Questions, Words        | `#questions`, `#words`                                             | Same              |
+| View                    | Address                                                            | Today                |
+| ----------------------- | ------------------------------------------------------------------ | -------------------- |
+| Menu (Home)             | `/`                                                                | Home                 |
+| Your positions          | `#positions`                                                       | `#app`               |
+| An automation's page    | One each, such as `#carbon-impact`                                 | `#how-it-works`      |
+| Choose for a position   | `#choose`, a dialog                                                | The group buttons    |
+| Review                  | A dialog                                                           | The review           |
+| Receipts and statements | `#receipts`                                                        | The last payout only |
+| Help me choose          | `#help-me-choose`                                                  | —                    |
+| Check it yourself       | `#verify`, for every product                                       | `#verify`            |
+| Brief for co-signers    | `#for-co-signers`, with the accounts and automation in the address | `#for-co-signers`    |
+| Questions, Words        | `#questions`, `#words`                                             | Same                 |
 
 The fragment of an address never reaches a server, so a brief can carry its accounts without the page storing anything.
 The page must check whatever it reads from a fragment, as it would anything from outside.

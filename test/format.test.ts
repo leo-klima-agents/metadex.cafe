@@ -76,6 +76,9 @@ test("text from the chain loses hidden marks, and its line breaks and tabs becom
   assert.equal(clean("Main\nAccount"), "Main Account");
   assert.equal(clean("\ufeffa\u061c\u200b\u200f\u202a\u202e\u2060\u2069b"), "ab");
   assert.equal(clean("Main\tProtocol\r\nAccount"), "Main Protocol Account");
+  assert.equal(clean("US\u00adDC"), "USDC", "a soft hyphen");
+  assert.equal(clean("tag\u{e0041}s"), "tags", "a tag character");
+  assert.equal(clean("Main \u200b Account"), "Main Account", "no double space where a mark was");
 });
 
 test("counts, with plurals", () => {

@@ -3,7 +3,6 @@ import "./views.ts";
 import { now, same, sawBlock } from "./chain.ts";
 import { CHAIN_ID } from "./config.ts";
 import { clone, fill, fillAddress, fillPlural, fillTime, groupAllHex, show } from "./dom.ts";
-import { sharesOf } from "./earnings.ts";
 import {
   WEEK,
   bps,
@@ -43,7 +42,7 @@ import {
   type Holdings,
   type Status,
 } from "./hydrex.ts";
-import { earningsDue, lastEpoch, loadEarnings } from "./last-epoch.ts";
+import { earnedByAccount, earningsDue, loadEarnings, loadShares } from "./last-epoch.ts";
 import { checkPayout, forgetPayout, showPayout } from "./last-payout.ts";
 import { closeReview, openReview, refreshReview, type Hooks } from "./review.ts";
 import {
@@ -71,8 +70,6 @@ let carbonImpactRead: Promise<void> | undefined;
 let trusted = false;
 let reads = 0;
 let reading = false;
-// Each shown account's share of Carbon Impact's votes last epoch.
-let shares: { holdings: Holdings; start: number; of: Map<bigint, number> } | undefined;
 // Wallet connections that finish are ignored up to this attempt: a later one connected, or the wallet was let go.
 let attempts = 0;
 let ignoredUpTo = 0;
@@ -141,19 +138,14 @@ function catchUp(): void {
 
 function loadEarningsAndShares(): void {
   loadEarnings().then((changed) => {
-    if (changed) loadShares();
+    if (changed) showShares();
   });
 }
 
-// What each account's votes earned last epoch: its share of what Carbon Impact's votes earned.
-async function loadShares(): Promise<void> {
-  const [holdings, last] = [shown, lastEpoch()];
-  if (!holdings || !last || (shares?.holdings === holdings && shares.start === last.found.start)) return;
-  const ids = holdings.accounts.filter(({ amount }) => amount > 0n).map(({ id }) => id);
-  const of = await sharesOf(ids, last.found.start, last.found.votes).catch((error) => void console.error(error));
-  if (!of || shown !== holdings || lastEpoch() !== last) return;
-  shares = { holdings, start: last.found.start, of };
-  showAccounts(true);
+// What each account's votes earned last epoch.
+async function showShares(): Promise<void> {
+  const holdings = shown;
+  if (holdings && (await loadShares(holdings)) && shown === holdings) showAccounts(true);
 }
 
 function showAutomations(found: Automation[]): void {
@@ -189,7 +181,7 @@ function accountKind({ lockType, end }: Account): string {
   return end ? `Flex Account, lock ${end > now() ? "ends" : "ended"} ${date(end)}` : "Flex Account";
 }
 
-function accountItem(account: Account, status: Status, pickable: boolean): DocumentFragment {
+function accountItem(holdings: Holdings, account: Account, status: Status, pickable: boolean): DocumentFragment {
   const item = clone("account");
   const name = account.name || "Account";
   fill(item, { name, id: `#${account.id}`, kind: accountKind(account), votes: earningPower(account.votes) });
@@ -202,14 +194,9 @@ function accountItem(account: Account, status: Status, pickable: boolean): Docum
   if ("name" in status) fill(line, { automation: status.name });
   if ("to" in status) fillAddress(line, "address", status.to);
   item.querySelector(".status")!.replaceWith(line);
-  // Shares are only valid with the earnings and the accounts they were read for.
-  const last = lastEpoch();
-  const part =
-    last && shares && shares.holdings === shown && shares.start === last.found.start
-      ? shares.of.get(account.id)
-      : undefined;
-  if (last && part !== undefined) {
-    fill(item, { "earned-usd": usd(part * last.value.usd) });
+  const earned = earnedByAccount(holdings, account.id);
+  if (earned !== undefined) {
+    fill(item, { "earned-usd": usd(earned) });
     show(".earned", true, item);
   }
   if (pickable) {
@@ -239,11 +226,14 @@ function showAccounts(keepTicked = false): void {
     const members = sorted.filter((member) => member.group === section.dataset.group);
     // Some wallets hold many empty accounts, which can do nothing: they go in a fold.
     const folded = section.dataset.group === "closed" ? members.filter(({ account }) => account.amount === 0n) : [];
+    const actions = buttons(section).map(actionOf);
     const able = members
       .map(({ account }) => account)
-      .filter((account) => buttons(section).some((button) => can[actionOf(button)](account)));
+      .filter((account) => actions.some((action) => can[action](account)));
     const items = (listed: typeof members) =>
-      listed.map(({ account, status }) => accountItem(account, status, able.length > 1 && able.includes(account)));
+      listed.map(({ account, status }) =>
+        accountItem(holdings, account, status, able.length > 1 && able.includes(account)),
+      );
     section.querySelector(".accounts")!.replaceChildren(...items(members.filter((member) => !folded.includes(member))));
     const fold = section.querySelector<HTMLDetailsElement>(".empty-accounts");
     if (fold) {
@@ -297,9 +287,9 @@ async function loadAccounts(quietly = false): Promise<void> {
     sawBlock(found.time);
     shown = found;
     showAccounts();
-    catchUp();
-    loadShares();
     showPayout(found);
+    catchUp();
+    showShares();
   } catch (error) {
     if (read === reads) failed(error);
   } finally {

@@ -18,7 +18,7 @@ import {
 
 // The section "Last payout": a receipt for each of the owner's accounts in Carbon Impact's last run of payouts.
 
-const section = document.getElementById("last-payout")!;
+const section = document.getElementById("receipts")!;
 const STATES = ["reading", "none", "other", "underway", "failed", "found"] as const;
 // A run takes up to half a day, so one whose last payout is more recent may still be under way.
 const UNDER_WAY = 12 * 3600;

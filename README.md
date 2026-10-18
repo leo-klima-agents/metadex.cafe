@@ -102,12 +102,12 @@ the table of automations in `index.html`. A test checks that the two match.
 ## Checking a deployment
 
 The same commit always builds the same files. To check what the site serves, check out the commit shown in the page's
-footer, then:
+footer, then run these. The query string skips any old copy the CDN still holds right after a release.
 
 ```sh
 npm ci --ignore-scripts
 npm run build
-cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.cafe/${file#./}" | cmp - "$file"; done
+cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.cafe/${file#./}?$(date +%s)" | cmp - "$file"; done
 ```
 
 ## What visitors may run into

@@ -1,8 +1,10 @@
 import { clone, fill, fillAddress, fillTime, show } from "./dom.ts";
-import { readAllEarnings, readEarnings, valueOf, type Earnings } from "./earnings.ts";
+import { readAllEarnings, readEarnings, sharesOf, valueOf, type Earnings } from "./earnings.ts";
 import { WEEK, compact, count, fraction, toEarningPower, usd } from "./format.ts";
+import type { Holdings } from "./hydrex.ts";
 
-// What Carbon Impact's votes earned last epoch: the figure on Home, and the section "How the votes did last epoch".
+// What Carbon Impact's votes earned last epoch: the figure on Home, each account's part of it in the App, and the
+// section "How the votes did last epoch".
 
 type Value = ReturnType<typeof valueOf>;
 
@@ -11,6 +13,8 @@ let reading = false;
 let tried = 0;
 let comparedEpoch: number | undefined;
 let onScreen = false;
+// Each account's share of Carbon Impact's votes, kept with the accounts it was read for.
+const shares = new WeakMap<Holdings, { start: number; of: Map<bigint, number> }>();
 
 const table = document.querySelector<HTMLElement>("#last-epoch .earnings")!;
 const comparison = {
@@ -19,8 +23,6 @@ const comparison = {
   versus: document.querySelector<HTMLElement>("#last-epoch .versus")!,
 };
 const waiting = comparison.status.textContent ?? "";
-
-export const lastEpoch = () => earned;
 
 export const earningsDue = (epoch: number): boolean =>
   !reading && (!earned || earned.found.start < epoch - WEEK) && Date.now() - tried > 300_000;
@@ -46,22 +48,38 @@ export async function loadEarnings(): Promise<boolean> {
   }
 }
 
+// Resolves to true once the accounts' shares of the epoch shown are read.
+export async function loadShares(holdings: Holdings): Promise<boolean> {
+  const found = earned?.found;
+  if (!found || shares.get(holdings)?.start === found.start) return false;
+  const ids = holdings.accounts.filter(({ amount }) => amount > 0n).map(({ id }) => id);
+  const of = await sharesOf(ids, found.start, found.votes).catch((error) => void console.error(error));
+  if (!of || earned?.found !== found) return false;
+  shares.set(holdings, { start: found.start, of });
+  return true;
+}
+
+// What the account's votes earned in the epoch shown, in dollars, if it was in Carbon Impact then.
+export function earnedByAccount(holdings: Holdings, id: bigint): number | undefined {
+  const mine = shares.get(holdings);
+  const part = mine?.of.get(id);
+  if (!earned || mine?.start !== earned.found.start || part === undefined) return undefined;
+  return part * earned.value.usd;
+}
+
 const perThousand = (value: number, votes: bigint): number =>
   votes > 0n ? value / (Number(toEarningPower(votes)) / 1e21) : 0;
 
 function showColumn(column: "ours" | "all", { votes, pools }: Earnings, value: Value | undefined): void {
   const per = value && perThousand(value.usd, votes);
-  const texts = {
-    "earning-power": compact(toEarningPower(votes)),
-    pools: count(pools.length, "pool", "pools"),
-    earned: value ? usd(value.usd) : "…",
-    fees: value ? usd(value.fees) : "…",
-    incentives: value ? usd(value.incentives) : "…",
-    "per-power": per === undefined ? "…" : usd(per),
-  };
-  for (const [name, text] of Object.entries(texts)) {
-    for (const cell of table.querySelectorAll(`.${column}.${name}`)) cell.textContent = text;
-  }
+  fill(table, {
+    [`${column}.earning-power`]: compact(toEarningPower(votes)),
+    [`${column}.pools`]: count(pools.length, "pool", "pools"),
+    [`${column}.earned`]: value ? usd(value.usd) : "…",
+    [`${column}.fees`]: value ? usd(value.fees) : "…",
+    [`${column}.incentives`]: value ? usd(value.incentives) : "…",
+    [`${column}.per-power`]: per === undefined ? "…" : usd(per),
+  });
 }
 
 function showPools({ pools, votes }: Earnings, value: Value): void {
@@ -88,7 +106,7 @@ function showEarnings(found: Earnings): void {
   comparison.status.textContent = waiting;
   comparison.status.hidden = false;
   comparison.failed.hidden = comparison.versus.hidden = true;
-  for (const cell of table.querySelectorAll(".all")) cell.textContent = "…";
+  fill(table, { all: "…" });
   if (onScreen) compare();
 }
 

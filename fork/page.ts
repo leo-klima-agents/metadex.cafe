@@ -596,11 +596,11 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
       { owner: PAYEE },
       { width: 390, height: 844, dark: true, flowing: true },
     );
-    const receipt = page.locator("#last-payout .receipt");
+    const receipt = page.locator("#receipts .receipt");
     await receipt.first().waitFor({ timeout: 120_000 });
     assert.equal(await receipt.count(), 1);
     assert.match(
-      await page.locator("#last-payout .receipts-found").innerText(),
+      await page.locator("#receipts .receipts-found").innerText(),
       /^For #82774, in Carbon Impact's payout of Wed,? 23 Sept?\./,
     );
     assert.equal(await receipt.locator(".receipt-id").innerText(), "#82774");
@@ -627,7 +627,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
       await receipt.getByRole("link", { name: "Transaction" }).getAttribute("href"),
       "https://basescan.org/tx/0x0932e5a24f24e45bfd1021764d94abc1d920754c4dc17128dd89f44bd086e899",
     );
-    await shoot(page, "receipt-390-dark", page.locator("#last-payout"));
+    await shoot(page, "receipt-390-dark", page.locator("#receipts"));
     // After the flip, the page reads Carbon Impact again and fills its figures, such as .tonnes, across the page. The
     // receipts keep their own.
     const entityName = toFunctionSelector("function retiringEntityName()").slice(2);
@@ -640,7 +640,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     assert.equal(await receipt.locator(".receipt-tonnes").innerText(), "65.26 t of carbon credits");
     const member = await connected({ owner: MEMBER }, { width: 390, height: 844 });
     await member.page
-      .locator("#last-payout")
+      .locator("#receipts")
       .getByText(/Carbon Impact's last payout, on Wed,? 23 Sept?, paid none of your accounts\./)
       .waitFor({ timeout: 120_000 });
     assert.deepEqual([...violations, ...member.violations], []);

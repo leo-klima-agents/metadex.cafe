@@ -60,8 +60,8 @@ const [cents, noCents] = [dollars(2), dollars(0)];
 // the number.
 export function usd(value: number): string {
   if (value === 0) return noCents.format(0);
-  if (value > 0 && value < 0.005) return `< ${cents.format(0.01)}`;
-  return `≈ ${(Math.abs(value) >= 100 ? noCents : cents).format(value)}`;
+  if (value > 0 && value < 0.005) return `<\u00a0${cents.format(0.01)}`;
+  return `≈\u00a0${(Math.abs(value) >= 100 ? noCents : cents).format(value)}`;
 }
 
 // Hydrex shows Earning Power as 1.3 times the votes.
@@ -137,7 +137,7 @@ export const listWith = <T>(items: T[]): (T | string)[] =>
 export const count = (n: number, one: string, other: string): string =>
   `${whole.format(n)} ${plurals.select(n) === "one" ? one : other}`;
 
-// Control characters, and invisible marks that reorder or hide text, which a name could use to pass for another.
-const HIDDEN = /[\p{Cc}؜​-‏‪-‮⁠-⁩﻿]/gu;
+// Control characters, and characters that are invisible or reorder text, which a name could use to pass for another.
+const HIDDEN = /[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}]/gu;
 
-export const clean = (text = ""): string => text.replace(/\s+/g, " ").replace(HIDDEN, "").trim();
+export const clean = (text = ""): string => text.replace(/\s+/g, " ").replace(HIDDEN, "").replace(/ {2,}/g, " ").trim();

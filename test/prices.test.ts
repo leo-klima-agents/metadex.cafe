@@ -64,7 +64,7 @@ function history(times: number[], failAt?: number) {
 }
 
 test("searches narrow together, a batch a round, and keep the reads either side of what they find", async () => {
-  // At least half an hour apart, as a classic pair records them.
+  // About half an hour apart, unevenly, as a classic pair records them.
   const times = Array.from({ length: 5_000 }, (_, i) => 1_000_000 + i * 1_800 + (i % 7) * 60);
   const { reader, search, batches } = history(times);
   const target = times[3_210]! - 30;
