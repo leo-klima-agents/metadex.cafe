@@ -1,5 +1,5 @@
 import type { Address, Hex } from "viem";
-import { day, short } from "./format.ts";
+import { day, hexLines } from "./format.ts";
 
 const BASESCAN = "https://basescan.org";
 
@@ -24,10 +24,43 @@ export function fillTime(root: ParentNode, name: string, time: number, format = 
   }
 }
 
-export function fillAddress(root: ParentNode, name: string, address: Address, text = short(address)): void {
+// Hex in groups of four, apart but with no space between them, so that a copy of it is the plain hex. Lines break only
+// between groups, and before each line of calldata.
+export function hexGroups(hex: string): DocumentFragment {
+  const fragment = document.createDocumentFragment();
+  hexLines(hex).forEach((line, i) =>
+    line.forEach((group, j) => {
+      if (i || j) fragment.append(document.createElement("wbr"));
+      const span = document.createElement("span");
+      span.textContent = group;
+      if (i && !j) span.className = "line";
+      fragment.append(span);
+    }),
+  );
+  return fragment;
+}
+
+export function showHex(element: Element, hex: string): void {
+  element.classList.add("hex");
+  element.replaceChildren(hexGroups(hex));
+}
+
+// Every address and hash the page writes in full, in groups.
+export function groupHex(root: ParentNode): void {
+  for (const element of root.querySelectorAll("code, code > a")) {
+    const text = element.childNodes.length === 1 ? element.firstChild : null;
+    if (text?.nodeType === Node.TEXT_NODE && /^0x([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/.test(text.textContent ?? "")) {
+      showHex(element, text.textContent!);
+    }
+  }
+}
+
+// In full, to be checked; a name instead, where the page gives one.
+export function fillAddress(root: ParentNode, name: string, address: Address, text?: string): void {
   for (const link of root.querySelectorAll<HTMLAnchorElement>(`a.${name}`)) {
     link.href = `${BASESCAN}/address/${address}`;
-    link.textContent = text;
+    if (text === undefined) showHex(link, address);
+    else link.textContent = text;
   }
 }
 

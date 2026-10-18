@@ -38,19 +38,21 @@ export async function rpc<T>(method: string, params: unknown[]): Promise<T> {
   throw new Error(`No Base RPC answered ${method}.`);
 }
 
-export async function read(calls: Call[]): Promise<unknown[]> {
+// At the newest block, or at an earlier one, which only the RPCs that keep Base's history can answer.
+export async function read(calls: Call[], block: number | "latest" = "latest"): Promise<unknown[]> {
   const chunks: Promise<unknown[]>[] = [];
-  for (let i = 0; i < calls.length; i += CHUNK) chunks.push(aggregate(calls.slice(i, i + CHUNK)));
+  for (let i = 0; i < calls.length; i += CHUNK) chunks.push(aggregate(calls.slice(i, i + CHUNK), block));
   return (await Promise.all(chunks)).flat();
 }
 
-async function aggregate(calls: Call[]): Promise<unknown[]> {
+async function aggregate(calls: Call[], block: number | "latest"): Promise<unknown[]> {
   const data = encodeFunctionData({
     abi: multicall3Abi,
     functionName: "aggregate3",
     args: [calls.map((c) => ({ target: c.address, allowFailure: true, callData: encodeFunctionData(c as never) }))],
   });
-  const reply = await rpc<Hex>("eth_call", [{ to: MULTICALL3, data }, "latest"]);
+  const tag = block === "latest" ? block : `0x${block.toString(16)}`;
+  const reply = await rpc<Hex>("eth_call", [{ to: MULTICALL3, data }, tag]);
   const results = decodeFunctionResult({ abi: multicall3Abi, functionName: "aggregate3", data: reply });
   return results.map(({ success, returnData }, i) => {
     if (!success || returnData === "0x") return undefined;

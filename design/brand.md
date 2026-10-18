@@ -340,6 +340,13 @@ On the canvas, row 7: the receipt in both themes, a call as the wallet will ask 
 - Atkinson Hyperlegible Next draws a slashed zero in text too, as in "Thu 10 Sep": it is the face's legibility, not an
   option.
 - The colours are Roast's, with milk in dark, and the mark is the figures and the total: see below.
+- **The review** shows each call as a slip, and **the last payout** as a receipt for each of the owner's accounts in it,
+  in the layout below.
+- **Addresses and hashes** are in full, in groups of four, wherever the page writes them; only the header's wallet chip
+  keeps the short form, to recognise a wallet rather than check it.
+- **Statuses** have their shape before their words: filled for running, half filled for joining and leaving, hollow for
+  not looked after, a triangle for stopped or partly in, a square for checks that failed.
+- **Labels** of figures, fields and steps are small capitals in the mono face; the earnings tables' figures are mono.
 
 ### Receipts and calls
 
@@ -356,7 +363,12 @@ C's layout, in A's faces and colours, wherever someone checks figures or address
   the contract under it; Call; Conduit, with its name; Account; Approve; Value. Each address in full, checksummed, in
   groups of four; copying it gives it without spaces.
 - **In a Safe,** the fields Safe{Wallet} shows, in its order: To, Value, Data, Operation, Nonce. Data is the selector,
-  then one 32-byte word per line, with the call decoded above it, so that co-signers can compare like with like.
+  then each 32-byte word on two lines of 16 bytes, the same on a phone as on a desktop, with the call decoded above it,
+  so that co-signers can compare like with like. Safe{Wallet} sets the nonce, and sends several calls through its
+  MultiSend contract, with operation 1: the page says so rather than show fields it cannot know.
+- **A receipt** is the account's line in the conduit's run: earned, swapped into kVCM, retired, with Klima's mark, the
+  fee, then paid, to whom, when, and the transaction. Dollars, at the prices of the flip before the payout, follow the
+  tokens once read.
 
 ### Klima's mark
 

@@ -28,8 +28,10 @@ tokens, the swap routers, any owner's payout address, and who claims and votes f
 
 ## What the page can and cannot do
 
-- **It sends two calls only,** `setConduitApproval` with `true` or `false`, and shows what they change and the exact
-  calls before the wallet asks, each from a click of its own.
+- **It sends two calls only,** `setConduitApproval` with `true` or `false`, and shows what they change and each call
+  before the wallet asks, field by field, as the wallet will show it, each from a click of its own. Inside Safe{Wallet},
+  it shows the Safe transaction's fields and its calldata, each 32-byte word on two lines of 16 bytes. Addresses are in
+  full, in groups of four, and copy without spaces.
 - **It holds no key, has no server and stores nothing.** It connects to a wallet only from a click: one the browser
   announces (EIP-6963), or `window.ethereum`. Inside Safe{Wallet}, it proposes the calls as one Safe transaction.
 - **It checks the conduit first.** The chain, the conduit's code and settings, and the code of Hydrex's VotingEscrow
@@ -38,7 +40,12 @@ tokens, the swap routers, any owner's payout address, and who claims and votes f
 - **It shows what the votes earned last epoch,** from Hydrex's reward contracts: for the conduit, for each account in
   it, and, once that section shows, for all of Hydrex. Tokens are priced at their average over the half hour before the
   epoch ended, in Hydrex's pools, with Chainlink for WETH and cbBTC; a token without a deep enough pool counts for
-  nothing. It cannot show payouts, which are only in the conduit's events.
+  nothing.
+- **It shows the last payout,** as a receipt for each of the owner's accounts in it: what was earned, swapped into kVCM,
+  retired and paid, the fee and the transaction, from the conduit's events. Base's free RPCs give the logs of a few
+  hundred blocks at a time at most, so the page finds the payout by its effect: `totalTonnesRetired` only grows, and a
+  search of past blocks finds where it last changed, in about 30 reads. It looks back eight weeks, and only for an owner
+  with an account in the conduit.
 - **It reaches nothing but three Base RPCs,** by its Content Security Policy: `https://mainnet.base.org`,
   `https://base-rpc.publicnode.com` and `https://base.drpc.org`. The browser checks the script and the stylesheet
   against the SHA-384 hashes in `index.html`; the fonts are inside the stylesheet.
@@ -71,7 +78,8 @@ The same commit gives the same files on any machine. Check out the version in th
 - **Base RPC:** a read that fails goes to the next RPC; if none answers, the page says so and offers to try again.
   Leaving never waits for the conduit's settings. If the Voter cannot be read, accounts in other automations show
   without saying whether those stopped; if what the votes earned cannot be read, the page says so where the figures go,
-  and tries again every five minutes.
+  and tries again every five minutes. If the last payout cannot be read, the page says so and offers to try again; one
+  without prices shows its tokens alone.
 - **A failed check** turns joining off and says why. An open page runs the checks again every hour.
 - **The end of an epoch:** the page takes the time from Base's newest block, and reads the accounts and the conduit
   again within half a minute.
@@ -101,7 +109,8 @@ are the same; with `BASE_RPC_URL`, it also runs the fork tests. Dependabot updat
 
 ## Limitations
 
-- No payout history, and no unclaimed rewards per account: the page cannot check that payouts happen.
+- The last payout only, and no unclaimed rewards per account. A run that retires nothing does not move
+  `totalTonnesRetired`, so the page would not find it.
 - What the votes earned is for the last epoch only, at approximate prices.
 - Only the admin key, or a call from the owner's address made elsewhere, can change a payout address.
 

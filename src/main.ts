@@ -1,11 +1,12 @@
-import { getAddress } from "viem";
+import { getAddress, type Address } from "viem";
 import "./views.ts";
 import { same } from "./chain.ts";
-import { CHAIN_ID } from "./config.ts";
-import { clone, fill, fillAddress, fillPlural, fillTime, show } from "./dom.ts";
+import { CHAIN_ID, CONDUIT, KVCM } from "./config.ts";
+import { clone, fill, fillAddress, fillPlural, fillTime, groupHex, show } from "./dom.ts";
 import { readAllEarnings, readEarnings, sharesOf, valueOf, type Earnings } from "./earnings.ts";
 import {
   WEEK,
+  amount,
   bps,
   compact,
   count,
@@ -43,6 +44,8 @@ import {
   type Relay,
   type Status,
 } from "./hydrex.ts";
+import { pricesAt, type Price, type Token } from "./prices.ts";
+import { lastRun, readTokens, type Amount, type Payout, type Run } from "./receipts.ts";
 import { close, review, update, type Hooks } from "./review.ts";
 import {
   NoWallet,
@@ -86,6 +89,9 @@ let shares: { holdings: Holdings; start: number; of: Map<bigint, number> } | und
 // The epoch the comparison with all of Hydrex is read for, and whether its table is on the screen.
 let compared: number | undefined;
 let onScreen = false;
+// Carbon Impact's last payout, read once, and the accounts whose receipts are shown.
+let run: Promise<Run | undefined> | undefined;
+let receiptsFor: Holdings | undefined;
 
 type Value = ReturnType<typeof valueOf>;
 
@@ -269,6 +275,107 @@ async function loadShares(): Promise<void> {
   showAccounts(true);
 }
 
+const receipts = document.getElementById("receipts")!;
+
+function receiptsState(state: "reading" | "none" | "other" | "failed" | "found"): void {
+  for (const name of ["reading", "none", "other", "failed", "found"])
+    show(`.receipts-${name}`, name === state, receipts);
+}
+
+const tokenOf = (tokens: Map<string, Token>, address: string) => tokens.get(address.toLowerCase());
+
+function amounts(found: Amount[], tokens: Map<string, Token>): string {
+  if (!found.length) return "0 kVCM";
+  return list(
+    found.map(({ token, amount: value }) => {
+      const known = tokenOf(tokens, token);
+      return known ? `${amount(value, known.decimals)} ${known.symbol}` : `${value} of ${short(token)}`;
+    }),
+  );
+}
+
+function worth(found: Amount[], tokens: Map<string, Token>, prices: Map<string, Price> | undefined): string {
+  if (!prices) return "";
+  const usdValue = found.reduce((sum, { token, amount: value }) => {
+    const [known, price] = [tokenOf(tokens, token), prices.get(token.toLowerCase())];
+    return known && price ? sum + (Number(value) / 10 ** known.decimals) * price.usd : sum;
+  }, 0);
+  return usdValue > 0 ? usd(usdValue) : "";
+}
+
+const kvcm = (found: Amount[]): bigint => found.find(({ token }) => same(token, KVCM))?.amount ?? 0n;
+
+function receipt(payout: Payout, time: number, tokens: Map<string, Token>, prices?: Map<string, Price>) {
+  const item = clone("receipt");
+  fill(item, {
+    id: `#${payout.id}`,
+    "earned-usd": worth(payout.earned, tokens, prices),
+    earned: amounts(payout.earned, tokens),
+    swapped: `${amount(kvcm(payout.paid) + kvcm(payout.fees) + payout.retiredKvcm, 18)} kVCM`,
+    retired: `${payout.retiredKvcm ? "−" : ""}${amount(payout.retiredKvcm, 18)} kVCM`,
+    tonnes: `${amount(payout.tonnes, 18)} t of carbon credits`,
+    fee: payout.fees.length ? `−${amounts(payout.fees, tokens)}` : "0 kVCM",
+    paid: amounts(payout.paid, tokens),
+    "paid-usd": worth(payout.paid, tokens, prices),
+  });
+  show(".tonnes, .through", payout.tonnes > 0n, item);
+  fillTime(item, "run-day", time);
+  fillTime(item, "run-time", time, when);
+  fillAddress(item, "recipient", payout.recipient);
+  item.querySelector<HTMLAnchorElement>(".tx")!.href = `https://basescan.org/tx/${payout.tx}`;
+  return item;
+}
+
+// A receipt for each of the owner's accounts in Carbon Impact's last payout. Only for an owner with an account that is
+// in it, or was at the start of this epoch: finding the payout takes some thirty reads.
+async function loadReceipts(): Promise<void> {
+  const holdings = shown;
+  if (!holdings || receiptsFor?.owner === holdings.owner) return;
+  const member = holdings.accounts.some(({ delegate, claimer, delegateAtStart }) =>
+    [delegate, claimer, delegateAtStart].some((address) => same(address, CONDUIT)),
+  );
+  receipts.hidden = !member;
+  if (!member) return;
+  receiptsFor = holdings;
+  receiptsState("reading");
+  const current = () => shown?.owner === holdings.owner;
+  try {
+    const found = await (run ??= lastRun());
+    if (!current()) return;
+    if (!found) return receiptsState("none");
+    fillTime(receipts, "run-when", found.time, when);
+    const mine = found.payouts.filter(({ owner }) => same(owner, holdings.owner));
+    if (!mine.length) return receiptsState("other");
+    const all = mine.flatMap(({ earned, paid, fees }) => [...earned, ...paid, ...fees]);
+    const tokens = new Map(
+      (await readTokens([...new Set(all.map(({ token }) => token.toLowerCase() as Address))])).map((token) => [
+        token.address.toLowerCase(),
+        token,
+      ]),
+    );
+    const totals = new Map<string, bigint>();
+    for (const { token, amount: value } of all)
+      totals.set(token.toLowerCase(), (totals.get(token.toLowerCase()) ?? 0n) + value);
+    const shelf = receipts.querySelector(".receipt-list")!;
+    const draw = (prices?: Map<string, Price>) =>
+      shelf.replaceChildren(...mine.map((payout) => receipt(payout, found.time, tokens, prices)));
+    draw();
+    fill(receipts, { "receipt-which": list(mine.map(({ id }) => `#${id}`)) });
+    fillTime(receipts, "run-flip", weekStart(found.time));
+    receiptsState("found");
+    // The dollars follow, from many more reads; without them, the receipts show the tokens alone.
+    const prices = await pricesAt([...tokens.values()], totals, weekStart(found.time), now()).catch((error) => {
+      console.error(error);
+      return undefined;
+    });
+    if (prices && current() && receiptsFor === holdings) draw(prices);
+  } catch (error) {
+    console.error(error);
+    run = receiptsFor = undefined;
+    if (current()) receiptsState("failed");
+  }
+}
+
 function showAutomations(found: Automation[]): void {
   for (const row of document.querySelectorAll<HTMLElement>("tr[data-automation]")) {
     const automation = found.find(({ address }) => same(address, row.dataset.automation ?? ""));
@@ -380,9 +487,9 @@ function showAccounts(keepTicked = false): void {
   const own = same(payout, owner);
   show(".payout-own, #itself", own);
   show(".payout-other", !own);
-  fillAddress(document, "payout-short", payout);
+  fillAddress(document, "payout-to", payout);
   fillAddress(document, "owner", owner);
-  fillAddress(document, "payout", payout, payout);
+  fillAddress(document, "payout", payout);
   show("#summary, #payout", full.length > 0);
   show("#none", !full.length);
   show("#accounts");
@@ -393,9 +500,9 @@ async function loadAccounts(quietly = false): Promise<void> {
   const read = ++reads;
   reading = true;
   if (!quietly) {
-    shown = undefined;
+    shown = receiptsFor = undefined;
     show("#reading");
-    show("#accounts, #summary, #none, #payout", false);
+    show("#accounts, #summary, #none, #payout, #receipts", false);
   }
   try {
     const found = await readAccounts(connection.address);
@@ -405,6 +512,7 @@ async function loadAccounts(quietly = false): Promise<void> {
     showAccounts();
     catchUp();
     loadShares();
+    loadReceipts();
   } catch (error) {
     if (read === reads) failed(error);
   } finally {
@@ -555,10 +663,10 @@ function letGo(): void {
   reads++;
   reading = false;
   connection = undefined;
-  shown = undefined;
+  shown = receiptsFor = undefined;
   close();
   showConnection();
-  show("#reading, #accounts, #summary, #none, #payout", false);
+  show("#reading, #accounts, #summary, #none, #payout, #receipts", false);
 }
 
 function walletButton(wallet: Wallet): DocumentFragment {
@@ -586,6 +694,7 @@ function walletButton(wallet: Wallet): DocumentFragment {
 }
 
 show(".needs-script", false);
+groupHex(document);
 // A reload keeps the address, and so the view.
 document.querySelector("#error .again")!.addEventListener("click", () => location.reload());
 document.getElementById("accounts")!.addEventListener("change", updateButtons);
@@ -617,5 +726,6 @@ new IntersectionObserver((entries) => {
   if (onScreen) compare();
 }).observe(earningsTable);
 document.querySelector("#last-epoch .compare-again")!.addEventListener("click", compare);
+receipts.querySelector(".receipts-again")!.addEventListener("click", loadReceipts);
 setInterval(() => showChecks().catch(console.error), 3_600_000);
 setInterval(tick, 30_000);

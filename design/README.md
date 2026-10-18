@@ -274,19 +274,19 @@ they caught.
 
 The page holds no key, has no server, stores nothing, and reaches only three Base RPCs. Each new need, and how it fits:
 
-| Need                         | How, within the rules                                                                                 | Cost or risk                                                         |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Receipts, payout history     | Read the automation's events with `eth_getLogs`, one epoch at a time                                  | About 30 calls an epoch at 10,000 blocks a call; slow the first time |
-| Value of a position          | Prices as the page already computes them for what votes earned                                        | None new                                                             |
-| Change watch                 | Read the settings' events, as for receipts                                                            | As for receipts                                                      |
-| One prompt for many accounts | EIP-5792 `wallet_sendCalls` where `wallet_getCapabilities` says so: MetaMask, Safe, Coinbase Wallet   | Rabby, Zerion and Phantom do not support it: one by one              |
-| Look up an address           | The same reads, without a wallet                                                                      | None                                                                 |
-| Brief for co-signers         | The accounts and the automation in the URL fragment                                                   | Check everything read from it                                        |
-| Calendar file, CSV, image    | Made in the browser, downloaded                                                                       | In-app browsers on iOS may not download: offer to copy instead       |
-| Safe status                  | Safe{Wallet} reports it to the page through the Safe Apps SDK                                         | None new                                                             |
-| Aero and liquidity reads     | More contracts, and their code hashes, in `src/config.ts`                                             | More checks to keep up to date                                       |
-| Alerts                       | A calendar file with a weekly rule; Basescan's Watch List, which e-mails activity on a payout address | Push, a bot or an e-mail of our own needs a server: a decision       |
-| A feed of settings changes   | An Atom file built by CI from the automations' events, published beside the page                      | A scheduled job; the page itself still reaches only the RPCs         |
+| Need                         | How, within the rules                                                                                 | Cost or risk                                                       |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Receipts, payout history     | Find each run where `totalTonnesRetired` changes, then read only those blocks' events                 | About 30 calls a run: the free RPCs give 100 to 200 blocks of logs |
+| Value of a position          | Prices as the page already computes them for what votes earned                                        | None new                                                           |
+| Change watch                 | Read the settings' events, as for receipts                                                            | As for receipts                                                    |
+| One prompt for many accounts | EIP-5792 `wallet_sendCalls` where `wallet_getCapabilities` says so: MetaMask, Safe, Coinbase Wallet   | Rabby, Zerion and Phantom do not support it: one by one            |
+| Look up an address           | The same reads, without a wallet                                                                      | None                                                               |
+| Brief for co-signers         | The accounts and the automation in the URL fragment                                                   | Check everything read from it                                      |
+| Calendar file, CSV, image    | Made in the browser, downloaded                                                                       | In-app browsers on iOS may not download: offer to copy instead     |
+| Safe status                  | Safe{Wallet} reports it to the page through the Safe Apps SDK                                         | None new                                                           |
+| Aero and liquidity reads     | More contracts, and their code hashes, in `src/config.ts`                                             | More checks to keep up to date                                     |
+| Alerts                       | A calendar file with a weekly rule; Basescan's Watch List, which e-mails activity on a payout address | Push, a bot or an e-mail of our own needs a server: a decision     |
+| A feed of settings changes   | An Atom file built by CI from the automations' events, published beside the page                      | A scheduled job; the page itself still reaches only the RPCs       |
 
 ## Roadmap
 
