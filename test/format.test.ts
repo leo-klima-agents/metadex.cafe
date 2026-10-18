@@ -12,6 +12,7 @@ import {
   earningPower,
   fraction,
   hexLines,
+  listWith,
   share,
   short,
   units,
@@ -120,4 +121,9 @@ test("amounts of a token, from its decimals", () => {
   assert.equal(amount(1_500_000n, 6), "1.50");
   assert.equal(amount(1n, 18), "< 0.01");
   assert.equal(amount(0n, 18), "0");
+});
+
+test("a list's items with the words between them, whatever the items are", () => {
+  assert.deepEqual(listWith([1, 2, 3]), [1, ", ", 2, " and ", 3]);
+  assert.deepEqual(listWith(["a"]), ["a"]);
 });

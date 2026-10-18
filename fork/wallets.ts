@@ -583,20 +583,26 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
   test("a receipt for each of the owner's accounts in the last payout, read from the automation's events", async () => {
     // PAYEE has 93 accounts: anvil reads them from FORK_URL for most of a minute the first time.
     await warm(() => Promise.all([readAccounts(PAYEE), lastRun()]));
-    const { page, violations } = await connected({ owner: PAYEE }, { width: 390, height: 844, dark: true });
+    const { page, violations } = await connected(
+      { owner: PAYEE },
+      { width: 390, height: 844, dark: true, flowing: true },
+    );
     const receipt = page.locator("#receipts .receipt");
     await receipt.first().waitFor({ timeout: 120_000 });
     assert.equal(await receipt.count(), 1);
     assert.match(
       await page.locator("#receipts .receipts-found").innerText(),
-      /For #82774, on Wed,? 23 Sept?,? 17:44 UTC/,
+      /^For #82774, in Carbon Impact's payout of Wed,? 23 Sept?\./,
     );
-    assert.equal(await receipt.locator(".id").innerText(), "#82774");
-    assert.equal(await receipt.locator(".paid").innerText(), "727.11 kVCM");
-    assert.equal(await receipt.locator(".retired").innerText(), "−326.80 kVCM");
-    assert.equal(await receipt.locator(".tonnes").innerText(), "65.26 t of carbon credits");
-    assert.equal(await receipt.locator(".fee").innerText(), "0 kVCM");
-    assert.equal(await receipt.locator(".recipient").innerText(), PAYEE);
+    assert.equal(await receipt.locator(".receipt-id").innerText(), "#82774");
+    assert.equal(await receipt.locator(".receipt-earned").innerText(), "8.56 USDC and 89.04 HYDX");
+    assert.equal(await receipt.locator(".receipt-swapped").innerText(), "1,053.92 kVCM");
+    assert.equal(await receipt.locator(".receipt-retired").innerText(), "−326.80 kVCM");
+    assert.equal(await receipt.locator(".receipt-tonnes").innerText(), "65.26 t of carbon credits");
+    assert.equal(await receipt.locator(".receipt-fee").innerText(), "0 kVCM");
+    assert.equal(await receipt.locator(".receipt-paid").innerText(), "727.11 kVCM");
+    assert.equal(await receipt.locator(".receipt-recipient").innerText(), PAYEE);
+    assert.match(await receipt.locator("time.receipt-time").innerText(), /^Wed,? 23 Sept?,? 17:44 UTC/);
     assert.equal(
       await receipt.locator(".through img").isVisible(),
       true,
@@ -607,10 +613,20 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
       "https://basescan.org/tx/0x0932e5a24f24e45bfd1021764d94abc1d920754c4dc17128dd89f44bd086e899",
     );
     await shoot(page, "receipt-390-dark", page.locator("#receipts"));
+    // Past the flip, the page reads the automation again and fills its figures, such as the tonnes retired, across the
+    // page: the receipts keep their own.
+    const relay = toFunctionSelector("function retiringEntityName()").slice(2);
+    const readAgain = page.waitForResponse((response) => !!response.request().postData()?.includes(relay));
+    await page.clock.setSystemTime((FLIP + 60) * 1000);
+    await page.clock.runFor(30_000);
+    await readAgain;
+    await page.waitForTimeout(500);
+    assert.equal(await receipt.locator(".receipt-retired").innerText(), "−326.80 kVCM");
+    assert.equal(await receipt.locator(".receipt-tonnes").innerText(), "65.26 t of carbon credits");
     const member = await connected({ owner: MEMBER }, { width: 390, height: 844 });
     await member.page
       .locator("#receipts")
-      .getByText(/None of your accounts was in Carbon Impact's last payout, on Wed,? 23 Sept?/)
+      .getByText(/Carbon Impact's last payout, on Wed,? 23 Sept?, paid none of your accounts\./)
       .waitFor({ timeout: 120_000 });
     assert.deepEqual([...violations, ...member.violations], []);
   });
@@ -859,7 +875,10 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     await dialog
       .getByText(/^One Safe transaction, with 2 calls\. Safe\{Wallet\} sends them through its MultiSend contract/)
       .waitFor();
-    assert.equal(await dialog.locator(".decoded").first().isVisible(), false, "a Safe shows the call's data instead");
+    const call = dialog.locator(".slip").first();
+    assert.equal(await call.locator(".conduit").innerText(), CONDUIT, "co-signers see the address, not only its name");
+    assert.equal(await call.locator(".conduit-name").innerText(), "Carbon Impact");
+    assert.equal(await call.locator(".call").innerText(), "The call above, in 100 bytes:");
     assert.equal(await dialog.locator(".operation").first().isVisible(), false, "Safe{Wallet} sets the operation");
     await shoot(page, "safe-calls-1440-light");
     await dialog.getByRole("button", { name: "Propose in Safe{Wallet}" }).click();

@@ -1,26 +1,32 @@
 import { decodeEventLog, parseAbi, type Address, type Hex } from "viem";
 import { call, read, rpc } from "./chain.ts";
 import { CONDUIT } from "./config.ts";
-import type { Token } from "./prices.ts";
 
-// Carbon Impact pays out by calling claimSwapAndDistribute once for each account: it claims the account's rewards,
-// swaps them to kVCM, retires a share, and pays the rest to the owner's payout address, with an event for the
-// retirement and one for the payout. Base's free RPCs give the logs of a few hundred blocks at a time at most, so a week
-// of them is out of reach. The run is found by what it changes instead: totalTonnesRetired only grows, so a search
-// through past blocks finds where it last changed, and the logs of those few blocks hold the run.
+// Carbon Impact pays out by calling claimSwapAndDistribute once for each account, in a transaction of its own: it
+// claims the account's rewards, swaps them to kVCM, retires a share, and pays the rest to the owner's payout address,
+// with an event for the retirement and one for the payout. A run takes up to half a day, and Base's free RPCs give the
+// logs of 100 blocks at a time at most, so its logs are out of reach as a whole. The run is found by what it changes
+// instead: totalTonnesRetired only grows, so a search through past blocks finds the stretches of 100 blocks in which
+// it changed, and their logs hold the run. A payout that retires nothing, as one that pays nothing does, is found only
+// if it falls in one of those stretches.
 
 const conduitAbi = parseAbi(["function totalTonnesRetired() view returns (uint256)"]);
 const eventsAbi = parseAbi([
   "event CarbonRetired(address indexed creditToken_, uint256 retireTonnes, uint256 kvcmSpent)",
   "event ClaimSwapAndDistributeCompleted(uint256 indexed tokenId, address indexed owner, address indexed recipient, address[] claimedTokens, uint256[] claimedAmounts, address[] distributedTokens, uint256[] distributedAmounts, uint256[] treasuryFees)",
 ]);
-const tokenAbi = parseAbi(["function symbol() view returns (string)", "function decimals() view returns (uint8)"]);
 
 // Base makes a block every two seconds.
 export const BLOCKS_PER_WEEK = 302_400;
 const BLOCKS_PER_DAY = 43_200;
 // How far back the page looks for a payout.
 export const WEEKS = 8;
+// The most blocks of logs the free RPCs give at once.
+export const STRETCH = 100;
+// The newest blocks are left out: an RPC behind its peers may not have them yet.
+const SETTLED = 5;
+// The reads in flight at once: the free RPCs limit how many they take a second.
+const AT_ONCE = 4;
 
 export type Amount = { token: Address; amount: bigint };
 export type Payout = {
@@ -33,30 +39,57 @@ export type Payout = {
   tonnes: bigint;
   retiredKvcm: bigint;
   tx: Hex;
+  block: number;
 };
+// The block and time of the run's last payout.
 export type Run = { block: number; time: number; payouts: Payout[] };
+// The last run, if there was one in the last WEEKS weeks, and the total retired that the search went by.
+export type Search = { total: bigint; run?: Run };
 export type Log = { data: Hex; topics: [Hex, ...Hex[]]; transactionHash: Hex; logIndex: Hex; blockNumber: Hex };
 
 // The total retired at a block.
 export type Reader = (block: number) => Promise<bigint>;
+// Blocks from, to, both included.
+export type Stretch = [number, number];
 
-// The first block at which the total is what it is now, after a block at which it was lower.
-export async function lastChange(at: Reader, lower: number, upper: number, now: bigint): Promise<number> {
-  while (upper - lower > 1) {
+// Where the total last changed: after lower, where it was below now, and by upper, where it is now, at most size blocks
+// apart.
+export async function lastChange(
+  at: Reader,
+  lower: number,
+  upper: number,
+  below: bigint,
+  now: bigint,
+  size: number,
+): Promise<{ lower: number; upper: number; below: bigint }> {
+  while (upper - lower > size) {
     const middle = Math.floor((lower + upper) / 2);
-    if ((await at(middle)) === now) upper = middle;
-    else lower = middle;
+    const total = await at(middle);
+    if (total === now) upper = middle;
+    else [lower, below] = [middle, total];
   }
-  return upper;
+  return { lower, upper, below };
 }
 
-// Every block after from, up to to, at which the total changed, from the totals at both ends.
-export async function changes(at: Reader, from: number, to: number, before: bigint, after: bigint): Promise<number[]> {
+// The stretches of at most size blocks, after from and up to to, in which the total changed, from the totals at both
+// ends.
+export async function changes(
+  at: Reader,
+  from: number,
+  to: number,
+  before: bigint,
+  after: bigint,
+  size: number,
+): Promise<Stretch[]> {
   if (before === after) return [];
-  if (to - from === 1) return [to];
+  if (to - from <= size) return [[from + 1, to]];
   const middle = Math.floor((from + to) / 2);
   const between = await at(middle);
-  return [...(await changes(at, from, middle, before, between)), ...(await changes(at, middle, to, between, after))];
+  const [left, right] = await Promise.all([
+    changes(at, from, middle, before, between, size),
+    changes(at, middle, to, between, after, size),
+  ]);
+  return [...left, ...right];
 }
 
 const positive = (tokens: readonly Address[], values: readonly bigint[]): Amount[] =>
@@ -94,6 +127,7 @@ export function payouts(logs: Log[]): Payout[] {
       tonnes: retirement?.tonnes ?? 0n,
       retiredKvcm: retirement?.kvcm ?? 0n,
       tx: log.transactionHash,
+      block: Number(log.blockNumber),
     });
   }
   return found;
@@ -101,44 +135,75 @@ export function payouts(logs: Log[]): Payout[] {
 
 const hex = (n: number): Hex => `0x${n.toString(16)}`;
 
-async function tonnesAt(block: number): Promise<bigint> {
+// Runs tasks at most size at a time, in the order they come.
+function queue(size: number) {
+  let running = 0;
+  const waiting: (() => void)[] = [];
+  return async <T>(task: () => Promise<T>): Promise<T> => {
+    if (running < size) running++;
+    else await new Promise<void>((go) => waiting.push(go));
+    try {
+      return await task();
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else running--;
+    }
+  };
+}
+
+async function tonnesAt(block: number | "latest"): Promise<bigint> {
   const [total] = await read([call(CONDUIT, conduitAbi, "totalTonnesRetired")], block);
   if (total === undefined) throw new Error("A read from Base failed.");
   return total as bigint;
 }
 
-// The automation's last payout, for all its accounts, or none if it made none in the last WEEKS weeks. About 30 reads.
-export async function lastRun(): Promise<Run | undefined> {
-  const head = Number(await rpc<Hex>("eth_blockNumber", []));
-  const now = await tonnesAt(head);
-  let lower = head;
-  for (let week = 1; ; week++) {
-    if (week > WEEKS || lower === 0) return undefined;
-    lower = Math.max(0, head - week * BLOCKS_PER_WEEK);
-    if ((await tonnesAt(lower)) < now) break;
+// The total retired now: when it has grown since a run was read, a later run has started.
+export const totalRetired = (): Promise<bigint> => tonnesAt("latest");
+
+// The automation's last payout, for all its accounts. Some 20 reads to find the run, and about 4 more for each of its
+// transactions: 17 to 118 for the six runs from Aug to Sept 2026.
+export async function lastRun(): Promise<Search> {
+  const slot = queue(AT_ONCE);
+  const at = (block: number) => slot(() => tonnesAt(block));
+  const top = Number(await rpc<Hex>("eth_blockNumber", [])) - SETTLED;
+  const now = await at(top);
+  let [lower, below] = [top, now];
+  for (let week = 1; below === now; week++) {
+    if (week > WEEKS || lower === 0) return { total: now };
+    lower = Math.max(0, top - week * BLOCKS_PER_WEEK);
+    below = await at(lower);
   }
-  const last = await lastChange(tonnesAt, lower, head, now);
-  // A run may take more than one transaction: the day before its last holds the others.
-  const from = Math.max(lower, last - BLOCKS_PER_DAY);
-  const before =
-    last - 1 > from ? await changes(tonnesAt, from, last - 1, await tonnesAt(from), await tonnesAt(last - 1)) : [];
-  const blocks = [...before, last];
-  const [logs, block] = await Promise.all([
-    Promise.all(
-      blocks.map((b) => rpc<Log[]>("eth_getLogs", [{ address: CONDUIT, fromBlock: hex(b), toBlock: hex(b) }])),
+  const last = await lastChange(at, lower, top, below, now, STRETCH);
+  // A run takes up to half a day: the day before its last retirement holds the others.
+  const from = Math.max(0, last.lower - BLOCKS_PER_DAY);
+  const stretches: Stretch[] = [
+    ...(await changes(at, from, last.lower, await at(from), last.below, STRETCH)),
+    [last.lower + 1, last.upper],
+  ];
+  const logs = await Promise.all(
+    stretches.map(([first, end]) =>
+      slot(() => rpc<Log[]>("eth_getLogs", [{ address: CONDUIT, fromBlock: hex(first), toBlock: hex(end) }])),
     ),
-    rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [hex(last), false]),
-  ]);
-  return { block: last, time: Number(block.timestamp), payouts: payouts(logs.flat()) };
+  );
+  const found = payouts(logs.flat());
+  // The total changed in these blocks, so their logs cannot be empty: an RPC that answers so has lost them.
+  if (!found.length) throw new Error("The run's logs are missing.");
+  const block = Math.max(...found.map((payout) => payout.block));
+  const [time] = (await blockTimes([block])).values();
+  return { total: now, run: { block, time: time!, payouts: found } };
 }
 
-// The symbol and decimals of each token, for those that answer.
-export async function readTokens(addresses: Address[]): Promise<Token[]> {
-  const found = await read(
-    addresses.flatMap((address) => [call(address, tokenAbi, "symbol"), call(address, tokenAbi, "decimals")]),
+// The time of each block.
+export async function blockTimes(blocks: number[]): Promise<Map<number, number>> {
+  const slot = queue(AT_ONCE);
+  const unique = [...new Set(blocks)];
+  const found = await Promise.all(
+    unique.map((block) =>
+      slot(() => rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [hex(block), false])).then(({ timestamp }) =>
+        Number(timestamp),
+      ),
+    ),
   );
-  return addresses.flatMap((address, i) => {
-    const [symbol, decimals] = [found[2 * i], found[2 * i + 1]];
-    return typeof symbol === "string" && typeof decimals === "number" ? [{ address, symbol, decimals }] : [];
-  });
+  return new Map(unique.map((block, i) => [block, found[i]!]));
 }

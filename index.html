@@ -444,7 +444,7 @@
           <p class="receipts-reading" role="status">Reading Carbon Impact's last payout from Base…</p>
           <p class="receipts-none" hidden>Carbon Impact has made no payout in the last eight weeks.</p>
           <p class="receipts-other" hidden>
-            None of your accounts was in Carbon Impact's last payout, on <time class="run-when"></time>.
+            Carbon Impact's last payout, on <time class="run-day"></time>, paid none of your accounts.
           </p>
           <p class="receipts-failed notice" hidden>
             The last payout could not be read from Base.
@@ -452,9 +452,9 @@
           </p>
           <div class="receipts-found" hidden>
             <p>
-              For <span class="receipt-which"></span>, on <time class="run-when"></time>. Read from the automation's
-              events on Base. Dollars are at the prices of <time class="run-flip"></time>; a token without a deep enough
-              pool counts for nothing.
+              For <span class="receipt-which"></span>, in Carbon Impact's payout of <time class="run-day"></time>. Read
+              from the automation's events on Base. Dollars are at the prices of <time class="run-flip"></time>; a token
+              without a deep enough pool counts for nothing.
             </p>
             <div class="receipt-list"></div>
           </div>
@@ -1198,19 +1198,19 @@
             <dt>To</dt>
             <dd><code class="to" translate="no"></code><br /><span class="on"></span></dd>
           </div>
-          <div class="decoded">
+          <div>
             <dt>Call</dt>
             <dd><code translate="no">setConduitApproval</code></dd>
           </div>
-          <div class="decoded">
+          <div>
             <dt>Conduit</dt>
             <dd><code class="conduit" translate="no"></code><br /><span class="conduit-name"></span></dd>
           </div>
-          <div class="decoded">
+          <div>
             <dt>Account</dt>
             <dd><code class="account" translate="no"></code></dd>
           </div>
-          <div class="decoded">
+          <div>
             <dt>Approve</dt>
             <dd><code class="approve" translate="no"></code></dd>
           </div>
@@ -1293,42 +1293,42 @@
     <template id="receipt">
       <article class="slip receipt">
         <p class="receipt-name">metaDEX Café</p>
-        <p class="label">Receipt · <span class="id"></span> · Carbon Impact</p>
-        <p class="receipt-day"><time class="run-day"></time></p>
+        <p class="label">Receipt · <span class="receipt-id"></span> · Carbon Impact</p>
+        <p class="receipt-day"><time class="receipt-date"></time></p>
         <dl class="lines">
           <div>
             <dt>Earned</dt>
-            <dd class="value earned-usd"></dd>
-            <dd class="detail earned"></dd>
+            <dd class="value receipt-earned-usd"></dd>
+            <dd class="detail receipt-earned"></dd>
           </div>
           <div>
             <dt>Swapped</dt>
-            <dd class="value swapped"></dd>
+            <dd class="value receipt-swapped"></dd>
             <dd class="detail">Into kVCM</dd>
           </div>
           <div>
             <dt>Retired</dt>
-            <dd class="value retired"></dd>
-            <dd class="detail tonnes"></dd>
+            <dd class="value receipt-retired"></dd>
+            <dd class="detail receipt-tonnes"></dd>
             <dd class="detail through">
               <img src="klima-protocol.svg" alt="" width="24" height="24" /> through Klima Protocol
             </dd>
           </div>
           <div>
             <dt>Fee</dt>
-            <dd class="value fee"></dd>
+            <dd class="value receipt-fee"></dd>
           </div>
         </dl>
         <dl class="total">
           <div>
             <dt>Paid</dt>
-            <dd class="value paid"></dd>
-            <dd class="detail paid-usd"></dd>
+            <dd class="value receipt-paid"></dd>
+            <dd class="detail receipt-paid-usd"></dd>
           </div>
         </dl>
         <p class="receipt-foot">
-          To <code translate="no"><a class="recipient"></a></code>, <time class="run-time"></time>.
-          <a class="tx">Transaction</a>
+          To <code translate="no"><a class="receipt-recipient"></a></code>, <time class="receipt-time"></time>.
+          <a class="receipt-tx">Transaction</a>
         </p>
       </article>
     </template>

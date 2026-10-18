@@ -41,11 +41,10 @@ const confirm = part<HTMLButtonElement>(".confirm");
 const back = part(".back");
 let current: Review | undefined;
 
-// Each call as the wallet will show it: its arguments one by one, each address in full and named. A Safe shows the
-// fields of a Safe transaction instead, with the calldata word by word.
+// Each call as the wallet will show it: its arguments one by one, each address in full and named. In a Safe, the fields
+// of a Safe transaction follow, with the calldata word by word, so that co-signers can compare both with Safe{Wallet}.
 function slip(step: Step, i: number, n: number, safe: boolean): DocumentFragment {
   const item = clone("step");
-  const automation = step.automation ?? "Carbon Impact";
   fill(item, {
     count: `${safe ? "Call" : "Transaction"} ${i + 1} of ${n}`,
     says: step.says,
@@ -53,13 +52,12 @@ function slip(step: Step, i: number, n: number, safe: boolean): DocumentFragment
     "conduit-name": step.automation ? `The ${step.automation} automation` : "Carbon Impact",
     account: String(step.id),
     approve: String(step.approve),
-    call: `setConduitApproval(${automation}, ${step.id}, ${step.approve}), in ${(step.data.length - 2) / 2} bytes:`,
+    call: `The call above, in ${(step.data.length - 2) / 2} bytes:`,
   });
   showHex(item.querySelector(".to")!, step.to);
   showHex(item.querySelector(".conduit")!, step.conduit);
   showHex(item.querySelector(".data")!, step.data);
   show(".count", n > 1, item);
-  show(".decoded", !safe, item);
   show(".raw", safe, item);
   show(".operation", safe && n === 1, item);
   return item;

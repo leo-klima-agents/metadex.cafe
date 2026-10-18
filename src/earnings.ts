@@ -139,7 +139,8 @@ async function rewardsOf(all: Bribes[], start: number, holder?: Address): Promis
   return { rewards, votes: new Map(voted.map(({ pool, balance }) => [pool, balance])) };
 }
 
-async function tokensOf(addresses: Address[]): Promise<Map<string, Token>> {
+// Each token's symbol, cleaned, and decimals, by its address in lower case; a token without decimals is left out.
+export async function tokensOf(addresses: Address[]): Promise<Map<string, Token>> {
   const unique = [...new Set(addresses.map((address) => address.toLowerCase()))] as Address[];
   const found = await read(
     unique.flatMap((address) => [call(address, tokenAbi, "symbol"), call(address, tokenAbi, "decimals")]),

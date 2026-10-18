@@ -23,17 +23,30 @@ function counter(steps: number[]) {
   return { at, reads };
 }
 
-test("the last change of a total that only grows, in a few reads", async () => {
+test("the stretch where a total that only grows last changed, in a few reads", async () => {
   const { at, reads } = counter([1_000, 51_698_051]);
-  assert.equal(await lastChange(at, 51_000_000, 52_694_000, 2n), 51_698_051);
-  assert.ok(reads.length <= 21, `${reads.length} reads`);
+  const found = await lastChange(at, 51_000_000, 52_694_000, 1n, 2n, 100);
+  assert.ok(found.lower < 51_698_051 && 51_698_051 <= found.upper, `${found.lower} to ${found.upper}`);
+  assert.ok(found.upper - found.lower <= 100);
+  assert.equal(found.below, 1n);
+  assert.ok(reads.length <= 15, `${reads.length} reads`);
 });
 
-test("every change between two blocks, and none where the total is the same at both ends", async () => {
-  const { at } = counter([100, 105, 160]);
-  assert.deepEqual(await changes(at, 50, 200, await at(50), await at(200)), [100, 105, 160]);
+test("each stretch in which the total changed, and none where it is the same at both ends", async () => {
+  const steps = [100, 105, 160, 900];
+  const { at } = counter(steps);
+  const stretches = await changes(at, 50, 1_000, await at(50), await at(1_000), 10);
+  for (const [first, last] of stretches) {
+    assert.ok(last - first < 10, `${first} to ${last}`);
+    assert.ok(
+      steps.some((step) => first <= step && step <= last),
+      `${first} to ${last} holds no change`,
+    );
+  }
+  for (const step of steps)
+    assert.equal(stretches.filter(([first, last]) => first <= step && step <= last).length, 1, `${step}`);
   const { at: flat, reads } = counter([10]);
-  assert.deepEqual(await changes(flat, 50, 200, 1n, 1n), []);
+  assert.deepEqual(await changes(flat, 50, 200, 1n, 1n, 10), []);
   assert.deepEqual(reads, []);
 });
 
@@ -103,9 +116,10 @@ test("each account's payout, with the retirement just before it in the same tran
   ];
   const found = payouts([...logs].reverse());
   assert.deepEqual(
-    found.map(({ id, owner, tonnes, retiredKvcm, earned, paid, fees }) => ({
+    found.map(({ id, owner, block, tonnes, retiredKvcm, earned, paid, fees }) => ({
       id,
       owner,
+      block,
       tonnes,
       retiredKvcm,
       earned,
@@ -116,6 +130,7 @@ test("each account's payout, with the retirement just before it in the same tran
       {
         id: 82774n,
         owner: OWNER,
+        block: 51_698_051,
         tonnes: t(65.26),
         retiredKvcm: t(326.8),
         earned: [{ token: USDC, amount: 12_000_000n }],
@@ -125,6 +140,7 @@ test("each account's payout, with the retirement just before it in the same tran
       {
         id: 14247n,
         owner: OTHER,
+        block: 51_698_051,
         tonnes: 0n,
         retiredKvcm: 0n,
         earned: [],

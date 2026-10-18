@@ -123,6 +123,11 @@ export function hexLines(hex: string): string[][] {
 }
 
 export const list = (items: string[]): string => and.format(items);
+// The items of a list with the words between them, as list() writes them: [a, ", ", b, " and ", c].
+export const listWith = <T>(items: T[]): (T | string)[] =>
+  and
+    .formatToParts(items.map((_, i) => String(i)))
+    .map(({ type, value }) => (type === "element" ? items[Number(value)]! : value));
 
 export const count = (n: number, one: string, other: string): string =>
   `${whole.format(n)} ${plurals.select(n) === "one" ? one : other}`;
