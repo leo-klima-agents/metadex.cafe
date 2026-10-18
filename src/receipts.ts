@@ -1,4 +1,4 @@
-import { decodeEventLog, parseAbi, type Address, type Hex } from "viem";
+import { decodeEventLog, encodeEventTopics, numberToHex, parseAbi, type Address, type Hex } from "viem";
 import { call, read, rpc } from "./chain.ts";
 import { CONDUIT } from "./config.ts";
 
@@ -41,8 +41,8 @@ export type Payout = {
 };
 // The block and time of the run's last payout.
 export type Run = { block: number; time: number; payouts: Payout[] };
-// The last run, if there was one in the last WEEKS weeks, and the total retired that the search went by.
-export type Search = { total: bigint; run?: Run };
+// The last run, if there was one in the last WEEKS weeks, and the block and total retired that the search went by.
+export type Search = { total: bigint; top: number; run?: Run };
 export type Log = { data: Hex; topics: [Hex, ...Hex[]]; transactionHash: Hex; logIndex: Hex; blockNumber: Hex };
 
 // The total retired at a block.
@@ -131,8 +131,6 @@ export function payouts(logs: Log[]): Payout[] {
   return found;
 }
 
-const hex = (n: number): Hex => `0x${n.toString(16)}`;
-
 // Every read of the search is in the background, behind the page's own.
 async function tonnesAt(block: number | "latest"): Promise<bigint> {
   const [total] = await read([call(CONDUIT, conduitAbi, "totalTonnesRetired")], block, true);
@@ -143,46 +141,74 @@ async function tonnesAt(block: number | "latest"): Promise<bigint> {
 // The total retired now: when it has grown since a run was read, a later run has started.
 export const totalRetired = (): Promise<bigint> => tonnesAt("latest");
 
+const RETIRED = encodeEventTopics({ abi: eventsAbi, eventName: "CarbonRetired" })[0].toLowerCase();
+
+// The total changed in a stretch, so its logs hold a retirement: an RPC that answers without one has lost them, and the
+// next is asked.
+export const retires = (logs: unknown): boolean =>
+  Array.isArray(logs) && logs.some((log: Partial<Log>) => log.topics?.[0]?.toLowerCase() === RETIRED);
+
+async function logsOf(stretches: Stretch[]): Promise<Log[]> {
+  const logs = await Promise.all(
+    stretches.map(([first, end]) =>
+      rpc<Log[]>("eth_getLogs", [{ address: CONDUIT, fromBlock: numberToHex(first), toBlock: numberToHex(end) }], {
+        later: true,
+        accept: retires,
+      }),
+    ),
+  );
+  return logs.flat();
+}
+
+async function runOf(found: Payout[]): Promise<Run> {
+  if (!found.length) throw new Error("The run's logs are missing.");
+  const block = Math.max(...found.map((payout) => payout.block));
+  return { block, time: (await blockTimes([block])).get(block)!, payouts: found };
+}
+
 // The automation's last payout, for all its accounts. Some 20 reads to find the run, and about 4 more for each of its
-// transactions: 17 to 118 for the six runs from Aug to Sept 2026.
-export async function lastRun(): Promise<Search> {
-  const top = Number(await rpc<Hex>("eth_blockNumber", [], true)) - SETTLED;
+// transactions: 17 to 118 for the six runs from Aug to Sept 2026. Since a search less than a day old, only the blocks
+// after it: new payouts within a day of its run's last are more of the same run, others a new one.
+export async function lastRun(since?: Search): Promise<Search> {
+  const top = Number(await rpc<Hex>("eth_blockNumber", [], { later: true })) - SETTLED;
   const now = await tonnesAt(top);
-  let [lower, below] = [top, now];
+  if (since && top - since.top <= BLOCKS_PER_DAY && now >= since.total) {
+    if (now === since.total) return { ...since, top };
+    const found = payouts(await logsOf(await changes(tonnesAt, since.top, top, since.total, now, STRETCH)));
+    const first = Math.min(...found.map((payout) => payout.block));
+    const goesOn = since.run && first - since.run.block <= BLOCKS_PER_DAY;
+    return { total: now, top, run: await runOf(goesOn ? [...since.run!.payouts, ...found] : found) };
+  }
+  // Back a week at a time to a total lower than now; the change is after it, and by the week boundary before it.
+  let [lower, below, upper] = [top, now, top];
   for (let week = 1; below === now; week++) {
-    if (week > WEEKS || lower === 0) return { total: now };
+    if (week > WEEKS || lower === 0) return { total: now, top };
+    upper = lower;
     lower = Math.max(0, top - week * BLOCKS_PER_WEEK);
     below = await tonnesAt(lower);
   }
-  const last = await lastChange(tonnesAt, lower, top, below, now, STRETCH);
+  const last = await lastChange(tonnesAt, lower, upper, below, now, STRETCH);
   // A run takes up to half a day: the day before its last retirement holds the others.
   const from = Math.max(0, last.lower - BLOCKS_PER_DAY);
   const stretches: Stretch[] = [
     ...(await changes(tonnesAt, from, last.lower, await tonnesAt(from), last.below, STRETCH)),
     [last.lower + 1, last.upper],
   ];
-  const logs = await Promise.all(
-    stretches.map(([first, end]) =>
-      rpc<Log[]>("eth_getLogs", [{ address: CONDUIT, fromBlock: hex(first), toBlock: hex(end) }], true),
-    ),
-  );
-  const found = payouts(logs.flat());
-  // The total changed in these blocks, so their logs cannot be empty: an RPC that answers so has lost them.
-  if (!found.length) throw new Error("The run's logs are missing.");
-  const block = Math.max(...found.map((payout) => payout.block));
-  const [time] = (await blockTimes([block])).values();
-  return { total: now, run: { block, time: time!, payouts: found } };
+  return { total: now, top, run: await runOf(payouts(await logsOf(stretches))) };
 }
 
-// The time of each block.
+// The time of each block. A block's time never changes: each is read once.
+const times = new Map<number, number>();
+
 export async function blockTimes(blocks: number[]): Promise<Map<number, number>> {
-  const unique = [...new Set(blocks)];
+  const missing = [...new Set(blocks)].filter((block) => !times.has(block));
   const found = await Promise.all(
-    unique.map((block) =>
-      rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [hex(block), false], true).then(({ timestamp }) =>
-        Number(timestamp),
+    missing.map((block) =>
+      rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [numberToHex(block), false], { later: true }).then(
+        ({ timestamp }) => Number(timestamp),
       ),
     ),
   );
-  return new Map(unique.map((block, i) => [block, found[i]!]));
+  missing.forEach((block, i) => times.set(block, found[i]!));
+  return new Map(blocks.map((block) => [block, times.get(block)!]));
 }

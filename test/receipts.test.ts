@@ -1,7 +1,27 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
-import { encodeAbiParameters, encodeEventTopics, parseAbi, parseAbiParameters, type Address, type Hex } from "viem";
-import { changes, lastChange, payouts, type Log } from "../src/receipts.ts";
+import { afterEach, beforeEach, test } from "node:test";
+import {
+  encodeAbiParameters,
+  encodeEventTopics,
+  encodeFunctionResult,
+  parseAbi,
+  parseAbiParameters,
+  type Address,
+  type Hex,
+} from "viem";
+import { forgetLimits } from "../src/chain.ts";
+import { RPCS } from "../src/config.ts";
+import {
+  BLOCKS_PER_WEEK,
+  blockTimes,
+  changes,
+  lastChange,
+  lastRun,
+  payouts,
+  retires,
+  type Log,
+  type Search,
+} from "../src/receipts.ts";
 
 const abi = parseAbi([
   "event CarbonRetired(address indexed creditToken_, uint256 retireTonnes, uint256 kvcmSpent)",
@@ -151,4 +171,139 @@ test("each account's payout, with the retirement just before it in the same tran
     "in the order of the logs, whatever order they come in, and a retirement only for the account it precedes",
   );
   assert.equal(found[0]!.tx, TX);
+});
+
+test("a stretch's logs hold a retirement, or an RPC has lost them", () => {
+  index = 0;
+  assert.equal(retires([retired(TX, 1, 1n, 1n), paidOut(TX, 1, 1n, OWNER, [[], []], [[], []], [])]), true);
+  assert.equal(retires([paidOut(TX, 1, 1n, OWNER, [[], []], [[], []], [])]), false);
+  assert.equal(retires([]), false);
+  assert.equal(retires(null), false);
+});
+
+// A Base that answers the search's reads: the total retired at any block, from the payouts that retired; their logs;
+// and each block's time, two seconds a block.
+const multicallAbi = parseAbi([
+  "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
+]);
+type Paid = { id: bigint; block: number; retires: boolean };
+type Read = { url: string; method: string; block?: number; from?: number; to?: number };
+
+function base(head: number, paid: Paid[], lost: (read: Read) => boolean = () => false) {
+  const chain = { head, paid, reads: [] as Read[] };
+  const logsOf = () =>
+    chain.paid.flatMap(({ id, block, retires: retiring }) => {
+      const tx = `0x${id.toString(16).padStart(64, "0")}` as Hex;
+      const paidLog = paidOut(tx, block, id, OWNER, [[USDC], [1_000_000n]], [[KVCM], [t(10)]], [0n]);
+      return retiring ? [retired(tx, block, t(1), t(5)), paidLog] : [paidLog];
+    });
+  globalThis.fetch = async (input, init) => {
+    const { method, params } = JSON.parse(String(init?.body)) as { method: string; params: any[] };
+    const url = String(input);
+    const reply = (result: unknown) => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }));
+    if (method === "eth_blockNumber") return reply(`0x${chain.head.toString(16)}`);
+    if (method === "eth_call") {
+      const block = params[1] === "latest" ? chain.head : Number(params[1]);
+      chain.reads.push({ url, method, block });
+      const total = BigInt(chain.paid.filter((payout) => payout.retires && payout.block <= block).length);
+      return reply(
+        encodeFunctionResult({
+          abi: multicallAbi,
+          functionName: "aggregate3",
+          result: [{ success: true, returnData: encodeAbiParameters([{ type: "uint256" }], [total]) }],
+        }),
+      );
+    }
+    if (method === "eth_getLogs") {
+      const read = { url, method, from: Number(params[0].fromBlock), to: Number(params[0].toBlock) };
+      chain.reads.push(read);
+      const logs = logsOf().filter(
+        ({ blockNumber }) => Number(blockNumber) >= read.from && Number(blockNumber) <= read.to,
+      );
+      return reply(lost(read) ? [] : logs);
+    }
+    if (method === "eth_getBlockByNumber") {
+      chain.reads.push({ url, method, block: Number(params[0]) });
+      return reply({ timestamp: `0x${(1_700_000_000 + 2 * Number(params[0])).toString(16)}` });
+    }
+    return reply(null);
+  };
+  return chain;
+}
+
+const original = globalThis.fetch;
+beforeEach(() => forgetLimits());
+afterEach(() => (globalThis.fetch = original));
+
+const HEAD = 1_000_000;
+// A run of four payouts over some 9,000 blocks, more than a week back, one paying out without retiring; and an older one.
+const RUN: Paid[] = [
+  { id: 1n, block: 598_800, retires: true },
+  { id: 2n, block: 599_350, retires: true },
+  { id: 3n, block: 600_120, retires: true },
+  { id: 4n, block: 600_120, retires: false },
+  { id: 5n, block: 607_800, retires: true },
+];
+const OLDER: Paid[] = [{ id: 9n, block: 300_000, retires: true }];
+const ids = (search: Search) => search.run?.payouts.map(({ id }) => id);
+
+test("the last run, whole, read in the background, without reading the week it has no change in", async () => {
+  const chain = base(HEAD, [...OLDER, ...RUN]);
+  const search = await lastRun();
+  assert.deepEqual(ids(search), [1n, 2n, 3n, 4n, 5n]);
+  assert.equal(search.run!.block, 607_800);
+  assert.equal(search.run!.time, 1_700_000_000 + 2 * 607_800);
+  assert.equal(search.total, 5n);
+  // The total at HEAD - 1 week is the same as now: the change is before it, and nothing after it is read again.
+  const calls = chain.reads.filter(({ method }) => method === "eth_call").map(({ block }) => block!);
+  assert.ok(
+    calls.slice(1).every((block) => block <= HEAD - 5 - BLOCKS_PER_WEEK),
+    calls.join(", "),
+  );
+});
+
+test("logs an RPC has lost go to the next RPC", async () => {
+  const [first, second] = RPCS as [string, string];
+  const chain = base(HEAD, RUN, ({ url, from, to }) => url === first && from! <= 607_800 && 607_800 <= to!);
+  const search = await lastRun();
+  assert.deepEqual(ids(search), [1n, 2n, 3n, 4n, 5n]);
+  assert.ok(
+    chain.reads.some(
+      ({ url, method, from, to }) => url === second && method === "eth_getLogs" && from! <= 607_800 && 607_800 <= to!,
+    ),
+  );
+  forgetLimits();
+  base(HEAD, RUN, ({ from, to }) => from! <= 607_800 && 607_800 <= to!);
+  await assert.rejects(lastRun(), /No Base RPC answered eth_getLogs/);
+});
+
+test("once the total has grown, only the new blocks are searched: a run goes on, or a new one begins", async () => {
+  const going: Paid[] = [
+    { id: 11n, block: HEAD - 3_000, retires: true },
+    { id: 12n, block: HEAD - 1_000, retires: true },
+  ];
+  const chain = base(HEAD, [...OLDER, ...going]);
+  const first = await lastRun();
+  assert.deepEqual(ids(first), [11n, 12n]);
+  chain.paid.push({ id: 13n, block: HEAD + 400, retires: true }, { id: 14n, block: HEAD + 900, retires: true });
+  chain.head = HEAD + 2_000;
+  chain.reads.length = 0;
+  const next = await lastRun(first);
+  assert.deepEqual(ids(next), [11n, 12n, 13n, 14n], "the same run, going on");
+  assert.equal(next.total, 5n);
+  assert.ok(
+    chain.reads.every(({ block, from }) => (block ?? from!) > first.top),
+    "nothing before the last search is read again",
+  );
+  // A week later, past a day: a full search, and a new run.
+  chain.paid.push({ id: 15n, block: HEAD + BLOCKS_PER_WEEK, retires: true });
+  chain.head = HEAD + BLOCKS_PER_WEEK + 1_000;
+  assert.deepEqual(ids(await lastRun(next)), [15n]);
+});
+
+test("a block's time is read once", async () => {
+  const chain = base(HEAD, RUN);
+  await blockTimes([123_456, 123_457]);
+  await blockTimes([123_456]);
+  assert.equal(chain.reads.filter(({ method }) => method === "eth_getBlockByNumber").length, 2);
 });

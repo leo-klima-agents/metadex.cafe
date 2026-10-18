@@ -160,9 +160,32 @@ test("six requests at a time at most, the page's own before those in the backgro
     return new Response(JSON.stringify(result("0x1").body));
   };
   const busy = Array.from({ length: 6 }, () => rpc("first", []));
-  const later = rpc("later", [], true);
+  const later = rpc("later", [], { later: true });
   const now = rpc("now", []);
   await Promise.all([...busy, later, now]);
   assert.equal(most, 6);
   assert.deepEqual(order.slice(6), ["now", "later"]);
+});
+
+test("an answer the caller does not take goes to the next RPC; a pending receipt's null is one it takes", async () => {
+  const asked = answering({ [first]: [result([])], [second]: [result([{ topics: ["0x1"] }])] });
+  const logs = await rpc<unknown[]>("eth_getLogs", [], { accept: (found) => (found as unknown[]).length > 0 });
+  assert.equal(logs.length, 1);
+  assert.deepEqual(urls(asked), [first, second]);
+  forgetLimits();
+  const polled = answering(everywhere(result(null)));
+  assert.equal(await rpc("eth_getTransactionReceipt", [], { accept: () => true }), null);
+  assert.equal(polled.length, 1, "one RPC a poll");
+});
+
+test("a request waiting for room gives its turn to others", async () => {
+  const asked = answering(everywhere(result("0x1")));
+  // The three RPCs' windows for logs are full for a second.
+  await Promise.all(Array.from({ length: 15 }, () => rpc("eth_getLogs", [], { later: true })));
+  const waiting = Array.from({ length: 6 }, () => rpc("eth_getLogs", [], { later: true }));
+  const before = performance.now();
+  await rpc("eth_chainId", []);
+  assert.ok(performance.now() - before < 200, "the page's read did not wait for the six");
+  await Promise.all(waiting);
+  assert.equal(asked.length, 22);
 });

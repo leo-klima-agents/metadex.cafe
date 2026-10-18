@@ -47,7 +47,9 @@ tokens, the swap routers, any owner's payout address, and who claims and votes f
   the payout by its effect: `totalTonnesRetired` only grows, and a search of past blocks finds the stretches of 100
   blocks in which it changed, then reads their logs. That was 17 to 118 requests for the six runs from Aug to Sept 2026.
   It looks back eight weeks, and only for an owner with an account in the conduit. An open page checks the total every
-  five minutes, and reads the payout again once it has grown.
+  five minutes, and once it has grown, searches only the blocks after its last search. A payout takes up to half a day:
+  while one is under way and has not reached the owner's accounts, the page keeps the last receipts, and says a new
+  payout has begun. Each stretch's logs must hold a retirement, or the next RPC is asked for them.
 - **It reaches nothing but three Base RPCs,** by its Content Security Policy: `https://mainnet.base.org`,
   `https://base.drpc.org` and `https://base-rpc.publicnode.com`. The browser checks the script and the stylesheet
   against the SHA-384 hashes in `index.html`; the fonts are inside the stylesheet.
@@ -89,7 +91,8 @@ The same commit gives the same files on any machine. Check out the version in th
   so and offers to try again. Leaving never waits for the conduit's settings. If the Voter cannot be read, accounts in
   other automations show without saying whether those stopped; if what the votes earned cannot be read, the page says so
   where the figures go, and tries again every five minutes. If the last payout cannot be read, the page says so and
-  offers to try again; one without prices shows its tokens alone.
+  offers to try again; one without prices shows its tokens alone. Read again in the background, a payout that cannot be
+  read leaves what is shown, and is tried again five minutes later.
 - **A failed check** turns joining off and says why. An open page runs the checks again every hour.
 - **The end of an epoch:** the page takes the time from Base's newest block, and reads the accounts and the conduit
   again within half a minute.

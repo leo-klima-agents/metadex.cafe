@@ -45,7 +45,7 @@ import {
   type Relay,
   type Status,
 } from "./hydrex.ts";
-import { pricesAt, type Price, type Token } from "./prices.ts";
+import { pricesAt, usdOf, type Price, type Token } from "./prices.ts";
 import { blockTimes, lastRun, totalRetired, type Amount, type Payout, type Run, type Search } from "./receipts.ts";
 import { close, review, update, type Hooks } from "./review.ts";
 import {
@@ -95,6 +95,8 @@ let onScreen = false;
 let search: Promise<Search> | undefined;
 let searchChecked = 0;
 let receiptsFor: Holdings | undefined;
+// The owner whose last payout the section shows, and whether as receipts.
+let showing: { owner: string; drawn: boolean } | undefined;
 
 type Value = ReturnType<typeof valueOf>;
 
@@ -281,9 +283,10 @@ async function loadShares(): Promise<void> {
 
 const receipts = document.getElementById("receipts")!;
 
-function receiptsState(state: "reading" | "none" | "other" | "failed" | "found"): void {
-  for (const name of ["reading", "none", "other", "failed", "found"])
-    show(`.receipts-${name}`, name === state, receipts);
+const RECEIPT_STATES = ["reading", "none", "other", "underway", "failed", "found"] as const;
+
+function receiptsState(state: (typeof RECEIPT_STATES)[number]): void {
+  for (const name of RECEIPT_STATES) show(`.receipts-${name}`, name === state, receipts);
 }
 
 const tokenOf = (tokens: Map<string, Token>, address: string) => tokens.get(address.toLowerCase());
@@ -308,7 +311,7 @@ function worth(found: Amount[], tokens: Map<string, Token>, prices: Map<string, 
   if (!prices) return "";
   const usdValue = found.reduce((sum, { token, amount: value }) => {
     const [known, price] = [tokenOf(tokens, token), prices.get(token.toLowerCase())];
-    return known && price ? sum + (Number(value) / 10 ** known.decimals) * price.usd : sum;
+    return known && price ? sum + usdOf(value, known, price) : sum;
   }, 0);
   return usdValue > 0 ? usd(usdValue) : "";
 }
@@ -340,9 +343,13 @@ function receipt(payout: Payout, time: number, tokens: Map<string, Token>, price
   return item;
 }
 
+// A run takes up to half a day: one whose last payout is more recent may still be under way.
+const UNDER_WAY = 12 * 3600;
+
 // A receipt for each of the owner's accounts in Carbon Impact's last payout. Only for an owner with an account that is
-// in it, or was at the start of this epoch: finding the payout takes some 20 to 120 reads. Read again quietly, the
-// receipts shown stay until the new ones are drawn.
+// in it, or was at the start of this epoch: finding the payout takes some 20 to 120 reads. Read again quietly, what is
+// shown stays until there is something new to show: a run under way that has not reached the owner's accounts leaves
+// the receipts of the last one, and a read that fails leaves them all.
 async function loadReceipts(quietly = false): Promise<void> {
   const holdings = shown;
   if (!holdings || receiptsFor?.owner === holdings.owner) return;
@@ -352,14 +359,20 @@ async function loadReceipts(quietly = false): Promise<void> {
   receipts.hidden = !member;
   if (!member) return;
   receiptsFor = holdings;
-  if (!quietly) receiptsState("reading");
+  const owner = holdings.owner.toLowerCase();
+  const kept = quietly && showing?.owner === owner;
+  if (!kept) receiptsState("reading");
   // Another owner, or a read started since, takes over.
   const current = () => receiptsFor === holdings && shown?.owner === holdings.owner;
   const fail = (error: unknown) => {
     console.error(error);
-    if (!current()) return;
+    if (!current() || kept) return;
     receiptsFor = undefined;
     receiptsState("failed");
+  };
+  const settle = (state: "none" | "other" | "underway") => {
+    showing = { owner, drawn: false };
+    receiptsState(state);
   };
   if (!search) searchChecked = Date.now();
   const reading = (search ??= lastRun());
@@ -372,10 +385,19 @@ async function loadReceipts(quietly = false): Promise<void> {
     return fail(error);
   }
   if (!current()) return;
-  if (!found) return receiptsState("none");
-  fillTime(receipts, "run-day", found.time);
-  const mine = found.payouts.filter(({ owner }) => same(owner, holdings.owner));
-  if (!mine.length) return receiptsState("other");
+  if (!found) return settle("none");
+  const underway = now() - found.time < UNDER_WAY;
+  const mine = found.payouts.filter((payout) => same(payout.owner, owner));
+  if (!mine.length) {
+    if (underway && kept && showing?.drawn) {
+      fillTime(receipts, "run-next", found.time);
+      show(".receipts-more", false, receipts);
+      show(".receipts-next", true, receipts);
+      return;
+    }
+    fillTime(receipts, "run-day", found.time);
+    return settle(underway ? "underway" : "other");
+  }
   const all = mine.flatMap(({ earned, paid, fees }) => [...earned, ...paid, ...fees]);
   let tokens: Map<string, Token>;
   let times: Map<number, number>;
@@ -391,18 +413,23 @@ async function loadReceipts(quietly = false): Promise<void> {
     return fail(error);
   }
   if (!current()) return;
-  const totals = new Map<string, bigint>();
-  for (const { token, amount: value } of all)
-    totals.set(token.toLowerCase(), (totals.get(token.toLowerCase()) ?? 0n) + value);
+  // Each token is priced for the largest amount of it a receipt shows in dollars, earned or paid.
+  const amounts = new Map<string, bigint>();
+  for (const { token, amount: value } of mine.flatMap(({ earned, paid }) => [...earned, ...paid]))
+    if (value > (amounts.get(token.toLowerCase()) ?? 0n)) amounts.set(token.toLowerCase(), value);
   const shelf = receipts.querySelector(".receipt-list")!;
   const draw = (prices?: Map<string, Price>) =>
     shelf.replaceChildren(...mine.map((payout) => receipt(payout, times.get(payout.block)!, tokens, prices)));
   draw();
   fill(receipts, { "receipt-which": list(mine.map(({ id }) => `#${id}`)) });
+  fillTime(receipts, "run-day", found.time);
   fillTime(receipts, "run-flip", weekStart(found.time));
+  show(".receipts-more", underway, receipts);
+  show(".receipts-next", false, receipts);
+  showing = { owner, drawn: true };
   receiptsState("found");
   // The dollars follow, from many more reads; without them, the receipts show the tokens alone.
-  const prices = await pricesAt([...tokens.values()], totals, weekStart(found.time), now(), readLater).catch(
+  const prices = await pricesAt([...tokens.values()], amounts, weekStart(found.time), now(), readLater).catch(
     (error) => {
       console.error(error);
       return undefined;
@@ -412,18 +439,24 @@ async function loadReceipts(quietly = false): Promise<void> {
 }
 
 // A run takes hours after each flip, and the page may have read one half done: once the total retired has grown, the
-// receipts are read again. One read every five minutes.
+// search goes on from where it stopped, and the receipts are read again. A search that failed is done again. One read
+// every five minutes.
 async function checkSearch(): Promise<void> {
-  const reading = search;
-  if (!reading || !receiptsFor || Date.now() - searchChecked < 300_000) return;
+  if (!receiptsFor || Date.now() - searchChecked < 300_000) return;
   searchChecked = Date.now();
-  try {
-    const [{ total }, latest] = await Promise.all([reading, totalRetired()]);
-    if (latest <= total || search !== reading) return;
-  } catch (error) {
-    return void console.error(error);
+  const reading = search;
+  let previous: Search | undefined;
+  if (reading) {
+    try {
+      const [done, latest] = await Promise.all([reading, totalRetired()]);
+      if (latest <= done.total || search !== reading) return;
+      previous = done;
+    } catch (error) {
+      return void console.error(error);
+    }
   }
-  search = receiptsFor = undefined;
+  search = lastRun(previous);
+  receiptsFor = undefined;
   loadReceipts(true);
 }
 
@@ -551,7 +584,7 @@ async function loadAccounts(quietly = false): Promise<void> {
   const read = ++reads;
   reading = true;
   if (!quietly) {
-    shown = receiptsFor = undefined;
+    shown = receiptsFor = showing = undefined;
     show("#reading");
     show("#accounts, #summary, #none, #payout, #receipts", false);
   }
@@ -714,7 +747,7 @@ function letGo(): void {
   reads++;
   reading = false;
   connection = undefined;
-  shown = receiptsFor = undefined;
+  shown = receiptsFor = showing = undefined;
   close();
   showConnection();
   show("#reading, #accounts, #summary, #none, #payout, #receipts", false);

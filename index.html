@@ -446,6 +446,10 @@
           <p class="receipts-other" hidden>
             Carbon Impact's last payout, on <time class="run-day"></time>, paid none of your accounts.
           </p>
+          <p class="receipts-underway" hidden>
+            Carbon Impact's payout of <time class="run-day"></time> is under way, and has not reached your accounts yet.
+            A payout takes up to half a day.
+          </p>
           <p class="receipts-failed notice" hidden>
             The last payout could not be read from Base.
             <button type="button" class="receipts-again secondary">Read the payout again</button>
@@ -455,6 +459,12 @@
               For <span class="receipt-which"></span>, in Carbon Impact's payout of <time class="run-day"></time>. Read
               from the automation's events on Base. Dollars are at the prices of <time class="run-flip"></time>; a token
               without a deep enough pool counts for nothing.
+            </p>
+            <p class="receipts-more" hidden>
+              The payout may still be under way: receipts for more of your accounts may follow.
+            </p>
+            <p class="receipts-next" hidden>
+              A new payout began on <time class="run-next"></time>, and has not reached your accounts yet.
             </p>
             <div class="receipt-list"></div>
           </div>

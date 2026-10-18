@@ -2,7 +2,7 @@ import { parseAbi, type Address } from "viem";
 import { blockTime, call, read, readLater, same } from "./chain.ts";
 import { CONDUIT, VOTER, VOTING_ESCROW } from "./config.ts";
 import { WEEK, clean } from "./format.ts";
-import { pricesAt, type Price, type Token } from "./prices.ts";
+import { pricesAt, usdOf, type Price, type Token } from "./prices.ts";
 
 // What votes earned in an epoch that has ended, as Hydrex's reward contracts keep it. Each pool's gauge has two: one
 // for the pool's fees, one for incentives. Each keeps, per epoch, the votes cast for the pool, each voter's share and
@@ -261,7 +261,7 @@ export function valueOf({ rewards, prices }: Earnings) {
   for (const { pool, token, amount, fee } of rewards) {
     const price = prices.get(token.address.toLowerCase());
     if (!price) continue;
-    const usd = (Number(amount) / 10 ** token.decimals) * price.usd;
+    const usd = usdOf(amount, token, price);
     byPool.set(pool.toLowerCase(), (byPool.get(pool.toLowerCase()) ?? 0) + usd);
     if (fee) fees += usd;
     else incentives += usd;

@@ -1,4 +1,13 @@
-import { decodeFunctionResult, encodeFunctionData, keccak256, parseAbi, type Abi, type Address, type Hex } from "viem";
+import {
+  decodeFunctionResult,
+  encodeFunctionData,
+  keccak256,
+  numberToHex,
+  parseAbi,
+  type Abi,
+  type Address,
+  type Hex,
+} from "viem";
 import { MULTICALL3, RPCS } from "./config.ts";
 
 export type Call = { address: Address; abi: Abi; functionName: string; args: unknown[] };
@@ -90,8 +99,13 @@ const BUSY = /request limit|rate limit|too many requests/i;
 type Reply = { result?: unknown; error?: { code?: number; message?: string } } | null;
 type Answer = { answered: true; result: unknown };
 type Outcome = Answer | { answered: false; busy: boolean };
+// What a caller takes as an answer. An RPC answers null for a block or a transaction it does not have yet: by default,
+// the next RPC is asked.
+type Accept = (result: unknown) => boolean;
+const present: Accept = (result) => result !== null;
+export type Options = { later?: boolean; accept?: Accept };
 
-async function ask(url: string, body: string): Promise<Outcome> {
+async function ask(url: string, body: string, accept: Accept): Promise<Outcome> {
   let busy = false;
   try {
     const response = await fetch(url, {
@@ -102,8 +116,8 @@ async function ask(url: string, body: string): Promise<Outcome> {
     });
     busy = response.status === 429 || response.status >= 500;
     const reply = (await response.json()) as Reply;
-    // An RPC answers null for a block or a transaction it does not have yet.
-    if (reply?.result != null) return { answered: true, result: reply.result };
+    const result = reply?.result;
+    if (result !== undefined) return accept(result) ? { answered: true, result } : { answered: false, busy: false };
     const { code = 0, message = "" } = reply?.error ?? {};
     return { answered: false, busy: busy || BUSY_CODES.includes(code) || BUSY.test(message) };
   } catch (error) {
@@ -112,48 +126,50 @@ async function ask(url: string, body: string): Promise<Outcome> {
   }
 }
 
-// Each RPC at most once, the first free in order taking the request, without leaving its turn in the queue. The RPCs
-// that were busy are what to ask again.
+// Each RPC at most once, the first free in order taking the request, without leaving its turn in the queue; while none
+// is free, the turn goes to others. The RPCs that were busy are what to ask again.
 async function round(
   urls: string[],
   method: string,
   body: string,
+  { later = false, accept = present }: Options,
 ): Promise<Answer | { answered: false; busy: string[] }> {
   const kind: Kind = method === "eth_getLogs" ? "logs" : "all";
   const left = [...urls];
   const busy: string[] = [];
-  while (left.length) {
-    const now = performance.now();
-    const free = left.map((url) => freeAt(url, kind, now));
-    const i = free.findIndex((at) => at <= now);
-    if (i < 0) {
-      await sleep(Math.min(...free) - now);
-      continue;
+  await take(later);
+  try {
+    while (left.length) {
+      const now = performance.now();
+      const free = left.map((url) => freeAt(url, kind, now));
+      const i = free.findIndex((at) => at <= now);
+      if (i < 0) {
+        give();
+        await sleep(Math.min(...free) - now);
+        await take(later);
+        continue;
+      }
+      const [url] = left.splice(i, 1) as [string];
+      start(url, kind, now);
+      const outcome = await ask(url, body, accept);
+      if (outcome.answered) return outcome;
+      if (outcome.busy) {
+        busy.push(url);
+        resting.set(`${url} ${kind}`, performance.now() + REST);
+      }
     }
-    const [url] = left.splice(i, 1) as [string];
-    start(url, kind, now);
-    const outcome = await ask(url, body);
-    if (outcome.answered) return outcome;
-    if (outcome.busy) {
-      busy.push(url);
-      resting.set(`${url} ${kind}`, performance.now() + REST);
-    }
+  } finally {
+    give();
   }
   return { answered: false, busy };
 }
 
-export async function rpc<T>(method: string, params: unknown[], later = false): Promise<T> {
+export async function rpc<T>(method: string, params: unknown[], options: Options = {}): Promise<T> {
   const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
   // Only the RPCs that were busy are asked again.
   let urls = RPCS;
   for (let attempt = 0; ; attempt++) {
-    await take(later);
-    let outcome;
-    try {
-      outcome = await round(urls, method, body);
-    } finally {
-      give();
-    }
+    const outcome = await round(urls, method, body, options);
     if (outcome.answered) return outcome.result as T;
     const { busy } = outcome;
     if (!busy.length || attempt === RETRIES) throw new Error(`No Base RPC answered ${method}.`);
@@ -178,8 +194,8 @@ async function aggregate(calls: Call[], block: number | "latest", later: boolean
     functionName: "aggregate3",
     args: [calls.map((c) => ({ target: c.address, allowFailure: true, callData: encodeFunctionData(c as never) }))],
   });
-  const tag = block === "latest" ? block : `0x${block.toString(16)}`;
-  const reply = await rpc<Hex>("eth_call", [{ to: MULTICALL3, data }, tag], later);
+  const tag = block === "latest" ? block : numberToHex(block);
+  const reply = await rpc<Hex>("eth_call", [{ to: MULTICALL3, data }, tag], { later });
   const results = decodeFunctionResult({ abi: multicall3Abi, functionName: "aggregate3", data: reply });
   return results.map(({ success, returnData }, i) => {
     if (!success || returnData === "0x") return undefined;
@@ -200,8 +216,10 @@ export const implementation = async (proxy: Address): Promise<Address> =>
 export async function included(hash: Hex): Promise<boolean | undefined> {
   const end = Date.now() + 10 * 60_000;
   while (Date.now() < end) {
-    // Each RPC answers null until it has the transaction.
-    const receipt = await rpc<{ status: Hex }>("eth_getTransactionReceipt", [hash]).catch(() => null);
+    // Null until the transaction is in a block: an answer, asked again in two seconds rather than of the next RPC.
+    const receipt = await rpc<{ status: Hex } | null>("eth_getTransactionReceipt", [hash], {
+      accept: () => true,
+    }).catch(() => null);
     if (receipt) return receipt.status === "0x1";
     await sleep(2_000);
   }

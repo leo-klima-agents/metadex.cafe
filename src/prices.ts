@@ -55,6 +55,9 @@ type Measured = { pool: Pool; usd: number; depth: number; plugin?: Address; leng
 
 const key = (address: string): string => address.toLowerCase();
 const whole = (amount: bigint, decimals: number): number => Number(amount) / 10 ** decimals;
+// What an amount of a token is worth, in dollars.
+export const usdOf = (amount: bigint, token: { decimals: number }, price: Price): number =>
+  whole(amount, token.decimals) * price.usd;
 
 // Concentrated pools price token0 in token1 as 1.0001^tick, in their smallest units.
 export const tickPrice = (tick: number, decimals0: number, decimals1: number): number =>
