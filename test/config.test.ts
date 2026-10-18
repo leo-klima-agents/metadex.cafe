@@ -48,7 +48,8 @@ test("Hydrex names the conduit Carbon Impact, and the page links to it, the Voti
 test("the page may reach its RPCs and nothing else, and the README lists them", () => {
   const csp = /http-equiv="Content-Security-Policy"\s+content="([^"]+)"/.exec(read("index.html"))?.[1] ?? "";
   const connect = (/connect-src ([^;]+)/.exec(csp)?.[1] ?? "").trim().split(/\s+/);
-  assert.deepEqual(connect, RPCS);
+  // The order in which they are asked is RPCS's own; a policy's has no meaning.
+  assert.deepEqual([...connect].sort(), [...RPCS].sort());
   assert.ok(RPCS.every((rpc) => rpc === new URL(rpc).origin && rpc.startsWith("https://")));
   const readme = read("README.md");
   for (const origin of connect) assert.ok(readme.includes(`\`${origin}\``), `${origin} is missing from the README`);

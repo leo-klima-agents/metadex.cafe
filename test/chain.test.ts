@@ -39,7 +39,7 @@ const urls = (asked: Asked[]) => asked.map(({ url }) => url);
 test("a refused request goes to the next RPC at once", async () => {
   const asked = answering({
     [first]: [error(-32007, "25/second request limit reached")],
-    [second]: [error(-32602, "Archive requests require a personal token.")],
+    [second]: [{ status: 429, ...error(15, "You reached Public endpoint rate limit, please upgrade to paid plan") }],
     [third]: [result("0x10")],
   });
   assert.equal(await rpc("eth_blockNumber", []), "0x10");
@@ -49,11 +49,11 @@ test("a refused request goes to the next RPC at once", async () => {
 test("only the RPCs that were busy are asked again, once they have rested", async () => {
   const asked = answering({
     [first]: [error(-32011, "request limit reached")],
-    [second]: [error(-32602, "Archive requests require a personal token.")],
-    [third]: [{ status: 429 }, result("0x10")],
+    [second]: [{ status: 429 }, result("0x10")],
+    [third]: [{ status: 403, ...error(-32602, "Archive requests require a personal token.") }],
   });
   assert.equal(await rpc("eth_getLogs", []), "0x10");
-  assert.deepEqual(urls(asked), [first, second, third, first, third]);
+  assert.deepEqual(urls(asked), [first, second, third, first, second]);
   assert.ok(asked[3]!.at - asked[0]!.at >= 990, "the first RPC rested a second");
 });
 

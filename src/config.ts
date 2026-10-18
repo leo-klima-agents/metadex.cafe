@@ -1,7 +1,8 @@
 import type { Address, Hex } from "viem";
 
 export const CHAIN_ID = 8453;
-export const RPCS = ["https://mainnet.base.org", "https://base-rpc.publicnode.com", "https://base.drpc.org"];
+// In the order they are asked: drpc keeps Base's history for free, where publicnode asks a token for it.
+export const RPCS = ["https://mainnet.base.org", "https://base.drpc.org", "https://base-rpc.publicnode.com"];
 export const MULTICALL3: Address = "0xcA11bde05977b3631167028862bE2a173976CA11";
 export const CONDUIT: Address = "0xdE91885cF35ac57DF0c4A75c16862127dBe8317c";
 export const CONDUIT_CODE_HASH: Hex = "0x0d67cd335e3ae9cde256cf399f819a3ea2b9c248b0336840a3b20a2ee82c192e";
