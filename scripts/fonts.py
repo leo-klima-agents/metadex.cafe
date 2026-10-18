@@ -1,6 +1,6 @@
-# Makes the fonts in fonts/ from Google Fonts' sources, at a pinned commit: Latin subsets, as WOFF2, without hinting.
-# Needs Python 3, with fonttools 4.67.0 and brotli 1.2.0. Run it from the repository's root: python3 scripts/fonts.py
-# The same sources and versions give the same files.
+# Makes the fonts in fonts/ from Google Fonts' sources at a pinned commit: Latin subsets, as WOFF2, without hinting.
+# Needs Python 3 with fonttools 4.67.0 and brotli 1.2.0. Run it from the repository's root: python3 scripts/fonts.py
+# It gives the same files on every run.
 
 import hashlib
 import io
@@ -26,7 +26,7 @@ SOURCES = {
         "42bb2602364b28569fdce5eeb6ab3d81cf8090ba81b211f1229ed69f33155523",
     ),
 }
-# Each file: its source, and the weight to instantiate a variable source at.
+# Each file: its source, and the weight to take from a variable font.
 FONTS = {
     "atkinson-hyperlegible-next-400.woff2": ("next", 400),
     "atkinson-hyperlegible-next-700.woff2": ("next", 700),

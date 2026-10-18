@@ -17,9 +17,9 @@ const multicall3Abi = parseAbi([
   "function getCurrentBlockTimestamp() view returns (uint256 timestamp)",
 ]);
 const EIP1967_IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
-const CHUNK = 200;
+const CALLS_PER_BATCH = 200;
 
-// Unlike viem's isAddressEqual, it never throws, as on the undefined of a read that failed.
+// Unlike viem's isAddressEqual, this never throws, even on the undefined of a failed read.
 export const same = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 
 export const call = (address: Address, abi: Abi, functionName: string, ...args: unknown[]): Call => ({
@@ -31,66 +31,75 @@ export const call = (address: Address, abi: Abi, functionName: string, ...args: 
 
 export const blockTime = call(MULTICALL3, multicall3Abi, "getCurrentBlockTimestamp");
 
+export function required<T>(values: (T | undefined)[]): T[] {
+  if (values.includes(undefined)) throw new Error("A read from Base failed.");
+  return values as T[];
+}
+
+// Base's time, from the newest block read, in case the device's clock is wrong.
+let drift = 0;
+let newest = 0;
+
+export function sawBlock(time: number): void {
+  if (time < newest) return;
+  newest = time;
+  drift = time - Math.floor(Date.now() / 1000);
+}
+
+export const now = (): number => Math.floor(Date.now() / 1000) + drift;
+
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-// What each RPC is asked in any second, at most: mainnet.base.org allows a visitor 25 requests, of which 5 eth_getLogs,
-// and says so when it refuses one. The other two publish no figure a second, and are held to the same.
+// mainnet.base.org allows 25 requests a second, 5 of them for logs. The other RPCs get the same limits.
 const PER_SECOND = 25;
 const LOGS_PER_SECOND = 5;
-// An RPC that refuses for its limits is left alone for a second, mainnet.base.org's window, by every request of that
-// kind: they go to the next RPC instead, or wait for it if none is free.
+// An RPC that says it is over its limit is left alone for this long.
 const REST = 1_000;
-// Requests in flight at once. The page's own reads go first; reads in the background, such as the receipts' search or
-// all of Hydrex, wait for them.
-const AT_ONCE = 6;
+const MAX_IN_FLIGHT = 6;
 
 type Kind = "all" | "logs";
 const started = new Map<string, number[]>();
-const resting = new Map<string, number>();
+const restingUntil = new Map<string, number>();
 
-// When the RPC can take a request of this kind, at the earliest: once it has rested, and once the requests of the last
-// second number fewer than its limits.
-function freeAt(url: string, kind: Kind, now: number): number {
+function freeAt(url: string, kind: Kind, time: number): number {
   const limits: [string, number][] = [[`${url} all`, PER_SECOND]];
   if (kind === "logs") limits.push([`${url} logs`, LOGS_PER_SECOND]);
-  let at = Math.max(now, resting.get(`${url} all`) ?? 0, resting.get(`${url} ${kind}`) ?? 0);
+  let at = Math.max(time, restingUntil.get(`${url} all`) ?? 0, restingUntil.get(`${url} ${kind}`) ?? 0);
   for (const [key, limit] of limits) {
-    const times = (started.get(key) ?? []).filter((time) => time > now - 1_000);
-    started.set(key, times);
-    if (times.length >= limit) at = Math.max(at, times[times.length - limit]! + 1_000);
+    const lastSecond = (started.get(key) ?? []).filter((start) => start > time - 1_000);
+    started.set(key, lastSecond);
+    if (lastSecond.length >= limit) at = Math.max(at, lastSecond[lastSecond.length - limit]! + 1_000);
   }
   return at;
 }
 
-// For tests: what the RPCs were asked, and which rest.
-export function forgetLimits(): void {
-  started.clear();
-  resting.clear();
+function recordStart(url: string, kind: Kind, time: number): void {
+  for (const key of kind === "logs" ? [`${url} all`, `${url} logs`] : [`${url} all`])
+    started.set(key, [...(started.get(key) ?? []), time]);
 }
 
-function start(url: string, kind: Kind, now: number): void {
-  for (const key of kind === "logs" ? [`${url} all`, `${url} logs`] : [`${url} all`])
-    started.set(key, [...(started.get(key) ?? []), now]);
+// For tests.
+export function resetRateLimits(): void {
+  started.clear();
+  restingUntil.clear();
 }
 
 let running = 0;
 const waiting = { now: [] as (() => void)[], later: [] as (() => void)[] };
 
-async function take(later: boolean): Promise<void> {
-  if (running < AT_ONCE) running++;
+async function takeSlot(later: boolean): Promise<void> {
+  if (running < MAX_IN_FLIGHT) running++;
   else await new Promise<void>((go) => waiting[later ? "later" : "now"].push(go));
 }
 
-function give(): void {
+function freeSlot(): void {
   const next = waiting.now.shift() ?? waiting.later.shift();
   if (next) next();
   else running--;
 }
 
-// When no RPC answers and one of them was busy or out of reach, the request is asked again after a truncated exponential
-// backoff with full jitter, as RPC providers advise: up to RETRIES times, at random within 250 ms, 500 ms, 1 s and 2 s.
-// What an RPC would answer the same again, such as a call that reverts, a block it does not keep or a request too slow
-// for it, goes to the next RPC but is not asked again.
+// When no RPC answers, those that were busy or out of reach are asked again, up to RETRIES times, after a random wait
+// that doubles each time. Errors that would come back the same, such as a revert or a timeout, are not retried.
 const RETRIES = 4;
 const BACKOFF = 250;
 const BUSY_CODES = [429, -32005, -32007, -32011, -32090];
@@ -98,14 +107,12 @@ const BUSY = /request limit|rate limit|too many requests/i;
 
 type Reply = { result?: unknown; error?: { code?: number; message?: string } } | null;
 type Answer = { answered: true; result: unknown };
-type Outcome = Answer | { answered: false; busy: boolean };
-// What a caller takes as an answer. An RPC answers null for a block or a transaction it does not have yet: by default,
-// the next RPC is asked.
+// By default, null is not an answer: the RPC may not have the block or transaction yet, so the next one is asked.
 type Accept = (result: unknown) => boolean;
-const present: Accept = (result) => result !== null;
-export type Options = { later?: boolean; accept?: Accept };
+const notNull: Accept = (result) => result !== null;
+type Options = { later?: boolean; accept?: Accept };
 
-async function ask(url: string, body: string, accept: Accept): Promise<Outcome> {
+async function askOne(url: string, body: string, accept: Accept): Promise<Answer | { answered: false; busy: boolean }> {
   let busy = false;
   try {
     const response = await fetch(url, {
@@ -121,55 +128,53 @@ async function ask(url: string, body: string, accept: Accept): Promise<Outcome> 
     const { code = 0, message = "" } = reply?.error ?? {};
     return { answered: false, busy: busy || BUSY_CODES.includes(code) || BUSY.test(message) };
   } catch (error) {
-    // Out of reach, or cut off, is asked again; too slow, or not JSON, is not.
+    // A network error is retried. A timeout, or a reply that is not JSON, is not.
     return { answered: false, busy: busy || error instanceof TypeError };
   }
 }
 
-// Each RPC at most once, the first free in order taking the request, without leaving its turn in the queue; while none
-// is free, the turn goes to others. The RPCs that were busy are what to ask again.
-async function round(
+// Asks each RPC at most once, the first free one first. While none is free, the slot goes to other requests.
+async function askEach(
   urls: string[],
   method: string,
   body: string,
-  { later = false, accept = present }: Options,
+  { later = false, accept = notNull }: Options,
 ): Promise<Answer | { answered: false; busy: string[] }> {
   const kind: Kind = method === "eth_getLogs" ? "logs" : "all";
   const left = [...urls];
   const busy: string[] = [];
-  await take(later);
+  await takeSlot(later);
   try {
     while (left.length) {
-      const now = performance.now();
-      const free = left.map((url) => freeAt(url, kind, now));
-      const i = free.findIndex((at) => at <= now);
+      const time = performance.now();
+      const free = left.map((url) => freeAt(url, kind, time));
+      const i = free.findIndex((at) => at <= time);
       if (i < 0) {
-        give();
-        await sleep(Math.min(...free) - now);
-        await take(later);
+        freeSlot();
+        await sleep(Math.min(...free) - time);
+        await takeSlot(later);
         continue;
       }
       const [url] = left.splice(i, 1) as [string];
-      start(url, kind, now);
-      const outcome = await ask(url, body, accept);
+      recordStart(url, kind, time);
+      const outcome = await askOne(url, body, accept);
       if (outcome.answered) return outcome;
       if (outcome.busy) {
         busy.push(url);
-        resting.set(`${url} ${kind}`, performance.now() + REST);
+        restingUntil.set(`${url} ${kind}`, performance.now() + REST);
       }
     }
   } finally {
-    give();
+    freeSlot();
   }
   return { answered: false, busy };
 }
 
 export async function rpc<T>(method: string, params: unknown[], options: Options = {}): Promise<T> {
   const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
-  // Only the RPCs that were busy are asked again.
   let urls = RPCS;
   for (let attempt = 0; ; attempt++) {
-    const outcome = await round(urls, method, body, options);
+    const outcome = await askEach(urls, method, body, options);
     if (outcome.answered) return outcome.result as T;
     const { busy } = outcome;
     if (!busy.length || attempt === RETRIES) throw new Error(`No Base RPC answered ${method}.`);
@@ -178,14 +183,16 @@ export async function rpc<T>(method: string, params: unknown[], options: Options
   }
 }
 
-// At the newest block, or at an earlier one, which only the RPCs that keep Base's history can answer.
+// Reads contracts through Multicall3. A call that fails reads as undefined.
 export async function read(calls: Call[], block: number | "latest" = "latest", later = false): Promise<unknown[]> {
-  const chunks: Promise<unknown[]>[] = [];
-  for (let i = 0; i < calls.length; i += CHUNK) chunks.push(aggregate(calls.slice(i, i + CHUNK), block, later));
-  return (await Promise.all(chunks)).flat();
+  const batches: Promise<unknown[]>[] = [];
+  for (let i = 0; i < calls.length; i += CALLS_PER_BATCH) {
+    batches.push(aggregate(calls.slice(i, i + CALLS_PER_BATCH), block, later));
+  }
+  return (await Promise.all(batches)).flat();
 }
 
-// The same, behind the page's own reads.
+// The same, after the page's own reads.
 export const readLater: typeof read = (calls, block = "latest") => read(calls, block, true);
 
 async function aggregate(calls: Call[], block: number | "latest", later: boolean): Promise<unknown[]> {
@@ -213,10 +220,11 @@ export const codeHash = async (address: Address): Promise<Hex> =>
 export const implementation = async (proxy: Address): Promise<Address> =>
   `0x${(await rpc<Hex>("eth_getStorageAt", [proxy, EIP1967_IMPLEMENTATION_SLOT, "latest"])).slice(-40)}`;
 
-export async function included(hash: Hex): Promise<boolean | undefined> {
+// Whether the transaction succeeded, or undefined if Base has not included it within ten minutes.
+export async function waitForTransaction(hash: Hex): Promise<boolean | undefined> {
   const end = Date.now() + 10 * 60_000;
   while (Date.now() < end) {
-    // Null until the transaction is in a block: an answer, asked again in two seconds rather than of the next RPC.
+    // A null receipt means "not included yet": ask again later, not another RPC.
     const receipt = await rpc<{ status: Hex } | null>("eth_getTransactionReceipt", [hash], {
       accept: () => true,
     }).catch(() => null);

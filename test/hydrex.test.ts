@@ -6,12 +6,12 @@ import { WEEK } from "../src/format.ts";
 import {
   canJoin,
   canLeave,
-  canRelease,
-  group,
+  canLeaveOther,
+  groupOf,
   join,
   leave,
-  release,
-  status,
+  leaveOther,
+  statusOf,
   type Account,
   type Step,
 } from "../src/hydrex.ts";
@@ -39,9 +39,10 @@ const account = (changes: Partial<Account> = {}): Account => ({
   claimer: zeroAddress,
   ...changes,
 });
-const statusOf = (changes: Partial<Account>) => status(account(changes), OWNER, NOW, START);
+const statusWith = (changes: Partial<Account>) => statusOf(account(changes), OWNER, NOW, START);
+const groupWith = (changes: Partial<Account>) => groupOf(account(changes), statusWith(changes));
 
-// Written apart from src/hydrex.ts, from the verified source on Sourcify.
+// Written separately from src/hydrex.ts, from the verified source on Sourcify.
 const abi = parseAbi(["function setConduitApproval(address conduitAddress, uint256 tokenId, bool approve)"]);
 const approval = (id: bigint, approve: boolean, conduit: Address = CONDUIT) => ({
   to: VOTING_ESCROW,
@@ -49,66 +50,65 @@ const approval = (id: bigint, approve: boolean, conduit: Address = CONDUIT) => (
 });
 const txs = (steps: Step[]) => steps.map(({ to, data }) => ({ to, data }));
 
-test("in the automation, joined this week, and left this week", () => {
-  assert.deepEqual(statusOf({ delegate: CONDUIT, delegateAtStart: CONDUIT, claimer: CONDUIT }), { kind: "in" });
-  assert.deepEqual(statusOf({ delegate: CONDUIT, claimer: CONDUIT }), { kind: "joined", date: START + WEEK });
-  assert.deepEqual(statusOf({ delegateAtStart: CONDUIT }), { kind: "left", date: START + WEEK });
+test("in Carbon Impact, joined this epoch, and left this epoch", () => {
+  assert.deepEqual(statusWith({ delegate: CONDUIT, delegateAtStart: CONDUIT, claimer: CONDUIT }), { kind: "in" });
+  assert.deepEqual(statusWith({ delegate: CONDUIT, claimer: CONDUIT }), { kind: "joined", date: START + WEEK });
+  assert.deepEqual(statusWith({ delegateAtStart: CONDUIT }), { kind: "left", date: START + WEEK });
 });
 
 test("votes without claims, or claims without votes, is only partly in", () => {
-  assert.deepEqual(statusOf({ delegate: CONDUIT, delegateAtStart: CONDUIT }), { kind: "partly" });
-  assert.deepEqual(statusOf({ claimer: CONDUIT }), { kind: "partly" });
+  assert.deepEqual(statusWith({ delegate: CONDUIT, delegateAtStart: CONDUIT }), { kind: "partly" });
+  assert.deepEqual(statusWith({ claimer: CONDUIT }), { kind: "partly" });
 });
 
 test("other delegates: the owner, nobody, another automation on Hydrex's list, any other address", () => {
-  assert.deepEqual(statusOf({}), { kind: "self" });
-  assert.deepEqual(statusOf({ delegate: zeroAddress }), { kind: "self" });
-  assert.deepEqual(statusOf({ delegate: USDC.toLowerCase() as Address }), { kind: "other", name: "USDC" });
-  assert.deepEqual(statusOf({ delegate: STRANGER }), { kind: "delegated", to: STRANGER });
+  assert.deepEqual(statusWith({}), { kind: "self" });
+  assert.deepEqual(statusWith({ delegate: zeroAddress }), { kind: "self" });
+  assert.deepEqual(statusWith({ delegate: USDC.toLowerCase() as Address }), { kind: "other", name: "USDC" });
+  assert.deepEqual(statusWith({ delegate: STRANGER }), { kind: "delegated", to: STRANGER });
 });
 
 test("an automation that has not voted since the previous epoch began has stopped", () => {
   const stopped = { kind: "stopped", name: "USDC", voted: STOPPED, since: SINCE };
-  assert.deepEqual(statusOf({ delegate: USDC, delegateAtStart: USDC, delegateVoted: STOPPED }), stopped);
-  assert.deepEqual(statusOf({ delegate: USDC, delegateVoted: START - WEEK - 1 }), {
+  assert.deepEqual(statusWith({ delegate: USDC, delegateAtStart: USDC, delegateVoted: STOPPED }), stopped);
+  assert.deepEqual(statusWith({ delegate: USDC, delegateVoted: START - WEEK - 1 }), {
     kind: "stopped",
     name: "USDC",
     voted: START - WEEK - 1,
     since: START - WEEK,
   });
-  assert.deepEqual(statusOf({ delegate: USDC, delegateVoted: START - WEEK }), { kind: "other", name: "USDC" });
-  assert.deepEqual(statusOf({ delegate: USDC, delegateVoted: 0 }), { kind: "other", name: "USDC" }, "never voted");
+  assert.deepEqual(statusWith({ delegate: USDC, delegateVoted: START - WEEK }), { kind: "other", name: "USDC" });
+  assert.deepEqual(statusWith({ delegate: USDC, delegateVoted: 0 }), { kind: "other", name: "USDC" }, "never voted");
   assert.ok(canJoin(account({ delegate: USDC, claimer: USDC, delegateVoted: STOPPED }), NOW));
 });
 
 test("an account that left another automation this epoch votes from the next", () => {
-  const released = { kind: "released", name: "USDC", date: START + WEEK };
-  assert.deepEqual(statusOf({ delegateAtStart: USDC }), released);
-  assert.deepEqual(statusOf({ delegate: zeroAddress, delegateAtStart: USDC }), released);
-  assert.deepEqual(statusOf({ delegateAtStart: STRANGER }), { kind: "self" }, "not a known automation");
+  const left = { kind: "left-other", name: "USDC", date: START + WEEK };
+  assert.deepEqual(statusWith({ delegateAtStart: USDC }), left);
+  assert.deepEqual(statusWith({ delegate: zeroAddress, delegateAtStart: USDC }), left);
+  assert.deepEqual(statusWith({ delegateAtStart: STRANGER }), { kind: "self" }, "not a known automation");
 });
 
 test("accounts are grouped by what their owner can do with them", () => {
-  const groupOf = (changes: Partial<Account>) => group(account(changes), statusOf(changes));
-  assert.equal(groupOf({ delegate: USDC, delegateAtStart: USDC, delegateVoted: STOPPED }), "stopped");
-  assert.equal(groupOf({ claimer: CONDUIT }), "attention");
-  assert.equal(groupOf({ delegate: CONDUIT, delegateAtStart: CONDUIT, claimer: CONDUIT }), "in");
-  assert.equal(groupOf({ delegate: CONDUIT, claimer: CONDUIT }), "joining");
-  assert.equal(groupOf({ delegateAtStart: CONDUIT }), "leaving");
-  assert.equal(groupOf({}), "open");
-  assert.equal(groupOf({ delegate: USDC, delegateVoted: NOW }), "open", "in a running automation");
-  assert.equal(groupOf({ delegate: STRANGER }), "open");
-  assert.equal(groupOf({ delegateAtStart: USDC }), "open", "left another automation");
-  assert.equal(groupOf({ lockType: 0, end: NOW }), "closed");
-  assert.equal(groupOf({ amount: 0n }), "closed");
-  assert.equal(groupOf({ amount: 0n, delegate: CONDUIT, claimer: CONDUIT }), "in", "empty, but Carbon Impact holds it");
+  assert.equal(groupWith({ delegate: USDC, delegateAtStart: USDC, delegateVoted: STOPPED }), "stopped");
+  assert.equal(groupWith({ claimer: CONDUIT }), "attention");
+  assert.equal(groupWith({ delegate: CONDUIT, delegateAtStart: CONDUIT, claimer: CONDUIT }), "in");
+  assert.equal(groupWith({ delegate: CONDUIT, claimer: CONDUIT }), "joining");
+  assert.equal(groupWith({ delegateAtStart: CONDUIT }), "leaving");
+  assert.equal(groupWith({}), "open");
+  assert.equal(groupWith({ delegate: USDC, delegateVoted: NOW }), "open", "in a running automation");
+  assert.equal(groupWith({ delegate: STRANGER }), "open");
+  assert.equal(groupWith({ delegateAtStart: USDC }), "open", "left another automation");
+  assert.equal(groupWith({ lockType: 0, end: NOW }), "closed");
+  assert.equal(groupWith({ amount: 0n }), "closed");
+  assert.equal(groupWith({ amount: 0n, delegate: CONDUIT, claimer: CONDUIT }), "in", "empty, but still in");
 });
 
 test("an empty account or an ended lock says so first", () => {
-  assert.deepEqual(statusOf({ amount: 0n, delegate: CONDUIT, claimer: CONDUIT }), { kind: "empty" });
-  assert.deepEqual(statusOf({ lockType: 0, end: NOW }), { kind: "ended" });
-  assert.deepEqual(statusOf({ lockType: 0, end: NOW + 1 }), { kind: "self" });
-  assert.deepEqual(statusOf({ lockType: 1, end: 0 }), { kind: "self" });
+  assert.deepEqual(statusWith({ amount: 0n, delegate: CONDUIT, claimer: CONDUIT }), { kind: "empty" });
+  assert.deepEqual(statusWith({ lockType: 0, end: NOW }), { kind: "ended" });
+  assert.deepEqual(statusWith({ lockType: 0, end: NOW + 1 }), { kind: "self" });
+  assert.deepEqual(statusWith({ lockType: 1, end: 0 }), { kind: "self" });
 });
 
 test("who can join and who can leave", () => {
@@ -125,10 +125,10 @@ test("who can join and who can leave", () => {
   assert.ok(canLeave(account({ amount: 0n, delegate: CONDUIT, claimer: CONDUIT })), "empty but in");
   assert.ok(!canLeave(account({ delegate: USDC, claimer: USDC })), "in another automation");
 
-  assert.ok(canRelease(account({ delegate: USDC, claimer: USDC })));
-  assert.ok(!canRelease(account({ delegate: CONDUIT, claimer: CONDUIT })), "in Carbon Impact");
-  assert.ok(!canRelease(account({ delegate: STRANGER })), "not a known automation");
-  assert.ok(!canRelease(account()), "its owner's");
+  assert.ok(canLeaveOther(account({ delegate: USDC, claimer: USDC })));
+  assert.ok(!canLeaveOther(account({ delegate: CONDUIT, claimer: CONDUIT })), "in Carbon Impact");
+  assert.ok(!canLeaveOther(account({ delegate: STRANGER })), "not a known automation");
+  assert.ok(!canLeaveOther(account()), "its owner's");
 });
 
 test("joining sets the conduit's approval on the VotingEscrow", () => {
@@ -163,7 +163,7 @@ test("leaving clears the conduit's approval", () => {
 });
 
 test("leaving another automation clears its approval, named by its address", () => {
-  const steps = release([account({ delegate: USDC, claimer: USDC }), account({ id: 42n, delegate: LOCK_MAXI })]);
+  const steps = leaveOther([account({ delegate: USDC, claimer: USDC }), account({ id: 42n, delegate: LOCK_MAXI })]);
   assert.deepEqual(txs(steps), [approval(141n, false, USDC), approval(42n, false, LOCK_MAXI)]);
   assert.deepEqual(
     steps.map(({ says, id, approve, conduit, automation }) => ({ says, id, approve, conduit, automation })),
@@ -184,7 +184,7 @@ test("leaving another automation clears its approval, named by its address", () 
       },
     ],
   );
-  assert.deepEqual(release([account({ delegate: STRANGER })]), [], "not on Hydrex's list");
+  assert.deepEqual(leaveOther([account({ delegate: STRANGER })]), [], "not on Hydrex's list");
   const [joining] = join([account({ delegate: USDC })]);
   assert.equal(joining!.conduit, CONDUIT);
   assert.ok(!("automation" in joining!), "Carbon Impact's call names no other automation");

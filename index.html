@@ -40,7 +40,7 @@
         <button type="button" class="again secondary">Try again</button>
       </p>
 
-      <!-- Views: the one holding the address's target shows, or Home. See style.css. -->
+      <!-- Each view shows when it holds the hash's target, and Home shows otherwise. See style.css. -->
       <div id="home" class="view" data-title="metaDEX Café">
         <section class="promise">
           <h1 tabindex="-1">Your Hydrex votes, retiring carbon credits and paying you</h1>
@@ -54,10 +54,10 @@
           </p>
           <ul class="states">
             <li>
-              <span class="shape running relay-shape" aria-hidden="true"></span>
+              <span class="shape running impact-shape" aria-hidden="true"></span>
               <span
-                ><b class="relay-state">Running</b><br /><span class="small"
-                  >Carbon Impact: voted <time class="relay-voted">…</time></span
+                ><b class="impact-state">Running</b><br /><span class="small"
+                  >Carbon Impact: voted <time class="impact-voted">…</time></span
                 ></span
               >
             </li>
@@ -278,7 +278,7 @@
           <p><a href="#questions">All questions</a> · <a href="#words">Words</a></p>
         </section>
 
-        <section class="go-on">
+        <section>
           <p class="buttons"><a class="button" href="#app">Open the app</a></p>
           <p>
             You need a Hydrex account: <a href="https://www.hydrex.fi/accounts">lock HYDX on Hydrex</a> to make one.
@@ -393,7 +393,7 @@
             <p class="pick-hint">Tick the accounts to join or leave with.</p>
             <p class="buttons">
               <button type="button" data-action="join">Join</button>
-              <button type="button" data-action="release" class="secondary">Leave</button>
+              <button type="button" data-action="leave-other" class="secondary">Leave</button>
             </p>
           </section>
           <section class="group" data-group="attention" aria-labelledby="group-attention" hidden>
@@ -441,8 +441,8 @@
           <p class="small">Earning Power is shown as on Hydrex: 1.3 times the votes.</p>
         </div>
 
-        <section id="receipts" aria-labelledby="receipts-title" hidden>
-          <h2 id="receipts-title">Last payout</h2>
+        <section id="last-payout" aria-labelledby="last-payout-title" hidden>
+          <h2 id="last-payout-title">Last payout</h2>
           <p class="receipts-reading" role="status">Reading Carbon Impact's last payout from Base…</p>
           <p class="receipts-none" hidden>Carbon Impact has made no payout in the last eight weeks.</p>
           <p class="receipts-other" hidden>
@@ -907,7 +907,7 @@
                   ><a
                     class="beneficiary-address"
                     href="https://basescan.org/address/0xcba0000027bd78edf6714DE3bCC312360E469502"
-                    >0xcba0…9502</a
+                    >0xcba0000027bd78edf6714DE3bCC312360E469502</a
                   ></code
                 >
               </dd>
@@ -1369,7 +1369,7 @@
       </ol>
       <p><a href="#leaving-at-any-time">More on leaving</a></p>
     </template>
-    <template id="release-effects">
+    <template id="leave-other-effects">
       <ol class="timeline">
         <li>
           <b>Now.</b> <span class="automations"></span> can no longer claim the rewards of <span class="which"></span>.
@@ -1412,7 +1412,7 @@
       ><strong>In another Hydrex automation: <bdi class="automation" translate="no"></bdi>.</strong> Joining takes it
       out of that automation.
     </template>
-    <template id="released">
+    <template id="left-other">
       <span class="shape leaving" aria-hidden="true"></span
       ><strong>Left <bdi class="automation" translate="no"></bdi>.</strong> You vote with it from
       <time class="date"></time>.

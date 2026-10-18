@@ -1,12 +1,11 @@
-// The page is one HTML file in views, each addressed by the hash: CSS shows the view that holds the target, or Home
-// (style.css), even without this script. The script adds what CSS cannot: the title, the focus, and opening what
-// folds the target. It changes views only through the hash, which the browser keeps in its history.
+// The page is one HTML file split into views. CSS shows the view that holds the hash's target, or Home, even without
+// this script (see style.css). The script adds the title and the focus, and opens any <details> around the target.
 
 const views = [...document.querySelectorAll<HTMLElement>(".view")];
 const home = views[0]!;
 let current: HTMLElement | undefined;
 
-// As the browser finds the target: the fragment as it is, then decoded. A stray "%" cannot be decoded.
+// Finds the target as the browser does: by the raw fragment, then decoded. A stray "%" cannot be decoded.
 function target(): HTMLElement | null {
   const fragment = location.hash.slice(1);
   if (!fragment) return null;
@@ -26,12 +25,12 @@ function showView(moved: boolean): void {
   current = view;
   if (element && element !== view) return element.scrollIntoView();
   if (!changed) return;
-  // A new view reads as a new page: from the top, and announced by its heading.
+  // A new view starts at the top, with its heading focused so that screen readers announce it.
   scrollTo(0, 0);
   if (moved) view.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
 }
 
-// Inside Safe{Wallet}'s frame, the page opens on the App.
+// Safe{Wallet} shows the page in a frame: start on the App there.
 if (window.parent !== window && !location.hash) location.replace("#app");
 showView(false);
 addEventListener("hashchange", () => showView(true));

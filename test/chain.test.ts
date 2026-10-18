@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
-import { forgetLimits, rpc } from "../src/chain.ts";
+import { resetRateLimits, rpc } from "../src/chain.ts";
 import { RPCS } from "../src/config.ts";
 
 type Answer = { status?: number; body?: unknown; fail?: Error };
 const original = { fetch: globalThis.fetch, random: Math.random, setTimeout: globalThis.setTimeout };
-beforeEach(() => forgetLimits());
+beforeEach(() => resetRateLimits());
 afterEach(() => {
   globalThis.fetch = original.fetch;
   Math.random = original.random;
@@ -14,7 +14,7 @@ afterEach(() => {
 
 type Asked = { url: string; method: string; at: number };
 
-// Each request answered by the next answer for its RPC, the last one again once they run out.
+// Answers each RPC's requests with its answers in turn, then repeats the last one.
 function answering(answers: Record<string, Answer[]>) {
   const asked: Asked[] = [];
   globalThis.fetch = async (input, init) => {
@@ -73,7 +73,7 @@ test("an answer an RPC would give again is not asked again", async () => {
     { body: null },
     result(null),
   ]) {
-    forgetLimits();
+    resetRateLimits();
     const asked = answering(everywhere(answer));
     await assert.rejects(rpc("eth_call", []), /No Base RPC answered eth_call\./);
     assert.equal(asked.length, RPCS.length, JSON.stringify(answer.body));
@@ -94,7 +94,7 @@ test("an RPC out of reach, or cut off in its answer, is asked again", async () =
   });
   assert.equal(await rpc("eth_blockNumber", []), "0x10");
   assert.equal(asked.length, 4);
-  forgetLimits();
+  resetRateLimits();
   const cut = new Response(
     new ReadableStream({ start: (controller) => controller.error(new TypeError("terminated")) }),
   );
@@ -112,7 +112,7 @@ test("a request is asked five times at most, waiting longer each time", async ()
   assert.equal(asked.length, 5 * RPCS.length);
   const rounds = asked.filter((_, i) => i % RPCS.length === 0).map(({ at }) => at);
   const waits = rounds.slice(1).map((at, i) => Math.round(at - rounds[i]!));
-  // Each RPC rests a second after refusing, so the first waits are a second; the backoff, 2 s by then, outlasts it.
+  // Each RPC rests a second after refusing, so the first three waits are about a second. The fourth backoff is longer.
   assert.ok(
     waits.slice(0, 3).every((wait) => wait >= 990 && wait < 1_500),
     waits.join(", "),
@@ -125,7 +125,7 @@ test("each RPC is asked 25 times a second at most, 5 of them for logs; the next 
   await Promise.all(Array.from({ length: 30 }, () => rpc("eth_chainId", [])));
   assert.equal(asked.filter(({ url }) => url === first).length, 25);
   assert.equal(asked.filter(({ url }) => url === second).length, 5);
-  forgetLimits();
+  resetRateLimits();
   asked.length = 0;
   await Promise.all(Array.from({ length: 12 }, () => rpc("eth_getLogs", [])));
   assert.deepEqual(
@@ -172,7 +172,7 @@ test("an answer the caller does not take goes to the next RPC; a pending receipt
   const logs = await rpc<unknown[]>("eth_getLogs", [], { accept: (found) => (found as unknown[]).length > 0 });
   assert.equal(logs.length, 1);
   assert.deepEqual(urls(asked), [first, second]);
-  forgetLimits();
+  resetRateLimits();
   const polled = answering(everywhere(result(null)));
   assert.equal(await rpc("eth_getTransactionReceipt", [], { accept: () => true }), null);
   assert.equal(polled.length, 1, "one RPC a poll");
@@ -180,7 +180,7 @@ test("an answer the caller does not take goes to the next RPC; a pending receipt
 
 test("a request waiting for room gives its turn to others", async () => {
   const asked = answering(everywhere(result("0x1")));
-  // The three RPCs' windows for logs are full for a second.
+  // This uses up all three RPCs' limits for logs for a second.
   await Promise.all(Array.from({ length: 15 }, () => rpc("eth_getLogs", [], { later: true })));
   const waiting = Array.from({ length: 6 }, () => rpc("eth_getLogs", [], { later: true }));
   const before = performance.now();

@@ -18,7 +18,7 @@ test("a concentrated pool's tick, in whole tokens of each", () => {
 test("a classic pair's price: the ratio of its reserves, or the slope of x³y + xy³ for a stable one", () => {
   close(pairPrice(100, 250, false), 2.5);
   close(pairPrice(100, 100, true), 1);
-  // A stable pair holds its price near one far from balance, where a volatile one would not.
+  // A stable pair keeps its price near 1 even when its reserves are uneven; a volatile pair would not.
   const stable = pairPrice(110, 90, true);
   assert.ok(stable < 1 && stable > 0.99, String(stable));
   assert.ok(pairPrice(90, 110, true) > 1);
@@ -45,7 +45,7 @@ test("a search probes every point of a short range, and spreads its points over 
   assert.ok(spread.at(-1)! < 11_769);
 });
 
-// A history of timestamps, read through a reader that counts its batches.
+// A list of timestamps, and a reader that counts the batches it reads.
 function history(times: number[], failAt?: number) {
   let batches = 0;
   const probe = (index: number): Call => ({ address: zeroAddress, abi: [], functionName: "at", args: [index] });
@@ -64,7 +64,7 @@ function history(times: number[], failAt?: number) {
 }
 
 test("searches narrow together, a batch a round, and keep the reads either side of what they find", async () => {
-  // Every half hour or more, as a classic pair records them.
+  // At least half an hour apart, as a classic pair records them.
   const times = Array.from({ length: 5_000 }, (_, i) => 1_000_000 + i * 1_800 + (i % 7) * 60);
   const { reader, search, batches } = history(times);
   const target = times[3_210]! - 30;

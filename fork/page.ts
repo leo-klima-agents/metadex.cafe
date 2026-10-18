@@ -43,9 +43,9 @@ const LIQUID_HYDREX = getAddress("0x809F8175b8F60960dF2bc7a78a7C4Eb04d138AF0");
 const LOCK_MAXI = getAddress("0x53388a4E98Bb56F8571433F5461010Fc287929d3");
 const USDC = getAddress("0xE57b3Ea02336B9b418cA523aB5aD6f479d93bD1D");
 const RECIPIENT = getAddress("0x000000000000000000000000000000000000beef");
-// Tokens that Base's own node runs, such as GOOGLc and cbZEC: their code is the byte 0xef, which anvil cannot run. A call
-// to one burns all its gas, and fails the page's whole batch of reads. Emptied, they read as tokens the page cannot
-// count, as on a node that does not know them.
+// Tokens that Base runs natively, such as GOOGLc and cbZEC. Their code is the byte 0xef, which anvil cannot run: a call
+// to one uses all its gas and fails the whole batch of reads. Without their code, they read as tokens the page cannot
+// count.
 const NATIVE: Address[] = [
   "0xb200000000000000000000c2e324d24d7eecd1fb",
   "0xb20000000000000000000078ee7ce2fe4908108c",
@@ -57,8 +57,8 @@ const NATIVE: Address[] = [
   "0xb200000000000000000000856a95738c92feed01",
 ];
 
-// The VotingEscrow's gas depends on the block's time, and anvil estimates at another time than it mines at, so the test
-// wallet sets a limit as a wallet's margin would.
+// The VotingEscrow's gas use depends on the block time, and anvil estimates gas at another time than it mines at. So
+// the test wallet sets a generous limit, as wallets add a margin.
 const GAS = "0xf4240";
 
 const abi = parseAbi([
@@ -87,8 +87,8 @@ async function view(to: Address, functionName: string, args: unknown[]): Promise
   return decodeFunctionResult({ abi, functionName, data: reply } as never) as Address;
 }
 
-// The page gives an RPC five seconds a request, and anvil reads the state it lacks from FORK_URL one slot at a time:
-// Node makes the page's first reads of the reward contracts with no time limit, so that the page finds them cached.
+// The page gives each request five seconds, but anvil fetches the state it lacks from FORK_URL one slot at a time. So
+// Node makes the slow first reads with no time limit, and the page then finds them cached.
 async function warm(reads: () => Promise<unknown>): Promise<void> {
   const original = globalThis.fetch;
   globalThis.fetch = (_, init) => original(ANVIL, { ...init, signal: null });
@@ -115,10 +115,10 @@ type WalletOptions = {
   decline: boolean;
   switches: boolean;
   approval?: Promise<void>;
-  // The wallet answers a transaction once it settles, as while its window is open.
+  // Holds back the answer to a transaction until it settles, as a wallet does while its window is open.
   sending?: Promise<void>;
 };
-// Reads of Base whose request body it matches fail.
+// Fails the reads of Base whose request body it matches.
 type Rpc = { refuse?: ((body: string) => boolean) | undefined };
 type OpenOptions = {
   width?: number;
@@ -140,7 +140,8 @@ type Opened = {
   rpc: Rpc;
 };
 
-// The page's policy cannot block testWallet, which hands each request of the announced wallet to Node.
+// A wallet that announces itself to the page and hands each request to Node through testWallet, which the page's
+// Content Security Policy cannot block.
 const WALLET_SCRIPT = `(() => {
   const listeners = {};
   window.testWalletEmit = (event, value) => { for (const l of listeners[event] ?? []) l(value); };
@@ -301,7 +302,7 @@ const homeTitle = (page: Page) =>
 const appTitle = (page: Page) => page.getByRole("heading", { name: "Your accounts", level: 1 });
 const howTitle = (page: Page) => page.getByRole("heading", { name: "How it works", level: 1 });
 
-// Through the join's first two steps, to what the wallet will ask.
+// Goes through the join's first two steps, to the calls.
 async function toWallet(page: Page): Promise<void> {
   await review(page).getByRole("heading", { name: "Before you join" }).waitFor();
   await review(page).getByRole("button", { name: "Continue" }).click();
@@ -332,7 +333,7 @@ async function confirm(page: Page): Promise<void> {
   await review(page).getByRole("button", { name: "Close" }).click();
 }
 
-// The first reads of the reward contracts, through anvil from FORK_URL, take most of a minute.
+// The first reads through anvil are slow.
 describe("the page against a fork of Base", { timeout: 600_000 }, () => {
   before(async () => {
     node = spawn(
@@ -388,8 +389,8 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
       /^Thu,? 22 Oct,? 00:00 UTC \(Thu,? 22 Oct,? 02:00 your time\)$/,
     );
     const states = page.locator(".promise .states");
-    assert.equal(await states.locator(".relay-state").textContent(), "Running");
-    assert.match((await states.locator("time.relay-voted").textContent()) ?? "", /^Wed,? 14 Oct,? 23:59 UTC$/);
+    assert.equal(await states.locator(".impact-state").textContent(), "Running");
+    assert.match((await states.locator("time.impact-voted").textContent()) ?? "", /^Wed,? 14 Oct,? 23:59 UTC$/);
     assert.equal(
       await page.locator("header").getByRole("link", { name: "How it works" }).isVisible(),
       false,
@@ -475,7 +476,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
       const found = (await readEarnings())!;
       await sharesOf([9540n, 14485n], found.start, found.votes);
     });
-    // All of Hydrex is too many reads for a fork to answer in time: the test refuses them, and sees when they start.
+    // All of Hydrex takes too many reads for the fork to answer in time, so they are refused, and noted.
     const everyPool = toFunctionSelector("function totalWeightAt(uint256)").slice(2);
     let compared = false;
     const refuse = (body: string) => {
@@ -563,7 +564,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["Carbon Impact", "Carbon Impact"]);
     assert.deepEqual(await review(page).locator(".account").allTextContents(), ["2439", "2435"]);
     assert.deepEqual(await review(page).locator(".approve").allTextContents(), ["true", "true"]);
-    // In groups of four, an address still reads, and copies, whole.
+    // Shown in groups of four, an address still reads and copies as one.
     assert.equal(await review(page).locator(".conduit").first().innerText(), CONDUIT);
     assert.equal(await review(page).locator(".to").first().innerText(), VOTING_ESCROW);
     assert.equal(await review(page).locator(".count").first().textContent(), "Your wallet will ask · 1 of 2");
@@ -577,7 +578,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     await review(page).getByRole("button", { name: "Close" }).click();
     assert.equal(sent.length, 2);
     await expectApprovals([2435n, 2439n], CONDUIT, CONDUIT);
-    // Lock Maxi's ERC-5725 claim approval stays, but the VotingEscrow's own claim does not accept it.
+    // Lock Maxi's ERC-5725 claim approval stays, but the VotingEscrow does not use it for claims.
     assert.equal(await view(VOTING_ESCROW, "getClaimApproved", [2435n]), LOCK_MAXI);
     await group(page, "Joining").getByText("Joined Carbon Impact.").first().waitFor();
     await account(page, 2439).getByText("Joined Carbon Impact.").waitFor();
@@ -595,11 +596,11 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
       { owner: PAYEE },
       { width: 390, height: 844, dark: true, flowing: true },
     );
-    const receipt = page.locator("#receipts .receipt");
+    const receipt = page.locator("#last-payout .receipt");
     await receipt.first().waitFor({ timeout: 120_000 });
     assert.equal(await receipt.count(), 1);
     assert.match(
-      await page.locator("#receipts .receipts-found").innerText(),
+      await page.locator("#last-payout .receipts-found").innerText(),
       /^For #82774, in Carbon Impact's payout of Wed,? 23 Sept?\./,
     );
     assert.equal(await receipt.locator(".receipt-id").innerText(), "#82774");
@@ -609,7 +610,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     assert.equal(await receipt.locator(".receipt-tonnes").innerText(), "65.26 t of carbon credits");
     assert.equal(await receipt.locator(".receipt-fee").innerText(), "0 kVCM");
     assert.equal(await receipt.locator(".receipt-paid").innerText(), "727.11 kVCM");
-    // The epoch whose rewards it paid; the time, in small capitals, is read as written.
+    // The epoch it paid for. The time is a label, which CSS shows in capitals, so it is read with textContent.
     assert.match((await receipt.locator(".receipt-day").textContent()) ?? "", /^Thu,? 10 Sept? to Thu,? 17 Sept?$/);
     assert.equal(await receipt.locator(".receipt-retired-share").innerText(), "31.01%");
     assert.equal(await receipt.locator(".receipt-fee-share").innerText(), "0%");
@@ -626,11 +627,11 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
       await receipt.getByRole("link", { name: "Transaction" }).getAttribute("href"),
       "https://basescan.org/tx/0x0932e5a24f24e45bfd1021764d94abc1d920754c4dc17128dd89f44bd086e899",
     );
-    await shoot(page, "receipt-390-dark", page.locator("#receipts"));
-    // Past the flip, the page reads the automation again and fills its figures, such as the tonnes retired, across the
-    // page: the receipts keep their own.
-    const relay = toFunctionSelector("function retiringEntityName()").slice(2);
-    const readAgain = page.waitForResponse((response) => !!response.request().postData()?.includes(relay));
+    await shoot(page, "receipt-390-dark", page.locator("#last-payout"));
+    // After the flip, the page reads Carbon Impact again and fills its figures, such as .tonnes, across the page. The
+    // receipts keep their own.
+    const entityName = toFunctionSelector("function retiringEntityName()").slice(2);
+    const readAgain = page.waitForResponse((response) => !!response.request().postData()?.includes(entityName));
     await page.clock.setSystemTime((FLIP + 60) * 1000);
     await page.clock.runFor(30_000);
     await readAgain;
@@ -639,7 +640,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     assert.equal(await receipt.locator(".receipt-tonnes").innerText(), "65.26 t of carbon credits");
     const member = await connected({ owner: MEMBER }, { width: 390, height: 844 });
     await member.page
-      .locator("#receipts")
+      .locator("#last-payout")
       .getByText(/Carbon Impact's last payout, on Wed,? 23 Sept?, paid none of your accounts\./)
       .waitFor({ timeout: 120_000 });
     assert.deepEqual([...violations, ...member.violations], []);
@@ -716,7 +717,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
       await review(page).getByText("Waiting for Base to include it").waitFor();
       await review(page).getByRole("button", { name: "Close" }).click();
       await account(page, 141).getByText("Not in an automation.").waitFor();
-      // Later than the page's next look, two seconds on, which a page that stopped following used to take as its last.
+      // Mine only after the page has polled again: it polls every two seconds.
       await page.waitForTimeout(5_000);
       await anvil("evm_mine");
     } finally {

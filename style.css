@@ -1,5 +1,4 @@
-/* The fonts are subsets made by scripts/fonts.py. The build puts them inside this stylesheet, so that its hash covers
-   them too. */
+/* Subsets made by scripts/fonts.py. The build puts them inside this stylesheet, so its hash covers them too. */
 @font-face {
   font-family: "Atkinson Hyperlegible Next";
   src: url("fonts/atkinson-hyperlegible-next-400.woff2") format("woff2");
@@ -36,7 +35,7 @@
   --sans: "Atkinson Hyperlegible Next", system-ui, sans-serif;
   --serif: "Young Serif", Georgia, serif;
   --mono: "Atkinson Hyperlegible Mono", ui-monospace, monospace;
-  /* The colours, Roast: plain values first, the light ones, for a browser without light-dark(). */
+  /* Light colours first, for browsers without light-dark(). */
   color-scheme: light;
   --paper: #fdfcf9;
   --ink: #251a15;
@@ -51,9 +50,8 @@
   --info: #234e82;
   --danger: #ab331f;
 }
-/* Then light and dark, where light-dark() works. A custom property holding it, where it does not, would make every use
-   of the property invalid: links would lose their colour, and buttons their fill. In dark, the accent is milk, as crema
-   looked like the warning's amber. */
+/* Only where light-dark() works: elsewhere, a property holding it would be invalid, and links and buttons would lose
+   their colours. */
 @supports (color: light-dark(red, red)) {
   :root {
     color-scheme: light dark;
@@ -84,13 +82,12 @@ body {
   display: none !important;
 }
 
-/* The views of the page: the one holding the address's target, or Home when it holds none. A browser without :has()
-   drops both rules, and shows every view as one page. */
+/* Show only the view that holds the hash's target, or Home. A browser without :has() shows every view. */
 main:has(> .view:target, > .view :target) > .view:not(:target, :has(:target)),
 main:not(:has(> .view:target, > .view :target)) > .view:not(#home) {
   display: none;
 }
-/* Young Serif has one weight: headings use it as it is. */
+/* Young Serif has one weight, so headings must not be bold. */
 h1,
 h2 {
   font-family: var(--serif);
@@ -107,8 +104,7 @@ h2 {
 code {
   font-family: var(--mono);
 }
-/* Hex in groups of four, apart with no space between them, so that a copy is the plain hex. See hexGroups(). The gap
-   follows each group, so that a group that wraps starts its line. */
+/* Hex in groups of four, apart by margins rather than spaces, so that a copy is the plain hex. See showHex(). */
 .hex {
   overflow-wrap: normal;
 }
@@ -119,8 +115,7 @@ code {
   content: "\A";
   white-space: pre;
 }
-/* Small capitals in the mono face, for what names a figure, a field or a step: quiet above what they name, in ink
-   beside it, on a slip. */
+/* Labels: small capitals in the mono face. */
 .label,
 .numbers dt,
 dl.details dt,
@@ -141,9 +136,6 @@ dialog .step-count,
 table,
 .numbers dd {
   font-variant-numeric: tabular-nums;
-}
-.view h1:focus {
-  outline: none;
 }
 
 header.site {
@@ -168,7 +160,7 @@ header.site nav {
   align-items: center;
   gap: 0.5rem 1rem;
 }
-/* On Home, on a phone, the header keeps Open the app beside the name: How it works is right under the heading. */
+/* On Home on a phone, the header leaves out How it works, which is right under the heading. */
 @media (max-width: 30rem) {
   body:not(:has(main > .view:not(#home):target, main > .view:not(#home) :target)) header.site .how {
     display: none;
@@ -184,8 +176,7 @@ header.site nav {
   background: currentColor;
   vertical-align: middle;
 }
-/* Each status has a shape, and words: never colour alone. Running is filled; joining and leaving half filled; not
-   looked after hollow; stopped, or needing attention, a triangle; checks that failed, a square. */
+/* Each status has a shape, so that it never depends on colour alone. */
 .shape {
   display: inline-block;
   box-sizing: border-box;
@@ -254,7 +245,6 @@ summary {
 .notice > p:last-child {
   margin-block-end: 0;
 }
-/* The automations' states, under Home's heading: each its shape, its state, and when it last voted. */
 .states {
   display: grid;
   gap: 0.5rem;
@@ -345,11 +335,13 @@ button img {
   margin: 0;
   font-weight: 600;
 }
-/* Klima Protocol's logo keeps a third of its size clear around it, as its guidelines ask. */
-.numbers .through {
+/* Klima's guidelines keep a third of the logo's size clear around it. */
+.through {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+.numbers .through {
   margin-block-start: 0.5rem;
   color: var(--quiet);
   font-size: 0.875rem;
@@ -374,7 +366,7 @@ button img {
 .scroll {
   overflow-x: auto;
 }
-/* Words stay whole: on a narrow screen, a table scrolls instead. */
+/* Words stay whole: on a narrow screen, the table scrolls. */
 .scroll table {
   border-collapse: collapse;
   font-size: 0.875rem;
@@ -394,7 +386,6 @@ button img {
   font-weight: normal;
 }
 
-/* How it works: one section after another, each its own address. */
 #how-it-works > section {
   margin-block-start: 2rem;
   border-block-start: 1px solid var(--line);
@@ -541,7 +532,6 @@ dialog .step-count {
 dialog .step-count:not([hidden]) + h2 {
   margin-block-start: 0.25rem;
 }
-/* Each call as a slip, in the mono face: its heading, the page's own words, then its fields as the wallet shows them. */
 .steps {
   padding-inline-start: 0;
   list-style: none;
@@ -588,8 +578,7 @@ dialog .step-count:not([hidden]) + h2 {
   color: var(--quiet);
   font-family: var(--sans);
 }
-/* The calldata under the fields, across the slip: eight groups a line, wide enough on a phone, so that each 32-byte
-   word takes two lines of 16 bytes. */
+/* Eight groups a line, so that each 32-byte word of calldata takes two lines. */
 .fields .bytes {
   grid-column: 1 / -1;
 }
@@ -626,7 +615,6 @@ dialog .step-count:not([hidden]) + h2 {
   font-family: var(--sans);
   font-size: 0.875rem;
 }
-/* A receipt for each account in the last payout, laid out as the call slips are. */
 .receipt {
   max-inline-size: 28rem;
   padding-inline: 1.25rem;
@@ -683,11 +671,7 @@ dialog .step-count:not([hidden]) + h2 {
   font-family: var(--sans);
   font-size: 0.8125rem;
 }
-/* Klima Protocol's logo keeps a third of its size clear around it, as its guidelines ask. */
 .lines .through {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
   margin-block: 0.5rem;
 }
 .total {
@@ -728,7 +712,9 @@ dialog .foot :is(p:empty, .buttons) {
     position: static;
   }
 }
-/* The title takes the focus when the review opens, so that it is read first. */
+/* Headings get the focus when a view or the review opens, so that screen readers read them first. They need no
+   outline. */
+.view h1:focus,
 #review-title:focus {
   outline: none;
 }

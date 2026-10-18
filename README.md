@@ -1,136 +1,180 @@
 # metaDEX Café
 
-The static page at <https://metadex.cafe/> for joining and leaving the Klima "Carbon Impact" conduit with Hydrex
-accounts on Base; Hydrex's app, and the page, call conduits automations. This repository holds the page: `index.html`,
-`style.css` and its fonts in `fonts/`, and the script in `src/` that reads Base and talks to the wallet, whose
-dependencies are `viem`, and `@safe-global/safe-apps-sdk` for Safe{Wallet}.
+metaDEX Café is a static web page at <https://metadex.cafe/>. It lets owners of Hydrex accounts on Base join or leave
+Carbon Impact, Klima's automation on Hydrex. Hydrex's contracts call automations "conduits".
 
-The page has three views, addressed by the hash: Home at `/`, which asks for no wallet; the App at `#app`, with the
-wallet's accounts, where Safe{Wallet} opens the page; and How it works at `#how-it-works`, which states everything in
-full. Every `id` is an address that shows the view holding it, such as `#timing`, and CSS switches the views, so they
-work without the script.
+The page has no server. It reads Base through public RPCs and asks the visitor's wallet to send transactions. It holds
+no keys and stores nothing.
 
-## How joining works
+This README is for whoever runs the site. The design and the plan are in [design/](design/).
 
-Joining calls `setConduitApproval(conduit, tokenId, true)` on Hydrex's VotingEscrow, once per account.
+## What the page does
 
-- **Votes:** the account's votes go to the conduit from the next epoch, which starts on Thursday at 00:00 UTC. Until it
-  leaves, its owner cannot vote with it.
-- **Rewards:** the conduit can claim the account's rewards at once, including any not yet claimed. After each epoch, it
-  swaps them to kVCM, retires a share as carbon credits and sends the rest to the owner's payout address.
-- **The account** stays in the owner's wallet, with its HYDX.
+- **Joining** is one call per account: `setConduitApproval(conduit, tokenId, true)` on Hydrex's VotingEscrow. Carbon
+  Impact can then claim the account's rewards at once, and votes with it from the next epoch, which starts on Thursday
+  at 00:00 UTC. After each epoch, it swaps the rewards to kVCM, retires a share as carbon credits, and pays the rest to
+  the owner. The account and its HYDX stay in the owner's wallet.
+- **Leaving** is the same call with `false`. The page can also take accounts out of Hydrex's other automations, such as
+  those that stopped voting in September 2026: same call, with that automation's address.
+- **Before anyone can join, the page checks** the chain, Carbon Impact's code and settings, and the code of Hydrex's
+  VotingEscrow against `src/config.ts`. If a check fails, joining is turned off and the page says why. Leaving always
+  works. The checks run again every hour.
+- It shows what Carbon Impact's votes earned last epoch, and a receipt for each of the owner's accounts in Carbon
+  Impact's last payout.
+- Inside Safe{Wallet}, it proposes all the calls as one Safe transaction.
 
-Leaving is the same call with `false`: the conduit can no longer claim, and the votes come back from the next epoch.
-Leaving another of Hydrex's automations, such as one that stopped, is the same call with its address.
+One admin key controls Carbon Impact. It can change the share retired (up to 100%), the fee (up to 1%), the payout
+tokens, the swap routers, any owner's payout address, and who claims and votes for it. The page always shows the
+settings as they are on Base.
 
-A single admin key controls the conduit. It can change the share retired (up to 100%), its fee (up to 1%), the payout
-tokens, the swap routers, any owner's payout address, and who claims and votes for it.
+## Network access
 
-## What the page can and cannot do
+The Content Security Policy in `index.html` lets the page reach three RPCs only. They are asked in this order:
 
-- **It sends two calls only,** `setConduitApproval` with `true` or `false`, and shows what they change and each call
-  before the wallet asks, field by field, as the wallet will show it, each from a click of its own. Inside Safe{Wallet},
-  it also shows the Safe transaction's fields and its calldata, each 32-byte word on two lines of 16 bytes. Addresses
-  are in full, in groups of four, and copy without spaces.
-- **It holds no key, has no server and stores nothing.** It connects to a wallet only from a click: one the browser
-  announces (EIP-6963), or `window.ethereum`. Inside Safe{Wallet}, it proposes the calls as one Safe transaction.
-- **It checks the conduit first.** The chain, the conduit's code and settings, and the code of Hydrex's VotingEscrow
-  must match `src/config.ts`, or joining stays off. Leaving works either way.
-- **It says when an account's automation has stopped,** from when Hydrex's Voter last saw it vote.
-- **It shows what the votes earned last epoch,** from Hydrex's reward contracts: for the conduit, for each account in
-  it, and, once that section shows, for all of Hydrex. Tokens are priced at their average over the half hour before the
-  epoch ended, in Hydrex's pools, with Chainlink for WETH and cbBTC; a token without a deep enough pool counts for
-  nothing.
-- **It shows the last payout,** as a receipt for each of the owner's accounts in it: the epoch it paid for, what was
-  earned, swapped into kVCM, retired, with its share and the name it was retired in, the fee, and paid, when and the
-  transaction, from the conduit's events. A run is mostly a transaction for each account, over up to half a day, and
-  Base's free RPCs give the logs of 100 blocks at a time at most, so the page finds the payout by its effect:
-  `totalTonnesRetired` only grows, and a search of past blocks finds the stretches of 100 blocks in which it changed,
-  then reads their logs. That was 17 to 118 requests for the six runs from Aug to Sept 2026. It looks back eight weeks,
-  and only for an owner with an account in the conduit. An open page checks the total every five minutes, and once it
-  has grown, searches only the blocks after its last search. A payout takes up to half a day: while one is under way and
-  has not reached the owner's accounts, the page keeps the last receipts, and says a new payout has begun. Each
-  stretch's logs must hold a retirement, or the next RPC is asked for them.
-- **It reaches nothing but three Base RPCs,** by its Content Security Policy: `https://mainnet.base.org`,
-  `https://base.drpc.org` and `https://base-rpc.publicnode.com`. The browser checks the script and the stylesheet
-  against the SHA-384 hashes in `index.html`; the fonts are inside the stylesheet.
-- **It cannot stop copies.** Anyone can host one that approves another conduit: use the official address, and read the
-  wallet prompt.
+1. `https://mainnet.base.org`
+2. `https://base.drpc.org`, which serves old blocks for free
+3. `https://base-rpc.publicnode.com`, which needs a paid token for old blocks
 
-## Deployment
+The page sends each RPC at most 25 requests a second, 5 of them for logs, and has at most 6 requests in flight. When an
+RPC is busy or fails, the next one is asked. When none answers, the busy ones are asked again up to four times.
 
-A tag deploys the page: push a tag of `v` and the version in `package.json`, such as `v0.3.0`; any other fails. CI runs
-its checks, publishes `dist/` on GitHub Pages, and checks that Pages serves the same files.
+The browser checks the script and the stylesheet against SHA-384 hashes in `index.html`. The fonts are inside the
+stylesheet.
 
-- **Pages:** built by GitHub Actions, on the custom domain `metadex.cafe` with HTTPS enforced, and the A and AAAA
-  records GitHub lists for an apex domain. The `github-pages` environment allows tags matching `v*`.
-- **Secrets:** `BASE_RPC_URL`, an archive RPC for Base, for the fork tests.
-- **Safe{Wallet}:** add `https://metadex.cafe/` as a custom Safe App, under Apps, then My custom apps.
+## Setup
 
-Before tagging, run the fork tests unless CI does, and open the build with a wallet: a failed check of the conduit means
-a contract changed, and `src/config.ts` needs the new contracts checked first.
+Once, on GitHub and at the DNS provider:
 
-## Checking a build
+- **GitHub Pages:** source "GitHub Actions", custom domain `metadex.cafe`, "Enforce HTTPS" on. At the DNS provider, add
+  the A and AAAA records that GitHub lists for an apex domain.
+- **The `github-pages` environment:** allow deployments from tags that match `v*`.
+- **The `BASE_RPC_URL` secret:** an archive RPC for Base. CI uses it for the browser tests, and skips them without it.
+- **Safe{Wallet}:** under Apps, then My custom apps, add `https://metadex.cafe/`.
 
-The same commit gives the same files on any machine. Check out the version in the page's footer, run
-`npm ci --ignore-scripts` and `npm run build`, and compare each file in `dist/` with the one at the same path on
-<https://metadex.cafe/>.
+## Releasing
 
-## Failure modes
+1. Set the new version, for example `npm version 0.5.0 --no-git-tag-version`, and commit.
+2. Run `npm run build` and `python3 -m http.server --directory dist 8000`, then open <http://localhost:8000/#app> with a
+   wallet. Check that joining is on.
+3. Run the browser tests with `npm run test:fork`. CI runs them too when the `BASE_RPC_URL` secret is set.
+4. Tag the commit with `v` and the version, for example `v0.5.0`, and push the tag. Any other tag fails.
 
-- **Right after a deployment,** a browser may keep the previous script or stylesheet for ten minutes, and refuses it
-  until then, as it does not match the page's hashes.
-- **Base RPC:** every request goes through one queue in `src/chain.ts`, six at a time at most, the page's own reads
-  before those in the background (the last payout's search, all of Hydrex, prices). Each RPC is asked 25 times a second
-  at most, 5 of them for logs, as `https://mainnet.base.org` allows a visitor; a request goes to the first RPC with
-  room, asking mainnet.base.org, then drpc, then publicnode: drpc keeps Base's history for free, where publicnode asks a
-  token for it. It waits only when none has room. While the first two are full, a read of a past block still reaches
-  publicnode, which refuses it, and goes on. A read that fails goes to the next RPC at once, in the same turn. An RPC
-  that refuses for its limits is left alone for a second by every request. When none answers, the page asks those that
-  were busy or out of reach again, up to four times, after an exponential backoff with full jitter; a read that would
-  fail the same way, as one that reverts or one too slow, is not asked again. If none answers in the end, the page says
-  so and offers to try again. Leaving never waits for the conduit's settings. If the Voter cannot be read, accounts in
-  other automations show without saying whether those stopped; if what the votes earned cannot be read, the page says so
-  where the figures go, and tries again every five minutes. If the last payout cannot be read, the page says so and
-  offers to try again; one without prices shows its tokens alone. Read again in the background, a payout that cannot be
-  read leaves what is shown, and is tried again five minutes later.
-- **A failed check** turns joining off and says why. An open page runs the checks again every hour.
-- **The end of an epoch:** the page takes the time from Base's newest block, and reads the accounts and the conduit
-  again within half a minute.
-- **The wrong network:** the page offers to switch to Base, or asks to pick Base in the wallet.
-- **A refusal, or a transaction that fails:** the review says so, with links to the transactions that went through.
-  Closing it stops the page sending, not following.
-- **A wallet that locks** is let go: pick it again once it is unlocked.
+CI then runs every check, publishes `dist/` on GitHub Pages, and downloads each file back from Pages to compare it.
+
+For up to ten minutes after a release, a browser may still hold the old script or stylesheet in its cache. It refuses
+them, because their hashes no longer match, so the page may not work for that visitor until the cache expires.
+
+## When a contract changes
+
+The page names each check that fails:
+
+| The page says                                          | What changed                                                                              |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| The RPC serves another chain than Base.                | An RPC answered for another chain.                                                        |
+| Carbon Impact runs other code than this page knows.    | Carbon Impact's code.                                                                     |
+| Carbon Impact points to another VotingEscrow or Voter. | `veToken()` or `voter()` on Carbon Impact.                                                |
+| Carbon Impact pays in another token than kVCM.         | `kvcm()` on Carbon Impact.                                                                |
+| What joining Carbon Impact approves has changed.       | `getConduitApprovalConfig` on the VotingEscrow: no longer active, or other than `[3, 5]`. |
+| Hydrex upgraded its VotingEscrow.                      | The VotingEscrow's implementation, or its code.                                           |
+| Hydrex changed its VotingEscrow's approval logic.      | `approvalLogic()` on the VotingEscrow, or its code.                                       |
+
+Read what changed, and decide whether the page should trust it. If it should, update `src/config.ts`, run the tests and
+release. These [Foundry](https://getfoundry.sh/) commands print the values that `src/config.ts` holds:
+
+```sh
+RPC=https://mainnet.base.org
+CONDUIT=0xdE91885cF35ac57DF0c4A75c16862127dBe8317c
+ESCROW=0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1
+IMPLEMENTATION=$(cast to-check-sum-address $(cast implementation $ESCROW --rpc-url $RPC))
+LOGIC=$(cast call $ESCROW "approvalLogic()(address)" --rpc-url $RPC)
+
+cast keccak $(cast code $CONDUIT --rpc-url $RPC)         # CONDUIT_CODE_HASH
+echo $IMPLEMENTATION                                    # VOTING_ESCROW_IMPLEMENTATION
+cast keccak $(cast code $IMPLEMENTATION --rpc-url $RPC)  # VOTING_ESCROW_IMPLEMENTATION_CODE_HASH
+echo $LOGIC                                             # APPROVAL_LOGIC
+cast keccak $(cast code $LOGIC --rpc-url $RPC)           # APPROVAL_LOGIC_CODE_HASH
+cast call $ESCROW "getConduitApprovalConfig(address)(uint8[],bool,string)" $CONDUIT --rpc-url $RPC  # ACTIONS
+```
+
+When Hydrex adds or removes automations, update `src/hydrex-conduits.json` from <https://api.hydrex.fi/conduits>, and
+the table of automations in `index.html`. A test checks that the two match.
+
+## Checking a deployment
+
+The same commit always builds the same files. To check what the site serves, check out the commit shown in the page's
+footer, then:
+
+```sh
+npm ci --ignore-scripts
+npm run build
+cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.cafe/${file#./}" | cmp - "$file"; done
+```
+
+## What visitors may run into
+
+- **"Reading Base failed."** No RPC answered. The page offers to try again. What votes earned, the other automations and
+  the last payout only add to the page: if one of them cannot be read, the rest of the page still works. What votes
+  earned is tried again every five minutes, and the last payout has a button to read it again.
+- **Joining is off.** A check failed: see [When a contract changes](#when-a-contract-changes).
+- **The wallet is on another network.** The page offers to switch it to Base, or asks the visitor to pick Base in the
+  wallet.
+- **A refused or failed transaction.** The review says so, with links to the transactions that went through. Closing the
+  review stops sending, but the page keeps following what was already sent.
+- **A wallet that locks** is disconnected. Picking it again reconnects it.
+- **At the end of an epoch,** Thursday at 00:00 UTC by Base's clock, the page reads the accounts and Carbon Impact again
+  within half a minute.
+- **A payout under way.** A payout run takes up to half a day after each epoch. Until it reaches the owner's accounts,
+  the page keeps the last receipts and says that a new payout has begun.
+
+## Limits
+
+- The page shows the last payout only, and no unclaimed rewards per account.
+- It finds payouts through changes in `totalTonnesRetired`, as the free RPCs give the logs of 100 blocks at a time at
+  most. So a payout that retires nothing is found only within 100 blocks of one that does. In Aug and Sept 2026, 2 of 71
+  payouts retired nothing, both of them paying nothing, and one of them was that close.
+- What votes earned is for the last epoch only, at approximate prices: each token's average price over the half hour
+  before the epoch ended, in Hydrex's pools, with Chainlink for WETH and cbBTC. A token without a deep enough pool
+  counts as nothing.
+- Only the admin key, or a call from the owner's own address made elsewhere, can change a payout address.
 
 ## Development
 
-Needs Node 26. Run `npm ci --ignore-scripts`, then `npm run typecheck`, `npm test` and `npm run format` before
-committing. `npm run build` writes the page to `dist/`.
+Needs Node 26.
 
-`npm run test:fork` drives the build in Chromium against a fork of Base in anvil, with real owners: joining, leaving, a
-Safe, the views and what can fail. It needs anvil, and Chromium (`npx playwright-core install chromium`, or `CHROMIUM`).
-`BASE_RPC_URL` is the archive RPC to fork from, and `SCREENSHOTS` a folder for screenshots.
+```sh
+npm ci --ignore-scripts
+npm run typecheck
+npm test
+npm run format  # before committing
+npm run build   # writes the page to dist/
+```
 
-`fonts/` holds Latin subsets of Atkinson Hyperlegible Next and Mono, and Young Serif, made by `scripts/fonts.py` from
-Google Fonts' sources at a pinned commit; it needs Python, with the fontTools and brotli versions it names. The build
-puts them inside `style.css` as `data:` URLs, which the Content Security Policy allows for fonts only.
-`scripts/icons.ts` draws `favicon.ico` and `apple-touch-icon.png` from `icon.svg`, with Chromium.
+`npm run test:fork` builds the page, then runs it in Chromium against a fork of Base in anvil, with real accounts:
+joining, leaving, a Safe, the views, and what can fail. It needs [anvil](https://getfoundry.sh/) and Chromium
+(`npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium binary). `BASE_RPC_URL` is the archive RPC to
+fork from, and `SCREENSHOTS` an optional folder for screenshots. It takes about ten minutes.
 
-`src/config.ts` holds what the page trusts about the conduit, its RPCs, and what its prices start from;
-`src/hydrex-conduits.json` names Hydrex's other automations, as `api.hydrex.fi/conduits` lists them. CI runs Prettier,
-the type check, the tests, `reuse lint` and the build, then builds again from a fresh clone and checks that both builds
-are the same; with `BASE_RPC_URL`, it also runs the fork tests. Dependabot updates the pinned Actions and npm packages.
+CI runs Prettier, the type check, the unit tests, `reuse lint` and the build. It then builds again from a fresh clone
+and checks that both builds are the same. With `BASE_RPC_URL` set, it also runs the browser tests. Dependabot updates
+the pinned Actions and npm packages every week.
 
-## Limitations
-
-- The last payout only, and no unclaimed rewards per account. A payout that retires nothing does not move
-  `totalTonnesRetired`: the page finds it only within 100 blocks of one that does. In Aug and Sept 2026, 2 of 71 payouts
-  retired nothing, both paying nothing, and one of them was that close.
-- What the votes earned is for the last epoch only, at approximate prices.
-- Only the admin key, or a call from the owner's address made elsewhere, can change a payout address.
+| Path                                                    | What it holds                                                                              |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `index.html`                                            | The page. Its views are Home, the App (`#app`) and How it works (`#how-it-works`).         |
+| `style.css`, `fonts/`                                   | Styles and fonts. CSS switches the views, so they work without the script.                 |
+| `src/config.ts`                                         | What the page trusts: contract addresses and code hashes, the RPCs, and the price anchors. |
+| `src/hydrex-conduits.json`                              | Hydrex's automations, as <https://api.hydrex.fi/conduits> lists them.                      |
+| `src/main.ts`                                           | Startup, the wallet connection, and the accounts.                                          |
+| `src/review.ts`                                         | The review that shows each call before the wallet asks.                                    |
+| `src/last-epoch.ts`, `src/earnings.ts`, `src/prices.ts` | What votes earned last epoch, and token prices.                                            |
+| `src/last-payout.ts`, `src/receipts.ts`                 | The receipts of the last payout.                                                           |
+| `src/hydrex.ts`                                         | Hydrex's contracts: reads, account statuses, the calls, and the checks.                    |
+| `src/chain.ts`, `src/wallet.ts`                         | RPC requests, and wallets.                                                                 |
+| `src/views.ts`, `src/dom.ts`, `src/format.ts`           | Views, page helpers, and number and date formats.                                          |
+| `test/`, `fork/page.ts`                                 | Unit tests, and the browser tests.                                                         |
+| `scripts/`                                              | The build; `fonts.py` makes `fonts/`, and `icons.ts` draws the icons from `icon.svg`.      |
 
 ## License
 
-MIT, REUSE compliant. The fonts in `fonts/` are under the SIL Open Font License 1.1, and carry their copyright and
-licence in their own metadata. Klima Protocol's logo, `klima-protocol.svg`, is Klima Protocol's, all rights reserved,
-and used with its permission.
+MIT, and REUSE compliant. The fonts in `fonts/` are under the SIL Open Font License 1.1. Klima Protocol's logo,
+`klima-protocol.svg`, belongs to Klima Protocol, all rights reserved, and is used with its permission.

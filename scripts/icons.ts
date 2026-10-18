@@ -1,12 +1,12 @@
-// Draws favicon.ico (16 and 32 px) and apple-touch-icon.png (180 px, opaque) from icon.svg, with Chromium. Run it from
-// the repository's root after changing icon.svg: node scripts/icons.ts. Chromium is found as for the fork tests.
+// Draws favicon.ico (16 and 32 px) and apple-touch-icon.png (180 px) from icon.svg, with Chromium. After changing
+// icon.svg, run it from the repository's root: node scripts/icons.ts. Set CHROMIUM to use another Chromium.
 import { readFileSync, writeFileSync } from "node:fs";
 import { chromium } from "playwright-core";
 
 const svg = readFileSync("icon.svg").toString("base64");
 const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 
-// The tile's own ink fills the corners of the touch icon, which iOS wants opaque, and rounds itself.
+// iOS wants an opaque touch icon and rounds its corners itself, so the corners take the tile's colour.
 async function draw(size: number, background = "transparent"): Promise<Buffer> {
   const page = await browser.newPage({ viewport: { width: size, height: size } });
   await page.setContent(
@@ -18,7 +18,7 @@ async function draw(size: number, background = "transparent"): Promise<Buffer> {
   return png;
 }
 
-// An ICO file whose images are PNGs, as every current browser reads.
+// An ICO file with PNG images inside, which every current browser reads.
 function ico(images: { size: number; png: Buffer }[]): Buffer {
   const head = Buffer.alloc(6 + 16 * images.length);
   head.writeUInt16LE(1, 2);

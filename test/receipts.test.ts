@@ -9,7 +9,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { forgetLimits } from "../src/chain.ts";
+import { resetRateLimits } from "../src/chain.ts";
 import { RPCS } from "../src/config.ts";
 import {
   BLOCKS_PER_WEEK,
@@ -20,7 +20,7 @@ import {
   payouts,
   retires,
   type Log,
-  type Search,
+  type RunSearch,
 } from "../src/receipts.ts";
 
 const abi = parseAbi([
@@ -33,7 +33,7 @@ const OWNER: Address = "0x60924601E73EBc5C2Bd9244c788d93e0710a6c93";
 const OTHER: Address = "0xa79cd47655156b299762DFE92A67980805ce5a31";
 const CREDIT: Address = "0x0000000000000000000000000000000000000c02";
 
-// A total retired that steps up at the given blocks, read one block at a time.
+// A total retired that goes up by one at each of the given blocks.
 function counter(steps: number[]) {
   const reads: number[] = [];
   const at = async (block: number) => {
@@ -181,8 +181,7 @@ test("a stretch's logs hold a retirement, or an RPC has lost them", () => {
   assert.equal(retires(null), false);
 });
 
-// A Base that answers the search's reads: the total retired at any block, from the payouts that retired; their logs;
-// and each block's time, two seconds a block.
+// A fake Base for the search: the total retired at any block, the payouts' logs, and block times, two seconds apart.
 const multicallAbi = parseAbi([
   "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
 ]);
@@ -232,11 +231,11 @@ function base(head: number, paid: Paid[], lost: (read: Read) => boolean = () => 
 }
 
 const original = globalThis.fetch;
-beforeEach(() => forgetLimits());
+beforeEach(() => resetRateLimits());
 afterEach(() => (globalThis.fetch = original));
 
 const HEAD = 1_000_000;
-// A run of four payouts over some 9,000 blocks, more than a week back, one paying out without retiring; and an older one.
+// A run of five payouts over some 9,000 blocks, more than a week back, one of them without a retirement; and an older one.
 const RUN: Paid[] = [
   { id: 1n, block: 598_800, retires: true },
   { id: 2n, block: 599_350, retires: true },
@@ -245,7 +244,7 @@ const RUN: Paid[] = [
   { id: 5n, block: 607_800, retires: true },
 ];
 const OLDER: Paid[] = [{ id: 9n, block: 300_000, retires: true }];
-const ids = (search: Search) => search.run?.payouts.map(({ id }) => id);
+const ids = (search: RunSearch) => search.run?.payouts.map(({ id }) => id);
 
 test("the last run, whole, read in the background, without reading the week it has no change in", async () => {
   const chain = base(HEAD, [...OLDER, ...RUN]);
@@ -254,7 +253,7 @@ test("the last run, whole, read in the background, without reading the week it h
   assert.equal(search.run!.block, 607_800);
   assert.equal(search.run!.time, 1_700_000_000 + 2 * 607_800);
   assert.equal(search.total, 5n);
-  // The total at HEAD - 1 week is the same as now: the change is before it, and nothing after it is read again.
+  // The total a week back is the same as now, so the change is earlier, and nothing after that is read again.
   const calls = chain.reads.filter(({ method }) => method === "eth_call").map(({ block }) => block!);
   assert.ok(
     calls.slice(1).every((block) => block <= HEAD - 5 - BLOCKS_PER_WEEK),
@@ -272,7 +271,7 @@ test("logs an RPC has lost go to the next RPC", async () => {
       ({ url, method, from, to }) => url === second && method === "eth_getLogs" && from! <= 607_800 && 607_800 <= to!,
     ),
   );
-  forgetLimits();
+  resetRateLimits();
   base(HEAD, RUN, ({ from, to }) => from! <= 607_800 && 607_800 <= to!);
   await assert.rejects(lastRun(), /No Base RPC answered eth_getLogs/);
 });
@@ -295,7 +294,7 @@ test("once the total has grown, only the new blocks are searched: a run goes on,
     chain.reads.every(({ block, from }) => (block ?? from!) > first.top),
     "nothing before the last search is read again",
   );
-  // A week later, past a day: a full search, and a new run.
+  // A week later, more than a day after the last search: a full search finds a new run.
   chain.paid.push({ id: 15n, block: HEAD + BLOCKS_PER_WEEK, retires: true });
   chain.head = HEAD + BLOCKS_PER_WEEK + 1_000;
   assert.deepEqual(ids(await lastRun(next)), [15n]);

@@ -1,5 +1,5 @@
 import type { Hex } from "viem";
-import { included } from "./chain.ts";
+import { waitForTransaction } from "./chain.ts";
 import { CHAIN_ID } from "./config.ts";
 import { clone, fill, show, showHex, txLink } from "./dom.ts";
 import { count } from "./format.ts";
@@ -7,8 +7,8 @@ import type { Step } from "./hydrex.ts";
 import { declined, sendTransaction, switchToBase, type Connection, type Wallet } from "./wallet.ts";
 
 export type Hooks = { closed(submitted: boolean): void; switched(): void };
-// The last page also shows the calls, and Confirm.
-export type Page = { title: string; body?: DocumentFragment };
+// The last page also shows the calls and the Confirm button.
+export type ReviewPage = { title: string; body?: DocumentFragment };
 
 type Review = {
   name: string;
@@ -41,8 +41,8 @@ const confirm = part<HTMLButtonElement>(".confirm");
 const back = part(".back");
 let current: Review | undefined;
 
-// Each call as the wallet will show it: its arguments one by one, each address in full and named. In a Safe, the fields
-// of a Safe transaction follow, with the calldata word by word, so that co-signers can compare both with Safe{Wallet}.
+// A call as the wallet will show it. In a Safe, the Safe transaction's fields and calldata follow, for co-signers to
+// compare with Safe{Wallet}.
 function slip(step: Step, i: number, n: number, safe: boolean): DocumentFragment {
   const item = clone("step");
   const which = n > 1 ? ` · ${safe ? "call " : ""}${i + 1} of ${n}` : "";
@@ -54,7 +54,6 @@ function slip(step: Step, i: number, n: number, safe: boolean): DocumentFragment
     account: String(step.id),
     approve: String(step.approve),
     call: `The call above, in ${(step.data.length - 2) / 2} bytes:`,
-    // The words after the selector, as the call's own arguments.
     "slip-note": `The selector, then each 32-byte word on two lines: the conduit, ${step.id} as ${step.id.toString(16)}, and ${step.approve} as ${Number(step.approve)}.`,
   });
   showHex(item.querySelector(".to")!, step.to);
@@ -65,18 +64,17 @@ function slip(step: Step, i: number, n: number, safe: boolean): DocumentFragment
   return item;
 }
 
-export function review(
+export function openReview(
   name: string,
-  pages: Page[],
+  pages: ReviewPage[],
   steps: Step[],
   connection: Connection,
   hooks: Hooks,
   outcome?: DocumentFragment,
 ): void {
-  const titles = pages.map(({ title }) => title);
   current = {
     name,
-    titles,
+    titles: pages.map(({ title }) => title),
     page: 0,
     outcome,
     steps,
@@ -100,7 +98,6 @@ export function review(
   doneBox.hidden = true;
   const safe = !!connection.wallet.propose;
   stepList.replaceChildren(...steps.map((step, i) => slip(step, i, n, safe)));
-  // Safe{Wallet} puts several calls in one, through its MultiSend contract, and numbers the transaction itself.
   how.textContent = safe
     ? n === 1
       ? "One Safe transaction. Safe{Wallet} sets its nonce; its other fields are these:"
@@ -109,11 +106,11 @@ export function review(
       ? "One transaction:"
       : `${count(n, "transaction", "transactions")}, one after the other:`;
   progress.replaceChildren();
-  turn(0);
+  showPage(0);
   dialog.showModal();
 }
 
-function turn(page: number): void {
+function showPage(page: number): void {
   if (!current) return;
   const { name, titles } = current;
   current.page = page;
@@ -122,11 +119,11 @@ function turn(page: number): void {
   stepCount.hidden = titles.length === 1;
   [...pageList.children].forEach((element, i) => ((element as HTMLElement).hidden = i !== page));
   calls.hidden = page < titles.length - 1;
-  update();
+  refreshReview();
   if (dialog.open) title.focus();
 }
 
-export function update(): void {
+export function refreshReview(): void {
   if (!current) return;
   const { connection, steps, done, sending, submitted, finished, page, titles } = current;
   const last = page === titles.length - 1;
@@ -145,10 +142,10 @@ export function update(): void {
   back.textContent = submitted ? "Close" : "Back";
 }
 
-export const close = (): void => dialog.close();
+export const closeReview = (): void => dialog.close();
 
-// A review may have closed, and another opened, by the time its wallet answers.
-function tell(state: Review, message: string, hashes: Hex[] = []): void {
+// The review may have closed, or another opened, by the time the wallet answers.
+function say(state: Review, message: string, hashes: Hex[] = []): void {
   if (state !== current) return;
   progress.replaceChildren(message);
   hashes.forEach((hash, i) => {
@@ -169,10 +166,10 @@ function failure(error: unknown): string {
 
 async function proposeAll(state: Review, propose: NonNullable<Wallet["propose"]>): Promise<void> {
   const proposing = propose(state.steps);
-  tell(state, "Waiting for your wallet…");
+  say(state, "Waiting for your wallet…");
   await proposing;
   state.submitted = state.finished = true;
-  tell(state, "Proposed. The Safe's owners sign it in Safe{Wallet}; the accounts here change once it executes.");
+  say(state, "Proposed. The Safe's owners sign it in Safe{Wallet}; the accounts here change once it executes.");
   if (state !== current) return;
   doneBox.replaceChildren(clone("proposed"));
   doneBox.hidden = false;
@@ -181,35 +178,35 @@ async function proposeAll(state: Review, propose: NonNullable<Wallet["propose"]>
 async function sendNext(state: Review): Promise<void> {
   const { steps, done } = state;
   const sending = sendTransaction(state.connection, steps[done.length]!);
-  tell(state, "Waiting for your wallet…", done);
+  say(state, "Waiting for your wallet…", done);
   const hash = await sending;
   const hashes = [...done, hash];
   const which = steps.length === 1 ? "Sent" : `Transaction ${hashes.length} of ${steps.length} sent`;
   state.submitted = true;
-  update();
-  tell(state, `${which}. Waiting for Base to include it…`, hashes);
-  const ok = await included(hash);
+  refreshReview();
+  say(state, `${which}. Waiting for Base to include it…`, hashes);
+  const ok = await waitForTransaction(hash);
   if (ok) done.push(hash);
   state.finished = !ok || done.length === steps.length;
-  if (ok === undefined) tell(state, "Sent. Your wallet shows when Base includes it; reload this page then.", hashes);
-  else if (!ok) tell(state, `A transaction failed on Base.${wentThrough(state)}`, hashes);
+  if (ok === undefined) say(state, "Sent. Your wallet shows when Base includes it; reload this page then.", hashes);
+  else if (!ok) say(state, `A transaction failed on Base.${wentThrough(state)}`, hashes);
   else if (state.finished) {
-    tell(state, "Done.", done);
+    say(state, "Done.", done);
     if (state === current && state.outcome) {
       doneBox.replaceChildren(state.outcome);
       doneBox.hidden = false;
     }
   } else {
     const next = `Confirm transaction ${done.length + 1} when you are ready; closing stops here.`;
-    tell(state, `Transaction ${done.length} of ${steps.length} is included. ${next}`, done);
+    say(state, `Transaction ${done.length} of ${steps.length} is included. ${next}`, done);
   }
 }
 
 confirm.addEventListener("click", () => {
   const state = current;
   if (!state) return;
-  // The wallet's request comes first, with no wait since the click: a wallet that opens a window opens it only from a
-  // click. That is also why each transaction takes a click of its own.
+  // Ask the wallet right away: some wallets open their window only in response to a click. That is also why each
+  // transaction takes a click of its own.
   const { propose } = state.connection.wallet;
   const sending =
     state.connection.chainId !== CHAIN_ID
@@ -218,40 +215,39 @@ confirm.addEventListener("click", () => {
         ? proposeAll(state, propose)
         : sendNext(state);
   state.sending = true;
-  update();
+  refreshReview();
   sending
-    .catch((error) => tell(state, failure(error) + wentThrough(state), state.done))
+    .catch((error) => say(state, failure(error) + wentThrough(state), state.done))
     .finally(() => {
       state.sending = false;
-      if (state === current) update();
+      if (state === current) refreshReview();
       else state.hooks.closed(state.submitted);
     });
 });
 
-next.addEventListener("click", () => current && turn(current.page + 1));
+next.addEventListener("click", () => current && showPage(current.page + 1));
 
-// While the wallet is asked, or once something was sent, Back closes the review: the page sends nothing more, and
-// follows what it sent.
+// Once something was sent, or while the wallet is asked, Back closes the review. The page then sends nothing more, but
+// keeps following what it sent.
 back.addEventListener("click", () => {
-  if (current && !current.sending && !current.submitted && current.page > 0) turn(current.page - 1);
-  else close();
+  if (current && !current.sending && !current.submitted && current.page > 0) showPage(current.page - 1);
+  else closeReview();
 });
 
-// A link to a section of the page closes the review, so that the section shows; Back then returns to the accounts as
-// they were. A click that opens it elsewhere, as in a new tab, leaves the review alone. While the wallet is asked, or
-// between transactions, closing would stop the rest, so the section opens in a new tab instead.
+// A link to a section closes the review, so that the section shows, and Back returns to the accounts as they were.
+// While the wallet is asked, or between transactions, closing would stop the rest, so the link opens in a new tab.
 dialog.addEventListener("click", (event) => {
   const link = (event.target as Element).closest<HTMLAnchorElement>('a[href^="#"]');
   if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
   if (current && (current.sending || (current.submitted && !current.finished))) {
     event.preventDefault();
     open(link.href, "_blank", "noopener");
-  } else close();
+  } else closeReview();
 });
 
 dialog.addEventListener("close", () => {
   const state = current;
   current = undefined;
-  // One still sending tells the page when it ends.
+  // A review that is still sending calls closed() when it ends.
   if (state && !state.sending) state.hooks.closed(state.submitted);
 });

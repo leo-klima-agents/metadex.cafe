@@ -1,20 +1,16 @@
 import { getAddress } from "viem";
 import "./views.ts";
-import { readLater, same } from "./chain.ts";
-import { CHAIN_ID, CONDUIT, KVCM } from "./config.ts";
-import { clone, fill, fillAddress, fillPlural, fillTime, groupHex, show, showHex } from "./dom.ts";
-import { readAllEarnings, readEarnings, sharesOf, tokensOf, valueOf, type Earnings } from "./earnings.ts";
+import { now, same, sawBlock } from "./chain.ts";
+import { CHAIN_ID } from "./config.ts";
+import { clone, fill, fillAddress, fillPlural, fillTime, groupAllHex, show } from "./dom.ts";
+import { sharesOf } from "./earnings.ts";
 import {
   WEEK,
-  amount,
   bps,
-  compact,
   count,
   date,
   earningPower,
-  fraction,
   list,
-  listWith,
   share,
   short,
   units,
@@ -26,39 +22,30 @@ import {
 } from "./format.ts";
 import {
   LockType,
-  automation,
+  automationName,
   canJoin,
   canLeave,
-  canRelease,
-  check,
-  group,
+  canLeaveOther,
+  failedChecks,
+  groupOf,
+  hasStopped,
   join,
   leave,
+  leaveOther,
   readAccounts,
   readAutomations,
-  readRelay,
-  release,
-  status,
-  stopped,
+  readCarbonImpact,
+  statusOf,
   type Account,
   type Automation,
+  type CarbonImpact,
   type Group,
   type Holdings,
-  type Relay,
   type Status,
 } from "./hydrex.ts";
-import { pricesAt, usdOf, type Price, type Token } from "./prices.ts";
-import {
-  blockTimes,
-  lastRun,
-  namesAt,
-  totalRetired,
-  type Amount,
-  type Payout,
-  type Run,
-  type Search,
-} from "./receipts.ts";
-import { close, review, update, type Hooks } from "./review.ts";
+import { earningsDue, lastEpoch, loadEarnings } from "./last-epoch.ts";
+import { checkPayout, forgetPayout, showPayout } from "./last-payout.ts";
+import { closeReview, openReview, refreshReview, type Hooks } from "./review.ts";
 import {
   NoWallet,
   connect,
@@ -71,70 +58,41 @@ import {
   type Wallet,
 } from "./wallet.ts";
 
-// What a group's buttons do: join Carbon Impact, leave it, or leave another automation.
-type Action = "join" | "leave" | "release";
+type Action = "join" | "leave" | "leave-other";
 
 const groups = [...document.querySelectorAll<HTMLElement>("#accounts .group")];
 const listening = new WeakSet<Provider>();
-// The accounts of each group that its buttons can act on.
 const actionable = new WeakMap<HTMLElement, Account[]>();
 
 let connection: Connection | undefined;
 let shown: Holdings | undefined;
-let relay: Relay | undefined;
+let carbonImpact: CarbonImpact | undefined;
+let carbonImpactRead: Promise<void> | undefined;
 let trusted = false;
 let reads = 0;
 let reading = false;
-let relayRead: Promise<void> | undefined;
-let attempts = 0;
-let stale = 0;
-let clicks = 0;
-// Base's time less the device's, from the newest block read: a read that started earlier may answer from an older one.
-let drift = 0;
-let newest = 0;
-// What the automation's votes earned in the last epoch that has ended, and when the page last tried to read it.
-let earned: { found: Earnings; value: Value } | undefined;
-let earningsTried = 0;
-let earningsRead: Promise<void> | undefined;
-// Each shown account's share of the automation's votes in that epoch.
+// Each shown account's share of Carbon Impact's votes last epoch.
 let shares: { holdings: Holdings; start: number; of: Map<bigint, number> } | undefined;
-// The epoch the comparison with all of Hydrex is read for, and whether its table is on the screen.
-let compared: number | undefined;
-let onScreen = false;
-// Carbon Impact's last payout, read again once the total retired has grown, when it was last checked, and the accounts
-// whose receipts are shown.
-let search: Promise<Search> | undefined;
-let searchChecked = 0;
-let receiptsFor: Holdings | undefined;
-// The owner whose last payout the section shows, and whether as receipts.
-let showing: { owner: string; drawn: boolean } | undefined;
-
-type Value = ReturnType<typeof valueOf>;
-
-const now = () => Math.floor(Date.now() / 1000) + drift;
-
-function sawBlock(time: number): void {
-  if (time < newest) return;
-  newest = time;
-  drift = time - Math.floor(Date.now() / 1000);
-}
+// Wallet connections that finish are ignored up to this attempt: a later one connected, or the wallet was let go.
+let attempts = 0;
+let ignoredUpTo = 0;
+let clicks = 0;
 
 function failed(error: unknown): void {
   console.error(error);
   show("#error");
 }
 
-function showRelay(found: Relay): void {
-  relay = found;
+function showCarbonImpact(found: CarbonImpact): void {
+  carbonImpact = found;
   sawBlock(found.time);
   const { epochStart, tonnes, retireBps, votes, entity, beneficiary, beneficiaryAddress, message, voted } = found;
-  // On Home, running while it votes each epoch.
-  const halted = stopped(voted, epochStart);
+  const stopped = hasStopped(voted, epochStart);
   document
-    .querySelector(".relay-shape")!
-    .classList.replace(halted ? "running" : "stopped", halted ? "stopped" : "running");
+    .querySelector(".impact-shape")!
+    .classList.replace(stopped ? "running" : "stopped", stopped ? "stopped" : "running");
   fill(document, {
-    "relay-state": halted ? "Stopped" : "Running",
+    "impact-state": stopped ? "Stopped" : "Running",
     tonnes: units(tonnes),
     retired: bps(retireBps),
     "retired-share": share(retireBps),
@@ -148,403 +106,115 @@ function showRelay(found: Relay): void {
   fillTime(document, "week-start", epochStart);
   fillTime(document, "week-end", epochStart + WEEK);
   fillTime(document, "week-end-when", epochStart + WEEK, when);
-  if (voted) fillTime(document, "relay-voted", voted, utc);
+  if (voted) fillTime(document, "impact-voted", voted, utc);
   fillTime(document, "vote-day", epochStart + WEEK - 1);
   tick();
 }
 
 function tick(): void {
   catchUp();
-  if (!relay) return;
+  if (!carbonImpact) return;
   const time = now();
-  const end = relay.epochStart + WEEK;
+  const end = carbonImpact.epochStart + WEEK;
   if (time >= end) return;
   fill(document, { countdown: `in ${until(end - time)}` });
   fillTime(document, "today", time);
   for (const bar of document.querySelectorAll<HTMLProgressElement>("progress.elapsed")) {
-    bar.value = time - relay.epochStart;
+    bar.value = time - carbonImpact.epochStart;
   }
 }
 
-// One read of the automation at a time.
-const readRelayAgain = (): Promise<void> =>
-  (relayRead ??= readRelay()
-    .then(showRelay)
-    .finally(() => (relayRead = undefined)));
+// One read at a time.
+const readCarbonImpactAgain = (): Promise<void> =>
+  (carbonImpactRead ??= readCarbonImpact()
+    .then(showCarbonImpact)
+    .finally(() => (carbonImpactRead = undefined)));
 
-// Reads again what is missing or from an epoch that has ended: the page moves on by itself. What the votes earned is
-// tried at most every five minutes: until Hydrex's own epoch has moved on, each try is one read.
+// Reads again whatever is missing or from an epoch that has ended, so that the page moves on by itself.
 function catchUp(): void {
   const epoch = weekStart(now());
   if (shown && !reading && epoch > shown.epochStart) loadAccounts(true);
-  if (!relay || epoch > relay.epochStart) readRelayAgain().catch(console.error);
-  const stale = !earned || earned.found.start < epoch - WEEK;
-  if (stale && Date.now() - earningsTried > 300_000) loadEarnings();
-  checkSearch();
+  if (!carbonImpact || epoch > carbonImpact.epochStart) readCarbonImpactAgain().catch(console.error);
+  if (earningsDue(epoch)) loadEarningsAndShares();
+  checkPayout();
 }
 
-function loadEarnings(): void {
-  if (earningsRead) return;
-  earningsTried = Date.now();
-  earningsRead = readEarnings(earned?.found.start)
-    .then(
-      (found) => found && showEarnings(found),
-      (error) => {
-        // Like the other automations' votes, it only adds to the page: it says so where the figures go, and keeps those
-        // of an earlier epoch.
-        console.error(error);
-        show(".earnings-failed", !earned);
-        show(".earnings-read", !!earned);
-      },
-    )
-    .finally(() => (earningsRead = undefined));
-}
-
-const earningsTable = document.querySelector<HTMLElement>("#last-epoch .earnings")!;
-const comparison = {
-  status: document.querySelector<HTMLElement>("#last-epoch .all-status")!,
-  failed: document.querySelector<HTMLElement>("#last-epoch .all-failed")!,
-  versus: document.querySelector<HTMLElement>("#last-epoch .versus")!,
-};
-// Dollars per 1,000 Earning Power, from votes with 18 decimals: Hydrex shows 1.3 times the votes.
-const perThousand = (value: number, votes: bigint): number => (votes > 0n ? value / ((Number(votes) * 1.3) / 1e21) : 0);
-
-function showColumn(column: "ours" | "all", { votes, pools }: Earnings, value: Value | undefined): void {
-  const per = value && perThousand(value.usd, votes);
-  const texts = {
-    "earning-power": compact((votes * 13n) / 10n),
-    pools: count(pools.length, "pool", "pools"),
-    earned: value ? usd(value.usd) : "…",
-    fees: value ? usd(value.fees) : "…",
-    incentives: value ? usd(value.incentives) : "…",
-    "per-power": per === undefined ? "…" : usd(per),
-  };
-  for (const [name, text] of Object.entries(texts)) {
-    for (const cell of earningsTable.querySelectorAll(`.${column}.${name}`)) cell.textContent = text;
-  }
-}
-
-function showPools({ pools, votes }: Earnings, value: Value): void {
-  const poolRows = pools.map((pool) => {
-    const row = clone("earned-pool");
-    fillAddress(row, "pool", pool.address, pool.name);
-    const earnedThere = value.byPool.get(pool.address.toLowerCase()) ?? 0;
-    fill(row, { share: fraction(Number(pool.votes) / Number(votes)), usd: usd(earnedThere) });
-    return row;
+function loadEarningsAndShares(): void {
+  loadEarnings().then((changed) => {
+    if (changed) loadShares();
   });
-  document.querySelector("#last-epoch .earned-pools tbody")!.replaceChildren(...poolRows);
 }
 
-function showEarnings(found: Earnings): void {
-  const value = valueOf(found);
-  earned = { found, value };
-  show(".earnings-failed", false);
-  show(".earnings-read");
-  const per = perThousand(value.usd, found.votes);
-  fillTime(document, "last-start", found.start);
-  fillTime(document, "last-end", found.start + WEEK);
-  fill(document, { "last-per-power": usd(per) });
-  showColumn("ours", found, value);
-  showPools(found, value);
-  comparison.status.textContent = comparison.status.dataset.text ?? "";
-  comparison.status.hidden = false;
-  comparison.failed.hidden = comparison.versus.hidden = true;
-  for (const cell of earningsTable.querySelectorAll(".all")) cell.textContent = "…";
-  if (onScreen) compare();
-  loadShares();
-}
-
-// All of Hydrex is ten times the reads, so it waits until its table is on the screen. Both columns then take the same
-// prices, so that they compare on the same footing.
-function compare(): void {
-  const mine = earned?.found;
-  if (!mine || compared === mine.start) return;
-  compared = mine.start;
-  comparison.failed.hidden = true;
-  comparison.status.hidden = false;
-  comparison.status.textContent = "Reading every pool's rewards…";
-  readAllEarnings(mine.start).then(
-    (all) => {
-      if (earned?.found !== mine) return;
-      const ours = valueOf({ ...mine, prices: all.prices });
-      const average = valueOf(all);
-      showColumn("ours", mine, ours);
-      showColumn("all", all, average);
-      const ratio = perThousand(ours.usd, mine.votes) / perThousand(average.usd, all.votes);
-      comparison.versus.textContent =
-        Math.abs(ratio - 1) < 0.005
-          ? "Last epoch, Carbon Impact earned about as much per 1,000 Earning Power as the average on Hydrex, at the same prices."
-          : `Last epoch, Carbon Impact earned ${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "more" : "less"} per 1,000 Earning Power than the average on Hydrex, at the same prices. Tokens left unpriced count for nothing in either.`;
-      comparison.status.hidden = true;
-      comparison.versus.hidden = !Number.isFinite(ratio);
-    },
-    (error) => {
-      console.error(error);
-      if (earned?.found !== mine) return;
-      compared = undefined;
-      comparison.status.hidden = true;
-      comparison.failed.hidden = false;
-    },
-  );
-}
-
-// What each account's votes earned with Carbon Impact last epoch: its share of the automation's votes.
+// What each account's votes earned last epoch: its share of what Carbon Impact's votes earned.
 async function loadShares(): Promise<void> {
-  const [holdings, found] = [shown, earned?.found];
-  if (!holdings || !found || (shares?.holdings === holdings && shares.start === found.start)) return;
+  const [holdings, last] = [shown, lastEpoch()];
+  if (!holdings || !last || (shares?.holdings === holdings && shares.start === last.found.start)) return;
   const ids = holdings.accounts.filter(({ amount }) => amount > 0n).map(({ id }) => id);
-  const of = await sharesOf(ids, found.start, found.votes).catch((error) => void console.error(error));
-  if (!of || shown !== holdings || earned?.found !== found) return;
-  shares = { holdings, start: found.start, of };
+  const of = await sharesOf(ids, last.found.start, last.found.votes).catch((error) => void console.error(error));
+  if (!of || shown !== holdings || lastEpoch() !== last) return;
+  shares = { holdings, start: last.found.start, of };
   showAccounts(true);
-}
-
-const receipts = document.getElementById("receipts")!;
-
-const RECEIPT_STATES = ["reading", "none", "other", "underway", "failed", "found"] as const;
-
-function receiptsState(state: (typeof RECEIPT_STATES)[number]): void {
-  for (const name of RECEIPT_STATES) show(`.receipts-${name}`, name === state, receipts);
-}
-
-const tokenOf = (tokens: Map<string, Token>, address: string) => tokens.get(address.toLowerCase());
-
-// A line's tokens, by name; one without decimals by its address, in its smallest units.
-function showAmounts(element: Element, found: Amount[], tokens: Map<string, Token>, sign = ""): void {
-  if (!found.length) return void element.replaceChildren("0 kVCM");
-  const items = found.map(({ token, amount: value }) => {
-    const known = tokenOf(tokens, token);
-    if (known) return `${amount(value, known.decimals)} ${known.symbol}`;
-    const address = document.createElement("code");
-    address.translate = false;
-    showHex(address, token);
-    const unknown = document.createElement("span");
-    unknown.append(`${value} base units of `, address);
-    return unknown;
-  });
-  element.replaceChildren(sign, ...listWith<Node | string>(items));
-}
-
-function worth(found: Amount[], tokens: Map<string, Token>, prices: Map<string, Price> | undefined): string {
-  if (!prices) return "";
-  const usdValue = found.reduce((sum, { token, amount: value }) => {
-    const [known, price] = [tokenOf(tokens, token), prices.get(token.toLowerCase())];
-    return known && price ? sum + usdOf(value, known, price) : sum;
-  }, 0);
-  return usdValue > 0 ? usd(usdValue) : "";
-}
-
-const kvcm = (found: Amount[]): bigint => found.find(({ token }) => same(token, KVCM))?.amount ?? 0n;
-
-// Its fields have names of their own: the automation's figures, such as the tonnes it retired, are filled by name
-// across the whole page.
-function receipt(payout: Payout, time: number, name: string, tokens: Map<string, Token>, prices?: Map<string, Price>) {
-  const item = clone("receipt");
-  // What was claimed as kVCM was not swapped. Its shares are of all the kVCM, as the automation retires up to its share,
-  // and pays the rest.
-  const all = kvcm(payout.paid) + kvcm(payout.fees) + payout.retiredKvcm;
-  const swapped = all - kvcm(payout.earned);
-  const of = (part: bigint) => (all ? bps((part * 10_000n + all / 2n) / all) : "");
-  fill(item, {
-    "receipt-id": `#${payout.id}`,
-    "receipt-earned-usd": worth(payout.earned, tokens, prices),
-    "receipt-swapped": `${amount(swapped > 0n ? swapped : 0n, 18)} kVCM`,
-    "receipt-retired-share": of(payout.retiredKvcm),
-    "receipt-retired": `${payout.retiredKvcm ? "−" : ""}${amount(payout.retiredKvcm, 18)} kVCM`,
-    "receipt-tonnes": `${amount(payout.tonnes, 18)} t of carbon credits`,
-    "receipt-entity": name,
-    "receipt-fee-share": of(kvcm(payout.fees)),
-    "receipt-paid-usd": worth(payout.paid, tokens, prices),
-  });
-  showAmounts(item.querySelector(".receipt-earned")!, payout.earned, tokens);
-  showAmounts(item.querySelector(".receipt-fee")!, payout.fees, tokens, payout.fees.length ? "−" : "");
-  showAmounts(item.querySelector(".receipt-paid")!, payout.paid, tokens);
-  show(".receipt-carbon, .through", payout.tonnes > 0n, item);
-  // The epoch whose rewards it paid, which ended at the flip before it.
-  fillTime(item, "receipt-from", weekStart(time) - WEEK);
-  fillTime(item, "receipt-to", weekStart(time));
-  fillTime(item, "receipt-time", time, utc);
-  // The owner may have a payout address of their own.
-  show(".receipt-elsewhere", !same(payout.recipient, payout.owner), item);
-  fillAddress(item, "receipt-recipient", payout.recipient);
-  item.querySelector<HTMLAnchorElement>(".receipt-tx")!.href = `https://basescan.org/tx/${payout.tx}`;
-  return item;
-}
-
-// A run takes up to half a day: one whose last payout is more recent may still be under way.
-const UNDER_WAY = 12 * 3600;
-
-// A receipt for each of the owner's accounts in Carbon Impact's last payout. Only for an owner with an account that is
-// in it, or was at the start of this epoch: finding the payout takes some 20 to 120 reads. Read again quietly, what is
-// shown stays until there is something new to show: a run under way that has not reached the owner's accounts leaves
-// the receipts of the last one, and a read that fails leaves them all.
-async function loadReceipts(quietly = false): Promise<void> {
-  const holdings = shown;
-  if (!holdings || receiptsFor?.owner === holdings.owner) return;
-  const member = holdings.accounts.some(({ delegate, claimer, delegateAtStart }) =>
-    [delegate, claimer, delegateAtStart].some((address) => same(address, CONDUIT)),
-  );
-  receipts.hidden = !member;
-  if (!member) return;
-  receiptsFor = holdings;
-  const owner = holdings.owner.toLowerCase();
-  const kept = quietly && showing?.owner === owner;
-  if (!kept) receiptsState("reading");
-  // Another owner, or a read started since, takes over.
-  const current = () => receiptsFor === holdings && shown?.owner === holdings.owner;
-  const fail = (error: unknown) => {
-    console.error(error);
-    if (!current() || kept) return;
-    receiptsFor = undefined;
-    receiptsState("failed");
-  };
-  const settle = (state: "none" | "other" | "underway") => {
-    showing = { owner, drawn: false };
-    receiptsState(state);
-  };
-  if (!search) searchChecked = Date.now();
-  const reading = (search ??= lastRun());
-  let found: Run | undefined;
-  try {
-    ({ run: found } = await reading);
-  } catch (error) {
-    // Only a search that failed is dropped: the receipts' other reads failing keeps it.
-    if (search === reading) search = undefined;
-    return fail(error);
-  }
-  if (!current()) return;
-  if (!found) return settle("none");
-  const underway = now() - found.time < UNDER_WAY;
-  const mine = found.payouts.filter((payout) => same(payout.owner, owner));
-  if (!mine.length) {
-    if (underway && kept && showing?.drawn) {
-      fillTime(receipts, "run-next", found.time);
-      show(".receipts-more", false, receipts);
-      show(".receipts-next", true, receipts);
-      return;
-    }
-    fillTime(receipts, "run-day", found.time);
-    return settle(underway ? "underway" : "other");
-  }
-  const all = mine.flatMap(({ earned, paid, fees }) => [...earned, ...paid, ...fees]);
-  let tokens: Map<string, Token>;
-  let times: Map<number, number>;
-  let names: Map<number, string>;
-  try {
-    [tokens, times, names] = await Promise.all([
-      tokensOf(
-        all.map(({ token }) => token),
-        readLater,
-      ),
-      blockTimes(mine.map(({ block }) => block)),
-      namesAt(mine.map(({ block }) => block)),
-    ]);
-  } catch (error) {
-    return fail(error);
-  }
-  if (!current()) return;
-  // Each token is priced for the largest amount of it a receipt shows in dollars, earned or paid.
-  const amounts = new Map<string, bigint>();
-  for (const { token, amount: value } of mine.flatMap(({ earned, paid }) => [...earned, ...paid]))
-    if (value > (amounts.get(token.toLowerCase()) ?? 0n)) amounts.set(token.toLowerCase(), value);
-  const shelf = receipts.querySelector(".receipt-list")!;
-  const draw = (prices?: Map<string, Price>) =>
-    shelf.replaceChildren(
-      ...mine.map((payout) => receipt(payout, times.get(payout.block)!, names.get(payout.block)!, tokens, prices)),
-    );
-  draw();
-  fill(receipts, { "receipt-which": list(mine.map(({ id }) => `#${id}`)) });
-  fillTime(receipts, "run-day", found.time);
-  fillTime(receipts, "run-flip", weekStart(found.time));
-  show(".receipts-more", underway, receipts);
-  show(".receipts-next", false, receipts);
-  showing = { owner, drawn: true };
-  receiptsState("found");
-  // The dollars follow, from many more reads; without them, the receipts show the tokens alone.
-  const prices = await pricesAt([...tokens.values()], amounts, weekStart(found.time), now(), readLater).catch(
-    (error) => {
-      console.error(error);
-      return undefined;
-    },
-  );
-  if (prices && current()) draw(prices);
-}
-
-// A run takes hours after each flip, and the page may have read one half done: once the total retired has grown, the
-// search goes on from where it stopped, and the receipts are read again. A search that failed is done again. One read
-// every five minutes.
-async function checkSearch(): Promise<void> {
-  if (!receiptsFor || Date.now() - searchChecked < 300_000) return;
-  searchChecked = Date.now();
-  const reading = search;
-  let previous: Search | undefined;
-  if (reading) {
-    try {
-      const [done, latest] = await Promise.all([reading, totalRetired()]);
-      if (latest <= done.total || search !== reading) return;
-      previous = done;
-    } catch (error) {
-      return void console.error(error);
-    }
-  }
-  search = lastRun(previous);
-  receiptsFor = undefined;
-  loadReceipts(true);
 }
 
 function showAutomations(found: Automation[]): void {
   for (const row of document.querySelectorAll<HTMLElement>("tr[data-automation]")) {
-    const automation = found.find(({ address }) => same(address, row.dataset.automation ?? ""));
-    if (!automation) continue;
-    if (automation.voted) fillTime(row, "voted", automation.voted);
-    if (automation.votes !== undefined) fill(row, { "still-in": earningPower(automation.votes) });
+    const other = found.find(({ address }) => same(address, row.dataset.automation ?? ""));
+    if (!other) continue;
+    if (other.voted) fillTime(row, "voted", other.voted);
+    if (other.votes !== undefined) fill(row, { "still-in": earningPower(other.votes) });
   }
 }
 
 async function showChecks(): Promise<void> {
-  const failing = await check();
+  const failing = await failedChecks();
   for (const item of document.querySelectorAll<HTMLElement>("#checks li")) item.hidden = !failing.includes(item.id);
   show("#checks", failing.length > 0);
   trusted = !failing.length;
-  // A read on its way shows the result when it ends.
+  // A read of the accounts that is under way shows the result when it ends.
   if (!reading) showAccounts(true);
 }
 
 const joinable = (account: Account): boolean => trusted && canJoin(account, now());
-const can: Record<Action, (account: Account) => boolean> = { join: joinable, leave: canLeave, release: canRelease };
+const can: Record<Action, (account: Account) => boolean> = {
+  join: joinable,
+  leave: canLeave,
+  "leave-other": canLeaveOther,
+};
 const buttons = (section: HTMLElement) => [...section.querySelectorAll<HTMLButtonElement>("button[data-action]")];
 const actionOf = (button: HTMLButtonElement) => button.dataset.action as Action;
 
-function kind({ lockType, end }: Account): string {
+function accountKind({ lockType, end }: Account): string {
   if (lockType === LockType.permanent) return "Protocol Account";
   if (lockType === LockType.rolling) return "Flex Account, rolling lock";
   return end ? `Flex Account, lock ${end > now() ? "ends" : "ended"} ${date(end)}` : "Flex Account";
 }
 
-function accountItem(account: Account, state: Status, pickable: boolean): DocumentFragment {
+function accountItem(account: Account, status: Status, pickable: boolean): DocumentFragment {
   const item = clone("account");
   const name = account.name || "Account";
-  fill(item, { name, id: `#${account.id}`, kind: kind(account), votes: earningPower(account.votes) });
-  const line = clone(state.kind);
-  if ("date" in state) fillTime(line, "date", state.date);
-  if ("voted" in state) {
-    fillTime(line, "voted", state.voted);
-    fillTime(line, "since", state.since);
+  fill(item, { name, id: `#${account.id}`, kind: accountKind(account), votes: earningPower(account.votes) });
+  const line = clone(status.kind);
+  if ("date" in status) fillTime(line, "date", status.date);
+  if ("voted" in status) {
+    fillTime(line, "voted", status.voted);
+    fillTime(line, "since", status.since);
   }
-  if ("name" in state) fill(line, { automation: state.name });
-  if ("to" in state) fillAddress(line, "address", state.to);
+  if ("name" in status) fill(line, { automation: status.name });
+  if ("to" in status) fillAddress(line, "address", status.to);
   item.querySelector(".status")!.replaceWith(line);
-  // Shares of the epoch shown, for the accounts shown: a share from another epoch, or for another read of the accounts,
-  // would be multiplied by the wrong total.
+  // Shares are only valid with the earnings and the accounts they were read for.
+  const last = lastEpoch();
   const part =
-    shares && shares.holdings === shown && shares.start === earned?.found.start ? shares.of.get(account.id) : undefined;
-  if (part !== undefined && earned) {
-    fill(item, { "earned-usd": usd(part * earned.value.usd) });
+    last && shares && shares.holdings === shown && shares.start === last.found.start
+      ? shares.of.get(account.id)
+      : undefined;
+  if (last && part !== undefined) {
+    fill(item, { "earned-usd": usd(part * last.value.usd) });
     show(".earned", true, item);
   }
   if (pickable) {
     const box = item.querySelector<HTMLInputElement>(".pick")!;
-    // A hidden box stays disabled, so that a click on its row's label cannot tick it.
+    // A hidden box stays disabled, so that a click on its row cannot tick it.
     box.hidden = box.disabled = false;
     box.value = String(account.id);
     box.ariaLabel = `Pick ${name} #${account.id}`;
@@ -552,8 +222,8 @@ function accountItem(account: Account, state: Status, pickable: boolean): Docume
   return item;
 }
 
-// Each group lists its accounts, with ticks when its buttons could act on more than one, so that one selection is
-// always one action.
+// Each group lists its accounts. When its buttons can act on more than one, each gets a box to tick, so that one
+// selection is always one action.
 function showAccounts(keepTicked = false): void {
   const holdings = shown;
   if (!holdings) return;
@@ -562,18 +232,18 @@ function showAccounts(keepTicked = false): void {
   const kept = new Set(keepTicked ? [...ticked].map(({ value }) => value) : []);
   const time = now();
   const sorted = accounts.map((account) => {
-    const state = status(account, owner, time, epochStart);
-    return { account, state, group: group(account, state) };
+    const status = statusOf(account, owner, time, epochStart);
+    return { account, status, group: groupOf(account, status) };
   });
   for (const section of groups) {
     const members = sorted.filter((member) => member.group === section.dataset.group);
-    // Some wallets hold many empty accounts, which can do nothing.
+    // Some wallets hold many empty accounts, which can do nothing: they go in a fold.
     const folded = section.dataset.group === "closed" ? members.filter(({ account }) => account.amount === 0n) : [];
     const able = members
       .map(({ account }) => account)
       .filter((account) => buttons(section).some((button) => can[actionOf(button)](account)));
     const items = (listed: typeof members) =>
-      listed.map(({ account, state }) => accountItem(account, state, able.length > 1 && able.includes(account)));
+      listed.map(({ account, status }) => accountItem(account, status, able.length > 1 && able.includes(account)));
     section.querySelector(".accounts")!.replaceChildren(...items(members.filter((member) => !folded.includes(member))));
     const fold = section.querySelector<HTMLDetailsElement>(".empty-accounts");
     if (fold) {
@@ -616,9 +286,10 @@ async function loadAccounts(quietly = false): Promise<void> {
   const read = ++reads;
   reading = true;
   if (!quietly) {
-    shown = receiptsFor = showing = undefined;
+    shown = undefined;
+    forgetPayout();
     show("#reading");
-    show("#accounts, #summary, #none, #payout, #receipts", false);
+    show("#accounts, #summary, #none, #payout", false);
   }
   try {
     const found = await readAccounts(connection.address);
@@ -628,7 +299,7 @@ async function loadAccounts(quietly = false): Promise<void> {
     showAccounts();
     catchUp();
     loadShares();
-    loadReceipts();
+    showPayout(found);
   } catch (error) {
     if (read === reads) failed(error);
   } finally {
@@ -671,34 +342,33 @@ const hooks: Hooks = {
 
 function reviewPicked(section: HTMLElement, action: Action): void {
   if (!connection || !shown) return;
-  // In a new epoch, the statuses and the review's dates would be last epoch's.
+  // In a new epoch, the statuses and dates shown would be wrong: read the accounts again instead.
   if (weekStart(now()) > shown.epochStart) return void loadAccounts();
-  // A join says what share is retired, from the automation's settings. Leaving never waits for them.
-  if (action === "join" && !relay) return void readRelayAgain().then(() => reviewPicked(section, action), failed);
+  // A join shows the share retired, so it waits for Carbon Impact's settings. Leaving never waits.
+  if (action === "join" && !carbonImpact) {
+    return void readCarbonImpactAgain().then(() => reviewPicked(section, action), failed);
+  }
   const accounts = picked(section).filter(can[action]);
   if (!accounts.length) return updateButtons();
   const { owner, epochStart } = shown;
-  const settings = relay;
+  const settings = carbonImpact;
   const which = list(accounts.map(({ id }) => `#${id}`));
   const prepare = (id: string): DocumentFragment => {
     const part = clone(id);
     fill(part, { which });
     fillTime(part, "next", epochStart + WEEK, when);
     fillPlural(part, accounts.length);
-    if (settings) {
-      const { retireBps, entity } = settings;
-      fill(part, { "retired-share": share(retireBps), entity });
-    }
+    if (settings) fill(part, { "retired-share": share(settings.retireBps), entity: settings.entity });
     return part;
   };
   if (action === "join") {
     const before = prepare("join-before");
     const from = (kind: Status["kind"]) =>
-      accounts.filter((account) => status(account, owner, now(), epochStart).kind === kind);
+      accounts.filter((account) => statusOf(account, owner, now(), epochStart).kind === kind);
     const [stopped, running] = [from("stopped"), from("other")];
     fill(before, {
-      "stopped-which": list(stopped.map(({ id, delegate }) => `#${id} is in ${automation(delegate)}`)),
-      "running-which": list(running.map(({ id, delegate }) => `#${id} out of ${automation(delegate)}`)),
+      "stopped-which": list(stopped.map(({ id, delegate }) => `#${id} is in ${automationName(delegate)}`)),
+      "running-which": list(running.map(({ id, delegate }) => `#${id} out of ${automationName(delegate)}`)),
     });
     show(".from-stopped", stopped.length > 0, before);
     show(".from-running", running.length > 0, before);
@@ -707,17 +377,17 @@ function reviewPicked(section: HTMLElement, action: Action): void {
       { title: "What changes", body: prepare("join-changes") },
       { title: "What your wallet will ask" },
     ];
-    return review("Join Carbon Impact", pages, join(accounts), connection, hooks, prepare("join-done"));
+    return openReview("Join Carbon Impact", pages, join(accounts), connection, hooks, prepare("join-done"));
   }
   if (action === "leave") {
     const title = "Leave Carbon Impact";
-    return review(title, [{ title, body: prepare("leave-effects") }], leave(accounts), connection, hooks);
+    return openReview(title, [{ title, body: prepare("leave-effects") }], leave(accounts), connection, hooks);
   }
-  const steps = release(accounts);
+  const steps = leaveOther(accounts);
   const names = list([...new Set(steps.flatMap(({ automation }) => automation ?? []))]);
-  const effects = prepare("release-effects");
+  const effects = prepare("leave-other-effects");
   fill(effects, { automations: names });
-  review(`Leave ${names}`, [{ title: `Leave ${names}`, body: effects }], steps, connection, hooks);
+  openReview(`Leave ${names}`, [{ title: `Leave ${names}`, body: effects }], steps, connection, hooks);
 }
 
 function showConnection(): void {
@@ -734,15 +404,14 @@ function showConnection(): void {
     show(".to-switch", !wallet.propose);
     show(".safe-elsewhere", !!wallet.propose);
   }
-  update();
+  refreshReview();
 }
 
-// A later attempt that fails, as when the wallet still asks about an earlier one, does not cancel it.
 async function connectTo(wallet: Wallet): Promise<void> {
   const attempt = ++attempts;
   const connected = await connect(wallet);
-  if (!connected || attempt <= stale) return;
-  stale = attempt;
+  if (!connected || attempt <= ignoredUpTo) return;
+  ignoredUpTo = attempt;
   show("#wallet-failed, #no-wallet", false);
   listen(connected.provider);
   connection = connected;
@@ -757,7 +426,7 @@ function listen(provider: Provider): void {
     if (connection?.provider !== provider) return;
     // Wallets also send this when the account stays the same, as when they unlock.
     if (account && same(account, connection.address)) return;
-    close();
+    closeReview();
     // A wallet that locks shares no account.
     if (!account) return letGo();
     connection.address = getAddress(account);
@@ -775,14 +444,14 @@ function listen(provider: Provider): void {
 }
 
 function letGo(): void {
-  stale = attempts;
+  ignoredUpTo = attempts;
   reads++;
   reading = false;
-  connection = undefined;
-  shown = receiptsFor = showing = undefined;
-  close();
+  connection = shown = undefined;
+  forgetPayout();
+  closeReview();
   showConnection();
-  show("#reading, #accounts, #summary, #none, #payout, #receipts", false);
+  show("#reading, #accounts, #summary, #none, #payout", false);
 }
 
 function walletButton(wallet: Wallet): DocumentFragment {
@@ -810,13 +479,14 @@ function walletButton(wallet: Wallet): DocumentFragment {
 }
 
 show(".needs-script", false);
-groupHex(document);
-// A reload keeps the address, and so the view.
+groupAllHex(document);
+// A reload keeps the hash, and so the view.
 document.querySelector("#error .again")!.addEventListener("click", () => location.reload());
 document.getElementById("accounts")!.addEventListener("change", updateButtons);
 for (const section of groups) {
-  for (const button of buttons(section))
+  for (const button of buttons(section)) {
     button.addEventListener("click", () => reviewPicked(section, actionOf(button)));
+  }
 }
 document.querySelector("#wrong-chain .switch")!.addEventListener("click", () => {
   if (!connection) return;
@@ -832,16 +502,9 @@ findWallets((wallets) => document.querySelector("#wallets .buttons")!.replaceChi
 safeWallet()
   .then((wallet) => wallet && connectTo(wallet))
   .catch(console.error);
-readRelayAgain().catch(failed);
+readCarbonImpactAgain().catch(failed);
 showChecks().catch(failed);
-comparison.status.dataset.text = comparison.status.textContent ?? "";
-loadEarnings();
+loadEarningsAndShares();
 readAutomations().then(showAutomations, console.error);
-new IntersectionObserver((entries) => {
-  onScreen = entries.some(({ isIntersecting }) => isIntersecting);
-  if (onScreen) compare();
-}).observe(earningsTable);
-document.querySelector("#last-epoch .compare-again")!.addEventListener("click", compare);
-receipts.querySelector(".receipts-again")!.addEventListener("click", () => loadReceipts());
 setInterval(() => showChecks().catch(console.error), 3_600_000);
 setInterval(tick, 30_000);

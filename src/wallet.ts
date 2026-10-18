@@ -12,7 +12,7 @@ export type Wallet = {
   name: string;
   icon?: string;
   provider: () => Promise<Provider>;
-  // Only a Safe has it: it proposes calls as one Safe transaction, for the Safe's owners to sign in Safe{Wallet}.
+  // Only Safe{Wallet} has it: it proposes all the calls as one Safe transaction, for the owners to sign there.
   propose?(txs: Tx[]): Promise<void>;
 };
 export type Connection = { wallet: Wallet; provider: Provider; address: Address; chainId: number };
@@ -27,6 +27,7 @@ const UNKNOWN_CHAIN = 4902;
 
 export class NoWallet extends Error {}
 
+// Wallets that announce themselves (EIP-6963), or window.ethereum if none does.
 export function findWallets(found: (wallets: Wallet[]) => void): void {
   const announced = new Map<string, Wallet>();
   const offer = () =>
@@ -69,7 +70,7 @@ export async function safeWallet(): Promise<Wallet | undefined> {
     name: "Safe{Wallet}",
     provider: async () => provider,
     async propose(txs) {
-      // Safe{Wallet} says "Transaction was rejected" when the user closes its window.
+      // Safe{Wallet} says "Transaction was rejected" when its window is closed.
       await sdk.txs.send({ txs: txs.map(({ to, data }) => ({ to, data, value: "0" })) }).catch((error: Error) => {
         throw Object.assign(error, /rejected/i.test(error.message) ? { code: USER_REJECTED } : {});
       });
@@ -85,7 +86,7 @@ export async function connect(wallet: Wallet): Promise<Connection | undefined> {
   return { wallet, provider, address: getAddress(address), chainId };
 }
 
-// Some wallets wrap the code of the error they pass on.
+// Some wallets wrap the error code they pass on.
 const code = (error: unknown): number | undefined => {
   const { code, data } = (error ?? {}) as { code?: number; data?: { originalError?: { code?: number } } };
   return data?.originalError?.code ?? code;
@@ -115,7 +116,7 @@ export async function switchToBase(connection: Connection): Promise<void> {
   connection.chainId = Number(await provider.request({ method: "eth_chainId" }));
 }
 
-// The chain ID makes a wallet on another chain refuse the transaction.
+// The chain ID makes a wallet that is on another chain refuse the transaction.
 export const sendTransaction = async ({ provider, address }: Connection, { to, data }: Tx): Promise<Hex> =>
   (await provider.request({
     method: "eth_sendTransaction",

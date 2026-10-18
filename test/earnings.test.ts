@@ -32,8 +32,8 @@ test("what votes earned, in dollars: fees and incentives apart, and by pool; a t
       { pool: OTHER, token: WFRAX, amount: 10n ** 17n, fee: false },
     ],
     prices: new Map([
-      [USDC.address.toLowerCase(), { usd: 1, at: "flip", via: "USDC" }],
-      [HYDX.address.toLowerCase(), { usd: 0.025, at: "today", via: POOL }],
+      [USDC.address.toLowerCase(), 1],
+      [HYDX.address.toLowerCase(), 0.025],
     ]),
   };
   const value = valueOf(earnings);

@@ -3,23 +3,18 @@ import { call, read, same, type Call } from "./chain.ts";
 import { ALGEBRA_FACTORY, ANCHORS, PAIR_FACTORY, type Anchor } from "./config.ts";
 
 export type Token = { address: Address; decimals: number; symbol: string };
-// What a token was worth when an epoch ended, in dollars, and where the price came from: a pool, or Chainlink. At
-// "today" when the source's history does not reach back to the flip. The page shows them with "≈".
-export type Price = { usd: number; at: "flip" | "today"; via: Address | "Chainlink" | "USDC" };
 
-// The half hour before the flip, over which prices are averaged: the epoch's rewards become final at the flip, and the
-// automation claims and swaps them right after it.
+// Prices are averaged over the half hour before the flip: rewards become final at the flip, and Carbon Impact swaps
+// them right after.
 export const WINDOW = 1800;
-// A pool prices a token only if it holds at least this much of each of its two tokens, in dollars, and ten times the
-// value it prices: a thin pool can show any price.
-export const FLOOR = 250;
-export const DEPTH = 10;
-// A classic pair records an observation only when it trades, at most every half hour, so the observations either side
-// of the window bracket it closely only for a pair that trades often. Further apart than this, their average is no
-// longer the flip's price.
+// A pool can price a token only if it holds at least $250 of each of its two tokens, and ten times the value it
+// prices. A thin pool can show any price.
+const FLOOR = 250;
+const DEPTH = 10;
+// A classic pair records an observation at most every half hour, and only when it trades. Observations further apart
+// than this no longer give the price at the flip.
 export const SPAN = 4 * WINDOW;
-// A search reads this many points of a history a round.
-const WIDTH = 16;
+const POINTS_PER_ROUND = 16;
 
 const algebraFactoryAbi = parseAbi(["function poolByPair(address tokenA, address tokenB) view returns (address)"]);
 const pairFactoryAbi = parseAbi([
@@ -46,20 +41,19 @@ const feedAbi = parseAbi([
 ]);
 
 type Round = readonly [bigint, bigint, bigint, bigint, bigint];
-// A classic pair's record of how much of each token it held, summed over time: [timestamp, reserve0, reserve1].
-export type Observation = readonly [bigint, bigint, bigint];
+// A classic pair's running sums of its reserves over time: [timestamp, reserve0, reserve1].
+type Observation = readonly [bigint, bigint, bigint];
 type Kind = "algebra" | "volatile" | "stable";
 type Pool = { address: Address; kind: Kind; token: Token; anchor: Anchor };
-// A pool as it is today: its price for the token, its depth, and where its history is.
+// A pool as it is now: its price for the token in dollars, its depth, and where to read its history.
 type Measured = { pool: Pool; usd: number; depth: number; plugin?: Address; length?: number; now?: Observation };
 
 const key = (address: string): string => address.toLowerCase();
 const whole = (amount: bigint, decimals: number): number => Number(amount) / 10 ** decimals;
-// What an amount of a token is worth, in dollars.
-export const usdOf = (amount: bigint, token: { decimals: number }, price: Price): number =>
-  whole(amount, token.decimals) * price.usd;
 
-// Concentrated pools price token0 in token1 as 1.0001^tick, in their smallest units.
+export const usdOf = (amount: bigint, decimals: number, price: number): number => whole(amount, decimals) * price;
+
+// A concentrated pool's price of token0 in token1 is 1.0001^tick, in their smallest units.
 export const tickPrice = (tick: number, decimals0: number, decimals1: number): number =>
   1.0001 ** tick * 10 ** (decimals0 - decimals1);
 
@@ -70,8 +64,8 @@ export function pairPrice(reserve0: number, reserve1: number, stable: boolean): 
   return (3 * x * x * y + y ** 3) / (x ** 3 + 3 * x * y * y);
 }
 
-// Token0's price in token1 from a classic pair's observations either side of the window, or nothing if they are too
-// far apart or the pair held nothing between them.
+// Token0's average price in token1 between two observations, or undefined if they are too far apart or the pair held
+// nothing between them.
 export function observedPrice(
   first: Observation,
   last: Observation,
@@ -86,9 +80,9 @@ export function observedPrice(
   return reserve0 > 0 && reserve1 > 0 ? pairPrice(reserve0, reserve1, stable) : undefined;
 }
 
-// A search for the first index in [lo, hi) whose read passes, where every index after one that passes passes too. Once
-// lo meets hi, hi is that index, or the end if none passes. The reads at hi and at hi - 1 are in seen, when they exist
-// and hi moved from where it started.
+// A search for the first index in [lo, hi) whose read passes, where every index after one that passes also passes.
+// When it ends, hi is that index, or where hi started if none passes. `seen` keeps the reads, including those at hi
+// and hi - 1 once hi has moved.
 export type Search = {
   lo: number;
   hi: number;
@@ -98,13 +92,13 @@ export type Search = {
   failed?: boolean;
 };
 
-export function points(lo: number, hi: number, width = WIDTH): number[] {
+export function points(lo: number, hi: number, width = POINTS_PER_ROUND): number[] {
   const n = hi - lo;
   if (n <= width) return Array.from({ length: n }, (_, i) => lo + i);
   return Array.from({ length: width }, (_, i) => lo + Math.floor((i * n) / width));
 }
 
-// Narrows every search at once, with one batch of reads a round. A read that fails ends its search.
+// Runs every search at once, with one batch of reads per round. A failed read ends its search.
 export async function narrow(searches: Search[], reader: typeof read = read): Promise<void> {
   for (;;) {
     const open = searches.filter((search) => search.lo < search.hi && !search.failed);
@@ -125,16 +119,16 @@ export async function narrow(searches: Search[], reader: typeof read = read): Pr
   }
 }
 
-// Chainlink's feeds are an aggregate already: the round in effect at the flip, or today's if it cannot be found.
-async function feedAt(feed: Address, flip: number, reader: typeof read): Promise<Price | undefined> {
+// Chainlink's price at the flip, or today's if the round in effect then cannot be found.
+async function feedAt(feed: Address, flip: number, reader: typeof read): Promise<number | undefined> {
   const [decimals, latest] = (await reader([
     call(feed, feedAbi, "decimals"),
     call(feed, feedAbi, "latestRoundData"),
   ])) as [number | undefined, Round | undefined];
   if (decimals === undefined || !latest) return undefined;
   const usd = (round: Round) => Number(round[1]) / 10 ** decimals;
-  if (Number(latest[3]) <= flip) return { usd: usd(latest), at: "flip", via: "Chainlink" };
-  // A round's ID holds its phase above the lowest 64 bits, and its number within the phase in them.
+  if (Number(latest[3]) <= flip) return usd(latest);
+  // A round id holds its phase above the lowest 64 bits, and the round's number within the phase in those bits.
   const phase = (latest[0] >> 64n) << 64n;
   const search: Search = {
     lo: 1,
@@ -145,9 +139,7 @@ async function feedAt(feed: Address, flip: number, reader: typeof read): Promise
   };
   await narrow([search], reader);
   const before = search.seen.get(search.hi - 1) as Round | undefined;
-  return !search.failed && before
-    ? { usd: usd(before), at: "flip", via: "Chainlink" }
-    : { usd: usd(latest), at: "today", via: "Chainlink" };
+  return !search.failed && before ? usd(before) : usd(latest);
 }
 
 // The pools of Hydrex's two factories that pair a token with an anchor.
@@ -175,10 +167,10 @@ const decimalsOf = (pool: Pool): [number, number] =>
 // The token's price in the anchor, from token0's price in token1.
 const inAnchor = (pool: Pool, price0: number): number => (tokenFirst(pool) ? price0 : 1 / price0);
 
-// Today's price and depth of each pool, with what its history needs. A pool that is too thin for the amount is dropped.
+// Each pool's price and depth now, and where its history is. Pools too thin for the amount to price are dropped.
 async function measure(
   pools: Pool[],
-  prices: Map<string, Price>,
+  prices: Map<string, number>,
   amounts: Map<string, bigint>,
   reader: typeof read,
 ): Promise<Measured[]> {
@@ -203,7 +195,7 @@ async function measure(
       pool.kind === "algebra"
         ? tickPrice((second as readonly [bigint, number])[1], decimals0, decimals1)
         : pairPrice(reserve0, reserve1, pool.kind === "stable");
-    const anchorUsd = prices.get(key(pool.anchor.address))!.usd;
+    const anchorUsd = prices.get(key(pool.anchor.address))!;
     const usd = inAnchor(pool, price0) * anchorUsd;
     const [tokenReserve, anchorReserve] = tokenFirst(pool) ? [reserve0, reserve1] : [reserve1, reserve0];
     const depth = Math.min(tokenReserve * usd, anchorReserve * anchorUsd);
@@ -215,23 +207,23 @@ async function measure(
   });
 }
 
-// Prices each token at the flip that ended an epoch, as far as Hydrex's own pools allow. USDC counts as a dollar; WETH
-// and cbBTC take Chainlink's ETH / USD and BTC / USD. Every other token takes the deepest pool that pairs it with one of
-// them: its average over the half hour before the flip, or today's price where the pool's history does not reach back
-// that far. A token without a deep enough pool stays unpriced. Amounts are what is to be priced, by token. Reads go
-// through reader, which may keep them behind the page's own.
+// Each token's price at the flip, in dollars per whole token, by lower-case address. USDC is a dollar, and WETH and
+// cbBTC take Chainlink's price. Other tokens take the deepest of Hydrex's pools that pairs them with one of those
+// three: its average over the half hour before the flip, or its price now if its history is too short. A token without
+// a deep enough pool gets no price. `amounts` is how much of each token will be priced.
 export async function pricesAt(
   tokens: Token[],
   amounts: Map<string, bigint>,
   flip: number,
   now: number,
   reader: typeof read = read,
-) {
-  const prices = new Map<string, Price>();
-  const found = await Promise.all(
-    ANCHORS.map(({ feed }) => (feed ? feedAt(feed, flip, reader) : ({ usd: 1, at: "flip", via: "USDC" } as const))),
-  );
-  ANCHORS.forEach(({ address }, i) => found[i] && prices.set(key(address), found[i]!));
+): Promise<Map<string, number>> {
+  const prices = new Map<string, number>();
+  const found = await Promise.all(ANCHORS.map(({ feed }) => (feed ? feedAt(feed, flip, reader) : 1)));
+  ANCHORS.forEach(({ address }, i) => {
+    const price = found[i];
+    if (price !== undefined) prices.set(key(address), price);
+  });
   const anchors = ANCHORS.filter(({ address }) => prices.has(key(address)));
   const others = tokens.filter(({ address }) => !ANCHORS.some((anchor) => same(anchor.address, address)));
   const measured = await measure(await candidates(others, anchors, reader), prices, amounts, reader);
@@ -248,8 +240,8 @@ export async function pricesAt(
   const timepoints = reader(
     algebra.map(({ plugin }) => call(plugin!, pluginAbi, "getTimepoints", [ago + WINDOW, ago])),
   );
-  // Classic pairs: the observations either side of the window. A pair records one at most every half hour, which
-  // bounds how far back from its last one the window can be.
+  // Classic pairs: the observations on either side of the window. A pair records one at most every half hour, which
+  // limits how far back from its last one the window can be.
   const classic = chosen.filter(({ length }) => length !== undefined);
   const searches = classic.flatMap(({ pool, length }): Search[] => {
     const probe = (index: number) => call(pool.address, pairAbi, "observations", BigInt(index));
@@ -262,16 +254,10 @@ export async function pricesAt(
   });
   const [ticks] = await Promise.all([timepoints, narrow(searches, reader)]);
 
-  // A pool whose history gives no price, or none above zero, as one nearly empty at the flip, gives today's.
+  // A pool whose history gives no price above zero, as one nearly empty at the flip, gives its price now.
   const set = ({ pool, usd }: Measured, price0: number | undefined) => {
-    const anchor = prices.get(key(pool.anchor.address))!;
-    const atFlip = price0 === undefined ? undefined : inAnchor(pool, price0) * anchor.usd;
-    prices.set(
-      key(pool.token.address),
-      atFlip !== undefined && Number.isFinite(atFlip) && atFlip > 0
-        ? { usd: atFlip, at: anchor.at, via: pool.address }
-        : { usd, at: "today", via: pool.address },
-    );
+    const atFlip = price0 === undefined ? undefined : inAnchor(pool, price0) * prices.get(key(pool.anchor.address))!;
+    prices.set(key(pool.token.address), atFlip !== undefined && Number.isFinite(atFlip) && atFlip > 0 ? atFlip : usd);
   };
   algebra.forEach((entry, i) => {
     const cumulatives = (ticks[i] as readonly [readonly bigint[]] | undefined)?.[0];

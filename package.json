@@ -1,6 +1,6 @@
 {
   "name": "metadex.cafe",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "description": "Static page for joining and leaving the Carbon Impact automation with Hydrex accounts",
   "license": "MIT",
@@ -13,7 +13,7 @@
     "build": "node scripts/build.ts",
     "format": "prettier --write .",
     "test": "node --test",
-    "test:fork": "npm run build && node --test fork/wallets.ts",
+    "test:fork": "npm run build && node --test fork/page.ts",
     "typecheck": "tsc"
   },
   "dependencies": {
