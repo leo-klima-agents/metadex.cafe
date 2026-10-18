@@ -94,11 +94,13 @@ export const date = (time: number): string => utcDate.format(time * 1000);
 const at = (time: number, timeZone?: string): string =>
   new Intl.DateTimeFormat(LANG, { ...DAY_AND_TIME, ...(timeZone && { timeZone }) }).format(time * 1000);
 
+// The time in UTC: "Wed 14 Oct, 23:59 UTC".
+export const utc = (time: number): string => `${at(time, "UTC")} UTC`;
+
 // The time in UTC, then in the visitor's own zone when it differs: "Thu 22 Oct, 00:00 UTC (Thu 22 Oct, 02:00 your time)".
 export function when(time: number, timeZone?: string): string {
-  const utc = at(time, "UTC");
   const local = at(time, timeZone);
-  return local === utc ? `${utc} UTC` : `${utc} UTC (${local} your time)`;
+  return local === at(time, "UTC") ? utc(time) : `${utc(time)} (${local} your time)`;
 }
 
 export function until(seconds: number): string {

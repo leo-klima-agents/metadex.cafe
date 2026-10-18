@@ -335,19 +335,24 @@ On the canvas, row 7: the receipt in both themes, a call as the wallet will ask 
 ### On the page now
 
 - **Young Serif** for the name and the `h1` and `h2` headings, at its one weight; **Atkinson Hyperlegible Next** for
-  text, at 400 and 700, where 600 takes 700; **Atkinson Hyperlegible Mono** for `code`: addresses, hashes and calls.
-  Tables and key figures use tabular figures.
+  text, at 400 and 700, where 600 takes 700; **Atkinson Hyperlegible Mono**, at 400 and 600, for `code`, labels, slips
+  and receipts: addresses, hashes, calls and their figures. Tables and key figures use tabular figures.
 - Atkinson Hyperlegible Next draws a slashed zero in text too, as in "Thu 10 Sep": it is the face's legibility, not an
   option.
 - The colours are Roast's, with milk in dark, and the mark is the figures and the total: see below.
+- **Home** is row 7's: the heading, one paragraph, Open the app and How it works, then the states of Carbon Impact and
+  of Hydrex's other automations, each with its shape and when it last voted. On a phone, the header keeps Open the app
+  beside the name; How it works is under the heading.
 - **The review** shows each call as a slip, and **the last payout** as a receipt for each of the owner's accounts in it,
-  in the layout below.
+  in the layout below, at the canvas's sizes: slips at 13 px and receipts at 14 px, in the mono face, the labels' column
+  84 px wide on a phone as on a desktop.
 - **Addresses and hashes** are in full, in groups of four, wherever the page writes them. Only the header's wallet chip
   and the links to a transaction keep the short form: they are there to recognise a wallet or to follow a link, not to
   check.
 - **Statuses** have their shape before their words: filled for running, half filled for joining and leaving, hollow for
   not looked after, a triangle for stopped or partly in, a square for checks that failed.
-- **Labels** of figures, fields and steps are small capitals in the mono face; the earnings tables' figures are mono.
+- **Labels** of figures, fields and steps are small capitals in the mono face, at 13 px and 600 with 0.08em of tracking:
+  quiet above what they name, in ink beside it, on a slip or a receipt. The earnings tables' figures are mono.
 
 ### Receipts and calls
 
@@ -360,17 +365,24 @@ C's layout, in A's faces and colours, wherever someone checks figures or address
 - **Rules:** a dashed rule between sections, a double rule above the total. The total last and larger, then the time and
   the transaction.
 - **The same lines in the same order** every week, so that a change shows.
-- **A call** opens with the page's own words, "#9540 joins Carbon Impact.", then one row per field: To, with the name of
-  the contract under it; Call; Conduit, with its name; Account; Approve; Value. Each address in full, checksummed, in
-  groups of four; copying it gives it without spaces.
-- **In a Safe,** the same rows, then the ones Safe{Wallet} adds: Data and Operation. Data is the selector, then each
-  32-byte word on two lines of 16 bytes, the same on a phone as on a desktop, under the call decoded above it with the
-  conduit's address in full, so that co-signers can compare like with like. Safe{Wallet} sets the nonce, and sends
-  several calls through its MultiSend contract, with operation 1: the page says so rather than show fields it cannot
-  know.
-- **A receipt** is the account's line in the conduit's run: earned, swapped into kVCM, retired, with Klima's mark, the
-  fee, then paid, to whom, when its own transaction was, and the transaction. Dollars, at the prices of the flip before
-  the payout, follow the tokens once read.
+- **A call** opens with what it is, "Your wallet will ask · 1 of 2", and the page's own words, "#9540 joins Carbon
+  Impact.", then one row per field: To, with the name of the contract under it; Call; Conduit, with its name; Account;
+  Approve; Value. Each address in full, checksummed, in groups of four; copying it gives it without spaces. Its foot:
+  "How to check these calls", and "On Base".
+- **In a Safe,** "In a Safe · one transaction to sign", or "In a Safe · call 1 of 2", then the same rows, then the ones
+  Safe{Wallet} adds: Data and, for one call, Operation, "0 · call". Data is the selector, then each 32-byte word on two
+  lines of 16 bytes, the same on a phone as on a desktop, across the slip under the call decoded above it with the
+  conduit's address in full, so that co-signers can compare like with like; the foot says how to read the words, "the
+  conduit, 9540 as 2544, and true as 1". Safe{Wallet} sets the nonce, and sends several calls through its MultiSend
+  contract, with operation 1: the page says so rather than show fields it cannot know.
+- **A receipt** is the account's line in the conduit's run. Its header gives the epoch whose rewards it paid, "Thu 8 Oct
+  to Thu 15 Oct", the one that ended at the flip before the payout. Then earned, in dollars, with the tokens under it;
+  swapped into kVCM; retired, with its share, the tonnes, the name they were retired in at that payout, and Klima's
+  mark; the fee, with its share; then "Paid to you", as large as its figure, the dollars under it, and the payout
+  address only when it is not the owner's own; last, the time in UTC and the transaction. Dollars, at the prices of the
+  flip before the payout, follow the tokens once read.
+- **The shares** are of all the payout's kVCM. The automation retires up to its `retireBps` of it, as the purchase may
+  cost less: #82774's payout of 23 Sept retired 31.01%, under 33.33%.
 
 ### Klima's mark
 
@@ -379,7 +391,8 @@ sustainability label, the Commission says, unless it is a certification mark
 ([Commission](https://commission.europa.eu/document/download/3c257883-bb2a-4dd9-a6dc-501d587bb34f_en), Q3); placed
 beside a specific retirement, Klima's mark says who retires, and nothing more.
 
-- **On the page now:** under "Retired so far" on Home, "through Klima Protocol", with the icon at 24 px.
+- **On the page now:** under "Retired so far" on Home, and on each receipt's retirement line, "through Klima Protocol",
+  with the icon at 24 px.
 - **On the canvas:** on the receipt's retirement line, in both themes.
 - **Beside a retirement only,** and where an automation's page says who retires its credits. Never on its own as a
   badge, on Home's heading, or next to "impact" without a figure.

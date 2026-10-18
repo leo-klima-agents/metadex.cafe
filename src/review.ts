@@ -45,20 +45,22 @@ let current: Review | undefined;
 // of a Safe transaction follow, with the calldata word by word, so that co-signers can compare both with Safe{Wallet}.
 function slip(step: Step, i: number, n: number, safe: boolean): DocumentFragment {
   const item = clone("step");
+  const which = n > 1 ? ` · ${safe ? "call " : ""}${i + 1} of ${n}` : "";
   fill(item, {
-    count: `${safe ? "Call" : "Transaction"} ${i + 1} of ${n}`,
+    count: safe ? `In a Safe${which || " · one transaction to sign"}` : `Your wallet will ask${which}`,
     says: step.says,
     on: step.on,
     "conduit-name": step.automation ? `The ${step.automation} automation` : "Carbon Impact",
     account: String(step.id),
     approve: String(step.approve),
     call: `The call above, in ${(step.data.length - 2) / 2} bytes:`,
+    // The words after the selector, as the call's own arguments.
+    "slip-note": `The selector, then each 32-byte word on two lines: the conduit, ${step.id} as ${step.id.toString(16)}, and ${step.approve} as ${Number(step.approve)}.`,
   });
   showHex(item.querySelector(".to")!, step.to);
   showHex(item.querySelector(".conduit")!, step.conduit);
   showHex(item.querySelector(".data")!, step.data);
-  show(".count", n > 1, item);
-  show(".raw", safe, item);
+  show(".raw, .slip-note", safe, item);
   show(".operation", safe && n === 1, item);
   return item;
 }

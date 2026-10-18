@@ -31,6 +31,7 @@ FONTS = {
     "atkinson-hyperlegible-next-400.woff2": ("next", 400),
     "atkinson-hyperlegible-next-700.woff2": ("next", 700),
     "atkinson-hyperlegible-mono-400.woff2": ("mono", 400),
+    "atkinson-hyperlegible-mono-600.woff2": ("mono", 600),
     "young-serif-400.woff2": ("serif", None),
 }
 # Latin, as Google Fonts subsets it, with the arrows and ≈ the page uses.

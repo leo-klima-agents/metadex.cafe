@@ -41,15 +41,16 @@ tokens, the swap routers, any owner's payout address, and who claims and votes f
   it, and, once that section shows, for all of Hydrex. Tokens are priced at their average over the half hour before the
   epoch ended, in Hydrex's pools, with Chainlink for WETH and cbBTC; a token without a deep enough pool counts for
   nothing.
-- **It shows the last payout,** as a receipt for each of the owner's accounts in it: what was earned, swapped into kVCM,
-  retired and paid, the fee, when and the transaction, from the conduit's events. A run is mostly a transaction for each
-  account, over up to half a day, and Base's free RPCs give the logs of 100 blocks at a time at most, so the page finds
-  the payout by its effect: `totalTonnesRetired` only grows, and a search of past blocks finds the stretches of 100
-  blocks in which it changed, then reads their logs. That was 17 to 118 requests for the six runs from Aug to Sept 2026.
-  It looks back eight weeks, and only for an owner with an account in the conduit. An open page checks the total every
-  five minutes, and once it has grown, searches only the blocks after its last search. A payout takes up to half a day:
-  while one is under way and has not reached the owner's accounts, the page keeps the last receipts, and says a new
-  payout has begun. Each stretch's logs must hold a retirement, or the next RPC is asked for them.
+- **It shows the last payout,** as a receipt for each of the owner's accounts in it: the epoch it paid for, what was
+  earned, swapped into kVCM, retired, with its share and the name it was retired in, the fee, and paid, when and the
+  transaction, from the conduit's events. A run is mostly a transaction for each account, over up to half a day, and
+  Base's free RPCs give the logs of 100 blocks at a time at most, so the page finds the payout by its effect:
+  `totalTonnesRetired` only grows, and a search of past blocks finds the stretches of 100 blocks in which it changed,
+  then reads their logs. That was 17 to 118 requests for the six runs from Aug to Sept 2026. It looks back eight weeks,
+  and only for an owner with an account in the conduit. An open page checks the total every five minutes, and once it
+  has grown, searches only the blocks after its last search. A payout takes up to half a day: while one is under way and
+  has not reached the owner's accounts, the page keeps the last receipts, and says a new payout has begun. Each
+  stretch's logs must hold a retirement, or the next RPC is asked for them.
 - **It reaches nothing but three Base RPCs,** by its Content Security Policy: `https://mainnet.base.org`,
   `https://base.drpc.org` and `https://base-rpc.publicnode.com`. The browser checks the script and the stylesheet
   against the SHA-384 hashes in `index.html`; the fonts are inside the stylesheet.

@@ -387,8 +387,16 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
       await numbers.locator("time.week-end-when").innerText(),
       /^Thu,? 22 Oct,? 00:00 UTC \(Thu,? 22 Oct,? 02:00 your time\)$/,
     );
+    const states = page.locator(".promise .states");
+    assert.equal(await states.locator(".relay-state").textContent(), "Running");
+    assert.match((await states.locator("time.relay-voted").textContent()) ?? "", /^Wed,? 14 Oct,? 23:59 UTC$/);
+    assert.equal(
+      await page.locator("header").getByRole("link", { name: "How it works" }).isVisible(),
+      false,
+      "on Home on a phone, How it works is under the heading",
+    );
     await shoot(page, "home-390-light");
-    await page.getByRole("link", { name: "Check my accounts" }).click();
+    await page.locator(".promise").getByRole("link", { name: "Open the app" }).click();
     await appTitle(page).waitFor();
     assert.equal(await homeTitle(page).isVisible(), false);
     assert.equal(await page.title(), "Your accounts · metaDEX Café");
@@ -510,7 +518,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
       .filter({ hasText: /^\d[\d,]*$/ })
       .waitFor();
     await page.goto(`${SITE}/#%E0%A4`);
-    await page.getByRole("link", { name: "Check my accounts" }).click();
+    await page.locator(".promise").getByRole("link", { name: "Open the app" }).click();
     await appTitle(page).waitFor();
     await page.getByRole("button", { name: "Browser wallet" }).waitFor();
     assert.deepEqual(violations, []);
@@ -558,7 +566,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     // In groups of four, an address still reads, and copies, whole.
     assert.equal(await review(page).locator(".conduit").first().innerText(), CONDUIT);
     assert.equal(await review(page).locator(".to").first().innerText(), VOTING_ESCROW);
-    assert.equal(await review(page).locator(".count").first().textContent(), "Transaction 1 of 2");
+    assert.equal(await review(page).locator(".count").first().textContent(), "Your wallet will ask · 1 of 2");
     assert.equal(await review(page).locator(".data").first().isVisible(), false, "the wallet shows the call's fields");
     await shoot(page, "join-3-1440-light");
     await review(page).getByRole("button", { name: "Confirm transaction 1 of 2" }).click();
@@ -601,8 +609,14 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     assert.equal(await receipt.locator(".receipt-tonnes").innerText(), "65.26 t of carbon credits");
     assert.equal(await receipt.locator(".receipt-fee").innerText(), "0 kVCM");
     assert.equal(await receipt.locator(".receipt-paid").innerText(), "727.11 kVCM");
-    assert.equal(await receipt.locator(".receipt-recipient").innerText(), PAYEE);
-    assert.match(await receipt.locator("time.receipt-time").innerText(), /^Wed,? 23 Sept?,? 17:44 UTC/);
+    // The epoch whose rewards it paid; the time, in small capitals, is read as written.
+    assert.match((await receipt.locator(".receipt-day").textContent()) ?? "", /^Thu,? 10 Sept? to Thu,? 17 Sept?$/);
+    assert.equal(await receipt.locator(".receipt-retired-share").innerText(), "31.01%");
+    assert.equal(await receipt.locator(".receipt-fee-share").innerText(), "0%");
+    assert.equal(await receipt.locator(".receipt-entity").innerText(), "Hydrex");
+    assert.equal(await receipt.locator(".total dt").textContent(), "Paid to you");
+    assert.equal(await receipt.locator(".receipt-elsewhere").isVisible(), false, "paid to the owner itself");
+    assert.match((await receipt.locator("time.receipt-time").textContent()) ?? "", /^Wed,? 23 Sept?,? 17:44 UTC$/);
     assert.equal(
       await receipt.locator(".through img").isVisible(),
       true,
@@ -668,7 +682,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     await review(page).getByText("closing stops here").waitFor();
     const [tab] = await Promise.all([
       page.context().waitForEvent("page"),
-      review(page).getByRole("link", { name: "How to check these calls" }).click(),
+      review(page).getByRole("link", { name: "How to check these calls" }).first().click(),
     ]);
     await tab.waitForURL(`${SITE}/#verify`);
     await review(page).getByRole("button", { name: "Confirm transaction 2 of 2" }).waitFor();
@@ -741,7 +755,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["The USDC automation"]);
     assert.equal(await review(page).locator(".conduit").innerText(), USDC);
     assert.equal(await review(page).locator(".approve").innerText(), "false");
-    assert.equal(await review(page).locator(".count").isVisible(), false, "one call has no count");
+    assert.equal(await review(page).locator(".count").textContent(), "Your wallet will ask", "one call has no count");
     await shoot(page, "release-390-light");
     await confirm(page);
     assert.equal(sent.length, 1);
@@ -879,6 +893,11 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     assert.equal(await call.locator(".conduit").innerText(), CONDUIT, "co-signers see the address, not only its name");
     assert.equal(await call.locator(".conduit-name").innerText(), "Carbon Impact");
     assert.equal(await call.locator(".call").innerText(), "The call above, in 100 bytes:");
+    assert.equal(await call.locator(".count").textContent(), "In a Safe · call 1 of 2");
+    assert.equal(
+      await call.locator(".slip-note").innerText(),
+      "The selector, then each 32-byte word on two lines: the conduit, 53350 as d066, and false as 0.",
+    );
     assert.equal(await dialog.locator(".operation").first().isVisible(), false, "Safe{Wallet} sets the operation");
     await shoot(page, "safe-calls-1440-light");
     await dialog.getByRole("button", { name: "Propose in Safe{Wallet}" }).click();

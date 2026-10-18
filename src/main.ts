@@ -20,6 +20,7 @@ import {
   units,
   until,
   usd,
+  utc,
   weekStart,
   when,
 } from "./format.ts";
@@ -38,6 +39,7 @@ import {
   readRelay,
   release,
   status,
+  stopped,
   type Account,
   type Automation,
   type Group,
@@ -46,7 +48,16 @@ import {
   type Status,
 } from "./hydrex.ts";
 import { pricesAt, usdOf, type Price, type Token } from "./prices.ts";
-import { blockTimes, lastRun, totalRetired, type Amount, type Payout, type Run, type Search } from "./receipts.ts";
+import {
+  blockTimes,
+  lastRun,
+  namesAt,
+  totalRetired,
+  type Amount,
+  type Payout,
+  type Run,
+  type Search,
+} from "./receipts.ts";
 import { close, review, update, type Hooks } from "./review.ts";
 import {
   NoWallet,
@@ -116,8 +127,14 @@ function failed(error: unknown): void {
 function showRelay(found: Relay): void {
   relay = found;
   sawBlock(found.time);
-  const { epochStart, tonnes, retireBps, votes, entity, beneficiary, beneficiaryAddress, message } = found;
+  const { epochStart, tonnes, retireBps, votes, entity, beneficiary, beneficiaryAddress, message, voted } = found;
+  // On Home, running while it votes each epoch.
+  const halted = stopped(voted, epochStart);
+  document
+    .querySelector(".relay-shape")!
+    .classList.replace(halted ? "running" : "stopped", halted ? "stopped" : "running");
   fill(document, {
+    "relay-state": halted ? "Stopped" : "Running",
     tonnes: units(tonnes),
     retired: bps(retireBps),
     "retired-share": share(retireBps),
@@ -131,6 +148,7 @@ function showRelay(found: Relay): void {
   fillTime(document, "week-start", epochStart);
   fillTime(document, "week-end", epochStart + WEEK);
   fillTime(document, "week-end-when", epochStart + WEEK, when);
+  if (voted) fillTime(document, "relay-voted", voted, utc);
   fillTime(document, "vote-day", epochStart + WEEK - 1);
   tick();
 }
@@ -320,24 +338,34 @@ const kvcm = (found: Amount[]): bigint => found.find(({ token }) => same(token, 
 
 // Its fields have names of their own: the automation's figures, such as the tonnes it retired, are filled by name
 // across the whole page.
-function receipt(payout: Payout, time: number, tokens: Map<string, Token>, prices?: Map<string, Price>) {
+function receipt(payout: Payout, time: number, name: string, tokens: Map<string, Token>, prices?: Map<string, Price>) {
   const item = clone("receipt");
-  // What was claimed as kVCM was not swapped.
-  const swapped = kvcm(payout.paid) + kvcm(payout.fees) + payout.retiredKvcm - kvcm(payout.earned);
+  // What was claimed as kVCM was not swapped. Its shares are of all the kVCM, as the automation retires up to its share,
+  // and pays the rest.
+  const all = kvcm(payout.paid) + kvcm(payout.fees) + payout.retiredKvcm;
+  const swapped = all - kvcm(payout.earned);
+  const of = (part: bigint) => (all ? bps((part * 10_000n + all / 2n) / all) : "");
   fill(item, {
     "receipt-id": `#${payout.id}`,
     "receipt-earned-usd": worth(payout.earned, tokens, prices),
     "receipt-swapped": `${amount(swapped > 0n ? swapped : 0n, 18)} kVCM`,
+    "receipt-retired-share": of(payout.retiredKvcm),
     "receipt-retired": `${payout.retiredKvcm ? "−" : ""}${amount(payout.retiredKvcm, 18)} kVCM`,
     "receipt-tonnes": `${amount(payout.tonnes, 18)} t of carbon credits`,
+    "receipt-entity": name,
+    "receipt-fee-share": of(kvcm(payout.fees)),
     "receipt-paid-usd": worth(payout.paid, tokens, prices),
   });
   showAmounts(item.querySelector(".receipt-earned")!, payout.earned, tokens);
   showAmounts(item.querySelector(".receipt-fee")!, payout.fees, tokens, payout.fees.length ? "−" : "");
   showAmounts(item.querySelector(".receipt-paid")!, payout.paid, tokens);
-  show(".receipt-tonnes, .through", payout.tonnes > 0n, item);
-  fillTime(item, "receipt-date", time);
-  fillTime(item, "receipt-time", time, when);
+  show(".receipt-carbon, .through", payout.tonnes > 0n, item);
+  // The epoch whose rewards it paid, which ended at the flip before it.
+  fillTime(item, "receipt-from", weekStart(time) - WEEK);
+  fillTime(item, "receipt-to", weekStart(time));
+  fillTime(item, "receipt-time", time, utc);
+  // The owner may have a payout address of their own.
+  show(".receipt-elsewhere", !same(payout.recipient, payout.owner), item);
   fillAddress(item, "receipt-recipient", payout.recipient);
   item.querySelector<HTMLAnchorElement>(".receipt-tx")!.href = `https://basescan.org/tx/${payout.tx}`;
   return item;
@@ -401,13 +429,15 @@ async function loadReceipts(quietly = false): Promise<void> {
   const all = mine.flatMap(({ earned, paid, fees }) => [...earned, ...paid, ...fees]);
   let tokens: Map<string, Token>;
   let times: Map<number, number>;
+  let names: Map<number, string>;
   try {
-    [tokens, times] = await Promise.all([
+    [tokens, times, names] = await Promise.all([
       tokensOf(
         all.map(({ token }) => token),
         readLater,
       ),
       blockTimes(mine.map(({ block }) => block)),
+      namesAt(mine.map(({ block }) => block)),
     ]);
   } catch (error) {
     return fail(error);
@@ -419,7 +449,9 @@ async function loadReceipts(quietly = false): Promise<void> {
     if (value > (amounts.get(token.toLowerCase()) ?? 0n)) amounts.set(token.toLowerCase(), value);
   const shelf = receipts.querySelector(".receipt-list")!;
   const draw = (prices?: Map<string, Price>) =>
-    shelf.replaceChildren(...mine.map((payout) => receipt(payout, times.get(payout.block)!, tokens, prices)));
+    shelf.replaceChildren(
+      ...mine.map((payout) => receipt(payout, times.get(payout.block)!, names.get(payout.block)!, tokens, prices)),
+    );
   draw();
   fill(receipts, { "receipt-which": list(mine.map(({ id }) => `#${id}`)) });
   fillTime(receipts, "run-day", found.time);

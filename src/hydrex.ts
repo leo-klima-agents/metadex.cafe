@@ -69,6 +69,8 @@ export type Relay = {
   beneficiaryAddress: Address;
   message: string;
   votes: bigint;
+  // When it last voted, or 0.
+  voted: number;
 };
 
 export type Account = {
@@ -119,17 +121,27 @@ function required(values: unknown[]): unknown[] {
 const epochAt = (time: unknown): number => weekStart(Number(time));
 
 export async function readRelay(): Promise<Relay> {
-  const [time, retireBps, tonnes, entity, beneficiary, beneficiaryAddress, message] = required(
-    await read([
-      blockTime,
-      conduit("retireBps"),
-      conduit("totalTonnesRetired"),
-      conduit("retiringEntityName"),
-      conduit("beneficiaryString"),
-      conduit("impactBeneficiaryAddress"),
-      conduit("retirementMessage"),
-    ]),
-  ) as [bigint, bigint, bigint, string, string, Address, string];
+  const replies = await read([
+    blockTime,
+    conduit("retireBps"),
+    conduit("totalTonnesRetired"),
+    conduit("retiringEntityName"),
+    conduit("beneficiaryString"),
+    conduit("impactBeneficiaryAddress"),
+    conduit("retirementMessage"),
+    call(VOTER, voterAbi, "lastVoted", CONDUIT),
+  ]);
+  const [time, retireBps, tonnes, entity, beneficiary, beneficiaryAddress, message] = required(replies.slice(0, 7)) as [
+    bigint,
+    bigint,
+    bigint,
+    string,
+    string,
+    Address,
+    string,
+  ];
+  // When it last voted only adds to Home: one that cannot be read is 0, not known.
+  const voted = replies[7] as bigint | undefined;
   const epochStart = epochAt(time);
   const [votes] = required(await read([escrow("getPastVotes", CONDUIT, BigInt(epochStart))])) as [bigint];
   return {
@@ -142,6 +154,7 @@ export async function readRelay(): Promise<Relay> {
     beneficiaryAddress,
     message: clean(message),
     votes,
+    voted: Number(voted ?? 0n),
   };
 }
 
@@ -203,7 +216,7 @@ export const automation = (address: Address): string | undefined =>
 
 // The Voter counts a vote only in the epoch it is cast, so an automation that has not voted since the previous epoch
 // began earns its accounts nothing. One that has never voted may be new.
-const stopped = (voted: number, epochStart: number): boolean => voted > 0 && voted < epochStart - WEEK;
+export const stopped = (voted: number, epochStart: number): boolean => voted > 0 && voted < epochStart - WEEK;
 
 // The Voter counts the delegate at the start of the epoch, so joins and leaves count from the next one.
 export function status(account: Account, owner: Address, now: number, epochStart: number): Status {

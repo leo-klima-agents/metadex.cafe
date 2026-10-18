@@ -19,14 +19,21 @@
   font-display: swap;
 }
 @font-face {
+  font-family: "Atkinson Hyperlegible Mono";
+  src: url("fonts/atkinson-hyperlegible-mono-600.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
   font-family: "Young Serif";
   src: url("fonts/young-serif-400.woff2") format("woff2");
   font-weight: 400;
   font-display: swap;
 }
 :root {
-  font-family: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  font-family: var(--sans);
   line-height: 1.5;
+  --sans: "Atkinson Hyperlegible Next", system-ui, sans-serif;
   --serif: "Young Serif", Georgia, serif;
   --mono: "Atkinson Hyperlegible Mono", ui-monospace, monospace;
   /* The colours, Roast: plain values first, the light ones, for a browser without light-dark(). */
@@ -40,7 +47,6 @@
   --tint: #f9eee4;
   --edge: #645850;
   --notice: #fbe6e3;
-  --callout: #fdf1e2;
   --warn: #944e00;
   --info: #234e82;
   --danger: #ab331f;
@@ -60,7 +66,6 @@
     --tint: light-dark(#f9eee4, #2e2118);
     --edge: light-dark(#645850, #b7b0a7);
     --notice: light-dark(#fbe6e3, #3a1b18);
-    --callout: light-dark(#fdf1e2, #33240f);
     --warn: light-dark(#944e00, #efb062);
     --info: light-dark(#234e82, #85b6e9);
     --danger: light-dark(#ab331f, #ef816b);
@@ -91,10 +96,13 @@ h2 {
   font-family: var(--serif);
   font-weight: 400;
 }
-.view > h1,
-.promise h1 {
+.view > h1 {
   font-size: 1.75rem;
   line-height: 1.25;
+}
+.promise h1 {
+  font-size: 1.875rem;
+  line-height: 1.15;
 }
 code {
   font-family: var(--mono);
@@ -111,19 +119,24 @@ code {
   content: "\A";
   white-space: pre;
 }
-/* Small capitals in the mono face, for what names a figure, a field or a step. */
+/* Small capitals in the mono face, for what names a figure, a field or a step: quiet above what they name, in ink
+   beside it, on a slip. */
 .label,
 .numbers dt,
 dl.details dt,
 dialog .step-count,
 .fields dt,
-.lines dt,
-.total dt {
+.lines dt {
   color: var(--quiet);
   font-family: var(--mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.06em;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+.fields dt,
+.lines dt {
+  color: var(--ink);
 }
 table,
 .numbers dd {
@@ -154,6 +167,12 @@ header.site nav {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem 1rem;
+}
+/* On Home, on a phone, the header keeps Open the app beside the name: How it works is right under the heading. */
+@media (max-width: 30rem) {
+  body:not(:has(main > .view:not(#home):target, main > .view:not(#home) :target)) header.site .how {
+    display: none;
+  }
 }
 .wallet-state::before {
   content: "";
@@ -235,15 +254,25 @@ summary {
 .notice > p:last-child {
   margin-block-end: 0;
 }
-.callout {
-  padding-block: 0.25rem 0.75rem;
-  padding-inline: 1rem;
-  border-inline-start: 4px solid var(--warn);
-  border-radius: 8px;
-  background: var(--callout);
+/* The automations' states, under Home's heading: each its shape, its state, and when it last voted. */
+.states {
+  display: grid;
+  gap: 0.5rem;
+  margin-block: 0;
+  padding-block: 0.75rem 0;
+  padding-inline: 0;
+  border-block-start: 1px solid var(--line);
+  list-style: none;
 }
-.callout h2 {
-  font-size: 1.125rem;
+.states li {
+  display: flex;
+  gap: 0.625rem;
+  align-items: baseline;
+  margin: 0;
+}
+.states .shape {
+  flex: none;
+  margin: 0;
 }
 .small {
   color: var(--quiet);
@@ -512,35 +541,41 @@ dialog .step-count {
 dialog .step-count:not([hidden]) + h2 {
   margin-block-start: 0.25rem;
 }
-/* Each call as a slip: the page's own words, then its fields, as the wallet shows them. */
+/* Each call as a slip, in the mono face: its heading, the page's own words, then its fields as the wallet shows them. */
 .steps {
   padding-inline-start: 0;
   list-style: none;
 }
 .slip {
   margin-block: 0.75rem;
-  padding: 0.75rem 1rem;
+  padding-block: 1.25rem;
+  padding-inline: 1rem;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 12px;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
 }
 .slip .count {
   margin: 0;
 }
 .slip .says {
-  margin-block: 0.25rem 0.75rem;
+  margin-block: 0.375rem 0;
+  font-family: var(--sans);
+  font-size: 1.125rem;
   font-weight: 700;
+  line-height: 1.3;
 }
 .fields {
   display: grid;
   gap: 0.5rem;
-  margin: 0;
-  padding-block-start: 0.75rem;
+  margin-block: 0.75rem 0;
+  padding-block-start: 0.625rem;
   border-block-start: 2px dashed var(--ink);
 }
 .fields > div {
   display: grid;
-  grid-template-columns: 5.5rem minmax(0, 1fr);
-  gap: 0.75rem;
+  grid-template-columns: 5.25rem minmax(0, 1fr);
+  column-gap: 0.625rem;
   align-items: baseline;
 }
 .fields dd {
@@ -548,33 +583,68 @@ dialog .step-count:not([hidden]) + h2 {
 }
 .fields .on,
 .fields .conduit-name,
-.fields .call {
+.fields .call,
+.slip-note {
   color: var(--quiet);
-  font-size: 0.875rem;
+  font-family: var(--sans);
 }
-/* Eight groups a line, wide enough on a phone: each 32-byte word of the calldata takes two lines of 16 bytes. */
+/* The calldata under the fields, across the slip: eight groups a line, wide enough on a phone, so that each 32-byte
+   word takes two lines of 16 bytes. */
+.fields .bytes {
+  grid-column: 1 / -1;
+}
 .fields .data {
   display: block;
   max-inline-size: 36ch;
-  margin-block-start: 0.25rem;
-  padding: 0.5rem;
+  margin-block-start: 0.375rem;
+  padding-block: 0.5rem;
+  padding-inline: 0.625rem;
   border-radius: 6px;
   background: var(--tint);
-  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+.slip-foot {
+  margin-block: 0.75rem 0;
+  padding-block-start: 0.625rem;
+  border-block-start: 2px dashed var(--ink);
+}
+.slip-note {
+  margin-block: 0 0.5rem;
+  font-size: 0.875rem;
+}
+.slip-foot .check,
+.receipt-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  margin: 0;
+}
+.slip-foot a,
+.receipt-foot a {
+  font-family: var(--sans);
+  font-size: 0.875rem;
 }
 /* A receipt for each account in the last payout, laid out as the call slips are. */
 .receipt {
   max-inline-size: 28rem;
+  padding-inline: 1.25rem;
+  font-size: 0.875rem;
 }
 .receipt-name {
   margin: 0;
   font-family: var(--serif);
-  font-size: 1.25rem;
+  font-size: 1.375rem;
+  line-height: 1.2;
   text-align: center;
 }
-.receipt .label,
+.receipt > .label {
+  margin-block: 0.375rem 0;
+  text-align: center;
+}
 .receipt-day {
-  margin-block: 0.25rem 0;
+  margin-block: 0.125rem 0;
   text-align: center;
 }
 .lines,
@@ -582,7 +652,7 @@ dialog .step-count:not([hidden]) + h2 {
   margin: 0;
 }
 .lines {
-  margin-block-start: 0.75rem;
+  margin-block-start: 0.875rem;
   padding-block: 0.375rem;
   border-block-start: 2px dashed var(--ink);
 }
@@ -592,22 +662,26 @@ dialog .step-count:not([hidden]) + h2 {
   grid-template-columns: auto minmax(0, 1fr);
   column-gap: 1rem;
   align-items: baseline;
-  padding-block: 0.25rem;
+}
+.lines > div {
+  padding-block: 0.3125rem;
 }
 .lines dd,
 .total dd {
   margin: 0;
 }
 .lines .value,
-.total .value {
-  font-family: var(--mono);
+.total .value,
+.total .dollars {
+  grid-column: 2;
   text-align: end;
 }
 .lines .detail,
 .total .detail {
   grid-column: 1 / -1;
   color: var(--quiet);
-  font-size: 0.875rem;
+  font-family: var(--sans);
+  font-size: 0.8125rem;
 }
 /* Klima Protocol's logo keeps a third of its size clear around it, as its guidelines ask. */
 .lines .through {
@@ -617,27 +691,25 @@ dialog .step-count:not([hidden]) + h2 {
   margin-block: 0.5rem;
 }
 .total {
-  padding-block-start: 0.5rem;
+  padding-block-start: 0.625rem;
   border-block-start: 4px double var(--ink);
 }
-.total dt {
-  color: var(--ink);
-}
+.total dt,
 .total .value {
   font-size: 1.125rem;
-  font-weight: 700;
+  font-weight: 600;
+}
+.total dt {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.total .dollars {
+  color: var(--quiet);
 }
 .receipt-foot {
-  margin-block: 0.75rem 0;
-  padding-block-start: 0.5rem;
+  margin-block-start: 0.75rem;
+  padding-block-start: 0.625rem;
   border-block-start: 2px dashed var(--ink);
-  font-size: 0.875rem;
-}
-@media (max-width: 30rem) {
-  .fields > div {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-  }
 }
 dialog .foot {
   position: sticky;

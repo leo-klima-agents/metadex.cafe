@@ -487,12 +487,12 @@ accounts and the automation in the fragment; the board's `#brief` predates it.
 
 What of the boards the page already has, so that the next work starts from there:
 
-| On the boards                                                                    | On the page                                                                                                      |
-| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| The stopped-automation callout                                                   | On Home; in the App, a group of its own, "In an automation that stopped"                                         |
-| Status by shape and words                                                        | Filled, half filled, hollow, triangle and square, before each status                                             |
-| The review in three steps                                                        | Before you join, what changes, and the calls, as slips with their fields; one transaction at a time, no batching |
-| Calls from a Safe                                                                | One Safe transaction, with the decoded fields and the calldata; a brief for co-signers without its accounts      |
-| What the votes earned, against all of Hydrex                                     | Per account and per 1,000 Earning Power, last epoch only                                                         |
-| A receipt per epoch, statements and export                                       | The last payout only, as a receipt per account in it; no statements or export                                    |
-| Menu, Your positions, Choose, Help me choose, fee facts, record, liquidity, Aero | Not yet                                                                                                          |
+| On the boards                                                                    | On the page                                                                                                          |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| The stopped-automation callout                                                   | On Home, as row 7's states, linked to what it means; in the App, a group of its own, "In an automation that stopped" |
+| Status by shape and words                                                        | Filled, half filled, hollow, triangle and square, before each status                                                 |
+| The review in three steps                                                        | Before you join, what changes, and the calls, as slips with their fields; one transaction at a time, no batching     |
+| Calls from a Safe                                                                | One Safe transaction, with the decoded fields and the calldata; a brief for co-signers without its accounts          |
+| What the votes earned, against all of Hydrex                                     | Per account and per 1,000 Earning Power, last epoch only                                                             |
+| A receipt per epoch, statements and export                                       | The last payout only, as a receipt per account in it; no statements or export                                        |
+| Menu, Your positions, Choose, Help me choose, fee facts, record, liquidity, Aero | Not yet                                                                                                              |

@@ -1,6 +1,7 @@
 import { decodeEventLog, encodeEventTopics, numberToHex, parseAbi, type Address, type Hex } from "viem";
 import { call, read, rpc } from "./chain.ts";
 import { CONDUIT } from "./config.ts";
+import { clean } from "./format.ts";
 
 // Carbon Impact pays out by calling claimSwapAndDistribute once for each account, in a transaction of its own: it
 // claims the account's rewards, swaps them to kVCM, retires a share, and pays the rest to the owner's payout address,
@@ -10,7 +11,10 @@ import { CONDUIT } from "./config.ts";
 // it changed, and their logs hold the run. A payout that retires nothing, as one that pays nothing does, is found only
 // if it falls in one of those stretches.
 
-const conduitAbi = parseAbi(["function totalTonnesRetired() view returns (uint256)"]);
+const conduitAbi = parseAbi([
+  "function totalTonnesRetired() view returns (uint256)",
+  "function retiringEntityName() view returns (string)",
+]);
 const eventsAbi = parseAbi([
   "event CarbonRetired(address indexed creditToken_, uint256 retireTonnes, uint256 kvcmSpent)",
   "event ClaimSwapAndDistributeCompleted(uint256 indexed tokenId, address indexed owner, address indexed recipient, address[] claimedTokens, uint256[] claimedAmounts, address[] distributedTokens, uint256[] distributedAmounts, uint256[] treasuryFees)",
@@ -211,4 +215,21 @@ export async function blockTimes(blocks: number[]): Promise<Map<number, number>>
   );
   missing.forEach((block, i) => times.set(block, found[i]!));
   return new Map(blocks.map((block) => [block, times.get(block)!]));
+}
+
+// The name the automation retired in at each block, as its admin can change it: the receipts keep the one of their own
+// payout. Each is read once.
+const names = new Map<number, string>();
+
+export async function namesAt(blocks: number[]): Promise<Map<number, string>> {
+  const missing = [...new Set(blocks)].filter((block) => !names.has(block));
+  const found = await Promise.all(
+    missing.map(async (block) => {
+      const [name] = await read([call(CONDUIT, conduitAbi, "retiringEntityName")], block, true);
+      if (name === undefined) throw new Error("A read from Base failed.");
+      return clean(name as string);
+    }),
+  );
+  missing.forEach((block, i) => names.set(block, found[i]!));
+  return new Map(blocks.map((block) => [block, names.get(block)!]));
 }

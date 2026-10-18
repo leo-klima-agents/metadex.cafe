@@ -24,7 +24,7 @@
     <header class="site">
       <a class="name" href="#">metaDEX Café</a>
       <nav aria-label="Site">
-        <a href="#how-it-works">How it works</a>
+        <a class="how" href="#how-it-works">How it works</a>
         <a class="to-app button" href="#app"
           ><span class="open">Open the app</span
           ><span class="wallet-state" hidden
@@ -44,32 +44,34 @@
       <div id="home" class="view" data-title="metaDEX Café">
         <section class="promise">
           <h1 tabindex="-1">Your Hydrex votes, retiring carbon credits and paying you</h1>
-          <p class="lead">
+          <p>
             Carbon Impact is an automation for Hydrex accounts. It votes with your accounts every week, retires a share
             of the rewards as carbon credits and pays you the rest. Your HYDX never leaves your wallet.
-          </p>
-          <p>
-            Anyone can check it: its code is Hydrex's own, it retires carbon credits through Klima, and this page checks
-            it on Base before it lets you join.
           </p>
           <p class="buttons">
             <a class="button" href="#app">Open the app</a>
             <a class="button secondary" href="#how-it-works">How it works</a>
           </p>
+          <ul class="states">
+            <li>
+              <span class="shape running relay-shape" aria-hidden="true"></span>
+              <span
+                ><b class="relay-state">Running</b><br /><span class="small"
+                  >Carbon Impact: voted <time class="relay-voted">…</time></span
+                ></span
+              >
+            </li>
+            <li>
+              <span class="shape stopped" aria-hidden="true"></span>
+              <span
+                ><b>Stopped</b><br /><span class="small"
+                  ><a href="#if-your-automation-stopped">Hydrex's other automations</a>, such as USDC: last voted Wed 9
+                  Sep; they earn nothing</span
+                ></span
+              >
+            </li>
+          </ul>
         </section>
-
-        <aside class="callout" aria-labelledby="stopped-title">
-          <h2 id="stopped-title">Was your account in another Hydrex automation?</h2>
-          <p>
-            Hydrex has turned off its other automations, such as USDC, Hydrex Lock Maxi and Liquid Hydrex. They last
-            voted on Wed 9 Sep.
-            <strong>An account still in one has earned nothing from voting since Thu 10 Sep.</strong>
-          </p>
-          <p class="buttons">
-            <a class="button" href="#app">Check my accounts</a>
-            <a class="button secondary" href="#if-your-automation-stopped">What it means</a>
-          </p>
-        </aside>
 
         <section class="numbers" aria-labelledby="numbers-title">
           <h2 id="numbers-title">Carbon Impact today</h2>
@@ -1169,7 +1171,6 @@
         <h3>What your wallet will ask</h3>
         <p class="how"></p>
         <ol class="steps"></ol>
-        <p class="small"><a href="#verify">How to check these calls</a></p>
       </div>
       <div class="done" hidden></div>
       <div class="foot">
@@ -1201,7 +1202,7 @@
     </template>
     <template id="step">
       <li class="slip">
-        <p class="count label" hidden></p>
+        <p class="count label"></p>
         <p class="says"></p>
         <dl class="fields">
           <div>
@@ -1230,13 +1231,18 @@
           </div>
           <div class="raw" hidden>
             <dt>Data</dt>
-            <dd><span class="call"></span> <code class="data" translate="no"></code></dd>
+            <dd class="call"></dd>
+            <dd class="bytes"><code class="data" translate="no"></code></dd>
           </div>
           <div class="operation" hidden>
             <dt>Operation</dt>
-            <dd><code translate="no">0</code>, a call</dd>
+            <dd><code translate="no">0</code> · call</dd>
           </div>
         </dl>
+        <div class="slip-foot">
+          <p class="slip-note" hidden></p>
+          <p class="check"><a href="#verify">How to check these calls</a> <span class="label">On Base</span></p>
+        </div>
       </li>
     </template>
 
@@ -1304,7 +1310,7 @@
       <article class="slip receipt">
         <p class="receipt-name">metaDEX Café</p>
         <p class="label">Receipt · <span class="receipt-id"></span> · Carbon Impact</p>
-        <p class="receipt-day"><time class="receipt-date"></time></p>
+        <p class="receipt-day"><time class="receipt-from"></time> to <time class="receipt-to"></time></p>
         <dl class="lines">
           <div>
             <dt>Earned</dt>
@@ -1314,32 +1320,33 @@
           <div>
             <dt>Swapped</dt>
             <dd class="value receipt-swapped"></dd>
-            <dd class="detail">Into kVCM</dd>
           </div>
           <div>
-            <dt>Retired</dt>
+            <dt>Retired <span class="receipt-retired-share"></span></dt>
             <dd class="value receipt-retired"></dd>
-            <dd class="detail receipt-tonnes"></dd>
+            <dd class="detail receipt-carbon">
+              <span class="receipt-tonnes"></span>, in the name "<bdi class="receipt-entity" translate="no"></bdi>"
+            </dd>
             <dd class="detail through">
               <img src="klima-protocol.svg" alt="" width="24" height="24" /> through Klima Protocol
             </dd>
           </div>
           <div>
-            <dt>Fee</dt>
+            <dt>Fee <span class="receipt-fee-share"></span></dt>
             <dd class="value receipt-fee"></dd>
           </div>
         </dl>
         <dl class="total">
           <div>
-            <dt>Paid</dt>
+            <dt>Paid to you</dt>
             <dd class="value receipt-paid"></dd>
-            <dd class="detail receipt-paid-usd"></dd>
+            <dd class="dollars receipt-paid-usd"></dd>
+            <dd class="detail receipt-elsewhere" hidden>
+              At your payout address, <code translate="no"><a class="receipt-recipient"></a></code>
+            </dd>
           </div>
         </dl>
-        <p class="receipt-foot">
-          To <code translate="no"><a class="receipt-recipient"></a></code>, <time class="receipt-time"></time>.
-          <a class="receipt-tx">Transaction</a>
-        </p>
+        <p class="receipt-foot"><time class="receipt-time label"></time> <a class="receipt-tx">Transaction</a></p>
       </article>
     </template>
     <template id="earned-pool">
