@@ -45,9 +45,9 @@ tokens, the swap routers, any owner's payout address, and who claims and votes f
   retired and paid, the fee, when and the transaction, from the conduit's events. A run is mostly a transaction for each
   account, over up to half a day, and Base's free RPCs give the logs of 100 blocks at a time at most, so the page finds
   the payout by its effect: `totalTonnesRetired` only grows, and a search of past blocks finds the stretches of 100
-  blocks in which it changed, then reads their logs. That was 17 to 118 requests, four at a time, for the six runs from
-  Aug to Sept 2026. It looks back eight weeks, and only for an owner with an account in the conduit. An open page checks
-  the total every five minutes, and reads the payout again once it has grown.
+  blocks in which it changed, then reads their logs. That was 17 to 118 requests for the six runs from Aug to Sept 2026.
+  It looks back eight weeks, and only for an owner with an account in the conduit. An open page checks the total every
+  five minutes, and reads the payout again once it has grown.
 - **It reaches nothing but three Base RPCs,** by its Content Security Policy: `https://mainnet.base.org`,
   `https://base-rpc.publicnode.com` and `https://base.drpc.org`. The browser checks the script and the stylesheet
   against the SHA-384 hashes in `index.html`; the fonts are inside the stylesheet.
@@ -77,11 +77,14 @@ The same commit gives the same files on any machine. Check out the version in th
 
 - **Right after a deployment,** a browser may keep the previous script or stylesheet for ten minutes, and refuses it
   until then, as it does not match the page's hashes.
-- **Base RPC:** a read that fails goes to the next RPC; if none answers, the page says so and offers to try again.
-  Leaving never waits for the conduit's settings. If the Voter cannot be read, accounts in other automations show
-  without saying whether those stopped; if what the votes earned cannot be read, the page says so where the figures go,
-  and tries again every five minutes. If the last payout cannot be read, the page says so and offers to try again; one
-  without prices shows its tokens alone.
+- **Base RPC:** every request goes through one queue, at most six at a time and started at least 50 ms apart, under the
+  25 a second that `https://mainnet.base.org` allows. A read that fails goes to the next RPC. When none answers, the
+  page asks those that were busy or out of reach again, up to four times, after an exponential backoff with full jitter
+  and never sooner than a `Retry-After`; a read that would fail the same way, as one that reverts, is not asked again.
+  If none answers in the end, the page says so and offers to try again. Leaving never waits for the conduit's settings.
+  If the Voter cannot be read, accounts in other automations show without saying whether those stopped; if what the
+  votes earned cannot be read, the page says so where the figures go, and tries again every five minutes. If the last
+  payout cannot be read, the page says so and offers to try again; one without prices shows its tokens alone.
 - **A failed check** turns joining off and says why. An open page runs the checks again every hour.
 - **The end of an epoch:** the page takes the time from Base's newest block, and reads the accounts and the conduit
   again within half a minute.

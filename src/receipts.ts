@@ -25,8 +25,6 @@ export const WEEKS = 8;
 export const STRETCH = 100;
 // The newest blocks are left out: an RPC behind its peers may not have them yet.
 const SETTLED = 5;
-// The reads in flight at once: the free RPCs limit how many they take a second.
-const AT_ONCE = 4;
 
 export type Amount = { token: Address; amount: bigint };
 export type Payout = {
@@ -135,23 +133,6 @@ export function payouts(logs: Log[]): Payout[] {
 
 const hex = (n: number): Hex => `0x${n.toString(16)}`;
 
-// Runs tasks at most size at a time, in the order they come.
-function queue(size: number) {
-  let running = 0;
-  const waiting: (() => void)[] = [];
-  return async <T>(task: () => Promise<T>): Promise<T> => {
-    if (running < size) running++;
-    else await new Promise<void>((go) => waiting.push(go));
-    try {
-      return await task();
-    } finally {
-      const next = waiting.shift();
-      if (next) next();
-      else running--;
-    }
-  };
-}
-
 async function tonnesAt(block: number | "latest"): Promise<bigint> {
   const [total] = await read([call(CONDUIT, conduitAbi, "totalTonnesRetired")], block);
   if (total === undefined) throw new Error("A read from Base failed.");
@@ -164,26 +145,24 @@ export const totalRetired = (): Promise<bigint> => tonnesAt("latest");
 // The automation's last payout, for all its accounts. Some 20 reads to find the run, and about 4 more for each of its
 // transactions: 17 to 118 for the six runs from Aug to Sept 2026.
 export async function lastRun(): Promise<Search> {
-  const slot = queue(AT_ONCE);
-  const at = (block: number) => slot(() => tonnesAt(block));
   const top = Number(await rpc<Hex>("eth_blockNumber", [])) - SETTLED;
-  const now = await at(top);
+  const now = await tonnesAt(top);
   let [lower, below] = [top, now];
   for (let week = 1; below === now; week++) {
     if (week > WEEKS || lower === 0) return { total: now };
     lower = Math.max(0, top - week * BLOCKS_PER_WEEK);
-    below = await at(lower);
+    below = await tonnesAt(lower);
   }
-  const last = await lastChange(at, lower, top, below, now, STRETCH);
+  const last = await lastChange(tonnesAt, lower, top, below, now, STRETCH);
   // A run takes up to half a day: the day before its last retirement holds the others.
   const from = Math.max(0, last.lower - BLOCKS_PER_DAY);
   const stretches: Stretch[] = [
-    ...(await changes(at, from, last.lower, await at(from), last.below, STRETCH)),
+    ...(await changes(tonnesAt, from, last.lower, await tonnesAt(from), last.below, STRETCH)),
     [last.lower + 1, last.upper],
   ];
   const logs = await Promise.all(
     stretches.map(([first, end]) =>
-      slot(() => rpc<Log[]>("eth_getLogs", [{ address: CONDUIT, fromBlock: hex(first), toBlock: hex(end) }])),
+      rpc<Log[]>("eth_getLogs", [{ address: CONDUIT, fromBlock: hex(first), toBlock: hex(end) }]),
     ),
   );
   const found = payouts(logs.flat());
@@ -196,13 +175,10 @@ export async function lastRun(): Promise<Search> {
 
 // The time of each block.
 export async function blockTimes(blocks: number[]): Promise<Map<number, number>> {
-  const slot = queue(AT_ONCE);
   const unique = [...new Set(blocks)];
   const found = await Promise.all(
     unique.map((block) =>
-      slot(() => rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [hex(block), false])).then(({ timestamp }) =>
-        Number(timestamp),
-      ),
+      rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [hex(block), false]).then(({ timestamp }) => Number(timestamp)),
     ),
   );
   return new Map(unique.map((block, i) => [block, found[i]!]));
