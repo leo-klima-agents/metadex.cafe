@@ -5,6 +5,8 @@ compounders and liquidity managers, each for a fee. Nothing here changes the pag
 
 - **The mockups** are on a design canvas, with a clickable join review and a clickable "Help me choose":
   <https://claude.ai/artifact/XWN6n3DdJEcgaWbD1GDsA5>. It is private until its owner shares it.
+- **The screens in words** are in [screens.md](screens.md): each board of rows 1 to 6, its parts in order, its words and
+  figures, and the logic of the two clickable ones, so that the work does not need the canvas.
 - **The evidence** is in [research.md](research.md): who uses automations on Base, what comparable products do and
   charge, what changes with Aero, what research says about liquidity providers, trust and disclosure, and the sources.
 - **The brand** is in [brand.md](brand.md): what the name carries, the neighbours' colours and type, what each persona
@@ -162,7 +164,7 @@ must check everything it reads from a fragment, as it would anything from outsid
 
 ## The front door: three directions
 
-On the canvas, row 1.
+On the canvas, row 1, and in [screens.md](screens.md#row-1-the-front-door-three-directions).
 
 | Direction             | For                                         | Strength                                               | Weakness                                                   |
 | --------------------- | ------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------- |
@@ -176,7 +178,7 @@ sections, not new components.
 
 ## Screens
 
-On the canvas, rows 2 to 6.
+On the canvas, rows 2 to 6, and in [screens.md](screens.md).
 
 - **Your positions** (desktop and phone). A summary of last epoch: earned, fees and retired, yours, next payout. "Needs
   you" first. Then positions by protocol, each with who looks after it, its status and last epoch. On a desk, tables
