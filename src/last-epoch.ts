@@ -11,7 +11,9 @@ type Value = ReturnType<typeof valueOf>;
 let earned: { found: Earnings; value: Value } | undefined;
 let reading = false;
 let tried = 0;
-let comparedEpoch: number | undefined;
+// The comparison with all of Hydrex under way or done, for the epoch from `start`, and its figures once read.
+let comparing: { start: number; done: Promise<boolean> } | undefined;
+let compared: { start: number; ours: number; all: number } | undefined;
 let onScreen = false;
 // Each account's share of Carbon Impact's votes, kept with the accounts it was read for.
 const shares = new WeakMap<Holdings, { start: number; of: Map<bigint, number> }>();
@@ -70,6 +72,14 @@ export function earnedByAccount(holdings: Holdings, id: bigint): number | undefi
 const perThousand = (value: number, votes: bigint): number =>
   votes > 0n ? value / (Number(toEarningPower(votes)) / 1e21) : 0;
 
+// Dollars per 1,000 Earning Power last epoch: what Carbon Impact's votes earned, and, once compared, the average on
+// Hydrex, both at the same prices.
+export function lastPerThousand(): { start: number; ours: number; all?: number } | undefined {
+  if (!earned) return undefined;
+  const { found, value } = earned;
+  return compared?.start === found.start ? compared : { start: found.start, ours: perThousand(value.usd, found.votes) };
+}
+
 function showColumn(column: "ours" | "all", { votes, pools }: Earnings, value: Value | undefined): void {
   const per = value && perThousand(value.usd, votes);
   fill(table, {
@@ -107,45 +117,54 @@ function showEarnings(found: Earnings): void {
   comparison.status.hidden = false;
   comparison.failed.hidden = comparison.versus.hidden = true;
   fill(table, { all: "…" });
-  if (onScreen) compare();
+  if (onScreen) void compare();
 }
 
-// All of Hydrex takes ten times the reads, so it waits until its table is on the screen. Both columns then use the
-// same prices, so that they compare fairly.
-function compare(): void {
+// All of Hydrex takes ten times the reads, so it waits until its table is on the screen, or until Choose asks. Both
+// columns then use the same prices, so that they compare fairly. Resolves to whether it was read.
+export function compare(): Promise<boolean> {
   const mine = earned?.found;
-  if (!mine || comparedEpoch === mine.start) return;
-  comparedEpoch = mine.start;
+  if (!mine) return Promise.resolve(false);
+  if (comparing?.start === mine.start) return comparing.done;
   comparison.failed.hidden = true;
   comparison.status.hidden = false;
   comparison.status.textContent = "Reading every pool's rewards…";
-  readAllEarnings(mine.start).then(
+  const done = readAllEarnings(mine.start).then(
     (all) => {
-      if (earned?.found !== mine) return;
+      if (earned?.found !== mine) return false;
       const ours = valueOf({ ...mine, prices: all.prices });
       const average = valueOf(all);
       showColumn("ours", mine, ours);
       showColumn("all", all, average);
-      const ratio = perThousand(ours.usd, mine.votes) / perThousand(average.usd, all.votes);
+      compared = {
+        start: mine.start,
+        ours: perThousand(ours.usd, mine.votes),
+        all: perThousand(average.usd, all.votes),
+      };
+      const ratio = compared.ours / compared.all;
       comparison.versus.textContent =
         Math.abs(ratio - 1) < 0.005
           ? "Last epoch, Carbon Impact earned about as much per 1,000 Earning Power as the average on Hydrex, at the same prices."
           : `Last epoch, Carbon Impact earned ${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "more" : "less"} per 1,000 Earning Power than the average on Hydrex, at the same prices. Tokens left unpriced count for nothing in either.`;
       comparison.status.hidden = true;
       comparison.versus.hidden = !Number.isFinite(ratio);
+      return true;
     },
     (error) => {
       console.error(error);
-      if (earned?.found !== mine) return;
-      comparedEpoch = undefined;
+      if (earned?.found !== mine) return false;
+      comparing = undefined;
       comparison.status.hidden = true;
       comparison.failed.hidden = false;
+      return false;
     },
   );
+  comparing = { start: mine.start, done };
+  return done;
 }
 
 new IntersectionObserver((entries) => {
   onScreen = entries.some(({ isIntersecting }) => isIntersecting);
-  if (onScreen) compare();
+  if (onScreen) void compare();
 }).observe(table);
-document.querySelector("#last-epoch .compare-again")!.addEventListener("click", compare);
+document.querySelector("#last-epoch .compare-again")!.addEventListener("click", () => void compare());

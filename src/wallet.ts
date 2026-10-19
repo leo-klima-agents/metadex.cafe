@@ -15,7 +15,8 @@ export type Wallet = {
   // Only Safe{Wallet} has it: it proposes all the calls as one Safe transaction, for the owners to sign there.
   propose?(txs: Tx[]): Promise<void>;
 };
-export type Connection = { wallet: Wallet; provider: Provider; address: Address; chainId: number };
+// `batches` is whether the wallet can send several calls in one request on Base (EIP-5792).
+export type Connection = { wallet: Wallet; provider: Provider; address: Address; chainId: number; batches?: boolean };
 export type Tx = { to: Address; data: Hex };
 
 type Announcement = { info: { name: string; icon: string; rdns: string }; provider: Provider };
@@ -24,6 +25,9 @@ const HEX_CHAIN_ID = `0x${CHAIN_ID.toString(16)}`;
 const USER_REJECTED = 4001;
 const UNSUPPORTED_METHOD = 4200;
 const UNKNOWN_CHAIN = 4902;
+// A wallet that answers these to wallet_sendCalls cannot send the calls in one request, but may one by one: the method
+// is unknown, a capability, the chain, the size or atomicity unsupported.
+const CANNOT_BATCH = [UNSUPPORTED_METHOD, -32601, 5700, 5710, 5740, 5760];
 
 export class NoWallet extends Error {}
 
@@ -114,6 +118,64 @@ export async function switchToBase(connection: Connection): Promise<void> {
     });
   }
   connection.chainId = Number(await provider.request({ method: "eth_chainId" }));
+}
+
+// EIP-5792: a wallet that can send several calls in one request on a chain lists the atomic capability for it, or
+// for every chain under 0x0. A wallet that does not answer within two seconds is taken not to.
+export async function canBatch({ provider, address }: Connection): Promise<boolean> {
+  const asking = provider.request({ method: "wallet_getCapabilities", params: [address, [HEX_CHAIN_ID]] });
+  const timeout = new Promise<undefined>((resolve) => setTimeout(resolve, 2_000));
+  const found = await Promise.race([asking, timeout]).catch(() => undefined);
+  if (!found || typeof found !== "object") return false;
+  return Object.entries(found as Record<string, { atomic?: unknown } | undefined>).some(
+    ([chain, capabilities]) => [CHAIN_ID, 0].includes(Number(chain)) && !!capabilities?.atomic,
+  );
+}
+
+export const cannotBatch = (error: unknown): boolean => CANNOT_BATCH.includes(code(error) ?? 0);
+
+// Asks for all the calls at once. The wallet may send them in one transaction or in several.
+export async function sendCalls({ provider, address }: Connection, txs: Tx[]): Promise<string> {
+  const sent = await provider.request({
+    method: "wallet_sendCalls",
+    params: [
+      {
+        version: "2.0.0",
+        from: address,
+        chainId: HEX_CHAIN_ID,
+        atomicRequired: false,
+        calls: txs.map(({ to, data }) => ({ to, data, value: "0x0" })),
+      },
+    ],
+  });
+  // Wallets that followed EIP-5792's drafts answer with the id alone.
+  return typeof sent === "string" ? sent : (sent as { id: string }).id;
+}
+
+// 100 while pending, 200 once included, 400 if the wallet gave up, 500 if all reverted, 600 if some did. Drafts of
+// EIP-5792 said PENDING and CONFIRMED.
+export type CallsStatus = { status: number; receipts: { status: Hex; transactionHash: Hex }[] };
+
+export async function callsStatus({ provider }: Connection, id: string): Promise<CallsStatus> {
+  const found = (await provider.request({ method: "wallet_getCallsStatus", params: [id] })) as {
+    status: number | string;
+    receipts?: CallsStatus["receipts"];
+  };
+  const named: Record<string, number> = { PENDING: 100, CONFIRMED: 200 };
+  const status = typeof found.status === "string" ? (named[found.status] ?? 100) : found.status;
+  return { status, receipts: found.receipts ?? [] };
+}
+
+// The batch's status once the wallet has an outcome, or undefined if it has none within ten minutes, or cannot say.
+export async function waitForCalls(connection: Connection, id: string): Promise<CallsStatus | undefined> {
+  const end = Date.now() + 10 * 60_000;
+  for (let failures = 0; Date.now() < end && failures < 3;) {
+    const found = await callsStatus(connection, id).catch(() => undefined);
+    if (found && found.status >= 200) return found;
+    failures = found ? 0 : failures + 1;
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  return undefined;
 }
 
 // The chain ID makes a wallet that is on another chain refuse the transaction.

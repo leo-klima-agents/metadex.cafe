@@ -4,6 +4,9 @@ import { encodeFunctionData, parseAbi, zeroAddress, type Address } from "viem";
 import { CONDUIT, VOTING_ESCROW } from "../src/config.ts";
 import { WEEK } from "../src/format.ts";
 import {
+  ADMIN_ROLE,
+  KEEPER_ROLE,
+  callsFor,
   canJoin,
   canLeave,
   canLeaveOther,
@@ -11,8 +14,10 @@ import {
   join,
   leave,
   leaveOther,
+  needsOf,
   statusOf,
   type Account,
+  type Holdings,
   type Step,
 } from "../src/hydrex.ts";
 
@@ -188,4 +193,57 @@ test("leaving another automation clears its approval, named by its address", () 
   const [joining] = join([account({ delegate: USDC })]);
   assert.equal(joining!.conduit, CONDUIT);
   assert.ok(!("automation" in joining!), "Carbon Impact's call names no other automation");
+});
+
+test("choosing Carbon Impact joins those not in it; voting yourself leaves whatever holds them", () => {
+  const accounts = [
+    account({ id: 1n, delegate: USDC, claimer: USDC, delegateVoted: STOPPED }),
+    account({ id: 2n, delegate: CONDUIT, delegateAtStart: CONDUIT, claimer: CONDUIT }),
+    account({ id: 3n }),
+    account({ id: 4n, claimer: CONDUIT, delegate: LOCK_MAXI }),
+    account({ id: 5n, delegate: STRANGER }),
+  ];
+  assert.deepEqual(txs(callsFor("join", accounts, NOW)), [
+    approval(1n, true),
+    approval(3n, true),
+    approval(4n, true),
+    approval(5n, true),
+  ]);
+  assert.deepEqual(
+    txs(callsFor("self", accounts, NOW)),
+    [approval(1n, false, USDC), approval(2n, false), approval(4n, false), approval(4n, false, LOCK_MAXI)],
+    "an account half in Carbon Impact and in another automation leaves both; a stranger's delegation stays",
+  );
+  assert.deepEqual(callsFor("self", [account({ id: 3n })], NOW), [], "it votes with its owner already");
+});
+
+test("what needs the owner: automations that stopped, accounts half in, and votes the owner leaves unused", () => {
+  const holdings = (accounts: Account[], voted: number | undefined): Holdings => ({
+    owner: OWNER,
+    accounts,
+    payout: OWNER,
+    time: NOW,
+    epochStart: START,
+    voted,
+  });
+  const stopped = account({ id: 1n, delegate: USDC, delegateAtStart: USDC, delegateVoted: STOPPED });
+  const half = account({ id: 2n, claimer: CONDUIT });
+  const own = account({ id: 3n });
+  const empty = account({ id: 4n, amount: 0n, votes: 0n });
+  assert.deepEqual(needsOf(holdings([stopped, half, own, empty], START + 60), NOW), [
+    { kind: "stopped", accounts: [stopped], since: SINCE },
+    { kind: "partly", accounts: [half] },
+  ]);
+  assert.deepEqual(needsOf(holdings([own, empty], START - WEEK - 1), NOW), [
+    { kind: "unvoted", accounts: [own], voted: START - WEEK - 1 },
+  ]);
+  assert.deepEqual(needsOf(holdings([own], 0), NOW), [{ kind: "unvoted", accounts: [own], voted: 0 }], "never voted");
+  assert.deepEqual(needsOf(holdings([own], START - WEEK), NOW), [], "voted last epoch");
+  assert.deepEqual(needsOf(holdings([own], undefined), NOW), [], "the Voter could not be read");
+  assert.deepEqual(needsOf(holdings([account({ id: 5n, votes: 0n })], 0), NOW), [], "no votes to use");
+});
+
+test("Carbon Impact's roles are AccessControl's admin role and its executor role", () => {
+  assert.equal(ADMIN_ROLE, `0x${"0".repeat(64)}`);
+  assert.equal(KEEPER_ROLE, "0xd8aa0f3194971a2a116679f7c2090f6939c8d4e01a2a8d7e41d55e5351469e63");
 });

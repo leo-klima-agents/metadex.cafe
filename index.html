@@ -143,6 +143,9 @@
               <h3>You give</h3>
               <ul>
                 <li>Part of the rewards: <span class="retired-share">a share</span>, retired as carbon credits</li>
+                <li>
+                  A fee of <span class="fee">…</span> of the rest, which can rise to <span class="max-fee">1%</span>
+                </li>
                 <li>Your own vote, while your account is in</li>
               </ul>
             </div>
@@ -155,7 +158,7 @@
             </div>
           </div>
           <p>
-            <a href="#carbon">What kVCM is, and what is retired</a> ·
+            <a href="#fee-facts">Fee facts</a> · <a href="#carbon">What kVCM is, and what is retired</a> ·
             <a href="#who-controls-what">Who sets the share</a>
           </p>
         </section>
@@ -233,8 +236,8 @@
             </li>
             <li>
               <b>One admin key controls the automation's settings, within limits:</b> the share retired (up to 100%),
-              the tokens it pays out in, the swap routers and your payout address.
-              <a href="#who-controls-what">Who controls what</a>
+              the fee (up to 1%), the tokens it pays out in, the swap routers and your payout address. The page shows
+              every change of the last four epochs. <a href="#fee-facts">Fee facts</a>
             </li>
           </ul>
         </section>
@@ -286,8 +289,8 @@
         </section>
       </div>
 
-      <div id="app" class="view" data-title="Your accounts · metaDEX Café">
-        <h1 tabindex="-1">Your accounts</h1>
+      <div id="app" class="view" data-title="Your positions · metaDEX Café">
+        <h1 tabindex="-1">Your positions</h1>
         <p class="needs-script notice">
           This part of the page needs its script, which has not run. Reload the page, and check that JavaScript is on.
         </p>
@@ -308,7 +311,7 @@
 
         <div id="wallets">
           <p class="buttons"></p>
-          <p>Pick your wallet to see your accounts. It is asked nothing else until you confirm a join or a leave.</p>
+          <p>Pick your wallet to see your positions. It is asked nothing else until you confirm a call.</p>
           <p id="connecting" role="status" hidden>
             Waiting for <bdi class="connecting-wallet" translate="no"></bdi> to answer…
           </p>
@@ -342,22 +345,58 @@
           </p>
         </div>
 
-        <p id="reading" role="status" hidden>Reading the accounts…</p>
+        <p id="reading" role="status" hidden>Reading your positions…</p>
         <section id="summary" aria-label="Summary" hidden>
           <p class="summary-line"></p>
-          <p>
-            Carbon Impact pays out to <span class="payout-own">your address</span
-            ><code class="payout-other" translate="no"><a class="payout-to"></a></code>.
-          </p>
+          <dl class="summary">
+            <div class="summary-earned" hidden>
+              <dt>Last epoch, <time class="last-start">…</time> to <time class="last-end">…</time></dt>
+              <dd>
+                <span class="mine-earned"></span> earned by the votes of your <span class="mine-in"></span> in Carbon
+                Impact
+              </dd>
+            </div>
+            <div class="summary-paid" hidden>
+              <dt>Last payout, <time class="paid-day"></time></dt>
+              <dd>Retired: <span class="paid-retired"></span></dd>
+              <dd>Fee: <span class="paid-fee"></span></dd>
+              <dd>Yours: <span class="paid-yours"></span> <span class="paid-yours-usd"></span></dd>
+            </div>
+            <div class="summary-next" hidden>
+              <dt>Next payout</dt>
+              <dd>
+                Right after <time class="week-end-when">…</time>, to <span class="payout-own">your address</span
+                ><code class="payout-other" translate="no"><a class="payout-to"></a></code>
+              </dd>
+            </div>
+          </dl>
         </section>
         <p id="none" hidden>
           No account of this wallet holds HYDX. <a href="https://www.hydrex.fi/accounts">Lock HYDX on Hydrex</a> to make
           one.
         </p>
-        <p class="small">
-          Carbon Impact has retired <span class="tonnes">…</span> tonnes of carbon credits so far. It retires
-          <span class="retired-share">a share</span> of the rewards, and pays the rest to its members.
-        </p>
+
+        <section id="needs" aria-labelledby="needs-title" hidden>
+          <h2 id="needs-title">Needs you</h2>
+          <ul class="needs"></ul>
+        </section>
+
+        <section id="accounts" aria-labelledby="accounts-title" hidden>
+          <h2 id="accounts-title">Hydrex accounts</h2>
+          <p class="small">
+            Who looks after each account, and what its votes earned last epoch. Earning Power is shown as on Hydrex: 1.3
+            times the votes.
+          </p>
+          <ul class="positions"></ul>
+          <details class="empty-accounts" hidden>
+            <summary class="empty-count"></summary>
+            <ul class="positions"></ul>
+          </details>
+          <div class="bar" hidden>
+            <p class="pick-hint">Tick the accounts to choose for.</p>
+            <p class="buttons"><button type="button" class="choose-picked" disabled>Choose</button></p>
+          </div>
+        </section>
 
         <section id="epoch" aria-labelledby="epoch-title">
           <h2 id="epoch-title">This epoch</h2>
@@ -381,65 +420,6 @@
             </li>
           </ol>
         </section>
-
-        <div id="accounts" hidden>
-          <section class="group" data-group="stopped" aria-labelledby="group-stopped" hidden>
-            <h2 id="group-stopped">In an automation that stopped</h2>
-            <p>
-              They earn nothing from voting. Join Carbon Impact, or leave to vote with them yourself on Hydrex.
-              <a href="#if-your-automation-stopped">What it means</a>
-            </p>
-            <ul class="accounts"></ul>
-            <p class="pick-hint">Tick the accounts to join or leave with.</p>
-            <p class="buttons">
-              <button type="button" data-action="join">Join</button>
-              <button type="button" data-action="leave-other" class="secondary">Leave</button>
-            </p>
-          </section>
-          <section class="group" data-group="attention" aria-labelledby="group-attention" hidden>
-            <h2 id="group-attention">Needs attention</h2>
-            <p>Carbon Impact holds only some of their approvals. Join to set them all, or leave to clear them.</p>
-            <ul class="accounts"></ul>
-            <p class="pick-hint">Tick the accounts to join or leave with.</p>
-            <p class="buttons">
-              <button type="button" data-action="join">Join</button>
-              <button type="button" data-action="leave" class="secondary">Leave</button>
-            </p>
-          </section>
-          <section class="group" data-group="in" aria-labelledby="group-in" hidden>
-            <h2 id="group-in">In Carbon Impact</h2>
-            <ul class="accounts"></ul>
-            <p class="pick-hint">Tick the accounts to leave with.</p>
-            <p class="buttons"><button type="button" data-action="leave" class="secondary">Leave</button></p>
-          </section>
-          <section class="group" data-group="joining" aria-labelledby="group-joining" hidden>
-            <h2 id="group-joining">Joining</h2>
-            <ul class="accounts"></ul>
-            <p class="pick-hint">Tick the accounts to leave with.</p>
-            <p class="buttons"><button type="button" data-action="leave" class="secondary">Leave</button></p>
-          </section>
-          <section class="group" data-group="leaving" aria-labelledby="group-leaving" hidden>
-            <h2 id="group-leaving">Leaving</h2>
-            <ul class="accounts"></ul>
-            <p class="pick-hint">Tick the accounts to join with.</p>
-            <p class="buttons"><button type="button" data-action="join">Join</button></p>
-          </section>
-          <section class="group" data-group="open" aria-labelledby="group-open" hidden>
-            <h2 id="group-open">Can join</h2>
-            <ul class="accounts"></ul>
-            <p class="pick-hint">Tick the accounts to join with.</p>
-            <p class="buttons"><button type="button" data-action="join">Join</button></p>
-          </section>
-          <section class="group" data-group="closed" aria-labelledby="group-closed" hidden>
-            <h2 id="group-closed">Can't join</h2>
-            <ul class="accounts"></ul>
-            <details class="empty-accounts" hidden>
-              <summary class="empty-count"></summary>
-              <ul class="accounts"></ul>
-            </details>
-          </section>
-          <p class="small">Earning Power is shown as on Hydrex: 1.3 times the votes.</p>
-        </div>
 
         <section id="receipts" aria-labelledby="receipts-title" hidden>
           <h2 id="receipts-title">Last payout</h2>
@@ -483,11 +463,16 @@
             Only Carbon Impact's admin key, or a call from your own address made elsewhere, can change it.
             <a href="#who-controls-what">Who controls what</a>
           </p>
+          <div class="payout-changes" hidden>
+            <p>Changes in the last four epochs:</p>
+            <ul></ul>
+          </div>
         </details>
 
         <nav class="help" aria-label="Help">
-          <a href="#what-joining-allows">What joining allows</a> · <a href="#timing">When things happen</a> ·
-          <a href="#leaving-at-any-time">Leaving</a> · <a href="#last-epoch">How the votes did</a> ·
+          <a href="#fee-facts">Fee facts</a> · <a href="#what-joining-allows">What joining allows</a> ·
+          <a href="#timing">When things happen</a> · <a href="#leaving-at-any-time">Leaving</a> ·
+          <a href="#last-epoch">How the votes did</a> · <a href="#changes">What changed</a> ·
           <a href="#questions">Questions</a>
         </nav>
       </div>
@@ -501,10 +486,12 @@
         <nav class="contents" aria-label="Sections">
           <ol>
             <li><a href="#if-your-automation-stopped">If your automation stopped</a></li>
+            <li><a href="#fee-facts">Fee facts</a></li>
             <li><a href="#what-joining-allows">What joining allows</a></li>
             <li><a href="#timing">When things happen</a></li>
             <li><a href="#last-epoch">How the votes did</a></li>
             <li><a href="#who-controls-what">Who controls what</a></li>
+            <li><a href="#changes">What changed</a></li>
             <li><a href="#carbon">The carbon credits</a></li>
             <li><a href="#for-co-signers">For co-signers</a></li>
             <li><a href="#verify">Check it yourself</a></li>
@@ -630,6 +617,20 @@
             stopped automation left unclaimed, <a href="https://www.hydrex.fi/accounts">claim it on Hydrex</a> first.
           </p>
           <p class="buttons"><a class="button" href="#app">Check my accounts</a></p>
+        </section>
+
+        <section id="fee-facts" aria-labelledby="fee-facts-title">
+          <h2 id="fee-facts-title">Fee facts</h2>
+          <p>
+            What Carbon Impact takes, the most it can take, and who can change it, read from the automation on Base. The
+            same six rows show in the review before you join.
+          </p>
+          <p class="needs-script small">The fee facts are read from Base by the page's script, which has not run.</p>
+          <div class="facts-here"></div>
+          <p class="small">
+            "Retired" is a share of the kVCM: Carbon Impact retires up to it, as buying the credits may cost less. The
+            fee is of what is left. <a href="#carbon">The carbon credits</a> · <a href="#changes">What changed</a>
+          </p>
         </section>
 
         <section id="what-joining-allows" aria-labelledby="what-joining-allows-title">
@@ -846,7 +847,22 @@
             retire, up to <span class="retired-share">the share set</span> of the kVCM: the contract stops it retiring
             more.
           </p>
+          <p>
+            Held by <code translate="no">0x40FBFe5312330f278824ddbB7521ab77409192f0</code>, the address that deployed
+            Carbon Impact.<span class="keeper-moved" hidden>
+              <strong>It no longer holds the role:</strong> <a href="#changes">what changed</a>.</span
+            >
+          </p>
           <h3>The admin key</h3>
+          <p>
+            Held by <code translate="no">0x74266f2b206D1359B83fc74949EF07176FB3AE03</code>. When this page was written,
+            it was an address without code: one key, not a multisig, with no delay before a change applies.<span
+              class="admin-moved"
+              hidden
+            >
+              <strong>It no longer holds the role:</strong> <a href="#changes">what changed</a>.</span
+            >
+          </p>
           <p>It can change, at any time and for every member at once:</p>
           <ul>
             <li>the share retired, up to 100%;</li>
@@ -867,12 +883,37 @@
             Every change is a transaction from the admin key to
             <a href="https://basescan.org/address/0xdE91885cF35ac57DF0c4A75c16862127dBe8317c"
               >the automation, on Basescan</a
-            >. This page reads the share retired and the name on the retirements from the automation each time it opens,
-            and shows them as they are. It checks what joining approves, and turns joining off if that changed.
+            >. This page reads the settings from the automation each time it opens, and shows them as they are. It lists
+            the changes of the last four epochs under <a href="#changes">What changed</a>, and on every account in
+            Carbon Impact. It checks what joining approves, and turns joining off if that changed.
           </p>
           <p>
             This page names no operator, and asks you to trust no one: what it says is read from Base, and
             <a href="#verify">anyone can check it</a>.
+          </p>
+        </section>
+
+        <section id="changes" aria-labelledby="changes-title">
+          <h2 id="changes-title">What changed</h2>
+          <p>
+            Changes to Carbon Impact's settings in the last four epochs, since <time class="changes-since">…</time>, as
+            read from Base: the share retired, the fee and where it goes, the payout tokens, the routers, the carbon
+            credit and the name on retirements, who holds the two roles, and what joining approves.
+          </p>
+          <p class="needs-script small">The changes are read from Base by the page's script, which has not run.</p>
+          <p class="changes-reading small" role="status" hidden>Reading the last four epochs from Base…</p>
+          <p class="changes-none" hidden>No change since <time class="changes-since">…</time>.</p>
+          <p class="changes-failed notice" role="alert" hidden>
+            Reading the changes from Base failed.
+            <button type="button" class="changes-again secondary">Read them again</button>
+          </p>
+          <ol class="changes-list changes-found" hidden></ol>
+          <p class="small">
+            The page stores nothing, so it reads the settings at the start of each epoch and now, then narrows each
+            difference down to its block. A change undone within an epoch does not show. Older changes are among
+            <a href="https://basescan.org/address/0xdE91885cF35ac57DF0c4A75c16862127dBe8317c"
+              >the automation's transactions</a
+            >.
           </p>
         </section>
 
@@ -1055,8 +1096,10 @@
           <details>
             <summary>What does it cost?</summary>
             <p>
-              Carbon Impact retires <span class="retired-share">a share</span> of the rewards as carbon credits. Swaps
-              have their usual costs, and each account takes the gas of one transaction to join, and one to leave.
+              Carbon Impact retires <span class="retired-share">a share</span> of the rewards as carbon credits, and
+              takes a fee of <span class="fee">…</span> of the rest, which its admin key can raise to
+              <span class="max-fee">1%</span>. Swaps have their usual costs, and each account takes the gas of one call
+              to join, and one to leave: Choose shows it. <a href="#fee-facts">Fee facts</a>
             </p>
           </details>
           <details>
@@ -1183,6 +1226,94 @@
       </div>
     </dialog>
 
+    <dialog id="choose" aria-labelledby="choose-title">
+      <p class="step-count">Choose for <span class="choose-count"></span></p>
+      <h2 id="choose-title" tabindex="-1" autofocus>Who should vote with <span class="which"></span>?</h2>
+      <ul class="now"></ul>
+      <fieldset class="choices">
+        <legend class="visually-hidden">The choices</legend>
+        <label class="choice" data-choice="self">
+          <input type="radio" name="choice" value="self" />
+          <span class="about">
+            <b>Vote yourself</b><br />
+            You vote with <span data-one="it" data-many="them"></span> on Hydrex each week, before Thursday at 00:00
+            UTC, and claim the rewards yourself. Nothing is taken.<br />
+            <span class="figures-line"
+              ><span class="self-figures"></span> What you earn depends on the pools you vote for.</span
+            ><br />
+            <span class="calls"></span>
+          </span>
+        </label>
+        <label class="choice" data-choice="join">
+          <input type="radio" name="choice" value="join" />
+          <span class="about">
+            <b>Carbon Impact</b><br />
+            It votes with <span data-one="it" data-many="them"></span> each week, retires
+            <span class="retired-share">a share</span> of the rewards as carbon credits and pays you the rest in kVCM.
+            You can leave at any time, with one call; your votes come back at the next epoch.<br />
+            <span class="figures-line join-figures"></span><br />
+            <span class="calls"></span>
+          </span>
+        </label>
+      </fieldset>
+      <p class="small">
+        Dollars at the prices in Hydrex's pools when last epoch ended<span class="same-prices" hidden
+          >, the same for both</span
+        >, before the costs of swaps. Not a promise: what votes earn changes every week.
+      </p>
+      <details class="compare">
+        <summary>Compare the two</summary>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <td></td>
+                <th scope="col">Vote yourself</th>
+                <th scope="col">Carbon Impact</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Pays you in</th>
+                <td>The tokens of the pools you vote for</td>
+                <td>kVCM</td>
+              </tr>
+              <tr>
+                <th scope="row">Taken</th>
+                <td>Nothing</td>
+                <td><span class="compare-retired"></span> retired, then a fee of <span class="compare-fee"></span></td>
+              </tr>
+              <tr>
+                <th scope="row">The most it can take</th>
+                <td>Nothing</td>
+                <td>100% retired, then a fee of <span class="compare-max-fee"></span></td>
+              </tr>
+              <tr>
+                <th scope="row">Each week, you</th>
+                <td>Vote before Thursday, 00:00 UTC, and claim</td>
+                <td>Do nothing</td>
+              </tr>
+              <tr>
+                <th scope="row">Leaving</th>
+                <td>Nothing to leave</td>
+                <td>One call, at any time; the votes come back at the next epoch</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+      <details class="facts-fold">
+        <summary>Carbon Impact's fee facts</summary>
+        <div class="facts-here"></div>
+      </details>
+      <div class="foot">
+        <p class="buttons">
+          <button type="button" class="continue" disabled>Continue</button>
+          <button type="button" class="cancel secondary">Cancel</button>
+        </p>
+      </div>
+    </dialog>
+
     <template id="account">
       <li>
         <label>
@@ -1190,12 +1321,156 @@
           <span class="about">
             <b><bdi class="name" translate="no"></bdi> <code class="id" translate="no"></code></b><br /><span
               class="kind"
-            ></span
-            >, <span class="votes"></span> Earning Power<br /><span class="status"></span
-            ><span class="earned" hidden><br />Last epoch, its votes earned <span class="earned-usd"></span>.</span>
+            ></span>
           </span>
+          <span class="figures"
+            ><span><span class="figure-name">Earning Power</span> <span class="votes"></span></span>
+            <span><span class="figure-name">Earned last epoch</span> <span class="earned-usd"></span></span
+          ></span>
+          <span class="state"
+            ><span class="status"></span
+            ><span class="changed" hidden
+              ><br />Carbon Impact changed <span class="changed-what"></span> on <time class="changed-on"></time>.
+              <a href="#changes">What changed</a></span
+            ></span
+          >
         </label>
       </li>
+    </template>
+    <template id="need-stopped">
+      <li>
+        <span class="shape stopped" aria-hidden="true"></span>
+        <span
+          ><strong
+            ><span class="which"></span>
+            <span data-one="is in an automation" data-many="are in automations"></span> that stopped.</strong
+          >
+          <span data-one="It has" data-many="They have"></span> earned nothing from voting since
+          <time class="since"></time>.</span
+        >
+        <button type="button" class="secondary">Choose for <span data-one="it" data-many="them"></span></button>
+      </li>
+    </template>
+    <template id="need-partly">
+      <li>
+        <span class="shape stopped" aria-hidden="true"></span>
+        <span
+          ><strong
+            ><span class="which"></span> <span data-one="is" data-many="are"></span> only partly in Carbon
+            Impact.</strong
+          >
+          Only some of <span data-one="its" data-many="their"></span> approvals are set.</span
+        >
+        <button type="button" class="secondary">Choose for <span data-one="it" data-many="them"></span></button>
+      </li>
+    </template>
+    <template id="need-unvoted">
+      <li>
+        <span class="shape idle" aria-hidden="true"></span>
+        <span
+          ><strong
+            ><span class="which"></span> <span data-one="votes" data-many="vote"></span> with you,
+            <span class="never">and you have not voted on Hydrex.</span
+            ><span class="last">and you last voted on <time class="voted"></time>.</span></strong
+          >
+          Votes count only in the epoch they are cast: until you vote,
+          <span data-one="it earns" data-many="they earn"></span> nothing.</span
+        >
+        <button type="button" class="secondary">Choose for <span data-one="it" data-many="them"></span></button>
+      </li>
+    </template>
+    <template id="need-changed">
+      <li>
+        <span class="shape elsewhere" aria-hidden="true"></span>
+        <span
+          ><strong
+            >Carbon Impact changed <span class="changed-what"></span> on <time class="changed-on"></time>.</strong
+          >
+          Its admin key can change its settings at any time.</span
+        >
+        <a class="button secondary" href="#changes">What changed</a>
+      </li>
+    </template>
+    <template id="need-payout">
+      <li>
+        <span class="shape elsewhere" aria-hidden="true"></span>
+        <span
+          ><strong>Your payout address was changed on <time class="changed-on"></time>,</strong> by someone other than
+          you.</span
+        >
+        <a class="button secondary" href="#payout">Payout address</a>
+      </li>
+    </template>
+    <template id="payout-change">
+      <li>
+        <time class="payout-time"></time>: <span class="payout-by"></span> changed it from
+        <span class="payout-before"></span> to <span class="payout-after"></span>. <span class="payout-txs"></span>
+      </li>
+    </template>
+    <template id="change">
+      <li class="slip change">
+        <p class="label"><time class="change-time"></time></p>
+        <dl class="fields"></dl>
+        <p class="slip-foot change-txs"></p>
+      </li>
+    </template>
+    <template id="change-row">
+      <div>
+        <dt class="change-name"></dt>
+        <dd><span class="was">Before</span> <span class="change-before"></span></dd>
+        <dd><span class="was">After</span> <span class="change-after"></span></dd>
+      </div>
+    </template>
+    <template id="fee-facts-slip">
+      <article class="slip facts">
+        <p class="label">Fee facts · Carbon Impact</p>
+        <dl class="fields">
+          <div>
+            <dt>Taken</dt>
+            <dd>
+              Of the rewards, once swapped into kVCM: <span class="fact-retired"></span> retired as carbon credits, then
+              a fee of <span class="fact-fee"></span> of the rest.
+            </dd>
+          </div>
+          <div>
+            <dt>At most</dt>
+            <dd>
+              <span class="fact-max-retired"></span> retired, and a fee of <span class="fact-max-fee"></span>: the
+              limits in its code.
+            </dd>
+          </div>
+          <div>
+            <dt>Goes to</dt>
+            <dd>
+              Carbon credits, retired through Klima Protocol in the name "<bdi class="fact-entity" translate="no"></bdi
+              >". The fee goes to a treasury, <code translate="no"><a class="fact-treasury"></a></code>.
+            </dd>
+          </div>
+          <div>
+            <dt>When</dt>
+            <dd>At each payout, right after each epoch ends.</dd>
+          </div>
+          <div>
+            <dt>Other costs</dt>
+            <dd>Swaps, through routers the admin key approves. The gas of one call to join, and one to leave.</dd>
+          </div>
+          <div>
+            <dt>Who can change it</dt>
+            <dd>
+              <span class="fact-admin-known"
+                >One admin key, <code translate="no"><a class="fact-admin"></a></code>, at any time, for every member at
+                once, with no delay.</span
+              ><span class="fact-admin-unknown" hidden
+                >One admin key, at any time, with no delay. The key this page knows no longer holds the role:
+                <a href="#changes">what changed</a>.</span
+              >
+            </dd>
+          </div>
+        </dl>
+        <p class="slip-foot label">
+          Read from Base at block <span class="fact-block"></span>, <time class="fact-time"></time>
+        </p>
+      </article>
     </template>
     <template id="wallet">
       <button type="button" class="secondary"><img alt="" hidden /> <bdi class="name" translate="no"></bdi></button>
@@ -1284,13 +1559,20 @@
           credits, in the name "<bdi class="entity" translate="no"></bdi>", and sends the rest to your payout address.
         </li>
       </ol>
+      <p class="estimate" hidden>
+        If last epoch came again, <span data-one="its" data-many="their"></span>
+        <span class="estimate-power"></span> Earning Power would earn <span class="estimate-earned"></span>, and
+        <span class="estimate-yours"></span> would reach you, before the costs of swaps. Not a promise: what votes earn
+        changes every week.
+      </p>
       <p>
         Your HYDX stays in your <span data-one="account" data-many="accounts"></span>, and
         <span data-one="it stays" data-many="they stay"></span> in your wallet. One admin key controls Carbon Impact's
-        settings: it can change the share retired (up to 100%), the payout tokens, the swap routers and your payout
-        address. <a href="#who-controls-what">Who controls what</a> ·
+        settings: it can change the share retired (up to 100%), the fee (up to 1%), the payout tokens, the swap routers
+        and your payout address. <a href="#who-controls-what">Who controls what</a> ·
         <a href="#timing">When things happen</a>
       </p>
+      <div class="facts-here"></div>
     </template>
     <template id="join-done">
       <p>

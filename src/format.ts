@@ -22,6 +22,8 @@ const DAY_AND_TIME: Intl.DateTimeFormatOptions = {
 const plurals = new Intl.PluralRules(LANG);
 const and = new Intl.ListFormat(LANG, { type: "conjunction" });
 
+export const integer = (value: number): string => whole.format(value);
+
 // A whole number of tokens with 18 decimals.
 export const units = (value: bigint): string => whole.format(value / 10n ** 18n);
 

@@ -46,7 +46,7 @@ export type Log = { data: Hex; topics: [Hex, ...Hex[]]; transactionHash: Hex; lo
 
 type TotalAt = (block: number) => Promise<bigint>;
 // The first and last block, both included.
-type Stretch = [number, number];
+export type Stretch = [number, number];
 
 // Narrows down where the total last changed: after `lower`, where it was `below`, and by `upper`, where it is `now`.
 export async function lastChange(
@@ -66,13 +66,14 @@ export async function lastChange(
   return { lower, upper, below };
 }
 
-// The stretches of at most `size` blocks, after `from` and up to `to`, in which the total changed.
-export async function changes(
-  at: TotalAt,
+// The stretches of at most `size` blocks, after `from` and up to `to`, in which a value changed: a total, or any
+// value whose changes are not undone between the reads.
+export async function changes<T>(
+  at: (block: number) => Promise<T>,
   from: number,
   to: number,
-  before: bigint,
-  after: bigint,
+  before: T,
+  after: T,
   size: number,
 ): Promise<Stretch[]> {
   if (before === after) return [];

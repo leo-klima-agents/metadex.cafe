@@ -1,13 +1,15 @@
-import { encodeFunctionData, parseAbi, zeroAddress, type Address } from "viem";
-import { blockTime, call, codeHash, implementation, read, required, rpc, same } from "./chain.ts";
+import { encodeFunctionData, keccak256, parseAbi, toHex, zeroAddress, zeroHash, type Address } from "viem";
+import { blockNumber, blockTime, call, codeHash, implementation, read, required, rpc, same } from "./chain.ts";
 import {
   ACCOUNT_NAMES,
   ACTIONS,
+  ADMIN,
   APPROVAL_LOGIC,
   APPROVAL_LOGIC_CODE_HASH,
   CHAIN_ID,
   CONDUIT,
   CONDUIT_CODE_HASH,
+  KEEPER,
   KVCM,
   VOTER,
   VOTING_ESCROW,
@@ -58,6 +60,19 @@ const conduitAbi = parseAbi([
   "function impactBeneficiaryAddress() view returns (address)",
   "function retirementMessage() view returns (string)",
   "function getEffectiveRecipientForOwner(address owner) view returns (address)",
+  "function userToPayoutRecipient(address owner) view returns (address)",
+  "function treasuryFeeBps() view returns (uint256)",
+  "function MAX_TREASURY_FEE_BPS() view returns (uint256)",
+  "function treasury() view returns (address)",
+  "function distributionTokens(uint256 index) view returns (address)",
+  "function approvedRouters(uint256 index) view returns (address)",
+  "function retirementAggregator() view returns (address)",
+  "function aam() view returns (address)",
+  "function creditToken() view returns (address)",
+  "function carbonClass() view returns (address)",
+  "function creditTokenId() view returns (uint256)",
+  "function batchId() view returns (uint256)",
+  "function hasRole(bytes32 role, address account) view returns (bool)",
 ]);
 
 const accountNamesAbi = parseAbi(["function getBulkNames(uint256[] tokenIds) view returns (string[])"]);
@@ -71,10 +86,23 @@ const others = conduits.filter(({ address }) => !same(address, CONDUIT));
 
 export const LockType = { timed: 0, rolling: 1, permanent: 2 } as const;
 
+// Carbon Impact's roles, as its code names them. The admin key can grant either role.
+export const ADMIN_ROLE = zeroHash;
+export const KEEPER_ROLE = keccak256(toHex("EXECUTOR_ROLE"));
+// The most it can retire: setRetirementConfig refuses more, in the code the page checks.
+export const MAX_RETIRE_BPS = 10_000n;
+
 export type CarbonImpact = {
   time: number;
+  block: number;
   epochStart: number;
   retireBps: bigint;
+  feeBps: bigint;
+  maxFeeBps: bigint;
+  treasury: Address;
+  // Whether the admin key and the keeper the page knows still hold their roles.
+  admin: boolean;
+  keeper: boolean;
   tonnes: bigint;
   entity: string;
   beneficiary: string;
@@ -99,7 +127,15 @@ export type Account = {
   claimer: Address;
 };
 
-export type Holdings = { owner: Address; accounts: Account[]; payout: Address; time: number; epochStart: number };
+export type Holdings = {
+  owner: Address;
+  accounts: Account[];
+  payout: Address;
+  time: number;
+  epochStart: number;
+  // When the owner last voted with the votes its accounts delegate to it: 0 if never, undefined if unknown.
+  voted: number | undefined;
+};
 
 export type Status =
   | { kind: "in" | "partly" | "self" | "ended" | "empty" }
@@ -128,31 +164,38 @@ const epochAt = (time: unknown): number => weekStart(Number(time));
 export async function readCarbonImpact(): Promise<CarbonImpact> {
   const replies = await read([
     blockTime,
+    blockNumber,
     conduit("retireBps"),
     conduit("totalTonnesRetired"),
     conduit("retiringEntityName"),
     conduit("beneficiaryString"),
     conduit("impactBeneficiaryAddress"),
     conduit("retirementMessage"),
+    conduit("treasuryFeeBps"),
+    conduit("MAX_TREASURY_FEE_BPS"),
+    conduit("treasury"),
+    conduit("hasRole", ADMIN_ROLE, ADMIN),
+    conduit("hasRole", KEEPER_ROLE, KEEPER),
     voter("lastVoted", CONDUIT),
   ]);
-  const [time, retireBps, tonnes, entity, beneficiary, beneficiaryAddress, message] = required(replies.slice(0, 7)) as [
-    bigint,
-    bigint,
-    bigint,
-    string,
-    string,
-    Address,
-    string,
-  ];
+  const [time, block, retireBps, tonnes, entity, beneficiary, beneficiaryAddress, message, ...rest] = required(
+    replies.slice(0, 13),
+  ) as [bigint, bigint, bigint, bigint, string, string, Address, string, ...unknown[]];
+  const [feeBps, maxFeeBps, treasury, admin, keeper] = rest as [bigint, bigint, Address, boolean, boolean];
   // Only Home shows when it last voted, so a failed read just leaves it out.
-  const voted = replies[7] as bigint | undefined;
+  const voted = replies[13] as bigint | undefined;
   const epochStart = epochAt(time);
   const [votes] = required(await read([escrow("getPastVotes", CONDUIT, BigInt(epochStart))])) as [bigint];
   return {
     time: Number(time),
+    block: Number(block),
     epochStart,
     retireBps,
+    feeBps,
+    maxFeeBps,
+    treasury,
+    admin,
+    keeper,
     tonnes,
     entity: clean(entity),
     beneficiary: clean(beneficiary),
@@ -168,12 +211,14 @@ export async function readAccounts(owner: Address): Promise<Holdings> {
     escrow("balanceOf", owner),
     conduit("getEffectiveRecipientForOwner", owner),
     blockTime,
+    voter("lastVoted", owner),
     ...others.map(({ address }) => voter("lastVoted", address)),
   ]);
   const [count, payout, time] = required(replies.slice(0, 3)) as [bigint, Address, bigint];
   const epochStart = epochAt(time);
-  // If the Voter cannot be read, the other automations are just not known to have stopped.
-  const voted = replies.slice(3) as (bigint | undefined)[];
+  // If the Voter cannot be read, the owner and the other automations are just not known to have stopped voting.
+  const ownVote = replies[3] as bigint | undefined;
+  const voted = replies.slice(4) as (bigint | undefined)[];
   const lastVoted = new Map(others.map(({ address }, i) => [address.toLowerCase(), Number(voted[i] ?? 0n)]));
   const indexes = Array.from({ length: Number(count) }, (_, i) => BigInt(i));
   const ids = required(await read(indexes.map((i) => escrow("tokenOfOwnerByIndex", owner, i)))) as bigint[];
@@ -206,7 +251,14 @@ export async function readAccounts(owner: Address): Promise<Holdings> {
     };
   });
   accounts.sort((a, b) => (a.votes === b.votes ? Number(a.id - b.id) : a.votes > b.votes ? -1 : 1));
-  return { owner, accounts, payout, time: Number(time), epochStart };
+  return {
+    owner,
+    accounts,
+    payout,
+    time: Number(time),
+    epochStart,
+    voted: ownVote === undefined ? undefined : Number(ownVote),
+  };
 }
 
 const ended = (account: Account, now: number): boolean => account.lockType === LockType.timed && account.end <= now;
@@ -310,6 +362,40 @@ export const leaveOther = (accounts: Account[]): Step[] =>
     if (!name) return [];
     return [approval(account, false, `leaves the ${name} automation.`, { address: account.delegate, name })];
   });
+
+// The two choices for an account: Carbon Impact, or its owner's own vote. Each takes the calls that move the accounts
+// picked, and none for those already there.
+export type Choice = "join" | "self";
+
+export function callsFor(choice: Choice, accounts: Account[], now: number): Step[] {
+  if (choice === "join") return join(accounts.filter((account) => canJoin(account, now)));
+  return accounts.flatMap((account) => [...(canLeave(account) ? leave([account]) : []), ...leaveOther([account])]);
+}
+
+// What the App puts first, with one action each: accounts in automations that stopped, accounts only partly in, and
+// accounts whose votes their owner has not used since the previous epoch began, which earn nothing.
+export type Need =
+  | { kind: "stopped"; accounts: Account[]; since: number }
+  | { kind: "partly"; accounts: Account[] }
+  | { kind: "unvoted"; accounts: Account[]; voted: number };
+
+export function needsOf({ owner, accounts, epochStart, voted }: Holdings, now: number): Need[] {
+  const statuses = accounts.map((account) => ({ account, status: statusOf(account, owner, now, epochStart) }));
+  const of = (kind: Status["kind"]) => statuses.filter(({ status }) => status.kind === kind);
+  const needs: Need[] = [];
+  const stopped = of("stopped");
+  if (stopped.length) {
+    const since = Math.min(...stopped.map(({ status }) => ("since" in status ? status.since : Infinity)));
+    needs.push({ kind: "stopped", accounts: stopped.map(({ account }) => account), since });
+  }
+  const partly = of("partly");
+  if (partly.length) needs.push({ kind: "partly", accounts: partly.map(({ account }) => account) });
+  const own = of("self").filter(({ account }) => account.votes > 0n);
+  if (own.length && voted !== undefined && (voted === 0 || hasStopped(voted, epochStart))) {
+    needs.push({ kind: "unvoted", accounts: own.map(({ account }) => account), voted });
+  }
+  return needs;
+}
 
 export type Automation = { address: Address; name: string; voted: number; votes: bigint | undefined };
 
