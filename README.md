@@ -19,8 +19,8 @@ This README is for whoever runs the site. The design and the plan are in [design
 - **Before anyone can join, the page checks** the chain, Carbon Impact's code and settings, and the code of Hydrex's
   VotingEscrow against `src/config.ts`. If a check fails, joining is turned off and the page says why. Leaving always
   works. The checks run again every hour.
-- It shows what Carbon Impact's votes earned last epoch, and a receipt for each of the owner's accounts in Carbon
-  Impact's last payout.
+- It shows what Carbon Impact's votes earned last epoch. For each of the owner's accounts in Carbon Impact, it shows up
+  to when the account has been paid, what waits to be claimed, and the receipt of its last payout.
 - Inside Safe{Wallet}, it proposes all the calls as one Safe transaction.
 
 One admin key controls Carbon Impact. It can change the share retired (up to 100%), the fee (up to 1%), the payout
@@ -113,8 +113,8 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 ## What visitors may run into
 
 - **"Reading Base failed."** No RPC answered. The page offers to try again. What votes earned, the other automations and
-  the last payout only add to the page: if one of them cannot be read, the rest of the page still works. What votes
-  earned is tried again every five minutes, and the last payout has a button to read it again.
+  the payouts only add to the page: if one of them cannot be read, the rest of the page still works. What votes earned
+  is tried again every five minutes, and the payouts have a button to read them again.
 - **Joining is off.** A check failed: see [When a contract changes](#when-a-contract-changes).
 - **The wallet is on another network.** The page offers to switch it to Base, or asks the visitor to pick Base in the
   wallet.
@@ -123,15 +123,20 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 - **A wallet that locks** is disconnected. Picking it again reconnects it.
 - **At the end of an epoch,** Thursday at 00:00 UTC by Base's clock, the page reads the accounts and Carbon Impact again
   within half a minute.
-- **A payout under way.** A payout run takes up to half a day after each epoch. Until it reaches the owner's accounts,
-  the page keeps the last receipts and says that a new payout has begun.
+- **A payout under way.** A payout takes up to half a day after each epoch. While it has paid some of the owner's
+  accounts and not yet others, the page says so, and reads the accounts again every five minutes.
+- **A late payout.** An account is late when it voted with Carbon Impact two epochs ago and has not been paid for that
+  epoch yet. Its rewards wait in Hydrex's reward contracts until someone claims them, for up to 50 epochs. Carbon Impact
+  paid nothing from 23 Sep to at least 19 Oct 2026, though it kept voting.
 
 ## Limits
 
-- The page shows the last payout only, and no unclaimed rewards per account.
-- It finds payouts through changes in `totalTonnesRetired`, as the free RPCs give the logs of 100 blocks at a time at
-  most. So a payout that retires nothing is found only within 100 blocks of one that does. In Aug and Sept 2026, 2 of 71
-  payouts retired nothing, both of them paying nothing, and one of them was that close.
+- The page shows each account's last payout only.
+- What waits to be claimed is a floor: the page reads each account's rewards in the pools Carbon Impact voted for last
+  epoch, and no others.
+- The page finds an account's last payout through Hydrex's reward contracts, which record up to when they have paid it.
+  Anyone allowed to claim for the account moves that record, such as its owner on Hydrex. The page then says that the
+  account was last claimed outside Carbon Impact, and shows no receipt.
 - What votes earned is for the last epoch only, at approximate prices: each token's average price over the half hour
   before the epoch ended, in Hydrex's pools, with Chainlink for WETH and cbBTC. A token without a deep enough pool
   counts as nothing.
@@ -167,7 +172,7 @@ the pinned Actions and npm packages every week.
 | `src/main.ts`                                           | Startup, the wallet connection, and the accounts.                                          |
 | `src/review.ts`                                         | The review that shows each call before the wallet asks.                                    |
 | `src/last-epoch.ts`, `src/earnings.ts`, `src/prices.ts` | What votes earned last epoch, and token prices.                                            |
-| `src/last-payout.ts`, `src/receipts.ts`                 | The receipts of the last payout.                                                           |
+| `src/last-payout.ts`, `src/receipts.ts`                 | Payouts: up to when each account was paid, what waits, and its last receipt.               |
 | `src/hydrex.ts`                                         | Hydrex's contracts: reads, account statuses, the calls, and the checks.                    |
 | `src/chain.ts`, `src/wallet.ts`                         | RPC requests, and wallets.                                                                 |
 | `src/views.ts`, `src/dom.ts`, `src/format.ts`           | Views, page helpers, and number and date formats.                                          |

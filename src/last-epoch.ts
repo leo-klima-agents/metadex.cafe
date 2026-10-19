@@ -9,7 +9,7 @@ import type { Holdings } from "./hydrex.ts";
 type Value = ReturnType<typeof valueOf>;
 
 let earned: { found: Earnings; value: Value } | undefined;
-let reading = false;
+let reading: Promise<boolean> | undefined;
 let tried = 0;
 let comparedEpoch: number | undefined;
 let onScreen = false;
@@ -27,10 +27,10 @@ const waiting = comparison.status.textContent ?? "";
 export const earningsDue = (epoch: number): boolean =>
   !reading && (!earned || earned.found.start < epoch - WEEK) && Date.now() - tried > 300_000;
 
-// Resolves to true once new figures are shown.
-export async function loadEarnings(): Promise<boolean> {
-  if (reading) return false;
-  reading = true;
+// Resolves to true once new figures are shown. Callers share a read under way.
+export const loadEarnings = (): Promise<boolean> => (reading ??= readAndShow().finally(() => (reading = undefined)));
+
+async function readAndShow(): Promise<boolean> {
   tried = Date.now();
   try {
     const found = await readEarnings(earned?.found.start);
@@ -43,9 +43,14 @@ export async function loadEarnings(): Promise<boolean> {
     show(".earnings-failed", !earned);
     show(".earnings-read", !!earned);
     return false;
-  } finally {
-    reading = false;
   }
+}
+
+// The figures shown, read first if there are none yet. The receipts read each account's rewards in their pools.
+export async function lastEarnings(): Promise<Earnings> {
+  if (!earned) await loadEarnings();
+  if (!earned) throw new Error("What votes earned last epoch could not be read.");
+  return earned.found;
 }
 
 // Resolves to true once the accounts' shares of the epoch shown are read.

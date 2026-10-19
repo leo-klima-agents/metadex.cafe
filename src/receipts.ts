@@ -1,29 +1,31 @@
-import { decodeEventLog, encodeEventTopics, numberToHex, parseAbi, type Address, type Hex } from "viem";
-import { readLater, required, rpc } from "./chain.ts";
+import { decodeEventLog, numberToHex, parseAbi, type Address, type Hex } from "viem";
+import { call, read, readLater, required, rpc } from "./chain.ts";
 import { CONDUIT } from "./config.ts";
-import { clean } from "./format.ts";
+import { WEEK, clean } from "./format.ts";
 import { conduit } from "./hydrex.ts";
+import { usdOf, type Token } from "./prices.ts";
 
-// Carbon Impact pays each account in a transaction of its own: it claims the account's rewards, swaps them to kVCM,
-// retires a share, and sends the rest to the owner's payout address, with one event for the retirement and one for the
-// payout. A run of payouts takes up to half a day, but the free RPCs give the logs of at most 100 blocks at a time. So
-// the page finds a run by its effect: totalTonnesRetired only grows, so a search through past blocks finds the
-// 100-block stretches where it changed, and their logs hold the run. A payout that retires nothing is found only if it
-// falls in one of those stretches.
+// Hydrex's reward contracts record, for each account and token, the start of the epoch up to which they have paid the
+// account. Every claim sets it to the start of the current epoch, even when nothing was owed, and it only grows. So an
+// account's newest record says up to when it has been paid, and a search through past blocks finds the block in which
+// it moved: the block of its last payout. Carbon Impact pays each account in one transaction: it claims the account's
+// rewards, swaps them to kVCM, retires a share, and sends the rest to the owner's payout address, with one event for
+// the retirement and one for the payout. The free RPCs give logs sparingly, so the page reads one block of logs per
+// payout, and no more.
 
 const eventsAbi = parseAbi([
   "event CarbonRetired(address indexed creditToken_, uint256 retireTonnes, uint256 kvcmSpent)",
   "event ClaimSwapAndDistributeCompleted(uint256 indexed tokenId, address indexed owner, address indexed recipient, address[] claimedTokens, uint256[] claimedAmounts, address[] distributedTokens, uint256[] distributedAmounts, uint256[] treasuryFees)",
 ]);
+const rewardsAbi = parseAbi([
+  "function tokenTimestamp(uint256 tokenId, address token) view returns (uint256)",
+  "function earned(uint256 tokenId, address token) view returns (uint256)",
+]);
 
 // Base makes a block every two seconds.
-export const BLOCKS_PER_WEEK = 302_400;
-const BLOCKS_PER_DAY = 43_200;
-const WEEKS_BACK = 8;
-// The most blocks of logs the free RPCs give at once.
-const STRETCH = 100;
+export const BLOCK_TIME = 2;
 // The newest blocks are skipped: an RPC that is a little behind may not have them yet.
-const SETTLED = 5;
+export const SETTLED = 5;
 
 export type Amount = { token: Address; amount: bigint };
 export type Payout = {
@@ -38,10 +40,6 @@ export type Payout = {
   tx: Hex;
   block: number;
 };
-// A run of payouts, with the block and time of its last one.
-export type Run = { block: number; time: number; payouts: Payout[] };
-// Where a search for the last run stopped, the total retired there, and the run, if one was found within WEEKS_BACK weeks.
-export type RunSearch = { total: bigint; top: number; run?: Run };
 export type Log = { data: Hex; topics: [Hex, ...Hex[]]; transactionHash: Hex; logIndex: Hex; blockNumber: Hex };
 
 type TotalAt = (block: number) => Promise<bigint>;
@@ -86,12 +84,154 @@ export async function changes(
   return [...left, ...right];
 }
 
+// Reads, at one block, whether each item has reached what it waits for.
+export type Reached<T> = (block: number, items: T[]) => Promise<boolean[]>;
+
+// The first block after `from`, and up to `to`, at which each item has reached what it waits for, if it has by `to`.
+// Each item must not have reached it at `from`, and once reached, stays so. Each step reads every item of a group at
+// the middle block, and the group splits by whether they have reached it, so items that reach it in the same block are
+// read together to the end.
+export async function firstReached<T>(
+  reached: Reached<T>,
+  items: T[],
+  from: number,
+  to: number,
+): Promise<Map<T, number>> {
+  const found = new Map<T, number>();
+  const narrow = async (group: T[], lower: number, upper: number): Promise<void> => {
+    if (!group.length) return;
+    if (upper - lower <= 1) return void group.forEach((item) => found.set(item, upper));
+    const middle = Math.floor((lower + upper) / 2);
+    const now = await reached(middle, group);
+    await Promise.all([
+      narrow(
+        group.filter((_, i) => now[i]),
+        lower,
+        middle,
+      ),
+      narrow(
+        group.filter((_, i) => !now[i]),
+        middle,
+        upper,
+      ),
+    ]);
+  };
+  if (!items.length || to <= from) return found;
+  const atEnd = await reached(to, items);
+  await narrow(
+    items.filter((_, i) => atEnd[i]),
+    from,
+    to,
+  );
+  return found;
+}
+
+// A token that one of Hydrex's reward contracts pays.
+export type Pair = { contract: Address; token: Address };
+export type Standing = {
+  id: bigint;
+  // The start of the epoch up to which the account has been paid, or 0 if it never has, and a pair that records it.
+  through: number;
+  pair?: Pair;
+  // What it can claim now from each pair, looking back at most 50 epochs.
+  waiting: Amount[];
+};
+
+// Each account's standing, from its reads of each pair: tokenTimestamp, then earned, pair by pair, account by account.
+export function standingsOf(ids: bigint[], pairs: Pair[], values: bigint[]): Standing[] {
+  return ids.map((id, a) => {
+    const standing: Standing = { id, through: 0, waiting: [] };
+    pairs.forEach((pair, i) => {
+      const [stamp, earned] = [values[2 * (a * pairs.length + i)]!, values[2 * (a * pairs.length + i) + 1]!];
+      if (Number(stamp) > standing.through) Object.assign(standing, { through: Number(stamp), pair });
+      if (earned > 0n) standing.waiting.push({ token: pair.token, amount: earned });
+    });
+    return standing;
+  });
+}
+
+// One read of every pair for every account, at a block.
+export async function readStandings(
+  ids: bigint[],
+  pairs: Pair[],
+  block: number,
+  reader: typeof read = readLater,
+): Promise<Standing[]> {
+  const values = await reader(
+    ids.flatMap((id) =>
+      pairs.flatMap(({ contract, token }) => [
+        call(contract, rewardsAbi, "tokenTimestamp", id, token),
+        call(contract, rewardsAbi, "earned", id, token),
+      ]),
+    ),
+    block,
+  );
+  return standingsOf(ids, pairs, required(values) as bigint[]);
+}
+
+// Late: the account voted with the automation in the epoch that started two epochs before the current one, `voted`,
+// and has not been paid for it, a week after that epoch ended.
+export const isLate = (through: number, voted: boolean, epochStart: number): boolean =>
+  voted && through <= epochStart - 2 * WEEK;
+
+// Dollars at the given prices. A token without a price, or whose decimals are unknown, counts for nothing.
+export function dollars(found: Amount[], tokens: Map<string, Token>, prices: Map<string, number>): number {
+  return found.reduce((sum, { token, amount }) => {
+    const [known, price] = [tokens.get(token.toLowerCase()), prices.get(token.toLowerCase())];
+    return known && price !== undefined ? sum + usdOf(amount, known.decimals, price) : sum;
+  }, 0);
+}
+
+// A search's result never changes once found, so each account's last payout block is kept with its epoch.
+const searched = new Map<string, number>();
+
+// The block of each account's last payout: the first block, after the last one before its paid-through epoch began,
+// in which the pair that records that epoch reached it. Accounts paid through the same epoch are searched together.
+// `top` is the block the standings were read at, and `time` its time; blocks before it are counted back from it.
+export async function payoutBlocks(
+  standings: Standing[],
+  top: number,
+  time: number,
+  reader: typeof read = readLater,
+): Promise<Map<bigint, number>> {
+  const blocks = new Map<bigint, number>();
+  const key = ({ id, through }: Standing) => `${id} ${through}`;
+  const left = standings.filter((standing) => {
+    const found = searched.get(key(standing));
+    if (found !== undefined && found <= top) blocks.set(standing.id, found);
+    return standing.pair && !blocks.has(standing.id);
+  });
+  const epochs = [...new Set(left.map(({ through }) => through))];
+  await Promise.all(
+    epochs.map(async (epoch) => {
+      const reached: Reached<Standing> = async (block, items) => {
+        const calls = items.map(({ id, pair }) => call(pair!.contract, rewardsAbi, "tokenTimestamp", id, pair!.token));
+        const values = required(await reader(calls, block)) as bigint[];
+        return values.map((value) => value >= BigInt(epoch));
+      };
+      const from = Math.max(0, top - Math.floor((time - epoch) / BLOCK_TIME) - 1);
+      const found = await firstReached(
+        reached,
+        left.filter(({ through }) => through === epoch),
+        from,
+        top,
+      );
+      for (const [standing, block] of found) {
+        searched.set(key(standing), block);
+        blocks.set(standing.id, block);
+      }
+    }),
+  );
+  return blocks;
+}
+
 const positive = (tokens: readonly Address[], values: readonly bigint[]): Amount[] =>
   tokens.map((token, i) => ({ token, amount: values[i] ?? 0n })).filter(({ amount }) => amount > 0n);
 
 const order = (log: Log): bigint => BigInt(log.blockNumber) * 1_000_000n + BigInt(log.logIndex);
 
-// The payouts in a run's logs. An account's retirement, if any, comes just before its payout, in the same transaction.
+// The payouts in some blocks' logs. An account's retirement, if any, comes just before its payout, in the same
+// transaction.
 export function payouts(logs: Log[]): Payout[] {
   const found: Payout[] = [];
   const retired = new Map<Hex, { tonnes: bigint; kvcm: bigint }>();
@@ -126,66 +266,20 @@ export function payouts(logs: Log[]): Payout[] {
   return found;
 }
 
-async function tonnesAt(block: number | "latest"): Promise<bigint> {
-  const [total] = required(await readLater([conduit("totalTonnesRetired")], block)) as [bigint];
-  return total;
-}
+// Carbon Impact's payouts in each block, from one read of the block's logs. Each block is read once.
+const logsOf = new Map<number, Payout[]>();
 
-// Once this has grown past a search's total, a new run has started.
-export const totalRetired = (): Promise<bigint> => tonnesAt("latest");
-
-const RETIRED = encodeEventTopics({ abi: eventsAbi, eventName: "CarbonRetired" })[0].toLowerCase();
-
-// The total changed in each stretch, so its logs hold a retirement. An RPC that answers without one has lost them.
-export const retires = (logs: unknown): boolean =>
-  Array.isArray(logs) && logs.some((log: Partial<Log>) => log.topics?.[0]?.toLowerCase() === RETIRED);
-
-async function logsOf(stretches: Stretch[]): Promise<Log[]> {
-  const logs = await Promise.all(
-    stretches.map(([first, last]) =>
-      rpc<Log[]>("eth_getLogs", [{ address: CONDUIT, fromBlock: numberToHex(first), toBlock: numberToHex(last) }], {
+export async function payoutsIn(blocks: number[]): Promise<Payout[]> {
+  const missing = [...new Set(blocks)].filter((block) => !logsOf.has(block));
+  const found = await Promise.all(
+    missing.map((block) =>
+      rpc<Log[]>("eth_getLogs", [{ address: CONDUIT, fromBlock: numberToHex(block), toBlock: numberToHex(block) }], {
         later: true,
-        accept: retires,
       }),
     ),
   );
-  return logs.flat();
-}
-
-async function runOf(found: Payout[]): Promise<Run> {
-  if (!found.length) throw new Error("The run's logs are missing.");
-  const block = Math.max(...found.map((payout) => payout.block));
-  return { block, time: (await blockTimes([block])).get(block)!, payouts: found };
-}
-
-// Carbon Impact's last run: some 20 reads to find it, and about 4 per payout. Given a search less than a day old, only
-// newer blocks are searched: payouts within a day of that run's last one belong to it, later ones start a new run.
-export async function lastRun(since?: RunSearch): Promise<RunSearch> {
-  const top = Number(await rpc<Hex>("eth_blockNumber", [], { later: true })) - SETTLED;
-  const now = await tonnesAt(top);
-  if (since && top - since.top <= BLOCKS_PER_DAY && now >= since.total) {
-    if (now === since.total) return { ...since, top };
-    const found = payouts(await logsOf(await changes(tonnesAt, since.top, top, since.total, now, STRETCH)));
-    const first = Math.min(...found.map((payout) => payout.block));
-    const goesOn = since.run && first - since.run.block <= BLOCKS_PER_DAY;
-    return { total: now, top, run: await runOf(goesOn ? [...since.run!.payouts, ...found] : found) };
-  }
-  // Go back a week at a time until the total is lower. The last change is between there and the week after.
-  let [lower, below, upper] = [top, now, top];
-  for (let week = 1; below === now; week++) {
-    if (week > WEEKS_BACK || lower === 0) return { total: now, top };
-    upper = lower;
-    lower = Math.max(0, top - week * BLOCKS_PER_WEEK);
-    below = await tonnesAt(lower);
-  }
-  const last = await lastChange(tonnesAt, lower, upper, below, now, STRETCH);
-  // A run takes up to half a day, so the day before its last retirement holds the rest of it.
-  const from = Math.max(0, last.lower - BLOCKS_PER_DAY);
-  const stretches: Stretch[] = [
-    ...(await changes(tonnesAt, from, last.lower, await tonnesAt(from), last.below, STRETCH)),
-    [last.lower + 1, last.upper],
-  ];
-  return { total: now, top, run: await runOf(payouts(await logsOf(stretches))) };
+  missing.forEach((block, i) => logsOf.set(block, payouts(found[i]!)));
+  return [...new Set(blocks)].flatMap((block) => logsOf.get(block)!);
 }
 
 // A block's time never changes, so each is read once.

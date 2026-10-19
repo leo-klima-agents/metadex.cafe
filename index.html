@@ -442,33 +442,25 @@
         </div>
 
         <section id="receipts" aria-labelledby="receipts-title" hidden>
-          <h2 id="receipts-title">Last payout</h2>
-          <p class="receipts-reading" role="status">Reading Carbon Impact's last payout from Base…</p>
-          <p class="receipts-none" hidden>Carbon Impact has made no payout in the last eight weeks.</p>
-          <p class="receipts-other" hidden>
-            Carbon Impact's last payout, on <time class="run-day"></time>, paid none of your accounts.
-          </p>
-          <p class="receipts-underway" hidden>
-            Carbon Impact's payout of <time class="run-day"></time> is under way, and has not reached your accounts yet.
-            A payout takes up to half a day.
-          </p>
+          <h2 id="receipts-title">Payouts</h2>
+          <p class="receipts-reading" role="status">Reading your accounts' payouts from Base…</p>
           <p class="receipts-failed notice" hidden>
-            The last payout could not be read from Base.
-            <button type="button" class="receipts-again secondary">Read the payout again</button>
+            The payouts could not be read from Base.
+            <button type="button" class="receipts-again secondary">Read the payouts again</button>
           </p>
           <div class="receipts-found" hidden>
             <p>
-              For <span class="receipt-which"></span>, in Carbon Impact's payout of <time class="run-day"></time>. Read
-              from the automation's events on Base. Dollars are at the prices of <time class="run-flip"></time>; a token
-              without a deep enough pool counts for nothing.
+              For each of your accounts in Carbon Impact: up to when it has been paid, and what waits to be claimed,
+              from Hydrex's reward contracts; then the receipt of its last payout, from Carbon Impact's events. Dollars
+              are at the prices of the flip before each payout, and of the last flip for what waits; a token without a
+              deep enough pool counts for nothing.
             </p>
-            <p class="receipts-more" hidden>
-              The payout may still be under way: receipts for more of your accounts may follow.
+            <p class="receipts-underway" hidden>
+              A payout is under way: it reached <span class="underway-paid"></span> on
+              <time class="underway-day"></time>, and has not reached <span class="underway-left"></span> yet. A payout
+              takes up to half a day.
             </p>
-            <p class="receipts-next" hidden>
-              A new payout began on <time class="run-next"></time>, and has not reached your accounts yet.
-            </p>
-            <div class="receipt-list"></div>
+            <div class="standings"></div>
           </div>
         </section>
 
@@ -1305,6 +1297,45 @@
         <a href="#for-co-signers"><code translate="no">https://metadex.cafe/#for-co-signers</code></a
         >.
       </p>
+    </template>
+    <template id="standing">
+      <article class="standing">
+        <h3><bdi class="standing-name" translate="no"></bdi> <code class="standing-id" translate="no"></code></h3>
+        <ul class="states">
+          <li class="standing-paid">
+            <span class="shape running" aria-hidden="true"></span
+            ><span
+              ><strong>Paid up to <time class="standing-through"></time>.</strong> Carbon Impact has paid it for every
+              epoch that ended by then.</span
+            >
+          </li>
+          <li class="standing-never" hidden>
+            <span class="shape idle" aria-hidden="true"></span><span><strong>Not paid yet.</strong></span>
+          </li>
+          <li class="standing-late" hidden>
+            <span class="shape stopped" aria-hidden="true"></span
+            ><span
+              ><strong>Late.</strong>
+              <span class="late-through">Paid up to <time class="standing-through"></time> only.</span
+              ><span class="late-never">Never paid.</span> Carbon Impact voted with it from
+              <time class="late-from"></time> to <time class="late-to"></time>, and has not paid it for that epoch
+              yet.</span
+            >
+          </li>
+          <li class="unmarked">
+            <span
+              ><span class="standing-waiting"></span> in last epoch's pools. There may be more in others: the page
+              counts only those.</span
+            >
+          </li>
+          <li class="standing-outside unmarked" hidden>
+            <span
+              >Its last claim, on <time class="outside-day"></time>, was made outside Carbon Impact, such as by its
+              owner on Hydrex. There is no receipt for it.</span
+            >
+          </li>
+        </ul>
+      </article>
     </template>
     <template id="receipt">
       <article class="slip receipt">

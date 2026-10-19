@@ -14,11 +14,12 @@ import {
   type Address,
   type Hex,
 } from "viem";
+import { blockTime, read } from "../src/chain.ts";
 import { CONDUIT, RPCS, VOTER, VOTING_ESCROW } from "../src/config.ts";
 import { readEarnings, sharesOf } from "../src/earnings.ts";
 import { WEEK } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
-import { lastRun } from "../src/receipts.ts";
+import { SETTLED, payoutBlocks, payoutsIn, readStandings } from "../src/receipts.ts";
 
 const FORK_URL = process.env.BASE_RPC_URL ?? "https://mainnet.base.org";
 const BLOCK = 52_694_000; // Fri 16 Oct 2026, 18:22 UTC
@@ -39,6 +40,11 @@ const ELSEWHERE = getAddress("0x69707a120ade8239f07595165e180c61395ea655"); // #
 const LEAVER = getAddress("0x2573264b8e690ca6b2128c113890f42198840b16"); // #53350 and #82206 in Carbon Impact
 const ENDED = getAddress("0x2518820268e4079e90446b93020dfad7dd54e84d"); // #123351 ended with HYDX in it, #123364
 const PAYEE = getAddress("0x60924601e73ebc5c2bd9244c788d93e0710a6c93"); // #82774 in Carbon Impact, paid Wed 23 Sep
+// Carbon Impact's last payout before BLOCK: one transaction, on Wed 23 Sep, that paid these accounts through Thu 17 Sep.
+const PAID = 51_698_051;
+const PAID_THROUGH = 1_789_603_200;
+const PAID_TX = "0x0932e5a24f24e45bfd1021764d94abc1d920754c4dc17128dd89f44bd086e899";
+const PAID_IDS = [26432n, 82774n, 14247n, 35366n];
 const LIQUID_HYDREX = getAddress("0x809F8175b8F60960dF2bc7a78a7C4Eb04d138AF0");
 const LOCK_MAXI = getAddress("0x53388a4E98Bb56F8571433F5461010Fc287929d3");
 const USDC = getAddress("0xE57b3Ea02336B9b418cA523aB5aD6f479d93bD1D");
@@ -589,20 +595,50 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     assert.deepEqual(violations, []);
   });
 
-  test("a receipt for each of the owner's accounts in the last payout, read from the automation's events", async () => {
+  test("each account's last payout, found through Hydrex's reward contracts, and its receipt", async () => {
     // PAYEE has 93 accounts: anvil reads them from FORK_URL for most of a minute the first time.
-    await warm(() => Promise.all([readAccounts(PAYEE), lastRun()]));
+    await warm(async () => {
+      const [earnings] = await Promise.all([readEarnings(), readAccounts(PAYEE)]);
+      const pairs = earnings!.rewards.map(({ contract, token }) => ({ contract, token: token.address }));
+      const top = BLOCK - SETTLED;
+      const [[time], standings] = await Promise.all([
+        read([blockTime], top) as Promise<[bigint]>,
+        readStandings(PAID_IDS, pairs, top),
+      ]);
+      assert.deepEqual(
+        standings.map(({ through }) => through),
+        PAID_IDS.map(() => PAID_THROUGH),
+      );
+      const blocks = await payoutBlocks(standings, top, Number(time));
+      assert.deepEqual(
+        PAID_IDS.map((id) => blocks.get(id)),
+        PAID_IDS.map(() => PAID),
+      );
+      const paid = await payoutsIn([PAID]);
+      assert.deepEqual(
+        PAID_IDS.map((id) => paid.find((payout) => payout.id === id)?.tx),
+        PAID_IDS.map(() => PAID_TX),
+      );
+    });
     const { page, violations } = await connected(
       { owner: PAYEE },
       { width: 390, height: 844, dark: true, flowing: true },
     );
-    const receipt = page.locator("#receipts .receipt");
+    const standing = page.locator("#receipts .standing");
+    const receipt = standing.locator(".receipt");
     await receipt.first().waitFor({ timeout: 120_000 });
-    assert.equal(await receipt.count(), 1);
+    assert.equal(await standing.count(), 1);
+    assert.equal(await standing.locator("h3").innerText(), "Account #82774");
+    // On Fri 16 Oct, Carbon Impact owed it the epoch from Thu 1 Oct, and had paid nothing since Wed 23 Sep.
     assert.match(
-      await page.locator("#receipts .receipts-found").innerText(),
-      /^For #82774, in Carbon Impact's payout of Wed,? 23 Sept?\./,
+      await standing.locator(".standing-late").innerText(),
+      /^Late\. Paid up to Thu,? 17 Sept? only\. Carbon Impact voted with it from Thu,? 1 Oct to Thu,? 8 Oct, and has not paid it for that epoch yet\.$/,
     );
+    assert.equal(await standing.locator(".standing-paid").isVisible(), false);
+    assert.match(await standing.locator(".standing-waiting").innerText(), /^≈\s\$\d[\d,.]* waits to be claimed$/);
+    assert.equal(await standing.locator(".standing-outside").isVisible(), false);
+    assert.equal(await page.locator("#receipts .receipts-underway").isVisible(), false);
+    assert.equal(await receipt.count(), 1);
     assert.equal(await receipt.locator(".receipt-id").innerText(), "#82774");
     assert.equal(await receipt.locator(".receipt-earned").innerText(), "8.56 USDC and 89.04 HYDX");
     assert.equal(await receipt.locator(".receipt-swapped").innerText(), "1,053.92 kVCM");
@@ -625,8 +661,12 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     );
     assert.equal(
       await receipt.getByRole("link", { name: "Transaction" }).getAttribute("href"),
-      "https://basescan.org/tx/0x0932e5a24f24e45bfd1021764d94abc1d920754c4dc17128dd89f44bd086e899",
+      `https://basescan.org/tx/${PAID_TX}`,
     );
+    await receipt
+      .locator(".receipt-paid-usd")
+      .getByText(/^≈\s\$\d/)
+      .waitFor({ timeout: 120_000 });
     await shoot(page, "receipt-390-dark", page.locator("#receipts"));
     // After the flip, the page reads Carbon Impact again and fills its figures, such as .tonnes, across the page. The
     // receipts keep their own.
@@ -638,11 +678,17 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     await page.waitForTimeout(500);
     assert.equal(await receipt.locator(".receipt-retired").innerText(), "−326.80 kVCM");
     assert.equal(await receipt.locator(".receipt-tonnes").innerText(), "65.26 t of carbon credits");
+    // A member's account last paid in an earlier payout has the receipt of that one.
     const member = await connected({ owner: MEMBER }, { width: 390, height: 844 });
-    await member.page
-      .locator("#receipts")
-      .getByText(/Carbon Impact's last payout, on Wed,? 23 Sept?, paid none of your accounts\./)
-      .waitFor({ timeout: 120_000 });
+    const own = member.page.locator("#receipts .standing").filter({ hasText: "#9540" });
+    await own.locator(".receipt").waitFor({ timeout: 120_000 });
+    assert.match(await own.locator(".standing-late").innerText(), /^Late\. Paid up to Thu,? 27 Aug only\./);
+    assert.match((await own.locator("time.receipt-time").textContent()) ?? "", /^Thu,? 27 Aug,? 01:47 UTC$/);
+    assert.equal(
+      await member.page.locator("#receipts .standing").count(),
+      1,
+      "its own account is not in Carbon Impact",
+    );
     assert.deepEqual([...violations, ...member.violations], []);
   });
 

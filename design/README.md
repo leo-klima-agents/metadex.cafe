@@ -259,19 +259,19 @@ plain-language decoding raised how many risky transactions they caught.
 
 ## Within the page's rules
 
-| Need                         | How                                                                                   | Cost or risk                                                 |
-| ---------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Value of a position          | The prices the page already computes                                                  | None                                                         |
-| Receipts and history         | Find the 100-block stretches where `totalTonnesRetired` changed, then read their logs | 17 to 118 requests a run, as the free RPCs give 100 blocks   |
-| Change watch                 | Read the settings' events the same way                                                | As for receipts                                              |
-| One prompt for many accounts | EIP-5792 `wallet_sendCalls` where `wallet_getCapabilities` allows it                  | Rabby, Zerion and Phantom lack it: one by one there          |
-| Look up an address           | The same reads, without a wallet                                                      | None                                                         |
-| Brief for co-signers         | The accounts and the automation in the fragment                                       | Check everything read from it                                |
-| Calendar file, CSV, image    | Made in the browser                                                                   | In-app browsers on iOS may not download: offer a copy too    |
-| Safe status                  | Safe{Wallet} reports it through the Safe Apps SDK                                     | None                                                         |
-| Aero and liquidity           | More contracts and code hashes in `src/config.ts`                                     | More checks to keep up to date                               |
-| Alerts                       | A calendar file; Basescan's Watch List e-mails activity on a payout address           | Push, a bot or our own e-mail needs a server: a decision     |
-| A feed of settings changes   | An Atom file built by CI from the automations' events                                 | A scheduled job; the page itself still reaches only the RPCs |
+| Need                         | How                                                                            | Cost or risk                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| Value of a position          | The prices the page already computes                                           | None                                                         |
+| Receipts and history         | Search the block where `tokenTimestamp` reached each account's last epoch paid | About 22 requests a payout, and one of logs per block        |
+| Change watch                 | Find the 100-block stretches where a setting changed, then read their logs     | 17 to 118 requests, as the free RPCs give 100 blocks         |
+| One prompt for many accounts | EIP-5792 `wallet_sendCalls` where `wallet_getCapabilities` allows it           | Rabby, Zerion and Phantom lack it: one by one there          |
+| Look up an address           | The same reads, without a wallet                                               | None                                                         |
+| Brief for co-signers         | The accounts and the automation in the fragment                                | Check everything read from it                                |
+| Calendar file, CSV, image    | Made in the browser                                                            | In-app browsers on iOS may not download: offer a copy too    |
+| Safe status                  | Safe{Wallet} reports it through the Safe Apps SDK                              | None                                                         |
+| Aero and liquidity           | More contracts and code hashes in `src/config.ts`                              | More checks to keep up to date                               |
+| Alerts                       | A calendar file; Basescan's Watch List e-mails activity on a payout address    | Push, a bot or our own e-mail needs a server: a decision     |
+| A feed of settings changes   | An Atom file built by CI from the automations' events                          | A scheduled job; the page itself still reaches only the RPCs |
 
 ## How to know it works
 

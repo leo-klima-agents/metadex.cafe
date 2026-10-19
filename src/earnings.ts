@@ -9,7 +9,8 @@ import { pricesAt, usdOf, type Token } from "./prices.ts";
 // pool's fees and one for incentives. They keep each epoch's votes and rewards, so an ended epoch's figures are final.
 
 export type Pool = { address: Address; name: string; votes: bigint };
-type Reward = { pool: Address; token: Token; amount: bigint; fee: boolean };
+// A pool's reward in one token, and the contract that pays it: the pool's fees contract, or its incentives contract.
+export type Reward = { pool: Address; contract: Address; token: Token; amount: bigint; fee: boolean };
 export type Earnings = {
   // The epoch runs from start to start + WEEK.
   start: number;
@@ -63,7 +64,7 @@ export const earnedBy = (perEpoch: bigint, supply: bigint, balance: bigint): big
   (((perEpoch * 10n ** 32n) / supply) * balance) / 10n ** 32n;
 
 type Found = {
-  rewards: { pool: Address; token: Address; amount: bigint; fee: boolean }[];
+  rewards: { pool: Address; contract: Address; token: Address; amount: bigint; fee: boolean }[];
   votes: Map<Address, bigint>;
 };
 
@@ -107,11 +108,11 @@ async function rewardsOf(all: Bribes[], start: number, holder?: Address, reader:
     ),
   ) as (readonly bigint[])[];
   k = 0;
-  const rewards = listed.flatMap(({ pool, fee, supply, balance, tokens }) =>
+  const rewards = listed.flatMap(({ pool, address: contract, fee, supply, balance, tokens }) =>
     tokens.flatMap((token) => {
       const perEpoch = data[k++]![1]!;
       const amount = holder ? earnedBy(perEpoch, supply, balance) : perEpoch;
-      return amount > 0n ? [{ pool, token, amount, fee }] : [];
+      return amount > 0n ? [{ pool, contract, token, amount, fee }] : [];
     }),
   );
   // A vote for a pool counts in both of its contracts.
@@ -141,9 +142,9 @@ async function priced(
   tokens: Map<string, Token>,
   reader: typeof read = read,
 ): Promise<Earnings> {
-  const rewards = found.rewards.flatMap(({ pool, token, amount, fee }) => {
+  const rewards = found.rewards.flatMap(({ token, ...reward }) => {
     const known = tokens.get(token.toLowerCase());
-    return known ? [{ pool, token: known, amount, fee }] : [];
+    return known ? [{ ...reward, token: known }] : [];
   });
   const amounts = new Map<string, bigint>();
   for (const { token, amount } of rewards) amounts.set(token.address, (amounts.get(token.address) ?? 0n) + amount);

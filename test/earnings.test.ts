@@ -9,6 +9,8 @@ const HYDX: Token = { address: "0x00000e7efa313F4E11Bfff432471eD9423AC6B30", dec
 const WFRAX: Token = { address: "0x0CEAC003B0d2479BebeC9f4b2EBAd0a803759bbf", decimals: 18, symbol: "WFRAX" };
 const POOL: Address = "0x605abD1873737CA9a9Ec1CFa52CDfc8ef62c2E1d";
 const OTHER: Address = "0x0BA69825c4C033e72309F6AC0Bde0023b15Cc97c";
+const FEES: Address = "0x59Bcf560Cd567f2eAaE9d7aDfF399E019B54A20d";
+const INCENTIVES: Address = "0x0000000000000000000000000000000000000b1b";
 
 test("a voter's share of a reward contract's rewards rounds down, as the contract's does", () => {
   assert.equal(earnedBy(1_000_000_000n, 3n, 1n), 333_333_333n);
@@ -26,10 +28,10 @@ test("what votes earned, in dollars: fees and incentives apart, and by pool; a t
       { address: OTHER, name: "USDC / cbBTC", votes: 2n },
     ],
     rewards: [
-      { pool: POOL, token: USDC, amount: 14_099_868n, fee: true },
-      { pool: OTHER, token: USDC, amount: 663_168_290n, fee: false },
-      { pool: POOL, token: HYDX, amount: 27n * 10n ** 18n, fee: true },
-      { pool: OTHER, token: WFRAX, amount: 10n ** 17n, fee: false },
+      { pool: POOL, contract: FEES, token: USDC, amount: 14_099_868n, fee: true },
+      { pool: OTHER, contract: INCENTIVES, token: USDC, amount: 663_168_290n, fee: false },
+      { pool: POOL, contract: FEES, token: HYDX, amount: 27n * 10n ** 18n, fee: true },
+      { pool: OTHER, contract: INCENTIVES, token: WFRAX, amount: 10n ** 17n, fee: false },
     ],
     prices: new Map([
       [USDC.address.toLowerCase(), 1],
