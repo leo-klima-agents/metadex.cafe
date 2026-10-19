@@ -133,7 +133,7 @@ function showCarbonImpact(found: CarbonImpact): void {
   const facts = document.querySelector("#fee-facts .facts-here")!;
   if (facts.firstElementChild) showFeeFacts(facts, found);
   else facts.replaceChildren(feeFacts(found));
-  refreshChoose();
+  refreshChoose({ carbonImpact: found });
   tick();
 }
 
@@ -193,7 +193,7 @@ async function showChecks(): Promise<void> {
   for (const item of document.querySelectorAll<HTMLElement>("#checks li")) item.hidden = !failing.includes(item.id);
   show("#checks", failing.length > 0);
   trusted = !failing.length;
-  refreshChoose();
+  refreshChoose({ trusted });
   // A read of the accounts that is under way shows the result when it ends.
   if (!reading) showAccounts(true);
 }

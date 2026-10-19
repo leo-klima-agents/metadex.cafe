@@ -1,6 +1,6 @@
 import { now } from "./chain.ts";
 import { fill, fillPlural, show } from "./dom.ts";
-import { feeFacts } from "./fee-facts.ts";
+import { feeFacts, showFeeFacts } from "./fee-facts.ts";
 import { bps, count, day, earningPower, list, share, toEarningPower, usd } from "./format.ts";
 import { gasCost } from "./gas.ts";
 import {
@@ -109,6 +109,16 @@ function render({ accounts, carbonImpact, trusted, gas, average }: State): void 
         : "What its votes earned last epoch is not read from Base yet.",
   });
   show(".same-prices", per?.all !== undefined, dialog);
+  fill(dialog, {
+    "retired-share": carbonImpact ? share(carbonImpact.retireBps) : "a share",
+    "compare-retired": carbonImpact ? bps(carbonImpact.retireBps) : "…",
+    "compare-fee": carbonImpact ? bps(carbonImpact.feeBps) : "…",
+    "compare-max-fee": carbonImpact ? bps(carbonImpact.maxFeeBps) : "…",
+  });
+  const facts = part(".facts-here");
+  if (carbonImpact && facts.firstElementChild) showFeeFacts(facts, carbonImpact);
+  else if (carbonImpact) facts.replaceChildren(feeFacts(carbonImpact));
+  show(".facts-fold", !!carbonImpact, dialog);
   for (const choice of CHOICES) {
     const steps = callsFor(choice, accounts, time);
     const off = choice === "join" && !trusted;
@@ -130,24 +140,19 @@ function render({ accounts, carbonImpact, trusted, gas, average }: State): void 
   proceed.disabled = !CHOICES.some((choice) => radio(choice).checked);
 }
 
-export function refreshChoose(): void {
+// Shows the dialog again, with what was read since it opened.
+export function refreshChoose(read: Partial<Pick<Context, "carbonImpact" | "trusted">> = {}): void {
   if (!current || !dialog.open) return;
+  Object.assign(current, read);
   readAverage(current);
   render(current);
 }
 
 export function openChoose(context: Context): void {
-  const { holdings, accounts, carbonImpact } = context;
+  const { holdings, accounts } = context;
   const state: State = { ...context, gas: new Map(), average: "unread" };
   current = state;
-  fill(dialog, {
-    which: ids(accounts),
-    "choose-count": count(accounts.length, "account", "accounts"),
-    "retired-share": carbonImpact ? share(carbonImpact.retireBps) : "a share",
-    "compare-retired": carbonImpact ? bps(carbonImpact.retireBps) : "…",
-    "compare-fee": carbonImpact ? bps(carbonImpact.feeBps) : "…",
-    "compare-max-fee": carbonImpact ? bps(carbonImpact.maxFeeBps) : "…",
-  });
+  fill(dialog, { which: ids(accounts), "choose-count": count(accounts.length, "account", "accounts") });
   fillPlural(dialog, accounts.length);
   states.replaceChildren(
     ...describe(accounts, holdings).map((text) => {
@@ -156,8 +161,8 @@ export function openChoose(context: Context): void {
       return item;
     }),
   );
-  part(".facts-here").replaceChildren(...(carbonImpact ? [feeFacts(carbonImpact)] : []));
-  show(".facts-fold", !!carbonImpact, dialog);
+  part(".facts-here").replaceChildren();
+  for (const fold of dialog.querySelectorAll("details")) fold.open = false;
   for (const choice of CHOICES) radio(choice).checked = false;
   dialog.showModal();
   title.focus();
