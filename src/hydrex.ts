@@ -1,18 +1,20 @@
-import { encodeFunctionData, parseAbi, zeroAddress, type Address } from "viem";
+import { encodeFunctionData, keccak256, parseAbi, zeroAddress, type Address } from "viem";
 import { blockTime, call, codeHash, implementation, read, required, rpc, same } from "./chain.ts";
 import {
   ACCOUNT_NAMES,
-  ACTIONS,
   APPROVAL_LOGIC,
   APPROVAL_LOGIC_CODE_HASH,
+  AUTOMATIONS,
+  AUTOMAXI,
+  CARBON_IMPACT,
   CHAIN_ID,
-  CONDUIT,
-  CONDUIT_CODE_HASH,
   KVCM,
   VOTER,
   VOTING_ESCROW,
   VOTING_ESCROW_IMPLEMENTATION,
   VOTING_ESCROW_IMPLEMENTATION_CODE_HASH,
+  type Automation,
+  type Kind,
 } from "./config.ts";
 import { WEEK, clean, list, weekStart } from "./format.ts";
 import conduits from "./hydrex-conduits.json" with { type: "json" };
@@ -47,7 +49,7 @@ const voterAbi = parseAbi([
   "function totalWeightAt(uint256 time) view returns (uint256)",
 ]);
 
-const conduitAbi = parseAbi([
+const carbonImpactAbi = parseAbi([
   "function veToken() view returns (address)",
   "function voter() view returns (address)",
   "function kvcm() view returns (address)",
@@ -60,14 +62,24 @@ const conduitAbi = parseAbi([
   "function getEffectiveRecipientForOwner(address owner) view returns (address)",
 ]);
 
+const autoMaxiAbi = parseAbi([
+  "function veToken() view returns (address)",
+  "function voter() view returns (address)",
+  "function lastClaimBlock(uint256 tokenId) view returns (uint256)",
+]);
+
 const accountNamesAbi = parseAbi(["function getBulkNames(uint256[] tokenIds) view returns (string[])"]);
 
 export const escrow = (functionName: string, ...args: unknown[]) =>
   call(VOTING_ESCROW, votingEscrowAbi, functionName, ...args);
 export const voter = (functionName: string, ...args: unknown[]) => call(VOTER, voterAbi, functionName, ...args);
-export const conduit = (functionName: string, ...args: unknown[]) => call(CONDUIT, conduitAbi, functionName, ...args);
+export const carbonImpact = (functionName: string, ...args: unknown[]) =>
+  call(CARBON_IMPACT.address, carbonImpactAbi, functionName, ...args);
+export const autoMaxi = (functionName: string, ...args: unknown[]) =>
+  call(AUTOMAXI.address, autoMaxiAbi, functionName, ...args);
 
-const others = conduits.filter(({ address }) => !same(address, CONDUIT));
+// Hydrex's other automations. If Hydrex lists one of the page's own, the page still treats it as its own.
+const others = conduits.filter(({ address }) => !AUTOMATIONS.some((automation) => same(address, automation.address)));
 
 export const LockType = { timed: 0, rolling: 1, permanent: 2 } as const;
 
@@ -101,23 +113,26 @@ export type Account = {
 
 export type Holdings = { owner: Address; accounts: Account[]; payout: Address; time: number; epochStart: number };
 
+// "in", "partly", "joined" and "left" are about the page's own automations.
 export type Status =
-  | { kind: "in" | "partly" | "self" | "ended" | "empty" }
-  | { kind: "joined" | "left"; date: number }
+  | { kind: "in" | "partly"; automation: Automation }
+  | { kind: "joined" | "left"; automation: Automation; date: number }
+  | { kind: "self" | "ended" | "empty" }
   | { kind: "other"; name: string }
   | { kind: "left-other"; name: string; date: number }
   | { kind: "stopped"; name: string; voted: number; since: number }
   | { kind: "delegated"; to: Address };
 
-export type Group = "stopped" | "attention" | "in" | "joining" | "leaving" | "open" | "closed";
+export type Group = "stopped" | "attention" | `in:${Kind}` | "joining" | "leaving" | "open" | "closed";
 
-// `automation` is set only when the call is not about Carbon Impact.
+// `automation` is set only when the call is about another of Hydrex's automations.
 export type Step = Tx & {
   says: string;
   on: string;
   id: bigint;
   approve: boolean;
   conduit: Address;
+  conduitName: string;
   automation?: string;
 };
 
@@ -128,13 +143,13 @@ const epochAt = (time: unknown): number => weekStart(Number(time));
 export async function readCarbonImpact(): Promise<CarbonImpact> {
   const replies = await read([
     blockTime,
-    conduit("retireBps"),
-    conduit("totalTonnesRetired"),
-    conduit("retiringEntityName"),
-    conduit("beneficiaryString"),
-    conduit("impactBeneficiaryAddress"),
-    conduit("retirementMessage"),
-    voter("lastVoted", CONDUIT),
+    carbonImpact("retireBps"),
+    carbonImpact("totalTonnesRetired"),
+    carbonImpact("retiringEntityName"),
+    carbonImpact("beneficiaryString"),
+    carbonImpact("impactBeneficiaryAddress"),
+    carbonImpact("retirementMessage"),
+    voter("lastVoted", CARBON_IMPACT.address),
   ]);
   const [time, retireBps, tonnes, entity, beneficiary, beneficiaryAddress, message] = required(replies.slice(0, 7)) as [
     bigint,
@@ -148,7 +163,7 @@ export async function readCarbonImpact(): Promise<CarbonImpact> {
   // Only Home shows when it last voted, so a failed read just leaves it out.
   const voted = replies[7] as bigint | undefined;
   const epochStart = epochAt(time);
-  const [votes] = required(await read([escrow("getPastVotes", CONDUIT, BigInt(epochStart))])) as [bigint];
+  const [votes] = required(await read([escrow("getPastVotes", CARBON_IMPACT.address, BigInt(epochStart))])) as [bigint];
   return {
     time: Number(time),
     epochStart,
@@ -166,7 +181,7 @@ export async function readCarbonImpact(): Promise<CarbonImpact> {
 export async function readAccounts(owner: Address): Promise<Holdings> {
   const replies = await read([
     escrow("balanceOf", owner),
-    conduit("getEffectiveRecipientForOwner", owner),
+    carbonImpact("getEffectiveRecipientForOwner", owner),
     blockTime,
     ...others.map(({ address }) => voter("lastVoted", address)),
   ]);
@@ -211,24 +226,42 @@ export async function readAccounts(owner: Address): Promise<Holdings> {
 
 const ended = (account: Account, now: number): boolean => account.lockType === LockType.timed && account.end <= now;
 
-const held = (account: Account) => ({ votes: same(account.delegate, CONDUIT), claims: same(account.claimer, CONDUIT) });
+const held = (account: Account, { address }: Automation) => ({
+  votes: same(account.delegate, address),
+  claims: same(account.claimer, address),
+});
 
 export const automationName = (address: Address): string | undefined =>
   others.find((other) => same(other.address, address))?.name;
+
+const pageAutomation = (address: Address, automations: Automation[]): Automation | undefined =>
+  automations.find((automation) => same(address, automation.address));
 
 // Hydrex counts a vote only in the epoch it is cast. An automation that has not voted since the previous epoch began
 // earns its accounts nothing. One that has never voted may be new.
 export const hasStopped = (voted: number, epochStart: number): boolean => voted > 0 && voted < epochStart - WEEK;
 
 // Hydrex counts votes for whoever held them when the epoch started, so joins and leaves count from the next epoch.
-export function statusOf(account: Account, owner: Address, now: number, epochStart: number): Status {
+// `automations` are the page's own that are on Base.
+export function statusOf(
+  account: Account,
+  owner: Address,
+  now: number,
+  epochStart: number,
+  automations: Automation[] = AUTOMATIONS,
+): Status {
   if (account.amount === 0n) return { kind: "empty" };
   if (ended(account, now)) return { kind: "ended" };
-  const { votes, claims } = held(account);
-  const votedAtStart = same(account.delegateAtStart, CONDUIT);
-  if (votes && claims) return votedAtStart ? { kind: "in" } : { kind: "joined", date: epochStart + WEEK };
-  if (votes || claims) return { kind: "partly" };
-  if (votedAtStart) return { kind: "left", date: epochStart + WEEK };
+  const [votes, claims, atStart] = [account.delegate, account.claimer, account.delegateAtStart].map((address) =>
+    pageAutomation(address, automations),
+  );
+  if (votes && votes === claims) {
+    return votes === atStart
+      ? { kind: "in", automation: votes }
+      : { kind: "joined", automation: votes, date: epochStart + WEEK };
+  }
+  if (votes || claims) return { kind: "partly", automation: (votes ?? claims)! };
+  if (atStart) return { kind: "left", automation: atStart, date: epochStart + WEEK };
   if (same(account.delegate, owner) || same(account.delegate, zeroAddress)) {
     const before = automationName(account.delegateAtStart);
     return before ? { kind: "left-other", name: before, date: epochStart + WEEK } : { kind: "self" };
@@ -241,80 +274,93 @@ export function statusOf(account: Account, owner: Address, now: number, epochSta
     : { kind: "other", name };
 }
 
-export function canJoin(account: Account, now: number): boolean {
-  const { votes, claims } = held(account);
+export function canJoin(account: Account, automation: Automation, now: number): boolean {
+  const { votes, claims } = held(account, automation);
   return account.amount > 0n && !ended(account, now) && !(votes && claims);
 }
 
-export function canLeave(account: Account): boolean {
-  const { votes, claims } = held(account);
+export function canLeave(account: Account, automation: Automation): boolean {
+  const { votes, claims } = held(account, automation);
   return votes || claims;
 }
 
 export const canLeaveOther = (account: Account): boolean => automationName(account.delegate) !== undefined;
 
-export function groupOf(account: Account, status: Status): Group {
+export function groupOf(account: Account, status: Status, automations: Automation[] = AUTOMATIONS): Group {
   switch (status.kind) {
     case "stopped":
       return "stopped";
     case "partly":
       return "attention";
     case "in":
-      return "in";
+      return `in:${status.automation.kind}`;
     case "joined":
       return "joining";
     case "left":
       return "leaving";
-    // Carbon Impact may still hold the approvals of an account it can no longer vote with.
+    // An automation may still hold the approvals of an account it can no longer vote with.
     case "ended":
-    case "empty":
-      return canLeave(account) ? "in" : "closed";
+    case "empty": {
+      const holder = automations.find((automation) => canLeave(account, automation));
+      return holder ? `in:${holder.kind}` : "closed";
+    }
     default:
       return "open";
   }
 }
 
-type Other = { address: Address; name: string };
+type Target = { address: Address; name: string };
 
-function approval({ id }: Account, approve: boolean, says: string, other?: Other): Step {
-  const target = other?.address ?? CONDUIT;
+function approval({ id }: Account, approve: boolean, says: string, target: Target, other = false): Step {
   return {
     to: VOTING_ESCROW,
-    data: encodeFunctionData({ abi: votingEscrowAbi, functionName: "setConduitApproval", args: [target, id, approve] }),
+    data: encodeFunctionData({
+      abi: votingEscrowAbi,
+      functionName: "setConduitApproval",
+      args: [target.address, id, approve],
+    }),
     says: `#${id} ${says}`,
     on: "Hydrex's VotingEscrow",
     id,
     approve,
-    conduit: target,
-    ...(other && { automation: other.name }),
+    conduit: target.address,
+    conduitName: other ? `The ${target.name} automation` : target.name,
+    ...(other && { automation: target.name }),
   };
 }
 
-// A join takes over the votes and the claims, which other automations may hold.
-export const join = (accounts: Account[]): Step[] =>
+// A join takes over the votes and the claims, which other automations may hold, the page's own included.
+export const join = (accounts: Account[], automation: Automation): Step[] =>
   accounts.map((account) => {
-    const names = [account.delegate, account.claimer].map(automationName).filter((name) => name !== undefined);
-    const from = [...new Set(names)];
-    const leaving = from.length ? `leaves the ${list(from)} automation${from.length > 1 ? "s" : ""} and ` : "";
-    return approval(account, true, `${leaving}joins Carbon Impact.`);
+    const holders = [account.delegate, account.claimer];
+    const own = AUTOMATIONS.filter(
+      (other) => other !== automation && holders.some((address) => same(address, other.address)),
+    );
+    const names = [...new Set(holders.map(automationName).filter((name) => name !== undefined))];
+    const parts = [
+      ...own.map(({ name }) => name),
+      ...(names.length ? [`the ${list(names)} automation${names.length > 1 ? "s" : ""}`] : []),
+    ];
+    const leaving = parts.length ? `leaves ${list(parts)} and ` : "";
+    return approval(account, true, `${leaving}joins ${automation.name}.`, automation);
   });
 
-export const leave = (accounts: Account[]): Step[] =>
-  accounts.map((account) => approval(account, false, "leaves Carbon Impact."));
+export const leave = (accounts: Account[], automation: Automation): Step[] =>
+  accounts.map((account) => approval(account, false, `leaves ${automation.name}.`, automation));
 
-// The same call as leaving Carbon Impact, with the other automation's address. Only automations on Hydrex's list, so
-// that each call names the one it leaves.
+// The same call as leaving the page's automations, with the other automation's address. Only automations on Hydrex's
+// list, so that each call names the one it leaves.
 export const leaveOther = (accounts: Account[]): Step[] =>
   accounts.flatMap((account) => {
     const name = automationName(account.delegate);
     if (!name) return [];
-    return [approval(account, false, `leaves the ${name} automation.`, { address: account.delegate, name })];
+    return [approval(account, false, `leaves the ${name} automation.`, { address: account.delegate, name }, true)];
   });
 
-export type Automation = { address: Address; name: string; voted: number; votes: bigint | undefined };
+export type Other = { address: Address; name: string; voted: number; votes: bigint | undefined };
 
 // When each of Hydrex's other automations last voted (0 if unknown), and the votes still delegated to it.
-export async function readAutomations(): Promise<Automation[]> {
+export async function readAutomations(): Promise<Other[]> {
   const found = await read(others.flatMap(({ address }) => [voter("lastVoted", address), escrow("getVotes", address)]));
   return others.map(({ address, name }, i) => ({
     address: address as Address,
@@ -324,30 +370,72 @@ export async function readAutomations(): Promise<Automation[]> {
   }));
 }
 
-// The checks that fail, each named by the id of its message on the page.
-export async function failedChecks(): Promise<string[]> {
-  const [chainId, conduitHash, impl, [veToken, voterAddress, payoutToken, config, logic]] = await Promise.all([
+// Freshness: when an automation last voted, or 0, and its votes this epoch.
+export type Freshness = { time: number; epochStart: number; voted: number; votes: bigint };
+
+export async function readFreshness({ address }: Automation): Promise<Freshness> {
+  const [time, voted] = required(await read([blockTime, voter("lastVoted", address)])) as bigint[];
+  const epochStart = epochAt(time);
+  const [votes] = required(await read([escrow("getPastVotes", address, BigInt(epochStart))])) as [bigint];
+  return { time: Number(time), epochStart, voted: Number(voted), votes };
+}
+
+// The hash of no code at all.
+const NO_CODE = keccak256("0x");
+
+export type Checks = {
+  // The page's automations with code on Base. Until AutoMaxi has some, the page leaves it out.
+  present: Automation[];
+  // The checks that fail for each automation, each named by the id of its message on the page. A check of Base or of
+  // Hydrex fails for all of them.
+  failed: Map<Kind, string[]>;
+};
+
+export async function failedChecks(): Promise<Checks> {
+  const [chainId, hashes, impl, replies] = await Promise.all([
     rpc<string>("eth_chainId", []),
-    codeHash(CONDUIT),
+    Promise.all(AUTOMATIONS.map(({ address }) => codeHash(address))),
     implementation(VOTING_ESCROW),
     read([
-      conduit("veToken"),
-      conduit("voter"),
-      conduit("kvcm"),
-      escrow("getConduitApprovalConfig", CONDUIT),
       escrow("approvalLogic"),
+      carbonImpact("veToken"),
+      carbonImpact("voter"),
+      carbonImpact("kvcm"),
+      autoMaxi("veToken"),
+      autoMaxi("voter"),
+      ...AUTOMATIONS.map(({ address }) => escrow("getConduitApprovalConfig", address)),
     ]),
   ]);
+  const [logic, veToken, voterAddress, payoutToken, autoMaxiVeToken, autoMaxiVoter, ...configs] = replies;
   const [implHash, logicHash] = await Promise.all([codeHash(impl), logic ? codeHash(logic as Address) : undefined]);
-  const [actions, active] = (config ?? [[], false]) as [number[], boolean];
-  const failed = {
+  const approves = (i: number): boolean => {
+    const [actions, active] = (configs[i] ?? [[], false]) as [number[], boolean];
+    return active && actions.join() === AUTOMATIONS[i]!.actions.join();
+  };
+  const points = (escrowAddress: unknown, voterOf: unknown) =>
+    same(String(escrowAddress), VOTING_ESCROW) && same(String(voterOf), VOTER);
+  const all = {
     chain: Number(chainId) !== CHAIN_ID,
-    code: conduitHash !== CONDUIT_CODE_HASH,
-    contracts: !same(String(veToken), VOTING_ESCROW) || !same(String(voterAddress), VOTER),
-    token: !same(String(payoutToken), KVCM),
-    approvals: !active || actions.join() !== ACTIONS.join(),
     upgrade: !same(impl, VOTING_ESCROW_IMPLEMENTATION) || implHash !== VOTING_ESCROW_IMPLEMENTATION_CODE_HASH,
     logic: !same(String(logic), APPROVAL_LOGIC) || logicHash !== APPROVAL_LOGIC_CODE_HASH,
   };
-  return Object.entries(failed).flatMap(([id, failing]) => (failing ? [id] : []));
+  const own: Record<Kind, Record<string, boolean>> = {
+    "carbon-impact": {
+      code: hashes[0] !== CARBON_IMPACT.codeHash,
+      contracts: !points(veToken, voterAddress),
+      token: !same(String(payoutToken), KVCM),
+      approvals: !approves(0),
+    },
+    automaxi: {
+      "automaxi-code": hashes[1] !== AUTOMAXI.codeHash,
+      "automaxi-contracts": !points(autoMaxiVeToken, autoMaxiVoter),
+      "automaxi-approvals": !approves(1),
+    },
+  };
+  const failing = (checks: Record<string, boolean>) =>
+    Object.entries(checks).flatMap(([id, fails]) => (fails ? [id] : []));
+  return {
+    present: AUTOMATIONS.filter((automation, i) => automation === CARBON_IMPACT || hashes[i] !== NO_CODE),
+    failed: new Map(AUTOMATIONS.map(({ kind }) => [kind, [...failing(all), ...failing(own[kind])]])),
+  };
 }

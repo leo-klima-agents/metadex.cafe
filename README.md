@@ -1,7 +1,8 @@
 # metaDEX Café
 
 metaDEX Café is a static web page at <https://metadex.cafe/>. It lets owners of Hydrex accounts on Base join or leave
-Carbon Impact, Klima's automation on Hydrex. Hydrex's contracts call automations "conduits".
+Carbon Impact, Klima's automation on Hydrex, and AutoMaxi, an automation nobody controls, once it is on Base. Hydrex's
+contracts call automations "conduits".
 
 The page has no server. It reads Base through public RPCs and asks the visitor's wallet to send transactions. It holds
 no keys and stores nothing.
@@ -14,18 +15,23 @@ This README is for whoever runs the site. The design and the plan are in [design
   Impact can then claim the account's rewards at once, and votes with it from the next epoch, which starts on Thursday
   at 00:00 UTC. After each epoch, it swaps the rewards to kVCM, retires a share as carbon credits, and pays the rest to
   the owner. The account and its HYDX stay in the owner's wallet.
+- **AutoMaxi** takes the same call. It votes for the pools it expects to earn the most bribes, and anyone can claim an
+  account's rewards through it: it pays them to the owner in the tokens earned, less 1%. Carbon Impact's keeper sends
+  its votes and claims. Joining one of the two takes the votes and the claims from the other, in one call.
 - **Leaving** is the same call with `false`. The page can also take accounts out of Hydrex's other automations, such as
   those that stopped voting in September 2026: same call, with that automation's address.
-- **Before anyone can join, the page checks** the chain, Carbon Impact's code and settings, and the code of Hydrex's
-  VotingEscrow against `src/config.ts`. If a check fails, joining is turned off and the page says why. Leaving always
-  works. The checks run again every hour.
-- It shows what Carbon Impact's votes earned last epoch. For each of the owner's accounts in Carbon Impact, it shows up
+- **Before anyone can join, the page checks** the chain, each automation's code, Carbon Impact's settings, and the code
+  of Hydrex's VotingEscrow against `src/config.ts`. If a check fails, joining that automation is turned off and the page
+  says why. Leaving always works. The checks run again every hour. Until there is code at AutoMaxi's address, the page
+  leaves AutoMaxi out.
+- It shows what Carbon Impact's votes earned last epoch. For each of the owner's accounts in an automation, it shows up
   to when the account has been paid, what waits to be claimed, and the receipt of its last payout.
 - Inside Safe{Wallet}, it proposes all the calls as one Safe transaction.
 
 One admin key controls Carbon Impact. It can change the share retired (up to 100%), the fee (up to 1%), the payout
 tokens, the swap routers, any owner's payout address, and who claims and votes for it. The page always shows the
-settings as they are on Base.
+settings as they are on Base. Nobody controls AutoMaxi: its code fixes its fee, 1% of each claim, and the 2-of-3 Safe it
+goes to. A change means a new deployment, and owners joining again.
 
 ## Network access
 
@@ -75,6 +81,9 @@ The page names each check that fails:
 | Carbon Impact points to another VotingEscrow or Voter. | `veToken()` or `voter()` on Carbon Impact.                                                |
 | Carbon Impact pays in another token than kVCM.         | `kvcm()` on Carbon Impact.                                                                |
 | What joining Carbon Impact approves has changed.       | `getConduitApprovalConfig` on the VotingEscrow: no longer active, or other than `[3, 5]`. |
+| AutoMaxi runs other code than this page knows.         | AutoMaxi's code.                                                                          |
+| AutoMaxi points to another VotingEscrow or Voter.      | `veToken()` or `voter()` on AutoMaxi.                                                     |
+| What joining AutoMaxi approves has changed.            | `getConduitApprovalConfig` on the VotingEscrow, for AutoMaxi.                             |
 | Hydrex upgraded its VotingEscrow.                      | The VotingEscrow's implementation, or its code.                                           |
 | Hydrex changed its VotingEscrow's approval logic.      | `approvalLogic()` on the VotingEscrow, or its code.                                       |
 
@@ -83,21 +92,32 @@ release. These [Foundry](https://getfoundry.sh/) commands print the values that 
 
 ```sh
 RPC=https://mainnet.base.org
-CONDUIT=0xdE91885cF35ac57DF0c4A75c16862127dBe8317c
+CARBON_IMPACT=0xdE91885cF35ac57DF0c4A75c16862127dBe8317c
+AUTOMAXI=0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B
 ESCROW=0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1
 IMPLEMENTATION=$(cast to-check-sum-address $(cast implementation $ESCROW --rpc-url $RPC))
 LOGIC=$(cast call $ESCROW "approvalLogic()(address)" --rpc-url $RPC)
 
-cast keccak $(cast code $CONDUIT --rpc-url $RPC)         # CONDUIT_CODE_HASH
+cast keccak $(cast code $CARBON_IMPACT --rpc-url $RPC)   # CARBON_IMPACT's codeHash
+cast keccak $(cast code $AUTOMAXI --rpc-url $RPC)        # AUTOMAXI's codeHash
 echo $IMPLEMENTATION                                    # VOTING_ESCROW_IMPLEMENTATION
 cast keccak $(cast code $IMPLEMENTATION --rpc-url $RPC)  # VOTING_ESCROW_IMPLEMENTATION_CODE_HASH
 echo $LOGIC                                             # APPROVAL_LOGIC
 cast keccak $(cast code $LOGIC --rpc-url $RPC)           # APPROVAL_LOGIC_CODE_HASH
-cast call $ESCROW "getConduitApprovalConfig(address)(uint8[],bool,string)" $CONDUIT --rpc-url $RPC  # ACTIONS
+for AUTOMATION in $CARBON_IMPACT $AUTOMAXI; do           # each automation's actions
+  cast call $ESCROW "getConduitApprovalConfig(address)(uint8[],bool,string)" $AUTOMATION --rpc-url $RPC
+done
 ```
 
 When Hydrex adds or removes automations, update `src/hydrex-conduits.json` from <https://api.hydrex.fi/conduits>, and
-the table of automations in `index.html`. A test checks that the two match.
+the table of automations in `index.html`. A test checks that the two match. If Hydrex lists AutoMaxi, the page still
+treats it as its own.
+
+AutoMaxi is not on Base yet. Its address is known in advance, as it deploys through the CREATE2 deployer, and so is its
+code hash, from `verification/bytecode-hashes.json` in <https://github.com/ldeso/hydrex-conduit> at commit `82ba69b`.
+Once it is deployed, check that the command above prints
+`0x489e3af444f9c0a45dbc7cb380fcabf86f581a3cc0c7aea968ae280aeae5b74d`, then release again: the page offers AutoMaxi from
+then on.
 
 ## Checking a deployment
 
@@ -131,7 +151,8 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 
 ## Limits
 
-- The page shows each account's last payout only.
+- The page shows each account's last payout only. For AutoMaxi, that is the claims in the epoch of the last one, up to
+  ten blocks of them: anyone can claim dust for an account through a contract of their own, as often as they like.
 - What waits to be claimed is a floor: the page reads each account's rewards in the pools Carbon Impact voted for last
   epoch, and no others.
 - The page finds an account's last payout through Hydrex's reward contracts, which record up to when they have paid it.
@@ -173,10 +194,12 @@ the pinned Actions and npm packages every week.
 | `src/review.ts`                                         | The review that shows each call before the wallet asks.                                    |
 | `src/last-epoch.ts`, `src/earnings.ts`, `src/prices.ts` | What votes earned last epoch, and token prices.                                            |
 | `src/last-payout.ts`, `src/receipts.ts`                 | Payouts: up to when each account was paid, what waits, and its last receipt.               |
+| `src/claims.ts`                                         | AutoMaxi's claims, read back from the last one.                                            |
 | `src/hydrex.ts`                                         | Hydrex's contracts: reads, account statuses, the calls, and the checks.                    |
 | `src/chain.ts`, `src/wallet.ts`                         | RPC requests, and wallets.                                                                 |
 | `src/views.ts`, `src/dom.ts`, `src/format.ts`           | Views, page helpers, and number and date formats.                                          |
 | `test/`, `fork/page.ts`                                 | Unit tests, and the browser tests.                                                         |
+| `fork/fixtures/`                                        | AutoMaxi's init code, for the browser tests to deploy it on the fork.                      |
 | `scripts/`                                              | The build; `fonts.py` makes `fonts/`, and `icons.ts` draws the icons from `icon.svg`.      |
 
 ## License

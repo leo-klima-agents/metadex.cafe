@@ -8,8 +8,12 @@ import {
   ANCHORS,
   APPROVAL_LOGIC,
   APPROVAL_LOGIC_CODE_HASH,
-  CONDUIT,
-  CONDUIT_CODE_HASH,
+  AUTOMATIONS,
+  AUTOMAXI,
+  AUTOMAXI_FEE_BPS,
+  AUTOMAXI_TREASURY,
+  CARBON_IMPACT,
+  KEEPER,
   KVCM,
   MULTICALL3,
   PAIR_FACTORY,
@@ -19,13 +23,23 @@ import {
   VOTING_ESCROW_IMPLEMENTATION,
   VOTING_ESCROW_IMPLEMENTATION_CODE_HASH,
 } from "../src/config.ts";
-import { LANG } from "../src/format.ts";
+import { LANG, bps } from "../src/format.ts";
 import conduits from "../src/hydrex-conduits.json" with { type: "json" };
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("addresses are checksummed, and code hashes are 32 bytes", () => {
-  const contracts = [MULTICALL3, CONDUIT, KVCM, VOTING_ESCROW, VOTING_ESCROW_IMPLEMENTATION, APPROVAL_LOGIC, VOTER];
+  const contracts = [
+    MULTICALL3,
+    ...AUTOMATIONS.map(({ address }) => address),
+    AUTOMAXI_TREASURY,
+    KEEPER,
+    KVCM,
+    VOTING_ESCROW,
+    VOTING_ESCROW_IMPLEMENTATION,
+    APPROVAL_LOGIC,
+    VOTER,
+  ];
   const prices = [
     ALGEBRA_FACTORY,
     PAIR_FACTORY,
@@ -33,16 +47,40 @@ test("addresses are checksummed, and code hashes are 32 bytes", () => {
   ];
   const addresses = [...contracts, ACCOUNT_NAMES, ...prices, ...conduits.map(({ address }) => address)];
   for (const address of addresses) assert.equal(getAddress(address), address);
-  for (const hash of [CONDUIT_CODE_HASH, VOTING_ESCROW_IMPLEMENTATION_CODE_HASH, APPROVAL_LOGIC_CODE_HASH]) {
+  const hashes = [...AUTOMATIONS.map(({ codeHash }) => codeHash), VOTING_ESCROW_IMPLEMENTATION_CODE_HASH];
+  for (const hash of [...hashes, APPROVAL_LOGIC_CODE_HASH]) {
     assert.match(hash, /^0x[0-9a-f]{64}$/);
   }
 });
 
 test("Hydrex names the conduit Carbon Impact, and the page links to it, the VotingEscrow and the Voter", () => {
-  assert.equal(conduits.find(({ address }) => address === CONDUIT)?.name, "Carbon Impact");
+  assert.equal(conduits.find(({ address }) => address === CARBON_IMPACT.address)?.name, "Carbon Impact");
   const html = read("index.html");
   assert.ok(html.includes(`<html lang="${LANG}">`), "the page and its numbers and dates use one language");
-  for (const address of [CONDUIT, VOTING_ESCROW, VOTER]) assert.ok(html.includes(`/address/${address}"`), address);
+  for (const address of [CARBON_IMPACT.address, VOTING_ESCROW, VOTER]) {
+    assert.ok(html.includes(`/address/${address}"`), address);
+  }
+});
+
+test("each automation has a kind, a name and the approvals of its own, and AutoMaxi's fee facts match its code", () => {
+  assert.deepEqual(
+    AUTOMATIONS.map(({ kind, name, actions }) => [kind, name, actions]),
+    [
+      ["carbon-impact", "Carbon Impact", [3, 5]],
+      ["automaxi", "AutoMaxi", [3, 5]],
+    ],
+  );
+  const html = read("index.html");
+  const facts = /<template id="automaxi-fee-facts">[\s\S]*?<\/template>/.exec(html)?.[0] ?? "";
+  assert.equal(bps(AUTOMAXI_FEE_BPS), "1%");
+  assert.deepEqual(
+    [...facts.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
+    ["Taken", "The most it can become", "Goes to", "When", "Other costs", "Who can change it"],
+  );
+  assert.match(facts, /<dd>1% of each claim<\/dd>/);
+  assert.match(facts, /<dd>1%, fixed in its code<\/dd>/);
+  assert.ok(facts.includes(`/address/${AUTOMAXI_TREASURY}"`));
+  assert.equal(AUTOMAXI.address, getAddress(AUTOMAXI.address));
 });
 
 test("the page may reach its RPCs and nothing else, and the README lists them", () => {
@@ -105,6 +143,8 @@ test("How it works lists each of its sections, and every other automation of Hyd
   const rows = [...view.matchAll(/data-automation="([^"]+)"/g)].map(([, address]) => address);
   assert.deepEqual(
     rows,
-    conduits.filter(({ address }) => address !== CONDUIT).map(({ address }) => address),
+    conduits
+      .filter(({ address }) => !AUTOMATIONS.some((automation) => automation.address === address))
+      .map(({ address }) => address),
   );
 });

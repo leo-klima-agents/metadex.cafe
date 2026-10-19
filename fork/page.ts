@@ -1,26 +1,31 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { after, afterEach, before, beforeEach, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Locator, type Page, type Route } from "playwright-core";
 import {
+  concat,
   decodeFunctionResult,
   encodeFunctionData,
   getAddress,
+  getContractAddress,
+  keccak256,
   parseAbi,
   toFunctionSelector,
+  toHex,
   zeroAddress,
   type Address,
   type Hex,
 } from "viem";
 import { blockTime, read } from "../src/chain.ts";
-import { CONDUIT, RPCS, VOTER, VOTING_ESCROW } from "../src/config.ts";
-import { readEarnings, sharesOf } from "../src/earnings.ts";
+import { AUTOMAXI, CARBON_IMPACT, KEEPER, RPCS, VOTER, VOTING_ESCROW } from "../src/config.ts";
+import { readEarnings, sharesOf, type Reward } from "../src/earnings.ts";
 import { WEEK } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
 import { SETTLED, payoutBlocks, payoutsIn, readStandings } from "../src/receipts.ts";
 
+const CONDUIT = CARBON_IMPACT.address;
 const FORK_URL = process.env.BASE_RPC_URL ?? "https://mainnet.base.org";
 const BLOCK = 52_694_000; // Fri 16 Oct 2026, 18:22 UTC
 const FLIP = 1_792_627_200; // Thu 22 Oct 2026, 00:00 UTC, when the epoch after BLOCK's starts
@@ -49,6 +54,12 @@ const LIQUID_HYDREX = getAddress("0x809F8175b8F60960dF2bc7a78a7C4Eb04d138AF0");
 const LOCK_MAXI = getAddress("0x53388a4E98Bb56F8571433F5461010Fc287929d3");
 const USDC = getAddress("0xE57b3Ea02336B9b418cA523aB5aD6f479d93bD1D");
 const RECIPIENT = getAddress("0x000000000000000000000000000000000000beef");
+const STRANGER = getAddress("0x000000000000000000000000000000000000dead");
+// AutoMaxi deploys through the CREATE2 deployer, with the salt and init code of its script/Deploy.s.sol at the pinned
+// commit. The init code was compiled from its verification/ input with solc 0.8.37.
+const CREATE2_DEPLOYER = getAddress("0x4e59b44847b379578588920cA78FbF26c0B4956C");
+const SALT = keccak256(toHex("metadex.cafe/ImmutableVeTokenConduit/v1"));
+const INIT_CODE = readFileSync(new URL("fixtures/automaxi-init-code.hex", import.meta.url), "utf8").trim() as Hex;
 // Tokens that Base runs natively, such as GOOGLc and cbZEC. Their code is the byte 0xef, which anvil cannot run: a call
 // to one uses all its gas and fails the whole batch of reads. Without their code, they read as tokens the page cannot
 // count.
@@ -73,6 +84,7 @@ const abi = parseAbi([
   "function getClaimApproved(uint256 tokenId) view returns (address)",
   "function transferFrom(address from, address to, uint256 tokenId)",
   "function setConduitApproval(address conduit, uint256 tokenId, bool approve)",
+  "function claim(uint256 tokenId, address[] feeAddresses, address[] bribeAddresses, address[] tokens) returns (uint256[])",
 ]);
 
 const hex = (n: number) => `0x${n.toString(16)}`;
@@ -103,6 +115,38 @@ async function warm(reads: () => Promise<unknown>): Promise<void> {
   } finally {
     globalThis.fetch = original;
   }
+}
+
+// Sends a transaction, and waits for Base, or anvil, to include it.
+async function mined(from: Address, to: Address, data: Hex): Promise<void> {
+  const hash = await anvil<Hex>("eth_sendTransaction", [{ from, to, data, gas: "0xf42400" }]);
+  for (;;) {
+    const receipt = await anvil<{ status: Hex } | null>("eth_getTransactionReceipt", [hash]);
+    if (receipt) return assert.equal(receipt.status, "0x1", `${hash} failed`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+// AutoMaxi's constructor needs fresh Chainlink prices and Base's sequencer up. anvil's clock runs on from the fork's,
+// so it deploys a minute after BLOCK.
+async function deployAutoMaxi(): Promise<void> {
+  const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", [hex(BLOCK), false]);
+  await anvil("evm_setNextBlockTimestamp", [Number(timestamp) + 60]);
+  await anvil("anvil_setBalance", [KEEPER, "0x16345785d8a0000"]);
+  await mined(KEEPER, CREATE2_DEPLOYER, concat([SALT, INIT_CODE]));
+  const at = getContractAddress({ opcode: "CREATE2", from: CREATE2_DEPLOYER, salt: SALT, bytecode: INIT_CODE });
+  assert.equal(at, AUTOMAXI.address);
+  assert.equal(keccak256(await anvil<Hex>("eth_getCode", [at, "latest"])), AUTOMAXI.codeHash);
+}
+
+// The page reads a few blocks before the latest, which on the fork can be before the last transactions. Blocks after
+// BLOCK make anvil read the state it lacks a slot at a time, so only the tests that need them mine them.
+const settle = () => anvil("anvil_mine", [hex(SETTLED + 1)]);
+
+// A claim through AutoMaxi of one reward, from its fees or incentives contract.
+async function claimOne(from: Address, id: bigint, { contract, token, fee }: Reward): Promise<void> {
+  const args = [id, fee ? [contract] : [], fee ? [] : [contract], [token.address]];
+  await mined(from, AUTOMAXI.address, encodeFunctionData({ abi, functionName: "claim", args } as never));
 }
 
 async function expectApprovals(ids: bigint[], delegate: Address, claimer: Address): Promise<void> {
@@ -340,7 +384,7 @@ async function confirm(page: Page): Promise<void> {
 }
 
 // The first reads through anvil are slow.
-describe("the page against a fork of Base", { timeout: 600_000 }, () => {
+describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
   before(async () => {
     node = spawn(
       "anvil",
@@ -479,8 +523,8 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
 
   test("what the votes earned last epoch: on Home, for a member's account, and all of Hydrex once it shows", async () => {
     await warm(async () => {
-      const found = (await readEarnings())!;
-      await sharesOf([9540n, 14485n], found.start, found.votes);
+      const found = (await readEarnings(CONDUIT))!;
+      await sharesOf([9540n, 14485n], found.start, found.votes, CONDUIT);
     });
     // All of Hydrex takes too many reads for the fork to answer in time, so they are refused, and noted.
     const everyPool = toFunctionSelector("function totalWeightAt(uint256)").slice(2);
@@ -598,7 +642,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
   test("each account's last payout, found through Hydrex's reward contracts, and its receipt", async () => {
     // PAYEE has 93 accounts: anvil reads them from FORK_URL for most of a minute the first time.
     await warm(async () => {
-      const [earnings] = await Promise.all([readEarnings(), readAccounts(PAYEE)]);
+      const [earnings] = await Promise.all([readEarnings(CONDUIT), readAccounts(PAYEE)]);
       const pairs = earnings!.rewards.map(({ contract, token }) => ({ contract, token: token.address }));
       const top = BLOCK - SETTLED;
       const [[time], standings] = await Promise.all([
@@ -628,7 +672,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     const receipt = standing.locator(".receipt");
     await receipt.first().waitFor({ timeout: 120_000 });
     assert.equal(await standing.count(), 1);
-    assert.equal(await standing.locator("h3").innerText(), "Account #82774");
+    assert.equal(await standing.locator("h3").innerText(), "Account #82774 · Carbon Impact");
     // On Fri 16 Oct, Carbon Impact owed it the epoch from Thu 1 Oct, and had paid nothing since Wed 23 Sep.
     assert.match(
       await standing.locator(".standing-late").innerText(),
@@ -710,6 +754,7 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
       .getByRole("link", { name: /connected as 0x0208…4C95/ })
       .click();
     await appTitle(page).waitFor();
+    assert.equal(await page.getByRole("button", { name: /AutoMaxi/ }).count(), 0, "AutoMaxi is not on Base yet");
     await group(page, "Can join").getByRole("button", { name: "Join", exact: true }).click();
     await toWallet(page);
     await review(page).getByText("One transaction:").waitFor();
@@ -978,6 +1023,133 @@ describe("the page against a fork of Base", { timeout: 600_000 }, () => {
     approve();
     await page.getByText("Connected with Test Wallet").waitFor();
     await account(page, 141).waitFor();
+  });
+
+  test("once AutoMaxi is on Base: join it, move between the two automations, and leave it", async () => {
+    await deployAutoMaxi();
+    // The pages read these at the latest block, which anvil reads from FORK_URL a slot at a time.
+    await warm(() =>
+      Promise.all([
+        readEarnings(CONDUIT),
+        readEarnings(AUTOMAXI.address),
+        readAccounts(NEWCOMER),
+        readAccounts(LEAVER),
+      ]),
+    );
+    const { page, sent } = await connected({ owner: NEWCOMER });
+    const canJoin = group(page, "Can join");
+    await canJoin.getByRole("button", { name: "Join AutoMaxi", exact: true }).click();
+    await review(page).getByRole("heading", { name: "Before you join" }).waitFor();
+    await review(page)
+      .getByText("Anyone can claim the rewards this account has not claimed yet through AutoMaxi")
+      .waitFor();
+    await review(page).getByRole("button", { name: "Continue" }).click();
+    const facts = review(page).locator(".fee-facts");
+    assert.deepEqual(await facts.locator("dt").allTextContents(), [
+      "Taken",
+      "The most it can become",
+      "Goes to",
+      "When",
+      "Other costs",
+      "Who can change it",
+    ]);
+    assert.equal(await facts.locator("dd").first().innerText(), "1% of each claim");
+    assert.match(await facts.innerText(), /0x450c72de8c0079B49AcedF294a13011bd09D125B/);
+    await shoot(page, "automaxi-join-2-1440-light");
+    await review(page).getByRole("button", { name: "Continue" }).click();
+    assert.deepEqual(await review(page).locator(".says").allTextContents(), ["#141 joins AutoMaxi."]);
+    assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["AutoMaxi"]);
+    assert.equal(await review(page).locator(".conduit").innerText(), AUTOMAXI.address);
+    await confirm(page);
+    await expectApprovals([141n], AUTOMAXI.address, AUTOMAXI.address);
+    await account(page, 141).getByText("Joined AutoMaxi.").waitFor();
+    assert.equal(sent.length, 1);
+
+    // An account in Carbon Impact moves in one call, and back the same way. LEAVER's were never paid, so the page has
+    // no receipt to price for them, which would keep anvil busy.
+    const member = await connected({ owner: LEAVER });
+    const own = member.page;
+    await account(own, 53350).getByText("In Carbon Impact.").waitFor();
+    await pick(own, 53350);
+    await group(own, "In Carbon Impact").getByRole("button", { name: "Move to AutoMaxi with 1 account" }).click();
+    await toWallet(own);
+    assert.deepEqual(await review(own).locator(".says").allTextContents(), [
+      "#53350 leaves Carbon Impact and joins AutoMaxi.",
+    ]);
+    await confirm(own);
+    await expectApprovals([53350n], AUTOMAXI.address, AUTOMAXI.address);
+    await account(own, 53350).getByText("Joined AutoMaxi.").waitFor();
+    await group(own, "Joining").getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
+    await toWallet(own);
+    assert.deepEqual(await review(own).locator(".says").allTextContents(), [
+      "#53350 leaves AutoMaxi and joins Carbon Impact.",
+    ]);
+    await confirm(own);
+    await expectApprovals([53350n], CONDUIT, CONDUIT);
+    await account(own, 53350).getByText("In Carbon Impact.").waitFor();
+
+    // Leaving AutoMaxi gives the votes back to the owner.
+    await group(page, "Joining").getByRole("button", { name: "Leave" }).click();
+    await review(page).getByRole("heading", { name: "Leave AutoMaxi" }).waitFor();
+    await review(page).getByText("AutoMaxi can no longer claim the rewards of #141.").waitFor();
+    await confirm(page);
+    await expectApprovals([141n], NEWCOMER, zeroAddress);
+    await account(page, 141).getByText("Not in an automation.").waitFor();
+    assert.deepEqual([...sent, ...member.sent].length, 4);
+  });
+
+  test("AutoMaxi's receipts: a claim by its keeper, a stranger's dust, and where the page stops reading", async () => {
+    await deployAutoMaxi();
+    let rewards: Reward[] = [];
+    await warm(async () => {
+      rewards = (await readEarnings(CONDUIT))!.rewards;
+      await readAccounts(PAYEE);
+    });
+    const move = encodeFunctionData({
+      abi,
+      functionName: "setConduitApproval",
+      args: [AUTOMAXI.address, 82774n, true],
+    });
+    await anvil("anvil_setBalance", [PAYEE, "0x16345785d8a0000"]);
+    await anvil("anvil_setBalance", [STRANGER, "0x16345785d8a0000"]);
+    await mined(PAYEE, VOTING_ESCROW, move);
+    const usdc = rewards.filter(({ token }) => token.symbol === "USDC");
+    await claimOne(KEEPER, 82774n, usdc[0]!);
+    await claimOne(STRANGER, 82774n, usdc[1]!);
+    await settle();
+    const { page, violations } = await connected({ owner: PAYEE }, { width: 390, height: 844 });
+    const standing = page.locator("#receipts .standing");
+    const receipt = standing.locator(".receipt");
+    await receipt.waitFor({ timeout: 120_000 });
+    assert.equal(await standing.locator("h3").innerText(), "Account #82774 · AutoMaxi");
+    assert.equal(await receipt.locator(".label").first().textContent(), "Receipt · #82774 · AutoMaxi");
+    assert.match(await receipt.locator(".receipt-claimed").innerText(), /^(< )?[\d,.]+ USDC$/);
+    assert.equal(await receipt.locator(".receipt-fee-share").innerText(), "1%");
+    assert.match(await receipt.locator(".receipt-fee").innerText(), /^−[\d,.<\s]+ USDC$/);
+    assert.match(await receipt.locator(".receipt-paid").innerText(), /^(< )?[\d,.]+ USDC$/);
+    assert.deepEqual(await receipt.locator(".claim-by").allTextContents(), ["by 0x0000…dEaD", "by the keeper"]);
+    assert.equal(await receipt.locator(".receipt-stopped").isVisible(), false);
+    // USDC counts as a dollar.
+    await receipt
+      .locator(".receipt-paid-usd")
+      .getByText(/^(≈|<)\s\$/)
+      .waitFor({ timeout: 120_000 });
+    await shoot(page, "automaxi-receipt-390-light", page.locator("#receipts"));
+
+    // Dust in many blocks: the page reads ten of them, and says it stopped.
+    for (const reward of rewards.filter(({ token }) => token.symbol !== "USDC").slice(0, 10)) {
+      await claimOne(STRANGER, 82774n, reward);
+    }
+    await settle();
+    const again = await connected({ owner: PAYEE }, { width: 390, height: 844 });
+    const longer = again.page.locator("#receipts .receipt");
+    await longer.locator(".receipt-stopped").waitFor({ timeout: 120_000 });
+    assert.equal(
+      await longer.locator(".receipt-stopped").innerText(),
+      "The page stopped after 10 blocks of claims. Older claims of this epoch are not shown.",
+    );
+    assert.equal(await longer.locator(".claim-by").count(), 10);
+    assert.deepEqual([...violations, ...again.violations], []);
   });
 
   // Last, as it moves anvil's clock on.

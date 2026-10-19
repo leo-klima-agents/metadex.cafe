@@ -50,7 +50,7 @@ function slip(step: Step, i: number, n: number, safe: boolean): DocumentFragment
     count: safe ? `In a Safe${which || " · one transaction to sign"}` : `Your wallet will ask${which}`,
     says: step.says,
     on: step.on,
-    "conduit-name": step.automation ? `The ${step.automation} automation` : "Carbon Impact",
+    "conduit-name": step.conduitName,
     account: String(step.id),
     approve: String(step.approve),
     call: `The call above, in ${(step.data.length - 2) / 2} bytes:`,

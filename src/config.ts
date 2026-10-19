@@ -5,11 +5,41 @@ export const CHAIN_ID = 8453;
 export const RPCS = ["https://mainnet.base.org", "https://base.drpc.org", "https://base-rpc.publicnode.com"];
 export const MULTICALL3: Address = "0xcA11bde05977b3631167028862bE2a173976CA11";
 
-// Carbon Impact, and the Hydrex contracts the page checks before it lets anyone join.
-export const CONDUIT: Address = "0xdE91885cF35ac57DF0c4A75c16862127dBe8317c";
-export const CONDUIT_CODE_HASH: Hex = "0x0d67cd335e3ae9cde256cf399f819a3ea2b9c248b0336840a3b20a2ee82c192e";
-// What joining approves: 3 sends the account's claims to the conduit, 5 delegates its votes.
-export const ACTIONS = [3, 5];
+// The automations the page offers, and the Hydrex contracts the page checks before it lets anyone join. The kind picks
+// an automation's reads and its receipts.
+export type Kind = "carbon-impact" | "automaxi";
+export type Automation = {
+  kind: Kind;
+  name: string;
+  address: Address;
+  codeHash: Hex;
+  // What joining approves: 3 sends the account's claims to the automation, 5 delegates its votes.
+  actions: number[];
+};
+// Klima's automation. One admin key controls its settings, which the page reads from Base.
+export const CARBON_IMPACT: Automation = {
+  kind: "carbon-impact",
+  name: "Carbon Impact",
+  address: "0xdE91885cF35ac57DF0c4A75c16862127dBe8317c",
+  codeHash: "0x0d67cd335e3ae9cde256cf399f819a3ea2b9c248b0336840a3b20a2ee82c192e",
+  actions: [3, 5],
+};
+// ImmutableVeTokenConduit, from https://github.com/ldeso/hydrex-conduit at commit 82ba69b. It has no owner and no
+// settings: its code fixes its fee and where the fee goes. It deploys through CREATE2, so its address is known before;
+// until there is code there, the page leaves it out.
+export const AUTOMAXI: Automation = {
+  kind: "automaxi",
+  name: "AutoMaxi",
+  address: "0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B",
+  codeHash: "0x489e3af444f9c0a45dbc7cb380fcabf86f581a3cc0c7aea968ae280aeae5b74d",
+  actions: [3, 5],
+};
+export const AUTOMATIONS = [CARBON_IMPACT, AUTOMAXI];
+// AutoMaxi's fee, FEE_BPS in its code, of each claim, and TREASURY, the 2-of-3 Safe it goes to.
+export const AUTOMAXI_FEE_BPS = 100n;
+export const AUTOMAXI_TREASURY: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
+// The keeper that votes and claims for both: it holds Carbon Impact's EXECUTOR_ROLE. Anyone may claim through AutoMaxi.
+export const KEEPER: Address = "0x40FBFe5312330f278824ddbB7521ab77409192f0";
 export const KVCM: Address = "0x00fBAC94Fec8D4089d3fe979F39454F48c71A65d";
 export const VOTING_ESCROW: Address = "0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1";
 export const VOTING_ESCROW_IMPLEMENTATION: Address = "0x0FC68cE53Be957a1AA779f553AD49f6068fFf231";

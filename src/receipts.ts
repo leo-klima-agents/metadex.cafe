@@ -1,8 +1,8 @@
 import { decodeEventLog, numberToHex, parseAbi, type Address, type Hex } from "viem";
 import { call, read, readLater, required, rpc } from "./chain.ts";
-import { CONDUIT } from "./config.ts";
+import { CARBON_IMPACT } from "./config.ts";
 import { WEEK, clean } from "./format.ts";
-import { conduit } from "./hydrex.ts";
+import { carbonImpact } from "./hydrex.ts";
 import { usdOf, type Token } from "./prices.ts";
 
 // Hydrex's reward contracts record, for each account and token, the start of the epoch up to which they have paid the
@@ -273,9 +273,13 @@ export async function payoutsIn(blocks: number[]): Promise<Payout[]> {
   const missing = [...new Set(blocks)].filter((block) => !logsOf.has(block));
   const found = await Promise.all(
     missing.map((block) =>
-      rpc<Log[]>("eth_getLogs", [{ address: CONDUIT, fromBlock: numberToHex(block), toBlock: numberToHex(block) }], {
-        later: true,
-      }),
+      rpc<Log[]>(
+        "eth_getLogs",
+        [{ address: CARBON_IMPACT.address, fromBlock: numberToHex(block), toBlock: numberToHex(block) }],
+        {
+          later: true,
+        },
+      ),
     ),
   );
   missing.forEach((block, i) => logsOf.set(block, payouts(found[i]!)));
@@ -306,7 +310,7 @@ export async function namesAt(blocks: number[]): Promise<Map<number, string>> {
   const missing = [...new Set(blocks)].filter((block) => !names.has(block));
   const found = await Promise.all(
     missing.map(async (block) => {
-      const [name] = required(await readLater([conduit("retiringEntityName")], block)) as [string];
+      const [name] = required(await readLater([carbonImpact("retiringEntityName")], block)) as [string];
       return clean(name);
     }),
   );

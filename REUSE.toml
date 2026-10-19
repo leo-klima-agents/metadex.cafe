@@ -24,3 +24,9 @@ SPDX-License-Identifier = "OFL-1.1"
 path = "klima-protocol.svg"
 SPDX-FileCopyrightText = "Klima Protocol"
 SPDX-License-Identifier = "LicenseRef-KlimaProtocol"
+
+[[annotations]]
+path = "fork/fixtures/automaxi-init-code.hex"
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Léo de Souza (https://github.com/ldeso/hydrex-conduit)"
+SPDX-License-Identifier = "MIT"

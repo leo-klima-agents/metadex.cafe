@@ -1,7 +1,7 @@
 import { getAddress } from "viem";
 import "./views.ts";
 import { now, same, sawBlock } from "./chain.ts";
-import { CHAIN_ID } from "./config.ts";
+import { AUTOMATIONS, CARBON_IMPACT, CHAIN_ID, type Automation } from "./config.ts";
 import { clone, fill, fillAddress, fillPlural, fillTime, groupAllHex, show } from "./dom.ts";
 import {
   WEEK,
@@ -36,10 +36,11 @@ import {
   readCarbonImpact,
   statusOf,
   type Account,
-  type Automation,
   type CarbonImpact,
+  type Checks,
   type Group,
   type Holdings,
+  type Other,
   type Status,
 } from "./hydrex.ts";
 import { earnedByAccount, earningsDue, loadEarnings, loadShares } from "./last-epoch.ts";
@@ -67,13 +68,17 @@ let connection: Connection | undefined;
 let shown: Holdings | undefined;
 let carbonImpact: CarbonImpact | undefined;
 let carbonImpactRead: Promise<void> | undefined;
-let trusted = false;
+// Until the checks have run, joining is off, and only Carbon Impact is shown.
+let checks: Checks | undefined;
 let reads = 0;
 let reading = false;
 // Wallet connections that finish are ignored up to this attempt: a later one connected, or the wallet was let go.
 let attempts = 0;
 let ignoredUpTo = 0;
 let clicks = 0;
+
+// The page's automations on Base.
+const present = (): Automation[] => checks?.present ?? [CARBON_IMPACT];
 
 function failed(error: unknown): void {
   console.error(error);
@@ -132,12 +137,12 @@ function catchUp(): void {
   const epoch = weekStart(now());
   if (shown && !reading && epoch > shown.epochStart) loadAccounts(true);
   if (!carbonImpact || epoch > carbonImpact.epochStart) readCarbonImpactAgain().catch(console.error);
-  if (earningsDue(epoch)) loadEarningsAndShares();
+  if (earningsDue(epoch, present())) loadEarningsAndShares();
   checkPayout();
 }
 
 function loadEarningsAndShares(): void {
-  loadEarnings().then((changed) => {
+  loadEarnings(present()).then((changed) => {
     if (changed) showShares();
   });
 }
@@ -145,10 +150,10 @@ function loadEarningsAndShares(): void {
 // What each account's votes earned last epoch.
 async function showShares(): Promise<void> {
   const holdings = shown;
-  if (holdings && (await loadShares(holdings)) && shown === holdings) showAccounts(true);
+  if (holdings && (await loadShares(holdings, present())) && shown === holdings) showAccounts(true);
 }
 
-function showAutomations(found: Automation[]): void {
+function showAutomations(found: Other[]): void {
   for (const row of document.querySelectorAll<HTMLElement>("tr[data-automation]")) {
     const other = found.find(({ address }) => same(address, row.dataset.automation ?? ""));
     if (!other) continue;
@@ -158,22 +163,39 @@ function showAutomations(found: Automation[]): void {
 }
 
 async function showChecks(): Promise<void> {
-  const failing = await failedChecks();
+  const found = await failedChecks();
+  const more = found.present.filter((automation) => !present().includes(automation));
+  checks = found;
+  const failing = found.present.flatMap(({ kind }) => found.failed.get(kind)!);
   for (const item of document.querySelectorAll<HTMLElement>("#checks li")) item.hidden = !failing.includes(item.id);
-  show("#checks", failing.length > 0);
-  trusted = !failing.length;
+  const off = found.present.filter(({ kind }) => found.failed.get(kind)!.length);
+  fill(document, { "checks-which": list(off.map(({ name }) => name)) });
+  show("#checks", off.length > 0);
+  // An automation newly on Base needs its figures, and the accounts in it their payouts.
+  if (more.length) loadEarningsAndShares();
+  if (more.length && shown) showPayout(shown, present());
   // A read of the accounts that is under way shows the result when it ends.
   if (!reading) showAccounts(true);
 }
 
-const joinable = (account: Account): boolean => trusted && canJoin(account, now());
-const can: Record<Action, (account: Account) => boolean> = {
+const automationOf = (button: HTMLButtonElement): Automation | undefined =>
+  AUTOMATIONS.find(({ kind }) => kind === button.dataset.automation);
+
+// Joining an automation needs it on Base and its checks passed. Leaving always works.
+function joinable(account: Account, automation: Automation | undefined): boolean {
+  if (!automation || !checks?.present.includes(automation) || checks.failed.get(automation.kind)!.length) return false;
+  return canJoin(account, automation, now());
+}
+const leavable = (account: Account): boolean => present().some((automation) => canLeave(account, automation));
+const can: Record<Action, (account: Account, automation?: Automation) => boolean> = {
   join: joinable,
-  leave: canLeave,
+  leave: leavable,
   "leave-other": canLeaveOther,
 };
 const buttons = (section: HTMLElement) => [...section.querySelectorAll<HTMLButtonElement>("button[data-action]")];
 const actionOf = (button: HTMLButtonElement) => button.dataset.action as Action;
+const allows = (button: HTMLButtonElement) => (account: Account) =>
+  can[actionOf(button)](account, automationOf(button));
 
 function accountKind({ lockType, end }: Account): string {
   if (lockType === LockType.permanent) return "Protocol Account";
@@ -192,6 +214,7 @@ function accountItem(holdings: Holdings, account: Account, status: Status, picka
     fillTime(line, "since", status.since);
   }
   if ("name" in status) fill(line, { automation: status.name });
+  if ("automation" in status) fill(line, { "automation-name": status.automation.name });
   if ("to" in status) fillAddress(line, "address", status.to);
   item.querySelector(".status")!.replaceWith(line);
   const earned = earnedByAccount(holdings, account.id);
@@ -218,18 +241,17 @@ function showAccounts(keepTicked = false): void {
   const ticked = document.querySelectorAll<HTMLInputElement>("#accounts .pick:checked");
   const kept = new Set(keepTicked ? [...ticked].map(({ value }) => value) : []);
   const time = now();
+  const automations = present();
   const sorted = accounts.map((account) => {
-    const status = statusOf(account, owner, time, epochStart);
-    return { account, status, group: groupOf(account, status) };
+    const status = statusOf(account, owner, time, epochStart, automations);
+    return { account, status, group: groupOf(account, status, automations) };
   });
   for (const section of groups) {
     const members = sorted.filter((member) => member.group === section.dataset.group);
     // Some wallets hold many empty accounts, which can do nothing: they go in a fold.
     const folded = section.dataset.group === "closed" ? members.filter(({ account }) => account.amount === 0n) : [];
-    const actions = buttons(section).map(actionOf);
-    const able = members
-      .map(({ account }) => account)
-      .filter((account) => actions.some((action) => can[action](account)));
+    const tests = buttons(section).map(allows);
+    const able = members.map(({ account }) => account).filter((account) => tests.some((test) => test(account)));
     const items = (listed: typeof members) =>
       listed.map(({ account, status }) =>
         accountItem(holdings, account, status, able.length > 1 && able.includes(account)),
@@ -250,12 +272,18 @@ function showAccounts(keepTicked = false): void {
   updateButtons();
   const full = sorted.filter(({ account }) => account.amount > 0n);
   const inGroups = (...names: Group[]) => full.filter((member) => names.includes(member.group)).length;
-  const [members, stopped] = [inGroups("in", "joining"), inGroups("stopped")];
+  const stopped = inGroups("stopped");
+  const memberships = automations.flatMap(({ kind, name }) => {
+    const n = full.filter(
+      ({ status }) => (status.kind === "in" || status.kind === "joined") && status.automation.kind === kind,
+    ).length;
+    return n ? [count(n, `in ${name}`, `in ${name}`)] : [];
+  });
   const power = full.reduce((sum, { account }) => sum + account.votes, 0n);
   fill(document, {
     "summary-line": [
       count(full.length, "account", "accounts"),
-      ...(members ? [count(members, "in Carbon Impact", "in Carbon Impact")] : []),
+      ...memberships,
       ...(stopped ? [count(stopped, "in an automation that stopped", "in automations that stopped")] : []),
       `${earningPower(power)} Earning Power`,
     ].join(" · "),
@@ -287,7 +315,7 @@ async function loadAccounts(quietly = false): Promise<void> {
     sawBlock(found.time);
     shown = found;
     showAccounts();
-    showPayout(found);
+    showPayout(found, present());
     catchUp();
     showShares();
   } catch (error) {
@@ -308,13 +336,16 @@ function picked(section: HTMLElement): Account[] {
   return accounts.filter(({ id }) => ids.has(String(id)));
 }
 
+// A Join names its automation once there is more than one to join.
 function updateButtons(): void {
   for (const section of groups) {
     const able = actionable.get(section) ?? [];
     const accounts = picked(section);
     for (const button of buttons(section)) {
-      const allowed = can[actionOf(button)];
-      const verb = (button.dataset.verb ??= button.textContent ?? "");
+      const allowed = allows(button);
+      const named = button.dataset.named !== undefined && present().length > 1;
+      const base = (button.dataset.verb ??= button.textContent?.trim() ?? "");
+      const verb = named ? `${base} ${automationOf(button)!.name}` : base;
       const n = accounts.filter(allowed).length;
       button.hidden = !able.some(allowed);
       button.disabled = !n;
@@ -330,15 +361,17 @@ const hooks: Hooks = {
   switched: showConnection,
 };
 
-function reviewPicked(section: HTMLElement, action: Action): void {
+function reviewPicked(section: HTMLElement, button: HTMLButtonElement): void {
   if (!connection || !shown) return;
   // In a new epoch, the statuses and dates shown would be wrong: read the accounts again instead.
   if (weekStart(now()) > shown.epochStart) return void loadAccounts();
-  // A join shows the share retired, so it waits for Carbon Impact's settings. Leaving never waits.
-  if (action === "join" && !carbonImpact) {
-    return void readCarbonImpactAgain().then(() => reviewPicked(section, action), failed);
+  const action = actionOf(button);
+  const automation = automationOf(button);
+  // A join of Carbon Impact shows the share retired, so it waits for its settings. Leaving never waits.
+  if (action === "join" && automation === CARBON_IMPACT && !carbonImpact) {
+    return void readCarbonImpactAgain().then(() => reviewPicked(section, button), failed);
   }
-  const accounts = picked(section).filter(can[action]);
+  const accounts = picked(section).filter(allows(button));
   if (!accounts.length) return updateButtons();
   const { owner, epochStart } = shown;
   const settings = carbonImpact;
@@ -351,27 +384,47 @@ function reviewPicked(section: HTMLElement, action: Action): void {
     if (settings) fill(part, { "retired-share": share(settings.retireBps), entity: settings.entity });
     return part;
   };
-  if (action === "join") {
-    const before = prepare("join-before");
-    const from = (kind: Status["kind"]) =>
-      accounts.filter((account) => statusOf(account, owner, now(), epochStart).kind === kind);
-    const [stopped, running] = [from("stopped"), from("other")];
+  if (action === "join" && automation) {
+    const prefix = automation === CARBON_IMPACT ? "" : `${automation.kind}-`;
+    const before = prepare(`${prefix}join-before`);
+    const statuses = accounts.map((account) => ({
+      account,
+      status: statusOf(account, owner, now(), epochStart, present()),
+    }));
+    const stopped = statuses.flatMap(({ account, status }) => (status.kind === "stopped" ? [account] : []));
+    // Accounts in a running automation, the page's other one included, move out of it.
+    const running = statuses.flatMap(({ account, status }) => {
+      if (status.kind === "other") return [`#${account.id} out of ${status.name}`];
+      const elsewhere = "automation" in status && status.kind !== "left" && status.automation !== automation;
+      return elsewhere ? [`#${account.id} out of ${status.automation.name}`] : [];
+    });
     fill(before, {
       "stopped-which": list(stopped.map(({ id, delegate }) => `#${id} is in ${automationName(delegate)}`)),
-      "running-which": list(running.map(({ id, delegate }) => `#${id} out of ${automationName(delegate)}`)),
+      "running-which": list(running),
     });
     show(".from-stopped", stopped.length > 0, before);
     show(".from-running", running.length > 0, before);
+    const changes = prepare(`${prefix}join-changes`);
+    changes.querySelector(".automaxi-fees")?.replaceWith(clone("automaxi-fee-facts"));
+    groupAllHex(changes);
     const pages = [
       { title: "Before you join", body: before },
-      { title: "What changes", body: prepare("join-changes") },
+      { title: "What changes", body: changes },
       { title: "What your wallet will ask" },
     ];
-    return openReview("Join Carbon Impact", pages, join(accounts), connection, hooks, prepare("join-done"));
+    const steps = join(accounts, automation);
+    return openReview(`Join ${automation.name}`, pages, steps, connection, hooks, prepare(`${prefix}join-done`));
   }
   if (action === "leave") {
-    const title = "Leave Carbon Impact";
-    return openReview(title, [{ title, body: prepare("leave-effects") }], leave(accounts), connection, hooks);
+    const from = present().filter((automation) => accounts.some((account) => canLeave(account, automation)));
+    const steps = accounts.flatMap((account) =>
+      from.flatMap((automation) => (canLeave(account, automation) ? leave([account], automation) : [])),
+    );
+    const names = list(from.map(({ name }) => name));
+    const effects = prepare("leave-effects");
+    fill(effects, { automations: names });
+    const title = `Leave ${names}`;
+    return openReview(title, [{ title, body: effects }], steps, connection, hooks);
   }
   const steps = leaveOther(accounts);
   const names = list([...new Set(steps.flatMap(({ automation }) => automation ?? []))]);
@@ -475,7 +528,7 @@ document.querySelector("#error .again")!.addEventListener("click", () => locatio
 document.getElementById("accounts")!.addEventListener("change", updateButtons);
 for (const section of groups) {
   for (const button of buttons(section)) {
-    button.addEventListener("click", () => reviewPicked(section, actionOf(button)));
+    button.addEventListener("click", () => reviewPicked(section, button));
   }
 }
 document.querySelector("#wrong-chain .switch")!.addEventListener("click", () => {

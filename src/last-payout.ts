@@ -1,13 +1,15 @@
 import type { Address, Hex } from "viem";
 import { blockTime, now, readLater, required, rpc, same } from "./chain.ts";
-import { CONDUIT, KVCM } from "./config.ts";
+import { lastClaimBlocks, readClaimsAt, totals, walkClaims, WALK_LIMIT, type Walk } from "./claims.ts";
+import { AUTOMAXI_FEE_BPS, CARBON_IMPACT, KEEPER, KVCM, type Automation } from "./config.ts";
 import { clone, fill, fillAddress, fillTime, show, showHex, txUrl } from "./dom.ts";
 import { tokensOf, type Earnings } from "./earnings.ts";
-import { WEEK, amount, bps, list, listWith, usd, utc, weekStart } from "./format.ts";
+import { WEEK, amount, bps, list, listWith, short, usd, utc, weekStart } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { lastEarnings } from "./last-epoch.ts";
 import { pricesAt, type Token } from "./prices.ts";
 import {
+  BLOCK_TIME,
   SETTLED,
   blockTimes,
   dollars,
@@ -21,8 +23,8 @@ import {
   type Standing,
 } from "./receipts.ts";
 
-// The section "Payouts": for each of the owner's accounts in Carbon Impact, up to when it has been paid and what waits
-// to be claimed, then the receipt of its last payout.
+// The section "Payouts": for each of the owner's accounts in the page's automations, up to when it has been paid and
+// what waits to be claimed, then the receipt of its last payout.
 
 const section = document.getElementById("receipts")!;
 const STATES = ["reading", "failed", "found"] as const;
@@ -30,46 +32,65 @@ const STATES = ["reading", "failed", "found"] as const;
 const UNDER_WAY = 12 * 3600;
 
 type Entry = {
+  automation: Automation;
   account: Account;
-  standing: Standing;
-  // Whether it voted with Carbon Impact last epoch, so that the payout after this epoch's flip is due to it.
+  // Unless the automation has no record of last epoch's rewards yet.
+  standing?: Standing;
+  earnings: Earnings;
+  // Whether it voted with the automation last epoch, so that the payout after this epoch's flip is due to it.
   due: boolean;
   late: boolean;
-  // The block and time of its last payout, and Carbon Impact's receipt for it, unless it was claimed elsewhere.
+  // The block and time of its last payout, if any.
   block?: number;
   time?: number;
+  // Carbon Impact's receipt, unless it was claimed elsewhere; AutoMaxi's claims in the epoch of its last one.
   payout?: Payout;
+  walk?: Walk;
 };
-type Found = { epochStart: number; earnings: Earnings; entries: Entry[] };
+type Found = { epochStart: number; entries: Entry[] };
+// A receipt drawn, which is drawn again once prices are read.
+type Drawn = {
+  node: HTMLElement;
+  priced: boolean;
+  flip: number;
+  amounts: Amount[];
+  draw(prices?: Map<string, number>): void;
+};
 
-// The accounts on the page, and those whose payouts were read, by owner, epoch and accounts.
+// The accounts on the page, the page's automations on Base, and the accounts whose payouts were read.
 let shown: Holdings | undefined;
+let present: Automation[] = [CARBON_IMPACT];
 let readFor: string | undefined;
 // The owner whose payouts the section shows.
 let showing: string | undefined;
 let checked = 0;
-// Each receipt drawn, by account and block, with whether it shows dollars yet.
-const drawn = new Map<string, { node: HTMLElement; priced: boolean }>();
+// Each receipt drawn, by what it shows.
+const drawn = new Map<string, Drawn>();
 
 const setState = (state: (typeof STATES)[number]): void => {
   for (const name of STATES) show(`.receipts-${name}`, name === state, section);
 };
 
-const inCarbonImpact = ({ delegate, claimer, delegateAtStart }: Account): boolean =>
-  [delegate, claimer, delegateAtStart].some((address) => same(address, CONDUIT));
+// The automation an account is in or joining, or else the one it is leaving.
+const automationOf = ({ delegate, claimer, delegateAtStart }: Account): Automation | undefined =>
+  present.find(({ address }) => same(delegate, address) || same(claimer, address)) ??
+  present.find(({ address }) => same(delegateAtStart, address));
 
 const keyOf = (holdings: Holdings): string =>
   [
     holdings.owner.toLowerCase(),
     holdings.epochStart,
-    ...holdings.accounts.filter(inCarbonImpact).map(({ id }) => id),
+    ...holdings.accounts.flatMap((account) => {
+      const automation = automationOf(account);
+      return automation ? [`${account.id}:${automation.kind}`] : [];
+    }),
   ].join(" ");
 
 const tokenOf = (tokens: Map<string, Token>, address: string) => tokens.get(address.toLowerCase());
 
 // Each token by name, or by address and in its smallest units if its decimals are unknown.
-function showAmounts(element: Element, found: Amount[], tokens: Map<string, Token>, sign = ""): void {
-  if (!found.length) return void element.replaceChildren("0 kVCM");
+function showAmounts(element: Element, found: Amount[], tokens: Map<string, Token>, sign = "", none = "0 kVCM"): void {
+  if (!found.length) return void element.replaceChildren(none);
   const items = found.map(({ token, amount: value }) => {
     const known = tokenOf(tokens, token);
     if (known) return `${amount(value, known.decimals)} ${known.symbol}`;
@@ -129,75 +150,171 @@ function fillReceipt(
   item.querySelector<HTMLAnchorElement>(".receipt-tx")!.href = txUrl(payout.tx);
 }
 
-function standingItem({ account, standing, late, payout, time }: Entry, found: Found, receipt?: HTMLElement) {
+// AutoMaxi's receipt: what its claims in the epoch of the last one received, its fee, and what reached the owner, in
+// the tokens earned. Tokens without a price show as amounts only.
+function fillClaims(
+  item: HTMLElement,
+  id: bigint,
+  owner: Address,
+  { claims, stopped }: Walk,
+  times: Map<number, number>,
+  tokens: Map<string, Token>,
+  prices?: Map<string, number>,
+): void {
+  const { received, fees, paid } = totals(claims);
+  const flip = weekStart(times.get(claims[0]!.block)!);
+  fill(item, {
+    "receipt-id": `#${id}`,
+    "receipt-fee-share": bps(AUTOMAXI_FEE_BPS),
+    "receipt-claimed-usd": worth(received, tokens, prices),
+    "receipt-fee-usd": worth(fees, tokens, prices),
+    "receipt-paid-usd": worth(paid, tokens, prices),
+    "receipt-limit": String(WALK_LIMIT),
+  });
+  showAmounts(item.querySelector(".receipt-claimed")!, received, tokens, "", "Nothing");
+  showAmounts(item.querySelector(".receipt-fee")!, fees, tokens, fees.length ? "−" : "", "Nothing");
+  showAmounts(item.querySelector(".receipt-paid")!, paid, tokens, "", "Nothing");
+  fillTime(item, "receipt-from", flip - WEEK);
+  fillTime(item, "receipt-to", flip);
+  show(".receipt-stopped", stopped, item);
+  item.querySelector(".receipt-claims")!.replaceChildren(
+    ...claims.map(({ block, caller, tx }) => {
+      const line = clone("claim-line");
+      fillTime(line, "claim-time", times.get(block)!, utc);
+      const by = same(caller, KEEPER) ? "by the keeper" : same(caller, owner) ? "by you" : `by ${short(caller)}`;
+      fill(line, { "claim-by": by });
+      line.querySelector<HTMLAnchorElement>(".claim-tx")!.href = txUrl(tx);
+      return line;
+    }),
+  );
+}
+
+function standingItem(entry: Entry, epochStart: number, receipt?: HTMLElement) {
+  const { automation, account, standing, earnings, late, payout, walk, time } = entry;
   const item = clone("standing");
-  const { earnings, epochStart } = found;
-  const { through, waiting } = standing;
+  const through = standing?.through ?? 0;
   const tokens = new Map(earnings.rewards.map(({ token }) => [token.address.toLowerCase(), token]));
-  const value = dollars(waiting, tokens, earnings.prices);
+  const value = standing ? dollars(standing.waiting, tokens, earnings.prices) : 0;
   fill(item, {
     "standing-name": account.name || "Account",
     "standing-id": `#${account.id}`,
+    "standing-automation": automation.name,
     "standing-waiting": value > 0 ? `${usd(value)} waits to be claimed` : "Nothing waits to be claimed",
   });
   if (through) fillTime(item, "standing-through", through);
   fillTime(item, "late-from", epochStart - 2 * WEEK);
   fillTime(item, "late-to", epochStart - WEEK);
-  show(".standing-paid", !late && through > 0, item);
-  show(".standing-never", !late && !through, item);
-  show(".standing-late", late, item);
+  show(".standing-paid", !!standing && !late && through > 0, item);
+  show(".standing-never", !!standing && !late && !through, item);
+  show(".standing-late", !!standing && late, item);
+  show(".standing-waits", !!standing, item);
   show(".late-through", through > 0, item);
   show(".late-never", !through, item);
-  const outside = time !== undefined && !payout;
+  const outside = automation === CARBON_IMPACT && time !== undefined && !payout;
   if (outside) fillTime(item, "outside-day", time);
   show(".standing-outside", outside, item);
+  show(".standing-unclaimed", automation !== CARBON_IMPACT && !walk?.claims.length, item);
   if (receipt) item.querySelector(".standing")!.append(receipt);
   return item;
 }
 
 // The accounts paid since the flip, and those still due, while the first of them was paid less than half a day ago.
 function underWay({ entries, epochStart }: Found): { paid: Entry[]; left: Entry[]; first: number } | undefined {
-  const paid = entries.filter(({ due, standing, time }) => due && standing.through >= epochStart && time !== undefined);
-  const left = entries.filter(({ due, standing }) => due && standing.through < epochStart);
+  const since = ({ time }: Entry) => time !== undefined && time >= epochStart;
+  const paid = entries.filter((entry) => entry.due && since(entry));
+  const left = entries.filter((entry) => entry.due && !since(entry));
   const first = Math.min(...paid.map(({ time }) => time!));
   return paid.length && left.length && now() - first < UNDER_WAY ? { paid, left, first } : undefined;
 }
 
-// About 25 reads to find each block of payouts, then one read of logs per block.
-async function readPayouts(holdings: Holdings, members: Account[]): Promise<Found> {
-  const earnings = await lastEarnings();
-  const pairs = earnings.rewards.map(({ contract, token }) => ({ contract, token: token.address }));
+const pairsOf = (earnings: Earnings) =>
+  earnings.rewards.map(({ contract, token }) => ({ contract, token: token.address }));
+
+// Carbon Impact: about 25 reads to find each block of payouts, then one read of logs per block.
+async function carbonImpactPayouts(ids: bigint[], earnings: Earnings, top: number, time: number) {
+  const pairs = pairsOf(earnings);
   if (!pairs.length) throw new Error("Carbon Impact's votes earned nothing last epoch: no reward contract to read.");
-  const { epochStart } = holdings;
-  const ids = members.map(({ id }) => id);
-  const top = Number(await rpc<Hex>("eth_blockNumber", [], { later: true })) - SETTLED;
-  const [[time, ...delegates], standings] = await Promise.all([
-    readLater(
-      [
-        blockTime,
-        ...ids.flatMap((id) => [epochStart - WEEK, epochStart - 2 * WEEK].map((t) => escrow("delegates", id, t))),
-      ],
-      top,
-    ),
-    readStandings(ids, pairs, top),
-  ]);
-  const blocks = await payoutBlocks(standings, top, Number(required([time])[0]));
+  const standings = await readStandings(ids, pairs, top);
+  const blocks = await payoutBlocks(standings, top, time);
   const [paid, times] = await Promise.all([payoutsIn([...blocks.values()]), blockTimes([...blocks.values()])]);
-  const entries = members.map((account, i): Entry => {
-    const standing = standings[i]!;
-    const [last, before] = delegates.slice(2 * i, 2 * i + 2) as (Address | undefined)[];
-    const block = blocks.get(account.id);
-    const payout = paid.filter(({ id, block: at }) => id === account.id && at === block).at(-1);
+  return ids.map((id, i) => {
+    const block = blocks.get(id);
+    const payout = paid.filter(({ id: paidId, block: at }) => paidId === id && at === block).at(-1);
     return {
-      account,
-      standing,
-      due: same(String(last), CONDUIT),
-      late: isLate(standing.through, same(String(before), CONDUIT), epochStart),
+      standing: standings[i]!,
       ...(block !== undefined && { block, time: times.get(block)! }),
       ...(payout && { payout }),
     };
   });
-  return { epochStart, earnings, entries };
+}
+
+// AutoMaxi: one read of each account's last claim block, then its claims back to the start of that claim's epoch, one
+// read of logs per block.
+async function autoMaxiPayouts(ids: bigint[], earnings: Earnings, top: number) {
+  const pairs = pairsOf(earnings);
+  const [standings, last] = await Promise.all([
+    pairs.length ? readStandings(ids, pairs, top) : undefined,
+    lastClaimBlocks(ids, top),
+  ]);
+  const lastTimes = await blockTimes([...last.values()].filter((block) => block > 0));
+  const starts = new Map(
+    ids.map((id) => {
+      const from = last.get(id)!;
+      const time = lastTimes.get(from) ?? 0;
+      // The first block of the epoch of the last claim.
+      return [id, { from, since: from && from - Math.floor((time - weekStart(time)) / BLOCK_TIME) }];
+    }),
+  );
+  const walks = await walkClaims(starts, readClaimsAt);
+  return ids.map((id, i) => {
+    const block = last.get(id)!;
+    return {
+      ...(standings && { standing: standings[i]! }),
+      ...(block > 0 && { block, time: lastTimes.get(block)! }),
+      walk: walks.get(id)!,
+    };
+  });
+}
+
+async function readPayouts(holdings: Holdings, members: Account[]): Promise<Found> {
+  const { epochStart } = holdings;
+  const ids = members.map(({ id }) => id);
+  const automations = [...new Set(members.map((account) => automationOf(account)!))];
+  const top = Number(await rpc<Hex>("eth_blockNumber", [], { later: true })) - SETTLED;
+  const [[time, ...delegates], earned] = await Promise.all([
+    readLater(
+      [
+        blockTime,
+        ...ids.flatMap((id) => [epochStart - WEEK, epochStart - 2 * WEEK].map((at) => escrow("delegates", id, at))),
+      ],
+      top,
+    ),
+    Promise.all(automations.map(lastEarnings)),
+  ]);
+  const read = await Promise.all(
+    automations.map(async (automation, i) => {
+      const these = members.filter((account) => automationOf(account) === automation).map(({ id }) => id);
+      const parts = await (automation === CARBON_IMPACT
+        ? carbonImpactPayouts(these, earned[i]!, top, Number(required([time])[0]))
+        : autoMaxiPayouts(these, earned[i]!, top));
+      return new Map<bigint, Partial<Entry>>(these.map((id, j) => [id, parts[j]!]));
+    }),
+  );
+  const entries = members.map((account, i): Entry => {
+    const automation = automationOf(account)!;
+    const k = automations.indexOf(automation);
+    const part = read[k]!.get(account.id)!;
+    const [last, before] = delegates.slice(2 * i, 2 * i + 2) as (Address | undefined)[];
+    return {
+      ...part,
+      automation,
+      account,
+      earnings: earned[k]!,
+      due: same(String(last), automation.address),
+      late: !!part.standing && isLate(part.standing.through, same(String(before), automation.address), epochStart),
+    };
+  });
+  return { epochStart, entries };
 }
 
 export function forgetPayout(): void {
@@ -205,9 +322,11 @@ export function forgetPayout(): void {
   section.hidden = true;
 }
 
-// Shows the payouts of an owner with an account that is in Carbon Impact, or was when this epoch started.
-export function showPayout(holdings: Holdings): void {
+// Shows the payouts of an owner with an account that is in one of the page's automations, or was when this epoch
+// started. `automations` are those on Base.
+export function showPayout(holdings: Holdings, automations: Automation[]): void {
   shown = holdings;
+  present = automations;
   void load(true);
 }
 
@@ -217,7 +336,7 @@ async function load(quietly = false): Promise<void> {
   if (!holdings) return;
   const key = keyOf(holdings);
   if (quietly && readFor === key) return;
-  const members = holdings.accounts.filter(inCarbonImpact);
+  const members = holdings.accounts.filter((account) => automationOf(account));
   section.hidden = !members.length;
   if (!members.length) return;
   readFor = key;
@@ -236,36 +355,62 @@ async function load(quietly = false): Promise<void> {
   let found: Found;
   let tokens: Map<string, Token>;
   let names: Map<number, string>;
+  let times: Map<number, number>;
   try {
     found = await readPayouts(holdings, members);
     const payouts = found.entries.flatMap(({ payout }) => (payout ? [payout] : []));
-    [tokens, names] = await Promise.all([
+    const claims = found.entries.flatMap(({ walk }) => walk?.claims ?? []);
+    [tokens, names, times] = await Promise.all([
       tokensOf(
-        payouts.flatMap(({ earned, paid, fees }) => [...earned, ...paid, ...fees].map(({ token }) => token)),
+        [
+          ...payouts.flatMap(({ earned, paid, fees }) => [...earned, ...paid, ...fees]),
+          ...claims.flatMap(({ received }) => received),
+        ].map(({ token }) => token),
         readLater,
       ),
       namesAt(payouts.map(({ block }) => block)),
+      blockTimes(claims.map(({ block }) => block)),
     ]);
   } catch (error) {
     return fail(error);
   }
   if (!current()) return;
-  const receipts = new Map<Entry, HTMLElement>();
+  const receipts = new Map<Entry, Drawn>();
   for (const entry of found.entries) {
-    const { payout, time } = entry;
-    if (!payout || time === undefined) continue;
-    const key = `${payout.id} ${payout.block}`;
-    let receipt = drawn.get(key);
-    if (!receipt) {
-      receipt = { node: clone("receipt").firstElementChild as HTMLElement, priced: false };
-      fillReceipt(receipt.node, payout, time, names.get(payout.block)!, tokens);
+    const { payout, time, walk, account, automation } = entry;
+    let key: string;
+    let make: () => Drawn;
+    if (payout && time !== undefined) {
+      key = `${payout.id} ${payout.block}`;
+      make = () => {
+        const node = clone("receipt").firstElementChild as HTMLElement;
+        const draw = (prices?: Map<string, number>) =>
+          fillReceipt(node, payout, time, names.get(payout.block)!, tokens, prices);
+        return { node, priced: false, flip: weekStart(time), amounts: [...payout.earned, ...payout.paid], draw };
+      };
+    } else if (walk?.claims.length) {
+      key = `${automation.kind} ${account.id} ${walk.claims.map(({ tx }) => tx).join(" ")}`;
+      make = () => {
+        const node = clone("claims-receipt").firstElementChild as HTMLElement;
+        const draw = (prices?: Map<string, number>) =>
+          fillClaims(node, account.id, holdings.owner, walk, times, tokens, prices);
+        const flip = weekStart(times.get(walk.claims[0]!.block)!);
+        return { node, priced: false, flip, amounts: totals(walk.claims).received, draw };
+      };
+    } else continue;
+    if (!drawn.has(key)) {
+      const receipt = make();
+      receipt.draw();
       drawn.set(key, receipt);
     }
-    receipts.set(entry, receipt.node);
+    receipts.set(entry, drawn.get(key)!);
   }
   section
     .querySelector(".standings")!
-    .replaceChildren(...found.entries.map((entry) => standingItem(entry, found, receipts.get(entry))));
+    .replaceChildren(...found.entries.map((entry) => standingItem(entry, found.epochStart, receipts.get(entry)?.node)));
+  fill(section, {
+    "receipts-automations": list([...new Set(found.entries.map(({ automation }) => automation.name))]),
+  });
   const under = underWay(found);
   if (under) {
     fill(section, {
@@ -279,21 +424,20 @@ async function load(quietly = false): Promise<void> {
   setState("found");
   // Dollars need many more reads, so they come after, at the prices of the flip before each payout. Without them, the
   // receipts show tokens only.
-  const unpriced = found.entries.filter(({ payout }) => payout && !drawn.get(`${payout.id} ${payout.block}`)!.priced);
-  for (const flip of new Set(unpriced.map(({ time }) => weekStart(time!)))) {
-    const these = unpriced.filter(({ time }) => weekStart(time!) === flip);
+  const unpriced = [...new Set(receipts.values())].filter(({ priced }) => !priced);
+  for (const flip of new Set(unpriced.map((receipt) => receipt.flip))) {
+    const these = unpriced.filter((receipt) => receipt.flip === flip);
     // A pool must be deep enough for the largest amount of the token that any receipt shows in dollars.
     const amounts = new Map<string, bigint>();
-    for (const { token, amount: value } of these.flatMap(({ payout }) => [...payout!.earned, ...payout!.paid]))
+    for (const { token, amount: value } of these.flatMap((receipt) => receipt.amounts))
       if (value > (amounts.get(token.toLowerCase()) ?? 0n)) amounts.set(token.toLowerCase(), value);
     const prices = await pricesAt([...tokens.values()], amounts, flip, now(), readLater).catch((error) => {
       console.error(error);
       return undefined;
     });
     if (!prices) continue;
-    for (const { payout, time } of these) {
-      const receipt = drawn.get(`${payout!.id} ${payout!.block}`)!;
-      fillReceipt(receipt.node, payout!, time!, names.get(payout!.block)!, tokens, prices);
+    for (const receipt of these) {
+      receipt.draw(prices);
       receipt.priced = true;
     }
   }
