@@ -107,6 +107,8 @@ wallet's browser, so every export also offers a copy.
 
 - **Done:** the stopped automations, and a way out of them; what votes earned against all of Hydrex; the last payout as
   receipts; Safe transactions with their calldata; the brand.
+- **Now:** Carbon Impact's receipts from Hydrex's reward contracts, and the groundwork for AutoMaxi, a second Hydrex
+  automation. The plan is in [automaxi-and-receipts.md](automaxi-and-receipts.md).
 - **Next, the rescue:** positions first in the App; Choose for one or many accounts, with the gas cost; one prompt with
   batching; fee facts for Carbon Impact; change watch; ERC-7730 metadata for `setConduitApproval`.
 - **Then, a second Hydrex automation:** the menu as Home; one page template per automation; Choose comparing two
