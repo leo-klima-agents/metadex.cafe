@@ -65,6 +65,34 @@ function worth(found: Amount[], tokens: Map<string, Token>, prices: Map<string, 
 
 const kvcm = (found: Amount[]): bigint => found.find(({ token }) => same(token, KVCM))?.amount ?? 0n;
 
+// The amounts of several receipts, added up by token.
+function total(found: Amount[][]): Amount[] {
+  const sums = new Map<string, Amount>();
+  for (const { token, amount: value } of found.flat()) {
+    const sum = sums.get(token.toLowerCase());
+    sums.set(token.toLowerCase(), { token, amount: (sum?.amount ?? 0n) + value });
+  }
+  return [...sums.values()];
+}
+
+// The positions' summary: what the last payout retired, took and paid, for all the owner's receipts.
+function summarize(mine: Payout[], time: number, tokens: Map<string, Token>, prices?: Map<string, number>): void {
+  const summary = document.getElementById("summary")!;
+  const tonnes = mine.reduce((sum, payout) => sum + payout.tonnes, 0n);
+  const paid = total(mine.map((payout) => payout.paid));
+  fill(summary, {
+    "paid-retired": `${amount(
+      mine.reduce((sum, payout) => sum + payout.retiredKvcm, 0n),
+      18,
+    )} kVCM, ${amount(tonnes, 18)} t of carbon credits`,
+    "paid-yours-usd": worth(paid, tokens, prices),
+  });
+  showAmounts(summary.querySelector(".paid-fee")!, total(mine.map((payout) => payout.fees)), tokens);
+  showAmounts(summary.querySelector(".paid-yours")!, paid, tokens);
+  fillTime(summary, "paid-day", time);
+  show(".summary-paid", true, summary);
+}
+
 // The receipt's fields have class names of their own, because fill(document, …) sets Carbon Impact's figures, such as
 // .tonnes, all over the page.
 function receipt(payout: Payout, time: number, name: string, tokens: Map<string, Token>, prices?: Map<string, number>) {
@@ -102,6 +130,7 @@ function receipt(payout: Payout, time: number, name: string, tokens: Map<string,
 export function forgetPayout(): void {
   shown = readFor = showing = undefined;
   section.hidden = true;
+  show(".summary-paid", false);
 }
 
 // Shows the last payout to an owner with an account that is in Carbon Impact, or was when this epoch started.
@@ -119,7 +148,7 @@ async function load(quietly = false): Promise<void> {
     [delegate, claimer, delegateAtStart].some((address) => same(address, CONDUIT)),
   );
   section.hidden = !member;
-  if (!member) return;
+  if (!member) return show(".summary-paid", false);
   readFor = holdings;
   const owner = holdings.owner.toLowerCase();
   const kept = quietly && showing?.owner === owner;
@@ -135,6 +164,7 @@ async function load(quietly = false): Promise<void> {
   const settle = (state: "none" | "other" | "underway") => {
     showing = { owner, drawn: false };
     setState(state);
+    show(".summary-paid", false);
   };
   if (!search) checked = Date.now();
   const searching = (search ??= lastRun());
@@ -181,10 +211,13 @@ async function load(quietly = false): Promise<void> {
   for (const { token, amount: value } of mine.flatMap(({ earned, paid }) => [...earned, ...paid]))
     if (value > (amounts.get(token.toLowerCase()) ?? 0n)) amounts.set(token.toLowerCase(), value);
   const shelf = section.querySelector(".receipt-list")!;
-  const draw = (prices?: Map<string, number>) =>
+  const paidAt = Math.max(...mine.map(({ block }) => times.get(block)!));
+  const draw = (prices?: Map<string, number>) => {
     shelf.replaceChildren(
       ...mine.map((payout) => receipt(payout, times.get(payout.block)!, names.get(payout.block)!, tokens, prices)),
     );
+    summarize(mine, paidAt, tokens, prices);
+  };
   draw();
   fill(section, { "receipt-which": list(mine.map(({ id }) => `#${id}`)) });
   fillTime(section, "run-day", run.time);

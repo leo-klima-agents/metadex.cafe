@@ -4,7 +4,16 @@ import { CHAIN_ID } from "./config.ts";
 import { clone, fill, show, showHex, txLink } from "./dom.ts";
 import { count } from "./format.ts";
 import type { Step } from "./hydrex.ts";
-import { declined, sendTransaction, switchToBase, type Connection, type Wallet } from "./wallet.ts";
+import {
+  cannotBatch,
+  declined,
+  sendCalls,
+  sendTransaction,
+  switchToBase,
+  waitForCalls,
+  type Connection,
+  type Wallet,
+} from "./wallet.ts";
 
 export type Hooks = { closed(submitted: boolean): void; switched(): void };
 // The last page also shows the calls and the Confirm button.
@@ -19,6 +28,8 @@ type Review = {
   steps: Step[];
   connection: Connection;
   hooks: Hooks;
+  // Whether the wallet is asked for all the calls in one request.
+  batched: boolean;
   done: Hex[];
   sending: boolean;
   submitted: boolean;
@@ -43,11 +54,13 @@ let current: Review | undefined;
 
 // A call as the wallet will show it. In a Safe, the Safe transaction's fields and calldata follow, for co-signers to
 // compare with Safe{Wallet}.
-function slip(step: Step, i: number, n: number, safe: boolean): DocumentFragment {
+function slip(step: Step, i: number, n: number, safe: boolean, batched: boolean): DocumentFragment {
   const item = clone("step");
-  const which = n > 1 ? ` · ${safe ? "call " : ""}${i + 1} of ${n}` : "";
+  const which = n > 1 ? ` · ${safe || batched ? "call " : ""}${i + 1} of ${n}` : "";
   fill(item, {
-    count: safe ? `In a Safe${which || " · one transaction to sign"}` : `Your wallet will ask${which}`,
+    count: safe
+      ? `In a Safe${which || " · one transaction to sign"}`
+      : `Your wallet will ask${batched ? " once" : ""}${which}`,
     says: step.says,
     on: step.on,
     "conduit-name": step.automation ? `The ${step.automation} automation` : "Carbon Impact",
@@ -62,6 +75,25 @@ function slip(step: Step, i: number, n: number, safe: boolean): DocumentFragment
   show(".raw, .slip-note", safe, item);
   show(".operation", safe && n === 1, item);
   return item;
+}
+
+const batches = ({ connection, steps }: Pick<Review, "connection" | "steps">): boolean =>
+  !connection.wallet.propose && steps.length > 1 && connection.batches === true;
+
+// The calls, and how the wallet will be asked for them.
+function showCalls({ steps, connection, batched }: Review): void {
+  const n = steps.length;
+  const safe = !!connection.wallet.propose;
+  stepList.replaceChildren(...steps.map((step, i) => slip(step, i, n, safe, batched)));
+  how.textContent = safe
+    ? n === 1
+      ? "One Safe transaction. Safe{Wallet} sets its nonce; its other fields are these:"
+      : `One Safe transaction, with ${n} calls. Safe{Wallet} sends them through its MultiSend contract, with operation 1, and sets the nonce. The calls:`
+    : batched
+      ? `One request for ${n} calls: your wallet asks once, and may send them in one transaction or several. The calls:`
+      : n === 1
+        ? "One transaction:"
+        : `${count(n, "transaction", "transactions")}, one after the other:`;
 }
 
 export function openReview(
@@ -80,12 +112,12 @@ export function openReview(
     steps,
     connection,
     hooks,
+    batched: batches({ connection, steps }),
     done: [],
     sending: false,
     submitted: false,
     finished: false,
   };
-  const n = steps.length;
   pageList.replaceChildren(
     ...pages.map(({ body }) => {
       const page = document.createElement("div");
@@ -96,15 +128,7 @@ export function openReview(
   callsTitle.hidden = !pages.at(-1)?.body;
   doneBox.replaceChildren();
   doneBox.hidden = true;
-  const safe = !!connection.wallet.propose;
-  stepList.replaceChildren(...steps.map((step, i) => slip(step, i, n, safe)));
-  how.textContent = safe
-    ? n === 1
-      ? "One Safe transaction. Safe{Wallet} sets its nonce; its other fields are these:"
-      : `One Safe transaction, with ${n} calls. Safe{Wallet} sends them through its MultiSend contract, with operation 1, and sets the nonce. The calls:`
-    : n === 1
-      ? "One transaction:"
-      : `${count(n, "transaction", "transactions")}, one after the other:`;
+  showCalls(current);
   progress.replaceChildren();
   showPage(0);
   dialog.showModal();
@@ -125,7 +149,12 @@ function showPage(page: number): void {
 
 export function refreshReview(): void {
   if (!current) return;
-  const { connection, steps, done, sending, submitted, finished, page, titles } = current;
+  // The wallet may say it can batch only after the review opened, or the visitor may have switched wallets.
+  if (!current.sending && !current.submitted && current.batched !== batches(current)) {
+    current.batched = !current.batched;
+    showCalls(current);
+  }
+  const { connection, steps, done, sending, submitted, finished, page, titles, batched } = current;
   const last = page === titles.length - 1;
   const safe = !!connection.wallet.propose;
   const wrongChain = connection.chainId !== CHAIN_ID;
@@ -133,7 +162,7 @@ export function refreshReview(): void {
     ? "Propose in Safe{Wallet}"
     : wrongChain
       ? "Switch to Base"
-      : steps.length === 1
+      : steps.length === 1 || batched
         ? "Confirm in your wallet"
         : `Confirm transaction ${done.length + 1} of ${steps.length}`;
   confirm.disabled = sending || (safe && wrongChain);
@@ -175,6 +204,44 @@ async function proposeAll(state: Review, propose: NonNullable<Wallet["propose"]>
   doneBox.hidden = false;
 }
 
+// All the calls in one request. A wallet that turns out unable to batch them sends nothing, so the review falls back
+// to one transaction at a time.
+async function sendBatch(state: Review): Promise<void> {
+  const { connection, steps } = state;
+  const sending = sendCalls(connection, steps);
+  say(state, "Waiting for your wallet…");
+  let id: string;
+  try {
+    id = await sending;
+  } catch (error) {
+    if (!cannotBatch(error)) throw error;
+    connection.batches = state.batched = false;
+    if (state === current) showCalls(state);
+    return say(state, "Your wallet cannot send these calls in one request. Confirm them one at a time.");
+  }
+  state.submitted = true;
+  refreshReview();
+  say(state, "Sent. Waiting for Base to include the calls…");
+  const found = await waitForCalls(connection, id);
+  state.finished = true;
+  if (!found) return say(state, "Sent. Your wallet shows when Base includes them; reload this page then.");
+  const hashes = [...new Set(found.receipts.map(({ transactionHash }) => transactionHash))];
+  // Nothing reached Base, so the calls can be asked for again.
+  if (found.status === 400) {
+    state.submitted = state.finished = false;
+    return say(state, "Your wallet did not send the calls.");
+  }
+  if (found.status !== 200) {
+    return say(state, found.status === 600 ? "Some of the calls failed on Base." : "The calls failed on Base.", hashes);
+  }
+  state.done = hashes;
+  say(state, "Done.", hashes);
+  if (state === current && state.outcome) {
+    doneBox.replaceChildren(state.outcome);
+    doneBox.hidden = false;
+  }
+}
+
 async function sendNext(state: Review): Promise<void> {
   const { steps, done } = state;
   const sending = sendTransaction(state.connection, steps[done.length]!);
@@ -213,7 +280,9 @@ confirm.addEventListener("click", () => {
       ? switchToBase(state.connection).then(state.hooks.switched)
       : propose
         ? proposeAll(state, propose)
-        : sendNext(state);
+        : state.batched
+          ? sendBatch(state)
+          : sendNext(state);
   state.sending = true;
   refreshReview();
   sending

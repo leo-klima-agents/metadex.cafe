@@ -1,8 +1,19 @@
-import { getAddress } from "viem";
+import { getAddress, type Address } from "viem";
 import "./views.ts";
 import { now, same, sawBlock } from "./chain.ts";
+import {
+  onChanges,
+  readPayoutChanges,
+  settingsChanged,
+  showPayoutChanges,
+  watchChanges,
+  whatChanged,
+} from "./change-watch.ts";
+import type { Change, PayoutChange } from "./changes.ts";
+import { closeChoose, openChoose, refreshChoose } from "./choose.ts";
 import { CHAIN_ID } from "./config.ts";
 import { clone, fill, fillAddress, fillPlural, fillTime, groupAllHex, show } from "./dom.ts";
+import { feeFacts, showFeeFacts } from "./fee-facts.ts";
 import {
   WEEK,
   bps,
@@ -12,6 +23,7 @@ import {
   list,
   share,
   short,
+  toEarningPower,
   units,
   until,
   usd,
@@ -22,15 +34,14 @@ import {
 import {
   LockType,
   automationName,
+  callsFor,
   canJoin,
   canLeave,
   canLeaveOther,
   failedChecks,
   groupOf,
   hasStopped,
-  join,
-  leave,
-  leaveOther,
+  needsOf,
   readAccounts,
   readAutomations,
   readCarbonImpact,
@@ -38,15 +49,18 @@ import {
   type Account,
   type Automation,
   type CarbonImpact,
+  type Choice,
   type Group,
   type Holdings,
+  type Need,
   type Status,
 } from "./hydrex.ts";
-import { earnedByAccount, earningsDue, loadEarnings, loadShares } from "./last-epoch.ts";
+import { earnedByAccount, earningsDue, lastPerThousand, loadEarnings, loadShares } from "./last-epoch.ts";
 import { checkPayout, forgetPayout, showPayout } from "./last-payout.ts";
 import { closeReview, openReview, refreshReview, type Hooks } from "./review.ts";
 import {
   NoWallet,
+  canBatch,
   connect,
   declined,
   findWallets,
@@ -57,14 +71,21 @@ import {
   type Wallet,
 } from "./wallet.ts";
 
-type Action = "join" | "leave" | "leave-other";
+// The order of the positions: what needs the owner first.
+const GROUPS: Group[] = ["stopped", "attention", "in", "joining", "leaving", "open", "closed"];
+// Statuses whose accounts Carbon Impact looks after, or still holds the approvals of.
+const LOOKED_AFTER: Status["kind"][] = ["in", "joined", "partly", "left"];
 
-const groups = [...document.querySelectorAll<HTMLElement>("#accounts .group")];
+const positions = document.getElementById("accounts")!;
+const bar = positions.querySelector<HTMLElement>(".bar")!;
+const choosePicked = bar.querySelector<HTMLButtonElement>("button")!;
 const listening = new WeakSet<Provider>();
-const actionable = new WeakMap<HTMLElement, Account[]>();
 
 let connection: Connection | undefined;
 let shown: Holdings | undefined;
+// The accounts shown that the owner can change from here.
+let able: Account[] = [];
+let payoutChanges: { owner: Address; found: PayoutChange[] } | undefined;
 let carbonImpact: CarbonImpact | undefined;
 let carbonImpactRead: Promise<void> | undefined;
 let trusted = false;
@@ -94,17 +115,25 @@ function showCarbonImpact(found: CarbonImpact): void {
     retired: bps(retireBps),
     "retired-share": share(retireBps),
     "paid-share": share(10_000n - retireBps),
+    fee: bps(found.feeBps),
+    "max-fee": bps(found.maxFeeBps),
     power: earningPower(votes),
     entity,
     beneficiary: beneficiary || "No name",
     message,
   });
   fillAddress(document, "beneficiary-address", beneficiaryAddress);
+  show(".admin-moved", !found.admin);
+  show(".keeper-moved", !found.keeper);
   fillTime(document, "week-start", epochStart);
   fillTime(document, "week-end", epochStart + WEEK);
   fillTime(document, "week-end-when", epochStart + WEEK, when);
   if (voted) fillTime(document, "impact-voted", voted, utc);
   fillTime(document, "vote-day", epochStart + WEEK - 1);
+  const facts = document.querySelector("#fee-facts .facts-here")!;
+  if (facts.firstElementChild) showFeeFacts(facts, found);
+  else facts.replaceChildren(feeFacts(found));
+  refreshChoose();
   tick();
 }
 
@@ -138,7 +167,9 @@ function catchUp(): void {
 
 function loadEarningsAndShares(): void {
   loadEarnings().then((changed) => {
-    if (changed) showShares();
+    if (!changed) return;
+    showShares();
+    refreshChoose();
   });
 }
 
@@ -162,18 +193,14 @@ async function showChecks(): Promise<void> {
   for (const item of document.querySelectorAll<HTMLElement>("#checks li")) item.hidden = !failing.includes(item.id);
   show("#checks", failing.length > 0);
   trusted = !failing.length;
+  refreshChoose();
   // A read of the accounts that is under way shows the result when it ends.
   if (!reading) showAccounts(true);
 }
 
-const joinable = (account: Account): boolean => trusted && canJoin(account, now());
-const can: Record<Action, (account: Account) => boolean> = {
-  join: joinable,
-  leave: canLeave,
-  "leave-other": canLeaveOther,
-};
-const buttons = (section: HTMLElement) => [...section.querySelectorAll<HTMLButtonElement>("button[data-action]")];
-const actionOf = (button: HTMLButtonElement) => button.dataset.action as Action;
+// Whether the owner can change anything for the account from here: join, or leave an automation.
+const changeable = (account: Account): boolean =>
+  (trusted && canJoin(account, now())) || canLeave(account) || canLeaveOther(account);
 
 function accountKind({ lockType, end }: Account): string {
   if (lockType === LockType.permanent) return "Protocol Account";
@@ -181,7 +208,13 @@ function accountKind({ lockType, end }: Account): string {
   return end ? `Flex Account, lock ${end > now() ? "ends" : "ended"} ${date(end)}` : "Flex Account";
 }
 
-function accountItem(holdings: Holdings, account: Account, status: Status, pickable: boolean): DocumentFragment {
+function accountItem(
+  holdings: Holdings,
+  account: Account,
+  status: Status,
+  pickable: boolean,
+  change: Change | undefined,
+): DocumentFragment {
   const item = clone("account");
   const name = account.name || "Account";
   fill(item, { name, id: `#${account.id}`, kind: accountKind(account), votes: earningPower(account.votes) });
@@ -195,9 +228,11 @@ function accountItem(holdings: Holdings, account: Account, status: Status, picka
   if ("to" in status) fillAddress(line, "address", status.to);
   item.querySelector(".status")!.replaceWith(line);
   const earned = earnedByAccount(holdings, account.id);
-  if (earned !== undefined) {
-    fill(item, { "earned-usd": usd(earned) });
-    show(".earned", true, item);
+  fill(item, { "earned-usd": earned === undefined ? "—" : usd(earned) });
+  if (change && LOOKED_AFTER.includes(status.kind)) {
+    fill(item, { "changed-what": whatChanged(change) });
+    fillTime(item, "changed-on", change.time);
+    show(".changed", true, item);
   }
   if (pickable) {
     const box = item.querySelector<HTMLInputElement>(".pick")!;
@@ -209,49 +244,50 @@ function accountItem(holdings: Holdings, account: Account, status: Status, picka
   return item;
 }
 
-// Each group lists its accounts. When its buttons can act on more than one, each gets a box to tick, so that one
-// selection is always one action.
-function showAccounts(keepTicked = false): void {
-  const holdings = shown;
-  if (!holdings) return;
-  const { owner, accounts, payout, epochStart } = holdings;
-  const ticked = document.querySelectorAll<HTMLInputElement>("#accounts .pick:checked");
-  const kept = new Set(keepTicked ? [...ticked].map(({ value }) => value) : []);
-  const time = now();
-  const sorted = accounts.map((account) => {
-    const status = statusOf(account, owner, time, epochStart);
-    return { account, status, group: groupOf(account, status) };
-  });
-  for (const section of groups) {
-    const members = sorted.filter((member) => member.group === section.dataset.group);
-    // Some wallets hold many empty accounts, which can do nothing: they go in a fold.
-    const folded = section.dataset.group === "closed" ? members.filter(({ account }) => account.amount === 0n) : [];
-    const actions = buttons(section).map(actionOf);
-    const able = members
-      .map(({ account }) => account)
-      .filter((account) => actions.some((action) => can[action](account)));
-    const items = (listed: typeof members) =>
-      listed.map(({ account, status }) =>
-        accountItem(holdings, account, status, able.length > 1 && able.includes(account)),
-      );
-    section.querySelector(".accounts")!.replaceChildren(...items(members.filter((member) => !folded.includes(member))));
-    const fold = section.querySelector<HTMLDetailsElement>(".empty-accounts");
-    if (fold) {
-      fold.querySelector(".accounts")!.replaceChildren(...items(folded));
-      fill(fold, { "empty-count": count(folded.length, "empty account", "empty accounts") });
-      fold.hidden = !folded.length;
-    }
-    actionable.set(section, able);
-    section.hidden = !members.length;
+const which = (accounts: Account[]): string => list(accounts.map(({ id }) => `#${id}`));
+
+function needItem(need: Need): DocumentFragment {
+  const item = clone(`need-${need.kind}`);
+  fill(item, { which: which(need.accounts) });
+  fillPlural(item, need.accounts.length);
+  if (need.kind === "stopped") fillTime(item, "since", need.since);
+  if (need.kind === "unvoted") {
+    show(".never", !need.voted, item);
+    show(".last", !!need.voted, item);
+    // It may be long ago, so with the year.
+    if (need.voted) fillTime(item, "voted", need.voted, date);
   }
-  for (const box of document.querySelectorAll<HTMLInputElement>("#accounts .pick:not([hidden])")) {
-    box.checked = kept.has(box.value);
+  item.querySelector("button")!.addEventListener("click", () => choose(need.accounts));
+  return item;
+}
+
+// What needs the owner, first: accounts that earn nothing or are half in, a change to Carbon Impact's settings, and
+// a payout address someone else changed.
+function showNeeds(holdings: Holdings, change: Change | undefined, members: boolean): void {
+  const items = needsOf(holdings, now()).map(needItem);
+  if (change && members) {
+    const item = clone("need-changed");
+    fill(item, { "changed-what": whatChanged(change) });
+    fillTime(item, "changed-on", change.time);
+    items.push(item);
   }
-  updateButtons();
+  const payout = payoutChanges?.owner === holdings.owner ? payoutChanges.found[0] : undefined;
+  if (payout?.by && !same(payout.by, holdings.owner)) {
+    const item = clone("need-payout");
+    fillTime(item, "changed-on", payout.time);
+    items.push(item);
+  }
+  document.querySelector("#needs .needs")!.replaceChildren(...items);
+  show("#needs", items.length > 0);
+}
+
+function showSummary(holdings: Holdings, sorted: { account: Account; status: Status; group: Group }[]): void {
+  const { owner, payout } = holdings;
   const full = sorted.filter(({ account }) => account.amount > 0n);
   const inGroups = (...names: Group[]) => full.filter((member) => names.includes(member.group)).length;
   const [members, stopped] = [inGroups("in", "joining"), inGroups("stopped")];
   const power = full.reduce((sum, { account }) => sum + account.votes, 0n);
+  const earned = full.flatMap(({ account }) => earnedByAccount(holdings, account.id) ?? []);
   fill(document, {
     "summary-line": [
       count(full.length, "account", "accounts"),
@@ -259,7 +295,11 @@ function showAccounts(keepTicked = false): void {
       ...(stopped ? [count(stopped, "in an automation that stopped", "in automations that stopped")] : []),
       `${earningPower(power)} Earning Power`,
     ].join(" · "),
+    "mine-earned": usd(earned.reduce((sum, value) => sum + value, 0)),
+    "mine-in": earned.length === 1 ? "account" : count(earned.length, "account", "accounts"),
   });
+  show(".summary-earned", earned.length > 0);
+  show(".summary-next", members > 0);
   const own = same(payout, owner);
   show(".payout-own, #itself", own);
   show(".payout-other", !own);
@@ -268,7 +308,49 @@ function showAccounts(keepTicked = false): void {
   fillAddress(document, "payout", payout);
   show("#summary, #payout", full.length > 0);
   show("#none", !full.length);
-  show("#accounts");
+}
+
+// The positions, what needs the owner first. When the owner can change more than one, each gets a box to tick, and
+// the bar below chooses for the ticked ones.
+function showAccounts(keepTicked = false): void {
+  const holdings = shown;
+  if (!holdings) return;
+  const { owner, accounts, epochStart } = holdings;
+  const ticked = positions.querySelectorAll<HTMLInputElement>(".pick:checked");
+  const kept = new Set(keepTicked ? [...ticked].map(({ value }) => value) : []);
+  const time = now();
+  const sorted = accounts
+    .map((account) => {
+      const status = statusOf(account, owner, time, epochStart);
+      return { account, status, group: groupOf(account, status) };
+    })
+    .sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group));
+  able = sorted.map(({ account }) => account).filter(changeable);
+  const change = settingsChanged()?.[0];
+  const items = (listed: typeof sorted) =>
+    listed.map(({ account, status }) =>
+      accountItem(holdings, account, status, able.length > 1 && able.includes(account), change),
+    );
+  // Some wallets hold many empty accounts, which can do nothing: they go in a fold.
+  const empty = sorted.filter(({ account, group }) => account.amount === 0n && group === "closed");
+  positions.querySelector(".positions")!.replaceChildren(...items(sorted.filter((item) => !empty.includes(item))));
+  const fold = positions.querySelector<HTMLDetailsElement>(".empty-accounts")!;
+  fold.querySelector(".positions")!.replaceChildren(...items(empty));
+  fill(fold, { "empty-count": count(empty.length, "empty account", "empty accounts") });
+  fold.hidden = !empty.length;
+  for (const box of positions.querySelectorAll<HTMLInputElement>(".pick:not([hidden])")) {
+    box.checked = kept.has(box.value);
+  }
+  updateBar();
+  // What changed matters to accounts Carbon Impact looks after, and to where their payouts go.
+  const members = sorted.some(({ status }) => LOOKED_AFTER.includes(status.kind));
+  if (members) {
+    watchChanges();
+    if (payoutChanges?.owner !== owner) loadPayoutChanges(owner);
+  }
+  showNeeds(holdings, change, members);
+  showSummary(holdings, sorted);
+  show("#accounts", sorted.length > 0);
 }
 
 async function loadAccounts(quietly = false): Promise<void> {
@@ -279,7 +361,7 @@ async function loadAccounts(quietly = false): Promise<void> {
     shown = undefined;
     forgetPayout();
     show("#reading");
-    show("#accounts, #summary, #none, #payout", false);
+    show("#accounts, #summary, #needs, #none, #payout", false);
   }
   try {
     const found = await readAccounts(connection.address);
@@ -300,29 +382,40 @@ async function loadAccounts(quietly = false): Promise<void> {
   }
 }
 
-// A group's ticked accounts, or the one account it can act on, which has no box.
-function picked(section: HTMLElement): Account[] {
-  const accounts = actionable.get(section) ?? [];
-  if (accounts.length <= 1) return accounts;
-  const ids = new Set([...section.querySelectorAll<HTMLInputElement>(".pick:checked")].map(({ value }) => value));
-  return accounts.filter(({ id }) => ids.has(String(id)));
+// Where the owner's payouts go, and who changed it, in the last four epochs. The page works without it.
+function loadPayoutChanges(owner: Address): void {
+  payoutChanges = { owner, found: [] };
+  showPayoutChanges(owner, []);
+  readPayoutChanges(owner).then(
+    (found) => {
+      if (payoutChanges?.owner !== owner) return;
+      payoutChanges.found = found;
+      showPayoutChanges(owner, found);
+      if (shown?.owner === owner) showAccounts(true);
+    },
+    // Not read again until another owner connects.
+    console.error,
+  );
 }
 
-function updateButtons(): void {
-  for (const section of groups) {
-    const able = actionable.get(section) ?? [];
-    const accounts = picked(section);
-    for (const button of buttons(section)) {
-      const allowed = can[actionOf(button)];
-      const verb = (button.dataset.verb ??= button.textContent ?? "");
-      const n = accounts.filter(allowed).length;
-      button.hidden = !able.some(allowed);
-      button.disabled = !n;
-      button.textContent = able.length > 1 && n ? `${verb} with ${count(n, "account", "accounts")}` : verb;
-    }
-    show(".buttons", able.length > 0, section);
-    show(".pick-hint", able.length > 1 && !accounts.length, section);
-  }
+// The ticked accounts, or the one account the owner can change, which has no box.
+function picked(): Account[] {
+  if (able.length <= 1) return able;
+  const ids = new Set([...positions.querySelectorAll<HTMLInputElement>(".pick:checked")].map(({ value }) => value));
+  return able.filter(({ id }) => ids.has(String(id)));
+}
+
+function updateBar(): void {
+  const accounts = picked();
+  choosePicked.disabled = !accounts.length;
+  choosePicked.textContent =
+    able.length === 1
+      ? `Choose for ${which(able)}`
+      : accounts.length
+        ? `Choose for ${count(accounts.length, "account", "accounts")}`
+        : "Choose";
+  bar.hidden = !able.length;
+  show(".pick-hint", able.length > 1 && !accounts.length, bar);
 }
 
 const hooks: Hooks = {
@@ -330,28 +423,36 @@ const hooks: Hooks = {
   switched: showConnection,
 };
 
-function reviewPicked(section: HTMLElement, action: Action): void {
+function choose(accounts: Account[]): void {
   if (!connection || !shown) return;
   // In a new epoch, the statuses and dates shown would be wrong: read the accounts again instead.
   if (weekStart(now()) > shown.epochStart) return void loadAccounts();
-  // A join shows the share retired, so it waits for Carbon Impact's settings. Leaving never waits.
-  if (action === "join" && !carbonImpact) {
-    return void readCarbonImpactAgain().then(() => reviewPicked(section, action), failed);
+  openChoose({ holdings: shown, accounts, carbonImpact, trusted, proceed: review });
+}
+
+// The review of a choice's calls, for the accounts it changes.
+function review(choice: Choice, picks: Account[]): void {
+  if (!connection || !shown) return;
+  if (weekStart(now()) > shown.epochStart) return void loadAccounts();
+  // A join shows the share retired and the fee facts, so it waits for Carbon Impact's settings. Leaving never waits.
+  if (choice === "join" && !carbonImpact) {
+    return void readCarbonImpactAgain().then(() => review(choice, picks), failed);
   }
-  const accounts = picked(section).filter(can[action]);
-  if (!accounts.length) return updateButtons();
+  if (choice === "join" && !trusted) return;
+  const steps = callsFor(choice, picks, now());
+  if (!steps.length) return;
+  const accounts = picks.filter(({ id }) => steps.some((step) => step.id === id));
   const { owner, epochStart } = shown;
   const settings = carbonImpact;
-  const which = list(accounts.map(({ id }) => `#${id}`));
-  const prepare = (id: string): DocumentFragment => {
+  const prepare = (id: string, members = accounts): DocumentFragment => {
     const part = clone(id);
-    fill(part, { which });
+    fill(part, { which: which(members) });
     fillTime(part, "next", epochStart + WEEK, when);
-    fillPlural(part, accounts.length);
+    fillPlural(part, members.length);
     if (settings) fill(part, { "retired-share": share(settings.retireBps), entity: settings.entity });
     return part;
   };
-  if (action === "join") {
+  if (choice === "join") {
     const before = prepare("join-before");
     const from = (kind: Status["kind"]) =>
       accounts.filter((account) => statusOf(account, owner, now(), epochStart).kind === kind);
@@ -362,22 +463,43 @@ function reviewPicked(section: HTMLElement, action: Action): void {
     });
     show(".from-stopped", stopped.length > 0, before);
     show(".from-running", running.length > 0, before);
+    const changes = prepare("join-changes");
+    const per = lastPerThousand();
+    if (per && settings) {
+      const votes = accounts.reduce((sum, account) => sum + account.votes, 0n);
+      const earned = (per.ours * Number(toEarningPower(votes))) / 1e21;
+      const kept = (1 - Number(settings.retireBps) / 1e4) * (1 - Number(settings.feeBps) / 1e4);
+      fill(changes, {
+        "estimate-power": earningPower(votes),
+        "estimate-earned": usd(earned),
+        "estimate-yours": usd(earned * kept),
+      });
+      show(".estimate", true, changes);
+    }
+    if (settings) changes.querySelector(".facts-here")!.replaceChildren(feeFacts(settings));
     const pages = [
       { title: "Before you join", body: before },
-      { title: "What changes", body: prepare("join-changes") },
+      { title: "What changes", body: changes },
       { title: "What your wallet will ask" },
     ];
-    return openReview("Join Carbon Impact", pages, join(accounts), connection, hooks, prepare("join-done"));
+    return openReview("Join Carbon Impact", pages, steps, connection, hooks, prepare("join-done"));
   }
-  if (action === "leave") {
-    const title = "Leave Carbon Impact";
-    return openReview(title, [{ title, body: prepare("leave-effects") }], leave(accounts), connection, hooks);
+  // Voting yourself leaves Carbon Impact, other automations, or both.
+  const fromImpact = accounts.filter((account) => steps.some((step) => step.id === account.id && !step.automation));
+  const others = steps.filter(({ automation }) => automation);
+  const names = [...new Set(others.flatMap(({ automation }) => automation ?? []))];
+  const effects = document.createDocumentFragment();
+  if (fromImpact.length) effects.append(prepare("leave-effects", fromImpact));
+  if (others.length) {
+    const part = prepare(
+      "leave-other-effects",
+      accounts.filter(({ id }) => others.some((step) => step.id === id)),
+    );
+    fill(part, { automations: list(names) });
+    effects.append(part);
   }
-  const steps = leaveOther(accounts);
-  const names = list([...new Set(steps.flatMap(({ automation }) => automation ?? []))]);
-  const effects = prepare("leave-other-effects");
-  fill(effects, { automations: names });
-  openReview(`Leave ${names}`, [{ title: `Leave ${names}`, body: effects }], steps, connection, hooks);
+  const title = `Leave ${list([...(fromImpact.length ? ["Carbon Impact"] : []), ...names])}`;
+  openReview(title, [{ title, body: effects }], steps, connection, hooks);
 }
 
 function showConnection(): void {
@@ -397,6 +519,16 @@ function showConnection(): void {
   refreshReview();
 }
 
+// Whether the wallet can send several calls in one request, asked again whenever the account or chain changes.
+function checkBatching(connected: Connection): void {
+  if (connected.wallet.propose) return;
+  canBatch(connected).then((batches) => {
+    if (connection !== connected) return;
+    connected.batches = batches;
+    refreshReview();
+  }, console.error);
+}
+
 async function connectTo(wallet: Wallet): Promise<void> {
   const attempt = ++attempts;
   const connected = await connect(wallet);
@@ -406,6 +538,7 @@ async function connectTo(wallet: Wallet): Promise<void> {
   listen(connected.provider);
   connection = connected;
   showConnection();
+  checkBatching(connected);
   loadAccounts();
 }
 
@@ -417,16 +550,20 @@ function listen(provider: Provider): void {
     // Wallets also send this when the account stays the same, as when they unlock.
     if (account && same(account, connection.address)) return;
     closeReview();
+    closeChoose();
     // A wallet that locks shares no account.
     if (!account) return letGo();
     connection.address = getAddress(account);
+    delete connection.batches;
     showConnection();
+    checkBatching(connection);
     loadAccounts();
   });
   provider.on?.("chainChanged", (chainId: string) => {
     if (connection?.provider !== provider) return;
     connection.chainId = Number(chainId);
     showConnection();
+    checkBatching(connection);
   });
   provider.on?.("disconnect", () => {
     if (connection?.provider === provider) letGo();
@@ -437,11 +574,12 @@ function letGo(): void {
   ignoredUpTo = attempts;
   reads++;
   reading = false;
-  connection = shown = undefined;
+  connection = shown = payoutChanges = undefined;
   forgetPayout();
   closeReview();
+  closeChoose();
   showConnection();
-  show("#reading, #accounts, #summary, #none, #payout", false);
+  show("#reading, #accounts, #summary, #needs, #none, #payout", false);
 }
 
 function walletButton(wallet: Wallet): DocumentFragment {
@@ -472,12 +610,11 @@ show(".needs-script", false);
 groupAllHex(document);
 // A reload keeps the hash, and so the view.
 document.querySelector("#error .again")!.addEventListener("click", () => location.reload());
-document.getElementById("accounts")!.addEventListener("change", updateButtons);
-for (const section of groups) {
-  for (const button of buttons(section)) {
-    button.addEventListener("click", () => reviewPicked(section, actionOf(button)));
-  }
-}
+positions.addEventListener("change", updateBar);
+choosePicked.addEventListener("click", () => {
+  const accounts = picked();
+  if (accounts.length) choose(accounts);
+});
 document.querySelector("#wrong-chain .switch")!.addEventListener("click", () => {
   if (!connection) return;
   show("#switch-failed", false);
@@ -487,6 +624,7 @@ document.querySelector("#wrong-chain .switch")!.addEventListener("click", () => 
     show("#switch-failed");
   });
 });
+onChanges(() => showAccounts(true));
 
 findWallets((wallets) => document.querySelector("#wallets .buttons")!.replaceChildren(...wallets.map(walletButton)));
 safeWallet()

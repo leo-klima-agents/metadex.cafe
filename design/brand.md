@@ -156,6 +156,10 @@ payout address only when it is not the owner's own; last, the time in UTC and th
 the flip before the payout, and follow the tokens once read. The shares are of all the payout's kVCM: Carbon Impact
 retires up to its `retireBps`, as buying the credits may cost less. #82774's payout of 23 Sept retired 31.01%.
 
+**Fee facts** are a slip of six rows, always in the same order: taken, at most, goes to, when, other costs, who can
+change it. Their foot gives the block and time they were read. **A change** is a slip too: the time in UTC, a row per
+setting with its value before and after, and the transaction.
+
 ## Klima's mark
 
 Klima Protocol agrees to the café using its logo where it makes sense. Placed beside a specific retirement, it says who

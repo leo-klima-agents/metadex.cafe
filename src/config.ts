@@ -19,6 +19,14 @@ export const APPROVAL_LOGIC: Address = "0x4B0BC0889EB524Dbae36d409fF733851E9B4f6
 export const APPROVAL_LOGIC_CODE_HASH: Hex = "0xd1fab3adcd045439b72359a675665cb9f9267b32aebb140df865fc723681a930";
 export const VOTER: Address = "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b";
 export const ACCOUNT_NAMES: Address = "0x998cf40a742460b4eBbFB569A0D23eA91976c0d3";
+// Who held Carbon Impact's two roles when it was deployed, on 25 Mar 2026: the admin key, an address with no code, and
+// the keeper. The page reads whether they still do.
+export const ADMIN: Address = "0x74266f2b206D1359B83fc74949EF07176FB3AE03";
+export const KEEPER: Address = "0x40FBFe5312330f278824ddbB7521ab77409192f0";
+
+// For the gas of a call: Base's GasPriceOracle prices the part of the fee that posts the transaction to Ethereum.
+export const GAS_PRICE_ORACLE: Address = "0x420000000000000000000000000000000000000F";
+export const ETH_USD_FEED: Address = "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70";
 
 // For pricing rewards: Hydrex's two pool factories, and the tokens other tokens are priced against.
 export const ALGEBRA_FACTORY: Address = "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E";
@@ -31,7 +39,7 @@ export const ANCHORS: Anchor[] = [
   {
     address: "0x4200000000000000000000000000000000000006",
     decimals: 18,
-    feed: "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70",
+    feed: ETH_USD_FEED,
   },
   // cbBTC, with Chainlink's BTC / USD feed
   {

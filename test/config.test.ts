@@ -1,15 +1,20 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
-import { getAddress } from "viem";
+import { getAddress, parseAbi, toFunctionSelector } from "viem";
 import {
   ACCOUNT_NAMES,
+  ADMIN,
   ALGEBRA_FACTORY,
   ANCHORS,
   APPROVAL_LOGIC,
   APPROVAL_LOGIC_CODE_HASH,
+  CHAIN_ID,
   CONDUIT,
   CONDUIT_CODE_HASH,
+  ETH_USD_FEED,
+  GAS_PRICE_ORACLE,
+  KEEPER,
   KVCM,
   MULTICALL3,
   PAIR_FACTORY,
@@ -31,7 +36,8 @@ test("addresses are checksummed, and code hashes are 32 bytes", () => {
     PAIR_FACTORY,
     ...ANCHORS.flatMap(({ address, feed }) => (feed ? [address, feed] : [address])),
   ];
-  const addresses = [...contracts, ACCOUNT_NAMES, ...prices, ...conduits.map(({ address }) => address)];
+  const others = [ACCOUNT_NAMES, ADMIN, KEEPER, GAS_PRICE_ORACLE, ETH_USD_FEED];
+  const addresses = [...contracts, ...others, ...prices, ...conduits.map(({ address }) => address)];
   for (const address of addresses) assert.equal(getAddress(address), address);
   for (const hash of [CONDUIT_CODE_HASH, VOTING_ESCROW_IMPLEMENTATION_CODE_HASH, APPROVAL_LOGIC_CODE_HASH]) {
     assert.match(hash, /^0x[0-9a-f]{64}$/);
@@ -106,5 +112,25 @@ test("How it works lists each of its sections, and every other automation of Hyd
   assert.deepEqual(
     rows,
     conduits.filter(({ address }) => address !== CONDUIT).map(({ address }) => address),
+  );
+});
+
+test("the ERC-7730 descriptor describes the call the page sends, on the VotingEscrow it checks", () => {
+  type Descriptor = {
+    context: { contract: { deployments: { chainId: number; address: string }[] } };
+    display: { formats: Record<string, { intent: string; fields: { path: string; format: string }[] }> };
+  };
+  const descriptor = JSON.parse(read("erc7730/calldata-HydrexVotingEscrow.json")) as Descriptor;
+  assert.deepEqual(descriptor.context.contract.deployments, [{ chainId: CHAIN_ID, address: VOTING_ESCROW }]);
+  const [[signature, format]] = Object.entries(descriptor.display.formats) as [
+    [string, Descriptor["display"]["formats"][string]],
+  ];
+  // Written separately from src/hydrex.ts, from the verified source on Sourcify.
+  const [call] = parseAbi(["function setConduitApproval(address conduitAddress, uint256 tokenId, bool approve)"]);
+  assert.equal(toFunctionSelector(`function ${signature}`), toFunctionSelector(call));
+  assert.equal(signature, `setConduitApproval(${call.inputs.map(({ type, name }) => `${type} ${name}`).join(",")})`);
+  assert.deepEqual(
+    format.fields.map(({ path }) => path),
+    call.inputs.map(({ name }) => name),
   );
 });

@@ -3,9 +3,9 @@
 What metaDEX Café is today, what it should become, and why. The brand, from type and colour to the layout of receipts,
 is in [brand.md](brand.md).
 
-Figures were read from Base on 17 Oct 2026, unless marked. [Brackets] mark decisions not yet taken, such as "[10%] fee".
-Mockups of the planned screens are on a design canvas, private to its owner:
-<https://claude.ai/artifact/XWN6n3DdJEcgaWbD1GDsA5>. Its screens use placeholder colours and type.
+Figures were read from Base on 17 Oct 2026, unless marked; Carbon Impact's roles and settings history on 19 Oct.
+[Brackets] mark decisions not yet taken, such as "[10%] fee". Mockups of the planned screens are on a design canvas,
+private to its owner: <https://claude.ai/artifact/XWN6n3DdJEcgaWbD1GDsA5>. Its screens use placeholder colours and type.
 
 ## The page today
 
@@ -16,16 +16,22 @@ of its own, and the views work without the script.
   figures: tonnes retired, the share retired, its Earning Power, when the epoch ends, and what last epoch earned per
   1,000 Earning Power. Then how it works in three steps, what you keep, give and get, a comparison with voting yourself
   and with staying in a stopped automation, why it is safe to try, and common questions.
-- **The App** (`#app`): a summary of the wallet's accounts, and the epoch as a timeline. Then the accounts, grouped by
-  what the owner can do with them: in an automation that stopped, needs attention, in Carbon Impact, joining, leaving,
-  can join, can't join. A group whose button can act on several accounts has boxes to tick. Last, a receipt for each
-  account in the last payout, and the payout address.
-- **The review:** a dialog in up to three steps: before you join, what changes, and the calls, each as a slip with its
-  fields as the wallet will show them. One transaction at a time. Inside Safe{Wallet}, one Safe transaction, with its
-  calldata word by word.
-- **How it works** (`#how-it-works`): everything in full. The stopped automations, what joining allows, when things
-  happen, how the votes did last epoch against all of Hydrex, who controls what, the carbon credits, a brief for
-  co-signers, what the page checks, questions, and words.
+- **Your positions** (`#app`): positions first. A summary: last epoch's earnings, the last payout (retired, fee, yours)
+  and the next payout. Then "Needs you", one action each: accounts in an automation that stopped, accounts only partly
+  in, votes the owner has not used since the previous epoch began, a change to Carbon Impact's settings, a payout
+  address someone else changed. Then the Hydrex accounts, needs first, each with who looks after it, its Earning Power
+  and what it earned last epoch; boxes to tick when more than one can change, and a bar to choose for them. Then the
+  epoch as a timeline, a receipt for each account in the last payout, and the payout address with its changes.
+- **Choose:** a dialog for one account or many. Vote yourself, then Carbon Impact, neither picked: what each does, last
+  epoch's dollars per 1,000 Earning Power at the same prices and for these accounts, and the number of calls with their
+  gas. A table compares the two on demand, and the fee facts fold out. Continue opens the review.
+- **The review:** a dialog in up to three steps: before you join, what changes (with the fee facts, and what last epoch
+  would have earned, "not a promise"), and the calls, each as a slip with its fields as the wallet will show them. One
+  request for all the calls where the wallet batches (EIP-5792), otherwise one transaction at a time, and it says which.
+  Inside Safe{Wallet}, one Safe transaction, with its calldata word by word.
+- **How it works** (`#how-it-works`): everything in full. The stopped automations, the fee facts, what joining allows,
+  when things happen, how the votes did last epoch against all of Hydrex, who controls what, what changed in the last
+  four epochs, the carbon credits, a brief for co-signers, what the page checks, questions, and words.
 
 Every new screen keeps the page's rules:
 
@@ -48,7 +54,8 @@ Two audiences. By count, many small holders delegate, and stay put. By value, a 
   $1,000 or more. Moving an account costs about $0.004 in gas. Hydrex's app only tells them to switch to "No
   Automation".
 - **Carbon Impact:** 17 accounts of 11 owners, 0.19% of the votes. In the epoch from 8 to 15 Oct, its 1.17M Earning
-  Power voted for 27 pools and earned about $693, or $0.59 per 1,000 Earning Power.
+  Power voted for 27 pools and earned about $693, or $0.59 per 1,000 Earning Power; the average on Hydrex was $0.51 at
+  the same prices.
 - **Competition:** a contract not on Hydrex's list votes for 26 owners, with as many votes as all of Hydrex's 14
   automations together. On Aero, Autopilot is the protocol's own.
 - **Aerodrome:** relays held 55% of veAERO, most of it in relays with two or three owners each; 7,006 owners used
@@ -107,9 +114,10 @@ wallet's browser, so every export also offers a copy.
 
 - **Done:** the stopped automations, and a way out of them; what votes earned against all of Hydrex; the last payout as
   receipts; Safe transactions with their calldata; the brand.
-- **Next, the rescue:** positions first in the App; Choose for one or many accounts, with the gas cost; one prompt with
-  batching; fee facts for Carbon Impact; change watch; ERC-7730 metadata for `setConduitApproval`.
-- **Then, a second Hydrex automation:** the menu as Home; one page template per automation; Choose comparing two
+- **Done, the rescue:** positions first in the App; Choose for one or many accounts, with the gas cost; one prompt with
+  batching; fee facts for Carbon Impact; change watch; ERC-7730 metadata for `setConduitApproval`, to propose to a
+  registry. Left for later: the `#positions` address, a calendar file for payday, and the Atom feed of changes.
+- **Next, a second Hydrex automation:** the menu as Home; one page template per automation; Choose comparing two
   automations and voting yourself; Help me choose; statements and export.
 - **Later, Aero and liquidity:** Aero relays, once Aero grants the role to deploy one; managed liquidity positions; the
   brief link for co-signers.
@@ -123,7 +131,7 @@ One static page, as today, with views addressed by the hash. Today's addresses k
 | Menu (Home)             | `/`                                                                | Home                 |
 | Your positions          | `#positions`                                                       | `#app`               |
 | An automation's page    | One each, such as `#carbon-impact`                                 | `#how-it-works`      |
-| Choose for a position   | `#choose`, a dialog                                                | The group buttons    |
+| Choose for a position   | `#choose`, a dialog                                                | A dialog             |
 | Review                  | A dialog                                                           | The review           |
 | Receipts and statements | `#receipts`                                                        | The last payout only |
 | Help me choose          | `#help-me-choose`                                                  | —                    |
@@ -245,7 +253,9 @@ the flip, in UTC and in the visitor's time.
 
 **Change watch:** when an automation's settings change, its page and every position in it show the change, the date and
 the transaction. The page stores nothing, so it cannot remember what was seen: it shows changes from the last four
-epochs.
+epochs. Carbon Impact emits no event for its fee, treasury or routers, so the page reads its settings at the start of
+each epoch and now, and narrows each difference down to the block, about 20 reads a change; a change undone within an
+epoch does not show.
 
 **Freshness:** every automation shows when it last acted. Past its usual rhythm, its status turns to "late", then
 "stopped". Where an automation will not act, the page says why, such as gas above the reward.
@@ -287,7 +297,8 @@ taken, and how do you leave.
 
 - **Fees and caps** for each new product, who holds each admin key, and any delay before a change applies. Carbon
   Impact's single admin key can raise the share retired to 100%, which would likely rate Stage 0 on DeFiScan's scale.
-  Naming its holder, signers and threshold, as Convex does, costs nothing.
+  The page now names the key, an address without code, so no signers or threshold; who stands behind it is still to be
+  named.
 - **Autopilot:** its fee is not published. What a café relay offers against it (a payout token, retirement, receipts)
   decides whether there should be one.
 - **Alerts:** whether to run anything that can send, and who would run it.
@@ -313,8 +324,14 @@ Voter `0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b`, and the automations in
   mid-September.
 - **In August,** before Hydrex stopped its automations, 2,270 owners used one, with 11–13% of the votes cast. Use fell
   with size: most owners under $1,000 used one, one in eight between $100,000 and $1M, and the largest holder none.
-- **Carbon Impact's settings:** `retireBps` 3333, `treasuryFeeBps` 0. It has retired 22,141 kVCM as 5,691 tonnes, about
-  3.9 kVCM a tonne, with kVCM at about $0.0273.
+- **Carbon Impact's settings:** `retireBps` 3333, `treasuryFeeBps` 0 of at most 100. It has retired 22,141 kVCM as 5,691
+  tonnes, about 3.9 kVCM a tonne, with kVCM at about $0.0273. It pays out in kVCM and AZUSD.
+- **Carbon Impact's roles and history:** deployed on 25 Mar 2026 by `0x40FB…92f0`, which keeps the keeper's role; the
+  admin key is `0x7426…AE03`, an address without code; the fee goes to a 2-of-3 Safe, `0xd9e9…50aF`. Its settings
+  changed twice since: on 26 Mar the admin key added the same router a second time, and on 28 Jun it changed the carbon
+  credit retired. Nothing changed from 24 Sep to 19 Oct.
+- **Gas:** `setConduitApproval` uses 280,000 to 350,000 gas; at Base's 0.006 gwei and ETH at $2,422, about $0.004 a
+  call, of which posting to Ethereum is under 0.1%.
 - **Aerodrome:** 1,034M veAERO; 75 relays hold 569M of it. In August, 16% of owners used a relay, and 22–35% of those
   holding $10,000 to $100,000.
 

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://eips.ethereum.org/assets/eip-7730/erc7730-v2.schema.json",
+  "context": {
+    "$id": "Hydrex VotingEscrow",
+    "contract": {
+      "deployments": [
+        {
+          "chainId": 8453,
+          "address": "0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1"
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "owner": "Hydrex",
+    "contractName": "VotingEscrow",
+    "info": {
+      "url": "https://www.hydrex.fi/"
+    }
+  },
+  "display": {
+    "formats": {
+      "setConduitApproval(address conduitAddress,uint256 tokenId,bool approve)": {
+        "intent": "Set an automation's access to an account",
+        "fields": [
+          {
+            "path": "conduitAddress",
+            "label": "Automation",
+            "format": "addressName",
+            "params": {
+              "types": ["contract"]
+            }
+          },
+          {
+            "path": "tokenId",
+            "label": "Account",
+            "format": "nftName",
+            "params": {
+              "collectionPath": "@.to"
+            }
+          },
+          {
+            "path": "approve",
+            "label": "Approve",
+            "format": "raw"
+          }
+        ]
+      }
+    }
+  }
+}

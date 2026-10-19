@@ -15,6 +15,7 @@ export type Call = { address: Address; abi: Abi; functionName: string; args: unk
 const multicall3Abi = parseAbi([
   "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
   "function getCurrentBlockTimestamp() view returns (uint256 timestamp)",
+  "function getBlockNumber() view returns (uint256 blockNumber)",
 ]);
 const EIP1967_IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 const CALLS_PER_BATCH = 200;
@@ -30,6 +31,7 @@ export const call = (address: Address, abi: Abi, functionName: string, ...args: 
 });
 
 export const blockTime = call(MULTICALL3, multicall3Abi, "getCurrentBlockTimestamp");
+export const blockNumber = call(MULTICALL3, multicall3Abi, "getBlockNumber");
 
 export function required<T>(values: (T | undefined)[]): T[] {
   if (values.includes(undefined)) throw new Error("A read from Base failed.");
