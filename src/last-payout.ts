@@ -205,7 +205,7 @@ function fillClaims(
     ...claims.map(({ block, caller, owner: paid, tx }) => {
       const line = clone("claim-line");
       fillTime(line, "claim-time", times.get(block)!, utc);
-      const by = same(caller, KEEPER) ? "by the keeper" : same(caller, owner) ? "by you" : `by ${short(caller)}`;
+      const by = same(caller, KEEPER) ? "by AutoMaxi" : same(caller, owner) ? "by you" : `by ${short(caller)}`;
       fill(line, { "claim-by": by });
       show(".claim-to", !same(paid, owner), line);
       fillAddress(line, "claim-owner", paid);

@@ -744,7 +744,7 @@
           </div>
           <div>
             <dt>Costs you</dt>
-            <dd>Nothing else: the keeper pays the gas</dd>
+            <dd>Nothing else: the claims cost you no gas</dd>
           </div>
           <div>
             <dt>Leaving</dt>
@@ -814,8 +814,8 @@
         </p>
         <p>
           While you are in, anyone can claim your rewards through AutoMaxi, at any time, and the fee is the same whoever
-          calls. Its keeper, Carbon Impact's, claims right after each epoch ends. Rewards nobody has claimed through it
-          yet, you can still claim on Hydrex yourself.
+          calls. They are claimed for you right after each epoch ends. Rewards nobody has claimed through it yet, you
+          can still claim on Hydrex yourself.
         </p>
 
         <h2 id="automaxi-join-now">If you join now</h2>
@@ -827,7 +827,7 @@
             EURC at Chainlink's prices, and some trading fees in other tokens at their pool's average price over the
             last half hour. A week without a vote earns nothing.
           </li>
-          <li><b>After each epoch ends.</b> Its keeper claims the rewards, and AutoMaxi sends them to you, less 1%.</li>
+          <li><b>After each epoch ends.</b> AutoMaxi claims the rewards, and sends them to you, less 1%.</li>
         </ol>
 
         <h2 id="automaxi-control">Who controls what</h2>
@@ -1213,14 +1213,14 @@
           <h2 id="who-controls-what-title">Who controls what</h2>
           <p>
             Carbon Impact is a contract of Hydrex's, whose source is in
-            <a href="https://github.com/hydrexfi/hydrex-periphery">Hydrex's repository</a>. Two roles act on it.
+            <a href="https://github.com/hydrexfi/hydrex-periphery">Hydrex's repository</a>.
           </p>
-          <h3>The keeper</h3>
+          <h3>Votes and payouts</h3>
           <p>
-            It votes with the Earning Power of every account in Carbon Impact, and claims, swaps, retires and pays out
-            each account. It picks the pools and the swaps, through routers the admin key approved. It picks how much to
-            retire, up to <span class="retired-share">the share set</span> of the kVCM: the contract stops it retiring
-            more.
+            Each week, Carbon Impact votes with the Earning Power of every account in it, and claims, swaps, retires and
+            pays out each account. The pools and the swaps are picked each week, through routers the admin key approved,
+            and so is how much to retire, up to <span class="retired-share">the share set</span> of the kVCM: the
+            contract stops it retiring more.
           </p>
           <h3>The admin key</h3>
           <p>It can change, at any time and for every member at once:</p>
@@ -1230,10 +1230,10 @@
             <li>the tokens it pays out in, and the routers it swaps through;</li>
             <li>the carbon credit retired, and the name and message on each retirement;</li>
             <li>any member's payout address;</li>
-            <li>what joining approves, and who holds either role.</li>
+            <li>what joining approves, and who runs the votes and payouts.</li>
           </ul>
           <p>It can also withdraw any tokens the automation holds.</p>
-          <h3>What neither can do</h3>
+          <h3>What nobody can do</h3>
           <p>
             Move your account or your HYDX. What joining approves is voting and claiming; the account stays yours, and
             leaving ends both.
@@ -1515,8 +1515,6 @@
             <dd>
               A contract that votes and claims for the accounts that approve it. Hydrex's contracts call it a conduit.
             </dd>
-            <dt>Keeper</dt>
-            <dd>Who runs an automation's votes and payouts each week.</dd>
             <dt>Admin key</dt>
             <dd>
               The key that can change an automation's settings. <a href="#who-controls-what">Who controls what</a>
@@ -1786,8 +1784,8 @@
           EURC at Chainlink's prices. A week without a vote earns nothing.
         </li>
         <li>
-          <b>After each epoch ends.</b> Its keeper claims the rewards, and AutoMaxi sends them to your address, in the
-          tokens earned, less 1%.
+          <b>After each epoch ends.</b> AutoMaxi claims the rewards, and sends them to your address, in the tokens
+          earned, less 1%.
         </li>
       </ol>
       <p>
@@ -1800,8 +1798,8 @@
     <template id="automaxi-join-done">
       <p>
         <strong>Joined.</strong> Anyone can claim the rewards of <span class="which"></span> through AutoMaxi now, and
-        it votes with <span data-one="it" data-many="them"></span> from <time class="next"></time>. Its keeper claims
-        right after each epoch ends. You can leave at any time from this page.
+        it votes with <span data-one="it" data-many="them"></span> from <time class="next"></time>. The rewards are
+        claimed for you right after each epoch ends. You can leave at any time from this page.
       </p>
     </template>
     <template id="proposed">

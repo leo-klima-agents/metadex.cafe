@@ -39,7 +39,8 @@ export const AUTOMATIONS = [CARBON_IMPACT, AUTOMAXI];
 // AutoMaxi's fee, FEE_BPS in its code, of each claim, and TREASURY, the 2-of-3 Safe it goes to.
 export const AUTOMAXI_FEE_BPS = 100n;
 export const AUTOMAXI_TREASURY: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
-// The keeper that votes and claims for both: it holds Carbon Impact's EXECUTOR_ROLE. Anyone may claim through AutoMaxi.
+// The address whose claims through AutoMaxi the receipts show as AutoMaxi's own, made for its members after each epoch.
+// It holds Carbon Impact's EXECUTOR_ROLE. Anyone may claim through AutoMaxi.
 export const KEEPER: Address = "0x40FBFe5312330f278824ddbB7521ab77409192f0";
 export const KVCM: Address = "0x00fBAC94Fec8D4089d3fe979F39454F48c71A65d";
 export const VOTING_ESCROW: Address = "0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1";

@@ -1161,7 +1161,7 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     assert.equal(await receipt.locator(".receipt-fee-share").innerText(), "1%");
     assert.match(await receipt.locator(".receipt-fee").innerText(), /^−[\d,.<\s]+ USDC$/);
     assert.match(await receipt.locator(".receipt-paid").innerText(), /^(< )?[\d,.]+ USDC$/);
-    assert.deepEqual(await receipt.locator(".claim-by").allTextContents(), ["by 0x0000…dEaD", "by the keeper"]);
+    assert.deepEqual(await receipt.locator(".claim-by").allTextContents(), ["by 0x0000…dEaD", "by AutoMaxi"]);
     assert.equal(await receipt.locator(".receipt-stopped").isVisible(), false);
     // USDC counts as a dollar.
     await receipt
