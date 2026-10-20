@@ -817,7 +817,8 @@
           <li>
             <b>At the next flip, Thursday at 00:00 UTC.</b> AutoMaxi votes with your account. Anyone can propose its
             votes: it takes one only if it expects it to earn at least $1 more in bribes, counting WETH, cbBTC, USDC and
-            EURC at Chainlink's prices. A week without a vote earns nothing.
+            EURC at Chainlink's prices, and some trading fees in other tokens at their pool's average price over the
+            last half hour. A week without a vote earns nothing.
           </li>
           <li><b>After each epoch ends.</b> Its keeper claims the rewards, and AutoMaxi sends them to you, less 1%.</li>
         </ol>
@@ -836,20 +837,25 @@
             Chainlink's prices only steer its votes. If a feed goes stale, its token counts for nothing, and a worse
             vote can win while it lasts.
           </li>
+          <li>
+            Hydrex's pools price the trading fees in other tokens, and they too only steer its votes. Someone who moves
+            a thin pool's price, or Hydrex, which can change how its pools report prices, can make a worse vote win. A
+            pool's fees in other tokens never count for more than its fees in the four tokens above.
+          </li>
         </ul>
 
         <h2 id="automaxi-checks">What the page checks</h2>
         <p>
           Before anyone can join, the page checks that the code at
           <code translate="no"
-            ><a href="https://basescan.org/address/0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B"
-              >0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B</a
+            ><a href="https://basescan.org/address/0x692c323B425A9DfeebE302F56168a7798D93EAC5"
+              >0x692c323B425A9DfeebE302F56168a7798D93EAC5</a
             ></code
           >
           has the hash
-          <code translate="no">0x489e3af444f9c0a45dbc7cb380fcabf86f581a3cc0c7aea968ae280aeae5b74d</code>, of the source
-          at <a href="https://github.com/ldeso/hydrex-conduit">github.com/ldeso/hydrex-conduit</a>, commit
-          <code translate="no">82ba69b</code>; that it points to Hydrex's VotingEscrow and Voter; and what joining it
+          <code translate="no">0x4872932431e0d175fb1213e9ffec2b8f0ebd1d9d490643d6df5b2c6d0b379847</code>, of version 2
+          of the source at <a href="https://github.com/ldeso/hydrex-conduit">github.com/ldeso/hydrex-conduit</a>, commit
+          <code translate="no">718c107</code>; that it points to Hydrex's VotingEscrow and Voter; and what joining it
           approves. If a check fails, joining is off, and leaving still works.
           <a href="#verify">How to check it yourself</a>
         </p>
@@ -1338,9 +1344,9 @@
               >
             </li>
             <li>
-              AutoMaxi, a conduit, once it is on Base:
-              <a href="https://basescan.org/address/0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B"
-                ><code translate="no">0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B</code></a
+              AutoMaxi, a conduit, version 2:
+              <a href="https://basescan.org/address/0x692c323B425A9DfeebE302F56168a7798D93EAC5"
+                ><code translate="no">0x692c323B425A9DfeebE302F56168a7798D93EAC5</code></a
               >
             </li>
             <li>

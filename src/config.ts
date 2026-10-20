@@ -24,14 +24,15 @@ export const CARBON_IMPACT: Automation = {
   codeHash: "0x0d67cd335e3ae9cde256cf399f819a3ea2b9c248b0336840a3b20a2ee82c192e",
   actions: [3, 5],
 };
-// ImmutableVeTokenConduit, from https://github.com/ldeso/hydrex-conduit at commit 82ba69b. It has no owner and no
-// settings: its code fixes its fee and where the fee goes. It deploys through CREATE2, so its address is known before;
-// until there is code there, the page leaves it out.
+// ImmutableVeTokenConduit version 2, from https://github.com/ldeso/hydrex-conduit at tag v2, commit 718c107. It has no
+// owner and no settings: its code fixes its fee and where the fee goes. It deploys through CREATE2, so its address is
+// known before; until there is code there, the page leaves it out. Version 1, at
+// 0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B, still works, but the page does not offer it.
 export const AUTOMAXI: Automation = {
   kind: "automaxi",
   name: "AutoMaxi",
-  address: "0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B",
-  codeHash: "0x489e3af444f9c0a45dbc7cb380fcabf86f581a3cc0c7aea968ae280aeae5b74d",
+  address: "0x692c323B425A9DfeebE302F56168a7798D93EAC5",
+  codeHash: "0x4872932431e0d175fb1213e9ffec2b8f0ebd1d9d490643d6df5b2c6d0b379847",
   actions: [3, 5],
 };
 export const AUTOMATIONS = [CARBON_IMPACT, AUTOMAXI];

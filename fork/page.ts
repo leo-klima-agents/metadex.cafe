@@ -55,10 +55,10 @@ const LOCK_MAXI = getAddress("0x53388a4E98Bb56F8571433F5461010Fc287929d3");
 const USDC = getAddress("0xE57b3Ea02336B9b418cA523aB5aD6f479d93bD1D");
 const RECIPIENT = getAddress("0x000000000000000000000000000000000000beef");
 const STRANGER = getAddress("0x000000000000000000000000000000000000dead");
-// AutoMaxi deploys through the CREATE2 deployer, with the salt and init code of its script/Deploy.s.sol at the pinned
-// commit. The init code was compiled from its verification/ input with solc 0.8.37.
+// AutoMaxi deploys through the CREATE2 deployer, with the salt and init code of its script/Deploy.s.sol at tag v2,
+// commit 718c107. The init code was compiled from its verification/ input with solc 0.8.37.
 const CREATE2_DEPLOYER = getAddress("0x4e59b44847b379578588920cA78FbF26c0B4956C");
-const SALT = keccak256(toHex("metadex.cafe/ImmutableVeTokenConduit/v1"));
+const SALT = keccak256(toHex("metadex.cafe/ImmutableVeTokenConduit/v2"));
 const INIT_CODE = readFileSync(new URL("fixtures/automaxi-init-code.hex", import.meta.url), "utf8").trim() as Hex;
 // Tokens that Base runs natively, such as GOOGLc and cbZEC. Their code is the byte 0xef, which anvil cannot run: a call
 // to one uses all its gas and fails the whole batch of reads. Without their code, they read as tokens the page cannot

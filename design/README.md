@@ -110,9 +110,9 @@ wallet's browser, so every export also offers a copy.
   Choose for one or many accounts, with the gas cost; fee facts for Carbon Impact.
 - **Next, the rescue:** positions first in the App; one prompt with batching; change watch; ERC-7730 metadata for
   `setConduitApproval`.
-- **Then, a second Hydrex automation, AutoMaxi:** ready, and offered once it is on Base. It votes for the bribes it
-  expects to earn the most, and pays in the tokens earned, unswapped, less 1% of each claim. Done: the menu on Home, one
-  page template per automation, and Choose comparing the two and voting yourself. Still to do: Help me choose;
+- **Then, a second Hydrex automation, AutoMaxi:** on Base since 20 Oct 2026, in its version 2. It votes for the bribes
+  it expects to earn the most, and pays in the tokens earned, unswapped, less 1% of each claim. Done: the menu on Home,
+  one page template per automation, and Choose comparing the two and voting yourself. Still to do: Help me choose;
   statements and export.
 - **Later, Aero and liquidity:** Aero relays, once Aero grants the role to deploy one; managed liquidity positions; the
   brief link for co-signers.

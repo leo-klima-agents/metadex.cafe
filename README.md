@@ -1,8 +1,8 @@
 # metaDEX Café
 
 metaDEX Café is a static web page at <https://metadex.cafe/>. It lets owners of Hydrex accounts on Base join or leave
-Carbon Impact, Klima's automation on Hydrex, and AutoMaxi, an automation nobody controls, once it is on Base. Hydrex's
-contracts call automations "conduits".
+Carbon Impact, Klima's automation on Hydrex, and AutoMaxi, an automation nobody controls. Hydrex's contracts call
+automations "conduits".
 
 The page has no server. It reads Base through public RPCs and asks the visitor's wallet to send transactions. It holds
 no keys and stores nothing.
@@ -96,7 +96,7 @@ release. These [Foundry](https://getfoundry.sh/) commands print the values that 
 ```sh
 RPC=https://mainnet.base.org
 CARBON_IMPACT=0xdE91885cF35ac57DF0c4A75c16862127dBe8317c
-AUTOMAXI=0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B
+AUTOMAXI=0x692c323B425A9DfeebE302F56168a7798D93EAC5
 ESCROW=0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1
 IMPLEMENTATION=$(cast to-check-sum-address $(cast implementation $ESCROW --rpc-url $RPC))
 LOGIC=$(cast call $ESCROW "approvalLogic()(address)" --rpc-url $RPC)
@@ -116,11 +116,12 @@ When Hydrex adds or removes automations, update `src/hydrex-conduits.json` from 
 the table of automations in `index.html`. A test checks that the two match. If Hydrex lists AutoMaxi, the page still
 treats it as its own.
 
-AutoMaxi is not on Base yet. Its address is known in advance, as it deploys through the CREATE2 deployer, and so is its
-code hash, from `verification/bytecode-hashes.json` in <https://github.com/ldeso/hydrex-conduit> at commit `82ba69b`.
-Once it is deployed, check that the command above prints
-`0x489e3af444f9c0a45dbc7cb380fcabf86f581a3cc0c7aea968ae280aeae5b74d`, then release again: the page offers AutoMaxi from
-then on.
+AutoMaxi is version 2 of `ImmutableVeTokenConduit`, from <https://github.com/ldeso/hydrex-conduit> at tag `v2`, commit
+`718c107`. It was deployed on 20 Oct 2026, in block 52,854,750, through the CREATE2 deployer. The command above prints
+the code hash in that commit's `verification/bytecode-hashes.json`,
+`0x4872932431e0d175fb1213e9ffec2b8f0ebd1d9d490643d6df5b2c6d0b379847`. Version 1, at
+`0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B`, still works, and nobody had joined it when version 2 was deployed. The
+page offers only version 2.
 
 ## Checking a deployment
 
