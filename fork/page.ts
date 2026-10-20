@@ -441,11 +441,11 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     const states = page.locator(".promise .states");
     assert.equal(await states.locator(".impact-state").textContent(), "Running");
     assert.match((await states.locator("time.impact-voted").textContent()) ?? "", /^Wed,? 14 Oct,? 23:59 UTC$/);
-    assert.equal(
-      await page.locator("header").getByRole("link", { name: "How it works" }).isVisible(),
-      false,
-      "on Home on a phone, How it works is under the heading",
-    );
+    // The header is the same on every view and at every width, and the hero repeats only Home's main action.
+    const how = page.locator("header").getByRole("link", { name: "How it works" });
+    assert.equal(await how.isVisible(), true);
+    assert.equal(await how.getAttribute("aria-current"), null);
+    assert.deepEqual(await page.locator(".promise .buttons a").allTextContents(), ["Open the app"]);
     await shoot(page, "home-390-light");
     await page.locator(".promise").getByRole("link", { name: "Open the app" }).click();
     await appTitle(page).waitFor();
@@ -461,6 +461,7 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     await page.getByRole("navigation", { name: "Help" }).getByRole("link", { name: "Questions" }).click();
     await page.getByRole("heading", { name: "Questions" }).waitFor();
     assert.equal(await appTitle(page).isVisible(), false);
+    assert.equal(await how.getAttribute("aria-current"), "page", "a section of How it works is in that view");
     await page.goto(`${SITE}/#if-your-automation-stopped`);
     await page.getByText("Its votes count for nothing.").waitFor();
     assert.deepEqual(asked, [], "the page asks a wallet nothing until it is picked");

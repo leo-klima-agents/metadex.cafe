@@ -1,5 +1,6 @@
 // The page is one HTML file split into views. CSS shows the view that holds the hash's target, or Home, even without
-// this script (see style.css). The script adds the title and the focus, and opens any <details> around the target.
+// this script (see style.css). The script adds the title and the focus, marks the header's link to the view shown, and
+// opens any <details> around the target.
 
 const views = [...document.querySelectorAll<HTMLElement>(".view")];
 const home = views[0]!;
@@ -20,6 +21,12 @@ function showView(moved: boolean): void {
   const element = target();
   const view = element?.closest<HTMLElement>(".view") ?? home;
   document.title = view.dataset.title ?? document.title;
+  // The header's links say which of them is the view shown.
+  for (const link of document.querySelectorAll<HTMLAnchorElement>("header.site a")) {
+    const to = link.hash.length > 1 ? document.getElementById(link.hash.slice(1))?.closest(".view") : home;
+    if (to === view) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
   for (let fold = element?.closest("details"); fold; fold = fold.parentElement?.closest("details")) fold.open = true;
   const changed = view !== current;
   current = view;

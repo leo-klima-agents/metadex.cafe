@@ -1,7 +1,7 @@
 # Brand
 
-How metaDEX Café looks and speaks: the name, the voice, what it may claim, type, colour, the mark, and the layout of
-slips and receipts. `style.css` and `index.html` follow these rules. Sources were checked on 17 Oct 2026.
+How metaDEX Café looks and speaks: the name, the voice, what it may claim, type, colour, the mark, navigation, and the
+layout of slips and receipts. `style.css` and `index.html` follow these rules. Sources were checked on 17 Oct 2026.
 
 ## The name
 
@@ -123,6 +123,16 @@ and works in one colour.
 - `scripts/icons.ts` draws `favicon.ico`, at 16 and 32 px, and `apple-touch-icon.png`, at 180 px and opaque, from it.
 - `index.html` links all three. MetaMask reads a page's icon from `link[rel="shortcut icon"]` only, so the `.ico` is
   linked that way.
+
+## Navigation
+
+- **The header is the same on every view, at every width:** the name, which leads Home; How it works, as a link; and the
+  app, as the one button, which shows the wallet once connected. The link to the view shown reads as where you are: in
+  ink, not the accent, and marked as the current page.
+- **A view repeats only its own main action,** as a button, such as "Open the app" on Home. It never offers a second way
+  to a page the header already leads to.
+- **Within a view, a link leads to a section and says what it holds,** such as "What it means" or "More on leaving",
+  never "How it works" or "Learn more".
 
 ## Slips and receipts
 

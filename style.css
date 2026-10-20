@@ -160,11 +160,11 @@ header.site nav {
   align-items: center;
   gap: 0.5rem 1rem;
 }
-/* On Home on a phone, the header leaves out How it works, which is right under the heading. */
-@media (max-width: 30rem) {
-  body:not(:has(main > .view:not(#home):target, main > .view:not(#home) :target)) header.site .how {
-    display: none;
-  }
+/* The header is the same on every view. Its link to the view shown reads as where you are. */
+header.site .how[aria-current="page"] {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: none;
 }
 .wallet-state::before {
   content: "";
