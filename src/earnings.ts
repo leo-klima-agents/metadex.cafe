@@ -201,17 +201,20 @@ export async function readEarnings(automation: Address, known?: number): Promise
 
 // The reward contracts and tokens that paid an automation's votes in the epoch from `start`. By then, Hydrex's Voter
 // holds its later votes, so they are found from every pool's reward contracts: thousands of reads, after the page's
-// own. An ended epoch's never change, so each is read once.
+// own, unless it had no votes then. An ended epoch's never change, so each is read once.
 const paidBy = new Map<string, Promise<{ contract: Address; token: Address }[]>>();
 
 export function rewardPairs(automation: Address, start: number): Promise<{ contract: Address; token: Address }[]> {
   const key = `${automation.toLowerCase()} ${start}`;
   let found = paidBy.get(key);
   if (!found) {
-    found = allPools(readLater)
-      .then((pools) => bribesOf(pools, readLater))
-      .then((bribes) => rewardsOf(bribes, start, automation, readLater))
-      .then(({ rewards }) => rewards.map(({ contract, token }) => ({ contract, token })));
+    found = readLater([escrow("getPastVotes", automation, start)])
+      .then(async ([votes]) => {
+        if (required([votes])[0] === 0n) return [];
+        const bribes = await bribesOf(await allPools(readLater), readLater);
+        return (await rewardsOf(bribes, start, automation, readLater)).rewards;
+      })
+      .then((rewards) => rewards.map(({ contract, token }) => ({ contract, token })));
     paidBy.set(key, found);
     found.catch(() => paidBy.delete(key));
   }

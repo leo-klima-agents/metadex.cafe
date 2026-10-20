@@ -20,10 +20,10 @@ import {
 } from "viem";
 import { blockTime, read } from "../src/chain.ts";
 import { AUTOMAXI, CARBON_IMPACT, KEEPER, RPCS, VOTER, VOTING_ESCROW } from "../src/config.ts";
-import { readEarnings, sharesOf, type Reward } from "../src/earnings.ts";
+import { readEarnings, rewardPairs, sharesOf, type Reward } from "../src/earnings.ts";
 import { WEEK } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
-import { SETTLED, payoutBlocks, payoutsIn, readStandings } from "../src/receipts.ts";
+import { SETTLED, paidThrough, payoutBlocks, payoutsIn, readStandings } from "../src/receipts.ts";
 
 const CONDUIT = CARBON_IMPACT.address;
 const FORK_URL = process.env.BASE_RPC_URL ?? "https://mainnet.base.org";
@@ -413,6 +413,10 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     for (const owner of [MEMBER, NEWCOMER, ELSEWHERE, LEAVER, ENDED]) {
       await anvil("anvil_setBalance", [owner, "0x16345785d8a0000"]); // 0.1 ETH
     }
+    // Carbon Impact paid nothing from Wed 23 Sep, so for any account in it, the payouts also read the pools of the epoch
+    // from Thu 1 Oct among every pool's reward contracts. Through anvil, that takes minutes the first time, and would
+    // hold up each test's own reads.
+    await warm(() => rewardPairs(CONDUIT, FLIP - 3 * WEEK));
     browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   });
 
@@ -651,18 +655,22 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
   });
 
   test("each account's last payout, found through Hydrex's reward contracts, and its receipt", async () => {
-    // PAYEE has 93 accounts: anvil reads them from FORK_URL for most of a minute the first time.
+    // PAYEE has 93 accounts: anvil reads them from FORK_URL for most of a minute the first time. #82774 was not paid in
+    // last epoch's pools, so the page also reads the pools of the epoch before, among every pool's reward contracts.
     await warm(async () => {
       const [earnings] = await Promise.all([readEarnings(CONDUIT), readAccounts(PAYEE)]);
       const pairs = earnings!.rewards.map(({ contract, token }) => ({ contract, token: token.address }));
       const top = BLOCK - SETTLED;
-      const [[time], standings] = await Promise.all([
+      const [[time], last, before] = await Promise.all([
         read([blockTime], top) as Promise<[bigint]>,
         readStandings(PAID_IDS, pairs, top),
+        rewardPairs(CONDUIT, earnings!.start - WEEK),
       ]);
+      const standings = await paidThrough(last, before, top);
       assert.deepEqual(
         standings.map(({ through }) => through),
         PAID_IDS.map(() => PAID_THROUGH),
+        "they were paid on neither epoch's pools since",
       );
       const blocks = await payoutBlocks(standings, top, Number(time));
       assert.deepEqual(
