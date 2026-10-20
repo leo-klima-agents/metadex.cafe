@@ -1341,6 +1341,12 @@
               >
             </li>
             <li>
+              AutoMaxi, a conduit, once it is on Base:
+              <a href="https://basescan.org/address/0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B"
+                ><code translate="no">0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B</code></a
+              >
+            </li>
+            <li>
               Hydrex's VotingEscrow, which holds the accounts:
               <a href="https://basescan.org/address/0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1"
                 ><code translate="no">0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1</code></a
@@ -1362,22 +1368,28 @@
           <h3>The two calls</h3>
           <p>
             Joining is <code translate="no">setConduitApproval(conduit, tokenId, true)</code> on the VotingEscrow, with
-            Carbon Impact as the conduit; leaving is the same with <code>false</code>. The review shows each call, as
-            your wallet will, before it asks.
+            Carbon Impact or AutoMaxi as the conduit; leaving is the same with <code>false</code>. The review shows each
+            call, as your wallet will, before it asks.
           </p>
           <h3>What the page checks</h3>
           <p>Before it lets anyone join, and every hour while it is open, the page checks on Base that:</p>
           <ul>
             <li>the RPC it reads from serves Base, so that what it shows is Base's;</li>
-            <li>Carbon Impact runs the code this page knows, so that it does what this page says;</li>
-            <li>Carbon Impact points to Hydrex's VotingEscrow and Voter, and pays in kVCM;</li>
+            <li>each automation runs the code this page knows, so that it does what this page says;</li>
+            <li>
+              each points to Hydrex's VotingEscrow and Voter, and Carbon Impact pays in kVCM, while AutoMaxi's code
+              fixes how it pays;
+            </li>
             <li>joining approves voting and claiming only, as it did when this page was written;</li>
             <li>
               Hydrex's VotingEscrow and its approval logic run the code this page knows, since an upgrade could change
               what an approval allows.
             </li>
           </ul>
-          <p>If a check fails, joining stays off, and the page says which. Leaving still works.</p>
+          <p>
+            If a check fails, joining that automation stays off, and the page says which. Leaving still works. Until
+            there is code at AutoMaxi's address, the page leaves it out.
+          </p>
           <h3>That nothing was transferred</h3>
           <p>
             On Basescan, a join or a leave shows no token transfers, and the VotingEscrow still lists the account as
