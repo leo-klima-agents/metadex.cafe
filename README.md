@@ -181,7 +181,7 @@ npm run build   # writes the page to dist/
 `npm run test:fork` builds the page, then runs it in Chromium against a fork of Base in anvil, with real accounts:
 joining, leaving, a Safe, the views, and what can fail. It needs [anvil](https://getfoundry.sh/) and Chromium
 (`npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium binary). `BASE_RPC_URL` is the archive RPC to
-fork from, and `SCREENSHOTS` an optional folder for screenshots. It takes about ten minutes.
+fork from, and `SCREENSHOTS` an optional folder for screenshots. It takes about twenty minutes.
 
 CI runs Prettier, the type check, the unit tests, `reuse lint` and the build. It then builds again from a fresh clone
 and checks that both builds are the same. With `BASE_RPC_URL` set, it also runs the browser tests. Dependabot updates
