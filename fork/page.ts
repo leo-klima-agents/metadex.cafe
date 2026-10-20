@@ -267,6 +267,10 @@ function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
   };
 }
 
+// Requests the page sent to anvil that it has not answered yet. A test can end while the page waits on one, and once
+// anvil stops, the request fails in a handler that nobody awaits any more. So anvil answers them all before it stops.
+const forwarding = new Set<Promise<string>>();
+
 async function serve(route: Route, { origins, rpc }: Pick<Opened, "origins" | "rpc">): Promise<void> {
   const request = route.request();
   const { origin, pathname } = new URL(request.url());
@@ -278,7 +282,9 @@ async function serve(route: Route, { origins, rpc }: Pick<Opened, "origins" | "r
   if (RPC_ORIGINS.includes(origin)) {
     if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: CORS });
     if (rpc.refuse?.(request.postData() ?? "")) return route.abort();
-    const body = await post(request.postData() ?? "");
+    const reply = post(request.postData() ?? "");
+    forwarding.add(reply);
+    const body = await reply.finally(() => forwarding.delete(reply));
     return route.fulfill({ headers: { ...CORS, "content-type": "application/json" }, body });
   }
   if (origin === SAFE_WALLET) return route.fulfill({ contentType: "text/html", body: SAFE_PAGE });
@@ -409,6 +415,7 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
 
   after(async () => {
     await browser?.close();
+    await Promise.allSettled(forwarding);
     node?.kill();
   });
 
