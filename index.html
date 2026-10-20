@@ -592,8 +592,10 @@
             <p>
               For each of your accounts in <span class="receipts-automations">Carbon Impact</span>: up to when it has
               been paid, and what waits to be claimed, from Hydrex's reward contracts; then the receipt of its last
-              payout, from the automation's events. Dollars are at the prices of the flip before each payout, and of the
-              last flip for what waits; a token without a deep enough pool counts for nothing.
+              payout, from the automation's events. An epoch counts as paid once claims since it ended took more than
+              half of what its rewards were worth, so that a claim of a few small rewards does not. Dollars are at the
+              prices of the flip before each payout, and of the last flip for what waits; a token without a deep enough
+              pool counts for nothing.
             </p>
             <p class="receipts-underway" hidden>
               A payout is under way: it reached <span class="underway-paid"></span> on
@@ -1831,16 +1833,23 @@
             ><span
               ><strong>Late.</strong>
               <span class="late-through">Paid up to <time class="standing-through"></time> only.</span
-              ><span class="late-never">Never paid.</span> <span class="standing-automation"></span> voted with it from
-              <time class="late-from"></time> to <time class="late-to"></time>, and has not paid it for that epoch
+              ><span class="late-never">Never paid.</span> <span class="standing-voter"></span> voted with it from
+              <time class="late-from"></time> to <time class="late-to"></time>, and it has not been paid for that epoch
               yet.</span
             >
           </li>
           <li class="standing-none" hidden>
             <span class="shape idle" aria-hidden="true"></span
             ><span
-              ><strong>Nothing to pay.</strong> <span class="standing-automation"></span>'s votes earned no rewards last
+              ><strong>Nothing to pay.</strong> <span class="standing-voter"></span>'s votes earned no rewards last
               epoch.</span
+            >
+          </li>
+          <li class="standing-early" hidden>
+            <span class="shape idle" aria-hidden="true"></span
+            ><span
+              ><strong>Not final yet.</strong> Hydrex has not moved on to the new epoch yet, so what last epoch's votes
+              earned can still change. The page reads the payouts again every five minutes.</span
             >
           </li>
           <li class="standing-failed" hidden>
@@ -1852,6 +1861,12 @@
           </li>
           <li class="standing-waits unmarked">
             <span><span class="standing-waiting"></span> There may be more in other pools.</span>
+          </li>
+          <li class="standing-moved unmarked" hidden>
+            <span
+              ><span class="standing-voter"></span> voted with it last epoch, but no longer holds its claims, so it
+              cannot claim what waits from those votes. You can claim it on Hydrex.</span
+            >
           </li>
           <li class="standing-outside unmarked" hidden>
             <span

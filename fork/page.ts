@@ -20,10 +20,10 @@ import {
 } from "viem";
 import { blockTime, read } from "../src/chain.ts";
 import { AUTOMAXI, CARBON_IMPACT, KEEPER, RPCS, VOTER, VOTING_ESCROW } from "../src/config.ts";
-import { readEarnings, rewardPairs, sharesOf, type Reward } from "../src/earnings.ts";
+import { readEarnings, rewardsFor, sharesOf, type Reward } from "../src/earnings.ts";
 import { WEEK } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
-import { SETTLED, paidThrough, payoutBlocks, payoutsIn, readStandings } from "../src/receipts.ts";
+import { SETTLED, payoutBlocks, payoutsIn, readEarned, readStamps, standingOf, weighed } from "../src/receipts.ts";
 
 const CONDUIT = CARBON_IMPACT.address;
 const FORK_URL = process.env.BASE_RPC_URL ?? "https://mainnet.base.org";
@@ -416,7 +416,7 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     // Carbon Impact paid nothing from Wed 23 Sep, so for any account in it, the payouts also read the pools of the epoch
     // from Thu 1 Oct among every pool's reward contracts. Through anvil, that takes minutes the first time, and would
     // hold up each test's own reads.
-    await warm(() => rewardPairs(CONDUIT, FLIP - 3 * WEEK));
+    await warm(() => rewardsFor(CONDUIT, FLIP - 3 * WEEK));
     browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   });
 
@@ -659,18 +659,29 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     // last epoch's pools, so the page also reads the pools of the epoch before, among every pool's reward contracts.
     await warm(async () => {
       const [earnings] = await Promise.all([readEarnings(CONDUIT), readAccounts(PAYEE)]);
-      const pairs = earnings!.rewards.map(({ contract, token }) => ({ contract, token: token.address }));
+      const last = { start: earnings!.start, pairs: weighed(earnings!.rewards, earnings!.prices) };
       const top = BLOCK - SETTLED;
-      const [[time], last, before] = await Promise.all([
+      const [[time], stamps, earned, rewards] = await Promise.all([
         read([blockTime], top) as Promise<[bigint]>,
-        readStandings(PAID_IDS, pairs, top),
-        rewardPairs(CONDUIT, earnings!.start - WEEK),
+        readStamps(PAID_IDS, last.pairs, top),
+        readEarned(PAID_IDS, last.pairs, top),
+        rewardsFor(CONDUIT, earnings!.start - WEEK),
       ]);
-      const standings = await paidThrough(last, before, top);
+      const before = { start: earnings!.start - WEEK, pairs: weighed(rewards, earnings!.prices) };
+      const stampsBefore = await readStamps(PAID_IDS, before.pairs, top);
+      const standings = PAID_IDS.map((id, i) =>
+        standingOf(
+          id,
+          last,
+          before,
+          { last: stamps[i]!, earned: earned[i]!, before: stampsBefore[i]! },
+          { last: true, before: true },
+        ),
+      );
       assert.deepEqual(
-        standings.map(({ through }) => through),
-        PAID_IDS.map(() => PAID_THROUGH),
-        "they were paid on neither epoch's pools since",
+        standings.map(({ through, late }) => [through, late]),
+        PAID_IDS.map(() => [PAID_THROUGH, true]),
+        "they were paid for neither epoch since",
       );
       const blocks = await payoutBlocks(standings, top, Number(time));
       assert.deepEqual(
@@ -695,7 +706,7 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     // On Fri 16 Oct, Carbon Impact owed it the epoch from Thu 1 Oct, and had paid nothing since Wed 23 Sep.
     assert.match(
       await standing.locator(".standing-late").innerText(),
-      /^Late\. Paid up to Thu,? 17 Sept? only\. Carbon Impact voted with it from Thu,? 1 Oct to Thu,? 8 Oct, and has not paid it for that epoch yet\.$/,
+      /^Late\. Paid up to Thu,? 17 Sept? only\. Carbon Impact voted with it from Thu,? 1 Oct to Thu,? 8 Oct, and it has not been paid for that epoch yet\.$/,
     );
     assert.equal(await standing.locator(".standing-paid").isVisible(), false);
     assert.match(

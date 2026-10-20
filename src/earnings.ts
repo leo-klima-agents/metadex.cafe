@@ -132,6 +132,13 @@ export async function tokensOf(addresses: Address[], reader: typeof read = read)
   );
 }
 
+// The rewards in tokens whose decimals are known, with their tokens.
+const withTokens = (rewards: Found["rewards"], tokens: Map<string, Token>): Reward[] =>
+  rewards.flatMap(({ token, ...reward }) => {
+    const known = tokens.get(token.toLowerCase());
+    return known ? [{ ...reward, token: known }] : [];
+  });
+
 async function priced(
   start: number,
   now: number,
@@ -141,10 +148,7 @@ async function priced(
   tokens: Map<string, Token>,
   reader: typeof read = read,
 ): Promise<Earnings> {
-  const rewards = found.rewards.flatMap(({ token, ...reward }) => {
-    const known = tokens.get(token.toLowerCase());
-    return known ? [{ ...reward, token: known }] : [];
-  });
+  const rewards = withTokens(found.rewards, tokens);
   const amounts = new Map<string, bigint>();
   for (const { token, amount } of rewards) amounts.set(token.address, (amounts.get(token.address) ?? 0n) + amount);
   // Only the tokens earned: the pools' own tokens are read only to name the pools.
@@ -199,22 +203,25 @@ export async function readEarnings(automation: Address, known?: number): Promise
   return priced(start, now, votes!, named, found, tokens);
 }
 
-// The reward contracts and tokens that paid an automation's votes in the epoch from `start`. By then, Hydrex's Voter
-// holds its later votes, so they are found from every pool's reward contracts: thousands of reads, after the page's
+// What an automation's votes earned in the epoch from `start`, reward by reward, unpriced. By then, Hydrex's Voter holds
+// its later votes, so the rewards are found from every pool's reward contracts: thousands of reads, after the page's
 // own, unless it had no votes then. An ended epoch's never change, so each is read once.
-const paidBy = new Map<string, Promise<{ contract: Address; token: Address }[]>>();
+const paidBy = new Map<string, Promise<Reward[]>>();
 
-export function rewardPairs(automation: Address, start: number): Promise<{ contract: Address; token: Address }[]> {
+export function rewardsFor(automation: Address, start: number): Promise<Reward[]> {
   const key = `${automation.toLowerCase()} ${start}`;
   let found = paidBy.get(key);
   if (!found) {
-    found = readLater([escrow("getPastVotes", automation, start)])
-      .then(async ([votes]) => {
-        if (required([votes])[0] === 0n) return [];
-        const bribes = await bribesOf(await allPools(readLater), readLater);
-        return (await rewardsOf(bribes, start, automation, readLater)).rewards;
-      })
-      .then((rewards) => rewards.map(({ contract, token }) => ({ contract, token })));
+    found = readLater([escrow("getPastVotes", automation, start)]).then(async ([votes]) => {
+      if (required([votes])[0] === 0n) return [];
+      const bribes = await bribesOf(await allPools(readLater), readLater);
+      const { rewards } = await rewardsOf(bribes, start, automation, readLater);
+      const tokens = await tokensOf(
+        rewards.map(({ token }) => token),
+        readLater,
+      );
+      return withTokens(rewards, tokens);
+    });
     paidBy.set(key, found);
     found.catch(() => paidBy.delete(key));
   }

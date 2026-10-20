@@ -82,9 +82,11 @@ async function readAndShow({ kind, address }: Automation): Promise<boolean> {
 // Whether an automation's figures could not be read, and there are none from an earlier epoch.
 export const earningsFailed = ({ kind }: Automation): boolean => failedKinds.has(kind) && !earned.has(kind);
 
-// An automation's figures, read first if there are none yet. The receipts read each account's rewards in its pools.
-export async function lastEarnings(automation: Automation): Promise<Earnings> {
-  if (!earned.has(automation.kind)) await loadOne(automation);
+// An automation's figures, read first if there are none yet, or none from the epoch from `start`. The receipts read
+// each account's rewards in its pools. Just after a flip, until Hydrex moves on to the new epoch, they are still the
+// epoch before's.
+export async function lastEarnings(automation: Automation, start = 0): Promise<Earnings> {
+  if ((earned.get(automation.kind)?.found.start ?? -1) < start) await loadOne(automation);
   const found = earned.get(automation.kind)?.found;
   if (!found) throw new Error(`What ${automation.name}'s votes earned last epoch could not be read.`);
   return found;
