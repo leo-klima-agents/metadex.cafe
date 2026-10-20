@@ -1,15 +1,7 @@
 import { getAddress, zeroAddress, type Address } from "viem";
 import "./views.ts";
 import { now, same, sawBlock } from "./chain.ts";
-import {
-  AUTOMATIONS,
-  AUTOMAXI,
-  AUTOMAXI_FEE_BPS,
-  CARBON_IMPACT,
-  CHAIN_ID,
-  type Automation,
-  type Kind,
-} from "./config.ts";
+import { AUTOMATIONS, AUTOMAXI, AUTOMAXI_FEE_BPS, CHAIN_ID, type Automation, type Kind } from "./config.ts";
 import { FACTS, closeChoose, openChoose, type Fact, type Option } from "./choose.ts";
 import { clone, fill, fillAddress, fillPlural, fillTime, groupAllHex, show } from "./dom.ts";
 import {
@@ -30,18 +22,19 @@ import {
   when,
 } from "./format.ts";
 import {
+  FROM_START,
   LockType,
   automationName,
   canJoin,
   canLeave,
   canLeaveOther,
   failedChecks,
+  gasCosts,
   groupOf,
   hasStopped,
   join,
   leave,
   leaveOther,
-  gasCost,
   paidBpsOf,
   readAccounts,
   readAutomations,
@@ -93,7 +86,7 @@ let connection: Connection | undefined;
 let shown: Holdings | undefined;
 let carbonImpact: CarbonImpact | undefined;
 let carbonImpactRead: Promise<void> | undefined;
-// Until the checks have run, joining is off, and only Carbon Impact is shown.
+// Until the checks have run, joining is off, and only the automations on Base from the start are shown.
 let checks: Checks | undefined;
 let reads = 0;
 let reading = false;
@@ -103,7 +96,7 @@ let ignoredUpTo = 0;
 let clicks = 0;
 
 // The page's automations on Base. They decide what the page offers to join; an account's status is read against all.
-const present = (): Automation[] => checks?.present ?? [CARBON_IMPACT];
+const present = (): Automation[] => checks?.present ?? FROM_START;
 
 // What differs between the page's automations, kind by kind.
 type Traits = {
@@ -599,6 +592,7 @@ function choose(accounts: Account[]): void {
   const { owner } = shown;
   const ids = accounts.map(({ id }) => id);
   const power = accounts.reduce((sum, { votes }) => sum + toEarningPower(votes), 0n);
+  const gasCost = gasCosts();
   const options: Option[] = present().map((automation) => {
     const can = (account: Account) => joinable(account, automation);
     const able = accounts.filter(can);

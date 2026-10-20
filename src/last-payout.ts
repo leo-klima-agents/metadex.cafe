@@ -1,5 +1,5 @@
 import type { Address, Hex } from "viem";
-import { blockTime, now, readLater, required, rpc, same } from "./chain.ts";
+import { blockTime, now, readLater, required, rpc, same, type Call } from "./chain.ts";
 import { lastClaimBlocks, readClaimsAt, totals, walkClaims, WALK_LIMIT, type Walk } from "./claims.ts";
 import {
   AUTOMATIONS,
@@ -14,20 +14,21 @@ import {
 import { clone, fill, fillAddress, fillTime, show, showHex, txUrl } from "./dom.ts";
 import { rewardPairs, tokensOf, type Earnings } from "./earnings.ts";
 import { WEEK, amount, bps, list, listWith, short, usd, utc, weekStart } from "./format.ts";
-import { escrow, type Account, type Holdings } from "./hydrex.ts";
+import { autoMaxi, escrow, type Account, type Holdings } from "./hydrex.ts";
 import { lastEarnings } from "./last-epoch.ts";
 import { pricesAt, type Token } from "./prices.ts";
 import {
-  BLOCK_TIME,
   SETTLED,
   blockTimes,
   dollars,
+  epochBlock,
   isLate,
   namesAt,
   paidThrough,
   payoutBlocks,
   payoutsIn,
   readStandings,
+  stampOf,
   type Amount,
   type Payout,
   type Standing,
@@ -78,9 +79,15 @@ let shown: Holdings | undefined;
 let readFor: string | undefined;
 // The owner whose payouts the section shows.
 let showing: string | undefined;
+// What the five-minute check reads: one call for each account that a payout due since the flip has not reached yet,
+// whose answer shows once it has; whether some payouts could not be read; and when a payout under way stops being shown
+// as such. Each calls for the payouts to be read again.
+type Signal = { call: Call; paid: (answer: unknown) => boolean };
+let signals: Signal[] = [];
+let missed = false;
+let underUntil = Infinity;
 let checked = 0;
-// Whether a payout due since the flip has not reached every account yet, or some payouts could not be read.
-let awaited = false;
+let checking = false;
 // Each receipt drawn, by what it shows.
 const drawn = new Map<string, Drawn>();
 
@@ -167,8 +174,9 @@ function fillReceipt(
   item.querySelector<HTMLAnchorElement>(".receipt-tx")!.href = txUrl(payout.tx);
 }
 
-// AutoMaxi's receipt: what its claims in the epoch of the last one received, its fee, and what reached the owner, in
-// the tokens earned. Tokens without a price show as amounts only.
+// AutoMaxi's receipt: what its claims in the epoch of the last one received, its fee, and what reached the account's
+// owner, in the tokens earned. Each claim pays whoever owned the account then, which a claim made before it changed hands
+// shows. Tokens without a price show as amounts only.
 function fillClaims(
   item: HTMLElement,
   id: bigint,
@@ -180,8 +188,10 @@ function fillClaims(
 ): void {
   const { received, fees, paid } = totals(claims);
   const flip = weekStart(times.get(claims[0]!.block)!);
+  const elsewhere = claims.some((claim) => !same(claim.owner, owner));
   fill(item, {
     "receipt-id": `#${id}`,
+    "receipt-paid-to": elsewhere ? "Paid to its owner" : "Paid to you",
     "receipt-fee-share": bps(AUTOMAXI_FEE_BPS),
     "receipt-claimed-usd": worth(received, tokens, prices),
     "receipt-fee-usd": worth(fees, tokens, prices),
@@ -195,21 +205,28 @@ function fillClaims(
   fillTime(item, "receipt-to", flip);
   show(".receipt-stopped", stopped, item);
   item.querySelector(".receipt-claims")!.replaceChildren(
-    ...claims.map(({ block, caller, tx }) => {
+    ...claims.map(({ block, caller, owner: paid, tx }) => {
       const line = clone("claim-line");
       fillTime(line, "claim-time", times.get(block)!, utc);
       const by = same(caller, KEEPER) ? "by the keeper" : same(caller, owner) ? "by you" : `by ${short(caller)}`;
       fill(line, { "claim-by": by });
+      show(".claim-to", !same(paid, owner), line);
+      fillAddress(line, "claim-owner", paid);
       line.querySelector<HTMLAnchorElement>(".claim-tx")!.href = txUrl(tx);
       return line;
     }),
   );
 }
 
+// Dollars at the prices of last epoch's rewards.
+function valueIn(earnings: Earnings): (found: Amount[]) => number {
+  const tokens = new Map(earnings.rewards.map(({ token }) => [token.address.toLowerCase(), token]));
+  return (found) => dollars(found, tokens, earnings.prices);
+}
+
 // What waits to be claimed in last epoch's pools, as far as it could be read.
 function waitingLine({ waiting, unknown }: Standing, earnings: Earnings): string {
-  const tokens = new Map(earnings.rewards.map(({ token }) => [token.address.toLowerCase(), token]));
-  const value = dollars(waiting, tokens, earnings.prices);
+  const value = valueIn(earnings)(waiting);
   if (unknown && value > 0) return `At least ${usd(value)} waits to be claimed in last epoch's pools.`;
   if (unknown) return "What waits to be claimed in last epoch's pools could not be read.";
   return value > 0
@@ -231,6 +248,7 @@ function standingItem(entry: Entry, epochStart: number, receipt?: HTMLElement) {
   fillTime(item, "late-from", epochStart - 2 * WEEK);
   fillTime(item, "late-to", epochStart - WEEK);
   show(".standing-failed", !earnings, item);
+  show(".standing-none", !!earnings && !standing, item);
   show(".standing-paid", !!standing && !late && through > 0, item);
   show(".standing-never", !!standing && !late && !through, item);
   show(".standing-late", !!standing && late, item);
@@ -257,28 +275,37 @@ const pairsOf = (earnings: Earnings) =>
   earnings.rewards.map(({ contract, token }) => ({ contract, token: token.address }));
 
 // Each account's standing in an automation's reward contracts, last epoch's first. An account not paid since last epoch
-// started may have been paid on the pools of the epoch before, until its next payout, so those are read for it too.
-// None if the automation had rewards in neither.
+// started, that voted with the automation in the epoch before, may have been paid on that epoch's pools, until its next
+// payout, so those are read for it too. None if the automation had rewards in neither.
 async function standingsIn(
   automation: Automation,
   ids: bigint[],
   earnings: Earnings,
   top: number,
+  votedBefore: Set<bigint>,
 ): Promise<Standing[] | undefined> {
   const pairs = pairsOf(earnings);
   const standings = await readStandings(ids, pairs, top);
-  if (standings.every(({ through }) => through >= earnings.start)) return standings;
-  const before = await rewardPairs(automation.address, earnings.start - WEEK);
+  const behind = standings.filter(({ id, through }) => through < earnings.start && votedBefore.has(id));
+  const before = behind.length ? await rewardPairs(automation.address, earnings.start - WEEK) : [];
   if (!pairs.length && !before.length) return undefined;
-  return paidThrough(standings, before, top);
+  const found = new Map((await paidThrough(behind, before, top)).map((standing) => [standing.id, standing]));
+  return standings.map((standing) => found.get(standing.id) ?? standing);
 }
 
-// An automation's own reader of its accounts' payouts, at block `top`, of time `time` if it could be read.
-type Reader = (ids: bigint[], earnings: Earnings, top: number, time?: bigint) => Promise<Part[]>;
+// An automation's own reader of its accounts' payouts, at block `top`, of time `time` if it could be read. `votedBefore`
+// holds the accounts that voted with it in the epoch before last.
+type Reader = (
+  ids: bigint[],
+  earnings: Earnings,
+  top: number,
+  votedBefore: Set<bigint>,
+  time?: bigint,
+) => Promise<Part[]>;
 
 // Carbon Impact: about 25 reads to find each block of payouts, then one read of logs per block.
-const carbonImpactPayouts: Reader = async (ids, earnings, top, time) => {
-  const standings = await standingsIn(CARBON_IMPACT, ids, earnings, top);
+const carbonImpactPayouts: Reader = async (ids, earnings, top, votedBefore, time) => {
+  const standings = await standingsIn(CARBON_IMPACT, ids, earnings, top, votedBefore);
   if (!standings) return ids.map(() => ({}));
   const blocks = await payoutBlocks(standings, top, Number(required([time])[0]));
   const [paid, times] = await Promise.all([payoutsIn([...blocks.values()]), blockTimes([...blocks.values()])]);
@@ -295,16 +322,21 @@ const carbonImpactPayouts: Reader = async (ids, earnings, top, time) => {
 
 // AutoMaxi: one read of each account's last claim block, then its claims back to the start of that claim's epoch, one
 // read of logs per block.
-const autoMaxiPayouts: Reader = async (ids, earnings, top) => {
-  const [standings, last] = await Promise.all([standingsIn(AUTOMAXI, ids, earnings, top), lastClaimBlocks(ids, top)]);
+const autoMaxiPayouts: Reader = async (ids, earnings, top, votedBefore) => {
+  const [standings, last] = await Promise.all([
+    standingsIn(AUTOMAXI, ids, earnings, top, votedBefore),
+    lastClaimBlocks(ids, top),
+  ]);
   const lastTimes = await blockTimes([...last.values()].filter((block) => block > 0));
   const starts = new Map(
-    ids.map((id) => {
-      const from = last.get(id)!;
-      const time = lastTimes.get(from) ?? 0;
-      // The first block of the epoch of the last claim.
-      return [id, { from, since: from && from - Math.floor((time - weekStart(time)) / BLOCK_TIME) }];
-    }),
+    await Promise.all(
+      ids.map(async (id) => {
+        const from = last.get(id)!;
+        const time = lastTimes.get(from)!;
+        // The first block of the epoch of the last claim.
+        return [id, { from, since: from && (await epochBlock(weekStart(time), from, time)) }] as const;
+      }),
+    ),
   );
   const walks = await walkClaims(starts, readClaimsAt);
   return ids.map((id, i) => {
@@ -321,6 +353,21 @@ const autoMaxiPayouts: Reader = async (ids, earnings, top) => {
 
 const readers: Record<Kind, Reader> = { "carbon-impact": carbonImpactPayouts, automaxi: autoMaxiPayouts };
 
+// For each kind, the cheap read that shows an account was paid. Carbon Impact's payout claims at least the reward that
+// is worth the most, which moves its record to this epoch; AutoMaxi records the block of each claim that received
+// anything.
+const signalOf: Record<Kind, (entry: Entry, epochStart: number) => Signal | undefined> = {
+  "carbon-impact": ({ account, standing, earnings }, epochStart) => {
+    const value = valueIn(earnings!);
+    const most = standing!.waiting.reduce((best, owed) => (value([owed]) > value([best]) ? owed : best));
+    return { call: stampOf(account.id, most), paid: (stamp) => Number(stamp) >= epochStart };
+  },
+  automaxi: ({ account, block = 0 }) => ({
+    call: autoMaxi("lastClaimBlock", account.id),
+    paid: (last) => Number(last) !== block,
+  }),
+};
+
 // Each automation's accounts are read on their own: if one automation's payouts cannot be read, the others' still show.
 async function readPayouts(holdings: Holdings, members: Account[]): Promise<Found> {
   const { epochStart } = holdings;
@@ -334,13 +381,17 @@ async function readPayouts(holdings: Holdings, members: Account[]): Promise<Foun
     ],
     top,
   );
+  // Whether an account voted with an automation in the epoch that started one or two epochs ago.
+  const votedWith = (automation: Automation, id: bigint, epochsAgo: 1 | 2): boolean =>
+    same(String(delegates[2 * ids.indexOf(id) + epochsAgo - 1]), automation.address);
   const read = new Map(
     await Promise.all(
       automations.map(async (automation) => {
         const these = members.filter((account) => automationOf(account) === automation).map(({ id }) => id);
+        const votedBefore = new Set(these.filter((id) => votedWith(automation, id, 2)));
         try {
           const earnings = await lastEarnings(automation);
-          const parts = await readers[automation.kind](these, earnings, top, time as bigint | undefined);
+          const parts = await readers[automation.kind](these, earnings, top, votedBefore, time as bigint | undefined);
           return [automation, { earnings, parts: new Map(these.map((id, j) => [id, parts[j]!])) }] as const;
         } catch (error) {
           console.error(error);
@@ -349,18 +400,18 @@ async function readPayouts(holdings: Holdings, members: Account[]): Promise<Foun
       }),
     ),
   );
-  const entries = members.map((account, i): Entry => {
+  const entries = members.map((account): Entry => {
     const automation = automationOf(account)!;
     const found = read.get(automation);
     const part = found?.parts.get(account.id) ?? {};
-    const [last, before] = delegates.slice(2 * i, 2 * i + 2) as (Address | undefined)[];
     return {
       ...part,
       automation,
       account,
       ...(found && { earnings: found.earnings }),
-      due: same(String(last), automation.address),
-      late: !!part.standing && isLate(part.standing.through, same(String(before), automation.address), epochStart),
+      // Only while the automation still holds its claims: an account that left can no longer be paid by it.
+      due: votedWith(automation, account.id, 1) && same(account.claimer, automation.address),
+      late: !!part.standing && isLate(part.standing.through, votedWith(automation, account.id, 2), epochStart),
     };
   });
   if (entries.every(({ earnings }) => !earnings)) throw new Error("No automation's payouts could be read.");
@@ -369,7 +420,7 @@ async function readPayouts(holdings: Holdings, members: Account[]): Promise<Foun
 
 export function forgetPayout(): void {
   shown = readFor = showing = undefined;
-  awaited = false;
+  [signals, missed, underUntil] = [[], false, Infinity];
   section.hidden = true;
 }
 
@@ -396,9 +447,11 @@ async function load(quietly = false): Promise<void> {
   if (!kept) setState("reading");
   // False once another owner's accounts, or a newer read, took over.
   const current = () => readFor === key && !!shown && keyOf(shown) === key;
+  // A quiet read that fails keeps what is shown, and the next check reads the payouts again.
   const fail = (error: unknown) => {
     console.error(error);
-    if (!current() || kept) return;
+    if (!current()) return;
+    if (kept) return void (missed = true);
     readFor = undefined;
     setState("failed");
   };
@@ -472,8 +525,12 @@ async function load(quietly = false): Promise<void> {
   show(".receipts-underway", !!under, section);
   showing = owner;
   setState("found");
+  // An account is awaited while a payout is due to it, has not reached it, and has something to pay it.
   const paidSince = ({ time }: Entry) => time !== undefined && time >= found.epochStart;
-  awaited = found.entries.some((entry) => !entry.earnings || (entry.due && !paidSince(entry)));
+  const awaited = found.entries.filter((entry) => entry.due && !paidSince(entry) && entry.standing?.waiting.length);
+  signals = awaited.map((entry) => signalOf[entry.automation.kind](entry, found.epochStart)!);
+  missed = found.entries.some(({ earnings }) => !earnings);
+  underUntil = under ? under.first + UNDER_WAY : Infinity;
   // Dollars need many more reads, so they come after, at the prices of the flip before each payout, flip by flip at
   // once. Without them, the receipts show tokens only.
   const unpriced = [...new Set(receipts.values())].filter(({ priced }) => !priced);
@@ -500,12 +557,33 @@ async function load(quietly = false): Promise<void> {
 }
 
 // A payout goes on for hours, so the page may have read it half done. Every five minutes, while a payout due since the
-// flip has not reached every account, or some payouts could not be read, the accounts' standings are read again, and
-// the payouts of any account paid since. A new epoch, or a change of accounts, reads them again anyway.
+// flip has not reached every account, one cheap read per account shows whether it has since, and only then are the
+// payouts read again, as they are when some could not be read. A new epoch, or a change of accounts, reads them again
+// anyway.
 export function checkPayout(): void {
-  if (!readFor || !awaited || Date.now() - checked < 300_000) return;
-  readFor = undefined;
-  void load(true);
+  if (!readFor || checking || Date.now() - checked < 300_000) return;
+  if (!signals.length && !missed && now() < underUntil) return;
+  const key = readFor;
+  checked = Date.now();
+  checking = true;
+  void moved()
+    .then((again) => {
+      if (!again || readFor !== key) return;
+      readFor = undefined;
+      return load(true);
+    })
+    .finally(() => (checking = false));
+}
+
+// Whether the payouts should be read again. A failed check is tried again at the next.
+async function moved(): Promise<boolean> {
+  if (missed || now() >= underUntil) return true;
+  const watched = signals;
+  const answers = await readLater(watched.map(({ call }) => call)).catch((error: unknown) => {
+    console.error(error);
+    return [];
+  });
+  return watched.some(({ paid }, i) => answers[i] !== undefined && paid(answers[i]));
 }
 
 section.querySelector(".receipts-again")!.addEventListener("click", () => void load());

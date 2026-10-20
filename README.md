@@ -149,8 +149,9 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 - **At the end of an epoch,** Thursday at 00:00 UTC by Base's clock, the page reads the accounts and Carbon Impact again
   within half a minute.
 - **A payout under way.** A payout takes up to half a day after each epoch. While it has paid some of the owner's
-  accounts and not yet others, the page says so. Until a payout due since the flip has reached every account, the page
-  reads the payouts again every five minutes, and then not until the next epoch.
+  accounts and not yet others, the page says so. Until a payout due since the flip has reached every account that has
+  something waiting, the page checks every five minutes, with one read per account, and reads the payouts again once one
+  has been paid; then not until the next epoch.
 - **A late payout.** An account is late when it voted with Carbon Impact two epochs ago and has not been paid for that
   epoch yet. Its rewards wait in Hydrex's reward contracts until someone claims them, for up to 50 epochs. Carbon Impact
   paid nothing from 23 Sep to at least 19 Oct 2026, though it kept voting.

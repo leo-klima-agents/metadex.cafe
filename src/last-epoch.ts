@@ -15,8 +15,10 @@ const earned = new Map<Kind, Read>();
 const reading = new Map<Kind, Promise<boolean>>();
 const tried = new Map<Kind, number>();
 const failedKinds = new Set<Kind>();
-// Called after each read, whichever caller started it, with the automation whose figures are new or failed.
-const listeners: ((kind: Kind) => void)[] = [];
+// Called after each read, whichever caller started it, with the automation read and whether its figures are new, could
+// not be read, or are as they were.
+type Outcome = "read" | "failed" | "same";
+const listeners: ((kind: Kind, outcome: Outcome) => void)[] = [];
 let comparedEpoch: number | undefined;
 let onScreen = false;
 // Each account's share of its automation's votes, kept with the accounts it was read for.
@@ -54,26 +56,26 @@ function loadOne(automation: Automation): Promise<boolean> {
   return pending;
 }
 
-export const onEarnings = (listener: (kind: Kind) => void): void => void listeners.push(listener);
+export const onEarnings = (listener: (kind: Kind, outcome: Outcome) => void): void => void listeners.push(listener);
 
 async function readAndShow({ kind, address }: Automation): Promise<boolean> {
   tried.set(kind, Date.now());
+  let outcome: Outcome = "same";
   try {
     const found = await readEarnings(address, earned.get(kind)?.found.start);
     if (!found) return false;
-    const value = valueOf(found);
-    earned.set(kind, { found, value });
+    earned.set(kind, { found, value: valueOf(found) });
     failedKinds.delete(kind);
-    display[kind].read(found, value);
+    outcome = "read";
     return true;
   } catch (error) {
     // The page works without these figures: it says so where they go, and keeps any from an earlier epoch.
     console.error(error);
     failedKinds.add(kind);
-    display[kind].failed();
+    outcome = "failed";
     return false;
   } finally {
-    for (const listener of listeners) listener(kind);
+    for (const listener of listeners) listener(kind, outcome);
   }
 }
 
@@ -203,18 +205,16 @@ function compare(): void {
   );
 }
 
-// Where each automation's figures show besides its listeners: Carbon Impact's in Home's numbers and in the section on
-// how the votes did; AutoMaxi's on its own page, which the page's script fills when told.
-const display: Record<Kind, { read(found: Earnings, value: Value): void; failed(): void }> = {
-  "carbon-impact": {
-    read: showEarnings,
-    failed() {
-      show(".earnings-failed", !carbonImpact());
-      show(".earnings-read", !!carbonImpact());
-    },
-  },
-  automaxi: { read() {}, failed() {} },
-};
+// Carbon Impact's figures show in Home's numbers and in the section on how the votes did.
+onEarnings((kind, outcome) => {
+  if (kind !== CARBON_IMPACT.kind) return;
+  const read = carbonImpact();
+  if (outcome === "read") showEarnings(read!.found, read!.value);
+  if (outcome === "failed") {
+    show(".earnings-failed", !read);
+    show(".earnings-read", !!read);
+  }
+});
 
 new IntersectionObserver((entries) => {
   onScreen = entries.some(({ isIntersecting }) => isIntersecting);

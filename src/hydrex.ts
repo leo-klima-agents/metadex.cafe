@@ -20,6 +20,7 @@ import {
 } from "./config.ts";
 import { WEEK, clean, list, weekStart } from "./format.ts";
 import conduits from "./hydrex-conduits.json" with { type: "json" };
+import { feedAt } from "./prices.ts";
 import type { Tx } from "./wallet.ts";
 
 const votingEscrowAbi = parseAbi([
@@ -73,10 +74,6 @@ const autoMaxiAbi = parseAbi([
   "function lastClaimBlock(uint256 tokenId) view returns (uint256)",
 ]);
 
-const feedAbi = parseAbi([
-  "function decimals() view returns (uint8)",
-  "function latestRoundData() view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)",
-]);
 // Base's predeploy that prices posting a transaction's data to Ethereum.
 const GAS_PRICE_ORACLE: Address = "0x420000000000000000000000000000000000000F";
 const gasPriceOracleAbi = parseAbi(["function getL1FeeUpperBound(uint256 unsignedTxSize) view returns (uint256)"]);
@@ -451,6 +448,9 @@ const own: Record<Kind, Own> = {
   },
 };
 
+// The automations on Base before the checks have run.
+export const FROM_START: Automation[] = AUTOMATIONS.filter(({ kind }) => own[kind].always);
+
 export async function failedChecks(): Promise<Checks> {
   const reads = AUTOMATIONS.map(({ kind, address }) => [
     escrow("getConduitApprovalConfig", address),
@@ -488,24 +488,38 @@ export async function failedChecks(): Promise<Checks> {
   };
 }
 
-// The dollars of gas for some calls from `from`, at today's prices: each costs about what the first does, as they
-// differ only by account, plus the most Base charges to post it to Ethereum. Undefined if ETH has no price.
-export async function gasCost(steps: Tx[], from: Address): Promise<number | undefined> {
-  const [first] = steps;
-  if (!first) return 0;
-  const feed = ANCHORS.find(({ address }) => same(address, WETH))!.feed!;
-  // The call's data, and about as much again for the transaction's other fields.
-  const size = BigInt((first.data.length - 2) / 2 + 100);
-  const [gasPrice, gas, [decimals, round, l1]] = await Promise.all([
-    rpc<Hex>("eth_gasPrice", []),
-    rpc<Hex>("eth_estimateGas", [{ from, to: first.to, data: first.data }]),
-    read([
-      call(feed, feedAbi, "decimals"),
-      call(feed, feedAbi, "latestRoundData"),
-      call(GAS_PRICE_ORACLE, gasPriceOracleAbi, "getL1FeeUpperBound", size),
-    ]) as Promise<[number?, (readonly bigint[])?, bigint?]>,
-  ]);
-  if (decimals === undefined || !round) return undefined;
-  const wei = (BigInt(gas) * BigInt(gasPrice) + (l1 ?? 0n)) * BigInt(steps.length);
-  return (Number(wei) / 1e18) * (Number(round[1]) / 10 ** decimals);
+// What gas costs in dollars for some calls from `from`, at today's prices: each costs about what the first does, as they
+// differ only by account, plus the most Base charges to post it to Ethereum. Undefined if ETH has no price. The gas
+// price, ETH's price, and what posting costs for each size of call, are read once for all the calls priced.
+export type GasCost = (steps: Tx[], from: Address) => Promise<number | undefined>;
+
+export function gasCosts(): GasCost {
+  let prices: Promise<[Hex, number | undefined]> | undefined;
+  const posting = new Map<bigint, Promise<bigint>>();
+  const postingOf = (size: bigint): Promise<bigint> => {
+    if (!posting.has(size)) {
+      const fee = read([call(GAS_PRICE_ORACLE, gasPriceOracleAbi, "getL1FeeUpperBound", size)]);
+      posting.set(
+        size,
+        fee.then(([found]) => (found as bigint | undefined) ?? 0n),
+      );
+    }
+    return posting.get(size)!;
+  };
+  return async (steps, from) => {
+    const [first] = steps;
+    if (!first) return 0;
+    const feed = ANCHORS.find(({ address }) => same(address, WETH))!.feed!;
+    prices ??= Promise.all([rpc<Hex>("eth_gasPrice", []), feedAt(feed, Infinity, read)]);
+    // The call's data, and about as much again for the transaction's other fields.
+    const size = BigInt((first.data.length - 2) / 2 + 100);
+    const [[gasPrice, ethUsd], gas, l1] = await Promise.all([
+      prices,
+      rpc<Hex>("eth_estimateGas", [{ from, to: first.to, data: first.data }]),
+      postingOf(size),
+    ]);
+    if (ethUsd === undefined) return undefined;
+    const wei = (BigInt(gas) * BigInt(gasPrice) + l1) * BigInt(steps.length);
+    return (Number(wei) / 1e18) * ethUsd;
+  };
 }

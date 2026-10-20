@@ -119,8 +119,9 @@ export async function narrow(searches: Search[], reader: typeof read = read): Pr
   }
 }
 
-// Chainlink's price at the flip, or today's if the round in effect then cannot be found.
-async function feedAt(feed: Address, flip: number, reader: typeof read): Promise<number | undefined> {
+// Chainlink's price at the flip, or today's if the round in effect then cannot be found. At no flip, Infinity, it is
+// today's.
+export async function feedAt(feed: Address, flip: number, reader: typeof read): Promise<number | undefined> {
   const [decimals, latest] = (await reader([
     call(feed, feedAbi, "decimals"),
     call(feed, feedAbi, "latestRoundData"),

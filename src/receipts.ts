@@ -1,5 +1,5 @@
 import { decodeEventLog, numberToHex, parseAbi, type Address, type Hex } from "viem";
-import { call, read, readLater, required, rpc } from "./chain.ts";
+import { blockTime, call, read, readLater, required, rpc, type Call } from "./chain.ts";
 import { CARBON_IMPACT } from "./config.ts";
 import { WEEK, clean } from "./format.ts";
 import { carbonImpact } from "./hydrex.ts";
@@ -22,7 +22,8 @@ const rewardsAbi = parseAbi([
   "function earned(uint256 tokenId, address token) view returns (uint256)",
 ]);
 
-// Base makes a block every two seconds.
+// Base makes a block every two seconds, which places a block of a given time nearly at once. Each read of a block's own
+// time then corrects the guess, so that what is found holds whatever the block time.
 export const BLOCK_TIME = 2;
 // The newest blocks are skipped: an RPC that is a little behind may not have them yet.
 export const SETTLED = 5;
@@ -93,16 +94,22 @@ export async function firstReached<T>(
 
 // A token that one of Hydrex's reward contracts pays.
 export type Pair = { contract: Address; token: Address };
+// An amount of a token that a reward contract owes.
+export type Owed = Amount & { contract: Address };
 export type Standing = {
   id: bigint;
   // The start of the epoch up to which the account has been paid, or 0 if it never has, and a pair that records it.
   through: number;
   pair?: Pair;
   // What it can claim now from each pair, looking back at most 50 epochs.
-  waiting: Amount[];
+  waiting: Owed[];
   // Whether what it can claim from some pairs could not be read, so that there is at least `waiting`.
   unknown: boolean;
 };
+
+// The read of an account's record in a pair.
+export const stampOf = (id: bigint, { contract, token }: Pair): Call =>
+  call(contract, rewardsAbi, "tokenTimestamp", id, token);
 
 // earned() adds up to 50 epochs one by one, so a call can take about a million gas: 20 fit well within the 50 million
 // that RPCs allow an eth_call.
@@ -122,7 +129,7 @@ export function standingsOf(
       const [stamp, amount] = [stamps[a * pairs.length + i]!, earned[a * pairs.length + i]];
       if (Number(stamp) > standing.through) Object.assign(standing, { through: Number(stamp), pair });
       if (amount === undefined) standing.unknown = true;
-      else if (amount > 0n) standing.waiting.push({ token: pair.token, amount });
+      else if (amount > 0n) standing.waiting.push({ ...pair, amount });
     });
     return standing;
   });
@@ -176,12 +183,52 @@ export function dollars(found: Amount[], tokens: Map<string, Token>, prices: Map
   }, 0);
 }
 
+// The first block whose time is at least `time`, from a block `top` of time `topTime` at or after it. Each guess places
+// the block by the time between the closest blocks known on either side; after a few, the rest halve the range.
+export async function firstBlockAt(
+  time: number,
+  top: number,
+  topTime: number,
+  reader: typeof read = readLater,
+): Promise<number> {
+  let [lo, loTime] = [-1, 0];
+  let [hi, hiTime] = [top, topTime];
+  for (let step = 0; hi - lo > 1; step++) {
+    const gap = lo < 0 ? BLOCK_TIME : (hiTime - loTime) / (hi - lo);
+    const placed = hi - Math.ceil((hiTime - time) / gap);
+    const guess = step < 4 ? Math.min(hi - 1, Math.max(lo + 1, placed)) : Math.floor((lo + hi) / 2);
+    const [at] = required(await reader([blockTime], guess)) as [bigint];
+    if (Number(at) >= time) [hi, hiTime] = [guess, Number(at)];
+    else [lo, loTime] = [guess, Number(at)];
+  }
+  return hi;
+}
+
+// An epoch's first block never changes, so each is found once.
+const firsts = new Map<number, Promise<number>>();
+
+// The first block of the epoch that starts at `epoch`, from a block `top` of time `topTime` in it or after it.
+export function epochBlock(
+  epoch: number,
+  top: number,
+  topTime: number,
+  reader: typeof read = readLater,
+): Promise<number> {
+  const kept = firsts.get(epoch);
+  if (kept) return kept;
+  const found = firstBlockAt(epoch, top, topTime, reader);
+  firsts.set(epoch, found);
+  found.catch(() => firsts.get(epoch) === found && firsts.delete(epoch));
+  return found;
+}
+
 // A search's result never changes once found, so each account's last payout block is kept with its epoch.
 const searched = new Map<string, number>();
 
-// The block of each account's last payout: the first block, after the last one before its paid-through epoch began,
-// in which the pair that records that epoch reached it. Accounts paid through the same epoch are searched together.
-// `top` is the block the standings were read at, and `time` its time; blocks before it are counted back from it.
+// The block of each account's last payout: the first block, from the one in which its paid-through epoch began, in
+// which the pair that records that epoch reached it. No claim can record an epoch before it begins, which the search
+// needs. Accounts paid through the same epoch are searched together. `top` is the block the standings were read at,
+// and `time` its time.
 export async function payoutBlocks(
   standings: Standing[],
   top: number,
@@ -199,11 +246,15 @@ export async function payoutBlocks(
   await Promise.all(
     epochs.map(async (epoch) => {
       const reached: Reached<Standing> = async (block, items) => {
-        const calls = items.map(({ id, pair }) => call(pair!.contract, rewardsAbi, "tokenTimestamp", id, pair!.token));
-        const values = required(await reader(calls, block)) as bigint[];
+        const values = required(
+          await reader(
+            items.map(({ id, pair }) => stampOf(id, pair!)),
+            block,
+          ),
+        ) as bigint[];
         return values.map((value) => value >= BigInt(epoch));
       };
-      const from = Math.max(0, top - Math.floor((time - epoch) / BLOCK_TIME) - 1);
+      const from = (await epochBlock(epoch, top, time, reader)) - 1;
       const found = await firstReached(
         reached,
         left.filter(({ through }) => through === epoch),
@@ -255,24 +306,29 @@ export function payouts(logs: Log[]): Payout[] {
   return found;
 }
 
-// Carbon Impact's payouts in each block, from one read of the block's logs. Each block is read once. Each block holds an
-// account's last claim, but the claim may have been made elsewhere, with no log of Carbon Impact's, and Hydrex's reward
-// contracts log nothing when they pay nothing. So no logs is taken only once no RPC has any.
+// Carbon Impact's payouts in each block, from one read of the block's logs. Each block holds an account's last claim,
+// but the claim may have been made elsewhere, with no log of Carbon Impact's, and Hydrex's reward contracts log nothing
+// when they pay nothing. So no logs is taken only once no RPC has any, and is read again next time, in case the RPCs that
+// had them did not answer. A block with logs is read once.
 const logsOf = new Map<number, Payout[]>();
 
 export async function payoutsIn(blocks: number[]): Promise<Payout[]> {
-  const missing = [...new Set(blocks)].filter((block) => !logsOf.has(block));
+  const all = [...new Set(blocks)];
   const found = await Promise.all(
-    missing.map((block) =>
-      rpc<Log[]>(
+    all.map(async (block) => {
+      const kept = logsOf.get(block);
+      if (kept) return kept;
+      const logs = await rpc<Log[]>(
         "eth_getLogs",
         [{ address: CARBON_IMPACT.address, fromBlock: numberToHex(block), toBlock: numberToHex(block) }],
         { later: true, doubt: (logs) => Array.isArray(logs) && !logs.length },
-      ),
-    ),
+      );
+      const paid = payouts(logs);
+      if (logs.length) logsOf.set(block, paid);
+      return paid;
+    }),
   );
-  missing.forEach((block, i) => logsOf.set(block, payouts(found[i]!)));
-  return [...new Set(blocks)].flatMap((block) => logsOf.get(block)!);
+  return found.flat();
 }
 
 // A block's time never changes, so each is read once.
@@ -309,5 +365,5 @@ export async function namesAt(blocks: number[]): Promise<Map<number, string>> {
 
 // For tests: what the reads above found is kept for the rest of the session.
 export function forgetReads(): void {
-  for (const kept of [searched, logsOf, times, names]) kept.clear();
+  for (const kept of [searched, firsts, logsOf, times, names]) kept.clear();
 }

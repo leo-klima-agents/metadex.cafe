@@ -1836,6 +1836,13 @@
               yet.</span
             >
           </li>
+          <li class="standing-none" hidden>
+            <span class="shape idle" aria-hidden="true"></span
+            ><span
+              ><strong>Nothing to pay.</strong> <span class="standing-automation"></span>'s votes earned no rewards last
+              epoch.</span
+            >
+          </li>
           <li class="standing-failed" hidden>
             <span class="shape idle" aria-hidden="true"></span
             ><span
@@ -1922,7 +1929,7 @@
         </dl>
         <dl class="total">
           <div>
-            <dt>Paid to you</dt>
+            <dt class="receipt-paid-to">Paid to you</dt>
             <dd class="value receipt-paid-usd"></dd>
             <dd class="detail receipt-paid"></dd>
           </div>
@@ -1936,7 +1943,11 @@
     </template>
     <template id="claim-line">
       <li class="receipt-foot">
-        <span><time class="claim-time label"></time> · <span class="claim-by"></span></span>
+        <span
+          ><time class="claim-time label"></time> · <span class="claim-by"></span
+          ><span class="claim-to" hidden
+            >, paid to its owner then, <code translate="no"><a class="claim-owner"></a></code></span
+        ></span>
         <a class="claim-tx">Transaction</a>
       </li>
     </template>
