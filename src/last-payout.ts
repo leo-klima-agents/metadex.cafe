@@ -80,8 +80,8 @@ let readFor: string | undefined;
 // The owner whose payouts the section shows.
 let showing: string | undefined;
 // What the five-minute check reads: one call for each account that a payout due since the flip has not reached yet,
-// whose answer shows once it has; whether some payouts could not be read; and when a payout under way stops being shown
-// as such. Each calls for the payouts to be read again.
+// whose answer shows once it has; whether some payouts could not be read, or were read against an older epoch's
+// figures; and when a payout under way stops being shown as such. Each calls for the payouts to be read again.
 type Signal = { call: Call; paid: (answer: unknown) => boolean };
 let signals: Signal[] = [];
 let missed = false;
@@ -529,7 +529,8 @@ async function load(quietly = false): Promise<void> {
   const paidSince = ({ time }: Entry) => time !== undefined && time >= found.epochStart;
   const awaited = found.entries.filter((entry) => entry.due && !paidSince(entry) && entry.standing?.waiting.length);
   signals = awaited.map((entry) => signalOf[entry.automation.kind](entry, found.epochStart)!);
-  missed = found.entries.some(({ earnings }) => !earnings);
+  // Figures from the epoch before last, as just after a flip until Hydrex moves on, are as good as missing.
+  missed = found.entries.some(({ earnings }) => !earnings || earnings.start < found.epochStart - WEEK);
   underUntil = under ? under.first + UNDER_WAY : Infinity;
   // Dollars need many more reads, so they come after, at the prices of the flip before each payout, flip by flip at
   // once. Without them, the receipts show tokens only.
