@@ -1,7 +1,8 @@
-import { encodeFunctionData, keccak256, parseAbi, zeroAddress, type Address } from "viem";
+import { encodeFunctionData, keccak256, parseAbi, zeroAddress, type Address, type Hex } from "viem";
 import { blockTime, call, codeHash, implementation, read, required, rpc, same } from "./chain.ts";
 import {
   ACCOUNT_NAMES,
+  ANCHORS,
   APPROVAL_LOGIC,
   APPROVAL_LOGIC_CODE_HASH,
   AUTOMATIONS,
@@ -13,6 +14,7 @@ import {
   VOTING_ESCROW,
   VOTING_ESCROW_IMPLEMENTATION,
   VOTING_ESCROW_IMPLEMENTATION_CODE_HASH,
+  WETH,
   type Automation,
   type Kind,
 } from "./config.ts";
@@ -54,6 +56,9 @@ const carbonImpactAbi = parseAbi([
   "function voter() view returns (address)",
   "function kvcm() view returns (address)",
   "function retireBps() view returns (uint256)",
+  "function treasuryFeeBps() view returns (uint256)",
+  "function MAX_TREASURY_FEE_BPS() view returns (uint256)",
+  "function treasury() view returns (address)",
   "function totalTonnesRetired() view returns (uint256)",
   "function retiringEntityName() view returns (string)",
   "function beneficiaryString() view returns (string)",
@@ -67,6 +72,14 @@ const autoMaxiAbi = parseAbi([
   "function voter() view returns (address)",
   "function lastClaimBlock(uint256 tokenId) view returns (uint256)",
 ]);
+
+const feedAbi = parseAbi([
+  "function decimals() view returns (uint8)",
+  "function latestRoundData() view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)",
+]);
+// Base's predeploy that prices posting a transaction's data to Ethereum.
+const GAS_PRICE_ORACLE: Address = "0x420000000000000000000000000000000000000F";
+const gasPriceOracleAbi = parseAbi(["function getL1FeeUpperBound(uint256 unsignedTxSize) view returns (uint256)"]);
 
 const accountNamesAbi = parseAbi(["function getBulkNames(uint256[] tokenIds) view returns (string[])"]);
 
@@ -95,6 +108,10 @@ export type CarbonImpact = {
   votes: bigint;
   // When it last voted, or 0.
   voted: number;
+  // Its fee, the most the fee can become, and where it goes. Only its page shows them, so they may be unknown.
+  feeBps?: bigint;
+  maxFeeBps?: bigint;
+  treasury?: Address;
 };
 
 export type Account = {
@@ -150,6 +167,9 @@ export async function readCarbonImpact(): Promise<CarbonImpact> {
     carbonImpact("impactBeneficiaryAddress"),
     carbonImpact("retirementMessage"),
     voter("lastVoted", CARBON_IMPACT.address),
+    carbonImpact("treasuryFeeBps"),
+    carbonImpact("MAX_TREASURY_FEE_BPS"),
+    carbonImpact("treasury"),
   ]);
   const [time, retireBps, tonnes, entity, beneficiary, beneficiaryAddress, message] = required(replies.slice(0, 7)) as [
     bigint,
@@ -160,8 +180,9 @@ export async function readCarbonImpact(): Promise<CarbonImpact> {
     Address,
     string,
   ];
-  // Only Home shows when it last voted, so a failed read just leaves it out.
+  // Only Home shows when it last voted, so a failed read just leaves it out. The same for the fee.
   const voted = replies[7] as bigint | undefined;
+  const [feeBps, maxFeeBps, treasury] = replies.slice(8) as [bigint?, bigint?, Address?];
   const epochStart = epochAt(time);
   const [votes] = required(await read([escrow("getPastVotes", CARBON_IMPACT.address, BigInt(epochStart))])) as [bigint];
   return {
@@ -175,6 +196,9 @@ export async function readCarbonImpact(): Promise<CarbonImpact> {
     message: clean(message),
     votes,
     voted: Number(voted ?? 0n),
+    ...(feeBps !== undefined && { feeBps }),
+    ...(maxFeeBps !== undefined && { maxFeeBps }),
+    ...(treasury && { treasury }),
   };
 }
 
@@ -438,4 +462,26 @@ export async function failedChecks(): Promise<Checks> {
     present: AUTOMATIONS.filter((automation, i) => automation === CARBON_IMPACT || hashes[i] !== NO_CODE),
     failed: new Map(AUTOMATIONS.map(({ kind }) => [kind, [...failing(all), ...failing(own[kind])]])),
   };
+}
+
+// The dollars of gas for some calls from `from`, at today's prices: each costs about what the first does, as they
+// differ only by account, plus the most Base charges to post it to Ethereum. Undefined if ETH has no price.
+export async function gasCost(steps: Tx[], from: Address): Promise<number | undefined> {
+  const [first] = steps;
+  if (!first) return 0;
+  const feed = ANCHORS.find(({ address }) => same(address, WETH))!.feed!;
+  // The call's data, and about as much again for the transaction's other fields.
+  const size = BigInt((first.data.length - 2) / 2 + 100);
+  const [gasPrice, gas, [decimals, round, l1]] = await Promise.all([
+    rpc<Hex>("eth_gasPrice", []),
+    rpc<Hex>("eth_estimateGas", [{ from, to: first.to, data: first.data }]),
+    read([
+      call(feed, feedAbi, "decimals"),
+      call(feed, feedAbi, "latestRoundData"),
+      call(GAS_PRICE_ORACLE, gasPriceOracleAbi, "getL1FeeUpperBound", size),
+    ]) as Promise<[number?, (readonly bigint[])?, bigint?]>,
+  ]);
+  if (decimals === undefined || !round) return undefined;
+  const wei = (BigInt(gas) * BigInt(gasPrice) + (l1 ?? 0n)) * BigInt(steps.length);
+  return (Number(wei) / 1e18) * (Number(round[1]) / 10 ** decimals);
 }

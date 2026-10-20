@@ -109,6 +109,14 @@ export function earnedByAccount(holdings: Holdings, id: bigint): number | undefi
 // An automation's figures shown, if read.
 export const earningsOf = (automation: Automation): Earnings | undefined => earned.get(automation.kind)?.found;
 
+// Last epoch's dollars per 1,000 Earning Power for an automation: undefined until read, and null if it had no votes
+// then, so no record yet.
+export function perThousandOf(automation: Automation): number | null | undefined {
+  const read = earned.get(automation.kind);
+  if (!read) return undefined;
+  return read.found.votes ? perThousand(read.value.usd, read.found.votes) : null;
+}
+
 const perThousand = (value: number, votes: bigint): number =>
   votes > 0n ? value / (Number(toEarningPower(votes)) / 1e21) : 0;
 

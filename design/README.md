@@ -3,7 +3,7 @@
 What metaDEX Café is today, what it should become, and why. The brand, from type and colour to the layout of receipts,
 is in [brand.md](brand.md).
 
-Figures were read from Base on 17 Oct 2026, unless marked. [Brackets] mark decisions not yet taken, such as "[10%] fee".
+Figures were read from Base on 17 Oct 2026, unless marked. [Brackets] mark decisions not yet taken, such as "[cap]".
 Mockups of the planned screens are on a design canvas, private to its owner:
 <https://claude.ai/artifact/XWN6n3DdJEcgaWbD1GDsA5>. Its screens use placeholder colours and type.
 
@@ -105,12 +105,15 @@ wallet's browser, so every export also offers a copy.
 
 ## Roadmap
 
-- **Done:** the stopped automations, and a way out of them; what votes earned against all of Hydrex; the last payout as
-  receipts; Safe transactions with their calldata; the brand.
-- **Next, the rescue:** positions first in the App; Choose for one or many accounts, with the gas cost; one prompt with
-  batching; fee facts for Carbon Impact; change watch; ERC-7730 metadata for `setConduitApproval`.
-- **Then, a second Hydrex automation:** the menu as Home; one page template per automation; Choose comparing two
-  automations and voting yourself; Help me choose; statements and export.
+- **Done:** the stopped automations, and a way out of them; what votes earned against all of Hydrex; each account's last
+  payout as a receipt, with up to when it was paid and what waits; Safe transactions with their calldata; the brand;
+  Choose for one or many accounts, with the gas cost; fee facts for Carbon Impact.
+- **Next, the rescue:** positions first in the App; one prompt with batching; change watch; ERC-7730 metadata for
+  `setConduitApproval`.
+- **Then, a second Hydrex automation, AutoMaxi:** ready, and offered once it is on Base. It votes for the bribes it
+  expects to earn the most, and pays in the tokens earned, unswapped, less 1% of each claim. Done: the menu on Home, one
+  page template per automation, and Choose comparing the two and voting yourself. Still to do: Help me choose;
+  statements and export.
 - **Later, Aero and liquidity:** Aero relays, once Aero grants the role to deploy one; managed liquidity positions; the
   brief link for co-signers.
 
@@ -118,18 +121,18 @@ wallet's browser, so every export also offers a copy.
 
 One static page, as today, with views addressed by the hash. Today's addresses keep working.
 
-| View                    | Address                                                            | Today                |
-| ----------------------- | ------------------------------------------------------------------ | -------------------- |
-| Menu (Home)             | `/`                                                                | Home                 |
-| Your positions          | `#positions`                                                       | `#app`               |
-| An automation's page    | One each, such as `#carbon-impact`                                 | `#how-it-works`      |
-| Choose for a position   | `#choose`, a dialog                                                | The group buttons    |
-| Review                  | A dialog                                                           | The review           |
-| Receipts and statements | `#receipts`                                                        | The last payout only |
-| Help me choose          | `#help-me-choose`                                                  | —                    |
-| Check it yourself       | `#verify`, for every product                                       | `#verify`            |
-| Brief for co-signers    | `#for-co-signers`, with the accounts and automation in the address | `#for-co-signers`    |
-| Questions, Words        | `#questions`, `#words`                                             | Same                 |
+| View                    | Address                                                            | Today                              |
+| ----------------------- | ------------------------------------------------------------------ | ---------------------------------- |
+| Menu (Home)             | `/`                                                                | Home, with the menu                |
+| Your positions          | `#positions`                                                       | `#app`                             |
+| An automation's page    | One each: `#carbon-impact`, `#automaxi`                            | Same, with `#how-it-works` in full |
+| Choose for a position   | `#choose`, a dialog                                                | A dialog beside the group buttons  |
+| Review                  | A dialog                                                           | The review                         |
+| Receipts and statements | `#receipts`                                                        | The last payout only               |
+| Help me choose          | `#help-me-choose`                                                  | —                                  |
+| Check it yourself       | `#verify`, for every product                                       | `#verify`                          |
+| Brief for co-signers    | `#for-co-signers`, with the accounts and automation in the address | `#for-co-signers`                  |
+| Questions, Words        | `#questions`, `#words`                                             | Same                               |
 
 The fragment of an address never reaches a server, so a brief can carry its accounts without the page storing anything.
 The page must check whatever it reads from a fragment, as it would anything from outside.
@@ -182,22 +185,22 @@ for the record. Then the status Safe{Wallet} reports, and a monthly statement fo
 you only want the most, and have time each week, vote yourself."
 
 1. What do you hold? Hydrex accounts; an Aero stake or Aerodrome lock; a liquidity position; not sure.
-2. What should happen to the rewards? Paid to me in one token; added to what I hold; partly retired; as much as
+2. What should happen to the rewards? Paid to me as they are earned; added to what I hold; partly retired; as much as
    possible.
 3. How much do you want to do each week? Nothing; a little; I will vote myself.
 
 The first rule that matches decides. After a liquidity manager, the honest line becomes "If you can watch the price and
 move the range yourself, you keep everything."
 
-| When                                       | Suggestion                                                    |
-| ------------------------------------------ | ------------------------------------------------------------- |
-| Not sure what they hold                    | Look at what you hold first                                   |
-| Will vote themselves, and want the most    | Vote yourself: nothing on the menu beats it, if you vote well |
-| Hydrex accounts, rewards added to the lock | Nothing fits yet; the closest choices                         |
-| Hydrex accounts, partly retired            | Carbon Impact                                                 |
-| Hydrex accounts, anything else             | [Hydrex automation], paying in [USDC]; Carbon Impact second   |
-| An Aero stake or Aerodrome lock            | [Aero relay]                                                  |
-| A liquidity position                       | [Liquidity manager]                                           |
+| When                                       | Suggestion                                                           |
+| ------------------------------------------ | -------------------------------------------------------------------- |
+| Not sure what they hold                    | Look at what you hold first                                          |
+| Will vote themselves, and want the most    | Vote yourself: nothing on the menu beats it, if you vote well        |
+| Hydrex accounts, rewards added to the lock | Nothing fits yet; the closest choices                                |
+| Hydrex accounts, partly retired            | Carbon Impact                                                        |
+| Hydrex accounts, anything else             | AutoMaxi, paying in the tokens earned, less 1%; Carbon Impact second |
+| An Aero stake or Aerodrome lock            | [Aero relay]                                                         |
+| A liquidity position                       | [Liquidity manager]                                                  |
 
 ## Patterns
 
@@ -213,12 +216,12 @@ read from the contract each time, with the block. A product that cannot fill a r
 
 For the four kinds of product:
 
-| Kind                               | Taken                                  | Most     | Goes to                  | When             | Other costs   | Who can change it |
-| ---------------------------------- | -------------------------------------- | -------- | ------------------------ | ---------------- | ------------- | ----------------- |
-| Votes for you, retires a share     | Of the rewards: 33.33% retired, 0% fee | 100%, 1% | Carbon credits; treasury | Each payout      | Swaps         | One admin key     |
-| Votes for you, pays you in a token | Of the rewards: [10%] fee              | [cap]    | [Operator]               | Each payout      | Swaps         | [Role, delay]     |
-| Pools your stake in a relay        | Of the deposit, then of the rewards    | [cap]    | Aero; [operator]         | Each compounding | Swaps         | [Role, delay]     |
-| Manages a liquidity position       | Of fees and emissions: [10%]           | [cap]    | [Operator]               | Each collection  | A swap a move | [Role, delay]     |
+| Kind                                         | Taken                                  | Most            | Goes to                  | When             | Other costs   | Who can change it        |
+| -------------------------------------------- | -------------------------------------- | --------------- | ------------------------ | ---------------- | ------------- | ------------------------ |
+| Votes for you, retires a share               | Of the rewards: 33.33% retired, 0% fee | 100%, 1%        | Carbon credits; treasury | Each payout      | Swaps         | One admin key            |
+| Votes for you, pays you as earned (AutoMaxi) | Of each claim: 1%                      | 1%, in its code | A 2-of-3 Safe            | Each claim       | None          | Nobody: a new deployment |
+| Pools your stake in a relay                  | Of the deposit, then of the rewards    | [cap]           | Aero; [operator]         | Each compounding | Swaps         | [Role, delay]            |
+| Manages a liquidity position                 | Of fees and emissions: [10%]           | [cap]           | [Operator]               | Each collection  | A swap a move | [Role, delay]            |
 
 **Money.** Earned, then taken, then what reached you, always in that order, with a bar split the same way. Dollars at
 the prices in the protocol's pools when the epoch ended, marked ≈, with the tokens beside them. Per position for the
@@ -342,21 +345,22 @@ relay, made with Aero's agreement.
 
 As each published it on 17 Oct 2026.
 
-| Product                 | Does                                    | Takes                                                                                                                                  |
-| ----------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Hydrex's automations    | Vote, claim, pay out                    | 0.5% or 1% of earnings, as its sources disagree; Lock Maxi nothing                                                                     |
-| Carbon Impact           | Vote, claim, retire, pay out            | 33.33% retired; a fee of 0%, up to 1%                                                                                                  |
-| Autopilot, on Aerodrome | Vote, pay out in USDC                   | 5% of rewards ([DefiLlama](https://defillama.com/protocol/autopilot))                                                                  |
-| Convex                  | Votes for Curve lockers                 | 17% of CRV rewards, capped at 20% ([docs](https://docs.convexfinance.com/convexfinance/faq/fees.md))                                   |
-| Votium                  | Vote incentives market                  | 2% of incentives, capped at 4% ([docs](https://docs.votium.app/faq/fees.md))                                                           |
-| vfat                    | Automates farms and positions, per user | 0.9–1.8% of rewards; 0.01–0.05% of a position per rebalance ([docs](https://docs.vfat.io/fees/))                                       |
-| Revert                  | Keeps positions in range                | 0.15% of the position or 2% of fees ([docs](https://docs.revert.finance/revert/auto-range.md))                                         |
-| Beefy CLM               | Pooled liquidity vaults                 | Up to 9.5% of trading fees, shown net ([docs](https://docs.beefy.finance/beefy-products/clm.md))                                       |
-| ICHI, Gamma             | Pooled liquidity vaults                 | 10% ([ICHI](https://docs.ichi.org/home/protocol-fees.md)); 14–20% ([Gamma](https://docs.gamma.xyz/gamma/lp-vaults/faq/using_gamma.md)) |
+| Product                 | Does                                      | Takes                                                                                                                                  |
+| ----------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Hydrex's automations    | Vote, claim, pay out                      | 0.5% or 1% of earnings, as its sources disagree; Lock Maxi nothing                                                                     |
+| Carbon Impact           | Vote, claim, retire, pay out              | 33.33% retired; a fee of 0%, up to 1%                                                                                                  |
+| AutoMaxi                | Vote for bribes, claim, pay out unswapped | 1% of each claim, fixed in its code                                                                                                    |
+| Autopilot, on Aerodrome | Vote, pay out in USDC                     | 5% of rewards ([DefiLlama](https://defillama.com/protocol/autopilot))                                                                  |
+| Convex                  | Votes for Curve lockers                   | 17% of CRV rewards, capped at 20% ([docs](https://docs.convexfinance.com/convexfinance/faq/fees.md))                                   |
+| Votium                  | Vote incentives market                    | 2% of incentives, capped at 4% ([docs](https://docs.votium.app/faq/fees.md))                                                           |
+| vfat                    | Automates farms and positions, per user   | 0.9–1.8% of rewards; 0.01–0.05% of a position per rebalance ([docs](https://docs.vfat.io/fees/))                                       |
+| Revert                  | Keeps positions in range                  | 0.15% of the position or 2% of fees ([docs](https://docs.revert.finance/revert/auto-range.md))                                         |
+| Beefy CLM               | Pooled liquidity vaults                   | Up to 9.5% of trading fees, shown net ([docs](https://docs.beefy.finance/beefy-products/clm.md))                                       |
+| ICHI, Gamma             | Pooled liquidity vaults                   | 10% ([ICHI](https://docs.ichi.org/home/protocol-fees.md)); 14–20% ([Gamma](https://docs.gamma.xyz/gamma/lp-vaults/faq/using_gamma.md)) |
 
 2–10% of rewards is the norm for voting and compounding, and about 10% of fees for managed liquidity. Carbon Impact's
-third retired is far above both, which suits people who want the retirement. The next products should sit in the norm,
-and say how they compare.
+third retired is far above both, which suits people who want the retirement. AutoMaxi's 1% is below the norm. The next
+products should sit in the norm, and say how they compare.
 
 Worth copying: one plain sentence per strategy; "no automation" next to the products; states that say when, such as
 "earning from next epoch"; ticked consent to side effects that cannot be undone; a payout ledger per account; when it

@@ -71,15 +71,19 @@ test("each automation has a kind, a name and the approvals of its own, and AutoM
     ],
   );
   const html = read("index.html");
-  const facts = /<template id="automaxi-fee-facts">[\s\S]*?<\/template>/.exec(html)?.[0] ?? "";
+  // Each automation's page has the same six rows, in the same order.
+  const page = (id: string) => html.slice(html.indexOf(`<div id="${id}" class="view"`)).split('class="view"')[1] ?? "";
+  const rows = (facts: string) => [...facts.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row);
+  const SIX = ["Taken", "The most it can become", "Goes to", "When", "Other costs", "Who can change it"];
+  const factsOf = (id: string) => /<dl class="fee-facts">[\s\S]*?<\/dl>/.exec(page(id))?.[0] ?? "";
+  assert.deepEqual(rows(factsOf("carbon-impact")), SIX);
+  const facts = factsOf("automaxi");
+  assert.deepEqual(rows(facts), SIX);
   assert.equal(bps(AUTOMAXI_FEE_BPS), "1%");
-  assert.deepEqual(
-    [...facts.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
-    ["Taken", "The most it can become", "Goes to", "When", "Other costs", "Who can change it"],
-  );
   assert.match(facts, /<dd>1% of each claim<\/dd>/);
   assert.match(facts, /<dd>1%, fixed in its code<\/dd>/);
   assert.ok(facts.includes(`/address/${AUTOMAXI_TREASURY}"`));
+  assert.ok(page("automaxi").includes(AUTOMAXI.codeHash), "its page shows the code hash the page checks");
   assert.equal(AUTOMAXI.address, getAddress(AUTOMAXI.address));
 });
 

@@ -755,6 +755,7 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
       .click();
     await appTitle(page).waitFor();
     assert.equal(await page.getByRole("button", { name: /AutoMaxi/ }).count(), 0, "AutoMaxi is not on Base yet");
+    assert.equal(await page.locator('[data-kind="automaxi"]:not([hidden])').count(), 0);
     await group(page, "Can join").getByRole("button", { name: "Join", exact: true }).click();
     await toWallet(page);
     await review(page).getByText("One transaction:").waitFor();
@@ -1150,6 +1151,70 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     );
     assert.equal(await longer.locator(".claim-by").count(), 10);
     assert.deepEqual([...violations, ...again.violations], []);
+  });
+
+  test("the menu on Home, a page for each automation, and Choose beside the group buttons", async () => {
+    await deployAutoMaxi();
+    await warm(() => Promise.all([readEarnings(CONDUIT), readEarnings(AUTOMAXI.address), readAccounts(NEWCOMER)]));
+    const { page, violations } = await connected({ owner: NEWCOMER }, { width: 390, height: 844 });
+    await account(page, 141).getByText("Not in an automation.").waitFor();
+    await group(page, "Can join").getByRole("button", { name: "Choose" }).click();
+    const dialog = page.locator("#choose");
+    await dialog.getByRole("heading", { name: "Choose for #141" }).waitFor();
+    const options = dialog.locator(".option");
+    assert.deepEqual(await options.locator(".option-name").allTextContents(), [
+      "Carbon Impact",
+      "AutoMaxi",
+      "Vote yourself",
+    ]);
+    await options
+      .nth(0)
+      .locator(".option-per-power")
+      .getByText(/^≈\s\$0\.5\d$/)
+      .waitFor({ timeout: 120_000 });
+    assert.equal(await options.nth(1).locator(".option-per-power").innerText(), "No record yet");
+    assert.equal(await options.nth(2).locator(".option-now").innerText(), "What this account has now.");
+    assert.equal(await options.nth(2).getByRole("button").isVisible(), false);
+    for (const i of [0, 1]) {
+      await options
+        .nth(i)
+        .locator(".option-gas")
+        .getByText(/^(≈|<)\s\$\d/)
+        .waitFor({ timeout: 60_000 });
+    }
+    await dialog.locator("summary").click();
+    assert.deepEqual(await dialog.locator(".compare-taken td").allTextContents(), [
+      "33.33% retired, and a fee of 0%",
+      "1% of each claim",
+      "Nothing",
+    ]);
+    await shoot(page, "choose-390-light");
+    await options.nth(1).getByRole("button", { name: "Join AutoMaxi" }).click();
+    await review(page).getByText("Join AutoMaxi: step 1 of 3").waitFor();
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("link", { name: "metaDEX Café" }).click();
+    const menu = page.locator("#menu");
+    assert.deepEqual(await menu.locator("h3").allInnerTexts(), ["Carbon Impact", "AutoMaxi", "Vote yourself"]);
+    await menu.locator(".automaxi-state").getByText("Not voted yet").waitFor();
+    await shoot(page, "menu-390-light", menu);
+    await menu.getByRole("link", { name: "AutoMaxi" }).click();
+    await page.getByRole("heading", { name: "AutoMaxi", level: 1 }).waitFor();
+    assert.equal(await page.title(), "AutoMaxi · metaDEX Café");
+    const own = page.locator("#automaxi");
+    assert.equal(await own.locator(".automaxi-absent").isVisible(), false);
+    await own.locator(".automaxi-no-record").waitFor();
+    await own.getByRole("link", { name: "Join from the app" }).waitFor();
+    await shoot(page, "automaxi-390-light");
+    await page.goto(`${SITE}/#carbon-impact`);
+    const impact = page.locator("#carbon-impact");
+    await impact.getByRole("heading", { name: "Carbon Impact", level: 1 }).waitFor();
+    const facts = impact.locator(".fee-facts dd");
+    await facts.first().getByText("Of the rewards: 33.33% retired as carbon credits, and a fee of 0%").waitFor();
+    assert.equal(await facts.nth(1).innerText(), "100% retired, and a fee of 1%");
+    assert.match(await facts.nth(2).innerText(), /0xd9e966a6Bfa2aE2113a34Bb4dd02ded921DA50aF$/);
+    await shoot(page, "carbon-impact-390-light");
+    assert.deepEqual(violations, []);
   });
 
   // Last, as it moves anvil's clock on.

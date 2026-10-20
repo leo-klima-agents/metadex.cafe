@@ -1,7 +1,16 @@
 import { getAddress } from "viem";
 import "./views.ts";
 import { now, same, sawBlock } from "./chain.ts";
-import { AUTOMATIONS, CARBON_IMPACT, CHAIN_ID, type Automation } from "./config.ts";
+import {
+  AUTOMATIONS,
+  AUTOMAXI,
+  AUTOMAXI_FEE_BPS,
+  CARBON_IMPACT,
+  CHAIN_ID,
+  type Automation,
+  type Kind,
+} from "./config.ts";
+import { openChoose, type Option } from "./choose.ts";
 import { clone, fill, fillAddress, fillPlural, fillTime, groupAllHex, show } from "./dom.ts";
 import {
   WEEK,
@@ -12,6 +21,7 @@ import {
   list,
   share,
   short,
+  toEarningPower,
   units,
   until,
   usd,
@@ -31,19 +41,31 @@ import {
   join,
   leave,
   leaveOther,
+  gasCost,
   readAccounts,
   readAutomations,
   readCarbonImpact,
+  readFreshness,
   statusOf,
   type Account,
   type CarbonImpact,
   type Checks,
+  type Freshness,
   type Group,
   type Holdings,
   type Other,
   type Status,
+  type Step,
 } from "./hydrex.ts";
-import { earnedByAccount, earningsDue, loadEarnings, loadShares } from "./last-epoch.ts";
+import {
+  earnedByAccount,
+  earningsDue,
+  earningsOf,
+  lastEarnings,
+  loadEarnings,
+  loadShares,
+  perThousandOf,
+} from "./last-epoch.ts";
 import { checkPayout, forgetPayout, showPayout } from "./last-payout.ts";
 import { closeReview, openReview, refreshReview, type Hooks } from "./review.ts";
 import {
@@ -58,7 +80,7 @@ import {
   type Wallet,
 } from "./wallet.ts";
 
-type Action = "join" | "leave" | "leave-other";
+type Action = "join" | "leave" | "leave-other" | "choose";
 
 const groups = [...document.querySelectorAll<HTMLElement>("#accounts .group")];
 const listening = new WeakSet<Provider>();
@@ -89,22 +111,26 @@ function showCarbonImpact(found: CarbonImpact): void {
   carbonImpact = found;
   sawBlock(found.time);
   const { epochStart, tonnes, retireBps, votes, entity, beneficiary, beneficiaryAddress, message, voted } = found;
+  const { feeBps, maxFeeBps, treasury } = found;
   const stopped = hasStopped(voted, epochStart);
-  document
-    .querySelector(".impact-shape")!
-    .classList.replace(stopped ? "running" : "stopped", stopped ? "stopped" : "running");
+  for (const shape of document.querySelectorAll(".impact-shape")) {
+    shape.classList.replace(stopped ? "running" : "stopped", stopped ? "stopped" : "running");
+  }
   fill(document, {
     "impact-state": stopped ? "Stopped" : "Running",
     tonnes: units(tonnes),
     retired: bps(retireBps),
     "retired-share": share(retireBps),
-    "paid-share": share(10_000n - retireBps),
+    "paid-share": share(10_000n - retireBps - (feeBps ?? 0n)),
+    fee: feeBps === undefined ? "…" : bps(feeBps),
+    "max-fee": maxFeeBps === undefined ? "…" : bps(maxFeeBps),
     power: earningPower(votes),
     entity,
     beneficiary: beneficiary || "No name",
     message,
   });
   fillAddress(document, "beneficiary-address", beneficiaryAddress);
+  if (treasury) fillAddress(document, "treasury", treasury);
   fillTime(document, "week-start", epochStart);
   fillTime(document, "week-end", epochStart + WEEK);
   fillTime(document, "week-end-when", epochStart + WEEK, when);
@@ -126,6 +152,55 @@ function tick(): void {
   }
 }
 
+// AutoMaxi's page, its card on the menu, and its column in the comparison, once it is on Base.
+let autoMaxiFreshness: Freshness | undefined;
+
+function showAutoMaxi(): void {
+  const on = present().includes(AUTOMAXI);
+  show('[data-kind="automaxi"]', on);
+  show(".automaxi-absent", !on);
+  show(".automaxi-join", on && !checks?.failed.get(AUTOMAXI.kind)!.length);
+  if (!on) return;
+  const fresh = autoMaxiFreshness;
+  const stopped = !!fresh && hasStopped(fresh.voted, fresh.epochStart);
+  const state = !fresh ? "…" : !fresh.voted ? "Not voted yet" : stopped ? "Stopped" : "Running";
+  for (const shape of document.querySelectorAll(".automaxi-shape")) {
+    shape.classList.remove("idle", "running", "stopped");
+    shape.classList.add(!fresh?.voted ? "idle" : stopped ? "stopped" : "running");
+  }
+  fill(document, { "automaxi-state": state });
+  if (fresh?.voted) fillTime(document, "automaxi-voted", fresh.voted, utc);
+  show(".automaxi-voted-line", !!fresh?.voted);
+  const per = perThousandOf(AUTOMAXI);
+  const paid = typeof per === "number" ? (per * Number(10_000n - AUTOMAXI_FEE_BPS)) / 10_000 : undefined;
+  show(".automaxi-no-record", typeof per !== "number");
+  show(".automaxi-has-record", typeof per === "number");
+  fill(document, {
+    "automaxi-record": paid === undefined ? "No record yet" : `${usd(per!)} earned, ${usd(paid)} paid to you`,
+    "automaxi-per-power": typeof per === "number" ? usd(per) : "…",
+    "automaxi-paid-per-power": paid === undefined ? "…" : usd(paid),
+  });
+  const pools = earningsOf(AUTOMAXI)?.pools ?? [];
+  document.querySelector("#automaxi .automaxi-pools")!.replaceChildren(
+    ...pools.map(({ address, name }) => {
+      const [item, link] = [document.createElement("li"), document.createElement("a")];
+      link.className = "pool";
+      link.translate = false;
+      item.append(link);
+      fillAddress(item, "pool", address, name);
+      return item;
+    }),
+  );
+}
+
+function readAutoMaxi(): void {
+  if (!present().includes(AUTOMAXI)) return;
+  readFreshness(AUTOMAXI).then((found) => {
+    autoMaxiFreshness = found;
+    showAutoMaxi();
+  }, console.error);
+}
+
 // One read at a time.
 const readCarbonImpactAgain = (): Promise<void> =>
   (carbonImpactRead ??= readCarbonImpact()
@@ -138,12 +213,15 @@ function catchUp(): void {
   if (shown && !reading && epoch > shown.epochStart) loadAccounts(true);
   if (!carbonImpact || epoch > carbonImpact.epochStart) readCarbonImpactAgain().catch(console.error);
   if (earningsDue(epoch, present())) loadEarningsAndShares();
+  if (autoMaxiFreshness && epoch > autoMaxiFreshness.epochStart) readAutoMaxi();
   checkPayout();
 }
 
 function loadEarningsAndShares(): void {
   loadEarnings(present()).then((changed) => {
-    if (changed) showShares();
+    if (!changed) return;
+    showShares();
+    showAutoMaxi();
   });
 }
 
@@ -174,6 +252,8 @@ async function showChecks(): Promise<void> {
   // An automation newly on Base needs its figures, and the accounts in it their payouts.
   if (more.length) loadEarningsAndShares();
   if (more.length && shown) showPayout(shown, present());
+  if (more.includes(AUTOMAXI)) readAutoMaxi();
+  showAutoMaxi();
   // A read of the accounts that is under way shows the result when it ends.
   if (!reading) showAccounts(true);
 }
@@ -187,10 +267,15 @@ function joinable(account: Account, automation: Automation | undefined): boolean
   return canJoin(account, automation, now());
 }
 const leavable = (account: Account): boolean => present().some((automation) => canLeave(account, automation));
+// Choose sets the page's automations beside voting yourself, once the checks have run.
+const choosable = (account: Account): boolean =>
+  !!checks &&
+  (present().some((automation) => joinable(account, automation)) || leavable(account) || canLeaveOther(account));
 const can: Record<Action, (account: Account, automation?: Automation) => boolean> = {
   join: joinable,
   leave: leavable,
   "leave-other": canLeaveOther,
+  choose: choosable,
 };
 const buttons = (section: HTMLElement) => [...section.querySelectorAll<HTMLButtonElement>("button[data-action]")];
 const actionOf = (button: HTMLButtonElement) => button.dataset.action as Action;
@@ -349,7 +434,8 @@ function updateButtons(): void {
       const n = accounts.filter(allowed).length;
       button.hidden = !able.some(allowed);
       button.disabled = !n;
-      button.textContent = able.length > 1 && n ? `${verb} with ${count(n, "account", "accounts")}` : verb;
+      const which = actionOf(button) === "choose" ? "for" : "with";
+      button.textContent = able.length > 1 && n ? `${verb} ${which} ${count(n, "account", "accounts")}` : verb;
     }
     show(".buttons", able.length > 0, section);
     show(".pick-hint", able.length > 1 && !accounts.length, section);
@@ -367,12 +453,31 @@ function reviewPicked(section: HTMLElement, button: HTMLButtonElement): void {
   if (weekStart(now()) > shown.epochStart) return void loadAccounts();
   const action = actionOf(button);
   const automation = automationOf(button);
-  // A join of Carbon Impact shows the share retired, so it waits for its settings. Leaving never waits.
-  if (action === "join" && automation === CARBON_IMPACT && !carbonImpact) {
+  // A join of Carbon Impact, and Choose, show the share retired, so they wait for its settings. Leaving never waits.
+  if (((action === "join" && automation === CARBON_IMPACT) || action === "choose") && !carbonImpact) {
     return void readCarbonImpactAgain().then(() => reviewPicked(section, button), failed);
   }
   const accounts = picked(section).filter(allows(button));
   if (!accounts.length) return updateButtons();
+  if (action === "choose") return choose(accounts);
+  review(accounts, action, automation);
+}
+
+// Leaving the automations that hold the accounts' approvals: the page's own, those on Hydrex's list, or both.
+function leaveAll(accounts: Account[], own = true, listed = true): { steps: Step[]; names: string[] } {
+  const from = own ? present().filter((automation) => accounts.some((account) => canLeave(account, automation))) : [];
+  const steps = accounts.flatMap((account) =>
+    from.flatMap((automation) => (canLeave(account, automation) ? leave([account], automation) : [])),
+  );
+  const others = listed ? leaveOther(accounts.filter(canLeaveOther)) : [];
+  const names = [...from.map(({ name }) => name), ...new Set(others.flatMap(({ automation }) => automation ?? []))];
+  return { steps: [...steps, ...others], names };
+}
+
+// The review of a join, or of leaving: "leave" leaves the page's automations, "leave-other" Hydrex's others, and
+// "self" both.
+function review(accounts: Account[], action: Action | "self", automation?: Automation): void {
+  if (!connection || !shown) return;
   const { owner, epochStart } = shown;
   const settings = carbonImpact;
   const which = list(accounts.map(({ id }) => `#${id}`));
@@ -405,8 +510,10 @@ function reviewPicked(section: HTMLElement, button: HTMLButtonElement): void {
     show(".from-stopped", stopped.length > 0, before);
     show(".from-running", running.length > 0, before);
     const changes = prepare(`${prefix}join-changes`);
-    changes.querySelector(".automaxi-fees")?.replaceWith(clone("automaxi-fee-facts"));
-    groupAllHex(changes);
+    // The fee facts on the automation's own page.
+    changes
+      .querySelector(".automaxi-fees")
+      ?.replaceWith(document.querySelector("#automaxi .fee-facts")!.cloneNode(true));
     const pages = [
       { title: "Before you join", body: before },
       { title: "What changes", body: changes },
@@ -415,22 +522,74 @@ function reviewPicked(section: HTMLElement, button: HTMLButtonElement): void {
     const steps = join(accounts, automation);
     return openReview(`Join ${automation.name}`, pages, steps, connection, hooks, prepare(`${prefix}join-done`));
   }
-  if (action === "leave") {
-    const from = present().filter((automation) => accounts.some((account) => canLeave(account, automation)));
-    const steps = accounts.flatMap((account) =>
-      from.flatMap((automation) => (canLeave(account, automation) ? leave([account], automation) : [])),
-    );
-    const names = list(from.map(({ name }) => name));
-    const effects = prepare("leave-effects");
-    fill(effects, { automations: names });
-    const title = `Leave ${names}`;
-    return openReview(title, [{ title, body: effects }], steps, connection, hooks);
-  }
-  const steps = leaveOther(accounts);
-  const names = list([...new Set(steps.flatMap(({ automation }) => automation ?? []))]);
-  const effects = prepare("leave-other-effects");
-  fill(effects, { automations: names });
-  openReview(`Leave ${names}`, [{ title: `Leave ${names}`, body: effects }], steps, connection, hooks);
+  const { steps, names } = leaveAll(accounts, action !== "leave-other", action !== "leave");
+  const title = `Leave ${list(names)}`;
+  const effects = prepare(action === "leave-other" ? "leave-other-effects" : "leave-effects");
+  fill(effects, { automations: list(names) });
+  openReview(title, [{ title, body: effects }], steps, connection, hooks);
+}
+
+// Choose: each of the page's automations on Base, and voting yourself, for the accounts picked.
+function choose(accounts: Account[]): void {
+  if (!shown) return;
+  const { owner } = shown;
+  const settings = carbonImpact;
+  const power = accounts.reduce((sum, { votes }) => sum + toEarningPower(votes), 0n);
+  const percent = (value: bigint | undefined) => (value === undefined ? "…" : bps(value));
+  const facts: Record<Kind, Option["facts"]> = {
+    "carbon-impact": {
+      pays: "kVCM",
+      taken: `${percent(settings?.retireBps)} retired, and a fee of ${percent(settings?.feeBps)}`,
+      most: `100% retired, and a fee of ${percent(settings?.maxFeeBps)}`,
+      leaving: "One call, at any time",
+    },
+    automaxi: {
+      pays: "The tokens earned, unswapped",
+      taken: `${bps(AUTOMAXI_FEE_BPS)} of each claim`,
+      most: `${bps(AUTOMAXI_FEE_BPS)}, fixed in its code`,
+      leaving: "One call, at any time",
+    },
+  };
+  const kept = (automation: Automation): number =>
+    automation === CARBON_IMPACT
+      ? settings
+        ? Number(10_000n - settings.retireBps - (settings.feeBps ?? 0n)) / 10_000
+        : 0
+      : Number(10_000n - AUTOMAXI_FEE_BPS) / 10_000;
+  const options: Option[] = present().map((automation) => {
+    const able = accounts.filter((account) => joinable(account, automation));
+    return {
+      name: automation.name,
+      perThousand: lastEarnings(automation).then(() => perThousandOf(automation) ?? null),
+      paidShare: kept(automation),
+      facts: facts[automation.kind],
+      now: accounts.every((account) => !canJoin(account, automation, now()) && canLeave(account, automation)),
+      ...(able.length && {
+        pick: {
+          label: `Join ${automation.name}`,
+          gas: gasCost(join(able, automation), owner),
+          go: () => review(able, "join", automation),
+        },
+      }),
+    };
+  });
+  const leaving = accounts.filter((account) => leavable(account) || canLeaveOther(account));
+  options.push({
+    name: "Vote yourself",
+    perThousand: undefined,
+    paidShare: 1,
+    facts: {
+      pays: "The tokens of the pools you vote for",
+      taken: "Nothing",
+      most: "Nothing",
+      leaving: "Nothing to leave",
+    },
+    now: !leaving.length,
+    ...(leaving.length && {
+      pick: { label: "Vote yourself", gas: gasCost(leaveAll(leaving).steps, owner), go: () => review(leaving, "self") },
+    }),
+  });
+  openChoose(list(accounts.map(({ id }) => `#${id}`)), accounts.length, power, options);
 }
 
 function showConnection(): void {

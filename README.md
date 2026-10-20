@@ -26,6 +26,9 @@ This README is for whoever runs the site. The design and the plan are in [design
   leaves AutoMaxi out.
 - It shows what Carbon Impact's votes earned last epoch. For each of the owner's accounts in an automation, it shows up
   to when the account has been paid, what waits to be claimed, and the receipt of its last payout.
+- Home sets the choices side by side: each automation, and voting yourself. Each automation has a page of its own,
+  `#carbon-impact` and `#automaxi`, with its six fee facts. In the App, Choose compares them for the accounts ticked,
+  with last epoch's figures and the gas of the change.
 - Inside Safe{Wallet}, it proposes all the calls as one Safe transaction.
 
 One admin key controls Carbon Impact. It can change the share retired (up to 100%), the fee (up to 1%), the payout
@@ -184,23 +187,24 @@ CI runs Prettier, the type check, the unit tests, `reuse lint` and the build. It
 and checks that both builds are the same. With `BASE_RPC_URL` set, it also runs the browser tests. Dependabot updates
 the pinned Actions and npm packages every week.
 
-| Path                                                    | What it holds                                                                              |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `index.html`                                            | The page. Its views are Home, the App (`#app`) and How it works (`#how-it-works`).         |
-| `style.css`, `fonts/`                                   | Styles and fonts. CSS switches the views, so they work without the script.                 |
-| `src/config.ts`                                         | What the page trusts: contract addresses and code hashes, the RPCs, and the price anchors. |
-| `src/hydrex-conduits.json`                              | Hydrex's automations, as <https://api.hydrex.fi/conduits> lists them.                      |
-| `src/main.ts`                                           | Startup, the wallet connection, and the accounts.                                          |
-| `src/review.ts`                                         | The review that shows each call before the wallet asks.                                    |
-| `src/last-epoch.ts`, `src/earnings.ts`, `src/prices.ts` | What votes earned last epoch, and token prices.                                            |
-| `src/last-payout.ts`, `src/receipts.ts`                 | Payouts: up to when each account was paid, what waits, and its last receipt.               |
-| `src/claims.ts`                                         | AutoMaxi's claims, read back from the last one.                                            |
-| `src/hydrex.ts`                                         | Hydrex's contracts: reads, account statuses, the calls, and the checks.                    |
-| `src/chain.ts`, `src/wallet.ts`                         | RPC requests, and wallets.                                                                 |
-| `src/views.ts`, `src/dom.ts`, `src/format.ts`           | Views, page helpers, and number and date formats.                                          |
-| `test/`, `fork/page.ts`                                 | Unit tests, and the browser tests.                                                         |
-| `fork/fixtures/`                                        | AutoMaxi's init code, for the browser tests to deploy it on the fork.                      |
-| `scripts/`                                              | The build; `fonts.py` makes `fonts/`, and `icons.ts` draws the icons from `icon.svg`.      |
+| Path                                                    | What it holds                                                                                                                             |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.html`                                            | The page. Its views are Home, the App (`#app`), a page per automation (`#carbon-impact`, `#automaxi`) and How it works (`#how-it-works`). |
+| `style.css`, `fonts/`                                   | Styles and fonts. CSS switches the views, so they work without the script.                                                                |
+| `src/config.ts`                                         | What the page trusts: contract addresses and code hashes, the RPCs, and the price anchors.                                                |
+| `src/hydrex-conduits.json`                              | Hydrex's automations, as <https://api.hydrex.fi/conduits> lists them.                                                                     |
+| `src/main.ts`                                           | Startup, the wallet connection, and the accounts.                                                                                         |
+| `src/review.ts`                                         | The review that shows each call before the wallet asks.                                                                                   |
+| `src/choose.ts`                                         | Choose: the automations and voting yourself, side by side, for the accounts ticked.                                                       |
+| `src/last-epoch.ts`, `src/earnings.ts`, `src/prices.ts` | What votes earned last epoch, and token prices.                                                                                           |
+| `src/last-payout.ts`, `src/receipts.ts`                 | Payouts: up to when each account was paid, what waits, and its last receipt.                                                              |
+| `src/claims.ts`                                         | AutoMaxi's claims, read back from the last one.                                                                                           |
+| `src/hydrex.ts`                                         | Hydrex's contracts: reads, account statuses, the calls, and the checks.                                                                   |
+| `src/chain.ts`, `src/wallet.ts`                         | RPC requests, and wallets.                                                                                                                |
+| `src/views.ts`, `src/dom.ts`, `src/format.ts`           | Views, page helpers, and number and date formats.                                                                                         |
+| `test/`, `fork/page.ts`                                 | Unit tests, and the browser tests.                                                                                                        |
+| `fork/fixtures/`                                        | AutoMaxi's init code, for the browser tests to deploy it on the fork.                                                                     |
+| `scripts/`                                              | The build; `fonts.py` makes `fonts/`, and `icons.ts` draws the icons from `icon.svg`.                                                     |
 
 ## License
 
