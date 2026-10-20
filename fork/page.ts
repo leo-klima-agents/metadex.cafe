@@ -118,13 +118,16 @@ async function warm(reads: () => Promise<unknown>): Promise<void> {
 }
 
 // Sends a transaction, and waits for Base, or anvil, to include it.
+// A transaction that anvil has not mined in two minutes, even reading its state from FORK_URL, fails its test there
+// and then, rather than at the suite's timeout.
 async function mined(from: Address, to: Address, data: Hex): Promise<void> {
   const hash = await anvil<Hex>("eth_sendTransaction", [{ from, to, data, gas: "0xf42400" }]);
-  for (;;) {
+  for (const deadline = Date.now() + 120_000; Date.now() < deadline;) {
     const receipt = await anvil<{ status: Hex } | null>("eth_getTransactionReceipt", [hash]);
     if (receipt) return assert.equal(receipt.status, "0x1", `${hash} failed`);
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+  assert.fail(`${hash} was not mined in two minutes`);
 }
 
 // AutoMaxi's constructor needs fresh Chainlink prices and Base's sequencer up. anvil's clock runs on from the fork's,
@@ -687,7 +690,10 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
       /^Late\. Paid up to Thu,? 17 Sept? only\. Carbon Impact voted with it from Thu,? 1 Oct to Thu,? 8 Oct, and has not paid it for that epoch yet\.$/,
     );
     assert.equal(await standing.locator(".standing-paid").isVisible(), false);
-    assert.match(await standing.locator(".standing-waiting").innerText(), /^≈\s\$\d[\d,.]* waits to be claimed$/);
+    assert.match(
+      await standing.locator(".standing-waiting").innerText(),
+      /^≈\s\$\d[\d,.]* waits to be claimed in last epoch's pools\.$/,
+    );
     assert.equal(await standing.locator(".standing-outside").isVisible(), false);
     assert.equal(await page.locator("#receipts .receipts-underway").isVisible(), false);
     assert.equal(await receipt.count(), 1);
@@ -1191,7 +1197,7 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
         .waitFor({ timeout: 60_000 });
     }
     await dialog.locator("summary").click();
-    assert.deepEqual(await dialog.locator(".compare-taken td").allTextContents(), [
+    assert.deepEqual(await dialog.locator(".compare-taken td").allInnerTexts(), [
       "33.33% retired, and a fee of 0%",
       "1% of each claim",
       "Nothing",

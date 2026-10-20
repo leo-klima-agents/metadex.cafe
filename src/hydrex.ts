@@ -1,5 +1,5 @@
 import { encodeFunctionData, keccak256, parseAbi, zeroAddress, type Address, type Hex } from "viem";
-import { blockTime, call, codeHash, implementation, read, required, rpc, same } from "./chain.ts";
+import { blockTime, call, codeHash, implementation, read, required, rpc, same, type Call } from "./chain.ts";
 import {
   ACCOUNT_NAMES,
   ANCHORS,
@@ -113,6 +113,11 @@ export type CarbonImpact = {
   maxFeeBps?: bigint;
   treasury?: Address;
 };
+
+// The share of a payout's kVCM that reaches the owner: Carbon Impact retires its share first, then takes its fee from
+// the rest. An unknown fee counts as none.
+export const paidBpsOf = ({ retireBps, feeBps = 0n }: CarbonImpact): bigint =>
+  ((10_000n - retireBps) * (10_000n - feeBps)) / 10_000n;
 
 export type Account = {
   id: bigint;
@@ -394,14 +399,12 @@ export async function readAutomations(): Promise<Other[]> {
   }));
 }
 
-// Freshness: when an automation last voted, or 0, and its votes this epoch.
-export type Freshness = { time: number; epochStart: number; voted: number; votes: bigint };
+// Freshness: when an automation last voted, or 0, as of an epoch.
+export type Freshness = { epochStart: number; voted: number };
 
 export async function readFreshness({ address }: Automation): Promise<Freshness> {
   const [time, voted] = required(await read([blockTime, voter("lastVoted", address)])) as bigint[];
-  const epochStart = epochAt(time);
-  const [votes] = required(await read([escrow("getPastVotes", address, BigInt(epochStart))])) as [bigint];
-  return { time: Number(time), epochStart, voted: Number(voted), votes };
+  return { epochStart: epochAt(time), voted: Number(voted) };
 }
 
 // The hash of no code at all.
@@ -415,52 +418,73 @@ export type Checks = {
   failed: Map<Kind, string[]>;
 };
 
+const points = (escrowAddress: unknown, voterOf: unknown) =>
+  same(String(escrowAddress), VOTING_ESCROW) && same(String(voterOf), VOTER);
+
+// Each automation's own checks: what its code must hash to and what joining it must approve, which every automation
+// has, then the reads of its own and what they must answer. Each check is named by the id of its message on the page.
+// Carbon Impact is on Base from the start; AutoMaxi only once there is code at its address.
+type Own = {
+  calls: Call[];
+  checks(answers: unknown[], code: boolean, approvals: boolean): Record<string, boolean>;
+  always: boolean;
+};
+const own: Record<Kind, Own> = {
+  "carbon-impact": {
+    calls: [carbonImpact("veToken"), carbonImpact("voter"), carbonImpact("kvcm")],
+    checks: ([veToken, voterOf, payoutToken], code, approvals) => ({
+      code: !code,
+      contracts: !points(veToken, voterOf),
+      token: !same(String(payoutToken), KVCM),
+      approvals: !approvals,
+    }),
+    always: true,
+  },
+  automaxi: {
+    calls: [autoMaxi("veToken"), autoMaxi("voter")],
+    checks: ([veToken, voterOf], code, approvals) => ({
+      "automaxi-code": !code,
+      "automaxi-contracts": !points(veToken, voterOf),
+      "automaxi-approvals": !approvals,
+    }),
+    always: false,
+  },
+};
+
 export async function failedChecks(): Promise<Checks> {
-  const [chainId, hashes, impl, replies] = await Promise.all([
+  const reads = AUTOMATIONS.map(({ kind, address }) => [
+    escrow("getConduitApprovalConfig", address),
+    ...own[kind].calls,
+  ]);
+  const [chainId, hashes, impl, [logic, ...answers]] = await Promise.all([
     rpc<string>("eth_chainId", []),
     Promise.all(AUTOMATIONS.map(({ address }) => codeHash(address))),
     implementation(VOTING_ESCROW),
-    read([
-      escrow("approvalLogic"),
-      carbonImpact("veToken"),
-      carbonImpact("voter"),
-      carbonImpact("kvcm"),
-      autoMaxi("veToken"),
-      autoMaxi("voter"),
-      ...AUTOMATIONS.map(({ address }) => escrow("getConduitApprovalConfig", address)),
-    ]),
+    read([escrow("approvalLogic"), ...reads.flat()]),
   ]);
-  const [logic, veToken, voterAddress, payoutToken, autoMaxiVeToken, autoMaxiVoter, ...configs] = replies;
   const [implHash, logicHash] = await Promise.all([codeHash(impl), logic ? codeHash(logic as Address) : undefined]);
-  const approves = (i: number): boolean => {
-    const [actions, active] = (configs[i] ?? [[], false]) as [number[], boolean];
-    return active && actions.join() === AUTOMATIONS[i]!.actions.join();
-  };
-  const points = (escrowAddress: unknown, voterOf: unknown) =>
-    same(String(escrowAddress), VOTING_ESCROW) && same(String(voterOf), VOTER);
-  const all = {
+  const failing = (checks: Record<string, boolean>) =>
+    Object.entries(checks).flatMap(([id, fails]) => (fails ? [id] : []));
+  const all = failing({
     chain: Number(chainId) !== CHAIN_ID,
     upgrade: !same(impl, VOTING_ESCROW_IMPLEMENTATION) || implHash !== VOTING_ESCROW_IMPLEMENTATION_CODE_HASH,
     logic: !same(String(logic), APPROVAL_LOGIC) || logicHash !== APPROVAL_LOGIC_CODE_HASH,
-  };
-  const own: Record<Kind, Record<string, boolean>> = {
-    "carbon-impact": {
-      code: hashes[0] !== CARBON_IMPACT.codeHash,
-      contracts: !points(veToken, voterAddress),
-      token: !same(String(payoutToken), KVCM),
-      approvals: !approves(0),
-    },
-    automaxi: {
-      "automaxi-code": hashes[1] !== AUTOMAXI.codeHash,
-      "automaxi-contracts": !points(autoMaxiVeToken, autoMaxiVoter),
-      "automaxi-approvals": !approves(1),
-    },
-  };
-  const failing = (checks: Record<string, boolean>) =>
-    Object.entries(checks).flatMap(([id, fails]) => (fails ? [id] : []));
+  });
+  let at = 0;
+  const found = AUTOMATIONS.map((automation, i) => {
+    const [config, ...mine] = answers.slice(at, (at += reads[i]!.length));
+    const [actions, active] = (config ?? [[], false]) as [number[], boolean];
+    const approvals = active && actions.join() === automation.actions.join();
+    const checks = own[automation.kind].checks(mine, hashes[i] === automation.codeHash, approvals);
+    return {
+      automation,
+      failed: [...all, ...failing(checks)],
+      on: own[automation.kind].always || hashes[i] !== NO_CODE,
+    };
+  });
   return {
-    present: AUTOMATIONS.filter((automation, i) => automation === CARBON_IMPACT || hashes[i] !== NO_CODE),
-    failed: new Map(AUTOMATIONS.map(({ kind }) => [kind, [...failing(all), ...failing(own[kind])]])),
+    present: found.flatMap(({ automation, on }) => (on ? [automation] : [])),
+    failed: new Map(found.map(({ automation, failed }) => [automation.kind, failed])),
   };
 }
 

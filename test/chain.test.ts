@@ -178,6 +178,19 @@ test("an answer the caller does not take goes to the next RPC; a pending receipt
   assert.equal(polled.length, 1, "one RPC a poll");
 });
 
+test("a doubtful answer is taken only once no RPC answers otherwise", async () => {
+  const doubt = (found: unknown) => (found as unknown[]).length === 0;
+  const asked = answering({ [first]: [result([])], [second]: [result(["0x1"])] });
+  assert.deepEqual(await rpc("eth_getLogs", [], { doubt }), ["0x1"], "the RPC behind is passed over");
+  assert.deepEqual(urls(asked), [first, second]);
+  resetRateLimits();
+  answering({ [first]: [result([])], [second]: [result([])], [third]: [error(-32602, "unknown block")] });
+  assert.deepEqual(await rpc("eth_getLogs", [], { doubt }), [], "no RPC answers otherwise");
+  resetRateLimits();
+  answering(everywhere(error(-32602, "unknown block")));
+  await assert.rejects(rpc("eth_getLogs", [], { doubt }), /No Base RPC answered/);
+});
+
 test("a request waiting for room gives its turn to others", async () => {
   const asked = answering(everywhere(result("0x1")));
   // This uses up all three RPCs' limits for logs for a second.

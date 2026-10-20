@@ -42,47 +42,12 @@ export type Payout = {
 };
 export type Log = { data: Hex; topics: [Hex, ...Hex[]]; transactionHash: Hex; logIndex: Hex; blockNumber: Hex };
 
-type TotalAt = (block: number) => Promise<bigint>;
-// The first and last block, both included.
-type Stretch = [number, number];
+// A log's place in the chain, to sort logs by.
+export const order = (log: Log): bigint => BigInt(log.blockNumber) * 1_000_000n + BigInt(log.logIndex);
 
-// Narrows down where the total last changed: after `lower`, where it was `below`, and by `upper`, where it is `now`.
-export async function lastChange(
-  at: TotalAt,
-  lower: number,
-  upper: number,
-  below: bigint,
-  now: bigint,
-  size: number,
-): Promise<{ lower: number; upper: number; below: bigint }> {
-  while (upper - lower > size) {
-    const middle = Math.floor((lower + upper) / 2);
-    const total = await at(middle);
-    if (total === now) upper = middle;
-    else [lower, below] = [middle, total];
-  }
-  return { lower, upper, below };
-}
-
-// The stretches of at most `size` blocks, after `from` and up to `to`, in which the total changed.
-export async function changes(
-  at: TotalAt,
-  from: number,
-  to: number,
-  before: bigint,
-  after: bigint,
-  size: number,
-): Promise<Stretch[]> {
-  if (before === after) return [];
-  if (to - from <= size) return [[from + 1, to]];
-  const middle = Math.floor((from + to) / 2);
-  const between = await at(middle);
-  const [left, right] = await Promise.all([
-    changes(at, from, middle, before, between, size),
-    changes(at, middle, to, between, after, size),
-  ]);
-  return [...left, ...right];
-}
+// The amounts above zero, token by token.
+export const positive = (tokens: readonly Address[], values: readonly bigint[]): Amount[] =>
+  tokens.map((token, i) => ({ token, amount: values[i] ?? 0n })).filter(({ amount }) => amount > 0n);
 
 // Reads, at one block, whether each item has reached what it waits for.
 export type Reached<T> = (block: number, items: T[]) => Promise<boolean[]>;
@@ -135,20 +100,36 @@ export type Standing = {
   pair?: Pair;
   // What it can claim now from each pair, looking back at most 50 epochs.
   waiting: Amount[];
+  // Whether what it can claim from some pairs could not be read, so that there is at least `waiting`.
+  unknown: boolean;
 };
 
-// Each account's standing, from its reads of each pair: tokenTimestamp, then earned, pair by pair, account by account.
-export function standingsOf(ids: bigint[], pairs: Pair[], values: bigint[]): Standing[] {
+// earned() adds up to 50 epochs one by one, so a call can take about a million gas: 20 fit well within the 50 million
+// that RPCs allow an eth_call.
+const EARNED_PER_BATCH = 20;
+
+// Each account's standing, from its reads of each pair, pair by pair, account by account: tokenTimestamp, and earned,
+// undefined where it could not be read.
+export function standingsOf(
+  ids: bigint[],
+  pairs: Pair[],
+  stamps: bigint[],
+  earned: (bigint | undefined)[],
+): Standing[] {
   return ids.map((id, a) => {
-    const standing: Standing = { id, through: 0, waiting: [] };
+    const standing: Standing = { id, through: 0, waiting: [], unknown: false };
     pairs.forEach((pair, i) => {
-      const [stamp, earned] = [values[2 * (a * pairs.length + i)]!, values[2 * (a * pairs.length + i) + 1]!];
+      const [stamp, amount] = [stamps[a * pairs.length + i]!, earned[a * pairs.length + i]];
       if (Number(stamp) > standing.through) Object.assign(standing, { through: Number(stamp), pair });
-      if (earned > 0n) standing.waiting.push({ token: pair.token, amount: earned });
+      if (amount === undefined) standing.unknown = true;
+      else if (amount > 0n) standing.waiting.push({ token: pair.token, amount });
     });
     return standing;
   });
 }
+
+const reads = (ids: bigint[], pairs: Pair[], name: "tokenTimestamp" | "earned") =>
+  ids.flatMap((id) => pairs.map(({ contract, token }) => call(contract, rewardsAbi, name, id, token)));
 
 // One read of every pair for every account, at a block.
 export async function readStandings(
@@ -157,16 +138,29 @@ export async function readStandings(
   block: number,
   reader: typeof read = readLater,
 ): Promise<Standing[]> {
-  const values = await reader(
-    ids.flatMap((id) =>
-      pairs.flatMap(({ contract, token }) => [
-        call(contract, rewardsAbi, "tokenTimestamp", id, token),
-        call(contract, rewardsAbi, "earned", id, token),
-      ]),
-    ),
-    block,
-  );
-  return standingsOf(ids, pairs, required(values) as bigint[]);
+  const [stamps, earned] = await Promise.all([
+    reader(reads(ids, pairs, "tokenTimestamp"), block),
+    reader(reads(ids, pairs, "earned"), block, true, EARNED_PER_BATCH),
+  ]);
+  return standingsOf(ids, pairs, required(stamps) as bigint[], earned as (bigint | undefined)[]);
+}
+
+// The standings, with the accounts' records in other pairs too, such as those of the epoch before: an account paid on
+// them has a newer record there than in last epoch's pools, until its next payout.
+export async function paidThrough(
+  standings: Standing[],
+  pairs: Pair[],
+  block: number,
+  reader: typeof read = readLater,
+): Promise<Standing[]> {
+  if (!standings.length || !pairs.length) return standings;
+  const ids = standings.map(({ id }) => id);
+  const stamps = required(await reader(reads(ids, pairs, "tokenTimestamp"), block)) as bigint[];
+  const found = standingsOf(ids, pairs, stamps, []);
+  return standings.map((standing, i) => {
+    const { through, pair } = found[i]!;
+    return through > standing.through && pair ? { ...standing, through, pair } : standing;
+  });
 }
 
 // Late: the account voted with the automation in the epoch that started two epochs before the current one, `voted`,
@@ -225,11 +219,6 @@ export async function payoutBlocks(
   return blocks;
 }
 
-const positive = (tokens: readonly Address[], values: readonly bigint[]): Amount[] =>
-  tokens.map((token, i) => ({ token, amount: values[i] ?? 0n })).filter(({ amount }) => amount > 0n);
-
-const order = (log: Log): bigint => BigInt(log.blockNumber) * 1_000_000n + BigInt(log.logIndex);
-
 // The payouts in some blocks' logs. An account's retirement, if any, comes just before its payout, in the same
 // transaction.
 export function payouts(logs: Log[]): Payout[] {
@@ -266,7 +255,9 @@ export function payouts(logs: Log[]): Payout[] {
   return found;
 }
 
-// Carbon Impact's payouts in each block, from one read of the block's logs. Each block is read once.
+// Carbon Impact's payouts in each block, from one read of the block's logs. Each block is read once. Each block holds an
+// account's last claim, but the claim may have been made elsewhere, with no log of Carbon Impact's, and Hydrex's reward
+// contracts log nothing when they pay nothing. So no logs is taken only once no RPC has any.
 const logsOf = new Map<number, Payout[]>();
 
 export async function payoutsIn(blocks: number[]): Promise<Payout[]> {
@@ -276,9 +267,7 @@ export async function payoutsIn(blocks: number[]): Promise<Payout[]> {
       rpc<Log[]>(
         "eth_getLogs",
         [{ address: CARBON_IMPACT.address, fromBlock: numberToHex(block), toBlock: numberToHex(block) }],
-        {
-          later: true,
-        },
+        { later: true, doubt: (logs) => Array.isArray(logs) && !logs.length },
       ),
     ),
   );
@@ -316,4 +305,9 @@ export async function namesAt(blocks: number[]): Promise<Map<number, string>> {
   );
   missing.forEach((block, i) => names.set(block, found[i]!));
   return new Map(blocks.map((block) => [block, names.get(block)!]));
+}
+
+// For tests: what the reads above found is kept for the rest of the session.
+export function forgetReads(): void {
+  for (const kept of [searched, logsOf, times, names]) kept.clear();
 }

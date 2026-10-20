@@ -4,6 +4,9 @@ import { usd } from "./format.ts";
 // Choose: for the accounts picked, each automation that fits them and voting yourself, with last epoch's figures per
 // 1,000 Earning Power, what that rate would pay them in a week, and the gas of the change. A table compares the facts.
 
+export const FACTS = ["pays", "taken", "most", "leaving"] as const;
+export type Fact = (typeof FACTS)[number];
+
 export type Option = {
   name: string;
   // Last epoch's dollars per 1,000 Earning Power once read, null for an automation with no record yet, or undefined
@@ -11,7 +14,8 @@ export type Option = {
   perThousand: Promise<number | null> | undefined;
   // The share of it paid to the owner.
   paidShare: number;
-  facts: { pays: string; taken: string; most: string; leaving: string };
+  // Each fact, as the page itself states it.
+  facts: Record<Fact, Node[]>;
   // Whether the accounts are all in it already.
   now: boolean;
   // The button, if the accounts can move to it, with the dollars of gas the calls cost.
@@ -63,22 +67,22 @@ export function openChoose(which: string, n: number, power: bigint, options: Opt
       return item;
     }),
   );
-  const row = (name: string, cells: string[], header = false) =>
+  const row = (name: string, cells: (string | Node)[][], header = false) =>
     dialog.querySelector(`.compare-${name}`)!.replaceChildren(
       ...(header ? [document.createElement("td")] : [dialog.querySelector(`.compare-${name} th`)!]),
-      ...cells.map((text) => {
+      ...cells.map((content) => {
         const cell = document.createElement(header ? "th" : "td");
         if (header) cell.scope = "col";
-        cell.textContent = text;
+        cell.replaceChildren(...content);
         return cell;
       }),
     );
   row(
     "names",
-    options.map(({ name }) => name),
+    options.map(({ name }) => [name]),
     true,
   );
-  for (const fact of ["pays", "taken", "most", "leaving"] as const) {
+  for (const fact of FACTS) {
     row(
       fact,
       options.map(({ facts }) => facts[fact]),
@@ -86,6 +90,9 @@ export function openChoose(which: string, n: number, power: bigint, options: Opt
   }
   dialog.showModal();
 }
+
+// A change of wallet, or of its address, closes it: its accounts are another owner's.
+export const closeChoose = (): void => dialog.close();
 
 dialog.querySelector(".choose-close")!.addEventListener("click", () => dialog.close());
 // A link closes the dialog, so that its target shows.

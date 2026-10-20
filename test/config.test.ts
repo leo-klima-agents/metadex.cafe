@@ -81,10 +81,25 @@ test("each automation has a kind, a name and the approvals of its own, and AutoM
   assert.deepEqual(rows(facts), SIX);
   assert.equal(bps(AUTOMAXI_FEE_BPS), "1%");
   assert.match(facts, /<dd>1% of each claim<\/dd>/);
-  assert.match(facts, /<dd>1%, fixed in its code<\/dd>/);
+  assert.match(facts, /<dd[^>]*>1%, fixed in its code<\/dd>/);
   assert.ok(facts.includes(`/address/${AUTOMAXI_TREASURY}"`));
   assert.ok(page("automaxi").includes(AUTOMAXI.codeHash), "its page shows the code hash the page checks");
   assert.equal(AUTOMAXI.address, getAddress(AUTOMAXI.address));
+});
+
+test("Choose finds each fact of each choice on the page: on its card in the menu, or in its page's fee facts", () => {
+  const html = read("index.html");
+  const card = /<article class="choice" data-choice="([^"]+)"[\s\S]*?<\/article>/g;
+  const cards = new Map([...html.matchAll(card)].map(([text, choice]) => [choice!, text]));
+  const page = (id: string) => html.slice(html.indexOf(`<div id="${id}" class="view"`)).split('class="view"')[1] ?? "";
+  const factsOf = (id: string) => /<dl class="fee-facts">[\s\S]*?<\/dl>/.exec(page(id))?.[0] ?? "";
+  assert.deepEqual([...cards.keys()], [...AUTOMATIONS.map(({ kind }) => kind), "self"]);
+  for (const [choice, text] of cards) {
+    for (const fact of ["pays", "taken", "most", "leaving"]) {
+      const has = (source: string) => new RegExp(`data-fact="[^"]*\\b${fact}\\b`).test(source);
+      assert.ok(has(text) || has(factsOf(choice)), `${choice} states "${fact}"`);
+    }
+  }
 });
 
 test("the page may reach its RPCs and nothing else, and the README lists them", () => {

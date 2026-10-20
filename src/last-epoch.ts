@@ -10,10 +10,13 @@ import type { Holdings } from "./hydrex.ts";
 type Value = ReturnType<typeof valueOf>;
 type Read = { found: Earnings; value: Value };
 
-// Each automation's figures, its read under way, and when it was last tried.
+// Each automation's figures, its read under way, when it was last tried, and whether that failed.
 const earned = new Map<Kind, Read>();
 const reading = new Map<Kind, Promise<boolean>>();
 const tried = new Map<Kind, number>();
+const failedKinds = new Set<Kind>();
+// Called after each read, whichever caller started it, with the automation whose figures are new or failed.
+const listeners: ((kind: Kind) => void)[] = [];
 let comparedEpoch: number | undefined;
 let onScreen = false;
 // Each account's share of its automation's votes, kept with the accounts it was read for.
@@ -51,24 +54,31 @@ function loadOne(automation: Automation): Promise<boolean> {
   return pending;
 }
 
+export const onEarnings = (listener: (kind: Kind) => void): void => void listeners.push(listener);
+
 async function readAndShow({ kind, address }: Automation): Promise<boolean> {
   tried.set(kind, Date.now());
   try {
     const found = await readEarnings(address, earned.get(kind)?.found.start);
     if (!found) return false;
-    if (kind === CARBON_IMPACT.kind) showEarnings(found);
-    else earned.set(kind, { found, value: valueOf(found) });
+    const value = valueOf(found);
+    earned.set(kind, { found, value });
+    failedKinds.delete(kind);
+    display[kind].read(found, value);
     return true;
   } catch (error) {
     // The page works without these figures: it says so where they go, and keeps any from an earlier epoch.
     console.error(error);
-    if (kind === CARBON_IMPACT.kind) {
-      show(".earnings-failed", !carbonImpact());
-      show(".earnings-read", !!carbonImpact());
-    }
+    failedKinds.add(kind);
+    display[kind].failed();
     return false;
+  } finally {
+    for (const listener of listeners) listener(kind);
   }
 }
+
+// Whether an automation's figures could not be read, and there are none from an earlier epoch.
+export const earningsFailed = ({ kind }: Automation): boolean => failedKinds.has(kind) && !earned.has(kind);
 
 // An automation's figures, read first if there are none yet. The receipts read each account's rewards in its pools.
 export async function lastEarnings(automation: Automation): Promise<Earnings> {
@@ -79,8 +89,10 @@ export async function lastEarnings(automation: Automation): Promise<Earnings> {
 }
 
 // Resolves to true once the accounts' shares of each automation's votes in the epoch shown are read.
+// Overlapping calls for the same accounts share one map, each adding its automations' shares.
 export async function loadShares(holdings: Holdings, automations: Automation[]): Promise<boolean> {
   const known = shares.get(holdings) ?? new Map();
+  shares.set(holdings, known);
   const ids = holdings.accounts.filter(({ amount }) => amount > 0n).map(({ id }) => id);
   const read = await Promise.all(
     automations.map(async ({ kind, address }) => {
@@ -92,7 +104,6 @@ export async function loadShares(holdings: Holdings, automations: Automation[]):
       return true;
     }),
   );
-  shares.set(holdings, known);
   return read.includes(true);
 }
 
@@ -143,9 +154,7 @@ function showPools({ pools, votes }: Earnings, value: Value): void {
   document.querySelector("#last-epoch .earned-pools tbody")!.replaceChildren(...rows);
 }
 
-function showEarnings(found: Earnings): void {
-  const value = valueOf(found);
-  earned.set(CARBON_IMPACT.kind, { found, value });
+function showEarnings(found: Earnings, value: Value): void {
   show(".earnings-failed", false);
   show(".earnings-read");
   fillTime(document, "last-start", found.start);
@@ -193,6 +202,19 @@ function compare(): void {
     },
   );
 }
+
+// Where each automation's figures show besides its listeners: Carbon Impact's in Home's numbers and in the section on
+// how the votes did; AutoMaxi's on its own page, which the page's script fills when told.
+const display: Record<Kind, { read(found: Earnings, value: Value): void; failed(): void }> = {
+  "carbon-impact": {
+    read: showEarnings,
+    failed() {
+      show(".earnings-failed", !carbonImpact());
+      show(".earnings-read", !!carbonImpact());
+    },
+  },
+  automaxi: { read() {}, failed() {} },
+};
 
 new IntersectionObserver((entries) => {
   onScreen = entries.some(({ isIntersecting }) => isIntersecting);

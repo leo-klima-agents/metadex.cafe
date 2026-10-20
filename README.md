@@ -138,7 +138,8 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 
 - **"Reading Base failed."** No RPC answered. The page offers to try again. What votes earned, the other automations and
   the payouts only add to the page: if one of them cannot be read, the rest of the page still works. What votes earned
-  is tried again every five minutes, and the payouts have a button to read them again.
+  is tried again every five minutes. If one automation's payouts cannot be read, the others' still show, and the page
+  reads them again every five minutes; if none can, the payouts have a button to read them again.
 - **Joining is off.** A check failed: see [When a contract changes](#when-a-contract-changes).
 - **The wallet is on another network.** The page offers to switch it to Base, or asks the visitor to pick Base in the
   wallet.
@@ -148,7 +149,8 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 - **At the end of an epoch,** Thursday at 00:00 UTC by Base's clock, the page reads the accounts and Carbon Impact again
   within half a minute.
 - **A payout under way.** A payout takes up to half a day after each epoch. While it has paid some of the owner's
-  accounts and not yet others, the page says so, and reads the accounts again every five minutes.
+  accounts and not yet others, the page says so. Until a payout due since the flip has reached every account, the page
+  reads the payouts again every five minutes, and then not until the next epoch.
 - **A late payout.** An account is late when it voted with Carbon Impact two epochs ago and has not been paid for that
   epoch yet. Its rewards wait in Hydrex's reward contracts until someone claims them, for up to 50 epochs. Carbon Impact
   paid nothing from 23 Sep to at least 19 Oct 2026, though it kept voting.
@@ -157,8 +159,11 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 
 - The page shows each account's last payout only. For AutoMaxi, that is the claims in the epoch of the last one, up to
   ten blocks of them: anyone can claim dust for an account through a contract of their own, as often as they like.
-- What waits to be claimed is a floor: the page reads each account's rewards in the pools Carbon Impact voted for last
-  epoch, and no others.
+- What waits to be claimed is a floor: the page reads each account's rewards in the pools its automation voted for last
+  epoch, and no others. If some of those reads fail, it says "at least".
+- An account not paid since last epoch started may have been paid on the pools of the epoch before. Hydrex's Voter no
+  longer holds those votes, so the page finds them among every pool's reward contracts: thousands of reads, made only
+  then, and once per session.
 - The page finds an account's last payout through Hydrex's reward contracts, which record up to when they have paid it.
   Anyone allowed to claim for the account moves that record, such as its owner on Hydrex. The page then says that the
   account was last claimed outside Carbon Impact, and shows no receipt.

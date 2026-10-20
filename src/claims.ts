@@ -2,7 +2,7 @@ import { decodeEventLog, encodeEventTopics, numberToHex, parseAbi, type Address,
 import { readLater, required, rpc, same } from "./chain.ts";
 import { AUTOMAXI } from "./config.ts";
 import { autoMaxi } from "./hydrex.ts";
-import type { Amount, Log } from "./receipts.ts";
+import { order, positive, type Amount, type Log } from "./receipts.ts";
 
 // AutoMaxi pays each claim to the account's owner, in the tokens earned, less its fee. It records the block of each
 // account's last claim that received anything, and each claim's event carries the block recorded before it. So the
@@ -32,8 +32,6 @@ export type Claim = {
 // got there.
 export type Walk = { claims: Claim[]; stopped: boolean };
 
-const order = (log: Log): bigint => BigInt(log.blockNumber) * 1_000_000n + BigInt(log.logIndex);
-
 // The claims in some logs, newest first.
 export function claimsOf(logs: Log[]): Claim[] {
   return [...logs]
@@ -46,15 +44,13 @@ export function claimsOf(logs: Log[]): Claim[] {
         return [];
       }
       const { tokenId, owner, caller, tokens, amounts, fees, previousClaimBlock } = event.args;
-      const of = (values: readonly bigint[]) =>
-        tokens.map((token, i) => ({ token, amount: values[i] ?? 0n })).filter(({ amount }) => amount > 0n);
       return [
         {
           id: tokenId,
           owner,
           caller,
-          received: of(amounts),
-          fees: of(fees),
+          received: positive(tokens, amounts),
+          fees: positive(tokens, fees),
           previous: Number(previousClaimBlock),
           tx: log.transactionHash,
           block: Number(log.blockNumber),
@@ -113,6 +109,8 @@ const CLAIMED = encodeEventTopics({ abi: claimedAbi, eventName: "Claimed" })[0];
 const topic = (id: bigint): Hex => numberToHex(id, { size: 32 });
 
 // AutoMaxi's claims for some accounts in a block, from one read of logs. Each account's claims in a block are read once.
+// The page reads a block only where AutoMaxi recorded a claim for each of the accounts, so an RPC whose logs lack one is
+// behind, or lost them, and the next is asked.
 const claimsIn = new Map<string, Claim[]>();
 
 export const readClaimsAt: ClaimsAt = async (block, ids) => {
@@ -129,7 +127,13 @@ export const readClaimsAt: ClaimsAt = async (block, ids) => {
           topics: [CLAIMED, missing.map(topic)],
         },
       ],
-      { later: true },
+      {
+        later: true,
+        accept: (found) => {
+          const claimed = Array.isArray(found) ? claimsOf(found as Log[]) : [];
+          return missing.every((id) => claimed.some((claim) => claim.id === id));
+        },
+      },
     );
     const found = claimsOf(logs);
     for (const id of missing)
@@ -140,6 +144,9 @@ export const readClaimsAt: ClaimsAt = async (block, ids) => {
   }
   return ids.flatMap((id) => claimsIn.get(key(id))!);
 };
+
+// For tests: the claims read are kept for the rest of the session.
+export const forgetClaims = (): void => claimsIn.clear();
 
 // The block of each account's last claim through AutoMaxi that received anything, or 0.
 export async function lastClaimBlocks(ids: bigint[], block: number): Promise<Map<bigint, number>> {

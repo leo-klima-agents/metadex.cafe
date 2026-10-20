@@ -113,7 +113,7 @@
             figures are read from Base.
           </p>
           <div class="menu">
-            <article class="choice">
+            <article class="choice" data-choice="carbon-impact">
               <h3><a href="#carbon-impact">Carbon Impact</a></h3>
               <p class="small">
                 <span class="shape running impact-shape" aria-hidden="true"></span><b class="impact-state">Running</b> ·
@@ -126,11 +126,13 @@
               <dl class="key-facts">
                 <div>
                   <dt>Takes</dt>
-                  <dd><span class="retired">…</span> retired, and a fee of <span class="fee">…</span></dd>
+                  <dd data-fact="taken">
+                    <span class="retired">…</span> retired, and a fee of <span class="fee">…</span>
+                  </dd>
                 </div>
                 <div>
                   <dt>Pays you</dt>
-                  <dd>kVCM</dd>
+                  <dd data-fact="pays">kVCM</dd>
                 </div>
                 <div>
                   <dt>Costs you</dt>
@@ -138,11 +140,11 @@
                 </div>
                 <div>
                   <dt>Leaving</dt>
-                  <dd>One call, at any time</dd>
+                  <dd data-fact="leaving">One call, at any time</dd>
                 </div>
               </dl>
             </article>
-            <article class="choice" data-kind="automaxi" hidden>
+            <article class="choice" data-choice="automaxi" data-kind="automaxi" hidden>
               <h3><a href="#automaxi">AutoMaxi</a></h3>
               <p class="small">
                 <span class="shape idle automaxi-shape" aria-hidden="true"></span><b class="automaxi-state">…</b
@@ -155,11 +157,11 @@
               <dl class="key-facts">
                 <div>
                   <dt>Takes</dt>
-                  <dd>1% of each claim</dd>
+                  <dd data-fact="taken">1% of each claim</dd>
                 </div>
                 <div>
                   <dt>Pays you</dt>
-                  <dd>The tokens earned, unswapped</dd>
+                  <dd data-fact="pays">The tokens earned, unswapped</dd>
                 </div>
                 <div>
                   <dt>Costs you</dt>
@@ -167,22 +169,22 @@
                 </div>
                 <div>
                   <dt>Leaving</dt>
-                  <dd>One call, at any time</dd>
+                  <dd data-fact="leaving">One call, at any time</dd>
                 </div>
               </dl>
             </article>
-            <article class="choice">
+            <article class="choice" data-choice="self">
               <h3>Vote yourself</h3>
               <p class="small"><span class="shape idle" aria-hidden="true"></span><b>No automation</b></p>
               <p>Vote on Hydrex before each Thursday, 00:00 UTC, and claim what your votes earned.</p>
               <dl class="key-facts">
                 <div>
                   <dt>Takes</dt>
-                  <dd>Nothing</dd>
+                  <dd data-fact="taken most">Nothing</dd>
                 </div>
                 <div>
                   <dt>Pays you</dt>
-                  <dd>The tokens of the pools you vote for</dd>
+                  <dd data-fact="pays">The tokens of the pools you vote for</dd>
                 </div>
                 <div>
                   <dt>Costs you</dt>
@@ -190,7 +192,7 @@
                 </div>
                 <div>
                   <dt>Leaving</dt>
-                  <dd>Nothing to leave</dd>
+                  <dd data-fact="leaving">Nothing to leave</dd>
                 </div>
               </dl>
             </article>
@@ -298,7 +300,7 @@
                   <td>
                     <span class="last-per-power">…</span> earned, <span class="paid-share">…</span> paid to you in kVCM
                   </td>
-                  <td data-kind="automaxi" hidden><span class="automaxi-record">No record yet</span></td>
+                  <td data-kind="automaxi" hidden><span class="automaxi-record">…</span></td>
                 </tr>
               </tbody>
             </table>
@@ -669,7 +671,7 @@
           </div>
           <div>
             <dt>The most it can become</dt>
-            <dd>100% retired, and a fee of <span class="max-fee">…</span></dd>
+            <dd data-fact="most">100% retired, and a fee of <span class="max-fee">…</span></dd>
           </div>
           <div>
             <dt>Goes to</dt>
@@ -711,7 +713,7 @@
 
       <div id="automaxi" class="view" data-title="AutoMaxi · metaDEX Café">
         <h1 tabindex="-1">AutoMaxi</h1>
-        <p class="automaxi-absent notice">
+        <p class="automaxi-absent notice" hidden>
           AutoMaxi is not on Base yet. Its address is known in advance: once there is code there, and it is the code
           this page knows, you can join it from the app.
         </p>
@@ -719,7 +721,7 @@
           <li>
             <span class="shape idle automaxi-shape" aria-hidden="true"></span>
             <span
-              ><b class="automaxi-state">Not on Base yet</b
+              ><b class="automaxi-state">…</b
               ><span class="automaxi-voted-line" hidden
                 ><br /><span class="small">Voted <time class="automaxi-voted"></time></span></span
             ></span>
@@ -758,7 +760,7 @@
           </div>
           <div>
             <dt>The most it can become</dt>
-            <dd>1%, fixed in its code</dd>
+            <dd data-fact="most">1%, fixed in its code</dd>
           </div>
           <div>
             <dt>Goes to</dt>
@@ -786,15 +788,18 @@
         </dl>
 
         <h2 id="automaxi-money">Last epoch, per 1,000 Earning Power</h2>
-        <p class="automaxi-no-record">
+        <p class="automaxi-unread">
+          Last epoch's figures <span class="automaxi-unread-why">are being read from Base.</span>
+        </p>
+        <p class="automaxi-no-record" hidden>
           No record yet. AutoMaxi has one once an epoch it voted in has ended. The page shows no projection in the
           meantime.
         </p>
         <div class="automaxi-has-record" hidden>
           <p>
-            <span class="automaxi-per-power">…</span> earned from <time class="last-start">…</time> to
-            <time class="last-end">…</time>, of which <span class="automaxi-paid-per-power">…</span> paid to you, in the
-            tokens earned.
+            <span class="automaxi-per-power">…</span> earned from <time class="automaxi-last-start">…</time> to
+            <time class="automaxi-last-end">…</time>, of which <span class="automaxi-paid-per-power">…</span> paid to
+            you, in the tokens earned.
           </p>
           <p>It voted for:</p>
           <ul class="automaxi-pools"></ul>
@@ -1788,7 +1793,7 @@
         <span data-one="it stays" data-many="they stay"></span> in your wallet. Nobody controls AutoMaxi: it has no
         owner, no settings and no upgrade path.
       </p>
-      <div class="automaxi-fees"></div>
+      <div class="fee-facts-copy"></div>
     </template>
     <template id="automaxi-join-done">
       <p>
@@ -1831,11 +1836,15 @@
               yet.</span
             >
           </li>
-          <li class="standing-waits unmarked">
-            <span
-              ><span class="standing-waiting"></span> in last epoch's pools. There may be more in others: the page
-              counts only those.</span
+          <li class="standing-failed" hidden>
+            <span class="shape idle" aria-hidden="true"></span
+            ><span
+              ><strong>Not read.</strong> Its payouts could not be read from Base just now. The page reads them again
+              every five minutes.</span
             >
+          </li>
+          <li class="standing-waits unmarked">
+            <span><span class="standing-waiting"></span> There may be more in other pools.</span>
           </li>
           <li class="standing-outside unmarked" hidden>
             <span
@@ -2009,7 +2018,7 @@
       ><strong
         >Delegated to <code translate="no"><a class="address"></a></code>.</strong
       >
-      Not a known automation. Joining moves its votes to Carbon Impact.
+      Not a known automation. Joining an automation moves its votes there.
     </template>
     <template id="self"
       ><span class="shape idle" aria-hidden="true"></span><strong>Not in an automation.</strong> You vote with

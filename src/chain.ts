@@ -110,7 +110,10 @@ type Answer = { answered: true; result: unknown };
 // By default, null is not an answer: the RPC may not have the block or transaction yet, so the next one is asked.
 type Accept = (result: unknown) => boolean;
 const notNull: Accept = (result) => result !== null;
-type Options = { later?: boolean; accept?: Accept };
+// A doubtful answer, such as no logs where some are expected but not certain, is taken only once no RPC answers
+// otherwise: an RPC that is behind, or that lost some logs, answers the same.
+type Options = { later?: boolean; accept?: Accept; doubt?: Accept };
+type Doubted = { result: unknown } | undefined;
 
 async function askOne(url: string, body: string, accept: Accept): Promise<Answer | { answered: false; busy: boolean }> {
   let busy = false;
@@ -138,11 +141,12 @@ async function askEach(
   urls: string[],
   method: string,
   body: string,
-  { later = false, accept = notNull }: Options,
-): Promise<Answer | { answered: false; busy: string[] }> {
+  { later = false, accept = notNull, doubt }: Options,
+): Promise<Answer | { answered: false; busy: string[]; doubted: Doubted }> {
   const kind: Kind = method === "eth_getLogs" ? "logs" : "all";
   const left = [...urls];
   const busy: string[] = [];
+  let doubted: Doubted;
   await takeSlot(later);
   try {
     while (left.length) {
@@ -158,8 +162,9 @@ async function askEach(
       const [url] = left.splice(i, 1) as [string];
       recordStart(url, kind, time);
       const outcome = await askOne(url, body, accept);
-      if (outcome.answered) return outcome;
-      if (outcome.busy) {
+      if (outcome.answered && doubt?.(outcome.result)) doubted ??= { result: outcome.result };
+      else if (outcome.answered) return outcome;
+      else if (outcome.busy) {
         busy.push(url);
         restingUntil.set(`${url} ${kind}`, performance.now() + REST);
       }
@@ -167,33 +172,44 @@ async function askEach(
   } finally {
     freeSlot();
   }
-  return { answered: false, busy };
+  return { answered: false, busy, doubted };
 }
 
 export async function rpc<T>(method: string, params: unknown[], options: Options = {}): Promise<T> {
   const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
   let urls = RPCS;
+  let doubted: Doubted;
   for (let attempt = 0; ; attempt++) {
     const outcome = await askEach(urls, method, body, options);
     if (outcome.answered) return outcome.result as T;
     const { busy } = outcome;
-    if (!busy.length || attempt === RETRIES) throw new Error(`No Base RPC answered ${method}.`);
+    doubted ??= outcome.doubted;
+    if (!busy.length || attempt === RETRIES) {
+      if (doubted) return doubted.result as T;
+      throw new Error(`No Base RPC answered ${method}.`);
+    }
     urls = RPCS.filter((url) => busy.includes(url));
     await sleep(Math.random() * BACKOFF * 2 ** attempt);
   }
 }
 
-// Reads contracts through Multicall3. A call that fails reads as undefined.
-export async function read(calls: Call[], block: number | "latest" = "latest", later = false): Promise<unknown[]> {
+// Reads contracts through Multicall3. A call that fails reads as undefined. Calls that each need much gas go in smaller
+// batches, `perBatch`, as an RPC runs each batch within its own gas limit for eth_call.
+export async function read(
+  calls: Call[],
+  block: number | "latest" = "latest",
+  later = false,
+  perBatch = CALLS_PER_BATCH,
+): Promise<unknown[]> {
   const batches: Promise<unknown[]>[] = [];
-  for (let i = 0; i < calls.length; i += CALLS_PER_BATCH) {
-    batches.push(aggregate(calls.slice(i, i + CALLS_PER_BATCH), block, later));
+  for (let i = 0; i < calls.length; i += perBatch) {
+    batches.push(aggregate(calls.slice(i, i + perBatch), block, later));
   }
   return (await Promise.all(batches)).flat();
 }
 
 // The same, after the page's own reads.
-export const readLater: typeof read = (calls, block = "latest") => read(calls, block, true);
+export const readLater: typeof read = (calls, block = "latest", _later, perBatch) => read(calls, block, true, perBatch);
 
 async function aggregate(calls: Call[], block: number | "latest", later: boolean): Promise<unknown[]> {
   const data = encodeFunctionData({

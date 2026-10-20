@@ -1,4 +1,4 @@
-import { getAddress } from "viem";
+import { getAddress, zeroAddress, type Address } from "viem";
 import "./views.ts";
 import { now, same, sawBlock } from "./chain.ts";
 import {
@@ -10,7 +10,7 @@ import {
   type Automation,
   type Kind,
 } from "./config.ts";
-import { openChoose, type Option } from "./choose.ts";
+import { FACTS, closeChoose, openChoose, type Fact, type Option } from "./choose.ts";
 import { clone, fill, fillAddress, fillPlural, fillTime, groupAllHex, show } from "./dom.ts";
 import {
   WEEK,
@@ -42,6 +42,7 @@ import {
   leave,
   leaveOther,
   gasCost,
+  paidBpsOf,
   readAccounts,
   readAutomations,
   readCarbonImpact,
@@ -60,10 +61,12 @@ import {
 import {
   earnedByAccount,
   earningsDue,
+  earningsFailed,
   earningsOf,
   lastEarnings,
   loadEarnings,
   loadShares,
+  onEarnings,
   perThousandOf,
 } from "./last-epoch.ts";
 import { checkPayout, forgetPayout, showPayout } from "./last-payout.ts";
@@ -99,8 +102,26 @@ let attempts = 0;
 let ignoredUpTo = 0;
 let clicks = 0;
 
-// The page's automations on Base.
+// The page's automations on Base. They decide what the page offers to join; an account's status is read against all.
 const present = (): Automation[] => checks?.present ?? [CARBON_IMPACT];
+
+// What differs between the page's automations, kind by kind.
+type Traits = {
+  // The start of its review's template ids. Carbon Impact's were the page's first, and have none.
+  templates: string;
+  // Whether joining it shows Carbon Impact's settings, and so waits for them.
+  settings: boolean;
+  // The share of what its votes earn that reaches the owner, or 0 until known.
+  paid(): number;
+};
+const traits: Record<Kind, Traits> = {
+  "carbon-impact": {
+    templates: "",
+    settings: true,
+    paid: () => (carbonImpact ? Number(paidBpsOf(carbonImpact)) / 10_000 : 0),
+  },
+  automaxi: { templates: "automaxi-", settings: false, paid: () => Number(10_000n - AUTOMAXI_FEE_BPS) / 10_000 },
+};
 
 function failed(error: unknown): void {
   console.error(error);
@@ -121,7 +142,7 @@ function showCarbonImpact(found: CarbonImpact): void {
     tonnes: units(tonnes),
     retired: bps(retireBps),
     "retired-share": share(retireBps),
-    "paid-share": share(10_000n - retireBps - (feeBps ?? 0n)),
+    "paid-share": share(paidBpsOf(found)),
     fee: feeBps === undefined ? "…" : bps(feeBps),
     "max-fee": maxFeeBps === undefined ? "…" : bps(maxFeeBps),
     power: earningPower(votes),
@@ -158,7 +179,7 @@ let autoMaxiFreshness: Freshness | undefined;
 function showAutoMaxi(): void {
   const on = present().includes(AUTOMAXI);
   show('[data-kind="automaxi"]', on);
-  show(".automaxi-absent", !on);
+  show(".automaxi-absent", !!checks && !on);
   show(".automaxi-join", on && !checks?.failed.get(AUTOMAXI.kind)!.length);
   if (!on) return;
   const fresh = autoMaxiFreshness;
@@ -171,16 +192,35 @@ function showAutoMaxi(): void {
   fill(document, { "automaxi-state": state });
   if (fresh?.voted) fillTime(document, "automaxi-voted", fresh.voted, utc);
   show(".automaxi-voted-line", !!fresh?.voted);
+  // Undefined until read, or if the read failed; null if AutoMaxi had no votes last epoch.
   const per = perThousandOf(AUTOMAXI);
-  const paid = typeof per === "number" ? (per * Number(10_000n - AUTOMAXI_FEE_BPS)) / 10_000 : undefined;
-  show(".automaxi-no-record", typeof per !== "number");
+  const unread = per === undefined;
+  const failedRead = unread && earningsFailed(AUTOMAXI);
+  const paid = typeof per === "number" ? per * traits.automaxi.paid() : undefined;
+  show(".automaxi-unread", unread);
+  show(".automaxi-no-record", per === null);
   show(".automaxi-has-record", typeof per === "number");
   fill(document, {
-    "automaxi-record": paid === undefined ? "No record yet" : `${usd(per!)} earned, ${usd(paid)} paid to you`,
-    "automaxi-per-power": typeof per === "number" ? usd(per) : "…",
+    "automaxi-unread-why": failedRead
+      ? "could not be read from Base. The page tries again every five minutes."
+      : "are being read from Base.",
+    "automaxi-record":
+      paid !== undefined
+        ? `${usd(per!)} earned, ${usd(paid)} paid to you`
+        : failedRead
+          ? "Not read"
+          : unread
+            ? "…"
+            : "No record yet",
+    "automaxi-per-power": paid !== undefined ? usd(per!) : "…",
     "automaxi-paid-per-power": paid === undefined ? "…" : usd(paid),
   });
-  const pools = earningsOf(AUTOMAXI)?.pools ?? [];
+  const found = earningsOf(AUTOMAXI);
+  if (found) {
+    fillTime(document, "automaxi-last-start", found.start);
+    fillTime(document, "automaxi-last-end", found.start + WEEK);
+  }
+  const pools = found?.pools ?? [];
   document.querySelector("#automaxi .automaxi-pools")!.replaceChildren(
     ...pools.map(({ address, name }) => {
       const [item, link] = [document.createElement("li"), document.createElement("a")];
@@ -193,12 +233,17 @@ function showAutoMaxi(): void {
   );
 }
 
+// One read at a time. Until one succeeds, each tick tries again.
+let autoMaxiRead: Promise<void> | undefined;
+
 function readAutoMaxi(): void {
   if (!present().includes(AUTOMAXI)) return;
-  readFreshness(AUTOMAXI).then((found) => {
-    autoMaxiFreshness = found;
-    showAutoMaxi();
-  }, console.error);
+  autoMaxiRead ??= readFreshness(AUTOMAXI)
+    .then((found) => {
+      autoMaxiFreshness = found;
+      showAutoMaxi();
+    }, console.error)
+    .finally(() => (autoMaxiRead = undefined));
 }
 
 // One read at a time.
@@ -212,18 +257,17 @@ function catchUp(): void {
   const epoch = weekStart(now());
   if (shown && !reading && epoch > shown.epochStart) loadAccounts(true);
   if (!carbonImpact || epoch > carbonImpact.epochStart) readCarbonImpactAgain().catch(console.error);
-  if (earningsDue(epoch, present())) loadEarningsAndShares();
-  if (autoMaxiFreshness && epoch > autoMaxiFreshness.epochStart) readAutoMaxi();
+  if (earningsDue(epoch, present())) loadAllEarnings();
+  if (!autoMaxiFreshness || epoch > autoMaxiFreshness.epochStart) readAutoMaxi();
   checkPayout();
 }
 
-function loadEarningsAndShares(): void {
-  loadEarnings(present()).then((changed) => {
-    if (!changed) return;
-    showShares();
-    showAutoMaxi();
-  });
-}
+// Each read of figures, whoever started it, shows on AutoMaxi's page and in the accounts' shares.
+const loadAllEarnings = (): void => void loadEarnings(present()).catch(console.error);
+onEarnings(() => {
+  showShares();
+  showAutoMaxi();
+});
 
 // What each account's votes earned last epoch.
 async function showShares(): Promise<void> {
@@ -249,9 +293,8 @@ async function showChecks(): Promise<void> {
   const off = found.present.filter(({ kind }) => found.failed.get(kind)!.length);
   fill(document, { "checks-which": list(off.map(({ name }) => name)) });
   show("#checks", off.length > 0);
-  // An automation newly on Base needs its figures, and the accounts in it their payouts.
-  if (more.length) loadEarningsAndShares();
-  if (more.length && shown) showPayout(shown, present());
+  // An automation newly on Base needs its figures.
+  if (more.length) loadAllEarnings();
   if (more.includes(AUTOMAXI)) readAutoMaxi();
   showAutoMaxi();
   // A read of the accounts that is under way shows the result when it ends.
@@ -266,7 +309,7 @@ function joinable(account: Account, automation: Automation | undefined): boolean
   if (!automation || !checks?.present.includes(automation) || checks.failed.get(automation.kind)!.length) return false;
   return canJoin(account, automation, now());
 }
-const leavable = (account: Account): boolean => present().some((automation) => canLeave(account, automation));
+const leavable = (account: Account): boolean => AUTOMATIONS.some((automation) => canLeave(account, automation));
 // Choose sets the page's automations beside voting yourself, once the checks have run.
 const choosable = (account: Account): boolean =>
   !!checks &&
@@ -326,10 +369,9 @@ function showAccounts(keepTicked = false): void {
   const ticked = document.querySelectorAll<HTMLInputElement>("#accounts .pick:checked");
   const kept = new Set(keepTicked ? [...ticked].map(({ value }) => value) : []);
   const time = now();
-  const automations = present();
   const sorted = accounts.map((account) => {
-    const status = statusOf(account, owner, time, epochStart, automations);
-    return { account, status, group: groupOf(account, status, automations) };
+    const status = statusOf(account, owner, time, epochStart);
+    return { account, status, group: groupOf(account, status) };
   });
   for (const section of groups) {
     const members = sorted.filter((member) => member.group === section.dataset.group);
@@ -358,7 +400,7 @@ function showAccounts(keepTicked = false): void {
   const full = sorted.filter(({ account }) => account.amount > 0n);
   const inGroups = (...names: Group[]) => full.filter((member) => names.includes(member.group)).length;
   const stopped = inGroups("stopped");
-  const memberships = automations.flatMap(({ kind, name }) => {
+  const memberships = AUTOMATIONS.flatMap(({ kind, name }) => {
     const n = full.filter(
       ({ status }) => (status.kind === "in" || status.kind === "joined") && status.automation.kind === kind,
     ).length;
@@ -391,6 +433,7 @@ async function loadAccounts(quietly = false): Promise<void> {
   if (!quietly) {
     shown = undefined;
     forgetPayout();
+    closeChoose();
     show("#reading");
     show("#accounts, #summary, #none, #payout", false);
   }
@@ -400,7 +443,7 @@ async function loadAccounts(quietly = false): Promise<void> {
     sawBlock(found.time);
     shown = found;
     showAccounts();
-    showPayout(found, present());
+    showPayout(found);
     catchUp();
     showShares();
   } catch (error) {
@@ -454,7 +497,7 @@ function reviewPicked(section: HTMLElement, button: HTMLButtonElement): void {
   const action = actionOf(button);
   const automation = automationOf(button);
   // A join of Carbon Impact, and Choose, show the share retired, so they wait for its settings. Leaving never waits.
-  if (((action === "join" && automation === CARBON_IMPACT) || action === "choose") && !carbonImpact) {
+  if (((action === "join" && automation && traits[automation.kind].settings) || action === "choose") && !carbonImpact) {
     return void readCarbonImpactAgain().then(() => reviewPicked(section, button), failed);
   }
   const accounts = picked(section).filter(allows(button));
@@ -465,7 +508,7 @@ function reviewPicked(section: HTMLElement, button: HTMLButtonElement): void {
 
 // Leaving the automations that hold the accounts' approvals: the page's own, those on Hydrex's list, or both.
 function leaveAll(accounts: Account[], own = true, listed = true): { steps: Step[]; names: string[] } {
-  const from = own ? present().filter((automation) => accounts.some((account) => canLeave(account, automation))) : [];
+  const from = own ? AUTOMATIONS.filter((automation) => accounts.some((account) => canLeave(account, automation))) : [];
   const steps = accounts.flatMap((account) =>
     from.flatMap((automation) => (canLeave(account, automation) ? leave([account], automation) : [])),
   );
@@ -490,12 +533,9 @@ function review(accounts: Account[], action: Action | "self", automation?: Autom
     return part;
   };
   if (action === "join" && automation) {
-    const prefix = automation === CARBON_IMPACT ? "" : `${automation.kind}-`;
+    const prefix = traits[automation.kind].templates;
     const before = prepare(`${prefix}join-before`);
-    const statuses = accounts.map((account) => ({
-      account,
-      status: statusOf(account, owner, now(), epochStart, present()),
-    }));
+    const statuses = accounts.map((account) => ({ account, status: statusOf(account, owner, now(), epochStart) }));
     const stopped = statuses.flatMap(({ account, status }) => (status.kind === "stopped" ? [account] : []));
     // Accounts in a running automation, the page's other one included, move out of it.
     const running = statuses.flatMap(({ account, status }) => {
@@ -512,8 +552,8 @@ function review(accounts: Account[], action: Action | "self", automation?: Autom
     const changes = prepare(`${prefix}join-changes`);
     // The fee facts on the automation's own page.
     changes
-      .querySelector(".automaxi-fees")
-      ?.replaceWith(document.querySelector("#automaxi .fee-facts")!.cloneNode(true));
+      .querySelector(".fee-facts-copy")
+      ?.replaceWith(document.querySelector(`#${automation.kind} .fee-facts`)!.cloneNode(true));
     const pages = [
       { title: "Before you join", body: before },
       { title: "What changes", body: changes },
@@ -529,64 +569,70 @@ function review(accounts: Account[], action: Action | "self", automation?: Autom
   openReview(title, [{ title, body: effects }], steps, connection, hooks);
 }
 
+// A choice's facts as the page states them: on its card in Home's menu, or else in the fee facts of its own page. Live
+// figures in them, such as the share retired, keep updating.
+const factsOf = (choice: Kind | "self"): Record<Fact, Node[]> =>
+  Object.fromEntries(
+    FACTS.map((fact) => {
+      const selector = `[data-fact~="${fact}"]`;
+      const source =
+        document.querySelector(`.choice[data-choice="${choice}"] ${selector}`) ??
+        document.querySelector(`#${choice} .fee-facts ${selector}`)!;
+      return [fact, [...source.childNodes].map((node) => node.cloneNode(true))];
+    }),
+  ) as Record<Fact, Node[]>;
+
+// A pick in Choose acts on the accounts as they are when it is clicked. The dialog may have stayed open: in a new epoch,
+// the page reads the accounts again instead, and only those that can still make the change take part.
+function act(ids: bigint[], owner: Address, can: (account: Account) => boolean, go: (accounts: Account[]) => void) {
+  return () => {
+    if (!shown || !same(shown.owner, owner)) return;
+    if (weekStart(now()) > shown.epochStart) return void loadAccounts();
+    const accounts = shown.accounts.filter((account) => ids.includes(account.id) && can(account));
+    if (accounts.length) go(accounts);
+  };
+}
+
 // Choose: each of the page's automations on Base, and voting yourself, for the accounts picked.
 function choose(accounts: Account[]): void {
   if (!shown) return;
   const { owner } = shown;
-  const settings = carbonImpact;
+  const ids = accounts.map(({ id }) => id);
   const power = accounts.reduce((sum, { votes }) => sum + toEarningPower(votes), 0n);
-  const percent = (value: bigint | undefined) => (value === undefined ? "…" : bps(value));
-  const facts: Record<Kind, Option["facts"]> = {
-    "carbon-impact": {
-      pays: "kVCM",
-      taken: `${percent(settings?.retireBps)} retired, and a fee of ${percent(settings?.feeBps)}`,
-      most: `100% retired, and a fee of ${percent(settings?.maxFeeBps)}`,
-      leaving: "One call, at any time",
-    },
-    automaxi: {
-      pays: "The tokens earned, unswapped",
-      taken: `${bps(AUTOMAXI_FEE_BPS)} of each claim`,
-      most: `${bps(AUTOMAXI_FEE_BPS)}, fixed in its code`,
-      leaving: "One call, at any time",
-    },
-  };
-  const kept = (automation: Automation): number =>
-    automation === CARBON_IMPACT
-      ? settings
-        ? Number(10_000n - settings.retireBps - (settings.feeBps ?? 0n)) / 10_000
-        : 0
-      : Number(10_000n - AUTOMAXI_FEE_BPS) / 10_000;
   const options: Option[] = present().map((automation) => {
-    const able = accounts.filter((account) => joinable(account, automation));
+    const can = (account: Account) => joinable(account, automation);
+    const able = accounts.filter(can);
     return {
       name: automation.name,
       perThousand: lastEarnings(automation).then(() => perThousandOf(automation) ?? null),
-      paidShare: kept(automation),
-      facts: facts[automation.kind],
+      paidShare: traits[automation.kind].paid(),
+      facts: factsOf(automation.kind),
       now: accounts.every((account) => !canJoin(account, automation, now()) && canLeave(account, automation)),
       ...(able.length && {
         pick: {
           label: `Join ${automation.name}`,
           gas: gasCost(join(able, automation), owner),
-          go: () => review(able, "join", automation),
+          go: act(ids, owner, can, (picked) => review(picked, "join", automation)),
         },
       }),
     };
   });
-  const leaving = accounts.filter((account) => leavable(account) || canLeaveOther(account));
+  const canLeaveAll = (account: Account) => leavable(account) || canLeaveOther(account);
+  const leaving = accounts.filter(canLeaveAll);
+  // An account whose votes someone else holds is not voting itself, though the page has nothing for it to leave.
+  const ownVotes = (account: Account) => same(account.delegate, owner) || same(account.delegate, zeroAddress);
   options.push({
     name: "Vote yourself",
     perThousand: undefined,
     paidShare: 1,
-    facts: {
-      pays: "The tokens of the pools you vote for",
-      taken: "Nothing",
-      most: "Nothing",
-      leaving: "Nothing to leave",
-    },
-    now: !leaving.length,
+    facts: factsOf("self"),
+    now: !leaving.length && accounts.every(ownVotes),
     ...(leaving.length && {
-      pick: { label: "Vote yourself", gas: gasCost(leaveAll(leaving).steps, owner), go: () => review(leaving, "self") },
+      pick: {
+        label: "Vote yourself",
+        gas: gasCost(leaveAll(leaving).steps, owner),
+        go: act(ids, owner, canLeaveAll, (picked) => review(picked, "self")),
+      },
     }),
   });
   openChoose(list(accounts.map(({ id }) => `#${id}`)), accounts.length, power, options);
@@ -629,6 +675,7 @@ function listen(provider: Provider): void {
     // Wallets also send this when the account stays the same, as when they unlock.
     if (account && same(account, connection.address)) return;
     closeReview();
+    closeChoose();
     // A wallet that locks shares no account.
     if (!account) return letGo();
     connection.address = getAddress(account);
@@ -652,6 +699,7 @@ function letGo(): void {
   connection = shown = undefined;
   forgetPayout();
   closeReview();
+  closeChoose();
   showConnection();
   show("#reading, #accounts, #summary, #none, #payout", false);
 }
@@ -706,7 +754,7 @@ safeWallet()
   .catch(console.error);
 readCarbonImpactAgain().catch(failed);
 showChecks().catch(failed);
-loadEarningsAndShares();
+loadAllEarnings();
 readAutomations().then(showAutomations, console.error);
 setInterval(() => showChecks().catch(console.error), 3_600_000);
 setInterval(tick, 30_000);

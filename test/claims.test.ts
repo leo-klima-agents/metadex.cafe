@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { afterEach, beforeEach, test } from "node:test";
 import { encodeAbiParameters, encodeEventTopics, parseAbi, parseAbiParameters, type Address, type Hex } from "viem";
-import { WALK_LIMIT, claimsOf, totals, walkClaims, type Claim } from "../src/claims.ts";
+import { resetRateLimits } from "../src/chain.ts";
+import { WALK_LIMIT, claimsOf, forgetClaims, readClaimsAt, totals, walkClaims, type Claim } from "../src/claims.ts";
 import type { Log } from "../src/receipts.ts";
 
 const abi = parseAbi([
@@ -145,3 +146,25 @@ test("what the claims received, the fee, and what reached the owner, token by to
     ],
   });
 });
+
+test("a block of logs without a claim AutoMaxi recorded there is from an RPC behind, and the next one is asked", async () => {
+  const replies: Log[][] = [[], [claimed(7n, 2_000, 0, [[USDC, 1_000_000n]])]];
+  let asked = 0;
+  globalThis.fetch = async () => {
+    asked++;
+    const result = replies.shift() ?? [];
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }));
+  };
+  const found = await readClaimsAt(2_000, [7n]);
+  assert.deepEqual(blocks(found), [2_000]);
+  assert.equal(asked, 2);
+  await readClaimsAt(2_000, [7n]);
+  assert.equal(asked, 2, "a block's claims for an account are read once");
+});
+
+const original = globalThis.fetch;
+beforeEach(() => {
+  resetRateLimits();
+  forgetClaims();
+});
+afterEach(() => (globalThis.fetch = original));

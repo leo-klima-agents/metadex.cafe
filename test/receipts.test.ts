@@ -7,13 +7,15 @@ import type { Token } from "../src/prices.ts";
 import {
   BLOCK_TIME,
   blockTimes,
-  changes,
   dollars,
   firstReached,
+  forgetReads,
   isLate,
-  lastChange,
+  paidThrough,
   payoutBlocks,
   payouts,
+  payoutsIn,
+  readStandings,
   standingsOf,
   type Log,
   type Pair,
@@ -29,43 +31,6 @@ const USDC: Address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const OWNER: Address = "0x60924601E73EBc5C2Bd9244c788d93e0710a6c93";
 const OTHER: Address = "0xa79cd47655156b299762DFE92A67980805ce5a31";
 const CREDIT: Address = "0x0000000000000000000000000000000000000c02";
-
-// A total retired that goes up by one at each of the given blocks.
-function counter(steps: number[]) {
-  const reads: number[] = [];
-  const at = async (block: number) => {
-    reads.push(block);
-    return BigInt(steps.filter((step) => step <= block).length);
-  };
-  return { at, reads };
-}
-
-test("the stretch where a total that only grows last changed, in a few reads", async () => {
-  const { at, reads } = counter([1_000, 51_698_051]);
-  const found = await lastChange(at, 51_000_000, 52_694_000, 1n, 2n, 100);
-  assert.ok(found.lower < 51_698_051 && 51_698_051 <= found.upper, `${found.lower} to ${found.upper}`);
-  assert.ok(found.upper - found.lower <= 100);
-  assert.equal(found.below, 1n);
-  assert.ok(reads.length <= 15, `${reads.length} reads`);
-});
-
-test("each stretch in which the total changed, and none where it is the same at both ends", async () => {
-  const steps = [100, 105, 160, 900];
-  const { at } = counter(steps);
-  const stretches = await changes(at, 50, 1_000, await at(50), await at(1_000), 10);
-  for (const [first, last] of stretches) {
-    assert.ok(last - first < 10, `${first} to ${last}`);
-    assert.ok(
-      steps.some((step) => first <= step && step <= last),
-      `${first} to ${last} holds no change`,
-    );
-  }
-  for (const step of steps)
-    assert.equal(stretches.filter(([first, last]) => first <= step && step <= last).length, 1, `${step}`);
-  const { at: flat, reads } = counter([10]);
-  assert.deepEqual(await changes(flat, 50, 200, 1n, 1n, 10), []);
-  assert.deepEqual(reads, []);
-});
 
 let index = 0;
 const at = (tx: Hex, block: number) => ({
@@ -204,7 +169,13 @@ function rewards(moves: Move[]) {
 
 const fees: Pair = { contract: FEES, token: USDC };
 const bribes: Pair = { contract: BRIBES, token: WETH };
-const standing = (id: bigint, through = SEP_17, pair = fees): Standing => ({ id, through, pair, waiting: [] });
+const standing = (id: bigint, through = SEP_17, pair = fees): Standing => ({
+  id,
+  through,
+  pair,
+  waiting: [],
+  unknown: false,
+});
 
 test("one account's last payout, from about 20 reads", async () => {
   const { reader, reads } = rewards([
@@ -224,7 +195,7 @@ test("one account's last payout, from about 20 reads", async () => {
 });
 
 test("accounts paid in one block are read together, in one call each step", async () => {
-  const ids = [26432n, 82775n, 14247n, 35366n];
+  const ids = [26432n, 82774n, 14247n, 35366n];
   const { reader, reads } = rewards(ids.map((id) => ({ id, pair: fees, block: PAID, epoch: SEP_17 })));
   const found = await payoutBlocks(
     ids.map((id) => standing(id)),
@@ -262,7 +233,7 @@ test("accounts paid in different blocks, or through different epochs, each get t
 
 test("an account never paid is not searched, and one whose record never reaches its epoch is left out", async () => {
   const { reader, reads } = rewards([{ id: 7n, pair: fees, block: PAID, epoch: SEP_17 - WEEK }]);
-  const never: Standing = { id: 6n, through: 0, waiting: [] };
+  const never: Standing = { id: 6n, through: 0, waiting: [], unknown: false };
   assert.deepEqual([...(await payoutBlocks([never], TOP, timeOf(TOP), reader))], []);
   assert.equal(reads.length, 0);
   // The standings said it reached Sep 17, but the blocks searched say otherwise, as an RPC behind the others might.
@@ -302,13 +273,19 @@ const tokens = new Map([usdc, weth].map((token) => [token.address.toLowerCase(),
 
 test("paid through, waiting and late, from fixed reads", () => {
   const pairs = [fees, bribes, { contract: BRIBES, token: KVCM }];
-  const values = [
-    // #1: paid through Sep 17 by its fees, and earlier by its bribes; WETH and USDC waiting.
-    [BigInt(SEP_17), 2_500_000n, BigInt(SEP_17 - 3 * WEEK), 10n ** 15n, 0n, 0n],
-    // #2: never paid, nothing waiting.
-    [0n, 0n, 0n, 0n, 0n, 0n],
+  // #1: paid through Sep 17 by its fees, and earlier by its bribes; USDC and WETH waiting. #2: never paid, nothing
+  // waiting. #3: one of its reads of what waits failed.
+  const stamps = [
+    [BigInt(SEP_17), BigInt(SEP_17 - 3 * WEEK), 0n],
+    [0n, 0n, 0n],
+    [0n, 0n, 0n],
   ].flat();
-  const [paid, never] = standingsOf([1n, 2n], pairs, values) as [Standing, Standing];
+  const earned = [
+    [2_500_000n, 10n ** 15n, 0n],
+    [0n, 0n, 0n],
+    [3_000_000n, undefined, 0n],
+  ].flat();
+  const [paid, never, partly] = standingsOf([1n, 2n, 3n], pairs, stamps, earned) as [Standing, Standing, Standing];
   assert.deepEqual(paid, {
     id: 1n,
     through: SEP_17,
@@ -317,8 +294,11 @@ test("paid through, waiting and late, from fixed reads", () => {
       { token: USDC, amount: 2_500_000n },
       { token: WETH, amount: 10n ** 15n },
     ],
+    unknown: false,
   });
-  assert.deepEqual(never, { id: 2n, through: 0, waiting: [] });
+  assert.deepEqual(never, { id: 2n, through: 0, waiting: [], unknown: false });
+  assert.deepEqual(partly.waiting, [{ token: USDC, amount: 3_000_000n }], "at least what was read");
+  assert.equal(partly.unknown, true);
   const prices = new Map([[USDC.toLowerCase(), 1]]);
   assert.equal(dollars(paid.waiting, tokens, prices), 2.5, "WETH has no price here");
   assert.equal(dollars(paid.waiting, tokens, new Map([...prices, [WETH.toLowerCase(), 4_000]])), 6.5);
@@ -331,6 +311,56 @@ test("paid through, waiting and late, from fixed reads", () => {
   assert.equal(isLate(0, true, OCT_15), true, "never paid");
   assert.equal(isLate(OCT_15 - WEEK, true, OCT_15), false, "paid for the epoch that ended Oct 8; Oct 15's comes next");
   assert.equal(isLate(SEP_17, false, OCT_15), false, "it joined since, so nothing is owed yet");
+});
+
+test("what waits is read in small batches, as each earned() can take a million gas; a failed one is unknown", async () => {
+  const batches: { name: string; perBatch: number | undefined }[] = [];
+  const reader = async (calls: Call[], _block?: number | "latest", _later?: boolean, perBatch?: number) => {
+    batches.push({ name: calls[0]!.functionName, perBatch });
+    return calls.map((call, i) => (call.functionName === "earned" ? (i === 1 ? undefined : 5n) : BigInt(SEP_17)));
+  };
+  const [found] = await readStandings([1n], [fees, bribes], TOP, reader);
+  assert.deepEqual(batches, [
+    { name: "tokenTimestamp", perBatch: undefined },
+    { name: "earned", perBatch: 20 },
+  ]);
+  assert.deepEqual(found!.waiting, [{ token: USDC, amount: 5n }]);
+  assert.equal(found!.unknown, true);
+});
+
+test("an account paid on the pools of the epoch before is paid through then, until its next payout", async () => {
+  // #1 was paid through Oct 8 on its fees of the epoch before; last epoch's bribes have no record for it yet. #2 was
+  // paid through Oct 15 on last epoch's bribes, which the epoch before's records do not change.
+  const { reader } = rewards([
+    { id: 1n, pair: fees, block: TOP - 100_000, epoch: OCT_15 - WEEK },
+    { id: 2n, pair: fees, block: TOP - 100_000, epoch: OCT_15 - WEEK },
+  ]);
+  const found = await paidThrough([standing(1n, 0, bribes), standing(2n, OCT_15, bribes)], [fees], TOP, reader);
+  assert.deepEqual(
+    found.map(({ through, pair }) => [through, pair]),
+    [
+      [OCT_15 - WEEK, fees],
+      [OCT_15, bribes],
+    ],
+  );
+});
+
+test("no logs in a payout's block is taken only once no RPC has any", async () => {
+  const replies: unknown[][] = [];
+  globalThis.fetch = async () => {
+    const result = replies.shift() ?? [];
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }));
+  };
+  index = 0;
+  const log = paidOut(TX, PAID, 82774n, OWNER, [[], []], [[KVCM], [t(5)]], [0n]);
+  replies.push([], [log]);
+  assert.deepEqual(
+    (await payoutsIn([PAID])).map(({ id }) => id),
+    [82774n],
+    "the RPC behind is passed over",
+  );
+  replies.push([], [], []);
+  assert.deepEqual(await payoutsIn([PAID + 1]), [], "every RPC agrees: a claim made outside Carbon Impact");
 });
 
 test("a block's time is read once", async () => {
@@ -353,5 +383,8 @@ test("a block's time is read once", async () => {
 });
 
 const original = globalThis.fetch;
-beforeEach(() => resetRateLimits());
+beforeEach(() => {
+  resetRateLimits();
+  forgetReads();
+});
 afterEach(() => (globalThis.fetch = original));
