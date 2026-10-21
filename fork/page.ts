@@ -693,13 +693,25 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
         PAID_IDS.map(() => PAID_TX),
       );
     });
-    const { page, violations } = await connected(
+    const { page, violations, rpc } = await connected(
       { owner: PAYEE },
       { width: 390, height: 844, dark: true, flowing: true },
     );
     // The App marks the account paid late.
     await account(page, 82774).getByText("Payout late.").waitFor({ timeout: 120_000 });
+    // Its receipt needs the name Carbon Impact retired in at the payout's block. If that read fails, the page says so,
+    // and does not show the payouts as read.
+    const entityName = toFunctionSelector("function retiringEntityName()").slice(2);
+    const paidBlock = toHex(PAID);
+    rpc.refuse = (body) => body.includes(entityName) && body.includes(paidBlock);
     await account(page, 82774).getByRole("link", { name: "Account #82774" }).click();
+    const payoutsSection = position(page).locator(".position-payouts");
+    await payoutsSection.getByText("Its payouts could not be read from Base.").waitFor({ timeout: 120_000 });
+    await page.waitForTimeout(500);
+    assert.equal(await payoutsSection.locator(".receipts-failed").isVisible(), true, "the failure stays");
+    assert.equal(await payoutsSection.locator(".receipts-found").isVisible(), false);
+    rpc.refuse = undefined;
+    await payoutsSection.getByRole("button", { name: "Read them again" }).click();
     const standing = position(page).locator(".standing");
     const receipt = standing.locator(".receipt");
     await receipt.first().waitFor({ timeout: 120_000 });
@@ -752,7 +764,6 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     await shoot(page, "receipt-390-dark", position(page));
     // After the flip, the page reads Carbon Impact again and fills its figures, such as .tonnes, across the page. The
     // receipts keep their own.
-    const entityName = toFunctionSelector("function retiringEntityName()").slice(2);
     const readAgain = page.waitForResponse((response) => !!response.request().postData()?.includes(entityName));
     await page.clock.setSystemTime((FLIP + 60) * 1000);
     await page.clock.runFor(30_000);

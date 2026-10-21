@@ -1394,11 +1394,15 @@
         </dl>
         <dl class="total">
           <div>
-            <dt data-own="Paid to you" data-theirs="Paid to its owner">Paid to you</dt>
+            <dt class="receipt-paid-to" data-own="Paid to you" data-theirs="Paid to its owner">Paid to you</dt>
             <dd class="value receipt-paid"></dd>
             <dd class="dollars receipt-paid-usd"></dd>
             <dd class="detail receipt-elsewhere" hidden>
-              <span data-own="At your payout address," data-theirs="At its owner's payout address,"></span>
+              <span
+                class="receipt-elsewhere-at"
+                data-own="At your payout address,"
+                data-theirs="At its owner's payout address,"
+              ></span>
               <code translate="no"><a class="receipt-recipient"></a></code>
             </dd>
           </div>

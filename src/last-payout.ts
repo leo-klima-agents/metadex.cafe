@@ -124,6 +124,7 @@ const kvcm = (found: Amount[]): bigint => found.find(({ token }) => same(token, 
 function fillReceipt(
   item: HTMLElement,
   payout: Payout,
+  owner: Address,
   time: number,
   name: string,
   tokens: Map<string, Token>,
@@ -154,7 +155,21 @@ function fillReceipt(
   fillTime(item, "receipt-from", weekStart(time) - WEEK);
   fillTime(item, "receipt-to", weekStart(time));
   fillTime(item, "receipt-time", time, utc);
-  show(".receipt-elsewhere", !same(payout.recipient, payout.owner), item);
+  // To the owner: "Paid to you", unless the payout went to whoever owned the account then, and to its address.
+  const then = !same(payout.owner, owner);
+  const itself = same(payout.recipient, payout.owner);
+  ownWords(
+    item.querySelector(".receipt-paid-to")!,
+    then ? "Paid to its owner then" : "Paid to you",
+    then ? "Paid to its owner then" : "Paid to its owner",
+  );
+  const at = then ? (itself ? "At that owner's address," : "At that owner's payout address,") : undefined;
+  ownWords(
+    item.querySelector(".receipt-elsewhere-at")!,
+    at ?? "At your payout address,",
+    at ?? "At its owner's payout address,",
+  );
+  show(".receipt-elsewhere", then || !itself, item);
   fillAddress(item, "receipt-recipient", payout.recipient);
   item.querySelector<HTMLAnchorElement>(".receipt-tx")!.href = txUrl(payout.tx);
   fillOwn(item, own);
@@ -475,6 +490,7 @@ export function payouts(
   let underUntil = Infinity;
   let checked = 0;
   let checking = false;
+  const reset = (): void => void ([signals, missed, underUntil] = [[], false, Infinity]);
 
   const setState = (state: (typeof STATES)[number]): void => {
     if (section) for (const name of STATES) show(`.receipts-${name}`, name === state, section);
@@ -490,7 +506,7 @@ export function payouts(
     if (section) section.hidden = !members.length;
     readFor = key;
     if (!members.length) {
-      [signals, missed, underUntil] = [[], false, Infinity];
+      reset();
       return found({ epochStart: holdings.epochStart, entries: [] }, undefined);
     }
     checked = Date.now();
@@ -529,7 +545,11 @@ export function payouts(
     missed = read.entries.some(({ earnings }) => !earnings);
     underUntil = under ? under.first + UNDER_WAY : Infinity;
     found(read, under);
-    if (section) await draw(section, holdings, read, current, () => ownedBy(holdings.owner)).catch(fail);
+    if (section) {
+      // A failed draw leaves the failure shown: the next check, or the button, reads again.
+      const drawn = await draw(section, holdings, read, current, () => ownedBy(holdings.owner)).then(() => true, fail);
+      if (!drawn) return;
+    }
     if (!current()) return;
     showing = owner;
     setState("found");
@@ -555,8 +575,12 @@ export function payouts(
     },
     forget() {
       shown = readFor = showing = undefined;
-      [signals, missed, underUntil] = [[], false, Infinity];
-      if (section) section.hidden = true;
+      reset();
+      // Another account's receipts never show under this one's heading.
+      if (section) {
+        section.hidden = true;
+        section.querySelector(".standings")!.replaceChildren();
+      }
     },
     check() {
       if (!readFor || checking || Date.now() - checked < 300_000) return;
@@ -609,7 +633,7 @@ async function draw(
       make = () => {
         const node = clone("receipt").firstElementChild as HTMLElement;
         const draw = (prices?: Map<string, number>) =>
-          fillReceipt(node, payout, time, names.get(payout.block)!, tokens, own(), prices);
+          fillReceipt(node, payout, holdings.owner, time, names.get(payout.block)!, tokens, own(), prices);
         return { node, priced: false, flip: weekStart(time), amounts: [...payout.earned, ...payout.paid], draw };
       };
     } else if (walk?.claims.length) {

@@ -17,11 +17,11 @@ page links to them there, as it does for AutoMaxi today, and never to a reposito
   products, after what needs you across all of them: the Hydrex automations as one entry, and the swap. Today's App, the
   wallet's Hydrex accounts and who votes for them, moves one level down to `#hydrex`. A new `#swap` sits beside it.
 - **Claiming is a fallback, not a product.** AutoMaxi's keeper claims for every member right after each epoch ends, so a
-  Claim button shows only when an account's payout is late: on its page, in the AutoMaxi group, and in the App's Needs
-  you.
-- **Payouts and the swap meet.** Every AutoMaxi receipt offers to swap the payout into one token, and a late claim's
-  review offers the rewards "as they are" or "into one token". That gives the hands-off holder what they want, "paid
-  weekly in one token", without a new contract.
+  Claim button shows only when an account's payout is overdue: on its page, in the AutoMaxi group, and in the App's
+  Needs you.
+- **Payouts and the swap meet.** Every AutoMaxi receipt offers to swap the payout into one token, and the claim's review
+  offers the rewards "as they are" or "into one token". That gives the hands-off holder what they want, "paid weekly in
+  one token", without a new contract.
 - **The swap does what the contract leaves out on purpose:** finding the wallet's tokens, choosing each route, setting
   each minimum, and approving each token. The page does all four in the browser, within its rules: three RPCs, no
   server, no signatures.
@@ -43,7 +43,7 @@ rest to the account's owner.
   is the same whoever calls.
 - **AutoMaxi's keeper claims for every member right after each epoch ends.** Claiming earlier gains nothing: an epoch's
   rewards can be claimed only once it has ended. The page already reads when the last payout came, and calls an account
-  late when it did not.
+  late a full epoch after a missed payout, which is too late for the fallback: see [Where it shows](#where-it-shows).
 - **It asks every contract for every token.** A bribe walks back up to 50 epochs for a token it has not paid recently,
   so a first claim, or one after a long gap, should pass only the contracts and tokens that owe something. The page
   already reads `earned(tokenId, token)` for last epoch's pools, so it knows which.
@@ -78,9 +78,10 @@ What it leaves to the page, on purpose:
   token stays in the wallet, and the rest go through.
 - **Approvals.** Each token needs `approve(swapper, amount)` first. No permit, no Permit2, no signature of any kind,
   which suits the page: it never asks for signatures.
-- **Gas.** About 220,000 gas a route on most pools, and about 1.6 million through Hydrex's Algebra pools, whose plugin
-  looks for an arbitrage after each swap. Base allows 16.7 million a transaction: about 64 tokens through Uniswap or
-  Aerodrome, about 15 through Hydrex's Algebra pools.
+- **Gas.** About 220,000 gas a route on most pools. Through Hydrex's Algebra pools, whose plugin looks for an arbitrage
+  after each swap, about 1 million a hop, and about 1.6 million for a whole transaction of one such route. Base allows
+  16.7 million a transaction: about 64 tokens through Uniswap or Aerodrome, about 15 hops through Hydrex's Algebra
+  pools.
 - **The priority fee.** Above a tip of 1 gwei, Aero's classic pools add an MEV tax of up to 10% that a quote does not
   see.
 
@@ -108,18 +109,21 @@ From Base on 21 Oct 2026, with the page's own reader (`readEarnings` in `src/ear
 
 At the gas price of 21 Oct 2026, 0.0096 gwei, and ETH at $2,461, from Chainlink:
 
-| What                                  | Gas       | Dollars |
-| ------------------------------------- | --------- | ------- |
-| An approval                           | ≈ 46,000  | ≈ 0.001 |
-| A route on Uniswap or Aerodrome       | ≈ 220,000 | ≈ 0.005 |
-| A route through a Hydrex Algebra pool | ≈ 1.6M    | ≈ 0.04  |
-| 20 routes of three Uniswap v2 hops    | ≈ 3.4M    | ≈ 0.08  |
-| A full transaction, 16.7M gas         | 16.7M     | ≈ 0.40  |
+| What                                | Gas       | Dollars |
+| ----------------------------------- | --------- | ------- |
+| An approval                         | ≈ 46,000  | ≈ 0.001 |
+| A route on Uniswap or Aerodrome     | ≈ 220,000 | ≈ 0.005 |
+| A hop through a Hydrex Algebra pool | ≈ 1M      | ≈ 0.02  |
+| A whole transaction of one such hop | ≈ 1.6M    | ≈ 0.04  |
+| 20 routes of three Uniswap v2 hops  | ≈ 3.4M    | ≈ 0.08  |
+| A full transaction, 16.7M gas       | 16.7M     | ≈ 0.40  |
 
 An approval and a route together cost about $0.006, so a token worth less than that costs more to sell than it fetches;
-through Hydrex's Algebra pools the floor is about $0.04. For the 1% member above, six of the 27 tokens are worth more
-than their gas, and none by more than three cents. The default priority fee that `mainnet.base.org` suggested was 0.001
-gwei, far below the 1 gwei where Aero's MEV tax starts; a wallet set to "fast" can cross it.
+through Hydrex's Algebra pools the floor is about $0.02 a hop. Base's L1 data fee adds little: its gas price oracle gave
+at most $0.00001 for an approval and $0.0007 for a swap of 9 KB, about 20 routes. The page's gas estimates already count
+it. For the 1% member above, six of the 27 tokens are worth more than their gas, and none by more than three cents. The
+default priority fee that `mainnet.base.org` suggested was 0.001 gwei, far below the 1 gwei where Aero's MEV tax starts;
+a wallet set to "fast" can cross it.
 
 ### What the page can read
 
@@ -181,23 +185,24 @@ New moments that matter, after [README.md's](README.md#the-moments-that-matter) 
 
 ### Levels
 
-| Level | View                 | Address                                      | Holds                                                                                        |
-| ----- | -------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 0     | Home                 | `/`                                          | What the café does, in a heading and a line; the one button; the line on stopped automations |
-| 1     | The App              | `#app`                                       | The wallet; Needs you, across products; the products, each with what you hold in it          |
-| 1     | About                | `#about`                                     | The café's facts, for every product                                                          |
-| 2     | Hydrex               | `#hydrex`                                    | Today's App: the wallet's accounts in groups, then who votes for them                        |
-| 2     | Swap                 | `#swap`, `#swap/weth`; a fold, `#swap/check` | The swap, into USDC unless the address names another output                                  |
-| 3     | An automation's page | `#hydrex/carbon-impact`, `#hydrex/automaxi`  | As today, with Claim in AutoMaxi's while a member's payout is late                           |
-| 4     | An account's page    | `#hydrex/9540`                               | As today, with Claim while its payout is late                                                |
-| –     | The review           | A dialog                                     | Join, leave, claim, swap: each in two steps                                                  |
+| Level | View                 | Address                                           | Holds                                                                                        |
+| ----- | -------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 0     | Home                 | `/`                                               | What the café does, in a heading and a line; the one button; the line on stopped automations |
+| 1     | The App              | `#app`                                            | The wallet; Needs you, across products; the products, each with what you hold in it          |
+| 1     | About                | `#about`                                          | The café's facts, for every product                                                          |
+| 2     | Hydrex               | `#hydrex`                                         | Today's App: the wallet's accounts in groups, then who votes for them                        |
+| 2     | Swap                 | `#swap`, `#swap/weth`; a fold, `#swap/weth/check` | The swap, into USDC unless the address names another output                                  |
+| 3     | An automation's page | `#hydrex/carbon-impact`, `#hydrex/automaxi`       | As today, with Claim in AutoMaxi's while a member's payout is overdue                        |
+| 4     | An account's page    | `#hydrex/9540`                                    | As today, with Claim while its payout is overdue                                             |
+| –     | The review           | A dialog                                          | Join, leave, claim, swap: each in two steps                                                  |
 
 The swap has no third level: the six swappers are one product with one choice, the output, which is a field on its page,
 not a page each. A swap's receipt shows in the review once done; a page per swap waits until the page reads history.
 
-`src/routes.ts` changes: `#hydrex` stops being an alias of `#app`; `#swap` is new. A second part names either the
-output, in lower case (`usdc`, `eurc`, `weth`, `cbbtc`, `aero`, `hydx`), or a fold: `fees`, `control`, `check` or
-`approvals`. The page stores nothing, but a link can carry the output.
+`src/routes.ts` changes: `#hydrex` stops being an alias of `#app`; `#swap` is new. A second part may name the output, in
+lower case (`usdc`, `eurc`, `weth`, `cbbtc`, `aero`, `hydx`), and the last part a fold: `fees`, `control`, `check` or
+`approvals`. So `#swap/weth/check` keeps the output when a fold opens, and `#swap/check` is USDC's. The page stores
+nothing, but a link can carry the output.
 
 ### Navigation
 
@@ -206,7 +211,7 @@ output, in lower case (`usdc`, `eurc`, `weth`, `cbbtc`, `aero`, `hydx`), or a fo
 - **Crumbs** gain a level: "App › Hydrex ›" on an automation's page and on an account's page; "App ›" on `#hydrex` and
   `#swap`.
 - **Deep links** go straight to the level that answers: Home's stopped line to `#hydrex`, AutoMaxi's receipt to the
-  swap, a late payout in the App to the account.
+  swap, an overdue payout in the App to the account.
 
 ### Home
 
@@ -239,7 +244,7 @@ Your wallet                                      0x0208…4C95
 NEEDS YOU · 2
 ▲ #42877 is in Liquid Hydrex, which stopped on Wed 9 Sep.
   It earns nothing.                                 Change it →
-▲ #9540's payout is late: ≈ $1.84 waits in 9 tokens.
+▲ #9540's payout is overdue: ≈ $1.84 waits in 9 tokens.
                                                 [Claim now]
 ○ 2 approvals left from a swap that failed.       [Reset]
 
@@ -254,7 +259,7 @@ Swap many tokens into one                                  →
 ```
 
 - **Without a wallet:** the wallet picker, then the menu, without the "Yours" lines.
-- **Needs you gathers from every product,** each with one action: an account in a stopped automation, a late payout,
+- **Needs you gathers from every product,** each with one action: an account in a stopped automation, an overdue payout,
   approvals left over. It shows nothing when nothing needs you; a payout that is merely waiting for Thursday does not
   count, so that the group keeps its weight.
 - **The menu** has one entry per kind of product, the Hydrex automations together and the swap, each with one line of
@@ -268,9 +273,9 @@ Swap many tokens into one                                  →
 
 Today's App, unchanged but for its heading, "Your Hydrex accounts", its crumb, and Claim in the AutoMaxi group:
 
-| Group        | Its actions                                                        |
-| ------------ | ------------------------------------------------------------------ |
-| **AutoMaxi** | Leave, Move to Carbon Impact, and **Claim** while a payout is late |
+| Group        | Its actions                                                           |
+| ------------ | --------------------------------------------------------------------- |
+| **AutoMaxi** | Leave, Move to Carbon Impact, and **Claim** while a payout is overdue |
 
 "Who votes for your accounts", the menu of automations, stays at the bottom. Its AutoMaxi entry says "Pays you in the
 tokens earned, right after each epoch. Swap them into one here." with a link to the swap.
@@ -279,11 +284,14 @@ tokens earned, right after each epoch. Swap them into one here." with a link to 
 
 ### Where it shows
 
-Only while an account's payout is late, as the page defines it today:
+Only while an account's payout is overdue: a payout is due since the flip, it has not reached the account, something
+waits, and more than half a day has passed since the flip, the time a payout takes. The page's "late" comes a full epoch
+later, when the next flip finds the epoch still unpaid, so the fallback needs this earlier mark.
 
-- **An account's page,** for the wallet's own account in AutoMaxi: the late notice gains **Claim now**.
-- **The AutoMaxi group** in `#hydrex`, and "Your accounts in it" on AutoMaxi's page: **Claim**, for the late accounts,
-  with boxes to tick when there are more than one.
+- **An account's page,** for the wallet's own account in AutoMaxi: a notice, "Its payout is overdue", with **Claim
+  now**.
+- **The AutoMaxi group** in `#hydrex`, and "Your accounts in it" on AutoMaxi's page: **Claim**, for the overdue
+  accounts, with boxes to tick when there are more than one.
 - **The App's Needs you,** with the same line.
 
 Never in a normal week. Right after each epoch, something always waits until the keeper's payout arrives, up to half a
@@ -322,8 +330,9 @@ other pools.
                                                        [Next]
 ```
 
-- **Step 1, what waits,** as earned, then taken, then yours, as every money figure on the page. It is a floor, as the
-  page says today: only last epoch's pools are read.
+- **Step 1, what waits,** as earned, then taken, then yours, as every money figure on the page. It reads `earned` in the
+  pools the automation voted for in each epoch not yet paid: last epoch's, and the one before when the keeper missed it
+  too, which today the page reads only for its records. It is still a floor: pools from further back are not read.
 - **"Receive them" is the one dial** that [README.md](README.md#principles) asks for: the payout token, by the owner's
   choice, without a contract that swaps. "As they are" is the default, so that nothing is sold unasked.
 - **Step 2, what your wallet will ask:** one `claim` per account, as slips, with only the contracts and tokens that owe
@@ -346,8 +355,8 @@ them.
 ### On a payout's receipt
 
 This is the usual path to one token, week after week. AutoMaxi's receipt on an account's page, and the review's receipt
-after a late claim, end with **Swap these into one token**, which opens `#swap` with the payout's tokens and amounts
-ticked. The page holds them in memory for the visit; nothing is stored.
+after a claim, end with **Swap these into one token**, which opens `#swap` with the payout's tokens and amounts ticked.
+The page holds them in memory for the visit; nothing is stored.
 
 ## Swapping, `#swap`
 
@@ -422,8 +431,9 @@ Two steps, as every review:
    pool `0x…` to USDC, at least 0.60 USDC"), the deadline, and skip-failed. From a Safe, the calldata word by word, as
    today.
 
-- **Without batching,** the approvals come one prompt each, then the page quotes again, and sets the minimums from the
-  fresh quote, before it asks for the swap. Approvals take minutes; a quote should not.
+- **Without batching,** the approvals come one prompt each, then the page quotes again before it asks for the swap.
+  Approvals take minutes; a quote should not. A minimum never goes below what the review showed: if a fresh quote falls
+  under it, the page shows the new figures and asks again, rather than lowering the minimum.
 - **The priority fee:** the page asks for a tip of at most 1 gwei where the wallet lets the page set it, and says why.
   [Aero's classic pools]
 - **Done:** a receipt from the `RouteSwapped`, `RouteFailed` and `Swapped` events: each token in, the output, the 1%,
@@ -444,9 +454,9 @@ The contract never picks a route, so the page must, in the browser, from the thr
 
 1. For each token, candidate paths: straight to the output, or through WETH, USDC or cbBTC, and HYDX for Hydrex's
    tokens.
-2. For each hop, the pools that the twelve factories know: Uniswap v3's four fee tiers, Uniswap v4's standard pools
-   without hooks, Aerodrome's and Aero's classic pools and Slipstream tick spacings, Hydrex's pairs and Algebra pools. A
-   few hundred factory reads for 20 tokens, in Multicall batches.
+2. For each hop, the pools that the twelve factories know: Uniswap v2's pairs, Uniswap v3's four fee tiers, Uniswap v4's
+   standard pools without hooks, Aerodrome's and Aero's classic pools and Slipstream tick spacings, Hydrex's pairs and
+   Algebra pools. A few hundred factory reads for 20 tokens, in Multicall batches.
 3. Quote every candidate with `quote`, in batches, and keep each token's best, net of gas.
 4. Simulate the chosen set with `eth_simulateV1`, which catches two routes sharing a pool.
 
@@ -551,16 +561,16 @@ leaving, that is the only way.
 
 Still open:
 
-| Decision                      | Options                                                                      | Recommendation                                                                                                                   |
-| ----------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Heading**                   | "Vote, claim and swap on Base, from your own wallet"; or one per product     | The first: three verbs anyone can check                                                                                          |
-| **Claim for others**          | Own accounts only; any account, "pays its owner"                             | Own accounts only                                                                                                                |
-| **Claim and swap, when late** | One review with "Receive them"; two separate flows                           | One review, "as they are" by default                                                                                             |
-| **Default output**            | USDC; none until picked                                                      | USDC, unless the address names another, such as `#swap/weth`. The page stores nothing, so it cannot remember a choice            |
-| **Minimum**                   | 0.5%; 1%; automatic, as Uniswap                                              | 0.5%, one setting. With skip-failed, a tight minimum leaves a token rather than failing the swap                                 |
-| **Token list**                | Hydrex's reward tokens and the outputs only; plus a list built into the page | Both. The list lives in the repository and a script refreshes it, as `src/hydrex-conduits.json`, so the build stays reproducible |
-| **Aero's classic pools**      | Use them; prefer others within 1%; avoid them                                | Prefer others within 1%, and cap the tip at 1 gwei where the wallet allows                                                       |
-| **WETH or ETH**               | WETH only; an "unwrap to ETH" call after the swap                            | WETH only at first. Unwrapping is one more call, worth adding once batching works                                                |
-| **Swap from a Safe**          | The same deadline; a longer one for co-signers                               | A day, said in the brief: a route that falls below its minimum while co-signers sign is skipped                                  |
-| **AutoMaxi version 1**        | Claim for its members too; not at all                                        | Not at all: the page does not offer version 1                                                                                    |
-| **The swap's name**           | "Swap"; a name of its own, as AutoMaxi                                       | "Swap many tokens into one" on the menu, "Swap" in crumbs: plain words, and nothing to brand                                     |
+| Decision                         | Options                                                                      | Recommendation                                                                                                                                                                         |
+| -------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Heading**                      | "Vote, claim and swap on Base, from your own wallet"; or one per product     | The first: three verbs anyone can check                                                                                                                                                |
+| **Claim for others**             | Own accounts only; any account, "pays its owner"                             | Own accounts only                                                                                                                                                                      |
+| **Claim and swap, when overdue** | One review with "Receive them"; two separate flows                           | One review, "as they are" by default                                                                                                                                                   |
+| **Default output**               | USDC; none until picked                                                      | USDC, unless the address names another, such as `#swap/weth`. The page stores nothing, so it cannot remember a choice                                                                  |
+| **Minimum**                      | 0.5%; 1%; automatic, as Uniswap                                              | 0.5%, one setting. With skip-failed, a tight minimum leaves a token rather than failing the swap                                                                                       |
+| **Token list**                   | Hydrex's reward tokens and the outputs only; plus a list built into the page | Both. The list lives in the repository, so the build stays reproducible, and is updated by hand, as `src/hydrex-conduits.json` is from Hydrex's API; a script to refresh it would help |
+| **Aero's classic pools**         | Use them; prefer others within 1%; avoid them                                | Prefer others within 1%, and cap the tip at 1 gwei where the wallet allows                                                                                                             |
+| **WETH or ETH**                  | WETH only; an "unwrap to ETH" call after the swap                            | WETH only at first. Unwrapping is one more call, worth adding once batching works                                                                                                      |
+| **Swap from a Safe**             | The same deadline; a longer one for co-signers                               | A day, said in the brief: a route that falls below its minimum while co-signers sign is skipped                                                                                        |
+| **AutoMaxi version 1**           | Claim for its members too; not at all                                        | Not at all: the page does not offer version 1                                                                                                                                          |
+| **The swap's name**              | "Swap"; a name of its own, as AutoMaxi                                       | "Swap many tokens into one" on the menu, "Swap" in crumbs: plain words, and nothing to brand                                                                                           |
