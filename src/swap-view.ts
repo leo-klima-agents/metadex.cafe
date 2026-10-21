@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 import { now, same, type Receipt } from "./chain.ts";
-import { AUTOMATIONS, DEFAULT_OUTPUT, SWAPPERS, swapperOf, type Output, type Swapper } from "./config.ts";
+import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Output, type Swapper } from "./config.ts";
 import { clone, fill, fillAddress, show, showHex } from "./dom.ts";
 import { tokensOf } from "./earnings.ts";
 import { count, figure, fraction, list, usd } from "./format.ts";
@@ -11,6 +11,8 @@ import { openReview, type Hooks, type ReviewPage, type Slip } from "./review.ts"
 import { hrefOf, type Route as PageRoute } from "./routes.ts";
 import {
   APPROVAL_GAS,
+  MIDDLES,
+  exchangeOf,
   feeOf,
   findRoute,
   minimumOf,
@@ -100,6 +102,8 @@ let scan: Scan | undefined;
 // Each output's failed checks, once run, and the payout's tokens and amounts to tick, for the visit.
 let failedOutputs: Map<Output, string[]> | undefined;
 let prefilled: Map<string, bigint> | undefined;
+// Whether a scan under way should be followed by another, as when new tokens became known meanwhile.
+let rescan = false;
 let allowances: Allowance[] | undefined;
 const listeners: (() => void)[] = [];
 
@@ -109,7 +113,9 @@ const swapperShown = (): Swapper => {
   const shown = route();
   return swapperOf(shown.view === "swap" ? shown.output : DEFAULT_OUTPUT)!;
 };
+// Until the checks have run, no output is offered; once they have, those whose checks failed are off.
 export const outputOff = (swapper: Swapper): boolean => !failedOutputs || failedOutputs.get(swapper.output)!.length > 0;
+export const swappersChecked = (): boolean => !!failedOutputs;
 const tell = (): void => listeners.forEach((listener) => listener());
 
 // Called once something the App shows from here changes: the swap's line, or the approvals left.
@@ -202,23 +208,8 @@ function drawRow(row: Row, scanned: Scan): void {
   fillAddress(node, "swap-address", token.address);
 }
 
-const poolOnly = (hop: Route["hops"][number]): string => routeName(hop.exchange);
-const routeName = (exchange: number): string =>
-  [
-    "Hydrex",
-    "Hydrex",
-    "Aero",
-    "Aero",
-    "Aero",
-    "Aerodrome",
-    "Aerodrome",
-    "Aerodrome",
-    "Aerodrome",
-    "Uniswap v2",
-    "Uniswap v3",
-    "Uniswap v4",
-  ][exchange]!;
-
+// An exchange's own name, without its kind of pool: "Hydrex", "Aero", "Uniswap v3".
+const poolOnly = ({ exchange }: Route["hops"][number]): string => exchangeOf(exchange).name.split(",")[0]!;
 function drawAll(): void {
   const signedIn = !!context.connection();
   form.hidden = !signedIn;
@@ -231,6 +222,7 @@ function drawAll(): void {
   }
   const off = failedOutputs ? SWAPPERS.filter(outputOff) : [];
   show(".swap-off", off.length > 0, view);
+  show(".swap-unchecked", !failedOutputs, view);
   fill(view, { "swap-off-outputs": list(off.map(({ symbol }) => symbol)) });
   if (!scan || !signedIn) return;
   const scanned = scan;
@@ -313,7 +305,11 @@ async function startScan(owner: Address, swapper: Swapper): Promise<void> {
     const tokens = [...new Set(known().map(key))] as Address[];
     const holdings = await holdingsOf(owner, tokens, swapper.address);
     const held = tokens.filter((token) => holdings.get(token)!.balance > 0n && !same(token, swapper.token));
-    const [described, found] = await Promise.all([describe([...held, swapper.token]), costs().catch(() => undefined)]);
+    // The tokens routes pass through are named in them, held or not.
+    const [described, found] = await Promise.all([
+      describe([...held, swapper.token, ...MIDDLES, HYDX]),
+      costs().catch(() => undefined),
+    ]);
     if (!current()) return;
     scanned.tokens = described;
     scanned.costs = found;
@@ -383,7 +379,10 @@ async function startScan(owner: Address, swapper: Swapper): Promise<void> {
     console.error(error);
     if (current()) scanned.failed = true;
   } finally {
-    if (current()) {
+    if (current() && rescan) {
+      rescan = false;
+      rescanNow();
+    } else if (current()) {
       // By value, once all are quoted: those worth swapping first.
       const worth = (row: Row) => (row.reason || row.worth === undefined ? -1 : row.worth);
       scanned.rows.sort((a, b) => worth(b) - worth(a));
@@ -480,7 +479,7 @@ export async function planSteps(
   connection: Connection,
   tokens: Map<string, Token>,
   whole = false,
-): Promise<{ approvals: Slip[]; swaps: Route[][]; slips: Slip[]; deadline: bigint }> {
+): Promise<{ approvals: Slip[]; swaps: Route[][]; slips: Slip[] }> {
   const safe = !!connection.wallet.propose;
   const found = await costs().catch(() => undefined);
   const deadline = BigInt(now() + (safe ? 86_400 : 1_800));
@@ -490,7 +489,7 @@ export async function planSteps(
   const swaps = split(plan.items.map(({ route }) => route));
   const tip = safe ? undefined : found?.tip;
   const slips = [...approvals, ...swaps.map((group) => swapSlip(plan.swapper, group, deadline, tokens, tip, whole))];
-  return { approvals, swaps, slips, deadline };
+  return { approvals, swaps, slips };
 }
 
 async function reviewSwap(): Promise<void> {
@@ -530,20 +529,15 @@ export async function openSwapReview(
   connection: Connection,
   tokens: Map<string, Token>,
   found?: Costs,
-  before: Slip[] = [],
-  pagesBefore: ReviewPage[] = [],
-  whole = false,
-  name = `Swap into ${plan.swapper.symbol}`,
 ): Promise<string | undefined> {
   const { swapper } = plan;
-  const { approvals, swaps, slips } = await planSteps(plan, connection, tokens, whole);
-
-  const steps = [...before, ...slips];
+  const { approvals, swaps, slips } = await planSteps(plan, connection, tokens);
+  const steps = slips;
   const simulated = await simulate(connection.address, steps).catch((error: unknown) => {
     console.error(error);
     return undefined;
   });
-  const firstSwap = before.length + approvals.length;
+  const firstSwap = approvals.length;
   if (simulated) {
     const failed = simulated.findIndex(({ ok }) => !ok);
     if (failed >= 0 && failed < firstSwap)
@@ -579,7 +573,7 @@ export async function openSwapReview(
     if (!reason) least += route.minPaid;
     fill(line, {
       "line-symbol": token.symbol,
-      "line-amount": whole ? "all that the claim brings" : figure(route.amount, token.decimals),
+      "line-amount": figure(route.amount, token.decimals),
       "line-fetches": reason
         ? "skipped"
         : `≈ ${figure(paidOf(fetched), swapper.decimals)} ${swapper.symbol}, at least ${figure(route.minPaid, swapper.decimals)}`,
@@ -599,7 +593,7 @@ export async function openSwapReview(
   }
   const fee = feeOf(out);
   const gas = simulated
-    ? simulated.slice(before.length).reduce((sum, { gas }) => sum + gas, 0n)
+    ? simulated.reduce((sum, { gas }) => sum + gas, 0n)
     : BigInt(approvals.length) * APPROVAL_GAS + swapGas(plan.items.map(({ route }) => route));
   const dollars = found ? gasUsd(gas, found) : undefined;
   fill(body, {
@@ -615,13 +609,9 @@ export async function openSwapReview(
   const safe = !!connection.wallet.propose;
   show(".swap-safe", safe, body);
   show(".swap-tip", !safe, body);
-  const pages: ReviewPage[] = [
-    ...pagesBefore,
-    { title: "What you swap", body },
-    { title: "What your wallet will ask" },
-  ];
+  const pages: ReviewPage[] = [{ title: "What you swap", body }, { title: "What your wallet will ask" }];
   openReview({
-    name,
+    name: `Swap into ${swapper.symbol}`,
     pages,
     steps,
     checkHref: hrefOf({ view: "swap", output: swapper.output, section: "check" }),
@@ -643,7 +633,7 @@ export async function openSwapReview(
       const fresh = await quoteAll(group.map((route) => ({ swapper, route: { ...route, minPaid: 0n } })));
       const under = group.filter((route, j) => !fresh[j]?.done || paidOf(fresh[j]!.amountOut) < route.minPaid);
       const deadline = BigInt(now() + 1_800);
-      const step = swapSlip(swapper, group, deadline, tokens, found?.tip, whole);
+      const step = swapSlip(swapper, group, deadline, tokens, found?.tip);
       const names = under.map((route) => tokens.get(key(route.token))?.symbol ?? route.token);
       return {
         step,
@@ -652,16 +642,21 @@ export async function openSwapReview(
         }),
       };
     },
-    outcomeOf: async (receipts) => swapReceipt(receipts, plan, tokens),
+    outcomeOf: async (receipts) => swapReceipt(receipts, plan, tokens, connection.address),
   });
   return undefined;
 }
 
 // The swap's receipt, from its events: each token in, what it fetched, the 1%, and what reached you. A token that was
 // skipped stays in the wallet with its approval, which it offers to reset.
-export function swapReceipt(receipts: Receipt[], plan: Plan, tokens: Map<string, Token>): DocumentFragment {
+export function swapReceipt(
+  receipts: Receipt[],
+  plan: Plan,
+  tokens: Map<string, Token>,
+  caller: Address,
+): DocumentFragment {
   const { swapper } = plan;
-  const { swapped, failed, paid, fee } = swappedIn(receipts, swapper);
+  const { swapped, failed, paid, fee } = swappedIn(receipts, swapper, caller);
   const receipt = clone("swap-receipt");
   const fetched = swapped.reduce((sum, { amountOut }) => sum + amountOut, 0n);
   fill(receipt, {
@@ -707,8 +702,15 @@ function knowRewards(): boolean {
   return known().length > before;
 }
 
-// The wallet changed, or what it holds did: read its tokens and approvals again.
+// The wallet's tokens read again, as they were scanned last.
+function rescanNow(): void {
+  const owner = context.connection()?.address;
+  if (owner) void startScan(owner, scan?.swapper ?? swapperShown());
+}
+
+// The wallet changed, or what it holds did: read its tokens and approvals again. A payout's amounts no longer apply.
 export function walletChanged(): void {
+  prefilled = undefined;
   const connection = context.connection();
   if (!connection) {
     scans++;
@@ -772,7 +774,7 @@ export function initSwap(given: SwapContext): void {
     }
     know([text as Address]);
     input.value = "";
-    walletChanged();
+    rescanNow();
   });
   // An output's page reads the tokens into it; a section opens its fold.
   onRoute((next) => {
@@ -782,11 +784,20 @@ export function initSwap(given: SwapContext): void {
       void startScan(owner, swapperOf(next.output)!);
     drawAll();
   });
-  // Last epoch's figures can take long to read the first time: their tokens join the list once read.
+  // Last epoch's figures can take long to read the first time: their tokens join the list once read, after a scan
+  // under way.
   onEarnings((_, outcome) => {
-    const owner = context.connection()?.address;
-    if (outcome === "read" && knowRewards() && owner && scan && !scan.reading) void startScan(owner, scan.swapper);
+    if (outcome !== "read" || !knowRewards()) return;
+    if (scan?.reading) rescan = true;
+    else rescanNow();
   });
-  checkSwappers().catch(console.error);
-  setInterval(() => checkSwappers().catch(console.error), 3_600_000);
+  // Until the checks have run once, a failed read of them is tried again within a minute.
+  const check = (): void =>
+    void checkSwappers().catch((error: unknown) => {
+      console.error(error);
+      drawAll();
+      if (!failedOutputs) setTimeout(check, 60_000);
+    });
+  check();
+  setInterval(check, 3_600_000);
 }

@@ -38,5 +38,7 @@ const checked = list.map((entry) => {
   }
   return { ...entry, symbol: token.symbol, address: getAddress(entry.address), decimals: token.decimals };
 });
-if (process.argv.includes("--write")) writeFileSync(PATH, `${JSON.stringify(checked, null, 2)}\n`);
+// A token added that does not answer is not written: only those already on the list stay for their maintainer.
+const kept = checked.filter(({ address }) => found.has(address.toLowerCase()) || !added.includes(getAddress(address)));
+if (process.argv.includes("--write")) writeFileSync(PATH, `${JSON.stringify(kept, null, 2)}\n`);
 else if (!differs) console.log(`All ${list.length} tokens are as Base says.`);

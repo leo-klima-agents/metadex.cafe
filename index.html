@@ -1073,6 +1073,10 @@
           <span class="safe-elsewhere" hidden>This Safe is on another network. Open the page from a Safe on Base.</span>
         </p>
         <div class="swap-form" hidden>
+          <p class="swap-unchecked small" role="status">
+            The page is checking the swappers on Base: swaps wait until it has. If Base does not answer, it tries again
+            within a minute.
+          </p>
           <fieldset class="outputs">
             <legend class="label">You receive</legend>
             <p class="output-choices"></p>
@@ -2116,6 +2120,7 @@
         <button type="button" class="claim-swap-next">Review the swap</button>
         <a class="button secondary claim-swap-these" href="#swap">Swap these into one token</a>
       </p>
+      <p class="claim-swap-failed notice" role="alert" hidden></p>
     </template>
 
     <template id="check-failed"

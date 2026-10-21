@@ -114,7 +114,8 @@ export function candidatePaths(token: Address, output: Address, hydrex = false):
   const paths = [[token, output], ...middles.map((middle) => [token, middle, output])];
   // Hydrex's tokens often trade only against HYDX, which then trades against WETH or USDC.
   if (hydrex && !same(token, HYDX) && !same(output, HYDX)) {
-    for (const middle of [WETH, USDC]) if (!same(middle, output)) paths.push([token, HYDX, middle, output]);
+    for (const middle of [WETH, USDC])
+      if (!same(middle, output) && !same(middle, token)) paths.push([token, HYDX, middle, output]);
   }
   return paths;
 }
@@ -203,7 +204,9 @@ function spacings(): Promise<Map<number, number[]>> {
 const found = new Map<string, Promise<Way[]>>();
 
 export async function waysFor(pairs: [Address, Address][]): Promise<Map<string, Way[]>> {
-  const missing = pairs.filter(([a, b]) => !found.has(pairKey(a, b)));
+  const missing = [...new Map(pairs.map((pair) => [pairKey(...pair), pair])).values()].filter(
+    ([a, b]) => !found.has(pairKey(a, b)),
+  );
   if (missing.length) {
     const known = await spacings();
     const each = missing.map(([a, b]) => lookups(a, b, known));
@@ -222,12 +225,11 @@ export async function waysFor(pairs: [Address, Address][]): Promise<Map<string, 
   );
 }
 
-// For tests: the pools found are kept for the visit.
-export const forgetWays = (): void => found.clear();
-
 export const exchangeOf = (id: number): Exchange => EXCHANGES[id]!;
 // Aero's classic pools add an MEV tax above a tip of 1 gwei, which a quote does not see.
-export const taxed = ({ exchange }: Hop): boolean => exchange === 2 || exchange === 3;
+export const taxed = ({ exchange }: Hop): boolean => exchangeOf(exchange).kind === "solidly";
+// Uniswap v4's pools live in its PoolManager, and have no address of their own.
+export const poolless = ({ exchange }: Hop): boolean => exchangeOf(exchange).kind === "v4";
 export const MAX_TIP = 1_000_000_000n;
 
 // A hop's pool in words: "Uniswap v3 0.05%", "Aero, Slipstream, tick spacing 100".
@@ -290,8 +292,8 @@ const quoteCall = (swapper: Swapper, routes: Route[]): Call =>
   call(swapper.address, swapperAbi as never, "quote", routes);
 
 // Quotes routes on each output's swapper: several routes a call, and a few calls a read, as a hop through Hydrex's
-// Algebra pools needs about a million gas, and an RPC gives an eth_call up to 50 million. A route that fails, or a read
-// that does, quotes nothing.
+// Algebra pools needs about a million gas, and an RPC gives an eth_call up to 50 million. A route that fails quotes
+// nothing; a read that fails throws, so that a token whose routes could not be read is not taken for one without any.
 const ROUTES_PER_QUOTE = 6;
 const QUOTES_PER_READ = 3;
 
@@ -316,7 +318,7 @@ export async function quoteAll(items: { swapper: Swapper; route: Route }[]): Pro
     "latest",
     true,
     QUOTES_PER_READ,
-  ).catch(() => calls.map(() => undefined));
+  );
   const results: (Result | undefined)[] = items.map(() => undefined);
   calls.forEach(({ at }, i) => {
     const found = replies[i] as readonly Result[] | undefined;
@@ -461,8 +463,8 @@ export function reasonOf(reason: Hex): string {
   }
 }
 
-// What a swap did, from its receipt's logs: each route that went through or failed, what reached the caller, and the
-// fee.
+// What a swap did for `caller`, from its receipt's logs: each route that went through or failed, what reached the
+// caller, and the fee.
 export type Swapped = {
   swapped: { index: number; token: Address; amountIn: bigint; amountOut: bigint }[];
   failed: { index: number; token: Address; reason: Hex }[];
@@ -470,7 +472,7 @@ export type Swapped = {
   fee: bigint;
 };
 
-export function swappedIn(receipts: Receipt[], swapper: Swapper): Swapped {
+export function swappedIn(receipts: Receipt[], swapper: Swapper, caller: Address): Swapped {
   const outcome: Swapped = { swapped: [], failed: [], paid: 0n, fee: 0n };
   for (const { logs } of receipts) {
     for (const log of logs) {
@@ -481,6 +483,8 @@ export function swappedIn(receipts: Receipt[], swapper: Swapper): Swapped {
       } catch {
         continue;
       }
+      // A batch's receipt may hold others' swaps through the same swapper.
+      if (!same(event.args.caller, caller)) continue;
       if (event.eventName === "RouteSwapped") {
         const { index, token, amountIn, amountOut } = event.args;
         outcome.swapped.push({ index: Number(index), token, amountIn, amountOut });

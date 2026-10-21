@@ -156,6 +156,9 @@ export type Opened = {
 };
 
 export function openReview(options: ReviewOptions): Opened {
+  // A review opened over another, as a swap from a claim's receipt, ends that one: what it sent still updates the page.
+  const previous = current;
+  if (previous && !previous.sending) previous.hooks.closed(previous.submitted);
   const state: Review = {
     ...options,
     titles: options.pages.map(({ title }) => title),
@@ -208,7 +211,8 @@ function showPage(page: number): void {
   stepCount.textContent = `${name}: step ${page + 1} of ${titles.length}`;
   stepCount.hidden = titles.length === 1;
   [...pageList.children].forEach((element, i) => ((element as HTMLElement).hidden = i !== page));
-  calls.hidden = page < titles.length - 1;
+  // A review with nothing to send has no calls to show.
+  calls.hidden = page < titles.length - 1 || !current.steps.length;
   refreshReview();
   if (dialog.open) title.focus();
 }
@@ -270,9 +274,9 @@ function failure(error: unknown): string {
   return message ? `Your wallet answered: “${message}”` : "Your wallet did not answer.";
 }
 
-// Errors of a wallet that cannot send these calls in one prompt after all: the method, all or nothing, Base, or the
-// upgrade of the account it would need, which its owner declined.
-const UNBATCHED = [4200, -32601, 5700, 5710, 5750];
+// Errors of a wallet that cannot send these calls in one prompt after all: the method, its version's parameters, all
+// or nothing, Base, so many calls, or the upgrade of the account it would need, which its owner declined.
+const UNBATCHED = [4200, -32601, -32602, 5700, 5710, 5740, 5750, 5760];
 const unbatched = (error: unknown): boolean => {
   const { code } = (error ?? {}) as { code?: number };
   return code !== undefined && UNBATCHED.includes(code);

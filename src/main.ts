@@ -72,6 +72,7 @@ import {
   showAbsent,
 } from "./last-epoch.ts";
 import { UNDER_WAY, payouts, type Entry, type Found, type UnderWay } from "./last-payout.ts";
+import { dollars } from "./receipts.ts";
 import { closeReview, openReview, refreshReview, type Hooks } from "./review.ts";
 import { hrefOf } from "./routes.ts";
 import { openClaim } from "./claim-view.ts";
@@ -160,11 +161,7 @@ const overdue = (): Entry[] =>
 function waitsLine({ standing, earnings }: Entry): string {
   const { waiting, unknown, late } = standing!;
   const tokens = new Map(earnings!.rewards.map(({ token }) => [token.address.toLowerCase(), token]));
-  const value = waiting.reduce((sum, { token, amount }) => {
-    const known = tokens.get(token.toLowerCase());
-    const price = earnings!.prices.get(token.toLowerCase());
-    return known && price !== undefined ? sum + (Number(amount) / 10 ** known.decimals) * price : sum;
-  }, 0);
+  const value = dollars(waiting, tokens, earnings!.prices);
   const n = new Set(waiting.map(({ token }) => token.toLowerCase())).size;
   if (!n) return "Its rewards from the epoch before last wait to be claimed.";
   return `${unknown || late ? "At least " : ""}${usd(value)} waits in ${count(n, "token", "tokens")}.`;
@@ -600,7 +597,7 @@ function act(button: HTMLButtonElement, accountsOf: () => Account[], redraw: () 
   if (weekStart(now()) > shown.epochStart) return void loadAccounts();
   const action = actionOf(button);
   const automation = automationOf(button);
-  if (action === "claim") return claim(accountsOf().filter(allows(button)), redraw);
+  if (action === "claim") return claim(accountsOf().filter(allows(button)), redraw, button);
   // A join of Carbon Impact shows its settings, so it waits for them. Leaving never waits.
   if (action === "join" && automation && traits[automation.kind].settings && !carbonImpact) {
     return void readCarbonImpactAgain().then(() => act(button, accountsOf, redraw), failed);
@@ -611,10 +608,24 @@ function act(button: HTMLButtonElement, accountsOf: () => Account[], redraw: () 
 }
 
 // The review of a claim through AutoMaxi for the accounts whose payout is overdue.
-function claim(accounts: Account[], redraw: () => void): void {
+// What waits can take a while to read, for an account whose keeper missed two epochs: the button says so meanwhile, and
+// takes no second click.
+let claiming = false;
+
+function claim(accounts: Account[], redraw: () => void, button?: HTMLButtonElement): void {
   const entries = accounts.flatMap((account) => overdueEntry(account.id) ?? []);
   if (!connection || !entries.length) return redraw();
-  openClaim(entries, connection, hooks).catch(failed);
+  if (claiming) return;
+  claiming = true;
+  const words = button?.textContent;
+  if (button) Object.assign(button, { disabled: true, textContent: "Reading what waits…" });
+  openClaim(entries, connection, hooks)
+    .catch(failed)
+    .finally(() => {
+      claiming = false;
+      if (button) Object.assign(button, { disabled: false, textContent: words });
+      redraw();
+    });
 }
 
 // Leaving the page's automations that hold the accounts' approvals, and, when `listed`, those on Hydrex's list.
@@ -736,7 +747,7 @@ const appView = document.querySelector<HTMLElement>('.view[data-view="app"]')!;
 function need(
   shape: string,
   words: string,
-  act: { link?: string; button?: () => void; label: string },
+  act: { link?: string; button?: (event: MouseEvent) => void; label: string },
 ): DocumentFragment {
   const item = clone("need");
   item.querySelector(".shape")!.classList.add(shape);
@@ -784,7 +795,7 @@ function showApp(): void {
       items.push(
         need("stopped", `#${entry.account.id}'s payout is overdue: ${waitsLine(entry)}`, {
           label: "Claim now",
-          button: () => claim([entry.account], showApp),
+          button: (event) => claim([entry.account], showApp, event.currentTarget as HTMLButtonElement),
         }),
       );
     }
@@ -797,14 +808,19 @@ function showApp(): void {
         `${count(left.length, "approval", "approvals")} to the swappers ${left.length === 1 ? "is" : "are"} left, from a swap that did not go through.`,
         {
           label: "Reset",
-          button: () => void resetReview(left),
+          // The approvals left when clicked, which a later read may have changed.
+          button: () => void resetReview(allowancesLeft() ?? []),
         },
       ),
     );
   }
   // Drawn again only when its lines change, so that a button keeps its focus between ticks.
   const needs = document.getElementById("needs")!;
-  const drawnNeeds = items.map((item) => item.textContent).join("\n");
+  // Keyed on what each line acts on, not only its words.
+  const drawnNeeds = [
+    ...items.map((item) => item.textContent),
+    ...(left ?? []).map(({ token, spender }) => `${token} ${spender}`),
+  ].join("\n");
   if (drawnNeeds !== needsShown) {
     needsShown = drawnNeeds;
     needs.hidden = !items.length;
@@ -888,6 +904,8 @@ async function showAllows(
   );
   show(".allows-none", !lines.length, appView);
   const tokens = left?.length ? await describe(left.map(({ token }) => token)).catch(() => new Map()) : new Map();
+  // A later call, with newer approvals, may have drawn them meanwhile.
+  if (allowsShown !== drawn) return;
   appView.querySelector(".allows-tokens")!.replaceChildren(
     ...(left ?? []).map((allowance) => {
       const item = clone("allowance");

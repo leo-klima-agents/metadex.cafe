@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { decodeFunctionData, parseAbi, zeroAddress, type Address } from "viem";
+import {
+  decodeFunctionData,
+  encodeAbiParameters,
+  encodeEventTopics,
+  encodeFunctionResult,
+  parseAbi,
+  zeroAddress,
+  type Address,
+  type Hex,
+} from "viem";
 import { EXCHANGES, HYDX, SWAPPERS, WETH } from "../src/config.ts";
 import {
   MAX_SWAP_GAS,
@@ -11,10 +20,13 @@ import {
   minimumOf,
   paidOf,
   poolName,
+  quoteAll,
   routeGas,
   split,
   swapCall,
   swapGas,
+  swappedIn,
+  swapperAbi,
   type Hop,
 } from "../src/swap.ts";
 
@@ -145,4 +157,90 @@ test("the swap's call is swap(routes, deadline, true), as the verified source de
   assert.equal(to, SWAPPERS[0]!.address);
   const { args } = decodeFunctionData({ abi, data });
   assert.deepEqual(args, [[route], 1_792_627_200n, true]);
+});
+
+test("no route loops through the token it sells, as WETH and USDC can be Hydrex's reward tokens", () => {
+  for (const [token, output] of [
+    [USDC, SWAPPERS[4]!.token],
+    [WETH, USDC],
+    [CBBTC, USDC],
+  ] as const) {
+    for (const path of candidatePaths(token, output, true)) assert.equal(new Set(path).size, path.length, `${path}`);
+  }
+  assert.deepEqual(candidatePaths(USDC, SWAPPERS[4]!.token, true).at(-1), [USDC, HYDX, WETH, SWAPPERS[4]!.token]);
+});
+
+test("each route's quote comes back to it, whatever the swapper and however the quotes are batched", async () => {
+  const multicall = parseAbi([
+    "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
+  ]);
+  const original = globalThis.fetch;
+  // Each swapper quotes a route as its amount times the swapper's place in the list, plus one, so that a quote that
+  // comes back to the wrong route, or from the wrong swapper, shows.
+  globalThis.fetch = async (_, init) => {
+    const { params } = JSON.parse(String(init?.body)) as { params: [{ data: Hex }] };
+    const { args } = decodeFunctionData({ abi: multicall, data: params[0].data });
+    const replies = args[0].map(({ target, callData }) => {
+      const place = BigInt(SWAPPERS.findIndex(({ address }) => address === target) + 1);
+      const { args: routes } = decodeFunctionData({ abi: swapperAbi, data: callData });
+      const results = (routes[0] as readonly { amount: bigint }[]).map(({ amount }) => ({
+        done: true,
+        amountIn: amount,
+        amountOut: amount * place,
+        reason: "0x" as Hex,
+      }));
+      return {
+        success: true,
+        returnData: encodeFunctionResult({ abi: swapperAbi, functionName: "quote", result: results }),
+      };
+    });
+    const result = encodeFunctionResult({ abi: multicall, functionName: "aggregate3", result: replies });
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }));
+  };
+  try {
+    const items = Array.from({ length: 40 }, (_, i) => ({
+      swapper: SWAPPERS[i % 3]!,
+      route: { token: AVNT, amount: BigInt(i + 1), minPaid: 0n, hops: [hop(10)] },
+    }));
+    const results = await quoteAll(items);
+    assert.deepEqual(
+      results.map((result) => result?.amountOut),
+      items.map(({ route, swapper }) => route.amount * BigInt(SWAPPERS.indexOf(swapper) + 1)),
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("a swap's receipt counts only the caller's own routes", () => {
+  const swapper = SWAPPERS[0]!;
+  const ME: Address = "0x00000000000000000000000000000000000000AA";
+  const THEM: Address = "0x00000000000000000000000000000000000000bb";
+  const log = (eventName: "RouteSwapped" | "Swapped", caller: Address, args: Record<string, unknown>) => ({
+    address: swapper.address,
+    topics: encodeEventTopics({ abi: swapperAbi, eventName, args: { caller } } as never) as Hex[],
+    data:
+      eventName === "Swapped"
+        ? encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }], [args.paid as bigint, args.fee as bigint])
+        : encodeAbiParameters(
+            [{ type: "uint256" }, { type: "address" }, { type: "uint256" }, { type: "uint256" }],
+            [0n, AVNT, args.amountIn as bigint, args.amountOut as bigint],
+          ),
+  });
+  const receipt = {
+    transactionHash: "0x01" as Hex,
+    status: "0x1" as Hex,
+    logs: [
+      log("RouteSwapped", THEM, { amountIn: 5n, amountOut: 500n }),
+      log("Swapped", THEM, { paid: 495n, fee: 5n }),
+      log("RouteSwapped", ME, { amountIn: 1n, amountOut: 100n }),
+      log("Swapped", ME, { paid: 99n, fee: 1n }),
+    ],
+  };
+  assert.deepEqual(swappedIn([receipt], swapper, ME), {
+    swapped: [{ index: 0, token: AVNT, amountIn: 1n, amountOut: 100n }],
+    failed: [],
+    paid: 99n,
+    fee: 1n,
+  });
 });

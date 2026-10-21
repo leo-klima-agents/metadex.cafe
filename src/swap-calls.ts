@@ -4,11 +4,12 @@ import { ANCHORS, WETH, type Swapper } from "./config.ts";
 import { figure, utc } from "./format.ts";
 import { feedAt, type Token } from "./prices.ts";
 import type { Field, Slip } from "./review.ts";
-import { MAX_TIP, approve, poolName, swapCall, type Route } from "./swap.ts";
+import { MAX_TIP, approve, poolName, poolless, swapCall, type Route } from "./swap.ts";
 
 // The calls of a swap, as the review shows them, and what gas costs.
 
-export type Costs = { gasPrice: bigint; tip: bigint; ethUsd: number | undefined };
+// `tip` is unknown when the RPC suggests none: the wallet then picks its own.
+export type Costs = { gasPrice: bigint; tip: bigint | undefined; ethUsd: number | undefined };
 let costsRead: { at: number; costs: Promise<Costs> } | undefined;
 
 // The gas price, the tip the page asks for, and ETH's price, read at most once a minute.
@@ -17,11 +18,12 @@ export function costs(): Promise<Costs> {
   const feed = ANCHORS.find(({ address }) => address === WETH)!.feed!;
   const found = Promise.all([
     rpc<string>("eth_gasPrice", []),
-    rpc<string>("eth_maxPriorityFeePerGas", []).catch(() => "0x0"),
+    rpc<string>("eth_maxPriorityFeePerGas", []).catch(() => undefined),
     feedAt(feed, Infinity, read).catch(() => undefined),
   ]).then(([gasPrice, tip, ethUsd]) => {
-    const suggested = BigInt(tip);
-    return { gasPrice: BigInt(gasPrice), tip: suggested < MAX_TIP ? suggested : MAX_TIP, ethUsd };
+    const suggested = tip === undefined ? undefined : BigInt(tip);
+    const capped = suggested === undefined ? undefined : suggested < MAX_TIP ? suggested : MAX_TIP;
+    return { gasPrice: BigInt(gasPrice), tip: capped, ethUsd };
   });
   costsRead = { at: Date.now(), costs: found };
   found.catch(() => (costsRead = undefined));
@@ -39,7 +41,7 @@ const symbolOf = (tokens: Map<string, Token>, address: Address): string =>
 export function pathWords(route: Route, tokens: Map<string, Token>): NonNullable<Field["words"]> {
   return route.hops.flatMap((hop, i) => [
     `${i ? ", " : ""}${poolName(hop)} `,
-    ...(hop.exchange === 11 ? ["pool"] : [{ code: hop.pool }]),
+    ...(poolless(hop) ? ["pool"] : [{ code: hop.pool }]),
     ` to ${symbolOf(tokens, hop.tokenOut)}`,
   ]);
 }
