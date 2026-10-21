@@ -28,7 +28,9 @@ layout of slips and receipts. `style.css` and `index.html` follow these rules. S
 - No puns where money moves: no brewing, roasting or fresh cups of yield, and nothing "on the house" that is not free.
 - Independent, and says so: not Dromos's, not Hydrex's. Anonymous for now: the page names no operator, nobody behind
   Carbon Impact's keeper or admin key, and links to no repository of the café's.
-- Say "Aero", not "Aerodrome", from 22 Oct 2026, and "Coinbase Wallet", its name again since 10 Sep 2026.
+- Say "Aero", not "Aerodrome", from 22 Oct 2026, and "Coinbase Wallet", its name again since 10 Sep 2026. Aerodrome's
+  pools and its AERO keep their name where the swap names an exchange or a token.
+- "Small balances", not "dust", in the page's words: plain, and no pun.
 
 ## What the page may claim
 
@@ -45,7 +47,7 @@ the Dutch ACM say the same.
   the transaction.
 - Say "retired" and "your share of what was retired". Never "carbon neutral", "offset" or "your footprint".
 - "Carbon Impact" is a product name the law covers, so the page says what it does in the same place.
-- Home's heading says what happens, which anyone can check: "Automations that vote with your Hydrex accounts".
+- Home's heading says what happens, which anyone can check: "Vote, claim and swap on Base, from your own wallet".
 
 ## Trust
 
@@ -56,6 +58,8 @@ The brand helps people recognise the page; the page teaches them to check the ad
 - **Addresses and hashes in full,** checksummed, in groups of four, wherever someone checks:
   `0xdE91 885c F35a c57D F0c4 A75c 1686 2127 dBe8 317c`. A copy gives them without spaces. Only the wallet chip and
   links to a transaction use the short form, as they are there to recognise or to follow, not to check.
+- **Token symbols in the mono face,** as untrusted text: a symbol is whatever its contract says. The address goes beside
+  it, and a symbol that copies a listed token's, at another address, says so. No symbol becomes a link.
 - **Calls in Safe's order** of fields, as Safe asks signers to check them
   ([Safe](https://help.safe.global/articles/2485383995-how-to-perform-basic-transactions-checks-on-safewallet)).
 

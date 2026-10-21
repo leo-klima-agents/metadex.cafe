@@ -236,15 +236,18 @@ export const codeHash = async (address: Address): Promise<Hex> =>
 export const implementation = async (proxy: Address): Promise<Address> =>
   `0x${(await rpc<Hex>("eth_getStorageAt", [proxy, EIP1967_IMPLEMENTATION_SLOT, "latest"])).slice(-40)}`;
 
-// Whether the transaction succeeded, or undefined if Base has not included it within ten minutes.
-export async function waitForTransaction(hash: Hex): Promise<boolean | undefined> {
+// A transaction's receipt: whether it succeeded, and its logs.
+export type Receipt = { transactionHash: Hex; status: Hex; logs: { address: Address; data: Hex; topics: Hex[] }[] };
+
+// The transaction's receipt, or undefined if Base has not included it within ten minutes.
+export async function waitForReceipt(hash: Hex): Promise<Receipt | undefined> {
   const end = Date.now() + 10 * 60_000;
   while (Date.now() < end) {
     // A null receipt means "not included yet": ask again later, not another RPC.
-    const receipt = await rpc<{ status: Hex } | null>("eth_getTransactionReceipt", [hash], {
+    const receipt = await rpc<Receipt | null>("eth_getTransactionReceipt", [hash], {
       accept: () => true,
     }).catch(() => null);
-    if (receipt) return receipt.status === "0x1";
+    if (receipt) return receipt;
     await sleep(2_000);
   }
   return undefined;

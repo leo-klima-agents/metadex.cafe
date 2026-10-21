@@ -187,3 +187,58 @@ test("the page names no operator, links to no repository but Hydrex's, and shows
   assert.ok(automaxi.includes(`https://basescan.org/address/${AUTOMAXI.address}#code`));
   assert.ok(automaxi.includes(`https://repo.sourcify.dev/8453/${AUTOMAXI.address}`));
 });
+
+test("each swapper has its output, a checksummed address and a code hash, and the swap's page shows them all", async () => {
+  const { SWAPPERS, EXCHANGES, SWAP_TREASURY, AUTOMAXI_TREASURY: treasury } = await import("../src/config.ts");
+  const tokens = (await import("../src/base-tokens.json", { with: { type: "json" } })).default;
+  const html = read("index.html");
+  const swap = viewOf(html, 'data-view="swap"');
+  assert.deepEqual(
+    SWAPPERS.map(({ output }) => output),
+    ["usdc", "eurc", "weth", "cbbtc", "aero", "hydx"],
+  );
+  for (const { address, token, codeHash, symbol } of SWAPPERS) {
+    assert.equal(getAddress(address), address);
+    assert.equal(getAddress(token), token);
+    assert.match(codeHash, /^0x[0-9a-f]{64}$/);
+    assert.ok(swap.includes(`/address/${address}#code`), `${symbol}'s swapper is linked to its verified source`);
+    assert.ok(swap.includes(codeHash), `${symbol}'s code hash is on the page`);
+    // Every output is on the page's list of tokens.
+    assert.ok(
+      tokens.some((listed) => listed.address === token && listed.symbol === symbol),
+      symbol,
+    );
+  }
+  assert.equal(SWAP_TREASURY, treasury);
+  assert.equal(EXCHANGES.length, 12);
+  for (const { factory } of EXCHANGES) {
+    assert.equal(getAddress(factory), factory);
+    assert.ok(swap.includes(`/address/${factory}"`), `${factory} is on the page`);
+  }
+  // The page's list of tokens: checksummed, each once.
+  for (const { address } of tokens) assert.equal(getAddress(address), address);
+  assert.equal(new Set(tokens.map(({ address }) => address)).size, tokens.length);
+  // Its folds, its fee facts in the same six rows as every product, and every check that can fail.
+  const { SWAP_SECTIONS } = await import("../src/routes.ts");
+  assert.deepEqual(
+    [...swap.matchAll(/data-section="([^"]+)"/g)].map(([, section]) => section),
+    SWAP_SECTIONS,
+  );
+  const facts = /<dl class="fee-facts">[\s\S]*?<\/dl>/.exec(swap)?.[0] ?? "";
+  assert.deepEqual(
+    [...facts.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
+    ["Taken", "The most it can become", "Goes to", "When", "Other costs", "Who can change it"],
+  );
+  assert.ok(facts.includes(`/address/${SWAP_TREASURY}"`));
+  assert.deepEqual(
+    [...swap.matchAll(/data-check="([^"]+)"/g)].map(([, check]) => check),
+    ["chain", "swap-code", "swap-output", "swap-treasury", "swap-fee", "swap-exchanges"],
+  );
+});
+
+test("AutoMaxi's page no longer says that owners can claim on Hydrex without its fee, but still does for leaving", () => {
+  const joining =
+    /data-section="joining"[\s\S]*?<\/details>/.exec(productOf(read("index.html"), "automaxi"))?.[0] ?? "";
+  assert.doesNotMatch(joining, /claim on Hydrex yourself/);
+  assert.match(joining, /what nobody has claimed through it is yours to claim on Hydrex/);
+});

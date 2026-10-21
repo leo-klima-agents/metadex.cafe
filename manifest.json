@@ -1,5 +1,5 @@
 {
   "name": "metaDEX Café",
-  "description": "Automations that vote with your Hydrex accounts. Your account stays in your wallet, and you can leave at any time.",
+  "description": "Vote, claim and swap on Base, from your own wallet. Each call is shown before your wallet asks.",
   "iconPath": "icon.svg"
 }

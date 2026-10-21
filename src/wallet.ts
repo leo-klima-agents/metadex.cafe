@@ -16,7 +16,8 @@ export type Wallet = {
   propose?(txs: Tx[]): Promise<void>;
 };
 export type Connection = { wallet: Wallet; provider: Provider; address: Address; chainId: number };
-export type Tx = { to: Address; data: Hex };
+// `tip`, the most priority fee to ask for, where the wallet lets the page set it.
+export type Tx = { to: Address; data: Hex; tip?: bigint };
 
 type Announcement = { info: { name: string; icon: string; rdns: string }; provider: Provider };
 
@@ -117,8 +118,105 @@ export async function switchToBase(connection: Connection): Promise<void> {
 }
 
 // The chain ID makes a wallet that is on another chain refuse the transaction.
-export const sendTransaction = async ({ provider, address }: Connection, { to, data }: Tx): Promise<Hex> =>
+export const sendTransaction = async ({ provider, address }: Connection, { to, data, tip }: Tx): Promise<Hex> =>
   (await provider.request({
     method: "eth_sendTransaction",
-    params: [{ from: address, to, data, chainId: HEX_CHAIN_ID }],
+    params: [
+      {
+        from: address,
+        to,
+        data,
+        chainId: HEX_CHAIN_ID,
+        ...(tip !== undefined && { maxPriorityFeePerGas: `0x${tip.toString(16)}` }),
+      },
+    ],
   })) as Hex;
+
+// What a wallet can do beyond one transaction at a time, from EIP-5792's wallet_getCapabilities: send several calls in
+// one prompt, all or nothing (`atomic`), and list the tokens it holds (ERC-7811's `assets`). Asked once per wallet and
+// address: a wallet that does not answer can do neither.
+export type Capabilities = { batch: boolean; atomic: boolean; assets: boolean };
+const NONE: Capabilities = { batch: false, atomic: false, assets: false };
+const asked = new WeakMap<Provider, Map<string, Promise<Capabilities>>>();
+
+export function capabilities({ wallet, provider, address }: Connection): Promise<Capabilities> {
+  // Safe{Wallet} proposes every call as one Safe transaction already.
+  if (wallet.propose) return Promise.resolve(NONE);
+  const byAddress = asked.get(provider) ?? new Map<string, Promise<Capabilities>>();
+  asked.set(provider, byAddress);
+  const key = address.toLowerCase();
+  let found = byAddress.get(key);
+  if (!found) {
+    found = provider
+      .request({ method: "wallet_getCapabilities", params: [address, [HEX_CHAIN_ID]] })
+      .then((reply) => {
+        const all = (reply ?? {}) as Record<string, Record<string, { status?: string; supported?: boolean }>>;
+        const base = { ...all["0x0"], ...all[HEX_CHAIN_ID], ...all[String(CHAIN_ID)] };
+        const status = base.atomic?.status;
+        const atomic = status === "supported" || status === "ready" || base.atomicBatch?.supported === true;
+        // A wallet that answers sends calls together, even if not all or nothing.
+        return { batch: true, atomic, assets: base.assetDiscovery?.supported === true };
+      })
+      .catch(() => NONE);
+    byAddress.set(key, found);
+  }
+  return found;
+}
+
+// Sends the calls in one prompt, with EIP-5792's wallet_sendCalls, and gives the batch's id.
+export async function sendCalls({ provider, address }: Connection, txs: Tx[], atomic: boolean): Promise<string> {
+  const reply = await provider.request({
+    method: "wallet_sendCalls",
+    params: [
+      {
+        version: "2.0.0",
+        from: address,
+        chainId: HEX_CHAIN_ID,
+        atomicRequired: atomic,
+        calls: txs.map(({ to, data }) => ({ to, data, value: "0x0" })),
+      },
+    ],
+  });
+  return typeof reply === "string" ? reply : String((reply as { id: string }).id);
+}
+
+export type CallsReceipt = {
+  transactionHash: Hex;
+  status: Hex;
+  logs: { address: Address; data: Hex; topics: Hex[] }[];
+};
+// A batch is pending, included (with each transaction's receipt), or failed. Wallets of the first drafts answer in words.
+export type CallsStatus = { state: "pending" | "done" | "failed"; receipts: CallsReceipt[] };
+
+export async function callsStatus({ provider }: Connection, id: string): Promise<CallsStatus> {
+  const reply = (await provider.request({ method: "wallet_getCallsStatus", params: [id] })) as {
+    status: number | string;
+    receipts?: CallsReceipt[];
+  };
+  const { status, receipts = [] } = reply;
+  const state =
+    status === 100 || status === "PENDING"
+      ? "pending"
+      : status === 200 || status === "CONFIRMED"
+        ? receipts.every((receipt) => receipt.status === "0x1")
+          ? "done"
+          : "failed"
+        : "failed";
+  return { state, receipts };
+}
+
+// The ERC-20 tokens the wallet says it holds on Base, from ERC-7811's wallet_getAssets, where it offers it.
+export async function walletAssets(connection: Connection): Promise<Address[]> {
+  if (!(await capabilities(connection)).assets) return [];
+  try {
+    const reply = (await connection.provider.request({
+      method: "wallet_getAssets",
+      params: [{ account: connection.address, chainFilter: [HEX_CHAIN_ID] }],
+    })) as Record<string, { address?: string; type?: string }[]>;
+    return (reply[HEX_CHAIN_ID] ?? []).flatMap(({ address, type }) =>
+      type === "erc20" && address && /^0x[0-9a-fA-F]{40}$/.test(address) ? [getAddress(address)] : [],
+    );
+  } catch {
+    return [];
+  }
+}

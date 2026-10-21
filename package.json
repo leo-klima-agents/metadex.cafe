@@ -2,7 +2,7 @@
   "name": "metadex.cafe",
   "version": "0.6.0",
   "private": true,
-  "description": "Static page for joining and leaving automations with Hydrex accounts",
+  "description": "Static page for Hydrex automations and a swap of many tokens into one, on Base",
   "license": "MIT",
   "type": "module",
   "homepage": "https://metadex.cafe/",

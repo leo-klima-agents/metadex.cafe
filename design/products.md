@@ -11,6 +11,8 @@ Read on 21 Oct 2026, from version 0.5.2 of the page (main at `5b7b9d8`), AutoMax
 verified with an exact match on Basescan and Sourcify, and their verified files name no author and no repository, so the
 page links to them there, as it does for AutoMaxi today, and never to a repository.
 
+Implemented in version 0.6.0, with each open decision as recommended below.
+
 ## In short
 
 - **A level for the products.** Home speaks for the whole café. The App (`#app`) becomes the level that lists the

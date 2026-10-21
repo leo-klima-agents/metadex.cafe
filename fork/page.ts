@@ -18,12 +18,15 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { blockTime, read } from "../src/chain.ts";
-import { AUTOMAXI, CARBON_IMPACT, KEEPER, RPCS, VOTER, VOTING_ESCROW } from "../src/config.ts";
+import { blockTime, read, same } from "../src/chain.ts";
+import { AUTOMAXI, CARBON_IMPACT, KEEPER, RPCS, SWAPPERS, VOTER, VOTING_ESCROW } from "../src/config.ts";
 import { readEarnings, rewardsFor, sharesOf, type Reward } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
+import { pricesAt } from "../src/prices.ts";
 import { SETTLED, payoutBlocks, payoutsIn, readEarned, readStamps, standingOf, weighed } from "../src/receipts.ts";
+import { findRoute } from "../src/swap.ts";
+import { describe as describeTokens, holdingsOf, known } from "../src/tokens.ts";
 
 const CONDUIT = CARBON_IMPACT.address;
 const FORK_URL = process.env.BASE_RPC_URL ?? "https://mainnet.base.org";
@@ -170,6 +173,8 @@ type WalletOptions = {
   approval?: Promise<void>;
   // Holds back the answer to a transaction until it settles, as a wallet does while its window is open.
   sending?: Promise<void>;
+  // Sends several calls in one prompt, with EIP-5792, as Coinbase Wallet and MetaMask do.
+  batch?: boolean;
 };
 // Fails the reads of Base whose request body it matches.
 type Rpc = { refuse?: ((body: string) => boolean) | undefined };
@@ -239,6 +244,7 @@ const SAFE_PAGE = `<!doctype html><meta charset="utf-8"><title>Safe{Wallet}</tit
 
 function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
   let asking = false;
+  const batches = new Map<string, Hex[]>();
   return async (method: string, params: any[]): Promise<{ result?: unknown; error?: unknown }> => {
     asked.push(method);
     switch (method) {
@@ -263,6 +269,31 @@ function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
         // As MetaMask does.
         if (chainId !== hex(options.chainId)) return { error: { code: -32602, message: "Wrong chain." } };
         return { result: await anvil("eth_sendTransaction", [{ to, data, from: options.owner, gas: GAS }]) };
+      }
+      case "wallet_getCapabilities":
+        if (!options.batch) return { error: { code: 4200, message: "The test wallet does not batch." } };
+        return { result: { [hex(8453)]: { atomic: { status: "supported" } } } };
+      case "wallet_sendCalls": {
+        if (!options.batch) return { error: { code: 4200, message: "The test wallet does not batch." } };
+        const { calls } = params[0] as { calls: Sent[] };
+        if (options.decline) return { error: { code: 4001, message: "User rejected the request." } };
+        // One after the other, each in its own block: anvil has no account code to run them together.
+        const hashes: Hex[] = [];
+        for (const { to, data } of calls) {
+          sent.push({ to, data });
+          hashes.push(await anvil<Hex>("eth_sendTransaction", [{ to, data, from: options.owner, gas: "0xf42400" }]));
+        }
+        const id = `0x${(batches.size + 1).toString(16).padStart(64, "0")}`;
+        batches.set(id, hashes);
+        return { result: { id } };
+      }
+      case "wallet_getCallsStatus": {
+        const hashes = batches.get(params[0] as string) ?? [];
+        const receipts = await Promise.all(
+          hashes.map((hash) => anvil<{ status: Hex } | null>("eth_getTransactionReceipt", [hash])),
+        );
+        if (receipts.some((receipt) => !receipt)) return { result: { status: 100 } };
+        return { result: { status: 200, atomic: true, receipts } };
       }
       default:
         return { error: { code: 4200, message: `The test wallet does not answer ${method}.` } };
@@ -346,25 +377,29 @@ async function open(
   return { page, ...opened };
 }
 
+// Connected on the Hydrex accounts' page, unless `options` says where.
 async function connected(wallet: Partial<WalletOptions>, options?: OpenOptions): Promise<Opened> {
-  const opened = await open(wallet, { url: `${SITE}/#app`, ...options });
+  const opened = await open(wallet, { url: `${SITE}/#hydrex`, ...options });
   await opened.page.getByRole("button", { name: "Test Wallet" }).click();
   return opened;
 }
 
 const app = (page: Page) => page.locator('.view[data-view="app"]');
+const hydrex = (page: Page) => page.locator('.view[data-view="hydrex"]');
 const account = (page: Page, id: number) =>
-  app(page)
+  hydrex(page)
     .locator("#accounts li")
     .filter({ hasText: `#${id}` });
-// The App's groups: "needs", "in:carbon-impact", "in:automaxi", "other" and "closed".
-const group = (page: Page, key: string) => app(page).locator(`.group[data-group="${key}"]`);
+// The Hydrex accounts' groups: "needs", "in:carbon-impact", "in:automaxi", "other" and "closed".
+const group = (page: Page, key: string) => hydrex(page).locator(`.group[data-group="${key}"]`);
 const product = (page: Page, kind: string) => page.locator(`.view[data-kind="${kind}"]`);
 const position = (page: Page) => page.locator('.view[data-view="position"]');
 const review = (page: Page) => page.locator("#review");
 const homeTitle = (page: Page) =>
-  page.getByRole("heading", { name: "Automations that vote with your Hydrex accounts" });
-const appTitle = (page: Page) => page.getByRole("heading", { name: "Your accounts", level: 1 });
+  page.getByRole("heading", { name: "Vote, claim and swap on Base, from your own wallet" });
+const appTitle = (page: Page) => page.getByRole("heading", { name: "Your wallet", level: 1 });
+const hydrexTitle = (page: Page) => page.getByRole("heading", { name: "Your Hydrex accounts", level: 1 });
+const toHydrex = (page: Page) => page.goto(`${SITE}/#hydrex`);
 const chip = (page: Page, owner: Address) => page.locator("header").getByText(short(owner));
 
 // Goes through the join's first step, to the calls.
@@ -398,49 +433,57 @@ async function confirm(page: Page): Promise<void> {
 }
 
 // The first reads through anvil are slow.
-describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
-  before(async () => {
-    node = spawn(
-      "anvil",
-      ["--fork-url", FORK_URL, "--fork-block-number", String(BLOCK), "--port", String(PORT), "--auto-impersonate"],
-      { stdio: "ignore" },
-    );
-    for (let i = 0; ; i++) {
-      try {
-        await anvil("eth_chainId");
-        break;
-      } catch (error) {
-        if (i === 60) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
+// Starts anvil on a fork of Base at `block`, and Chromium; and the hooks that put anvil back after each test.
+async function start(block: number, owners: Address[]): Promise<void> {
+  node = spawn(
+    "anvil",
+    ["--fork-url", FORK_URL, "--fork-block-number", String(block), "--port", String(PORT), "--auto-impersonate"],
+    { stdio: ["ignore", "ignore", process.env.ANVIL_LOG ? "inherit" : "ignore"] },
+  );
+  for (let i = 0; ; i++) {
+    try {
+      await anvil("eth_chainId");
+      break;
+    } catch (error) {
+      if (i === 60) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
-    for (const token of NATIVE) await anvil("anvil_setCode", [token, "0x"]);
-    for (const owner of [MEMBER, NEWCOMER, ELSEWHERE, LEAVER, ENDED]) {
-      await anvil("anvil_setBalance", [owner, "0x16345785d8a0000"]); // 0.1 ETH
-    }
-    // Carbon Impact paid nothing from Wed 23 Sep, so for any account in it, the payouts also read the pools of the epoch
-    // from Thu 1 Oct among every pool's reward contracts. Through anvil, that takes minutes the first time, and would
-    // hold up each test's own reads.
-    await warm(() => rewardsFor(CONDUIT, FLIP - 3 * WEEK));
-    browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
-  });
+  }
+  for (const token of NATIVE) await anvil("anvil_setCode", [token, "0x"]);
+  for (const owner of owners) await anvil("anvil_setBalance", [owner, "0x16345785d8a0000"]); // 0.1 ETH
+  browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
+}
 
-  after(async () => {
-    await browser?.close();
-    await Promise.allSettled(forwarding);
-    node?.kill();
-  });
+async function stop(): Promise<void> {
+  await browser?.close();
+  await Promise.allSettled(forwarding);
+  node?.kill();
+  // The next fork reuses the port once this one has let it go.
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+}
 
+function hooks(): void {
   beforeEach(async () => {
     snapshot = await anvil<Hex>("evm_snapshot");
   });
-
   afterEach(async () => {
     for (const context of contexts.splice(0)) await context.close();
     // anvil hangs on a revert while it estimates gas, as for the join review, so it first answers what the page sent.
     await Promise.allSettled(forwarding);
     await anvil("evm_revert", [snapshot]);
   });
+}
+
+describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
+  before(async () => {
+    await start(BLOCK, [MEMBER, NEWCOMER, ELSEWHERE, LEAVER, ENDED]);
+    // Carbon Impact paid nothing from Wed 23 Sep, so for any account in it, the payouts also read the pools of the epoch
+    // from Thu 1 Oct among every pool's reward contracts. Through anvil, that takes minutes the first time, and would
+    // hold up each test's own reads.
+    await warm(() => rewardsFor(CONDUIT, FLIP - 3 * WEEK));
+  });
+  after(stop);
+  hooks();
 
   test("Home first, the App at its address, Back and Forward, About, and an address the page does not know", async () => {
     const { page, asked, violations } = await open({ owner: NEWCOMER }, { width: 390, height: 844 });
@@ -456,8 +499,13 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     await home.getByRole("link", { name: "Open the app" }).click();
     await appTitle(page).waitFor();
     assert.equal(await homeTitle(page).isVisible(), false);
-    assert.equal(await page.title(), "Your accounts · metaDEX Café");
-    assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Your accounts");
+    assert.equal(await page.title(), "Your wallet · metaDEX Café");
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Your wallet");
+    // The App lists the products: the Hydrex automations, and the swap.
+    assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), [
+      "Hydrex automations",
+      "Swap many tokens into one",
+    ]);
     assert.equal(await page.locator("header .to-app").getAttribute("aria-current"), "page");
     await app(page).getByRole("button", { name: "Test Wallet" }).waitFor();
     await shoot(page, "app-390-light");
@@ -499,7 +547,7 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     assert.equal(new URL(page.url()).hash, "#hydrex/carbon-impact/control");
     assert.equal(await appTitle(page).isVisible(), false);
     await page.goBack();
-    await appTitle(page).waitFor();
+    await hydrexTitle(page).waitFor();
     assert.equal(await page.getByRole("checkbox", { name: "Pick Account #2439" }).isChecked(), true);
     await page.getByRole("button", { name: "Join Carbon Impact with 2 accounts" }).waitFor();
     await account(page, 2439).getByRole("link", { name: "Account #2439" }).click();
@@ -514,8 +562,23 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     await position(page).getByRole("button", { name: "Leave", exact: true }).waitFor();
     assert.equal(await position(page).locator(".position-owner-row").isVisible(), false, "its own account");
     await shoot(page, "stopped-account-390-light");
-    await position(page).getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "App" }).click();
+    await position(page).getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Hydrex" }).click();
+    await hydrexTitle(page).waitFor();
+    await hydrex(page).getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "App" }).click();
     await appTitle(page).waitFor();
+    // The App says what needs you across the products: here, the accounts in automations that stopped.
+    const needs = app(page).locator("#needs");
+    await needs.getByRole("heading", { name: "Needs you · 2" }).waitFor();
+    await needs.getByText(/^#2439 is in USDC, which stopped on Wed,? 9 Sept?\. It earns nothing\.$/).waitFor();
+    assert.equal(
+      await needs
+        .locator("li")
+        .filter({ hasText: "#2439" })
+        .getByRole("link", { name: "Change it" })
+        .getAttribute("href"),
+      "#hydrex/2439",
+    );
+    await app(page).locator(".hydrex-yours").getByText("Yours: 2 accounts").waitFor();
     assert.deepEqual(violations, []);
   });
 
@@ -539,7 +602,7 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
       .waitFor({ timeout: 60_000 });
     assert.equal(await account(page, 14485).locator(".earned").isVisible(), false, "its own account voted itself");
     await shoot(page, "member-earned-390-light");
-    const menu = app(page).locator('.choice[data-choice="carbon-impact"]');
+    const menu = hydrex(page).locator('.choice[data-choice="carbon-impact"]');
     assert.match(
       await menu.locator(".record").innerText(),
       /^≈\s\$0\.5\d earned per 1,000 Earning Power, ≈\s\$0\.\d\d paid to you$/,
@@ -576,7 +639,8 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     await page.locator('.view[data-view="home"]').getByRole("link", { name: "Open the app" }).click();
     await appTitle(page).waitFor();
     await app(page).getByRole("button", { name: "Browser wallet" }).waitFor();
-    await app(page)
+    await toHydrex(page);
+    await hydrex(page)
       .locator(".impact-state")
       .getByText(/^(Running|Stopped)$/)
       .waitFor();
@@ -586,8 +650,8 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
   test("join with two accounts from automations that stopped, one transaction at a time", async () => {
     // The review's estimate needs last epoch's figures.
     await warm(() => readEarnings(CONDUIT));
-    const { page, sent, asked, origins, violations } = await open({ owner: ELSEWHERE }, { url: `${SITE}/#app` });
-    await app(page).locator("time.impact-voted").getByText(/Wed/).waitFor();
+    const { page, sent, asked, origins, violations } = await open({ owner: ELSEWHERE }, { url: `${SITE}/#hydrex` });
+    await hydrex(page).locator("time.impact-voted").getByText(/Wed/).waitFor();
     assert.deepEqual(asked, [], "the page asks a wallet nothing until it is picked");
     await page.getByRole("button", { name: "Test Wallet" }).click();
     await chip(page, ELSEWHERE).waitFor();
@@ -647,7 +711,12 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     await group(page, "in:carbon-impact").locator("li").filter({ hasText: "#2439" }).getByText(joined).waitFor();
     await account(page, 2435).getByText(joined).waitFor();
     assert.equal(await group(page, "needs").isVisible(), false);
-    assert.deepEqual([...new Set(asked)].sort(), ["eth_chainId", "eth_requestAccounts", "eth_sendTransaction"]);
+    assert.deepEqual([...new Set(asked)].sort(), [
+      "eth_chainId",
+      "eth_requestAccounts",
+      "eth_sendTransaction",
+      "wallet_getCapabilities",
+    ]);
     assert.deepEqual([...origins].sort(), [SITE, ...RPC_ORIGINS].filter((o) => origins.has(o)).sort());
     assert.ok(origins.has(SITE));
     assert.deepEqual(violations, []);
@@ -801,9 +870,10 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     await chip(page, NEWCOMER).waitFor();
     await page
       .locator("header")
-      .getByRole("link", { name: /connected as 0x0208…4C95/ })
+      .getByRole("link", { name: /Your wallet, connected as 0x0208…4C95/ })
       .click();
     await appTitle(page).waitFor();
+    await toHydrex(page);
     assert.equal(await page.getByRole("button", { name: /AutoMaxi/ }).count(), 0, "AutoMaxi is not on Base yet");
     assert.equal(await page.locator('[data-needs="automaxi"]:not([hidden])').count(), 0);
     await group(page, "other").getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
@@ -868,6 +938,7 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     for (const part of ["#accounts", "#none", "#epoch"]) assert.equal(await page.locator(part).isVisible(), false);
     await page.locator("header").getByText("Open the app").waitFor();
     await page.getByRole("button", { name: "Test Wallet" }).click();
+    await toHydrex(page);
     await account(page, 141).waitFor();
   });
 
@@ -979,7 +1050,7 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
 
   test("the wrong network, a refusal in the wallet, and a transaction that fails", async () => {
     const { page, wallet, sent } = await connected({ owner: NEWCOMER, chainId: 1, decline: true });
-    await page.getByText("Your wallet is on another network.").waitFor();
+    await hydrex(page).getByText("Your wallet is on another network.").waitFor();
     const joinOwn = group(page, "other").getByRole("button", { name: "Join Carbon Impact", exact: true });
     await joinOwn.click();
     await toWallet(page);
@@ -990,7 +1061,7 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     await expectApprovals([141n], NEWCOMER, zeroAddress);
     await page.keyboard.press("Escape");
     assert.equal(await review(page).isVisible(), false);
-    assert.equal(await page.getByText("Your wallet is on another network.").isVisible(), false);
+    assert.equal(await hydrex(page).getByText("Your wallet is on another network.").isVisible(), false);
 
     const data = encodeFunctionData({ abi, functionName: "transferFrom", args: [NEWCOMER, RECIPIENT, 141n] });
     await anvil("eth_sendTransaction", [{ from: NEWCOMER, to: VOTING_ESCROW, data }]);
@@ -1037,6 +1108,7 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     await page.locator("#error").getByText("Reading Base failed.").waitFor();
     await shoot(page, "error-390-light");
     await page.getByRole("button", { name: "Test Wallet" }).click();
+    await toHydrex(page);
     await group(page, "in:carbon-impact").getByText("#9540").waitFor();
     await group(page, "in:carbon-impact").getByRole("button", { name: "Leave" }).click();
     await review(page).getByRole("heading", { name: "Leave Carbon Impact" }).waitFor();
@@ -1050,14 +1122,14 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
       .waitFor();
     await page.getByRole("button", { name: "Try again" }).click();
     await page.getByRole("button", { name: "Test Wallet" }).waitFor();
-    await appTitle(page).waitFor();
-    assert.equal(new URL(page.url()).hash, "#app");
+    await hydrexTitle(page).waitFor();
+    assert.equal(new URL(page.url()).hash, "#hydrex");
   });
 
   test("a wallet that cannot switch to Base says so", async () => {
     const { page } = await connected({ owner: NEWCOMER, chainId: 1, switches: false });
-    await page.locator("#wrong-chain").getByRole("button", { name: "Switch to Base" }).click();
-    await page.getByText("Your wallet did not switch.").waitFor();
+    await hydrex(page).locator(".wrong-chain").getByRole("button", { name: "Switch to Base" }).click();
+    await hydrex(page).getByText("Your wallet did not switch.").waitFor();
   });
 
   test("inside Safe{Wallet}, a Safe proposes leaving with two accounts as one Safe transaction", async () => {
@@ -1065,11 +1137,12 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     const frame = page.frameLocator("iframe");
     const dialog = frame.locator("#review");
     await frame.locator("header").getByText(short(LEAVER)).waitFor();
-    assert.equal(await frame.getByRole("heading", { name: "Your accounts", level: 1 }).isVisible(), true);
+    assert.equal(await frame.getByRole("heading", { name: "Your wallet", level: 1 }).isVisible(), true);
     assert.equal(
-      await frame.getByRole("heading", { name: "Automations that vote with your Hydrex accounts" }).isVisible(),
+      await frame.getByRole("heading", { name: "Vote, claim and swap on Base, from your own wallet" }).isVisible(),
       false,
     );
+    await frame.getByRole("link", { name: "Hydrex automations" }).click();
     await frame.getByRole("checkbox", { name: "Pick Account #53350" }).check();
     await frame.getByRole("checkbox", { name: "Pick Account #82206" }).check();
     await frame.getByRole("button", { name: "Leave with 2 accounts" }).click();
@@ -1117,6 +1190,7 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     await app(page).getByText("did not connect").waitFor();
     approve();
     await chip(page, NEWCOMER).waitFor();
+    await toHydrex(page);
     await account(page, 141).waitFor();
   });
 
@@ -1262,7 +1336,7 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     await warm(() => Promise.all([readEarnings(CONDUIT), readEarnings(AUTOMAXI.address), readAccounts(NEWCOMER)]));
     const { page, violations } = await connected({ owner: NEWCOMER }, { width: 390, height: 844 });
     await account(page, 141).getByText("You vote with it.").waitFor();
-    const menu = app(page).locator("#menu");
+    const menu = hydrex(page).locator("#menu");
     assert.deepEqual(await menu.locator("h3").allInnerTexts(), ["Carbon Impact", "AutoMaxi", "Vote yourself"]);
     await menu.locator(".automaxi-state").getByText("Not voted yet").waitFor();
     await menu
@@ -1370,5 +1444,276 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
       .locator("#epoch .countdown")
       .getByText(/^in 6 d 23 h$/)
       .waitFor();
+  });
+});
+
+// After the swappers' deployment in block 52,894,916: Wed 21 Oct 2026, 15:42 UTC. Carbon Impact still owed #82774 the
+// epoch from Thu 1 Oct.
+const RECENT = 52_904_000;
+// Carbon Impact's treasury, a Safe that holds many of the tokens its fee took.
+const HOLDER = getAddress("0xd9e966a6bfa2ae2113a34bb4dd02ded921da50af");
+const AVNT = getAddress("0x696f9436b67233384889472cd7cd58a6fb5df4f1");
+const ZORA = getAddress("0x1111111111166b7fe7bd91427724b487980afc69");
+const WETH = getAddress("0x4200000000000000000000000000000000000006");
+const [INTO_USDC, INTO_EURC] = SWAPPERS as [(typeof SWAPPERS)[number], (typeof SWAPPERS)[number]];
+const tokenAbi = parseAbi([
+  "function balanceOf(address owner) view returns (uint256)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function transfer(address to, uint256 amount) returns (bool)",
+]);
+const autoMaxiAbi = parseAbi(["function lastClaimBlock(uint256 tokenId) view returns (uint256)"]);
+// A wallet of the test's own, which the treasury gives three of its tokens, so that the page has only those to route.
+const SELLER = getAddress("0x0000000000000000000000000000000000c0ffee");
+
+// Gives SELLER the treasury's whole balance of each token, then reads what the page will: the balances, the prices, and
+// each token's route into USDC, with no time limit, as anvil reads the pools from FORK_URL a slot at a time.
+async function fund(tokens: Address[]): Promise<void> {
+  for (const token of tokens) {
+    const amount = await balanceOf(token, HOLDER);
+    await mined(HOLDER, token, encodeFunctionData({ abi: tokenAbi, functionName: "transfer", args: [SELLER, amount] }));
+  }
+  await warm(async () => {
+    // The page reads the balance of every token it knows.
+    const held = await holdingsOf(SELLER, known(), INTO_USDC.address);
+    const described = await describeTokens([...tokens, INTO_USDC.token]);
+    const amounts = new Map(tokens.map((token) => [token.toLowerCase(), held.get(token.toLowerCase())!.balance]));
+    const time = Number((await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false])).timestamp);
+    await pricesAt([...described.values()], amounts, time, time);
+    for (const token of tokens) await findRoute(token, amounts.get(token.toLowerCase())!, INTO_USDC, false);
+  });
+}
+
+async function readOn<T>(
+  to: Address,
+  abi: typeof tokenAbi | typeof autoMaxiAbi,
+  functionName: string,
+  args: unknown[],
+): Promise<T> {
+  const data = encodeFunctionData({ abi, functionName, args } as never);
+  const reply = await anvil<Hex>("eth_call", [{ to, data }, "latest"]);
+  return decodeFunctionResult({ abi, functionName, data: reply } as never) as T;
+}
+const balanceOf = (token: Address, owner: Address) => readOn<bigint>(token, tokenAbi, "balanceOf", [owner]);
+
+const swapView = (page: Page) => page.locator('.view[data-view="swap"]');
+
+// Reads, with no time limit, what the page reads of an owner's payouts, and what the claim of #82774 reads.
+async function warmPayouts(owner: Address): Promise<void> {
+  await warm(async () => {
+    const holdings = await readAccounts(owner);
+    const ids = holdings.accounts
+      .filter((account) =>
+        [account.delegate, account.claimer, account.delegateAtStart].some(
+          (address) => same(address, CONDUIT) || same(address, AUTOMAXI.address),
+        ),
+      )
+      .map(({ id }) => id);
+    const earnings = (await readEarnings(CONDUIT))!;
+    const top = Number(await anvil<Hex>("eth_blockNumber")) - SETTLED;
+    const last = weighed(earnings.rewards, earnings.prices);
+    const earlier = await rewardsFor(CONDUIT, earnings.start - WEEK);
+    const before = weighed(earlier, earnings.prices);
+    const pairs = [...earnings.rewards, ...earlier].map(({ contract, token }) => ({ contract, token: token.address }));
+    await Promise.all([
+      readStamps(ids, last, top),
+      readEarned(ids, last, top),
+      readStamps(ids, before, top),
+      readEarned([82774n], pairs, "latest"),
+    ]);
+  });
+}
+
+// Waits until every token has its route, then ticks only those given.
+async function tickOnly(page: Page, symbols: string[]): Promise<void> {
+  const swap = swapView(page);
+  try {
+    await swap.locator(".swap-rows li").first().waitFor({ timeout: 300_000 });
+    await swap.locator(".swap-status").waitFor({ state: "hidden", timeout: 600_000 });
+  } catch (error) {
+    throw new Error(`The swap's page shows: ${await swap.locator(".swap-tokens").innerText()}`, { cause: error });
+  }
+  for (const box of await swap.locator(".swap-rows .pick").all()) {
+    const symbol = ((await box.getAttribute("aria-label")) ?? "").replace(/^Sell /, "");
+    if ((await box.isChecked()) !== symbols.includes(symbol)) await box.click();
+  }
+}
+
+describe("the swap and the claim against a fork after the swappers' deployment", { timeout: 2_400_000 }, () => {
+  before(() => start(RECENT, [HOLDER, PAYEE, SELLER]));
+  after(stop);
+  hooks();
+
+  test("swap three tokens into USDC in one prompt; one is skipped, and its approval is reset", async () => {
+    await fund([WETH, ZORA, AVNT]);
+    const { page, sent, violations } = await connected({ owner: SELLER, batch: true }, { url: `${SITE}/#swap` });
+    const swap = swapView(page);
+    await swap.getByRole("heading", { name: "Swap many tokens into one", level: 1 }).waitFor();
+    assert.equal(
+      await swap.getByRole("radio", { name: "USDC" }).isChecked(),
+      true,
+      "USDC unless the address names another",
+    );
+    await tickOnly(page, ["WETH", "ZORA", "AVNT"]);
+    await swap
+      .locator(".swap-sells")
+      .getByText(/^Sells 3 tokens for ≈ [\d,.]+ USDC, at least [\d,.]+ USDC\.$/)
+      .waitFor();
+    await swap
+      .locator(".swap-costs")
+      .getByText(/4 calls: 3 approvals, 1 swap$/)
+      .waitFor();
+    await shoot(page, "swap-390-light");
+    await swap.getByRole("button", { name: "Review" }).click();
+    await review(page).getByRole("heading", { name: "What you swap" }).waitFor({ timeout: 300_000 });
+    await review(page).getByText("these figures are the swap's own").waitFor();
+    assert.equal(await review(page).locator(".swap-lines li").count(), 3);
+    await review(page).getByRole("button", { name: "Continue" }).click();
+    await review(page).getByText("One prompt, with 4 calls, which go through together or not at all:").waitFor();
+    const says = await review(page).locator(".says").allTextContents();
+    assert.equal(says.length, 4);
+    assert.match(says[0]!, /^Lets the USDC swapper take [\d,.]+ \S+ from you\.$/);
+    assert.match(says[3]!, /^Sells 3 tokens for at least [\d,.]+ USDC, less any token skipped\.$/);
+    assert.deepEqual(await review(page).locator(".function").allTextContents(), [
+      "approve",
+      "approve",
+      "approve",
+      "swap",
+    ]);
+    assert.equal(await review(page).locator(".to").last().innerText(), INTO_USDC.address);
+    // AVNT leaves the wallet before the swap, so its route fails, and the swap skips it.
+    const avnt = await balanceOf(AVNT, SELLER);
+    assert.ok(avnt > 0n);
+    await mined(SELLER, AVNT, encodeFunctionData({ abi: tokenAbi, functionName: "transfer", args: [STRANGER, avnt] }));
+    const before = await balanceOf(INTO_USDC.token, SELLER);
+    await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
+    await review(page).getByText("Done.").waitFor({ timeout: 120_000 });
+    assert.equal(sent.length, 4);
+    const receipt = review(page).locator(".receipt");
+    assert.equal(await receipt.locator(".swap-receipt-sold").innerText(), "2 tokens");
+    const paid = await receipt.locator(".swap-receipt-paid").innerText();
+    assert.match(paid, /^[\d,.]+ USDC$/);
+    assert.ok((await balanceOf(INTO_USDC.token, SELLER)) > before);
+    assert.equal(await balanceOf(WETH, SELLER), 0n);
+    assert.equal(await balanceOf(ZORA, SELLER), 0n);
+    const skipped = receipt.locator(".swap-receipt-skipped li");
+    assert.match(
+      await skipped.innerText(),
+      /AVNT stayed in your wallet: its token refused the transfer\. Its approval stays\./,
+    );
+    await shoot(page, "swap-receipt-390-light", review(page));
+    assert.ok((await readOn<bigint>(AVNT, tokenAbi, "allowance", [SELLER, INTO_USDC.address])) > 0n);
+    await skipped.getByRole("button", { name: "Reset its approval" }).click();
+    await review(page).getByRole("heading", { name: "Reset an approval" }).waitFor();
+    assert.deepEqual(await review(page).locator(".says").allTextContents(), [
+      "Resets AVNT's approval of the USDC swapper to nothing.",
+    ]);
+    await confirm(page);
+    assert.equal(await readOn<bigint>(AVNT, tokenAbi, "allowance", [SELLER, INTO_USDC.address]), 0n);
+    assert.deepEqual(violations, []);
+  });
+
+  test("a swapper whose checks fail turns its output off, and says which check failed", async () => {
+    await anvil("anvil_setCode", [INTO_EURC.address, "0x00"]);
+    const { page } = await connected({ owner: HOLDER }, { url: `${SITE}/#swap/eurc` });
+    const swap = swapView(page);
+    await swap.getByText("Swaps into EURC are off: this page's checks of their swappers failed.").waitFor();
+    assert.equal(await swap.getByRole("radio", { name: /EURC/ }).isDisabled(), true);
+    assert.equal(await swap.getByRole("radio", { name: "USDC" }).isDisabled(), false);
+    assert.equal(await swap.getByRole("button", { name: "Review" }).isDisabled(), true);
+    await page.goto(`${SITE}/#swap/eurc/check`);
+    const failed = swap.locator('[data-check="swap-code"] .check-failed');
+    await failed.waitFor();
+    assert.equal(await failed.innerText(), "Failed for EURC: ");
+    assert.equal(await swap.locator('[data-check="chain"] .check-failed').count(), 0);
+  });
+
+  test("an overdue payout in AutoMaxi: the App and the account say so, and Claim now claims it as it is", async () => {
+    // #82774 moves to AutoMaxi, which now holds its claims, while what Carbon Impact's votes earned for it waits.
+    await mined(
+      PAYEE,
+      VOTING_ESCROW,
+      encodeFunctionData({ abi, functionName: "setConduitApproval", args: [AUTOMAXI.address, 82774n, true] }),
+    );
+    await settle();
+    await warmPayouts(PAYEE);
+    const { page, sent, violations } = await connected(
+      { owner: PAYEE },
+      { url: `${SITE}/#app`, width: 390, height: 844 },
+    );
+    const needs = app(page).locator("#needs");
+    const line = needs.locator("li").filter({ hasText: "#82774's payout is overdue" });
+    await line.waitFor({ timeout: 600_000 });
+    assert.match(
+      await line.innerText(),
+      /^#82774's payout is overdue: At least (≈|<)\s\$[\d,.]+ waits in \d+ tokens?\./,
+    );
+    await shoot(page, "needs-overdue-390-light");
+    await page.goto(`${SITE}/#hydrex/82774`);
+    await position(page).getByText("Its payout is overdue.").waitFor();
+    await position(page).getByRole("button", { name: "Claim now" }).click();
+    await review(page).getByText("Claim for #82774: step 1 of 2").waitFor({ timeout: 300_000 });
+    await review(page).getByRole("heading", { name: "What waits" }).waitFor();
+    assert.equal(
+      await review(page)
+        .getByRole("radio", { name: /As they are/ })
+        .isChecked(),
+      true,
+      "nothing sold unasked",
+    );
+    assert.match(await review(page).locator(".claim-paid").innerText(), /^(≈|<)\s\$/);
+    await shoot(page, "claim-1-390-light", review(page));
+    await review(page).getByRole("button", { name: "Continue" }).click();
+    assert.deepEqual(await review(page).locator(".says").allTextContents(), [
+      "Claims #82774's rewards through AutoMaxi, which pays them to you, less 1%.",
+    ]);
+    assert.deepEqual(await review(page).locator(".function").allTextContents(), ["claim"]);
+    assert.equal(await review(page).locator(".to").innerText(), AUTOMAXI.address);
+    await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
+    await review(page).getByText("Done.").waitFor({ timeout: 120_000 });
+    const receipt = review(page).locator(".receipt");
+    assert.equal(await receipt.locator(".claim-receipt-id").innerText(), "#82774");
+    assert.notEqual(await receipt.locator(".claim-receipt-paid").innerText(), "Nothing");
+    assert.match(await receipt.locator(".claim-receipt-fee").innerText(), /^−/);
+    await review(page).getByRole("link", { name: "Swap these into one token" }).waitFor();
+    assert.equal(sent.length, 1);
+    assert.ok((await readOn<bigint>(AUTOMAXI.address, autoMaxiAbi, "lastClaimBlock", [82774n])) > 0n);
+    assert.deepEqual(violations, []);
+  });
+
+  test("claim and swap into USDC in one prompt", async () => {
+    await mined(
+      PAYEE,
+      VOTING_ESCROW,
+      encodeFunctionData({ abi, functionName: "setConduitApproval", args: [AUTOMAXI.address, 82774n, true] }),
+    );
+    await settle();
+    await warmPayouts(PAYEE);
+    const { page, sent } = await connected({ owner: PAYEE, batch: true }, { url: `${SITE}/#app` });
+    const line = app(page).locator("#needs li").filter({ hasText: "#82774's payout is overdue" });
+    await line.getByRole("button", { name: "Claim now" }).click({ timeout: 600_000 });
+    await review(page).getByRole("heading", { name: "What waits" }).waitFor({ timeout: 300_000 });
+    await review(page).getByRole("radio", { name: "Into" }).check();
+    await review(page)
+      .locator(".claim-into")
+      .getByText(/^≈ [\d,.]+ USDC, at least [\d,.]+\./)
+      .waitFor({ timeout: 600_000 });
+    await shoot(page, "claim-into-390-light", review(page));
+    await review(page).getByRole("button", { name: "Continue" }).click();
+    await review(page)
+      .getByText(/^One prompt, with \d+ calls, which go through together or not at all:$/)
+      .waitFor();
+    const says = await review(page).locator(".says").allTextContents();
+    assert.equal(says[0], "Claims #82774's rewards through AutoMaxi, which pays them to you, less 1%.");
+    assert.match(says.at(-1)!, /^Sells \d+ tokens? for at least [\d,.]+ USDC, less any token skipped\.$/);
+    assert.ok(says.slice(1, -1).every((each) => /^Lets the USDC swapper take /.test(each)));
+    const before = await balanceOf(INTO_USDC.token, PAYEE);
+    await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
+    await review(page).getByText("Done.").waitFor({ timeout: 300_000 });
+    assert.equal(sent.length, says.length);
+    await review(page)
+      .locator(".swap-receipt-paid")
+      .getByText(/^[\d,.]+ USDC$/)
+      .waitFor();
+    assert.ok((await balanceOf(INTO_USDC.token, PAYEE)) > before);
   });
 });

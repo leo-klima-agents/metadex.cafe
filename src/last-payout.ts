@@ -8,6 +8,7 @@ import { WEEK, amount, bps, listWith, short, usd, utc, weekStart } from "./forma
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { lastEarnings } from "./last-epoch.ts";
 import { pricesAt, type Token } from "./prices.ts";
+import { prefill } from "./swap-view.ts";
 import {
   SETTLED,
   blockTimes,
@@ -33,7 +34,7 @@ import {
 
 const STATES = ["reading", "failed", "found"] as const;
 // A payout takes up to half a day after each flip.
-const UNDER_WAY = 12 * 3600;
+export const UNDER_WAY = 12 * 3600;
 
 // What an automation's own reader finds of an account's payouts through it.
 type Part = {
@@ -211,6 +212,8 @@ function fillClaims(
   fillTime(item, "receipt-from", flip - WEEK);
   fillTime(item, "receipt-to", flip);
   show(".receipt-stopped", stopped, item);
+  // The usual path to one token, week after week: the swap's page, with these tokens and amounts ticked.
+  item.querySelector<HTMLAnchorElement>(".swap-these")!.onclick = () => prefill(paid);
   item.querySelector(".receipt-claims")!.replaceChildren(
     ...claims.map(({ block, caller, owner: paid, tx }) => {
       const line = clone("claim-line");

@@ -248,7 +248,7 @@ export async function readStamps(
 export async function readEarned(
   ids: bigint[],
   pairs: Pair[],
-  block: number,
+  block: number | "latest",
   reader: typeof read = readLater,
 ): Promise<(bigint | undefined)[][]> {
   const values = await reader(reads(ids, pairs, "earned"), block, true, EARNED_PER_BATCH);

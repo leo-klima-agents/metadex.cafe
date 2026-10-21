@@ -12,7 +12,7 @@
     <title>metaDEX Café</title>
     <meta
       name="description"
-      content="Automations that vote with your Hydrex accounts on Base. Your account stays in your wallet, and you can leave at any time."
+      content="Vote, claim and swap on Base, from your own wallet: automations for your Hydrex accounts, and a swap of many tokens into one. Each call is shown before your wallet asks."
     />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="shortcut icon" href="favicon.ico" sizes="32x32" />
@@ -27,7 +27,7 @@
         <a class="to-app button" href="#app"
           ><span class="open">Open the app</span
           ><span class="wallet-state" hidden
-            ><span class="visually-hidden">Your accounts, connected as </span
+            ><span class="visually-hidden">Your wallet, connected as </span
             ><span class="wallet-short" translate="no"></span></span
         ></a>
       </nav>
@@ -42,20 +42,69 @@
 
       <!-- One view for each kind of page. The route in the hash picks the one shown: see src/views.ts. -->
       <div class="view" data-view="home" data-title="metaDEX Café">
-        <h1 tabindex="-1">Automations that vote with your Hydrex accounts</h1>
-        <p class="lead">Your account stays in your wallet, and you can leave with one call, at any time.</p>
+        <h1 tabindex="-1">Vote, claim and swap on Base, from your own wallet</h1>
+        <p class="lead">
+          Each call is shown before your wallet asks. Your accounts and tokens stay in your wallet until you confirm,
+          and this page keeps nothing.
+        </p>
         <p class="buttons"><a class="button" href="#app">Open the app</a></p>
         <p class="stopped-line">
           <span class="shape stopped" aria-hidden="true"></span
           ><span
             >Many of Hydrex's automations, such as USDC, stopped voting on Wed 9 Sep. An account still in one earns
-            nothing. <a href="#app">Check your accounts</a></span
+            nothing. <a href="#hydrex">Check your accounts</a></span
           >
         </p>
       </div>
 
-      <div class="view" data-view="app" data-title="Your accounts · metaDEX Café" hidden>
-        <h1 tabindex="-1">Your accounts</h1>
+      <div class="view" data-view="app" data-title="Your wallet · metaDEX Café" hidden>
+        <h1 tabindex="-1">Your wallet</h1>
+        <div class="wallet-slot"></div>
+        <p class="wrong-chain notice" role="alert" hidden>
+          <span class="to-switch">
+            Your wallet is on another network.
+            <button type="button" class="switch">Switch to Base</button>
+            <span class="switch-failed" hidden>Your wallet did not switch. Pick Base in your wallet itself.</span>
+          </span>
+          <span class="safe-elsewhere" hidden>This Safe is on another network. Open the page from a Safe on Base.</span>
+        </p>
+        <section id="needs" class="needs" aria-labelledby="needs-title" hidden>
+          <h2 id="needs-title">Needs you <span class="count"></span></h2>
+          <ul class="needs-list"></ul>
+        </section>
+        <section id="products" aria-labelledby="products-title">
+          <h2 id="products-title">The menu</h2>
+          <ul class="menu">
+            <li class="choice" data-choice="hydrex">
+              <h3><a href="#hydrex">Hydrex automations</a></h3>
+              <p>Automations that vote with your Hydrex accounts.</p>
+              <p class="small yours hydrex-yours" hidden></p>
+            </li>
+            <li class="choice" data-choice="swap">
+              <h3><a href="#swap">Swap many tokens into one</a></h3>
+              <p>Sell the tokens you pick for one, in one transaction. Takes 1% of what each fetches.</p>
+              <p class="small yours swap-yours" hidden></p>
+            </li>
+          </ul>
+        </section>
+        <details class="fold allows" data-section="allows" hidden>
+          <summary>What this wallet allows</summary>
+          <p>
+            Every approval this wallet gave the café's contracts, each with the call that undoes it: the automations
+            that vote and claim for its accounts, and what the swappers may take of its tokens.
+          </p>
+          <h3>The automations</h3>
+          <p class="allows-none small" hidden>No automation can vote or claim for this wallet's accounts.</p>
+          <ul class="allows-accounts"></ul>
+          <h3>The swappers</h3>
+          <p class="allows-tokens-none small" hidden>No swapper can take any token from this wallet.</p>
+          <ul class="allows-tokens"></ul>
+        </details>
+      </div>
+
+      <div class="view" data-view="hydrex" data-title="Your Hydrex accounts · metaDEX Café" hidden>
+        <nav class="crumbs" aria-label="Breadcrumb"><a href="#app">App</a> ›</nav>
+        <h1 tabindex="-1">Your Hydrex accounts</h1>
         <p class="notice checks-failed" data-kind="carbon-impact" role="alert" hidden>
           <span class="shape failed" aria-hidden="true"></span>Joining Carbon Impact is off: this page's checks of it
           failed. Leaving works. <a href="#hydrex/carbon-impact/check">Which check failed</a>
@@ -65,11 +114,11 @@
           Leaving works. <a href="#hydrex/automaxi/check">Which check failed</a>
         </p>
         <div class="wallet-slot"></div>
-        <p id="wrong-chain" class="notice" role="alert" hidden>
+        <p class="wrong-chain notice" role="alert" hidden>
           <span class="to-switch">
             Your wallet is on another network.
             <button type="button" class="switch">Switch to Base</button>
-            <span id="switch-failed" hidden>Your wallet did not switch. Pick Base in your wallet itself.</span>
+            <span class="switch-failed" hidden>Your wallet did not switch. Pick Base in your wallet itself.</span>
           </span>
           <span class="safe-elsewhere" hidden>This Safe is on another network. Open the page from a Safe on Base.</span>
         </p>
@@ -116,7 +165,13 @@
             <h2 id="group-automaxi"><a href="#hydrex/automaxi">AutoMaxi</a> <span class="count"></span></h2>
             <ul class="accounts"></ul>
             <p class="pick-hint">Tick the accounts to change.</p>
+            <p class="claim-note small" hidden>
+              AutoMaxi's keeper usually claims right after each epoch, and has not for
+              <span data-one="this account" data-many="these accounts"></span> yet. Claiming now costs the gas, and
+              AutoMaxi takes 1%, as from the keeper's claim.
+            </p>
             <p class="buttons">
+              <button type="button" data-action="claim">Claim</button>
               <button type="button" data-action="leave" class="secondary">Leave</button>
               <button type="button" data-action="join" data-automation="carbon-impact" class="secondary">
                 Move to Carbon Impact
@@ -178,8 +233,8 @@
                 >
               </p>
               <p>
-                It votes for the pools it expects to earn the most bribes, and pays you what they earn, in the tokens
-                earned. Nobody controls it.
+                It votes for the pools it expects to earn the most bribes, and pays you in the tokens earned, right
+                after each epoch. <a href="#swap">Swap them into one here.</a> Nobody controls it.
               </p>
               <dl class="key-facts">
                 <div>
@@ -221,7 +276,7 @@
         data-title="Carbon Impact · metaDEX Café"
         hidden
       >
-        <nav class="crumbs" aria-label="Breadcrumb"><a href="#app">App</a> ›</nav>
+        <nav class="crumbs" aria-label="Breadcrumb"><a href="#app">App</a> › <a href="#hydrex">Hydrex</a> ›</nav>
         <h1 tabindex="-1">Carbon Impact</h1>
         <p class="state">
           <span class="state-normal"
@@ -579,7 +634,7 @@
       </div>
 
       <div class="view product" data-view="product" data-kind="automaxi" data-title="AutoMaxi · metaDEX Café" hidden>
-        <nav class="crumbs" aria-label="Breadcrumb"><a href="#app">App</a> ›</nav>
+        <nav class="crumbs" aria-label="Breadcrumb"><a href="#app">App</a> › <a href="#hydrex">Hydrex</a> ›</nav>
         <h1 tabindex="-1">AutoMaxi</h1>
         <p class="automaxi-absent notice" hidden>
           AutoMaxi is not on Base yet. Its address is known in advance: once there is code there, and it is the code
@@ -613,6 +668,15 @@
             <section class="group" data-group="in:automaxi" aria-labelledby="mine-automaxi" hidden>
               <h2 id="mine-automaxi">Your accounts in it</h2>
               <ul class="accounts"></ul>
+              <p class="pick-hint">Tick the accounts to claim for.</p>
+              <p class="claim-note small" hidden>
+                AutoMaxi's keeper usually claims right after each epoch, and has not for
+                <span data-one="this account" data-many="these accounts"></span> yet. Claiming now costs the gas, and
+                AutoMaxi takes 1%, as from the keeper's claim.
+              </p>
+              <p class="buttons">
+                <button type="button" data-action="claim">Claim</button>
+              </p>
             </section>
             <section class="group" data-group="can:automaxi" aria-labelledby="can-automaxi" hidden>
               <h2 id="can-automaxi">Your accounts that can join</h2>
@@ -895,7 +959,7 @@
       </div>
 
       <div class="view" data-view="position" data-title="Account · metaDEX Café" hidden>
-        <nav class="crumbs" aria-label="Breadcrumb"><a href="#app">App</a> ›</nav>
+        <nav class="crumbs" aria-label="Breadcrumb"><a href="#app">App</a> › <a href="#hydrex">Hydrex</a> ›</nav>
         <h1 tabindex="-1"><bdi class="position-name" translate="no">Account</bdi> <span class="position-id"></span></h1>
         <p class="position-reading" role="status">Reading the account from Base…</p>
         <p class="position-failed notice" role="alert" hidden>
@@ -925,8 +989,16 @@
               </dd>
             </div>
           </dl>
+          <div class="position-overdue notice" hidden>
+            <p>
+              <strong>Its payout is overdue.</strong> <span class="overdue-waits"></span> AutoMaxi's keeper usually
+              claims right after each epoch, and has not for this account yet. Claiming now costs the gas, and AutoMaxi
+              takes 1%, as from the keeper's claim.
+            </p>
+          </div>
           <section class="position-actions" aria-label="What you can do with it" hidden>
             <p class="buttons">
+              <button type="button" data-action="claim">Claim now</button>
               <button type="button" data-action="join" data-automation="carbon-impact">Join Carbon Impact</button>
               <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
               <button type="button" data-action="self" class="secondary">Leave</button>
@@ -975,11 +1047,380 @@
         </div>
       </div>
 
+      <div class="view swap" data-view="swap" data-title="Swap · metaDEX Café" hidden>
+        <nav class="crumbs" aria-label="Breadcrumb"><a href="#app">App</a> ›</nav>
+        <h1 tabindex="-1">Swap many tokens into one</h1>
+        <p class="notice swap-off" role="alert" hidden>
+          <span class="shape failed" aria-hidden="true"></span>Swaps into <span class="swap-off-outputs"></span> are
+          off: this page's checks of their swappers failed. Resetting an approval works.
+          <a href="#swap/check">Which check failed</a>
+        </p>
+        <p class="lead">
+          Pick the tokens to sell and the token you want. One transaction sells them all, through pools on Hydrex, Aero,
+          Aerodrome and Uniswap that the swapper checks. It takes 1% of what each token fetches.
+        </p>
+        <p>
+          Your tokens stay in your wallet until the swap. Each approval lets the swapper take that token, for that
+          amount, only from you.
+        </p>
+        <div class="wallet-slot"></div>
+        <p class="wrong-chain notice" role="alert" hidden>
+          <span class="to-switch">
+            Your wallet is on another network.
+            <button type="button" class="switch">Switch to Base</button>
+            <span class="switch-failed" hidden>Your wallet did not switch. Pick Base in your wallet itself.</span>
+          </span>
+          <span class="safe-elsewhere" hidden>This Safe is on another network. Open the page from a Safe on Base.</span>
+        </p>
+        <div class="swap-form" hidden>
+          <fieldset class="outputs">
+            <legend class="label">You receive</legend>
+            <p class="output-choices"></p>
+          </fieldset>
+          <section class="swap-tokens" aria-labelledby="swap-tokens-title">
+            <h2 id="swap-tokens-title">Your tokens <span class="swap-ticked"></span></h2>
+            <p class="swap-status" role="status">Reading your tokens…</p>
+            <p class="swap-failed notice" role="alert" hidden>
+              Your tokens could not be read from Base.
+              <button type="button" class="swap-again secondary">Read them again</button>
+            </p>
+            <p class="swap-none" hidden>This wallet holds none of the tokens the page knows, besides the output.</p>
+            <ul class="swap-rows accounts"></ul>
+            <details class="add-token">
+              <summary>Add a token by its address</summary>
+              <p class="add-line">
+                <label
+                  ><span class="visually-hidden">The token's address</span
+                  ><input
+                    class="add-address"
+                    type="text"
+                    inputmode="text"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="0x…"
+                    translate="no"
+                /></label>
+                <button type="button" class="add-button secondary">Add</button>
+              </p>
+              <p class="add-failed small" role="alert" hidden></p>
+            </details>
+          </section>
+          <section class="swap-summary" aria-label="What the swap does">
+            <p class="swap-sells"><b>Tick the tokens to sell.</b></p>
+            <p class="small swap-costs" hidden></p>
+            <p class="small swap-split" hidden></p>
+            <p class="small">
+              <label
+                >Minimum:
+                <select class="swap-margin">
+                  <option value="10">0.1%</option>
+                  <option value="50" selected>0.5%</option>
+                  <option value="100">1%</option>
+                  <option value="300">3%</option>
+                </select>
+                under each quote.</label
+              >
+              A token whose swap would fetch less stays in your wallet.
+            </p>
+            <p class="buttons"><button type="button" class="swap-review" disabled>Review</button></p>
+            <p class="swap-review-failed notice" role="alert" hidden></p>
+          </section>
+        </div>
+
+        <details class="fold" data-section="fees">
+          <summary>Fee facts</summary>
+          <p>Its code fixes all six, and the page checks its code.</p>
+          <dl class="fee-facts">
+            <div>
+              <dt>Taken</dt>
+              <dd>1% of what each token fetches, in the output token</dd>
+            </div>
+            <div>
+              <dt>The most it can become</dt>
+              <dd>1%, fixed in its code</dd>
+            </div>
+            <div>
+              <dt>Goes to</dt>
+              <dd>
+                A 2-of-3 Safe,
+                <code translate="no"
+                  ><a href="https://basescan.org/address/0x450c72de8c0079B49AcedF294a13011bd09D125B"
+                    >0x450c72de8c0079B49AcedF294a13011bd09D125B</a
+                  ></code
+                >, the same as AutoMaxi's fee
+              </dd>
+            </div>
+            <div>
+              <dt>When</dt>
+              <dd>Each swap</dd>
+            </div>
+            <div>
+              <dt>Other costs</dt>
+              <dd>The pools' own fees, the price the swap moves, and gas</dd>
+            </div>
+            <div>
+              <dt>Who can change it</dt>
+              <dd>Nobody: a new fee means a new deployment</dd>
+            </div>
+          </dl>
+        </details>
+
+        <details class="fold" data-section="control">
+          <summary>Who controls what</summary>
+          <p>
+            Nobody controls the swappers: they have no owner, no settings and no upgrade path. Each exchange's admins
+            can change what its pools charge, which can worsen a price down to the minimum, but none can take the
+            tokens: the swapper takes each token from you only for its swap, and sends what it fetched straight back.
+          </p>
+          <ul>
+            <li>
+              <b>Hydrex:</b> its admins can change its pools' fees, and the plugin of its Algebra pools, which runs in
+              each swap through them.
+            </li>
+            <li>
+              <b>Aero:</b> its admins can change its pools' fees, and its classic pools add a tax of up to 10% above a
+              tip of 1 gwei, which a quote does not see. The page prefers other pools unless Aero's pay more than 1%
+              more, and asks your wallet for a tip of at most 1 gwei where it can.
+            </li>
+            <li><b>Aerodrome:</b> its admins can change its pools' fees, and pause its classic pools.</li>
+            <li><b>Uniswap:</b> its governance can turn on a protocol fee for its pools.</li>
+          </ul>
+        </details>
+
+        <details class="fold" data-section="approvals">
+          <summary>Approvals you gave the swappers</summary>
+          <p>
+            Each swap approves exactly what it sells, so a swap that goes through leaves nothing approved. A token that
+            was skipped, a swap that failed, or a review closed between prompts can leave some. The swapper only ever
+            takes from whoever calls it, so nobody else can use them, but you can reset each to nothing.
+          </p>
+          <p class="allowances-status small" role="status">Connect a wallet to see its approvals.</p>
+          <ul class="allowances"></ul>
+          <p class="buttons allowances-all" hidden>
+            <button type="button" class="reset-all secondary">Reset all</button>
+          </p>
+        </details>
+
+        <details class="fold" data-section="check">
+          <summary>Check it</summary>
+          <h3>The swappers</h3>
+          <p>
+            One for each output, all of the same code, ImmutableSwapper. Its sources are verified, with an exact match,
+            on Basescan and on
+            <a href="https://repo.sourcify.dev/8453/0x31791f453d2100e728E012c9e189C0828adf4b6F">Sourcify</a>.
+          </p>
+          <ul>
+            <li>
+              Into USDC:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0x31791f453d2100e728E012c9e189C0828adf4b6F#code"
+                  >0x31791f453d2100e728E012c9e189C0828adf4b6F</a
+                ></code
+              >, code hash
+              <code translate="no">0x8d6d7ae768e36b4642c1b2d83afc4411053ef918cc78a6fa372f7b694386970b</code>
+            </li>
+            <li>
+              Into EURC:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E#code"
+                  >0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E</a
+                ></code
+              >, code hash
+              <code translate="no">0xb51455b03682699694ae84a9ee17f1fa52cef8f57100d19a684226069f23be2e</code>
+            </li>
+            <li>
+              Into WETH:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0xe5cbD828c2227E17f7FF8BD54C7A1e6012694Ff2#code"
+                  >0xe5cbD828c2227E17f7FF8BD54C7A1e6012694Ff2</a
+                ></code
+              >, code hash
+              <code translate="no">0xf58e0a14f707b542c5eae6af6929b28e4214e723543c617c29444541207261c8</code>
+            </li>
+            <li>
+              Into cbBTC:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0#code"
+                  >0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0</a
+                ></code
+              >, code hash
+              <code translate="no">0xce9c5630b7243cbe9cbcbef1704c888e376d45f1889197ffc7d5ad6704c2ed69</code>
+            </li>
+            <li>
+              Into AERO:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0xdd575A498C625AF96ac89efE578Dc68f4c9aB963#code"
+                  >0xdd575A498C625AF96ac89efE578Dc68f4c9aB963</a
+                ></code
+              >, code hash
+              <code translate="no">0xb0f28d588145fa5aef5f44eab97bf0e7f891e60499179b72540cbaa6f80b31d1</code>
+            </li>
+            <li>
+              Into HYDX:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC#code"
+                  >0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC</a
+                ></code
+              >, code hash
+              <code translate="no">0xfa9d0e728d29ee86a2762db1ff2d017b0779fcc73fff68e5a4a62301e1785c5d</code>
+            </li>
+          </ul>
+          <h3>The exchanges</h3>
+          <p>
+            Each hop names its exchange and its pool, and the swapper checks the pool against that exchange's factory,
+            in this order:
+          </p>
+          <ul class="factories">
+            <li>
+              0. Hydrex, Algebra pools:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E"
+                  >0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E</a
+                ></code
+              >
+            </li>
+            <li>
+              1. Hydrex, classic pools:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0"
+                  >0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0</a
+                ></code
+              >
+            </li>
+            <li>
+              2. Aero, volatile pools:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0x8E6a9FCd1d638CC760Ffba397605Fe3355dE76D2"
+                  >0x8E6a9FCd1d638CC760Ffba397605Fe3355dE76D2</a
+                ></code
+              >
+            </li>
+            <li>
+              3. Aero, stable pools:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0x78589E876edcEbdce72ee3436ab3c9AD3a7cEF2D"
+                  >0x78589E876edcEbdce72ee3436ab3c9AD3a7cEF2D</a
+                ></code
+              >
+            </li>
+            <li>
+              4. Aero, Slipstream:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0x9CB220581b91b0C83223012FE69688b92aD07a76"
+                  >0x9CB220581b91b0C83223012FE69688b92aD07a76</a
+                ></code
+              >
+            </li>
+            <li>
+              5. Aerodrome, classic pools:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0x420DD381b31aEf6683db6B902084cB0FFECe40Da"
+                  >0x420DD381b31aEf6683db6B902084cB0FFECe40Da</a
+                ></code
+              >
+            </li>
+            <li>
+              6. Aerodrome, Slipstream:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A"
+                  >0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A</a
+                ></code
+              >
+            </li>
+            <li>
+              7. Aerodrome, Slipstream 2:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a"
+                  >0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a</a
+                ></code
+              >
+            </li>
+            <li>
+              8. Aerodrome, Slipstream 3:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef"
+                  >0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef</a
+                ></code
+              >
+            </li>
+            <li>
+              9. Uniswap v2:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6"
+                  >0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6</a
+                ></code
+              >
+            </li>
+            <li>
+              10. Uniswap v3:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0x33128a8fC17869897dcE68Ed026d694621f6FDfD"
+                  >0x33128a8fC17869897dcE68Ed026d694621f6FDfD</a
+                ></code
+              >
+            </li>
+            <li>
+              11. Uniswap v4, its PoolManager:
+              <code translate="no"
+                ><a href="https://basescan.org/address/0x498581fF718922c3f8e6A244956aF099B2652b2b"
+                  >0x498581fF718922c3f8e6A244956aF099B2652b2b</a
+                ></code
+              >
+            </li>
+          </ul>
+          <h3>What the page checks</h3>
+          <p>Before it offers swaps into an output, and every hour while it is open, the page checks on Base that:</p>
+          <ul class="checks">
+            <li data-check="chain">the RPC it reads from serves Base;</li>
+            <li data-check="swap-code">each swapper runs the code above;</li>
+            <li data-check="swap-output">it pays in its output token;</li>
+            <li data-check="swap-treasury">its fee goes to the 2-of-3 Safe in the fee facts;</li>
+            <li data-check="swap-fee">its fee is 1%;</li>
+            <li data-check="swap-exchanges">and its exchanges are the twelve factories above, in that order.</li>
+          </ul>
+          <p>
+            If a check fails, swaps into that output stay off, and the page marks it here. Resetting an approval works.
+          </p>
+          <h3>How the routes are found</h3>
+          <p>
+            The swapper never picks a route, so the page does, from the factories. For each token, it tries the output
+            straight, or through WETH, USDC or cbBTC, and HYDX for Hydrex's tokens. For each hop, it asks every factory
+            for its pools of the two tokens: Uniswap v3's four fee tiers, v4's standard pools without hooks, and every
+            tick spacing of each Slipstream. It quotes each with the swapper's own <code translate="no">quote</code>,
+            keeps the best, net of gas, then runs the approvals and the swap through
+            <code translate="no">eth_simulateV1</code> before your wallet asks.
+          </p>
+          <h3>How a quote can differ from the swap</h3>
+          <p>
+            A quote prices each route against the pools as they are, so two routes through one pool are each priced as
+            if first; the simulation catches that. Prices move between the quote and the swap, and Aero's classic pools
+            add their tax above a tip of 1 gwei. The minimum caps the loss: a route that would pay less is skipped, and
+            its token stays in your wallet.
+          </p>
+          <h3>Swapping without this page</h3>
+          <p>
+            On Basescan, call <code translate="no">approve(spender, amount)</code> on each token, with the swapper's
+            address, then <code translate="no">swap(routes, deadline, skipFailed)</code> on the swapper, under Write
+            Contract. Each route names the token, the amount, the least to receive after the 1%, and its hops: the
+            exchange's number above, the pool, the token out, and Uniswap's fee and tick spacing.
+          </p>
+          <h3>For co-signers</h3>
+          <p>
+            A Safe transaction from this page approves each token for exactly what it sells, to the swapper of the
+            output, then calls that swapper's <code translate="no">swap</code>, with a deadline a day later, so that a
+            route that falls below its minimum while you sign is skipped. What it fetches, less 1%, comes back to the
+            Safe. In Safe{Wallet}, check that each approval names one of the swappers above, and that the swap goes to
+            the same one.
+          </p>
+        </details>
+      </div>
+
       <div class="view" data-view="about" data-title="About · metaDEX Café" hidden>
         <h1 tabindex="-1">About</h1>
         <p class="lead">
-          metaDEX Café is a page for joining and leaving automations with your Hydrex accounts. It is independent: not
-          Hydrex's, not Dromos's. It names no operator, and asks you to trust no one: what it shows is read from Base.
+          metaDEX Café is a page for looking after your Hydrex accounts and swapping tokens on Base, from your own
+          wallet. It is independent: not Hydrex's, not Dromos's. It names no operator, and asks you to trust no one:
+          what it shows is read from Base.
         </p>
         <section aria-labelledby="about-address">
           <h2 id="about-address">The official address</h2>
@@ -994,7 +1435,8 @@
             It has no server and stores nothing. It asks your wallet nothing until you pick it, and then only for
             transactions you confirm, never for signatures. Everything it shows comes from Base, through public RPCs:
             <code translate="no">mainnet.base.org</code>, <code translate="no">base.drpc.org</code> and
-            <code translate="no">base-rpc.publicnode.com</code>.
+            <code translate="no">base-rpc.publicnode.com</code>. It never sells a token you did not tick, and shows each
+            route before your wallet asks.
           </p>
         </section>
         <section data-section="check" aria-labelledby="about-check">
@@ -1008,15 +1450,16 @@
           <h2 id="about-safe" tabindex="-1">From a Safe</h2>
           <p>
             In Safe{Wallet}, add <code translate="no">https://metadex.cafe/</code> as a custom Safe App. The page
-            proposes one Safe transaction for all the accounts, and the Safe's owners sign it in Safe{Wallet}. Each
-            automation's "Check it" says what its calls do, for the co-signers.
+            proposes one Safe transaction for all the calls, a swap's approvals included, and the Safe's owners sign it
+            in Safe{Wallet}. Each product's "Check it" says what its calls do, for the co-signers.
           </p>
         </section>
         <section aria-labelledby="about-gone">
           <h2 id="about-gone">If this page goes away</h2>
           <p>
             Your accounts stay as they are, and the automations go on. Leaving is one call on Hydrex's VotingEscrow,
-            which any contract interface, such as Basescan's, can make.
+            which any contract interface, such as Basescan's, can make. Your tokens stay in your wallet. Approvals can
+            be reset on each token's contract, and the swappers called from Basescan.
           </p>
         </section>
         <section data-section="figures" aria-labelledby="about-figures">
@@ -1045,6 +1488,15 @@
             <li>
               <b>What waits to be claimed</b> is a floor: the page reads an account's rewards in the pools its
               automation voted for last epoch, and no others.
+            </li>
+            <li>
+              <b>Swap quotes</b> are the swapper's own <code translate="no">quote</code>, route by route, then the
+              approvals and the swap run together through <code translate="no">eth_simulateV1</code>. A token is ticked
+              when its quote is worth twice its gas, at Base's gas price and Chainlink's ETH / USD.
+            </li>
+            <li>
+              <b>The price check:</b> a quote more than 2% under the page's own price for the token, its average over
+              the last half hour in Hydrex's pools as above, says so, with both figures.
             </li>
           </ul>
         </section>
@@ -1079,7 +1531,7 @@
     <template id="wallet-picker">
       <div class="wallets">
         <p class="buttons wallet-buttons"></p>
-        <p>Pick your wallet to see your Hydrex accounts. It is asked nothing else until you confirm a change.</p>
+        <p>Pick your wallet to see your accounts and tokens. It is asked nothing else until you confirm a call.</p>
         <p class="connecting" role="status" hidden>
           Waiting for <bdi class="connecting-wallet" translate="no"></bdi> to answer…
         </p>
@@ -1127,25 +1579,13 @@
         <dl class="fields">
           <div>
             <dt>To</dt>
-            <dd><code class="to" translate="no"></code><br /><span class="on"></span></dd>
+            <dd><code class="to" translate="no"></code><br /><span class="on under"></span></dd>
           </div>
           <div>
             <dt>Call</dt>
-            <dd><code translate="no">setConduitApproval</code></dd>
+            <dd><code class="function" translate="no"></code></dd>
           </div>
-          <div>
-            <dt>Conduit</dt>
-            <dd><code class="conduit" translate="no"></code><br /><span class="conduit-name"></span></dd>
-          </div>
-          <div>
-            <dt>Account</dt>
-            <dd><code class="account" translate="no"></code></dd>
-          </div>
-          <div>
-            <dt>Approve</dt>
-            <dd><code class="approve" translate="no"></code></dd>
-          </div>
-          <div>
+          <div class="value-row">
             <dt>Value</dt>
             <dd><code translate="no">0</code> ETH</dd>
           </div>
@@ -1164,6 +1604,12 @@
           <p class="check"><a class="check-calls">How to check these calls</a> <span class="label">On Base</span></p>
         </div>
       </li>
+    </template>
+    <template id="field">
+      <div>
+        <dt></dt>
+        <dd></dd>
+      </div>
     </template>
 
     <template id="join-before">
@@ -1440,6 +1886,7 @@
           The page stopped after <span class="receipt-limit"></span> blocks of claims. Older claims of this epoch are
           not shown.
         </p>
+        <p class="receipt-swap" data-own-only><a class="swap-these" href="#swap">Swap these into one token</a></p>
       </article>
     </template>
     <template id="claim-line">
@@ -1458,6 +1905,217 @@
         <td class="share"></td>
         <td class="usd"></td>
       </tr>
+    </template>
+
+    <template id="output-choice">
+      <label class="output-choice"
+        ><input type="radio" name="output" /> <code class="output-symbol" translate="no"></code
+        ><span class="output-off" hidden> (off)</span></label
+      >
+    </template>
+    <template id="swap-row">
+      <li>
+        <label>
+          <input type="checkbox" class="pick" />
+          <span class="about">
+            <b><code class="swap-symbol" translate="no"></code></b> <span class="swap-amount"></span
+            ><span class="swap-fetches"></span><br /><span class="small swap-route"></span
+            ><span class="swap-lookalike small" hidden
+              ><br /><span class="shape stopped" aria-hidden="true"></span>Not the
+              <code class="swap-like" translate="no"></code> you may know: its address is its own.</span
+            ><span class="swap-check small" hidden
+              ><br /><span class="shape stopped" aria-hidden="true"></span><span class="swap-check-words"></span></span
+            ><br /><span class="small"
+              ><code translate="no"><a class="swap-address"></a></code
+            ></span>
+          </span>
+        </label>
+      </li>
+    </template>
+    <template id="allowance">
+      <li class="allowance">
+        <span
+          ><code class="allowance-symbol" translate="no"></code> <span class="allowance-amount"></span>, to the
+          <span class="allowance-swapper"></span> swapper</span
+        >
+        <button type="button" class="reset secondary">Reset</button>
+      </li>
+    </template>
+    <template id="swap-before">
+      <ul class="swap-lines"></ul>
+      <dl class="lines swap-figures">
+        <div>
+          <dt>Fetched</dt>
+          <dd class="value swap-fetched"></dd>
+        </div>
+        <div>
+          <dt>Swap's 1%</dt>
+          <dd class="value swap-fee"></dd>
+          <dd class="detail">To the 2-of-3 Safe set in the swapper's code</dd>
+        </div>
+      </dl>
+      <dl class="total swap-figures">
+        <div>
+          <dt>Reaches you</dt>
+          <dd class="value swap-paid"></dd>
+          <dd class="detail swap-least"></dd>
+        </div>
+      </dl>
+      <p class="swap-simulated small"></p>
+      <p class="swap-skips notice" hidden></p>
+      <p class="small">
+        Gas: <span class="swap-gas"></span>. A quote cannot see what Hydrex's and Aero's admins may change before the
+        swap, nor the tax Aero's classic pools add above a tip of 1 gwei.
+        <span class="swap-tip">The page asks your wallet for a tip of at most 1 gwei, where your wallet lets it.</span>
+      </p>
+      <p class="swap-safe small" hidden>
+        From a Safe, the swap's deadline is a day away: a route that falls below its minimum while the owners sign is
+        skipped, and its token stays in the Safe.
+      </p>
+    </template>
+    <template id="swap-line">
+      <li>
+        <b><code class="line-symbol" translate="no"></code></b> <span class="line-amount"></span> ·
+        <span class="line-fetches"></span><br /><span class="small line-route"></span
+        ><span class="small line-skip" hidden
+          ><br /><span class="shape stopped" aria-hidden="true"></span><span class="line-skip-words"></span
+        ></span>
+      </li>
+    </template>
+    <template id="swap-receipt">
+      <article class="slip receipt">
+        <p class="receipt-name">metaDEX Café</p>
+        <p class="label">Receipt · swap into <span class="swap-receipt-output"></span></p>
+        <dl class="lines">
+          <div>
+            <dt>Sold</dt>
+            <dd class="value swap-receipt-sold"></dd>
+            <dd class="detail swap-receipt-tokens"></dd>
+          </div>
+          <div>
+            <dt>Fetched</dt>
+            <dd class="value swap-receipt-fetched"></dd>
+          </div>
+          <div>
+            <dt>Fee 1%</dt>
+            <dd class="value swap-receipt-fee"></dd>
+            <dd class="detail">To the 2-of-3 Safe set in the swapper's code</dd>
+          </div>
+        </dl>
+        <dl class="total">
+          <div>
+            <dt>Paid to you</dt>
+            <dd class="value swap-receipt-paid"></dd>
+          </div>
+        </dl>
+        <ul class="swap-receipt-skipped"></ul>
+      </article>
+    </template>
+    <template id="swap-skipped">
+      <li>
+        <span
+          ><code class="skipped-symbol" translate="no"></code> stayed in your wallet:
+          <span class="skipped-reason"></span>. Its approval stays.</span
+        >
+        <button type="button" class="reset secondary">Reset its approval</button>
+      </li>
+    </template>
+
+    <template id="need">
+      <li class="need">
+        <span class="shape" aria-hidden="true"></span
+        ><span class="need-body"
+          ><span class="need-words"></span> <a class="need-link" hidden></a
+          ><button type="button" class="need-button secondary" hidden></button
+        ></span>
+      </li>
+    </template>
+    <template id="allows-account">
+      <li class="allowance">
+        <span class="allows-words"></span>
+        <button type="button" class="allows-undo secondary">Leave</button>
+      </li>
+    </template>
+    <template id="claim-before">
+      <p class="small claim-where"></p>
+      <ul class="claim-tokens"></ul>
+      <details class="claim-more" hidden>
+        <summary class="claim-more-summary"></summary>
+        <ul class="claim-rest"></ul>
+      </details>
+      <dl class="lines">
+        <div>
+          <dt>Earned</dt>
+          <dd class="value claim-earned"></dd>
+        </div>
+        <div>
+          <dt>AutoMaxi's 1%</dt>
+          <dd class="value claim-fee"></dd>
+          <dd class="detail">To AutoMaxi's treasury, a 2-of-3 Safe set in its code</dd>
+        </div>
+      </dl>
+      <dl class="total">
+        <div>
+          <dt>Reaches you</dt>
+          <dd class="value claim-paid"></dd>
+        </div>
+      </dl>
+      <fieldset class="receive">
+        <legend class="label">Receive them</legend>
+        <p>
+          <label
+            ><input type="radio" name="receive" value="as" checked /> As they are, in <span class="claim-count"></span
+          ></label>
+        </p>
+        <p>
+          <label><input type="radio" name="receive" value="into" /> Into</label>
+          <label
+            ><span class="visually-hidden">The token to receive</span
+            ><select class="claim-output"></select></label
+          >: <span class="claim-into">finding routes…</span>
+        </p>
+      </fieldset>
+      <p class="small claim-gas"></p>
+    </template>
+    <template id="claim-token">
+      <li>
+        <code class="claim-symbol" translate="no"></code> <span class="claim-amount"></span>
+        <span class="claim-usd small"></span>
+      </li>
+    </template>
+    <template id="claim-receipt">
+      <article class="slip receipt">
+        <p class="receipt-name">metaDEX Café</p>
+        <p class="label">Receipt · <span class="claim-receipt-id"></span> · AutoMaxi</p>
+        <dl class="lines">
+          <div>
+            <dt>Claimed</dt>
+            <dd class="value claim-receipt-usd"></dd>
+            <dd class="detail claim-receipt-claimed"></dd>
+          </div>
+          <div>
+            <dt>Fee 1%</dt>
+            <dd class="detail claim-receipt-fee"></dd>
+            <dd class="detail">To AutoMaxi's treasury, a 2-of-3 Safe set in its code</dd>
+          </div>
+        </dl>
+        <dl class="total">
+          <div>
+            <dt>Paid to you</dt>
+            <dd class="detail claim-receipt-paid"></dd>
+          </div>
+        </dl>
+        <p class="claim-receipt-keeper small" hidden>
+          Nothing came in this claim: AutoMaxi's keeper claimed first, and its claim paid you. This one still cost its
+          gas.
+        </p>
+      </article>
+    </template>
+    <template id="claim-next">
+      <p class="buttons">
+        <button type="button" class="claim-swap-next">Review the swap</button>
+        <a class="button secondary claim-swap-these" href="#swap">Swap these into one token</a>
+      </p>
     </template>
 
     <template id="check-failed"

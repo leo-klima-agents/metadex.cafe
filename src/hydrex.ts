@@ -21,6 +21,7 @@ import {
 import { WEEK, clean, list, weekStart } from "./format.ts";
 import conduits from "./hydrex-conduits.json" with { type: "json" };
 import { feedAt } from "./prices.ts";
+import type { Slip } from "./review.ts";
 import type { Tx } from "./wallet.ts";
 
 const votingEscrowAbi = parseAbi([
@@ -153,15 +154,7 @@ export type Status =
 export type Group = "needs" | `in:${Kind}` | "other" | "closed";
 
 // `automation` is set only when the call is about another of Hydrex's automations.
-export type Step = Tx & {
-  says: string;
-  on: string;
-  id: bigint;
-  approve: boolean;
-  conduit: Address;
-  conduitName: string;
-  automation?: string;
-};
+export type Step = Slip & { id: bigint; approve: boolean; conduit: Address; conduitName: string; automation?: string };
 
 // Epochs follow the calendar. Hydrex's Voter moves its own epoch only once someone calls the minter, but joins count
 // from the next Thursday either way.
@@ -371,6 +364,7 @@ export function groupOf(account: Account, status: Status, automations: Automatio
 type Target = { address: Address; name: string };
 
 function approval({ id }: Account, approve: boolean, says: string, target: Target, other = false): Step {
+  const conduitName = other ? `The ${target.name} automation` : target.name;
   return {
     to: VOTING_ESCROW,
     data: encodeFunctionData({
@@ -378,12 +372,24 @@ function approval({ id }: Account, approve: boolean, says: string, target: Targe
       functionName: "setConduitApproval",
       args: [target.address, id, approve],
     }),
-    says: `#${id} ${says}`,
-    on: "Hydrex's VotingEscrow",
     id,
     approve,
     conduit: target.address,
-    conduitName: other ? `The ${target.name} automation` : target.name,
+    conduitName,
+    says: `#${id} ${says}`,
+    on: "Hydrex's VotingEscrow",
+    call: "setConduitApproval",
+    fields: [
+      {
+        label: "Conduit",
+        name: "conduit",
+        code: target.address,
+        under: conduitName,
+      },
+      { label: "Account", name: "account", code: String(id) },
+      { label: "Approve", name: "approve", code: String(approve) },
+    ],
+    note: `The selector, then each 32-byte word on two lines: the conduit, ${id} as ${id.toString(16)}, and ${approve} as ${Number(approve)}.`,
     ...(other && { automation: target.name }),
   };
 }

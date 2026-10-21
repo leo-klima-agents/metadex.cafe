@@ -1,8 +1,9 @@
 # metaDEX Café
 
 metaDEX Café is a static web page at <https://metadex.cafe/>. It lets owners of Hydrex accounts on Base join or leave
-Carbon Impact, Hydrex's automation, and AutoMaxi, an automation nobody controls. Hydrex's contracts call automations
-"conduits".
+Carbon Impact, Hydrex's automation, and AutoMaxi, an automation nobody controls, and claim AutoMaxi's rewards when its
+keeper is late. It also swaps many tokens on Base into one, through ImmutableSwapper. Hydrex's contracts call
+automations "conduits".
 
 The page has no server. It reads Base through public RPCs and asks the visitor's wallet to send transactions. It holds
 no keys and stores nothing.
@@ -23,10 +24,33 @@ This README is for whoever runs the site. The design and the plan are in [design
 - **Before anyone can join, the page checks** the chain, each automation's code, Carbon Impact's settings, and the code
   of Hydrex's VotingEscrow against `src/config.ts`. If a check fails, joining that automation is turned off, and the
   page marks the check on that automation's page, under Check it. Leaving always works. The checks run again every hour.
-  Until there is code at AutoMaxi's address, the page leaves AutoMaxi out.
-- Home says what the page is, in a line, and leads to the App (`#app`). The App starts with the wallet's accounts, in
-  groups: those that need their owner, those in each automation, and the others. Then the menu: each automation, and
-  voting yourself, with what each takes and what it paid last epoch.
+  Until there is code at AutoMaxi's address, the page leaves AutoMaxi out. The swappers' checks are in `src/swap.ts`.
+- **Claiming** is `claim(tokenId, feeAddresses, bribeAddresses, tokens)` on AutoMaxi, which anyone can call for any
+  account in it, and which pays the owner, less 1%. AutoMaxi's keeper claims for every member right after each epoch, so
+  the page offers it only for the wallet's own accounts, once a payout is overdue: half a day after the flip with
+  something waiting, or a full epoch late. It passes only the contracts and tokens that `earned()` finds owing, in last
+  epoch's pools, and the epoch before's when the keeper missed it too. The review offers the rewards as they are, or
+  swapped into one token.
+- **Swapping** goes through `ImmutableSwapper`, deployed once per output token: USDC, EURC, WETH, cbBTC, AERO and HYDX.
+  Each `swap(routes, deadline, skipFailed)` sells the tokens named, each along a route of one to three hops the caller
+  picks, through pools of Hydrex, Aero, Aerodrome and Uniswap that it checks against each exchange's factory, and sends
+  1% of each route's output to the same 2-of-3 Safe as AutoMaxi's fee. The page finds the wallet's tokens among those it
+  knows (`src/base-tokens.json`, the six outputs, Hydrex's reward tokens, and any added by address), finds each route
+  from the twelve factories, quotes it with the swapper's own `quote`, sets each minimum 0.5% under its quote, and runs
+  the approvals and the swap through `eth_simulateV1` before the wallet asks. Each approval is exact. A route below its
+  minimum is skipped, and its token stays in the wallet, with its approval, which the page offers to reset.
+- **Batching:** where the wallet answers EIP-5792's `wallet_getCapabilities`, the page sends all the calls of a review
+  in one prompt with `wallet_sendCalls`, all or nothing where it can. From a Safe, one Safe transaction. Otherwise one
+  prompt per call; the swap is then quoted again before the wallet asks for it, and never with a lower minimum.
+- Home says what the page does, in a line, and leads to the App (`#app`). The App starts with what needs you across the
+  products, each with one action: an account in a stopped automation, an overdue payout, approvals left to the swappers.
+  Then the products, each with what you hold in it: the Hydrex automations (`#hydrex`) and the swap (`#swap`). A fold,
+  What this wallet allows, lists every approval this wallet gave the café's contracts, with the call that undoes it.
+- `#hydrex` starts with the wallet's accounts, in groups: those that need their owner, those in each automation, and the
+  others. Then the menu: each automation, and voting yourself, with what each takes and what it paid last epoch.
+- `#swap` takes the output from its address, `#swap/weth`, USDC by default, then lists the wallet's tokens, each with
+  its route and what it fetches, ticked when the quote is worth twice its gas. Its folds: fee facts, who controls what,
+  the approvals given to the swappers, and Check it, such as `#swap/weth/check`.
 - Each automation has a page, `#hydrex/carbon-impact` and `#hydrex/automaxi`, with its six fee facts and a way to join.
   Its technical parts are folded at its foot: how it did against all of Hydrex, joining and leaving, who controls what,
   and Check it. A fold has an address of its own, such as `#hydrex/carbon-impact/check`.
@@ -37,6 +61,10 @@ This README is for whoever runs the site. The design and the plan are in [design
   then the calls. About (`#about`) holds the page's own facts, and how its figures are read.
   [design/audit.md](design/audit.md) says why the page is laid out so.
 - Inside Safe{Wallet}, it proposes all the calls as one Safe transaction.
+
+Nobody controls the swappers either: their code fixes the fee, 1% of each route's output, the Safe it goes to, the
+output and the twelve factories, and the page checks all of them, and each swapper's code hash, before it offers swaps
+into its output.
 
 One admin key controls Carbon Impact. It can change the share retired (up to 100%), the fee (up to 1%), the payout
 tokens, the swap routers, any owner's payout address, and who claims and votes for it. The page always shows the
@@ -97,6 +125,11 @@ in `src/hydrex.ts`:
 | `automaxi-approvals`: what joining approves   | AutoMaxi's      | `getConduitApprovalConfig` on the VotingEscrow, for AutoMaxi.                             |
 | `upgrade`: the VotingEscrow                   | Both pages      | The VotingEscrow's implementation, or its code.                                           |
 | `logic`: its approval logic                   | Both pages      | `approvalLogic()` on the VotingEscrow, or its code.                                       |
+| `swap-code`: a swapper's code                 | The swap's      | The code at that output's swapper. Swaps into that output turn off.                       |
+| `swap-output`: its output token               | The swap's      | `outputToken()` on that swapper.                                                          |
+| `swap-treasury`: where its fee goes           | The swap's      | `TREASURY()` on that swapper.                                                             |
+| `swap-fee`: its fee                           | The swap's      | `FEE_BPS()` on that swapper.                                                              |
+| `swap-exchanges`: its twelve factories        | The swap's      | `exchanges()` on that swapper, against `EXCHANGES` in `src/config.ts`.                    |
 
 Read what changed, and decide whether the page should trust it. If it should, update `src/config.ts`, run the tests and
 release. These [Foundry](https://getfoundry.sh/) commands print the values that `src/config.ts` holds:
@@ -122,6 +155,14 @@ done
 
 When Hydrex adds or removes automations, update `src/hydrex-conduits.json` from <https://api.hydrex.fi/conduits>. If
 Hydrex lists AutoMaxi, the page still treats it as its own.
+
+The swappers were deployed on 21 Oct 2026, from block 52,894,916. Each one's code hash, in `src/config.ts`, is the one
+its sources record, and `cast keccak $(cast code $SWAPPER --rpc-url $RPC)` prints it. Their sources are verified, with
+an exact match, on Basescan and Sourcify, which the page links to, and name no author and no repository.
+
+The page's list of tokens, `src/base-tokens.json`, lives in the repository, so that the build stays reproducible, and is
+kept by hand. `node scripts/tokens.ts` checks each token's symbol and decimals against Base; `--add 0x…` adds one, and
+`--write` writes Base's answers back.
 
 AutoMaxi is version 2 of `ImmutableVeTokenConduit`, from <https://github.com/ldeso/hydrex-conduit> at tag `v2`, commit
 `718c107`. It was deployed on 20 Oct 2026, in block 52,854,750, through the CREATE2 deployer. The command above prints
@@ -167,6 +208,13 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   minutes, with one read per account, and reads the payouts again once one has been paid; then not until the next epoch.
 - **A late payout.** An account is late when it voted with an automation two epochs ago and has not been paid for that
   epoch yet. Its rewards wait in Hydrex's reward contracts until someone claims them, for up to 50 epochs.
+- **An overdue payout in AutoMaxi.** Half a day after the flip, an account whose payout has not come and that has
+  something waiting is overdue: its page, the AutoMaxi group and the App's Needs you offer to claim it. If the keeper's
+  claim lands first, the page's claim receives nothing, and its receipt says so; it still costs its gas.
+- **A token the swap skipped.** Its route would have fetched less than its minimum, or its token refused the transfer.
+  It stays in the wallet with its approval; the receipt, Needs you and the swap's Approvals fold offer to reset it.
+- **A quote far under the page's own price.** The row says so, with both figures: the swapper's sources ask holders to
+  check quotes through Hydrex's Algebra and Aero's Slipstream pools against another price.
 - **Paid, or claimed in part.** An epoch counts as paid once claims since it ended took more than half of what its
   rewards were worth, at last epoch's prices. A claim of a few small rewards, such as anyone may make through AutoMaxi,
   does not count, and tokens a payout leaves out, such as those that cannot be swapped, do not keep it from counting.
@@ -194,6 +242,11 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   before the epoch ended, in Hydrex's pools, with Chainlink for WETH and cbBTC. A token without a deep enough pool
   counts as nothing.
 - Only the admin key, or a call from the owner's own address made elsewhere, can change a payout address.
+- The swap knows only the tokens on its list, Hydrex's reward tokens, those added by address, and those a wallet lists
+  with ERC-7811's `wallet_getAssets`: no RPC lists a wallet's tokens. Routes pass through WETH, USDC, cbBTC and HYDX
+  only, and each hop takes the best pool for what the hop before paid, which is not always the best route as a whole.
+  Aero's classic pools win a hop only by more than 1%: above a tip of 1 gwei, they add a tax that a quote does not see.
+- Swaps never take or give native ETH: WETH is not ETH.
 
 ## Development
 
@@ -207,33 +260,38 @@ npm run format  # before committing
 npm run build   # writes the page to dist/
 ```
 
-`npm run test:fork` builds the page, then runs it in Chromium against a fork of Base in anvil, with real accounts:
-joining, leaving, a Safe, the views, the accounts' pages, and what can fail. It needs [anvil](https://getfoundry.sh/)
-and Chromium (`npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium binary). `BASE_RPC_URL` is the
-archive RPC to fork from, and `SCREENSHOTS` an optional folder for screenshots. It takes about twenty minutes.
+`npm run test:fork` builds the page, then runs it in Chromium against two forks of Base in anvil, with real accounts:
+joining, leaving, a Safe, the views, the accounts' pages, and what can fail; then, after the swappers' deployment, a
+swap with a token skipped and its approval reset, a swapper whose checks fail, and a claim, as it is and swapped. It
+needs [anvil](https://getfoundry.sh/) and Chromium (`npx playwright-core install chromium`, or set `CHROMIUM` to a
+Chromium binary). `BASE_RPC_URL` is the archive RPC to fork from, and `SCREENSHOTS` an optional folder for screenshots.
+It takes about twenty minutes.
 
 CI runs Prettier, the type check, the unit tests, `reuse lint` and the build. It then builds again from a fresh clone
 and checks that both builds are the same. With `BASE_RPC_URL` set, it also runs the browser tests. Dependabot updates
 the pinned Actions and npm packages every week.
 
-| Path                                                    | What it holds                                                                                                                                                                 |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html`                                            | The page. Its views are Home, the App (`#app`), a page per automation (`#hydrex/carbon-impact`, `#hydrex/automaxi`), an account's page (`#hydrex/9540`) and About (`#about`). |
-| `style.css`, `fonts/`                                   | Styles and fonts.                                                                                                                                                             |
-| `src/config.ts`                                         | What the page trusts: contract addresses and code hashes, the RPCs, and the price anchors.                                                                                    |
-| `src/hydrex-conduits.json`                              | Hydrex's automations, as <https://api.hydrex.fi/conduits> lists them.                                                                                                         |
-| `src/main.ts`                                           | Startup, the wallet connection, the accounts, and an account's page.                                                                                                          |
-| `src/review.ts`                                         | The review that shows each call before the wallet asks.                                                                                                                       |
-| `src/last-epoch.ts`, `src/earnings.ts`, `src/prices.ts` | What votes earned last epoch, and token prices.                                                                                                                               |
-| `src/last-payout.ts`, `src/receipts.ts`                 | Payouts: up to when each account was paid, what waits, and its last receipt.                                                                                                  |
-| `src/claims.ts`                                         | AutoMaxi's claims, read back from the last one.                                                                                                                               |
-| `src/hydrex.ts`                                         | Hydrex's contracts: reads, account statuses, the calls, and the checks.                                                                                                       |
-| `src/chain.ts`, `src/wallet.ts`                         | RPC requests, and wallets.                                                                                                                                                    |
-| `src/routes.ts`, `src/views.ts`                         | The page's addresses, and the view each shows.                                                                                                                                |
-| `src/dom.ts`, `src/format.ts`                           | Page helpers, and number and date formats.                                                                                                                                    |
-| `test/`, `fork/page.ts`                                 | Unit tests, and the browser tests.                                                                                                                                            |
-| `fork/fixtures/`                                        | AutoMaxi's init code, for the browser tests to deploy it on the fork.                                                                                                         |
-| `scripts/`                                              | The build; `fonts.py` makes `fonts/`, and `icons.ts` draws the icons from `icon.svg`.                                                                                         |
+| Path                                                    | What it holds                                                                                                                                                                                             |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.html`                                            | The page. Its views are Home, the App (`#app`), the Hydrex accounts (`#hydrex`), a page per automation (`#hydrex/automaxi`), an account's page (`#hydrex/9540`), the swap (`#swap`) and About (`#about`). |
+| `style.css`, `fonts/`                                   | Styles and fonts.                                                                                                                                                                                         |
+| `src/config.ts`                                         | What the page trusts: contract addresses and code hashes, the RPCs, and the price anchors.                                                                                                                |
+| `src/hydrex-conduits.json`                              | Hydrex's automations, as <https://api.hydrex.fi/conduits> lists them.                                                                                                                                     |
+| `src/main.ts`                                           | Startup, the wallet connection, the App, the accounts, and an account's page.                                                                                                                             |
+| `src/swap.ts`, `src/swap-calls.ts`, `src/swap-view.ts`  | The swap: candidate pools, quotes, minimums and simulation; its calls; and its page.                                                                                                                      |
+| `src/tokens.ts`, `src/base-tokens.json`                 | The tokens the page knows, and their balances and approvals.                                                                                                                                              |
+| `src/claim.ts`, `src/claim-view.ts`                     | Claiming through AutoMaxi: the calls from what `earned` found, and the review.                                                                                                                            |
+| `src/review.ts`                                         | The review that shows each call before the wallet asks.                                                                                                                                                   |
+| `src/last-epoch.ts`, `src/earnings.ts`, `src/prices.ts` | What votes earned last epoch, and token prices.                                                                                                                                                           |
+| `src/last-payout.ts`, `src/receipts.ts`                 | Payouts: up to when each account was paid, what waits, and its last receipt.                                                                                                                              |
+| `src/claims.ts`                                         | AutoMaxi's claims, read back from the last one.                                                                                                                                                           |
+| `src/hydrex.ts`                                         | Hydrex's contracts: reads, account statuses, the calls, and the checks.                                                                                                                                   |
+| `src/chain.ts`, `src/wallet.ts`                         | RPC requests, and wallets.                                                                                                                                                                                |
+| `src/routes.ts`, `src/views.ts`                         | The page's addresses, and the view each shows.                                                                                                                                                            |
+| `src/dom.ts`, `src/format.ts`                           | Page helpers, and number and date formats.                                                                                                                                                                |
+| `test/`, `fork/page.ts`                                 | Unit tests, and the browser tests.                                                                                                                                                                        |
+| `fork/fixtures/`                                        | AutoMaxi's init code, for the browser tests to deploy it on the fork.                                                                                                                                     |
+| `scripts/`                                              | The build; `fonts.py` makes `fonts/`, `icons.ts` draws the icons from `icon.svg`, and `tokens.ts` checks the list of tokens.                                                                              |
 
 ## License
 

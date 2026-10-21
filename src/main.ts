@@ -7,6 +7,7 @@ import {
   AUTOMAXI_FEE_BPS,
   CARBON_IMPACT,
   CHAIN_ID,
+  SWAPPERS,
   byKind,
   type Automation,
   type Kind,
@@ -19,6 +20,7 @@ import {
   date,
   day,
   earningPower,
+  figure,
   list,
   short,
   toEarningPower,
@@ -69,9 +71,12 @@ import {
   perThousandOf,
   showAbsent,
 } from "./last-epoch.ts";
-import { payouts, type UnderWay } from "./last-payout.ts";
+import { UNDER_WAY, payouts, type Entry, type Found, type UnderWay } from "./last-payout.ts";
 import { closeReview, openReview, refreshReview, type Hooks } from "./review.ts";
 import { hrefOf } from "./routes.ts";
+import { openClaim } from "./claim-view.ts";
+import { allowancesLeft, initSwap, onSwapChange, resetReview, swapLine, walletChanged } from "./swap-view.ts";
+import { describe } from "./tokens.ts";
 import {
   NoWallet,
   connect,
@@ -84,8 +89,9 @@ import {
   type Wallet,
 } from "./wallet.ts";
 
-// "self" leaves whichever automation holds an account, the page's or one of Hydrex's.
-type Action = "join" | "leave" | "self";
+// "self" leaves whichever automation holds an account, the page's or one of Hydrex's; "claim" claims its rewards
+// through AutoMaxi, while its payout is overdue.
+type Action = "join" | "leave" | "self" | "claim";
 type Member = { account: Account; status: Status; group: Group };
 
 const listening = new WeakSet<Provider>();
@@ -104,9 +110,10 @@ let reading = false;
 let attempts = 0;
 let ignoredUpTo = 0;
 let clicks = 0;
-// The wallet's accounts paid late, and a payout under way, from their payouts.
+// The wallet's accounts paid late, a payout under way, and what their payouts' last read found.
 let late = new Set<bigint>();
 let under: UnderWay | undefined;
+let appFound: Found | undefined;
 // The account whose page is shown: the wallet's own, or one read by its number. `folded` once its payout fold was
 // opened or closed for it, which the page then leaves to the visitor; `tried`, when its last read began.
 type Viewing = {
@@ -125,9 +132,43 @@ const viewerOwns = (owner: Address): boolean => !!connection && same(owner, conn
 const appPayouts = payouts(undefined, (found, underWay) => {
   late = new Set(found.entries.flatMap(({ standing, account }) => (standing?.late ? [account.id] : [])));
   under = underWay;
+  appFound = found;
   showUnderWay();
   showAccounts(true);
+  showApp();
 });
+
+// An account's payout through AutoMaxi is overdue when something waits for it and its keeper has not paid it: half a day
+// after the flip, the time a payout takes, for the epoch that just ended, or once it is late for the one before. Only
+// the wallet's own accounts, while AutoMaxi holds their claims: a claim pays the owner, whoever calls.
+function overdueEntry(id: bigint): Entry | undefined {
+  const entry = appFound?.entries.find(({ account }) => account.id === id);
+  if (!entry || !appFound || entry.automation !== AUTOMAXI || !entry.standing || !entry.earnings) return undefined;
+  if (!same(entry.account.claimer, AUTOMAXI.address) || !shown?.accounts.some((account) => account.id === id)) return;
+  const { standing } = entry;
+  const waits = standing.waiting.length > 0 || standing.unknown;
+  const missed = entry.due && !standing.paid && waits && now() - appFound.epochStart >= UNDER_WAY;
+  return missed || standing.late ? entry : undefined;
+}
+const overdue = (): Entry[] =>
+  (shown?.accounts ?? []).flatMap((account) => {
+    const entry = overdueEntry(account.id);
+    return entry ? [entry] : [];
+  });
+
+// What waits for an overdue account, in words: "≈ $1.84 waits in 9 tokens."
+function waitsLine({ standing, earnings }: Entry): string {
+  const { waiting, unknown, late } = standing!;
+  const tokens = new Map(earnings!.rewards.map(({ token }) => [token.address.toLowerCase(), token]));
+  const value = waiting.reduce((sum, { token, amount }) => {
+    const known = tokens.get(token.toLowerCase());
+    const price = earnings!.prices.get(token.toLowerCase());
+    return known && price !== undefined ? sum + (Number(amount) / 10 ** known.decimals) * price : sum;
+  }, 0);
+  const n = new Set(waiting.map(({ token }) => token.toLowerCase())).size;
+  if (!n) return "Its rewards from the epoch before last wait to be claimed.";
+  return `${unknown || late ? "At least " : ""}${usd(value)} waits in ${count(n, "token", "tokens")}.`;
+}
 // An account's page that is not the wallet's tells a payout under way from its owner's other accounts, which it reads
 // once while the account awaits its payout.
 let ownerUnder: UnderWay | undefined;
@@ -221,6 +262,7 @@ function showCarbonImpact(found: CarbonImpact): void {
 
 function tick(): void {
   catchUp();
+  showApp();
   if (!carbonImpact) return;
   const time = now();
   const end = carbonImpact.epochStart + WEEK;
@@ -371,6 +413,7 @@ const can: Record<Action, (account: Account, automation?: Automation) => boolean
   join: joinable,
   leave: leavable,
   self: (account) => leavable(account) || canLeaveOther(account),
+  claim: (account) => !!overdueEntry(account.id),
 };
 const groups = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(".group")];
 const buttons = (section: HTMLElement) => [...section.querySelectorAll<HTMLButtonElement>("button[data-action]")];
@@ -481,7 +524,7 @@ async function loadAccounts(quietly = false): Promise<void> {
   const read = ++reads;
   reading = true;
   if (!quietly) {
-    shown = undefined;
+    shown = appFound = undefined;
     late = new Set();
     under = undefined;
     appPayouts.forget();
@@ -497,6 +540,7 @@ async function loadAccounts(quietly = false): Promise<void> {
     sawBlock(found.time);
     shown = found;
     showAccounts();
+    showApp();
     appPayouts.show(found);
     catchUp();
     void showShares();
@@ -533,6 +577,13 @@ function updateButtons(): void {
     }
     show(".buttons", able.length > 0, section);
     show(".pick-hint", able.length > 1 && !accounts.length, section);
+    // Claim says what it costs before anyone presses it.
+    const claiming = able.filter((account) => can.claim(account));
+    const note = section.querySelector<HTMLElement>(".claim-note");
+    if (note) {
+      note.hidden = !claiming.length;
+      fillPlural(note, claiming.length);
+    }
   }
 }
 
@@ -549,6 +600,7 @@ function act(button: HTMLButtonElement, accountsOf: () => Account[], redraw: () 
   if (weekStart(now()) > shown.epochStart) return void loadAccounts();
   const action = actionOf(button);
   const automation = automationOf(button);
+  if (action === "claim") return claim(accountsOf().filter(allows(button)), redraw);
   // A join of Carbon Impact shows its settings, so it waits for them. Leaving never waits.
   if (action === "join" && automation && traits[automation.kind].settings && !carbonImpact) {
     return void readCarbonImpactAgain().then(() => act(button, accountsOf, redraw), failed);
@@ -556,6 +608,13 @@ function act(button: HTMLButtonElement, accountsOf: () => Account[], redraw: () 
   const accounts = accountsOf().filter(allows(button));
   if (!accounts.length) return redraw();
   review(accounts, action, automation);
+}
+
+// The review of a claim through AutoMaxi for the accounts whose payout is overdue.
+function claim(accounts: Account[], redraw: () => void): void {
+  const entries = accounts.flatMap((account) => overdueEntry(account.id) ?? []);
+  if (!connection || !entries.length) return redraw();
+  openClaim(entries, connection, hooks).catch(failed);
 }
 
 // Leaving the page's automations that hold the accounts' approvals, and, when `listed`, those on Hydrex's list.
@@ -642,7 +701,15 @@ function review(accounts: Account[], action: Action, automation?: Automation): v
     const pages = [{ title: "Before you join", body: before }, { title: "What your wallet will ask" }];
     const steps = join(accounts, automation);
     const done = prepare(`${prefix}join-done`);
-    return openReview(`Join ${automation.name}`, pages, steps, checkOf(automation), connection, hooks, done);
+    return void openReview({
+      name: `Join ${automation.name}`,
+      pages,
+      steps,
+      checkHref: checkOf(automation),
+      connection,
+      hooks,
+      outcome: done,
+    });
   }
   const { steps, from, names } = leaveAll(accounts, action === "self");
   const title = `Leave ${list(names)}`;
@@ -652,7 +719,177 @@ function review(accounts: Account[], action: Action, automation?: Automation): v
     const more = hrefOf({ view: "product", kind: from[0].kind, section: "joining" });
     effects.querySelector(".more-leaving")!.setAttribute("href", more);
   }
-  openReview(title, [{ title, body: effects }], steps, checkOf(from[0] ?? CARBON_IMPACT), connection, hooks);
+  openReview({
+    name: title,
+    pages: [{ title, body: effects }],
+    steps,
+    checkHref: checkOf(from[0] ?? CARBON_IMPACT),
+    connection,
+    hooks,
+  });
+}
+
+// The App: what needs you across the products, each with one action, then the products, each with what you hold in it,
+// and what this wallet allows the café's contracts to do.
+const appView = document.querySelector<HTMLElement>('.view[data-view="app"]')!;
+
+function need(
+  shape: string,
+  words: string,
+  act: { link?: string; button?: () => void; label: string },
+): DocumentFragment {
+  const item = clone("need");
+  item.querySelector(".shape")!.classList.add(shape);
+  fill(item, { "need-words": words });
+  const link = item.querySelector<HTMLAnchorElement>(".need-link")!;
+  const button = item.querySelector<HTMLButtonElement>(".need-button")!;
+  if (act.link) Object.assign(link, { href: act.link, textContent: act.label, hidden: false });
+  if (act.button) {
+    Object.assign(button, { textContent: act.label, hidden: false });
+    button.addEventListener("click", act.button);
+  }
+  return item;
+}
+
+let overdueShown = "";
+
+function showApp(): void {
+  const items: DocumentFragment[] = [];
+  const holdings = connection ? shown : undefined;
+  if (holdings) {
+    const { owner, accounts, epochStart } = holdings;
+    for (const account of accounts) {
+      const status = statusOf(account, owner, now(), epochStart);
+      const change = { link: hrefOf({ view: "position", id: account.id }), label: "Change it" };
+      if (status.kind === "stopped")
+        items.push(
+          need(
+            "stopped",
+            `#${account.id} is in ${status.name}, which stopped on ${day(status.voted)}. It earns nothing.`,
+            change,
+          ),
+        );
+      if (status.kind === "partly")
+        items.push(
+          need(
+            "stopped",
+            `#${account.id} is partly in ${status.automation.name}: only some of its approvals are set.`,
+            change,
+          ),
+        );
+    }
+    for (const entry of overdue()) {
+      items.push(
+        need("stopped", `#${entry.account.id}'s payout is overdue: ${waitsLine(entry)}`, {
+          label: "Claim now",
+          button: () => claim([entry.account], showApp),
+        }),
+      );
+    }
+  }
+  const left = connection ? allowancesLeft() : undefined;
+  if (left?.length) {
+    items.push(
+      need(
+        "idle",
+        `${count(left.length, "approval", "approvals")} to the swappers ${left.length === 1 ? "is" : "are"} left, from a swap that did not go through.`,
+        {
+          label: "Reset",
+          button: () => void resetReview(left),
+        },
+      ),
+    );
+  }
+  const needs = document.getElementById("needs")!;
+  needs.hidden = !items.length;
+  fill(needs, { count: `· ${items.length}` });
+  needs.querySelector(".needs-list")!.replaceChildren(...items);
+  // What you hold in each product, once connected.
+  const hydrexYours = appView.querySelector<HTMLElement>(".hydrex-yours")!;
+  hydrexYours.hidden = !holdings;
+  if (holdings) {
+    const full = holdings.accounts.filter(({ amount }) => amount > 0n);
+    const counts = AUTOMATIONS.flatMap((automation) => {
+      const n = full.filter((account) => {
+        const status = statusOf(account, holdings.owner, now(), holdings.epochStart);
+        return (
+          "automation" in status &&
+          status.automation === automation &&
+          (status.kind === "in" || status.kind === "joined")
+        );
+      }).length;
+      return n ? [`${n} in ${automation.name}`] : [];
+    });
+    hydrexYours.textContent = `Yours: ${count(full.length, "account", "accounts")}${counts.length ? `, ${counts.join(", ")}` : ""}`;
+  }
+  const swapYours = appView.querySelector<HTMLElement>(".swap-yours")!;
+  const line = connection ? swapLine() : undefined;
+  swapYours.hidden = !line;
+  if (line) {
+    swapYours.textContent =
+      line.reading && !line.count
+        ? "Yours: …"
+        : line.count
+          ? `Yours: ${count(line.count, "token", "tokens")} worth swapping, ${usd(line.usd)}${line.reading ? ", …" : ""}`
+          : "Yours: no token worth swapping";
+  }
+  void showAllows(holdings, left);
+  // A payout becomes overdue as time passes: the groups' Claim follows.
+  const key = overdue()
+    .map(({ account }) => account.id)
+    .join();
+  if (key !== overdueShown) {
+    overdueShown = key;
+    showAccounts(true);
+    showPosition();
+  }
+}
+
+// What this wallet allows: the automations that vote or claim for its accounts, and what the swappers may take.
+async function showAllows(
+  holdings: Holdings | undefined,
+  left: { token: Address; spender: Address; amount: bigint }[] | undefined,
+): Promise<void> {
+  const fold = appView.querySelector<HTMLElement>(".allows")!;
+  fold.hidden = !connection;
+  if (!connection) return;
+  const lines = (holdings?.accounts ?? []).flatMap((account) => {
+    const theirs = AUTOMATIONS.filter((automation) => canLeave(account, automation)).map((automation) => {
+      const votes = same(account.delegate, automation.address);
+      const claims = same(account.claimer, automation.address);
+      const what =
+        votes && claims ? "vote with it and claim its rewards" : votes ? "vote with it" : "claim its rewards";
+      return { words: `#${account.id}: ${automation.name} can ${what}.`, action: "leave" as Action };
+    });
+    const other = automationName(account.delegate);
+    if (other) theirs.push({ words: `#${account.id}: Hydrex's ${other} automation can vote with it.`, action: "self" });
+    return theirs.map((line) => ({ ...line, account }));
+  });
+  appView.querySelector(".allows-accounts")!.replaceChildren(
+    ...lines.map(({ words, action, account }) => {
+      const item = clone("allows-account");
+      fill(item, { "allows-words": words });
+      item.querySelector(".allows-undo")!.addEventListener("click", () => review([account], action));
+      return item;
+    }),
+  );
+  show(".allows-none", !lines.length, appView);
+  const tokens = left?.length ? await describe(left.map(({ token }) => token)).catch(() => new Map()) : new Map();
+  appView.querySelector(".allows-tokens")!.replaceChildren(
+    ...(left ?? []).map((allowance) => {
+      const item = clone("allowance");
+      const token = tokens.get(allowance.token.toLowerCase());
+      const swapper = SWAPPERS.find(({ address }) => same(address, allowance.spender))!;
+      fill(item, {
+        "allowance-symbol": token?.symbol ?? allowance.token,
+        "allowance-amount": token ? figure(allowance.amount, token.decimals) : String(allowance.amount),
+        "allowance-swapper": swapper.symbol,
+      });
+      item.querySelector(".reset")!.addEventListener("click", () => void resetReview([allowance]));
+      return item;
+    }),
+  );
+  show(".allows-tokens-none", !left?.length, appView);
 }
 
 // A payout under way: a line in the App, and on the page of each account it has not reached yet.
@@ -749,6 +986,10 @@ function showPosition(): void {
   show(".position-owner-row", theirs, view);
   fillAddress(view, "position-owner", owner, short(owner));
   show(".position-stopped", status.kind === "stopped", view);
+  // The wallet's own account in AutoMaxi says when its payout is overdue, with Claim now among its actions.
+  const owing = own ? overdueEntry(account.id) : undefined;
+  show(".position-overdue", !!owing, view);
+  if (owing) fill(view, { "overdue-waits": waitsLine(owing) });
   if (status.kind === "stopped") fillTime(view, "position-since", status.since);
   const underWay = own ? under : ownerUnder;
   show(".position-underway", !!underWay?.left.some((entry) => entry.account.id === account.id), view);
@@ -805,11 +1046,11 @@ function showConnection(): void {
   show(".to-app .open", !connection);
   show(".to-app .wallet-state", !!connection);
   show("#epoch", !!connection);
-  show("#wrong-chain", !!connection && connection.chainId !== CHAIN_ID);
+  show(".wrong-chain", !!connection && connection.chainId !== CHAIN_ID);
   if (connection) {
     const { wallet, address, chainId } = connection;
     fill(document, { "wallet-short": short(address) });
-    if (chainId === CHAIN_ID) show("#switch-failed", false);
+    if (chainId === CHAIN_ID) show(".switch-failed", false);
     show(".to-switch", !wallet.propose);
     show(".safe-elsewhere", !!wallet.propose);
   }
@@ -826,6 +1067,7 @@ async function connectTo(wallet: Wallet): Promise<void> {
   connection = connected;
   showConnection();
   loadAccounts();
+  walletChanged();
 }
 
 function listen(provider: Provider): void {
@@ -841,6 +1083,7 @@ function listen(provider: Provider): void {
     connection.address = getAddress(account);
     showConnection();
     loadAccounts();
+    walletChanged();
   });
   provider.on?.("chainChanged", (chainId: string) => {
     if (connection?.provider !== provider) return;
@@ -856,13 +1099,15 @@ function letGo(): void {
   ignoredUpTo = attempts;
   reads++;
   reading = false;
-  connection = shown = under = undefined;
+  connection = shown = under = appFound = undefined;
   late = new Set();
   appPayouts.forget();
   closeReview();
   showConnection();
   show(".accounts-reading, #accounts, #none, .mine, #underway", false);
   showPosition();
+  walletChanged();
+  showApp();
 }
 
 function walletButton(wallet: Wallet): DocumentFragment {
@@ -890,6 +1135,8 @@ function walletButton(wallet: Wallet): DocumentFragment {
 }
 
 for (const slot of document.querySelectorAll(".wallet-slot")) slot.append(clone("wallet-picker"));
+initSwap({ connection: () => connection, hooks });
+onSwapChange(showApp);
 groupAllHex(document);
 // A reload keeps the hash, and so the view.
 document.querySelector("#error .again")!.addEventListener("click", () => location.reload());
@@ -905,15 +1152,16 @@ for (const button of buttons(actions)) {
     act(button, () => (viewing && ownHoldings(viewing.id)?.accounts) ?? [], showPosition),
   );
 }
-document.querySelector("#wrong-chain .switch")!.addEventListener("click", () => {
-  if (!connection) return;
-  show("#switch-failed", false);
-  switchToBase(connection).then(showConnection, (error) => {
-    if (declined(error)) return;
-    console.error(error);
-    show("#switch-failed");
+for (const button of document.querySelectorAll(".wrong-chain .switch"))
+  button.addEventListener("click", () => {
+    if (!connection) return;
+    show(".switch-failed", false);
+    switchToBase(connection).then(showConnection, (error) => {
+      if (declined(error)) return;
+      console.error(error);
+      show(".switch-failed");
+    });
   });
-});
 positionView.querySelector(".position-again")!.addEventListener("click", () => void loadPosition());
 
 findWallets((wallets) => {

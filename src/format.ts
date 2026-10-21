@@ -124,3 +124,11 @@ export const count = (n: number, one: string, other: string): string =>
 const HIDDEN = /[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}]/gu;
 
 export const clean = (text = ""): string => text.replace(/\s+/g, " ").replace(HIDDEN, "").replace(/ {2,}/g, " ").trim();
+
+const fourDigits = new Intl.NumberFormat(LANG, { maximumSignificantDigits: 4 });
+
+// An amount of a token, to four significant figures, or whole from 10,000: "0.000065", "41.2", "1,000,000".
+export function figure(value: bigint, decimals: number): string {
+  const number = Number(value) / 10 ** decimals;
+  return number >= 10_000 ? whole.format(number) : fourDigits.format(number);
+}

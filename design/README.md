@@ -14,19 +14,24 @@ Mockups of the planned screens are on a design canvas, private to its owner:
 One static page with views addressed by the hash, laid out by [audit.md](audit.md): each level down shows more, and the
 technical parts come last, folded.
 
-- **Home** (`/`): what the café is, in a heading and a line, the one button, and a line on Hydrex's automations that
+- **Home** (`/`): what the café does, in a heading and a line, the one button, and a line on Hydrex's automations that
   stopped.
-- **The App** (`#app`): with a wallet, its accounts first, in groups: those that need their owner, those in each
+- **The App** (`#app`): what needs you across the products, each with one action; then the products, the Hydrex
+  automations and the swap, each with what you hold in it; and a fold, What this wallet allows. See
+  [products.md](products.md).
+- **Hydrex** (`#hydrex`): with a wallet, its accounts first, in groups: those that need their owner, those in each
   automation, the others, and a fold for those with nothing to vote with. Each row leads to the account's page. Then the
   menu: each automation and voting yourself, with what it takes and what it paid last epoch.
+- **The swap** (`#swap`, `#swap/weth`): the output, the wallet's tokens with their routes, what the ticked ones fetch,
+  and folds: fee facts, who controls what, approvals you gave the swappers, Check it.
 - **An automation's page** (`#hydrex/carbon-impact`, `#hydrex/automaxi`): its status, what it does, leaving, your
   accounts in it and Join, last epoch, and its fee facts. Then folds: against all of Hydrex, joining and leaving, who
   controls what, one of its own, and Check it.
 - **An account's page** (`#hydrex/` and its number): its status, its lock, what it earned, what its owner can do, and
   its last payout as a receipt.
-- **The review:** a dialog in two steps: before you join, with a week's estimate and the gas, then the calls, each as a
-  slip with its fields as the wallet will show them. Inside Safe{Wallet}, one Safe transaction, with its calldata word
-  by word.
+- **The review:** a dialog in two steps: before you join, claim or swap, with what it costs, then the calls, each as a
+  slip with its fields as the wallet will show them. One prompt with EIP-5792 where the wallet allows it. Inside
+  Safe{Wallet}, one Safe transaction, with its calldata word by word.
 - **About** (`#about`): the page's own facts, from a Safe, and how its figures are read.
 
 Every new screen keeps the page's rules:
@@ -64,14 +69,16 @@ Two audiences. By count, many small holders delegate, and stay put. By value, a 
 
 Hypotheses to test, not findings.
 
-| Persona                    | Holds                                                | Wants                                           | Would pay                                  | Needs to see                                         | Wrong if                                                    |
-| -------------------------- | ---------------------------------------------------- | ----------------------------------------------- | ------------------------------------------ | ---------------------------------------------------- | ----------------------------------------------------------- |
-| **The stranded holder**    | An account in a stopped automation; median about $3  | To earn again without learning how voting works | A share of rewards, nothing up front       | When it last voted; one call to change; plain words  | Few act once told: then attention, not choice, is the limit |
-| **The hands-off holder**   | Accounts or a lock, $1,000 to $50,000                | Paid weekly in one token, or a lock that grows  | 2–17% of rewards, as Beefy and Convex take | Fee facts and their caps; a weekly receipt           | They choose by headline APR rather than by token and fee    |
-| **The optimiser**          | Several locks and liquidity positions, $10k to $500k | More than doing it themselves, after fees       | A fee, when the result beats a benchmark   | The record per epoch against a benchmark; CSV        | They will not join without a projected APR                  |
-| **The treasury**           | Large locks in a Safe                                | Votes and yield handled without weekly signing  | A flat or capped fee governance can pass   | The calldata; build hashes; a risk summary           | They need to direct their own votes: then a custom relay    |
-| **The impact holder**      | Any size                                             | A credible retirement from their rewards        | The share retired is the price             | Each retirement, its tonnes and transaction          | They leave once the share retired is shown in dollars       |
-| **The liquidity provider** | A concentrated position                              | A position kept in range                        | About 10% of fees, as managers take        | Its range, its moves, and the result against holding | They prefer pooled vaults to positions kept in their wallet |
+| Persona                       | Holds                                                | Wants                                           | Would pay                                  | Needs to see                                         | Wrong if                                                    |
+| ----------------------------- | ---------------------------------------------------- | ----------------------------------------------- | ------------------------------------------ | ---------------------------------------------------- | ----------------------------------------------------------- |
+| **The stranded holder**       | An account in a stopped automation; median about $3  | To earn again without learning how voting works | A share of rewards, nothing up front       | When it last voted; one call to change; plain words  | Few act once told: then attention, not choice, is the limit |
+| **The hands-off holder**      | Accounts or a lock, $1,000 to $50,000                | Paid weekly in one token, or a lock that grows  | 2–17% of rewards, as Beefy and Convex take | Fee facts and their caps; a weekly receipt           | They choose by headline APR rather than by token and fee    |
+| **The optimiser**             | Several locks and liquidity positions, $10k to $500k | More than doing it themselves, after fees       | A fee, when the result beats a benchmark   | The record per epoch against a benchmark; CSV        | They will not join without a projected APR                  |
+| **The treasury**              | Large locks in a Safe                                | Votes and yield handled without weekly signing  | A flat or capped fee governance can pass   | The calldata; build hashes; a risk summary           | They need to direct their own votes: then a custom relay    |
+| **The impact holder**         | Any size                                             | A credible retirement from their rewards        | The share retired is the price             | Each retirement, its tonnes and transaction          | They leave once the share retired is shown in dollars       |
+| **The liquidity provider**    | A concentrated position                              | A position kept in range                        | About 10% of fees, as managers take        | Its range, its moves, and the result against holding | They prefer pooled vaults to positions kept in their wallet |
+| **The reward collector**      | Accounts in AutoMaxi, paid in 20 or more tokens      | One token, weekly, without a spreadsheet        | 1% of the swap, on top of AutoMaxi's 1%    | What it fetched, the fees, what stayed and why       | They keep the tokens, hoping some rise                      |
+| **The wallet with leftovers** | Small balances on Base from trades and airdrops      | A clean wallet, in one token                    | 1%, if gas stays below a cent              | Which tokens are worth swapping, and the minimum     | Their leftovers are worth less than gas: nothing to do      |
 
 On a phone, any of them: Coinbase Wallet can send several calls in one prompt, but a download may not work inside a
 wallet's browser, so every export also offers a copy.
@@ -89,6 +96,11 @@ wallet's browser, so every export also offers a copy.
    automation says so, with the old value, the new one and the transaction.
 8. **"My lock is ending."** The position says when, and links to the protocol to extend it.
 9. **"My automation is ending."** The date, what to do before it, and where to go after.
+10. **"I was paid in 28 tokens."** The receipt offers to swap them into one, and says which are worth it.
+11. **"My payout is late."** The account says so, shows what waits, and offers to claim it now.
+12. **"Was the swap fair?"** Each token's quote next to the page's own price, and what each fee took.
+13. **"The swap failed: what about my approvals?"** What stayed in the wallet, why, and a way to reset what remains
+    approved.
 
 ## Principles
 
@@ -111,7 +123,11 @@ wallet's browser, so every export also offers a copy.
   payout as a receipt, with up to when it was paid and what waits; Safe transactions with their calldata; the brand;
   Choose for one or many accounts, with the gas cost, since replaced by the menu and the review; fee facts for Carbon
   Impact; the redesign towards minimalism, in [audit.md](audit.md), with positions first in the App.
-- **Next, the rescue:** one prompt with batching; change watch; ERC-7730 metadata for `setConduitApproval`.
+- **Done, the products:** a level for the products in the App; the swap of many tokens into one, with each route, its
+  minimum and a simulation before the wallet asks; claiming AutoMaxi's rewards when its keeper is late, as they are or
+  swapped into one token; one prompt with batching, for joining and leaving too; What this wallet allows. See
+  [products.md](products.md).
+- **Next, the rescue:** change watch; ERC-7730 metadata for `setConduitApproval`, `claim` and `swap`.
 - **Then, a second Hydrex automation, AutoMaxi:** on Base since 20 Oct 2026, in its version 2. It votes for the bribes
   it expects to earn the most, and pays in the tokens earned, unswapped, less 1% of each claim. Done: the menu, one page
   template per automation, and comparing the two with voting yourself. Still to do: statements and export.
@@ -125,7 +141,9 @@ One static page, with views addressed by the hash, as [audit.md](audit.md) lays 
 | View                         | Address                                                                      |
 | ---------------------------- | ---------------------------------------------------------------------------- |
 | Home                         | `/`                                                                          |
-| The App: accounts, then menu | `#app`; `#hydrex` too, until a second protocol has a page of its own         |
+| The App: needs you, products | `#app`; its fold `#app/allows`                                               |
+| Hydrex: accounts, then menu  | `#hydrex`                                                                    |
+| The swap                     | `#swap`, `#swap/weth`; a fold, such as `#swap/weth/check`                    |
 | An automation's page         | `#hydrex/carbon-impact`, `#hydrex/automaxi`; a fold of it, such as `…/check` |
 | An account's page            | `#hydrex/9540`                                                               |
 | A receipt                    | `#hydrex/9540/2026-10-22`, once the page reads more payouts than the last    |
@@ -200,6 +218,7 @@ For the four kinds of product:
 | -------------------------------------------- | -------------------------------------- | --------------- | ------------------------ | ---------------- | ------------- | ------------------------ |
 | Votes for you, retires a share               | Of the rewards: 33.33% retired, 0% fee | 100%, 1%        | Carbon credits; treasury | Each payout      | Swaps         | One admin key            |
 | Votes for you, pays you as earned (AutoMaxi) | Of each claim: 1%                      | 1%, in its code | A 2-of-3 Safe            | Each claim       | None          | Nobody: a new deployment |
+| Swaps many tokens into one                   | Of what each token fetches: 1%         | 1%, in its code | The same 2-of-3 Safe     | Each swap        | Pools, gas    | Nobody: a new deployment |
 | Pools your stake in a relay                  | Of the deposit, then of the rewards    | [cap]           | Aero; [operator]         | Each compounding | Swaps         | [Role, delay]            |
 | Manages a liquidity position                 | Of fees and emissions: [10%]           | [cap]           | [Operator]               | Each collection  | A swap a move | [Role, delay]            |
 
