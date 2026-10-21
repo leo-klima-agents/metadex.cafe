@@ -2,6 +2,7 @@
 
 What metaDEX Café is today, what it should become, and why. The brand, from type and colour to the layout of receipts,
 is in [brand.md](brand.md). The redesign towards minimalism is in [audit.md](audit.md): where the two disagree, it wins.
+The next offerings, claiming AutoMaxi's rewards and swapping many tokens into one, are in [offerings.md](offerings.md).
 
 Figures were read from Base on 17 Oct 2026, unless marked. [Brackets] mark decisions not yet taken, such as "[cap]".
 Mockups of the planned screens are on a design canvas, private to its owner:
