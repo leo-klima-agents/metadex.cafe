@@ -108,7 +108,7 @@ let clicks = 0;
 let late = new Set<bigint>();
 let under: UnderWay | undefined;
 // The account whose page is shown: the wallet's own, or one read by its number. `folded` once its payout fold was
-// opened or closed for it, which the page then leaves to the visitor.
+// opened or closed for it, which the page then leaves to the visitor; `tried`, when its last read began.
 type Viewing = {
   id: bigint;
   holdings?: Holdings | undefined;
@@ -116,6 +116,7 @@ type Viewing = {
   failed: boolean;
   reading: boolean;
   folded: boolean;
+  tried: number;
 };
 let viewing: Viewing | undefined;
 const viewerOwns = (owner: Address): boolean => !!connection && same(owner, connection.address);
@@ -127,7 +128,35 @@ const appPayouts = payouts(undefined, (found, underWay) => {
   showUnderWay();
   showAccounts(true);
 });
-const positionPayouts = payouts(positionView.querySelector<HTMLElement>(".position-payouts")!, undefined, viewerOwns);
+// An account's page that is not the wallet's tells a payout under way from its owner's other accounts, which it reads
+// once while the account awaits its payout.
+let ownerUnder: UnderWay | undefined;
+let ownerRead: string | undefined;
+const ownerPayouts = payouts(undefined, (_, underWay) => {
+  ownerUnder = underWay;
+  showPosition();
+});
+const positionPayouts = payouts(
+  positionView.querySelector<HTMLElement>(".position-payouts")!,
+  ({ entries }) => {
+    const target = onPage();
+    const owner = target?.holdings?.owner;
+    const awaits = entries.some(
+      ({ due, standing }) => due && standing && !standing.paid && (standing.waiting.length > 0 || standing.unknown),
+    );
+    if (!target || !owner || ownHoldings(target.id) || !awaits || ownerRead === owner.toLowerCase()) return;
+    ownerRead = owner.toLowerCase();
+    readAccounts(owner).then(
+      (holdings) => onPage() === target && ownerPayouts.show(holdings),
+      (error) => {
+        // The payouts' next check tries again.
+        ownerRead = undefined;
+        console.error(error);
+      },
+    );
+  },
+  viewerOwns,
+);
 
 // The page's automations on Base. They decide what the page offers to join; an account's status is read against all.
 const present = (): Automation[] => checks?.present ?? FROM_START;
@@ -269,14 +298,16 @@ const readCarbonImpactAgain = (): Promise<void> =>
 function catchUp(): void {
   const epoch = weekStart(now());
   if (shown && !reading && epoch > shown.epochStart) loadAccounts(true);
-  // The wallet's own account moves on with the wallet's accounts.
+  // The wallet's own account moves on with the wallet's accounts. After a failed read, the next waits five minutes.
   const page = onPage();
-  if (page?.holdings && epoch > page.holdings.epochStart && !ownHoldings(page.id)) void loadPosition();
+  const ready = !!page && (!page.failed || Date.now() - page.tried >= 300_000);
+  if (ready && page.holdings && epoch > page.holdings.epochStart && !ownHoldings(page.id)) void loadPosition();
   if (!carbonImpact || epoch > carbonImpact.epochStart) readCarbonImpactAgain().catch(console.error);
   if (earningsDue(epoch, present())) loadAllEarnings();
   if (!autoMaxiFreshness || epoch > autoMaxiFreshness.epochStart) readAutoMaxi();
   appPayouts.check();
   if (page) positionPayouts.check();
+  if (page) ownerPayouts.check();
 }
 
 // Each read of figures, whoever started it, shows on the menu, on the automations' pages and in the accounts' shares.
@@ -376,12 +407,7 @@ function statusLine(status: Status, own: boolean): DocumentFragment {
   return line;
 }
 
-function accountItem(
-  holdings: Holdings,
-  { account, status }: Member,
-  group: string,
-  pickable: boolean,
-): DocumentFragment {
+function accountItem({ account, status }: Member, group: string, pickable: boolean): DocumentFragment {
   const item = clone("account");
   const name = account.name || "Account";
   fill(item, { name, id: `#${account.id}`, votes: earningPower(account.votes) });
@@ -426,7 +452,7 @@ function showAccounts(keepTicked = false): void {
     const able = these.map(({ account }) => account).filter((account) => tests.some((test) => test(account)));
     const items = section.querySelector(":scope > .accounts");
     items?.replaceChildren(
-      ...these.map((member) => accountItem(holdings, member, group, able.length > 1 && able.includes(member.account))),
+      ...these.map((member) => accountItem(member, group, able.length > 1 && able.includes(member.account))),
     );
     for (const box of section.querySelectorAll<HTMLInputElement>(".pick:not([hidden])"))
       box.checked = kept.has(box.value);
@@ -441,9 +467,13 @@ function showAccounts(keepTicked = false): void {
   const full = accounts.filter(({ amount }) => amount > 0n);
   show("#none", !full.length);
   show("#accounts, .mine");
-  // An automation's page says when none of the wallet's accounts is in it or can join it.
-  for (const mine of document.querySelectorAll(".mine"))
-    show(".mine-none", !mine.querySelector(".group:not([hidden])"), mine);
+  // An automation's page says when none of the wallet's accounts is in it or can join it, once joining it is on: until
+  // then, its notices say why none can.
+  for (const mine of document.querySelectorAll<HTMLElement>(".mine")) {
+    const automation = byKind(mine.closest<HTMLElement>(".view")!.dataset.kind!)!;
+    const open = !!checks?.present.includes(automation) && !checks.failed.get(automation.kind)!.length;
+    show(".mine-none", open && !mine.querySelector(".group:not([hidden])"), mine);
+  }
 }
 
 async function loadAccounts(quietly = false): Promise<void> {
@@ -665,14 +695,15 @@ async function loadPosition(): Promise<void> {
   const target = onPage();
   if (!target) return;
   if (target.reading || ownHoldings(target.id)) return showPosition();
-  target.reading = true;
-  target.failed = false;
+  Object.assign(target, { reading: true, failed: false, tried: Date.now() });
   showPosition();
   try {
     const found = await readAccount(target.id);
     if (found) sawBlock(found.time);
     Object.assign(target, { holdings: found, none: !found });
-    if (found) void loadShares(found, present()).then((changed) => changed && showPosition());
+    // An account that is gone, as when it was merged, has no payouts to follow.
+    if (!found) [positionPayouts, ownerPayouts].forEach((each) => each.forget());
+    void showShares();
   } catch (error) {
     console.error(error);
     target.failed = true;
@@ -692,9 +723,14 @@ function showPosition(): void {
   const { holdings } = target;
   const state = holdings ? "found" : target.none ? "none" : target.failed ? "failed" : "reading";
   for (const name of ["reading", "none", "failed", "found"]) show(`.position-${name}`, name === state, view);
+  // A read that failed says so, over what an earlier one found.
+  if (target.failed) show(".position-failed", true, view);
   fill(view, { "position-id": `#${target.id}` });
   showActions(own?.accounts[0]);
-  if (!holdings) return void fill(view, { "position-name": "Account" });
+  if (!holdings) {
+    document.title = `Account #${target.id} · metaDEX Café`;
+    return void fill(view, { "position-name": "Account" });
+  }
   const account = holdings.accounts[0]!;
   const { owner, epochStart, payout } = holdings;
   const status = statusOf(account, owner, now(), epochStart);
@@ -714,7 +750,8 @@ function showPosition(): void {
   fillAddress(view, "position-owner", owner, short(owner));
   show(".position-stopped", status.kind === "stopped", view);
   if (status.kind === "stopped") fillTime(view, "position-since", status.since);
-  show(".position-underway", !!under?.left.some((entry) => entry.account.id === account.id), view);
+  const underWay = own ? under : ownerUnder;
+  show(".position-underway", !!underWay?.left.some((entry) => entry.account.id === account.id), view);
   // Carbon Impact pays an owner's accounts to one address, once read, which shows where it is not the owner's own. The
   // fold opens by itself once: then it stays as the visitor leaves it.
   const inImpact = [account.delegate, account.claimer, account.delegateAtStart].some((address) =>
@@ -756,8 +793,9 @@ function showActions(account: Account | undefined): void {
 onRoute((next) => {
   if (next.view !== "position") return;
   if (viewing?.id !== next.id) {
-    viewing = { id: next.id, none: false, failed: false, reading: false, folded: false };
-    positionPayouts.forget();
+    viewing = { id: next.id, none: false, failed: false, reading: false, folded: false, tried: 0 };
+    [positionPayouts, ownerPayouts].forEach((each) => each.forget());
+    ownerUnder = ownerRead = undefined;
   }
   void loadPosition();
 });

@@ -16,8 +16,8 @@ This README is for whoever runs the site. The design and the plan are in [design
   at 00:00 UTC. After each epoch, it swaps the rewards to kVCM, retires a share as carbon credits, and pays the rest to
   the owner. The account and its HYDX stay in the owner's wallet.
 - **AutoMaxi** takes the same call. It votes for the pools it expects to earn the most bribes, and anyone can claim an
-  account's rewards through it: it pays them to the owner in the tokens earned, less 1%. Carbon Impact's keeper sends
-  its votes and claims. Joining one of the two takes the votes and the claims from the other, in one call.
+  account's rewards through it: it pays them to the owner in the tokens earned, less 1%. Joining one of the two takes
+  the votes and the claims from the other, in one call.
 - **Leaving** is the same call with `false`. The page can also take accounts out of Hydrex's other automations, such as
   those that stopped voting in September 2026: same call, with that automation's address.
 - **Before anyone can join, the page checks** the chain, each automation's code, Carbon Impact's settings, and the code
@@ -161,15 +161,15 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 - **At the end of an epoch,** Thursday at 00:00 UTC by Base's clock, the page reads the accounts and Carbon Impact again
   within half a minute.
 - **A payout under way.** A payout takes up to half a day after each epoch. While it has paid some of the owner's
-  accounts and not yet others, the App says so, and so does the page of each account it has not reached. Until a payout
-  due since the flip has reached every account that has something waiting, the page checks every five minutes, with one
-  read per account, and reads the payouts again once one has been paid; then not until the next epoch.
+  accounts and not yet others, the App says so, and so does the page of each account it has not reached. On the page of
+  an account the wallet does not hold, the page reads its owner's accounts once, while the account awaits its payout.
+  Until a payout due since the flip has reached every account that has something waiting, the page checks every five
+  minutes, with one read per account, and reads the payouts again once one has been paid; then not until the next epoch.
 - **A late payout.** An account is late when it voted with an automation two epochs ago and has not been paid for that
-  epoch yet. Its rewards wait in Hydrex's reward contracts until someone claims them, for up to 50 epochs. Carbon Impact
-  paid nothing from 23 Sep to at least 19 Oct 2026, though it kept voting.
+  epoch yet. Its rewards wait in Hydrex's reward contracts until someone claims them, for up to 50 epochs.
 - **Paid, or claimed in part.** An epoch counts as paid once claims since it ended took more than half of what its
   rewards were worth, at last epoch's prices. A claim of a few small rewards, such as anyone may make through AutoMaxi,
-  does not count, and the tokens a keeper leaves out, such as those it cannot swap, do not keep a payout from counting.
+  does not count, and tokens a payout leaves out, such as those that cannot be swapped, do not keep it from counting.
 - **An account that moved.** Its standing is read in the pools of the automation it voted with last epoch, where its
   rewards are, and its receipts are those of the automation it is in now. If the one it voted with no longer holds its
   claims, the page says so: what waits can still be claimed on Hydrex.

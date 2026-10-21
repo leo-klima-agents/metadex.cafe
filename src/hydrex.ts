@@ -214,7 +214,17 @@ export async function readCarbonImpact(): Promise<CarbonImpact> {
 const othersVoted = (replies: unknown[]): Map<string, number> =>
   new Map(others.map(({ address }, i) => [address.toLowerCase(), Number((replies[i] as bigint | undefined) ?? 0n)]));
 
-async function accountsOf(ids: bigint[], epochStart: number, lastVoted: Map<string, number>): Promise<Account[]> {
+// The block's time, and when each of Hydrex's other automations last voted, read after the calls given.
+const withContext = (calls: Call[]): Promise<unknown[]> =>
+  read([...calls, blockTime, ...others.map(({ address }) => voter("lastVoted", address))]);
+
+// The accounts, and the replies to the `more` calls, which share their read.
+async function accountsOf(
+  ids: bigint[],
+  epochStart: number,
+  lastVoted: Map<string, number>,
+  more: Call[] = [],
+): Promise<{ accounts: Account[]; more: unknown[] }> {
   const details = await read([
     ...ids.flatMap((id) => [
       escrow("lockDetails", id),
@@ -224,9 +234,10 @@ async function accountsOf(ids: bigint[], epochStart: number, lastVoted: Map<stri
       escrow("getClaimRedirectApproved", id),
     ]),
     call(ACCOUNT_NAMES, accountNamesAbi, "getBulkNames", ids),
+    ...more,
   ]);
-  const names = (details.at(-1) as readonly string[] | undefined) ?? [];
-  return ids.map((id, i): Account => {
+  const names = (details[5 * ids.length] as readonly string[] | undefined) ?? [];
+  const accounts = ids.map((id, i): Account => {
     const [{ amount, endTime, lockType }, votes, delegate, delegateAtStart, claimer] = required(
       details.slice(5 * i, 5 * i + 5),
     ) as [{ amount: bigint; endTime: bigint; lockType: number }, bigint, Address, Address, Address];
@@ -243,41 +254,37 @@ async function accountsOf(ids: bigint[], epochStart: number, lastVoted: Map<stri
       claimer,
     };
   });
+  return { accounts, more: details.slice(5 * ids.length + 1) };
 }
 
 export async function readAccounts(owner: Address): Promise<Holdings> {
-  const replies = await read([
+  const [count, payout, time, ...voted] = await withContext([
     escrow("balanceOf", owner),
     carbonImpact("getEffectiveRecipientForOwner", owner),
-    blockTime,
-    ...others.map(({ address }) => voter("lastVoted", address)),
   ]);
-  const [count, time] = required([replies[0], replies[2]]) as [bigint, bigint];
-  const payout = replies[1] as Address | undefined;
+  required([count, time]);
   const epochStart = epochAt(time);
   const indexes = Array.from({ length: Number(count) }, (_, i) => BigInt(i));
   const ids = required(await read(indexes.map((i) => escrow("tokenOfOwnerByIndex", owner, i)))) as bigint[];
-  const accounts = await accountsOf(ids, epochStart, othersVoted(replies.slice(3)));
+  const { accounts } = await accountsOf(ids, epochStart, othersVoted(voted));
   accounts.sort((a, b) => (a.votes === b.votes ? Number(a.id - b.id) : a.votes > b.votes ? -1 : 1));
-  return { owner, accounts, payout, time: Number(time), epochStart };
+  return { owner, accounts, payout: payout as Address | undefined, time: Number(time), epochStart };
 }
 
 // One account, whoever owns it, as its owner's holdings of that account alone. Undefined if Hydrex has no account with
 // that number, as when it was never minted, or was merged or withdrawn.
 export async function readAccount(id: bigint): Promise<Holdings | undefined> {
-  const [owner, time, ...voted] = await read([
-    escrow("ownerOf", id),
-    blockTime,
-    ...others.map(({ address }) => voter("lastVoted", address)),
-  ]);
+  const [owner, time, ...voted] = await withContext([escrow("ownerOf", id)]);
   if (owner === undefined) return undefined;
-  const [now] = required([time]) as [bigint];
-  const epochStart = epochAt(now);
-  const [[payout], accounts] = await Promise.all([
-    read([carbonImpact("getEffectiveRecipientForOwner", owner as Address)]),
-    accountsOf([id], epochStart, othersVoted(voted)),
+  required([time]);
+  const epochStart = epochAt(time);
+  const {
+    accounts,
+    more: [payout],
+  } = await accountsOf([id], epochStart, othersVoted(voted), [
+    carbonImpact("getEffectiveRecipientForOwner", owner as Address),
   ]);
-  return { owner: owner as Address, accounts, payout: payout as Address | undefined, time: Number(now), epochStart };
+  return { owner: owner as Address, accounts, payout: payout as Address | undefined, time: Number(time), epochStart };
 }
 
 const ended = (account: Account, now: number): boolean => account.lockType === LockType.timed && account.end <= now;

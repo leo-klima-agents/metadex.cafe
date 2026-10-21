@@ -747,7 +747,7 @@
             <li>
               <b>Claims move at once.</b> While you are in, anyone can claim your rewards through AutoMaxi, at any time,
               even those your own votes earned, and the fee is the same whoever calls. They are claimed for you right
-              after each epoch ends. Rewards nobody has claimed through it yet, you can still claim on Hydrex yourself.
+              after each epoch ends.
             </li>
             <li>
               <b>Votes move at the next epoch,</b> <time class="next-epoch">on Thursday at 00:00 UTC</time>. From then,
@@ -1394,11 +1394,15 @@
         </dl>
         <dl class="total">
           <div>
-            <dt data-own="Paid to you" data-theirs="Paid to its owner">Paid to you</dt>
+            <dt class="receipt-paid-to" data-own="Paid to you" data-theirs="Paid to its owner">Paid to you</dt>
             <dd class="value receipt-paid"></dd>
             <dd class="dollars receipt-paid-usd"></dd>
             <dd class="detail receipt-elsewhere" hidden>
-              <span data-own="At your payout address," data-theirs="At its owner's payout address,"></span>
+              <span
+                class="receipt-elsewhere-at"
+                data-own="At your payout address,"
+                data-theirs="At its owner's payout address,"
+              ></span>
               <code translate="no"><a class="receipt-recipient"></a></code>
             </dd>
           </div>
