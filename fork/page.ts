@@ -1483,7 +1483,17 @@ async function fund(tokens: Address[]): Promise<void> {
     const amounts = new Map(tokens.map((token) => [token.toLowerCase(), held.get(token.toLowerCase())!.balance]));
     const time = Number((await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false])).timestamp);
     await pricesAt([...described.values()], amounts, time, time);
-    for (const token of tokens) await findRoute(token, amounts.get(token.toLowerCase())!, INTO_USDC, false);
+    // anvil fails a read when FORK_URL does: each route is tried again, three times at most.
+    for (const token of tokens) {
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await findRoute(token, amounts.get(token.toLowerCase())!, INTO_USDC, false);
+          break;
+        } catch (error) {
+          if (attempt === 3) throw error;
+        }
+      }
+    }
   });
 }
 
