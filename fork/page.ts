@@ -1478,7 +1478,7 @@ async function fund(tokens: Address[]): Promise<void> {
   }
   await warm(async () => {
     // The page reads the balance of every token it knows.
-    const held = await holdingsOf(SELLER, known(), INTO_USDC.address);
+    const held = await holdingsOf(SELLER, [...known(), ...tokens], INTO_USDC.address);
     const described = await describeTokens([...tokens, INTO_USDC.token]);
     const amounts = new Map(tokens.map((token) => [token.toLowerCase(), held.get(token.toLowerCase())!.balance]));
     const time = Number((await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false])).timestamp);
