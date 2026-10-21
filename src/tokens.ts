@@ -41,12 +41,15 @@ export function lookalike(token: Token): Listed | undefined {
 }
 
 // Each token's symbol and decimals: the list's own, or read from its contract. Tokens without decimals are left out.
+// Each is read once.
+const described = new Map<string, Token>();
+
 export async function describe(addresses: Address[]): Promise<Map<string, Token>> {
-  const unknown = addresses.filter((address) => !listed(address));
-  const read = unknown.length ? await tokensOf(unknown) : new Map<string, Token>();
+  const unknown = addresses.filter((address) => !listed(address) && !described.has(key(address)));
+  if (unknown.length) for (const [address, token] of await tokensOf(unknown)) described.set(address, token);
   return new Map(
     addresses.flatMap((address) => {
-      const token = listed(address) ?? read.get(key(address));
+      const token = listed(address) ?? described.get(key(address));
       return token ? [[key(address), token] as const] : [];
     }),
   );

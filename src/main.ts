@@ -752,6 +752,8 @@ function need(
 }
 
 let overdueShown = "";
+let needsShown: string | undefined;
+let allowsShown: string | undefined;
 
 function showApp(): void {
   const items: DocumentFragment[] = [];
@@ -800,10 +802,15 @@ function showApp(): void {
       ),
     );
   }
+  // Drawn again only when its lines change, so that a button keeps its focus between ticks.
   const needs = document.getElementById("needs")!;
-  needs.hidden = !items.length;
-  fill(needs, { count: `· ${items.length}` });
-  needs.querySelector(".needs-list")!.replaceChildren(...items);
+  const drawnNeeds = items.map((item) => item.textContent).join("\n");
+  if (drawnNeeds !== needsShown) {
+    needsShown = drawnNeeds;
+    needs.hidden = !items.length;
+    fill(needs, { count: `· ${items.length}` });
+    needs.querySelector(".needs-list")!.replaceChildren(...items);
+  }
   // What you hold in each product, once connected.
   const hydrexYours = appView.querySelector<HTMLElement>(".hydrex-yours")!;
   hydrexYours.hidden = !holdings;
@@ -865,6 +872,12 @@ async function showAllows(
     if (other) theirs.push({ words: `#${account.id}: Hydrex's ${other} automation can vote with it.`, action: "self" });
     return theirs.map((line) => ({ ...line, account }));
   });
+  const drawn = [
+    ...lines.map(({ words }) => words),
+    ...(left ?? []).map(({ token, spender, amount }) => `${token} ${spender} ${amount}`),
+  ].join("\n");
+  if (drawn === allowsShown) return;
+  allowsShown = drawn;
   appView.querySelector(".allows-accounts")!.replaceChildren(
     ...lines.map(({ words, action, account }) => {
       const item = clone("allows-account");

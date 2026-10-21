@@ -437,7 +437,11 @@ async function confirm(page: Page): Promise<void> {
 async function start(block: number, owners: Address[]): Promise<void> {
   node = spawn(
     "anvil",
-    ["--fork-url", FORK_URL, "--fork-block-number", String(block), "--port", String(PORT), "--auto-impersonate"],
+    // A free archive RPC times out now and then: anvil asks it again, after a second, up to twenty times.
+    [
+      ...["--fork-url", FORK_URL, "--fork-block-number", String(block), "--port", String(PORT), "--auto-impersonate"],
+      ...["--retries", "20", "--fork-retry-backoff", "1000"],
+    ],
     { stdio: ["ignore", "ignore", process.env.ANVIL_LOG ? "inherit" : "ignore"] },
   );
   for (let i = 0; ; i++) {
