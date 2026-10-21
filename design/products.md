@@ -1,9 +1,10 @@
-# Offerings
+# Products
 
-How the page grows from one offering to three: the Hydrex automations it has, a way to claim AutoMaxi's rewards when its
-keeper is late, and a swap of many tokens into one. It is UX research and a plan, written for the owner, who has
-decisions to take, and for whoever implements it. [Brackets] mark those decisions; [Decisions](#decisions) lists them
-with a recommendation each. Where this file disagrees with [audit.md](audit.md), this file wins for the parts it covers.
+How the page grows from one kind of product to two: the Hydrex automations it has, and a swap of many tokens into one.
+On the way, it gains a way to claim AutoMaxi's rewards when its keeper is late. It is UX research and a plan, written
+for the owner, who has decisions to take, and for whoever implements it. [Brackets] mark those decisions;
+[Decisions](#decisions) lists them with a recommendation each. Where this file disagrees with [audit.md](audit.md), this
+file wins for the parts it covers.
 
 Read on 21 Oct 2026, from version 0.5.2 of the page (main at `5b7b9d8`), AutoMaxi version 2 at
 `0x692c323B425A9DfeebE302F56168a7798D93EAC5`, and the six swappers deployed that day. Both contracts' sources are
@@ -12,11 +13,11 @@ page links to them there, as it does for AutoMaxi today, and never to a reposito
 
 ## In short
 
-- **A level for the offerings.** Home speaks for the whole café. The App (`#app`) becomes the level that lists the
-  offerings, after what needs you across all of them. Today's App, the wallet's Hydrex accounts and who votes for them,
-  moves one level down to `#hydrex`. A new `#swap` sits beside it.
-- **Claiming is a fallback, not an offering.** AutoMaxi's keeper claims for every member right after each epoch ends, so
-  a Claim button shows only when an account's payout is late: on its page, in the AutoMaxi group, and in the App's Needs
+- **A level for the products.** Home speaks for the whole café. The App (`#app`) becomes the level that lists the
+  products, after what needs you across all of them: the Hydrex automations as one entry, and the swap. Today's App, the
+  wallet's Hydrex accounts and who votes for them, moves one level down to `#hydrex`. A new `#swap` sits beside it.
+- **Claiming is a fallback, not a product.** AutoMaxi's keeper claims for every member right after each epoch ends, so a
+  Claim button shows only when an account's payout is late: on its page, in the AutoMaxi group, and in the App's Needs
   you.
 - **Payouts and the swap meet.** Every AutoMaxi receipt offers to swap the payout into one token, and a late claim's
   review offers the rewards "as they are" or "into one token". That gives the hands-off holder what they want, "paid
@@ -183,8 +184,8 @@ New moments that matter, after [README.md's](README.md#the-moments-that-matter) 
 | Level | View                 | Address                                      | Holds                                                                                        |
 | ----- | -------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | 0     | Home                 | `/`                                          | What the café does, in a heading and a line; the one button; the line on stopped automations |
-| 1     | The App              | `#app`                                       | The wallet; Needs you, across offerings; the offerings, each with what you hold in it        |
-| 1     | About                | `#about`                                     | The café's facts, for every offering                                                         |
+| 1     | The App              | `#app`                                       | The wallet; Needs you, across products; the products, each with what you hold in it          |
+| 1     | About                | `#about`                                     | The café's facts, for every product                                                          |
 | 2     | Hydrex               | `#hydrex`                                    | Today's App: the wallet's accounts in groups, then who votes for them                        |
 | 2     | Swap                 | `#swap`, `#swap/weth`; a fold, `#swap/check` | The swap, into USDC unless the address names another output                                  |
 | 3     | An automation's page | `#hydrex/carbon-impact`, `#hydrex/automaxi`  | As today, with Claim in AutoMaxi's while a member's payout is late                           |
@@ -227,8 +228,8 @@ keeps nothing.
 - **The heading** says what happens, which anyone can check, as the brand asks. It names the three verbs, and Base,
   since the swap is for any wallet on Base, not only Hydrex's voters. [Heading]
 - **The stopped line stays.** The stranded holder is still the largest audience, and it now leads to `#hydrex`.
-- **Nothing else:** no list of offerings on Home. That is the App's job, one click on, and the header's button reaches
-  it from every view.
+- **Nothing else:** no list of products on Home. That is the App's job, one click on, and the header's button reaches it
+  from every view.
 
 ### The App
 
@@ -253,11 +254,12 @@ Swap many tokens into one                                  →
 ```
 
 - **Without a wallet:** the wallet picker, then the menu, without the "Yours" lines.
-- **Needs you gathers from every offering,** each with one action: an account in a stopped automation, a late payout,
+- **Needs you gathers from every product,** each with one action: an account in a stopped automation, a late payout,
   approvals left over. It shows nothing when nothing needs you; a payout that is merely waiting for Thursday does not
   count, so that the group keeps its weight.
-- **The menu** has one entry per offering, each with one line of what it does, what it takes, and once connected, what
-  you hold in it. Claiming is not on it: it is an action on accounts in AutoMaxi.
+- **The menu** has one entry per kind of product, the Hydrex automations together and the swap, each with one line of
+  what it does, what it takes, and once connected, what you hold in it. Claiming is not on it: it is an action on
+  accounts in AutoMaxi.
 - **Reads:** the App reads only what its lines need: the accounts and their groups, which it reads today, and the
   balances of known tokens with their quotes for the swap line. The swap line can come last, marked "…", as the earnings
   do today.
@@ -472,7 +474,7 @@ finding routes for many tokens strains the free RPCs' limits, the page finds the
   `exchanges()`; what the page checks (code, `outputToken`, `TREASURY`, `FEE_BPS`, the factories); how routes are found;
   how a quote can differ from the swap; swapping without this page, from Basescan; and for co-signers.
 
-## Rules for every offering
+## Rules for every product
 
 The page's rules stand, and extend:
 
@@ -490,7 +492,7 @@ The page's rules stand, and extend:
 
 ## Elsewhere on the page
 
-- **About** speaks for every offering. Its lead: "metaDEX Café is a page for looking after your Hydrex accounts and
+- **About** speaks for every product. Its lead: "metaDEX Café is a page for looking after your Hydrex accounts and
   swapping tokens on Base, from your own wallet." "What it does not do" adds: "It never sells a token you did not tick,
   and shows each route before your wallet asks." "If this page goes away" adds: "Your tokens stay in your wallet.
   Approvals can be reset on each token's contract, and the swappers called from Basescan." "How the figures are read"
@@ -551,7 +553,7 @@ Still open:
 
 | Decision                      | Options                                                                      | Recommendation                                                                                                                   |
 | ----------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Heading**                   | "Vote, claim and swap on Base, from your own wallet"; or one per offering    | The first: three verbs anyone can check                                                                                          |
+| **Heading**                   | "Vote, claim and swap on Base, from your own wallet"; or one per product     | The first: three verbs anyone can check                                                                                          |
 | **Claim for others**          | Own accounts only; any account, "pays its owner"                             | Own accounts only                                                                                                                |
 | **Claim and swap, when late** | One review with "Receive them"; two separate flows                           | One review, "as they are" by default                                                                                             |
 | **Default output**            | USDC; none until picked                                                      | USDC, unless the address names another, such as `#swap/weth`. The page stores nothing, so it cannot remember a choice            |
@@ -561,4 +563,4 @@ Still open:
 | **WETH or ETH**               | WETH only; an "unwrap to ETH" call after the swap                            | WETH only at first. Unwrapping is one more call, worth adding once batching works                                                |
 | **Swap from a Safe**          | The same deadline; a longer one for co-signers                               | A day, said in the brief: a route that falls below its minimum while co-signers sign is skipped                                  |
 | **AutoMaxi version 1**        | Claim for its members too; not at all                                        | Not at all: the page does not offer version 1                                                                                    |
-| **The offering's name**       | "Swap"; a product name, as AutoMaxi                                          | "Swap many tokens into one" on the menu, "Swap" in crumbs: plain words, and no product to brand                                  |
+| **The swap's name**           | "Swap"; a name of its own, as AutoMaxi                                       | "Swap many tokens into one" on the menu, "Swap" in crumbs: plain words, and nothing to brand                                     |
