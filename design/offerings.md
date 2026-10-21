@@ -1,9 +1,9 @@
 # Offerings
 
-How the page grows from one offering to three: the Hydrex automations it has, a way to claim AutoMaxi's rewards, and a
-swap of many tokens into one. It is UX research and a plan, written for the owner, who has decisions to take, and for
-whoever implements it. [Brackets] mark those decisions; [Decisions](#decisions) lists them with a recommendation each.
-Where this file disagrees with [audit.md](audit.md), this file wins for the parts it covers.
+How the page grows from one offering to three: the Hydrex automations it has, a way to claim AutoMaxi's rewards when its
+keeper is late, and a swap of many tokens into one. It is UX research and a plan, written for the owner, who has
+decisions to take, and for whoever implements it. [Brackets] mark those decisions; [Decisions](#decisions) lists them
+with a recommendation each. Where this file disagrees with [audit.md](audit.md), this file wins for the parts it covers.
 
 Read on 21 Oct 2026, from version 0.5.2 of the page (main at `5b7b9d8`), AutoMaxi version 2 at
 `0x692c323B425A9DfeebE302F56168a7798D93EAC5`, and the six swappers deployed that day. Both contracts' sources are
@@ -15,11 +15,12 @@ page links to them there, as it does for AutoMaxi today, and never to a reposito
 - **A level for the offerings.** Home speaks for the whole café. The App (`#app`) becomes the level that lists the
   offerings, after what needs you across all of them. Today's App, the wallet's Hydrex accounts and who votes for them,
   moves one level down to `#hydrex`. A new `#swap` sits beside it.
-- **Claiming is an action, not an offering.** It lives where the rewards are: on an account's page, in the AutoMaxi
-  group, and on AutoMaxi's page. The App raises it only when a payout is late.
-- **Claim and swap meet.** The claim's review offers the rewards "as they are" or "into one token", and a payout's
-  receipt offers to swap it. That gives the hands-off holder what they want, "paid weekly in one token", without a new
-  contract.
+- **Claiming is a fallback, not an offering.** AutoMaxi's keeper claims for every member right after each epoch ends, so
+  a Claim button shows only when an account's payout is late: on its page, in the AutoMaxi group, and in the App's Needs
+  you.
+- **Payouts and the swap meet.** Every AutoMaxi receipt offers to swap the payout into one token, and a late claim's
+  review offers the rewards "as they are" or "into one token". That gives the hands-off holder what they want, "paid
+  weekly in one token", without a new contract.
 - **The swap does what the contract leaves out on purpose:** finding the wallet's tokens, choosing each route, setting
   each minimum, and approving each token. The page does all four in the browser, within its rules: three RPCs, no
   server, no signatures.
@@ -39,13 +40,15 @@ rest to the account's owner.
 
 - **Anyone can call it, for any account in AutoMaxi,** and it always pays the owner. Whoever calls pays the gas. The fee
   is the same whoever calls.
-- **AutoMaxi's keeper claims for every member after each epoch.** The page already reads when the last payout came, and
-  calls an account late when it did not.
+- **AutoMaxi's keeper claims for every member right after each epoch ends.** Claiming earlier gains nothing: an epoch's
+  rewards can be claimed only once it has ended. The page already reads when the last payout came, and calls an account
+  late when it did not.
 - **It asks every contract for every token.** A bribe walks back up to 50 epochs for a token it has not paid recently,
   so a first claim, or one after a long gap, should pass only the contracts and tokens that owe something. The page
   already reads `earned(tokenId, token)` for last epoch's pools, so it knows which.
-- **Owners can still claim on Hydrex without the fee,** for rewards nobody has claimed through AutoMaxi yet. AutoMaxi's
-  page says so today, under "Joining and leaving".
+- **Owners can also claim on Hydrex directly, without the fee,** for rewards nobody has claimed through AutoMaxi yet.
+  The page does not say so: the keeper claims right after each epoch, so there is almost never anything left to claim
+  that way. Settled by the owner on 21 Oct 2026.
 - **A claim that receives nothing does not revert.** If the keeper claims first, the tokens still reach the owner.
 
 ### The swapper
@@ -184,8 +187,8 @@ New moments that matter, after [README.md's](README.md#the-moments-that-matter) 
 | 1     | About                | `#about`                                     | The café's facts, for every offering                                                         |
 | 2     | Hydrex               | `#hydrex`                                    | Today's App: the wallet's accounts in groups, then who votes for them                        |
 | 2     | Swap                 | `#swap`, `#swap/weth`; a fold, `#swap/check` | The swap, into USDC unless the address names another output                                  |
-| 3     | An automation's page | `#hydrex/carbon-impact`, `#hydrex/automaxi`  | As today, with Claim in AutoMaxi's                                                           |
-| 4     | An account's page    | `#hydrex/9540`                               | As today, with Claim                                                                         |
+| 3     | An automation's page | `#hydrex/carbon-impact`, `#hydrex/automaxi`  | As today, with Claim in AutoMaxi's while a member's payout is late                           |
+| 4     | An account's page    | `#hydrex/9540`                               | As today, with Claim while its payout is late                                                |
 | –     | The review           | A dialog                                     | Join, leave, claim, swap: each in two steps                                                  |
 
 The swap has no third level: the six swappers are one product with one choice, the output, which is a field on its page,
@@ -263,27 +266,31 @@ Swap many tokens into one                                  →
 
 Today's App, unchanged but for its heading, "Your Hydrex accounts", its crumb, and Claim in the AutoMaxi group:
 
-| Group        | Its actions                             |
-| ------------ | --------------------------------------- |
-| **AutoMaxi** | Leave, Move to Carbon Impact, **Claim** |
+| Group        | Its actions                                                        |
+| ------------ | ------------------------------------------------------------------ |
+| **AutoMaxi** | Leave, Move to Carbon Impact, and **Claim** while a payout is late |
 
 "Who votes for your accounts", the menu of automations, stays at the bottom. Its AutoMaxi entry says "Pays you in the
-tokens earned. Claim and swap them here." with a link to the swap.
+tokens earned, right after each epoch. Swap them into one here." with a link to the swap.
 
 ## Claiming
 
 ### Where it shows
 
-- **An account's page,** for the wallet's own account in AutoMaxi, when something waits: under "Its last payout", the
-  standing line it shows today ("≈ $1.84 waits to be claimed in last epoch's pools.") gains a button, **Claim now**.
-- **The AutoMaxi group** in `#hydrex`, and "Your accounts in it" on AutoMaxi's page: **Claim**, with the boxes to tick
-  when more than one account has something waiting.
-- **The App's Needs you,** only when a payout is late, as the page defines it today.
-- **Not for others' accounts.** Anyone may claim for anyone, and it pays the owner, but a button on a stranger's account
-  invites confusion about who gets paid. [Claim for others]
+Only while an account's payout is late, as the page defines it today:
 
-The button says what it costs before anyone presses it: "AutoMaxi's keeper claims after each epoch. Claiming now costs
-the gas, ≈ $0.01, and AutoMaxi takes 1% either way."
+- **An account's page,** for the wallet's own account in AutoMaxi: the late notice gains **Claim now**.
+- **The AutoMaxi group** in `#hydrex`, and "Your accounts in it" on AutoMaxi's page: **Claim**, for the late accounts,
+  with boxes to tick when there are more than one.
+- **The App's Needs you,** with the same line.
+
+Never in a normal week. Right after each epoch, something always waits until the keeper's payout arrives, up to half a
+day later, and a button then would only spend the member's gas on what the keeper is about to do. Nor for others'
+accounts: anyone may claim for anyone, and it pays the owner, but a button on a stranger's account invites confusion
+about who gets paid. [Claim for others]
+
+The button says what it costs before anyone presses it: "AutoMaxi's keeper usually claims right after each epoch, and
+has not for this account yet. Claiming now costs the gas, ≈ $0.01, and AutoMaxi takes 1%, as from the keeper's claim."
 
 ### Its review
 
@@ -309,7 +316,6 @@ RECEIVE THEM
 
 Gas ≈ $0.01, or ≈ $0.02 with the swap. There may be more in
 other pools.
-You can also claim on Hydrex yourself, without the 1%.  [Decision]
 
                                                        [Next]
 ```
@@ -337,9 +343,9 @@ them.
 
 ### On a payout's receipt
 
-AutoMaxi's receipt on an account's page, and the review's receipt after a claim, end with **Swap these into one token**,
-which opens `#swap` with the payout's tokens and amounts ticked. The page holds them in memory for the visit; nothing is
-stored.
+This is the usual path to one token, week after week. AutoMaxi's receipt on an account's page, and the review's receipt
+after a late claim, end with **Swap these into one token**, which opens `#swap` with the payout's tokens and amounts
+ticked. The page holds them in memory for the visit; nothing is stored.
 
 ## Swapping, `#swap`
 
@@ -530,23 +536,29 @@ The refactor touches every level, so these come cheaply with it:
 From Base, with nothing collected: claims through AutoMaxi by callers other than its keeper; swaps through the six
 swappers, with the tokens and outputs; leftover approvals to the swappers.
 
-From people, five sessions per new persona, with four tasks: "Claim what waits for your account", "Turn last week's
-rewards into USDC", "What did that cost you?", and "Make sure nothing is still approved". After each, ask what was sold,
-what stayed, and why.
+From people, five sessions per new persona, with four tasks: "Your payout is late: get it", "Turn last week's rewards
+into USDC", "What did that cost you?", and "Make sure nothing is still approved". After each, ask what was sold, what
+stayed, and why.
 
 ## Decisions
 
-| Decision                               | Options                                                                      | Recommendation                                                                                                                   |
-| -------------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Heading**                            | "Vote, claim and swap on Base, from your own wallet"; or one per offering    | The first: three verbs anyone can check                                                                                          |
-| **Claiming on Hydrex without the fee** | Say it next to Claim; build a fee-free claim too; say nothing                | Say it, as AutoMaxi's page does today. Saying nothing would be the nudge [README.md](README.md#principles) rules out             |
-| **Claim for others**                   | Own accounts only; any account, "pays its owner"                             | Own accounts only                                                                                                                |
-| **Claim and swap**                     | One review with "Receive them"; two separate flows                           | One review, "as they are" by default                                                                                             |
-| **Default output**                     | USDC; none until picked                                                      | USDC, unless the address names another, such as `#swap/weth`. The page stores nothing, so it cannot remember a choice            |
-| **Minimum**                            | 0.5%; 1%; automatic, as Uniswap                                              | 0.5%, one setting. With skip-failed, a tight minimum leaves a token rather than failing the swap                                 |
-| **Token list**                         | Hydrex's reward tokens and the outputs only; plus a list built into the page | Both. The list lives in the repository and a script refreshes it, as `src/hydrex-conduits.json`, so the build stays reproducible |
-| **Aero's classic pools**               | Use them; prefer others within 1%; avoid them                                | Prefer others within 1%, and cap the tip at 1 gwei where the wallet allows                                                       |
-| **WETH or ETH**                        | WETH only; an "unwrap to ETH" call after the swap                            | WETH only at first. Unwrapping is one more call, worth adding once batching works                                                |
-| **Swap from a Safe**                   | The same deadline; a longer one for co-signers                               | A day, said in the brief: a route that falls below its minimum while co-signers sign is skipped                                  |
-| **AutoMaxi version 1**                 | Claim for its members too; not at all                                        | Not at all: the page does not offer version 1                                                                                    |
-| **The offering's name**                | "Swap"; a product name, as AutoMaxi                                          | "Swap many tokens into one" on the menu, "Swap" in crumbs: plain words, and no product to brand                                  |
+Settled by the owner on 21 Oct 2026: the page does not say that owners can claim AutoMaxi's rewards on Hydrex without
+the fee, as the keeper claims right after each epoch. AutoMaxi's page no longer says it under "Joining and leaving". It
+still says, under leaving, that what nobody has claimed through AutoMaxi is the owner's to claim on Hydrex: after
+leaving, that is the only way.
+
+Still open:
+
+| Decision                      | Options                                                                      | Recommendation                                                                                                                   |
+| ----------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Heading**                   | "Vote, claim and swap on Base, from your own wallet"; or one per offering    | The first: three verbs anyone can check                                                                                          |
+| **Claim for others**          | Own accounts only; any account, "pays its owner"                             | Own accounts only                                                                                                                |
+| **Claim and swap, when late** | One review with "Receive them"; two separate flows                           | One review, "as they are" by default                                                                                             |
+| **Default output**            | USDC; none until picked                                                      | USDC, unless the address names another, such as `#swap/weth`. The page stores nothing, so it cannot remember a choice            |
+| **Minimum**                   | 0.5%; 1%; automatic, as Uniswap                                              | 0.5%, one setting. With skip-failed, a tight minimum leaves a token rather than failing the swap                                 |
+| **Token list**                | Hydrex's reward tokens and the outputs only; plus a list built into the page | Both. The list lives in the repository and a script refreshes it, as `src/hydrex-conduits.json`, so the build stays reproducible |
+| **Aero's classic pools**      | Use them; prefer others within 1%; avoid them                                | Prefer others within 1%, and cap the tip at 1 gwei where the wallet allows                                                       |
+| **WETH or ETH**               | WETH only; an "unwrap to ETH" call after the swap                            | WETH only at first. Unwrapping is one more call, worth adding once batching works                                                |
+| **Swap from a Safe**          | The same deadline; a longer one for co-signers                               | A day, said in the brief: a route that falls below its minimum while co-signers sign is skipped                                  |
+| **AutoMaxi version 1**        | Claim for its members too; not at all                                        | Not at all: the page does not offer version 1                                                                                    |
+| **The offering's name**       | "Swap"; a product name, as AutoMaxi                                          | "Swap many tokens into one" on the menu, "Swap" in crumbs: plain words, and no product to brand                                  |
