@@ -338,7 +338,11 @@ other pools.
 - **"Receive them" is the one dial** that [README.md](README.md#principles) asks for: the payout token, by the owner's
   choice, without a contract that swaps. "As they are" is the default, so that nothing is sold unasked.
 - **Step 2, what your wallet will ask:** one `claim` per account, as slips, with only the contracts and tokens that owe
-  something. With "Swapped into", the approvals and the swap follow, as in the swap's review.
+  something. AutoMaxi asks each contract for every token, so an account owed by many contracts in many tokens, as one
+  the keeper missed for weeks, would need more gas than Base allows a transaction: its claim splits into calls that each
+  fit one, the most valuable first. Calls that need more than one transaction's gas together go one at a time, even from
+  a wallet that sends several in one prompt, and not from a Safe. With "Swapped into", the approvals and the swap
+  follow, as in the swap's review, or in a review of their own after split calls.
 - **Done:** a receipt from the `Claimed` events: what was received, the 1%, what reached you. If the keeper claimed
   first, the receipt says the tokens came in its claim, not this one, which still cost its gas.
 

@@ -52,6 +52,9 @@ export type ReviewOptions = {
   prepare?(i: number): Promise<{ step: Slip; changed?: string } | undefined>;
   // Whether calls sent in one prompt must go through all together or not at all, where the wallet can.
   atomic?: boolean;
+  // Calls that need more gas together than one transaction may use go one at a time: a wallet may run the calls of
+  // one prompt as one transaction.
+  apart?: boolean;
 };
 
 type Review = ReviewOptions & {
@@ -189,14 +192,14 @@ export function openReview(options: ReviewOptions): Opened {
   void capabilities(options.connection).then((found) => {
     if (state !== current || state.sending || state.submitted) return;
     state.capabilities = found;
-    state.batch = found.batch && state.steps.length > 1;
+    state.batch = found.batch && state.steps.length > 1 && !state.apart;
     refreshReview();
   });
   return {
     replace(steps, more = {}) {
       if (state !== current || state.sending || state.submitted) return;
       Object.assign(state, { steps, atomic: undefined, outcomeOf: undefined, prepare: undefined, ...more });
-      state.batch = !!state.capabilities?.batch && steps.length > 1;
+      state.batch = !!state.capabilities?.batch && steps.length > 1 && !state.apart;
       drawSlips(state);
       refreshReview();
     },

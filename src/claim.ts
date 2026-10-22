@@ -2,7 +2,7 @@ import { decodeEventLog, encodeFunctionData, parseAbi, type Address, type Hex } 
 import { same, type Receipt } from "./chain.ts";
 import { AUTOMAXI, AUTOMAXI_FEE_BPS } from "./config.ts";
 import { rewardsFor, type Reward } from "./earnings.ts";
-import { WEEK, list } from "./format.ts";
+import { WEEK, count, list } from "./format.ts";
 import type { Entry } from "./last-payout.ts";
 import type { Token } from "./prices.ts";
 import { readEarned, type Amount } from "./receipts.ts";
@@ -12,7 +12,8 @@ import type { Slip } from "./review.ts";
 // tokens) for any account in AutoMaxi, and it pays the owner, less 1%. The page offers it for the wallet's own accounts
 // only, once a payout is overdue. A claim asks every contract given for every token given, and a contract walks back up
 // to 50 epochs for a token it has not paid recently, so the page passes only the contracts and tokens that owe
-// something, as earned() finds them.
+// something, as earned() finds them, and splits a claim that would need more gas than a transaction may use into
+// several, each contract with only the tokens it owes.
 
 const autoMaxiAbi = parseAbi([
   "function claim(uint256 tokenId, address[] feeAddresses, address[] bribeAddresses, address[] tokens) returns (uint256[] amounts)",
@@ -27,6 +28,50 @@ const key = (address: string): string => address.toLowerCase();
 const unique = (addresses: Address[]): Address[] => [
   ...new Map(addresses.map((address) => [key(address), address])).values(),
 ];
+
+// What a claim's call costs at most, as a trace of one on a fork of Base finds it: each contract walks each token it is
+// asked for back up to 50 epochs, asking the VotingEscrow for the account's votes at each, about 6,400 gas a time; then
+// AutoMaxi takes its fee and pays the owner, token by token.
+const CLAIM_GAS = { call: 100_000n, token: 80_000n, contract: 50_000n, pair: 400_000n };
+// Each call is kept under this, by the estimate, and under MAX_CLAIM_GAS, as simulated: a transaction may use 16.7 million
+// gas on Base.
+export const CLAIM_CALL_GAS = 12_000_000n;
+export const MAX_CLAIM_GAS = 15_000_000n;
+
+export function claimGas(owed: Owed[]): bigint {
+  const contracts = BigInt(new Set(owed.map(({ contract }) => key(contract))).size);
+  const tokens = BigInt(new Set(owed.map(({ token }) => key(token))).size);
+  return CLAIM_GAS.call + tokens * CLAIM_GAS.token + contracts * (CLAIM_GAS.contract + tokens * CLAIM_GAS.pair);
+}
+
+// An account's claim, as calls that each fit `budget`. A call asks each of its contracts for all of its tokens, so
+// contracts that owe the same tokens share one, and each other contract goes where it adds the least: the contracts
+// that owe the most tokens first. A contract that owes too many tokens for one call is asked in several.
+export function claimCalls(claim: Claim, budget = CLAIM_CALL_GAS): Claim[] {
+  const owing = claim.owed.filter(({ amount }) => amount > 0n);
+  const byContract = new Map<string, Owed[]>();
+  for (const owed of owing) byContract.set(key(owed.contract), [...(byContract.get(key(owed.contract)) ?? []), owed]);
+  const pieces = [...byContract.values()].flatMap((owed) => {
+    const parts: Owed[][] = [[]];
+    for (const one of owed) {
+      if (parts.at(-1)!.length && claimGas([...parts.at(-1)!, one]) > budget) parts.push([]);
+      parts.at(-1)!.push(one);
+    }
+    return parts;
+  });
+  const calls: Owed[][] = [];
+  for (const piece of pieces.sort((a, b) => b.length - a.length)) {
+    let best: { call: Owed[]; added: bigint } | undefined;
+    for (const call of calls) {
+      const gas = claimGas([...call, ...piece]);
+      const added = gas - claimGas(call);
+      if (gas <= budget && (!best || added < best.added)) best = { call, added };
+    }
+    if (best) best.call.push(...piece);
+    else calls.push([...piece]);
+  }
+  return calls.map((owed) => ({ id: claim.id, owed }));
+}
 
 // The claim's arguments: the contracts that owe something, of each kind, and the tokens they owe.
 export function claimArgs({ id, owed }: Claim): [bigint, Address[], Address[], Address[]] {
@@ -54,14 +99,16 @@ export function paidBy(owed: Owed[]): { token: Address; earned: bigint; fee: big
     });
 }
 
-export function claimSlip(claim: Claim, tokens: Map<string, Token>): Slip {
+// The call for a claim, or for `whole === false`, one of the calls an account's claim is split into.
+export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true): Slip {
   const args = claimArgs(claim);
   const [id, fees, bribes, claimed] = args;
   const symbols = claimed.map((token) => tokens.get(key(token))?.symbol ?? token);
+  const from = whole ? "" : ` from ${count(fees.length + bribes.length, "reward contract", "reward contracts")}`;
   return {
     to: AUTOMAXI.address,
     data: encodeFunctionData({ abi: autoMaxiAbi, functionName: "claim", args }),
-    says: `Claims #${id}'s rewards through AutoMaxi, which pays them to you, less 1%.`,
+    says: `Claims #${id}'s rewards${from} through AutoMaxi, which pays them to you, less 1%.`,
     on: "AutoMaxi",
     call: "claim",
     fields: [
@@ -115,7 +162,8 @@ export async function owedOf(
 }
 
 // Each of the page's own claims, from its Claimed events: what AutoMaxi received for the account, its fee, and what it
-// paid the owner. A claim that received nothing, as when the keeper claimed first, has none.
+// paid the owner, summed over the calls a claim was split into. A claim that received nothing, as when the keeper
+// claimed first, has none.
 export type Claimed = { id: bigint; received: Amount[]; fees: Amount[]; paid: Amount[] };
 
 export function claimedIn(receipts: Receipt[], ids: bigint[], caller: Address): Claimed[] {
@@ -142,8 +190,27 @@ export function claimedIn(receipts: Receipt[], ids: bigint[], caller: Address): 
           amount: amount - (taken.find((fee) => same(fee.token, token))?.amount ?? 0n),
         }))
         .filter(({ amount }) => amount > 0n);
-      found.push({ id: tokenId, received, fees: taken, paid });
+      const before = found.find((claimed) => claimed.id === tokenId);
+      if (!before) found.push({ id: tokenId, received, fees: taken, paid });
+      else
+        Object.assign(before, {
+          received: [...before.received, ...received],
+          fees: [...before.fees, ...taken],
+          paid: [...before.paid, ...paid],
+        });
     }
   }
-  return found;
+  return found.map(({ id, received, fees, paid }) => ({
+    id,
+    received: summed(received),
+    fees: summed(fees),
+    paid: summed(paid),
+  }));
 }
+
+const summed = (amounts: Amount[]): Amount[] => {
+  const all = new Map<string, Amount>();
+  for (const { token, amount } of amounts)
+    all.set(key(token), { token, amount: (all.get(key(token))?.amount ?? 0n) + amount });
+  return [...all.values()];
+};

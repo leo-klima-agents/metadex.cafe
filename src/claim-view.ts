@@ -1,7 +1,7 @@
 import { maxUint256, type Address } from "viem";
 import { same, type Receipt } from "./chain.ts";
 import { DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
-import { claimSlip, claimedIn, owedOf, paidBy, type Claim } from "./claim.ts";
+import { MAX_CLAIM_GAS, claimCalls, claimGas, claimSlip, claimedIn, owedOf, paidBy, type Claim } from "./claim.ts";
 import { clone, fill, show } from "./dom.ts";
 import { count, figure, list, usd } from "./format.ts";
 import type { Entry } from "./last-payout.ts";
@@ -116,9 +116,30 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     openReview({ name, pages: [{ title: name, body: fragment }], steps: [], checkHref, connection, hooks });
   };
   if (!owing.length) return nothing("Nothing to claim: the keeper may have just claimed it.");
-  const claimSlips = owing.map((claim) => claimSlip(claim, tokens));
+  // Each account's claim, in calls that fit a transaction, the most valuable first, so that stopping halfway still
+  // claims the most.
+  const worth = ({ owed }: Claim) =>
+    dollars(
+      owed.map(({ token, amount }) => ({ token, amount })),
+      tokens,
+      prices,
+    );
+  const calls = owing.flatMap((claim) => {
+    const parts = claimCalls(claim).sort((a, b) => worth(b) - worth(a));
+    return parts.map((part) => ({ part, whole: parts.length === 1 }));
+  });
+  const claimSlips = calls.map(({ part, whole }) => claimSlip(part, tokens, whole));
   const simulated = await simulate(connection.address, claimSlips).catch(() => undefined);
   if (simulated?.some(({ ok }) => !ok)) return nothing("Base refused the claim. The keeper may be claiming now.");
+  if (simulated?.some(({ gas }) => gas > MAX_CLAIM_GAS)) return nothing("This claim needs more gas than Base allows.");
+  // More gas together than one transaction may use: the calls go one at a time, and a Safe, which sends them all in
+  // one transaction, cannot claim.
+  const totalGas =
+    simulated?.reduce((sum, { gas }) => sum + gas, 0n) ??
+    calls.reduce((sum, { part }) => sum + claimGas(part.owed), 0n);
+  const apart = totalGas > MAX_CLAIM_GAS;
+  if (apart && connection.wallet.propose)
+    return nothing("This claim needs more gas than one Safe transaction may use.");
   const totals = paidBy(owing.flatMap(({ owed }) => owed));
   const paid = totals.map(({ token, paid }) => ({ token, amount: paid }));
   const body = clone("claim-before");
@@ -146,8 +167,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     tokens,
     prices,
   );
-  const claimGas = simulated?.reduce((sum, { gas }) => sum + gas, 0n);
-  const claimUsd = claimGas !== undefined && found ? gasUsd(claimGas, found) : undefined;
+  const claimUsd = simulated && found ? gasUsd(totalGas, found) : undefined;
   const gasLine = body.querySelector(".claim-gas")!;
   const sayGas = (withSwap?: number) =>
     (gasLine.textContent = `Gas ${claimUsd === undefined ? "…" : usd(claimUsd)}${withSwap === undefined ? "" : `, ${usd(withSwap)} with the swap`}`);
@@ -194,12 +214,14 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     connection,
     hooks,
     outcomeOf: asTheyAre,
+    apart,
   });
   // Swapped into one token: the claim brings exact amounts, known before, so the page approves each for exactly that,
   // and the swap sells "my balance, up to the allowance". With batching, or from a Safe, all in one prompt; otherwise
   // the claim first, then the swap's own review.
-  // Only all or nothing: should the claim fail, a swap of "my balance" would sell tokens the wallet held before.
-  const together = caps.atomic || !!connection.wallet.propose;
+  // Only all or nothing: should the claim fail, a swap of "my balance" would sell tokens the wallet held before. And only
+  // if the claim leaves room in the transaction for the swap.
+  const together = (caps.atomic || !!connection.wallet.propose) && !apart;
   let planned = 0;
   const plan = async (swapper: Swapper): Promise<void> => {
     const id = ++planned;
@@ -294,7 +316,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     const all = [...claimSlips, ...slips];
     const run = await simulate(connection.address, all).catch(() => undefined);
     if (id !== planned) return;
-    if (run?.some(({ ok }) => !ok)) {
+    if (run?.some(({ ok }) => !ok) || (run?.reduce((sum, { gas }) => sum + gas, 0n) ?? 0n) > MAX_CLAIM_GAS) {
       into.textContent = "Base refused both together: they come as they are.";
       return opened.replace(claimSlips, { outcomeOf: asTheyAre });
     }

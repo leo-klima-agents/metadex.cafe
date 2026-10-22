@@ -29,8 +29,11 @@ This README is for whoever runs the site. The design and the plan are in [design
   account in it, and which pays the owner, less 1%. AutoMaxi's keeper claims for every member right after each epoch, so
   the page offers it only for the wallet's own accounts, once a payout is overdue: half a day after the flip with
   something waiting, or a full epoch late. It passes only the contracts and tokens that `earned()` finds owing, in last
-  epoch's pools, and the epoch before's when the keeper missed it too. The review offers the rewards as they are, or
-  swapped into one token.
+  epoch's pools, and the epoch before's when the keeper missed it too. AutoMaxi asks each contract for every token
+  passed, and each answer reads the account's past epochs, so a claim of many contracts and tokens splits into calls
+  that each fit a transaction, the most valuable first; calls that need more gas together than one transaction may use
+  go one at a time, and a Safe, which sends them as one, cannot claim them. The review offers the rewards as they are,
+  or swapped into one token.
 - **Swapping** goes through `ImmutableSwapper`, deployed once per output token: USDC, EURC, WETH, cbBTC, AERO and HYDX.
   Each `swap(routes, deadline, skipFailed)` sells the tokens named, each along a route of one to three hops the caller
   picks, through pools of Hydrex, Aero, Aerodrome and Uniswap that it checks against each exchange's factory, and sends

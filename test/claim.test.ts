@@ -2,7 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { decodeFunctionData, encodeAbiParameters, encodeEventTopics, parseAbi, type Address } from "viem";
 import { AUTOMAXI } from "../src/config.ts";
-import { claimArgs, claimSlip, claimedIn, paidBy, type Owed } from "../src/claim.ts";
+import {
+  CLAIM_CALL_GAS,
+  claimArgs,
+  claimCalls,
+  claimGas,
+  claimSlip,
+  claimedIn,
+  paidBy,
+  type Owed,
+} from "../src/claim.ts";
 
 const FEES: Address = "0x00000000000000000000000000000000000000f1";
 const FEES_2: Address = "0x00000000000000000000000000000000000000f2";
@@ -74,4 +83,102 @@ test("a claim's receipt reads its Claimed event, and says so when the keeper's c
   ]);
   // Another caller's claim, as the keeper's, is not the page's own.
   assert.deepEqual(claimedIn([receipt([log([5n, 0n], [0n, 0n], AVNT)])], [9540n], OWNER), []);
+});
+
+// A contract at an address of its number, and a token at another.
+const contract = (n: number): Address => `0x${n.toString(16).padStart(40, "0")}`;
+const token = (n: number): Address => `0x${(n + 0x1000).toString(16).padStart(40, "0")}`;
+
+test("a claim that fits one call stays one, as claimArgs gives it", () => {
+  const calls = claimCalls({ id: 9540n, owed });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(claimArgs(calls[0]!), claimArgs({ id: 9540n, owed }));
+  assert.equal(
+    claimSlip(calls[0]!, new Map()).says,
+    "Claims #9540's rewards through AutoMaxi, which pays them to you, less 1%.",
+  );
+});
+
+test("a claim too large for one transaction is split into calls that each fit, each contract asked for its own tokens", () => {
+  // As #82774's on a fork of Base: 71 contracts, each owing one or two of 37 tokens.
+  const many: Owed[] = Array.from({ length: 71 }, (_, i) => [
+    { contract: contract(i), token: token(i % 37), amount: 1n, fee: i % 2 === 0 },
+    ...(i % 3 === 0 ? [{ contract: contract(i), token: token((i + 1) % 37), amount: 2n, fee: i % 2 === 0 }] : []),
+  ]).flat();
+  assert.ok(claimGas(many) > 1_000_000_000n, "asked of every contract for every token, it would need a billion gas");
+  const calls = claimCalls({ id: 82774n, owed: many });
+  assert.ok(calls.length > 1);
+  for (const { owed } of calls) assert.ok(claimGas(owed) <= CLAIM_CALL_GAS);
+  // Every pair is claimed once.
+  const pairs = (list: Owed[]) => list.map(({ contract, token }) => `${contract} ${token}`).sort();
+  assert.deepEqual(pairs(calls.flatMap(({ owed }) => owed)), pairs(many));
+  // A contract's tokens stay together.
+  for (let i = 0; i < 71; i++)
+    assert.equal(calls.filter(({ owed }) => owed.some((o) => o.contract === contract(i))).length, 1);
+  assert.match(
+    claimSlip(calls[0]!, new Map(), false).says,
+    /^Claims #82774's rewards from \d+ reward contracts? through AutoMaxi/,
+  );
+});
+
+test("contracts that owe the same tokens share a call, and one that owes too many for one call is asked in several", () => {
+  const same: Owed[] = [1, 2, 3].map((i) => ({ contract: contract(i), token: token(0), amount: 1n, fee: true }));
+  assert.equal(claimCalls({ id: 1n, owed: same }).length, 1);
+  const wide: Owed[] = Array.from({ length: 40 }, (_, i) => ({
+    contract: contract(9),
+    token: token(i),
+    amount: 1n,
+    fee: false,
+  }));
+  const calls = claimCalls({ id: 1n, owed: wide });
+  assert.ok(calls.length > 1);
+  for (const { owed } of calls) assert.ok(claimGas(owed) <= CLAIM_CALL_GAS);
+  assert.equal(
+    calls.reduce((n, { owed }) => n + owed.length, 0),
+    40,
+  );
+});
+
+test("the receipt of a claim split into calls sums their Claimed events", () => {
+  const abi = parseAbi([
+    "event Claimed(uint256 indexed tokenId, address indexed owner, address indexed caller, address[] tokens, uint256[] amounts, uint256[] fees, uint256 previousClaimBlock)",
+  ]);
+  const log = (tokens: Address[], amounts: bigint[], fees: bigint[]) => ({
+    address: AUTOMAXI.address,
+    topics: encodeEventTopics({
+      abi,
+      eventName: "Claimed",
+      args: { tokenId: 82774n, owner: OWNER, caller: OWNER },
+    }) as `0x${string}`[],
+    data: encodeAbiParameters(
+      [{ type: "address[]" }, { type: "uint256[]" }, { type: "uint256[]" }, { type: "uint256" }],
+      [tokens, amounts, fees, 0n],
+    ),
+  });
+  const receipt = (logs: ReturnType<typeof log>[]) => ({
+    transactionHash: "0x01" as const,
+    status: "0x1" as const,
+    logs,
+  });
+  assert.deepEqual(
+    claimedIn(
+      [receipt([log([USDC, AVNT], [100n, 7n], [1n, 0n])]), receipt([log([USDC], [200n], [2n])])],
+      [82774n],
+      OWNER,
+    ),
+    [
+      {
+        id: 82774n,
+        received: [
+          { token: USDC, amount: 300n },
+          { token: AVNT, amount: 7n },
+        ],
+        fees: [{ token: USDC, amount: 3n }],
+        paid: [
+          { token: USDC, amount: 297n },
+          { token: AVNT, amount: 7n },
+        ],
+      },
+    ],
+  );
 });
