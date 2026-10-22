@@ -109,6 +109,8 @@ test("an upstream over its limit is asked again, once for all the requests for t
   assert.equal(status, 429);
   assert.deepEqual(reply.error, { code: -32011, message: "request limit reached" });
   assert.equal(rpc.asked.filter((method) => method === "eth_getCode").length, 4);
+  // Two answers over its limit for the logs, three for the code, then asked again.
+  assert.equal(cache.busy, 5);
   await cache.close();
   await rpc.close();
 });
@@ -159,6 +161,101 @@ test("the upstream is asked through the fetch there was when the cache was loade
     globalThis.fetch = original;
   }
   assert.deepEqual(elsewhere, []);
+  await cache.close();
+  await rpc.close();
+});
+
+test("what a call reads is asked of the upstream at once, from its access list, before anvil asks for it", async () => {
+  const rpc = await upstream({
+    eth_createAccessList: {
+      body: {
+        result: {
+          accessList: [
+            {
+              address: "0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1",
+              storageKeys: [`0x${"0".repeat(63)}1`, `0x${"ab".repeat(32)}`],
+            },
+          ],
+          gasUsed: "0x5208",
+        },
+      },
+    },
+    eth_getAccountInfo: { status: 401, body: { error: { code: -32611, message: "rejected due to request filter" } } },
+    eth_getBalance: { body: { result: "0x0" } },
+    eth_getTransactionCount: { body: { result: "0x1" } },
+    eth_getCode: { body: { result: "0x" } },
+    eth_getStorageAt: { body: { result: `0x${"0".repeat(63)}5` } },
+  });
+  const cache = await serveCached(rpc.url, join(mkdtempSync(join(tmpdir(), "fork-cache-")), "base.json.gz"), {
+    block: 16,
+  });
+  const from = "0x0000000000000000000000000000000000c0FFEE";
+  const to = "0x4200000000000000000000000000000000000006";
+  await cache.prefetch(
+    JSON.stringify([
+      { jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ from, to, data: "0x" }, "latest"] },
+      { jsonrpc: "2.0", id: 2, method: "eth_blockNumber", params: [] },
+    ]),
+  );
+  const fetched = cache.fetched;
+  // Two slots, and three accounts, each in three requests once the upstream refuses the one anvil asks first.
+  assert.equal(fetched, 1 + 1 + 3 * 3 + 2);
+  // anvil then finds each kept, as it asks: a slot as a number, an address in lower case.
+  const contract = "0x25b2ed7149fb8a05f6ef9407d9c8f878f59cd1e1";
+  assert.equal(
+    (await ask(cache.url, "eth_getStorageAt", [contract, "0x1", "0x10"])).reply.result,
+    `0x${"0".repeat(63)}5`,
+  );
+  await ask(cache.url, "eth_getStorageAt", [contract, `0x${"ab".repeat(32)}`, "0x10"]);
+  await ask(cache.url, "eth_getCode", [from.toLowerCase(), "0x10"]);
+  await ask(cache.url, "eth_getBalance", [to, "0x10"]);
+  assert.equal(cache.fetched, fetched);
+  // The same call again asks nothing.
+  await cache.prefetch(
+    JSON.stringify({ jsonrpc: "2.0", id: 3, method: "eth_estimateGas", params: [{ from, to, data: "0x" }] }),
+  );
+  assert.equal(cache.fetched, fetched);
+  await cache.close();
+  await rpc.close();
+});
+
+test("runs that close at once, as the test files do, each keep their answers", async () => {
+  const rpc = await upstream({ eth_getStorageAt: { body: { result: "0x01" } } });
+  const file = join(mkdtempSync(join(tmpdir(), "fork-cache-")), "base.json.gz");
+  const caches = await Promise.all([1, 2, 3].map(() => serveCached(rpc.url, file)));
+  await Promise.all(caches.map((cache, i) => ask(cache.url, "eth_getStorageAt", ["0x01", `0x${i}`, "0x10"])));
+  await Promise.all(caches.map((cache) => cache.close()));
+  const next = await serveCached(rpc.url, file);
+  for (const i of [0, 1, 2]) await ask(next.url, "eth_getStorageAt", ["0x01", `0x${i}`, "0x10"]);
+  assert.equal(next.fetched, 0);
+  await next.close();
+  await rpc.close();
+});
+
+test("anvil's requests go to the upstream before the prefetch's", async () => {
+  const slots = Array.from({ length: 12 }, (_, i) => `0x${i.toString(16).padStart(64, "0")}`);
+  const rpc = await upstream({
+    eth_createAccessList: {
+      body: { result: { accessList: [{ address: "0x01", storageKeys: slots }], gasUsed: "0x0" } },
+    },
+    eth_getAccountInfo: { body: { result: { balance: "0x0", nonce: "0x0", code: "0x" } } },
+    eth_getStorageAt: { body: { result: "0x00" } },
+    eth_getCode: { body: { result: "0x60" } },
+  });
+  const cache = await serveCached(rpc.url, join(mkdtempSync(join(tmpdir(), "fork-cache-")), "base.json.gz"), {
+    block: 16,
+    requestsPerSecond: 20,
+    inFlight: 12,
+  });
+  const prefetched = cache.prefetch(
+    JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: "0x01" }, "latest"] }),
+  );
+  // Once the slots wait their turn, anvil asks for code: it goes before most of them.
+  while (!rpc.asked.includes("eth_getStorageAt")) await new Promise((resolve) => setTimeout(resolve, 10));
+  await ask(cache.url, "eth_getCode", ["0x02", "0x10"]);
+  assert.ok(rpc.asked.indexOf("eth_getCode") <= rpc.asked.indexOf("eth_getStorageAt") + 3, rpc.asked.join(" "));
+  await prefetched;
+  assert.equal(rpc.asked.filter((method) => method === "eth_getStorageAt").length, 12);
   await cache.close();
   await rpc.close();
 });

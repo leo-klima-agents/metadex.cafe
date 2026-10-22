@@ -551,12 +551,12 @@ Where each question's answer goes:
   of the six fee facts at the product template. Keep the tests of the CSP, fonts, colours, integrity, and that every
   address within the page has a target, for the new routes. Add one: the page links to no address on `github.com` but
   Hydrex's repository, links to AutoMaxi's verified source on Basescan and Sourcify, and holds no commit.
-- `fork/page.ts` finds things by their headings and words. Rewrite its tests of navigation, Home's menu, Choose, How it
-  works and the views without the script. Keep what the others prove: joining and leaving, one transaction at a time,
-  Safe, receipts, failed checks, another network, a refusal, the turn of an epoch, and that the page reaches only its
-  RPCs.
+- The browser tests in `fork/` find things by their headings and words. Rewrite their tests of navigation, Home's menu,
+  Choose, How it works and the views without the script. Keep what the others prove: joining and leaving, one
+  transaction at a time, Safe, receipts, failed checks, another network, a refusal, the turn of an epoch, and that the
+  page reaches only its RPCs.
 - To see the App with real accounts without anvil, announce an EIP-6963 wallet that answers `eth_requestAccounts` with a
-  fixture owner, and `eth_chainId` with `0x2105`: the page reads Base itself. The owners at the top of `fork/page.ts`
+  fixture owner, and `eth_chainId` with `0x2105`: the page reads Base itself. The owners at the top of `fork/harness.ts`
   work, though their accounts may have changed since its block.
 
 ### Docs to update
@@ -587,7 +587,7 @@ The owner's answers are under [Givens](#givens).
 ## Done when
 
 - Every item above is done as marked.
-- The heights in rule 9 hold, with the owners in `fork/page.ts`.
+- The heights in rule 9 hold, with the owners in `fork/harness.ts`.
 - `npm run typecheck`, `npm test`, `npx prettier --check .` and `npm run build` pass, and the rewritten browser tests
   pass against anvil.
 - The Content Security Policy and the RPCs have not changed.

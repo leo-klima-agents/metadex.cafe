@@ -267,20 +267,25 @@ npm run format  # before committing
 npm run build   # writes the page to dist/
 ```
 
-`npm run test:fork` builds the page, then runs it in Chromium against two forks of Base in anvil, with real accounts:
+`npm run test:fork` builds the page, then runs it in Chromium against forks of Base in anvil, with real accounts:
 joining, leaving, a Safe, the views, the accounts' pages, and what can fail; then, after the swappers' deployment, a
-swap with a token skipped and its approval reset, a swapper whose checks fail, and a claim, as it is and swapped. It
-needs [anvil](https://getfoundry.sh/) and Chromium (`npx playwright-core install chromium`, or set `CHROMIUM` to a
-Chromium binary). `BASE_RPC_URL` is the archive RPC to fork from, `https://mainnet.base.org` by default, and
-`SCREENSHOTS` an optional folder for screenshots. anvil forks through `fork/rpc-cache.ts`, which asks `BASE_RPC_URL`
-once for each answer about the forks' blocks and keeps it, in `FORK_CACHE`, `~/.cache/metadex.cafe/fork` by default;
-`FORK_LOG=1` prints each request it still sends. The first run, which asks for everything, can take most of an hour; the
-next ones take about four minutes. Base's public RPC limits how many logs one address may ask for, so a first run is
-surer through an RPC of your own.
+swap with a token skipped and its approval reset, a swapper whose checks fail, and a claim, as it is and swapped. Its
+five files run at once, each with an anvil of its own; `node fork/run.ts fork/claim.ts` runs one, and passes options
+such as `--test-name-pattern=…` on to `node --test`. It needs [anvil](https://getfoundry.sh/) and Chromium
+(`npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium or Chrome binary). `BASE_RPC_URL` is the
+archive RPC to fork from, `https://mainnet.base.org` by default, and `SCREENSHOTS` an optional folder for screenshots.
+anvil forks through `fork/rpc-cache.ts`, which asks `BASE_RPC_URL` once for each answer about the forks' blocks and
+keeps it, in `FORK_CACHE`, `~/.cache/metadex.cafe/fork` by default; `FORK_LOG=1` prints each request it still sends.
+Before anvil runs a call, the cache asks `BASE_RPC_URL` which slots it reads, and for all of them at once, as anvil's
+own requests leave room: it asks as fast as `BASE_RPC_URL` answers, or 20 a second of Base's public RPC. The first run,
+which asks for everything, takes about 25 minutes through an RPC of your own; the next ones take about two minutes.
+Base's public RPC also limits how many logs one address may ask for, so a first run through it may fail a test or two,
+and the next one picks up from the answers it kept.
 
 CI runs Prettier, the type check, the unit tests, `reuse lint` and the build. It then builds again from a fresh clone
-and checks that both builds are the same. It also runs the browser tests, with the forks' answers kept in GitHub's cache
-from one run to the next. Dependabot updates the pinned Actions and npm packages every week.
+and checks that both builds are the same. It also runs the browser tests, in the runner's Chrome, with the forks'
+answers kept in GitHub's cache from one run to the next. Dependabot updates the pinned Actions and npm packages every
+week.
 
 | Path                                                    | What it holds                                                                                                                                                                                             |
 | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -300,7 +305,7 @@ from one run to the next. Dependabot updates the pinned Actions and npm packages
 | `src/chain.ts`, `src/wallet.ts`                         | RPC requests, and wallets.                                                                                                                                                                                |
 | `src/routes.ts`, `src/views.ts`                         | The page's addresses, and the view each shows.                                                                                                                                                            |
 | `src/dom.ts`, `src/format.ts`                           | Page helpers, and number and date formats.                                                                                                                                                                |
-| `test/`, `fork/page.ts`, `fork/rpc-cache.ts`            | Unit tests, the browser tests, and what keeps the answers their forks read from Base.                                                                                                                     |
+| `test/`, `fork/`                                        | Unit tests; the browser tests, which `fork/run.ts` runs at once, the harness they share in `fork/harness.ts`, and `fork/rpc-cache.ts`, which keeps the answers their forks read from Base.                |
 | `fork/fixtures/`                                        | AutoMaxi's init code, for the browser tests to deploy it on the fork.                                                                                                                                     |
 | `scripts/`                                              | The build; `fonts.py` makes `fonts/`, `icons.ts` draws the icons from `icon.svg`, and `tokens.ts` checks the list of tokens.                                                                              |
 

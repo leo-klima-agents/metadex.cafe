@@ -13,7 +13,7 @@
     "build": "node scripts/build.ts",
     "format": "prettier --write .",
     "test": "node --test",
-    "test:fork": "npm run build && node --test fork/page.ts",
+    "test:fork": "npm run build && node fork/run.ts",
     "typecheck": "tsc"
   },
   "dependencies": {

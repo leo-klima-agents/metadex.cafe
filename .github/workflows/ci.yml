@@ -42,13 +42,14 @@ jobs:
         with:
           path: dist
 
-  # Runs the page in Chromium against a fork of Base: through the BASE_RPC_URL secret if it is set, else through Base's
-  # public RPC. The fork's answers are kept in GitHub's cache from one run to the next, and saved again when a run adds
-  # some.
+  # Runs the page in Chrome against forks of Base: through the BASE_RPC_URL secret if it is set, else through Base's
+  # public RPC. The forks' answers are kept in GitHub's cache from one run to the next, and saved again when a run adds
+  # some. The runner's image comes with Google Chrome.
   fork:
     runs-on: ubuntu-26.04
     env:
       BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
+      CHROMIUM: /usr/bin/google-chrome
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -59,7 +60,7 @@ jobs:
         with:
           version: v1.5.1
       - run: npm ci --ignore-scripts
-      - run: npx playwright-core install --with-deps chromium
+      - run: '"$CHROMIUM" --version'
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/metadex.cafe/fork
