@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { createServer } from "node:net";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { after, afterEach, before, beforeEach, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Locator, type Page, type Route } from "playwright-core";
@@ -19,7 +22,7 @@ import {
   type Hex,
 } from "viem";
 import { blockTime, read, same } from "../src/chain.ts";
-import { AUTOMAXI, CARBON_IMPACT, KEEPER, RPCS, SWAPPERS, VOTER, VOTING_ESCROW } from "../src/config.ts";
+import { AUTOMATIONS, AUTOMAXI, CARBON_IMPACT, KEEPER, RPCS, SWAPPERS, VOTER, VOTING_ESCROW } from "../src/config.ts";
 import { readEarnings, rewardsFor, sharesOf, type Reward } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
@@ -27,13 +30,18 @@ import { pricesAt } from "../src/prices.ts";
 import { SETTLED, payoutBlocks, payoutsIn, readEarned, readStamps, standingOf, weighed } from "../src/receipts.ts";
 import { findRoute } from "../src/swap.ts";
 import { describe as describeTokens, holdingsOf, known } from "../src/tokens.ts";
+import { serveCached, type Cache } from "./rpc-cache.ts";
 
 const CONDUIT = CARBON_IMPACT.address;
-const FORK_URL = process.env.BASE_RPC_URL ?? "https://mainnet.base.org";
+// Base's public RPC serves the state of blocks a year old, as an archive RPC does. CI passes an empty BASE_RPC_URL when
+// it has none.
+const FORK_URL = process.env.BASE_RPC_URL || "https://mainnet.base.org";
+// Where the answers of FORK_URL are kept between runs: see rpc-cache.ts.
+const CACHE = process.env.FORK_CACHE || join(homedir(), ".cache", "metadex.cafe", "fork");
 const BLOCK = 52_694_000; // Fri 16 Oct 2026, 18:22 UTC
 const FLIP = 1_792_627_200; // Thu 22 Oct 2026, 00:00 UTC, when the epoch after BLOCK's starts
-const PORT = 8546;
-const ANVIL = `http://127.0.0.1:${PORT}`;
+// anvil's address, on a port free when it starts, so that no other run's anvil answers in its place.
+let ANVIL = "";
 const SITE = "https://metadex.cafe";
 const SAFE_WALLET = "https://app.safe.global";
 const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
@@ -327,6 +335,7 @@ async function serve(route: Route, { origins, rpc }: Pick<Opened, "origins" | "r
 
 let browser: Browser;
 let node: ChildProcess;
+let cache: Cache | undefined;
 let snapshot: Hex;
 const contexts: BrowserContext[] = [];
 
@@ -446,14 +455,19 @@ async function confirm(page: Page): Promise<void> {
 }
 
 // The first reads through anvil are slow.
-// Starts anvil on a fork of Base at `block`, and Chromium; and the hooks that put anvil back after each test.
+// Starts anvil on a fork of Base at `block`, through the answers kept for it, and Chromium; and the hooks that put anvil
+// back after each test.
 async function start(block: number, owners: Address[]): Promise<void> {
+  cache = await serveCached(FORK_URL, join(CACHE, `base-${block}.json.gz`));
+  const port = await freePort();
+  ANVIL = `http://127.0.0.1:${port}`;
   node = spawn(
     "anvil",
-    // A free archive RPC times out now and then: anvil asks it again, after a second, up to twenty times.
+    // A free archive RPC refuses requests over its limit now and then: anvil asks it again, after a second, up to twenty
+    // times. anvil keeps no answers of its own, so that the cache sees each request.
     [
-      ...["--fork-url", FORK_URL, "--fork-block-number", String(block), "--port", String(PORT), "--auto-impersonate"],
-      ...["--retries", "20", "--fork-retry-backoff", "1000"],
+      ...["--fork-url", cache.url, "--fork-block-number", String(block), "--port", String(port), "--auto-impersonate"],
+      ...["--retries", "20", "--fork-retry-backoff", "1000", "--no-storage-caching"],
     ],
     { stdio: ["ignore", "ignore", process.env.ANVIL_LOG ? "inherit" : "ignore"] },
   );
@@ -471,12 +485,28 @@ async function start(block: number, owners: Address[]): Promise<void> {
   browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 }
 
+// A port nothing listens on now.
+async function freePort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as { port: number };
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
+
+// anvil busy with a request can take long to stop: after five seconds, it is made to.
 async function stop(): Promise<void> {
   await browser?.close();
   await Promise.allSettled(forwarding);
-  node?.kill();
-  // The next fork reuses the port once this one has let it go.
-  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  if (node && node.exitCode === null && node.signalCode === null) {
+    const exited = new Promise((resolve) => node.once("exit", resolve));
+    node.kill();
+    const late = setTimeout(() => node.kill("SIGKILL"), 5_000);
+    await exited;
+    clearTimeout(late);
+  }
+  await cache?.close();
+  if (cache) console.log(`${cache.asked} requests from anvil, ${cache.fetched} of them asked of FORK_URL`);
 }
 
 function hooks(): void {
@@ -1431,6 +1461,8 @@ describe("the page against a fork of Base", { timeout: 1_800_000 }, () => {
     assert.match(await review(page).locator(".pages").innerText(), /Thu,? 29 Oct,? 00:00 UTC/);
     await page.keyboard.press("Escape");
 
+    // anvil mines once it has answered what the page sent, such as the review's gas estimate.
+    await Promise.allSettled(forwarding);
     await anvil("evm_setNextBlockTimestamp", [FLIP + WEEK + 60]);
     await anvil("evm_mine");
     await page.clock.setSystemTime((FLIP + WEEK + 60) * 1000);
@@ -1469,7 +1501,9 @@ async function fund(tokens: Address[]): Promise<void> {
     await mined(HOLDER, token, encodeFunctionData({ abi: tokenAbi, functionName: "transfer", args: [SELLER, amount] }));
   }
   await warm(async () => {
-    // The page reads the balance of every token it knows.
+    // The page reads the balance of every token it knows, and adds last epoch's rewards, such as AVNT, once it has read
+    // each automation's.
+    await Promise.all(AUTOMATIONS.map(({ address }) => readEarnings(address)));
     const held = await holdingsOf(SELLER, [...known(), ...tokens], INTO_USDC.address);
     const described = await describeTokens([...tokens, INTO_USDC.token]);
     const amounts = new Map(tokens.map((token) => [token.toLowerCase(), held.get(token.toLowerCase())!.balance]));
@@ -1519,12 +1553,25 @@ async function warmPayouts(owner: Address): Promise<void> {
   });
 }
 
-// Waits until every token has its route, then ticks only those given.
+// A claim's review opens on what waits, unless the page found nothing to claim, or Base refused the claim: the test then
+// fails at once, with the page's words.
+async function claimOpens(page: Page): Promise<void> {
+  const waits = review(page).getByRole("heading", { name: "What waits" });
+  const refused = review(page)
+    .locator(".pages p")
+    .filter({ hasText: /^(Nothing to claim|Base refused the claim)/ });
+  await waits.or(refused).first().waitFor({ timeout: 300_000 });
+  if (!(await waits.isVisible())) assert.fail(`The claim's review says: ${await refused.innerText()}`);
+}
+
+// Waits until every token has its route, then ticks only those given. A token the page learns from last epoch's
+// rewards, such as AVNT, joins the list once those are read: each one asked for is waited for.
 async function tickOnly(page: Page, symbols: string[]): Promise<void> {
   const swap = swapView(page);
   try {
-    await swap.locator(".swap-rows li").first().waitFor({ timeout: 300_000 });
-    await swap.locator(".swap-status").waitFor({ state: "hidden", timeout: 600_000 });
+    for (const symbol of symbols)
+      await swap.getByRole("checkbox", { name: `Sell ${symbol}` }).waitFor({ timeout: 120_000 });
+    await swap.locator(".swap-status").waitFor({ state: "hidden", timeout: 120_000 });
   } catch (error) {
     throw new Error(`The swap's page shows: ${await swap.locator(".swap-tokens").innerText()}`, { cause: error });
   }
@@ -1642,8 +1689,8 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await page.goto(`${SITE}/#hydrex/82774`);
     await position(page).getByText("Payout overdue:").waitFor();
     await position(page).getByRole("button", { name: "Claim now" }).click();
-    await review(page).getByText("Claim for #82774 · 1 of 2").waitFor({ timeout: 300_000 });
-    await review(page).getByRole("heading", { name: "What waits" }).waitFor();
+    await claimOpens(page);
+    await review(page).getByText("Claim for #82774 · 1 of 2").waitFor();
     assert.equal(
       await review(page)
         .getByRole("radio", { name: /As they are/ })
@@ -1682,7 +1729,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     const { page, sent } = await connected({ owner: PAYEE, batch: true }, { url: `${SITE}/#app` });
     const line = app(page).locator("#needs li").filter({ hasText: "#82774: payout overdue" });
     await line.getByRole("button", { name: "Claim now" }).click({ timeout: 600_000 });
-    await review(page).getByRole("heading", { name: "What waits" }).waitFor({ timeout: 300_000 });
+    await claimOpens(page);
     await review(page).getByRole("radio", { name: "Into" }).check();
     await review(page)
       .locator(".claim-into")
