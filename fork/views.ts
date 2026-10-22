@@ -3,10 +3,20 @@ import { after, before, describe, test } from "node:test";
 import { toFunctionSelector, toHex } from "viem";
 import { blockTime, read } from "../src/chain.ts";
 import { VOTER } from "../src/config.ts";
-import { readEarnings, rewardsFor, sharesOf } from "../src/earnings.ts";
+import { readEarnings, rewardsFor, sharesOf, tokensOf } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
-import { SETTLED, payoutBlocks, payoutsIn, readEarned, readStamps, standingOf, weighed } from "../src/receipts.ts";
+import {
+  SETTLED,
+  blockTimes,
+  namesAt,
+  payoutBlocks,
+  payoutsIn,
+  readEarned,
+  readStamps,
+  standingOf,
+  weighed,
+} from "../src/receipts.ts";
 import {
   CONDUIT,
   BLOCK,
@@ -218,19 +228,22 @@ describe("the page against a fork of Base: its views, and each account's payouts
   test("each account's last payout, found through Hydrex's reward contracts, and its receipt on its page", async () => {
     // PAYEE has 93 accounts: anvil reads them from FORK_URL for most of a minute the first time. #82774 was not paid in
     // last epoch's pools, so the page also reads the pools of the epoch before, among every pool's reward contracts.
+    // MEMBER's #9540, whose page the test opens last, was paid weeks before, so the page looks further back for it. They
+    // are all read first, with no time limit, as the page reads them, then their receipts' names and tokens.
+    const ids = [...PAID_IDS, 9540n];
     await warm(async () => {
       const [earnings] = await Promise.all([readEarnings(CONDUIT), readAccounts(PAYEE)]);
       const last = { start: earnings!.start, pairs: weighed(earnings!.rewards, earnings!.prices) };
       const top = BLOCK - SETTLED;
       const [[time], stamps, earned, rewards] = await Promise.all([
         read([blockTime], top) as Promise<[bigint]>,
-        readStamps(PAID_IDS, last.pairs, top),
-        readEarned(PAID_IDS, last.pairs, top),
+        readStamps(ids, last.pairs, top),
+        readEarned(ids, last.pairs, top),
         rewardsFor(CONDUIT, earnings!.start - WEEK),
       ]);
       const before = { start: earnings!.start - WEEK, pairs: weighed(rewards, earnings!.prices) };
-      const stampsBefore = await readStamps(PAID_IDS, before.pairs, top);
-      const standings = PAID_IDS.map((id, i) =>
+      const stampsBefore = await readStamps(ids, before.pairs, top);
+      const standings = ids.map((id, i) =>
         standingOf(
           id,
           last,
@@ -240,7 +253,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
         ),
       );
       assert.deepEqual(
-        standings.map(({ through, late }) => [through, late]),
+        standings.slice(0, PAID_IDS.length).map(({ through, late }) => [through, late]),
         PAID_IDS.map(() => [PAID_THROUGH, true]),
         "they were paid for neither epoch since",
       );
@@ -249,11 +262,14 @@ describe("the page against a fork of Base: its views, and each account's payouts
         PAID_IDS.map((id) => blocks.get(id)),
         PAID_IDS.map(() => PAID),
       );
-      const paid = await payoutsIn([PAID]);
+      const at = [...new Set(blocks.values())];
+      const [paid] = await Promise.all([payoutsIn(at), blockTimes(at), namesAt(at)]);
       assert.deepEqual(
         PAID_IDS.map((id) => paid.find((payout) => payout.id === id)?.tx),
         PAID_IDS.map(() => PAID_TX),
       );
+      assert.ok(paid.some((payout) => payout.id === 9540n && payout.block === blocks.get(9540n)));
+      await tokensOf(paid.flatMap(({ earned, paid, fees }) => [...earned, ...paid, ...fees]).map(({ token }) => token));
     });
     const { page, violations, rpc } = await connected(
       { owner: PAYEE },
