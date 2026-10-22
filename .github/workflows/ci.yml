@@ -44,8 +44,9 @@ jobs:
 
   # Runs the page in Chrome against forks of Base: through the BASE_RPC_URL secret if it is set, else through the page's
   # first RPC. The forks' answers are kept in GitHub's cache from one run to the next, and saved again when a run adds
-  # some. Runs of one branch, as the push and the pull request of a commit, go one after the other, each from the
-  # answers the one before kept. The runner's image comes with Google Chrome.
+  # some, under a key of each attempt's own: a key once saved cannot be saved again, so a run attempted again would
+  # start each time from what its first attempt kept. Runs of one branch, as the push and the pull request of a commit,
+  # go one after the other, each from the answers the one before kept. The runner's image comes with Google Chrome.
   fork:
     concurrency: fork-${{ github.head_ref || github.ref_name }}
     runs-on: ubuntu-26.04
@@ -66,7 +67,7 @@ jobs:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/metadex.cafe/fork
-          key: fork-${{ github.run_id }}
+          key: fork-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: fork-
       - run: touch "$RUNNER_TEMP/fork-started"
       - run: npm run test:fork
@@ -80,7 +81,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/metadex.cafe/fork
-          key: fork-${{ github.run_id }}
+          key: fork-${{ github.run_id }}-${{ github.run_attempt }}
 
   # A tag v… publishes the build on GitHub Pages, then checks that Pages serves the same files.
   pages:

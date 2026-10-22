@@ -5,7 +5,7 @@ import { encodeFunctionData, getAddress, type Address, type Hex } from "viem";
 import { AUTOMATIONS, AUTOMAXI, SWAPPERS, VOTING_ESCROW } from "../src/config.ts";
 import { readEarnings } from "../src/earnings.ts";
 import { pricesAt } from "../src/prices.ts";
-import { findRoute } from "../src/swap.ts";
+import { findRoute, swapChecks } from "../src/swap.ts";
 import { describe as describeTokens, holdingsOf, known } from "../src/tokens.ts";
 import {
   PAYEE,
@@ -43,8 +43,9 @@ const [INTO_USDC, INTO_EURC] = SWAPPERS as [(typeof SWAPPERS)[number], (typeof S
 // A wallet of the test's own, which the treasury gives three of its tokens, so that the page has only those to route.
 const SELLER = getAddress("0x0000000000000000000000000000000000c0ffee");
 
-// Gives SELLER the treasury's whole balance of each token, then reads what the page will: the balances, the prices, and
-// each token's route into USDC, with no time limit, as anvil reads the pools from FORK_URL a slot at a time.
+// Gives SELLER the treasury's whole balance of each token, then reads what the page will: the swappers' checks, which
+// Review waits for, the balances, the prices, and each token's route into USDC, with no time limit, as anvil reads the
+// pools from FORK_URL a slot at a time.
 async function fund(tokens: Address[]): Promise<void> {
   for (const token of tokens) {
     const amount = await balanceOf(token, HOLDER);
@@ -53,7 +54,7 @@ async function fund(tokens: Address[]): Promise<void> {
   await warm(async () => {
     // The page reads the balance of every token it knows, and adds last epoch's rewards, such as AVNT, once it has read
     // each automation's.
-    await Promise.all(AUTOMATIONS.map(({ address }) => readEarnings(address)));
+    await Promise.all([swapChecks(), ...AUTOMATIONS.map(({ address }) => readEarnings(address))]);
     const held = await holdingsOf(SELLER, [...known(), ...tokens], INTO_USDC.address);
     const described = await describeTokens([...tokens, INTO_USDC.token]);
     const amounts = new Map(tokens.map((token) => [token.toLowerCase(), held.get(token.toLowerCase())!.balance]));

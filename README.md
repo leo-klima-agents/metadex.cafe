@@ -285,8 +285,8 @@ next ones take about two minutes.
 
 CI runs Prettier, the type check, the unit tests, `reuse lint` and the build. It then builds again from a fresh clone
 and checks that both builds are the same. It also runs the browser tests, in the runner's Chrome, with the forks'
-answers kept in GitHub's cache from one run to the next, one run of a branch at a time. Dependabot updates the pinned
-Actions and npm packages every week.
+answers kept in GitHub's cache from one run, or attempt, to the next, one run of a branch at a time. Dependabot updates
+the pinned Actions and npm packages every week.
 
 | Path                                                    | What it holds                                                                                                                                                                                             |
 | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
