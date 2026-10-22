@@ -8,6 +8,7 @@ import {
   claimCalls,
   claimGas,
   claimSlip,
+  claimTransactions,
   claimedIn,
   paidBy,
   type Owed,
@@ -137,6 +138,16 @@ test("contracts that owe the same tokens share a call, and one that owes too man
     calls.reduce((n, { owed }) => n + owed.length, 0),
     40,
   );
+});
+
+test("a Safe proposes a split claim's calls in as few Safe transactions as their gas allows, in order", () => {
+  const million = 1_000_000n;
+  // Twelve calls that need about two million gas each fit two Safe transactions of at most 15 million.
+  assert.deepEqual(claimTransactions(Array.from({ length: 12 }, () => 2n * million)), [7, 5]);
+  // One that fits nowhere else starts a transaction of its own, and the next ones join it if they fit.
+  assert.deepEqual(claimTransactions([12n * million, 4n * million, 2n * million, 14n * million]), [1, 2, 1]);
+  // Calls that fit one transaction together stay in one.
+  assert.deepEqual(claimTransactions([3n * million, 5n * million]), [2]);
 });
 
 test("the receipt of a claim split into calls sums their Claimed events", () => {

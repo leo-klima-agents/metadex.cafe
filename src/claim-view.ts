@@ -1,7 +1,17 @@
 import { maxUint256, type Address } from "viem";
 import { same, type Receipt } from "./chain.ts";
 import { DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
-import { MAX_CLAIM_GAS, claimCalls, claimGas, claimSlip, claimedIn, owedOf, paidBy, type Claim } from "./claim.ts";
+import {
+  MAX_CLAIM_GAS,
+  claimCalls,
+  claimGas,
+  claimSlip,
+  claimTransactions,
+  claimedIn,
+  owedOf,
+  paidBy,
+  type Claim,
+} from "./claim.ts";
 import { clone, fill, show } from "./dom.ts";
 import { count, figure, list, usd } from "./format.ts";
 import type { Entry } from "./last-payout.ts";
@@ -132,14 +142,12 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   const simulated = await simulate(connection.address, claimSlips).catch(() => undefined);
   if (simulated?.some(({ ok }) => !ok)) return nothing("Base refused the claim. The keeper may be claiming now.");
   if (simulated?.some(({ gas }) => gas > MAX_CLAIM_GAS)) return nothing("This claim needs more gas than Base allows.");
-  // More gas together than one transaction may use: the calls go one at a time, and a Safe, which sends them all in
-  // one transaction, cannot claim.
-  const totalGas =
-    simulated?.reduce((sum, { gas }) => sum + gas, 0n) ??
-    calls.reduce((sum, { part }) => sum + claimGas(part.owed), 0n);
-  const apart = totalGas > MAX_CLAIM_GAS;
-  if (apart && connection.wallet.propose)
-    return nothing("This claim needs more gas than one Safe transaction may use.");
+  // More gas together than one transaction may use: the calls go one at a time, and a Safe proposes them in as few
+  // Safe transactions as hold them, by the gas each used in the simulation, or else by its estimate.
+  const gas = simulated?.map(({ gas }) => gas) ?? calls.map(({ part }) => claimGas(part.owed));
+  const totalGas = gas.reduce((sum, one) => sum + one, 0n);
+  const groups = claimTransactions(gas);
+  const apart = groups.length > 1;
   const totals = paidBy(owing.flatMap(({ owed }) => owed));
   const paid = totals.map(({ token, paid }) => ({ token, amount: paid }));
   const body = clone("claim-before");
@@ -214,7 +222,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     connection,
     hooks,
     outcomeOf: asTheyAre,
-    apart,
+    ...(apart ? { groups } : {}),
   });
   // Swapped into one token: the claim brings exact amounts, known before, so the page approves each for exactly that,
   // and the swap sells "my balance, up to the allowance". With batching, or from a Safe, all in one prompt; otherwise
@@ -349,9 +357,15 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     radios.find(({ value }) => value === "into")!.checked = true;
     choose();
   });
-  // Without an output whose checks passed, the swap is not offered.
-  if (!select.options.length) {
+  // Without an output whose checks passed, the swap is not offered; nor from a Safe whose claim takes several Safe
+  // transactions, as the swap follows the claim's receipts, which the Safe's owners bring once they sign.
+  const safeApart = apart && !!connection.wallet.propose;
+  if (!select.options.length || safeApart) {
     radios.find(({ value }) => value === "into")!.disabled = select.disabled = true;
-    into.textContent = swappersChecked() ? "Swaps are off." : "Swappers not checked yet.";
+    into.textContent = safeApart
+      ? "Swap them once the claims go through."
+      : swappersChecked()
+        ? "Swaps are off."
+        : "Swappers not checked yet.";
   } else void plan(swapperOf(select.value)!);
 }

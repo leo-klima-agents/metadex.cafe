@@ -73,6 +73,18 @@ export function claimCalls(claim: Claim, budget = CLAIM_CALL_GAS): Claim[] {
   return calls.map((owed) => ({ id: claim.id, owed }));
 }
 
+// How many of the calls, in order, go in each transaction where one may hold several, as a Safe transaction does: as
+// many as fit `budget` together, by each one's gas.
+export function claimTransactions(gas: bigint[], budget = MAX_CLAIM_GAS): number[] {
+  const groups: { size: number; gas: bigint }[] = [];
+  for (const one of gas) {
+    const last = groups.at(-1);
+    if (last && last.gas + one <= budget) Object.assign(last, { size: last.size + 1, gas: last.gas + one });
+    else groups.push({ size: 1, gas: one });
+  }
+  return groups.map(({ size }) => size);
+}
+
 // The claim's arguments: the contracts that owe something, of each kind, and the tokens they owe.
 export function claimArgs({ id, owed }: Claim): [bigint, Address[], Address[], Address[]] {
   const owing = owed.filter(({ amount }) => amount > 0n);

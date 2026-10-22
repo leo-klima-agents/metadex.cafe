@@ -32,8 +32,9 @@ This README is for whoever runs the site. The design and the plan are in [design
   epoch's pools, and the epoch before's when the keeper missed it too. AutoMaxi asks each contract for every token
   passed, and each answer reads the account's past epochs, so a claim of many contracts and tokens splits into calls
   that each fit a transaction, the most valuable first; calls that need more gas together than one transaction may use
-  go one at a time, and a Safe, which sends them as one, cannot claim them. The review offers the rewards as they are,
-  or swapped into one token.
+  go one at a time, and a Safe proposes them in as few Safe transactions as their simulated gas allows, each under 15
+  million. The review offers the rewards as they are, or swapped into one token, but not from a Safe whose claim takes
+  several Safe transactions: the swap follows the claim's receipts.
 - **Swapping** goes through `ImmutableSwapper`, deployed once per output token: USDC, EURC, WETH, cbBTC, AERO and HYDX.
   Each `swap(routes, deadline, skipFailed)` sells the tokens named, each along a route of one to three hops the caller
   picks, through pools of Hydrex, Aero, Aerodrome and Uniswap that it checks against each exchange's factory, and sends
@@ -269,9 +270,9 @@ npm run build   # writes the page to dist/
 
 `npm run test:fork` builds the page, then runs it in Chromium against forks of Base in anvil, with real accounts:
 joining, leaving, a Safe, the views, the accounts' pages, and what can fail; then, after the swappers' deployment, a
-swap with a token skipped and its approval reset, a swapper whose checks fail, and a claim, as it is and swapped. Its
-five files run at once, each with an anvil of its own; `node fork/run.ts fork/claim.ts` runs one, and passes options
-such as `--test-name-pattern=…` on to `node --test`. It needs [anvil](https://getfoundry.sh/) and Chromium
+swap with a token skipped and its approval reset, a swapper whose checks fail, and a claim, as it is, swapped, and from
+a Safe. Its five files run at once, each with an anvil of its own; `node fork/run.ts fork/claim.ts` runs one, and passes
+options such as `--test-name-pattern=…` on to `node --test`. It needs [anvil](https://getfoundry.sh/) and Chromium
 (`npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium or Chrome binary). `BASE_RPC_URL` is the
 archive RPC to fork from, `https://mainnet.base.org` by default, and `SCREENSHOTS` an optional folder for screenshots.
 anvil forks through `fork/rpc-cache.ts`, which asks `BASE_RPC_URL` once for each answer about the forks' blocks and

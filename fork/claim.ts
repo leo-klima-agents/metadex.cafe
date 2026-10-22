@@ -5,6 +5,7 @@ import { AUTOMAXI, VOTING_ESCROW } from "../src/config.ts";
 import {
   PAYEE,
   RECENT,
+  SAFE_WALLET,
   SITE,
   abi,
   app,
@@ -14,6 +15,7 @@ import {
   connected,
   hooks,
   mined,
+  open,
   position,
   readOn,
   review,
@@ -90,6 +92,56 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
     await review(page).getByRole("link", { name: "Swap these" }).waitFor();
     assert.equal(sent.length, says.length);
     assert.ok((await readOn<bigint>(AUTOMAXI.address, autoMaxiAbi, "lastClaimBlock", [82774n])) > 0n);
+    assert.deepEqual(violations, []);
+  });
+
+  test("inside Safe{Wallet}, a Safe proposes a claim too large for one transaction as several Safe transactions", async () => {
+    await mined(
+      PAYEE,
+      VOTING_ESCROW,
+      encodeFunctionData({ abi, functionName: "setConduitApproval", args: [AUTOMAXI.address, 82774n, true] }),
+    );
+    await settle();
+    await warmPayouts(PAYEE);
+    const { page, violations } = await open(false, { url: `${SAFE_WALLET}/`, safe: PAYEE });
+    const frame = page.frameLocator("iframe");
+    const dialog = review(frame);
+    await frame
+      .locator('.view[data-view="app"] #needs li')
+      .filter({ hasText: "#82774: payout overdue" })
+      .getByRole("button", { name: "Claim now" })
+      .click({ timeout: 600_000 });
+    await claimOpens(frame);
+    // The swap would follow the claims' receipts, which come once the Safe's owners sign.
+    assert.equal(await dialog.getByRole("radio", { name: "Into" }).isDisabled(), true);
+    assert.equal(await dialog.locator(".claim-into").innerText(), "Swap them once the claims go through.");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    // As few Safe transactions as the calls' gas allows, each under what a transaction may use.
+    const how = (await dialog.locator(".how").textContent()) ?? "";
+    const [, safeTxs = "", calls = ""] = /^(\d+) Safe transactions, (\d+) calls$/.exec(how) ?? [];
+    assert.ok(Number(safeTxs) > 1 && Number(calls) > Number(safeTxs), how);
+    const counts = await dialog.locator(".count").allTextContents();
+    assert.equal(counts[0], `Safe 1 of ${safeTxs} · 1 of ${calls}`);
+    assert.equal(counts.at(-1), `Safe ${safeTxs} of ${safeTxs} · ${calls} of ${calls}`);
+    await shoot(page, "safe-claim-1440-light");
+    await dialog.getByRole("button", { name: "Propose in Safe{Wallet}" }).click();
+    await dialog.getByText(`Proposed ${safeTxs} Safe transactions. Sign them in Safe{Wallet}.`).waitFor();
+    // One proposal for each Safe transaction, with the calls the review shows in it, in order.
+    type Received = { method: string; params: { txs: { to: string; data: string; value: string }[] } };
+    const received = await page.evaluate(() => (window as unknown as { received: Received[] }).received);
+    const proposals = received.filter(({ method }) => method === "sendTransactions").map(({ params }) => params.txs);
+    assert.deepEqual(
+      proposals.map((txs) => txs.length),
+      Array.from(
+        { length: Number(safeTxs) },
+        (_, i) => counts.filter((each) => each.startsWith(`Safe ${i + 1} of`)).length,
+      ),
+    );
+    const datas = await dialog.locator(".data").allTextContents();
+    assert.deepEqual(
+      proposals.flat(),
+      datas.map((data) => ({ to: AUTOMAXI.address, data, value: "0" })),
+    );
     assert.deepEqual(violations, []);
   });
 });

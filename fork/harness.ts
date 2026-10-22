@@ -9,7 +9,15 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach } from "node:test";
 import { fileURLToPath } from "node:url";
-import { chromium, type Browser, type BrowserContext, type Locator, type Page, type Route } from "playwright-core";
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type FrameLocator,
+  type Locator,
+  type Page,
+  type Route,
+} from "playwright-core";
 import {
   concat,
   decodeFunctionResult,
@@ -219,6 +227,8 @@ type OpenOptions = {
   flowing?: boolean;
   script?: boolean;
   refuse?: Rpc["refuse"];
+  // The Safe that Safe{Wallet}'s page holds.
+  safe?: Address;
 };
 type Sent = { to: string; data: string };
 type Opened = {
@@ -229,6 +239,7 @@ type Opened = {
   origins: Set<string>;
   violations: string[];
   rpc: Rpc;
+  safe: Address;
 };
 
 // A wallet that announces itself to the page and hands each request to Node through testWallet, which the page's
@@ -257,7 +268,7 @@ const WALLET_SCRIPT = `(() => {
 const POLICY_SCRIPT = `document.addEventListener("securitypolicyviolation", (event) =>
   console.error("Content Security Policy: " + event.violatedDirective + " " + event.blockedURI));`;
 
-const SAFE_PAGE = `<!doctype html><meta charset="utf-8"><title>Safe{Wallet}</title>
+const safePage = (safe: Address) => `<!doctype html><meta charset="utf-8"><title>Safe{Wallet}</title>
 <iframe src="${SITE}/" style="inline-size: 100%; block-size: 95vh; border: 0"></iframe>
 <script>
   window.received = [];
@@ -265,7 +276,7 @@ const SAFE_PAGE = `<!doctype html><meta charset="utf-8"><title>Safe{Wallet}</tit
     if (origin !== "${SITE}" || !data?.method) return;
     window.received.push({ method: data.method, params: data.params });
     const answers = {
-      getSafeInfo: { safeAddress: "${LEAVER}", chainId: 8453, threshold: 2, owners: [], isReadOnly: false },
+      getSafeInfo: { safeAddress: "${safe}", chainId: 8453, threshold: 2, owners: [], isReadOnly: false },
       sendTransactions: { safeTxHash: "0x${"ab".repeat(32)}" },
     };
     const reply = data.method in answers
@@ -338,7 +349,7 @@ function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
 // anvil stops, the request fails in a handler that nobody awaits any more. So anvil answers them all before it stops.
 export const forwarding = new Set<Promise<string>>();
 
-async function serve(route: Route, { origins, rpc }: Pick<Opened, "origins" | "rpc">): Promise<void> {
+async function serve(route: Route, { origins, rpc, safe }: Pick<Opened, "origins" | "rpc" | "safe">): Promise<void> {
   const request = route.request();
   const { origin, pathname } = new URL(request.url());
   origins.add(origin);
@@ -354,7 +365,7 @@ async function serve(route: Route, { origins, rpc }: Pick<Opened, "origins" | "r
     const body = await reply.finally(() => forwarding.delete(reply));
     return route.fulfill({ headers: { ...CORS, "content-type": "application/json" }, body });
   }
-  if (origin === SAFE_WALLET) return route.fulfill({ contentType: "text/html", body: SAFE_PAGE });
+  if (origin === SAFE_WALLET) return route.fulfill({ contentType: "text/html", body: safePage(safe) });
   return route.abort();
 }
 
@@ -374,6 +385,7 @@ export async function open(
     flowing = false,
     script = true,
     refuse,
+    safe = LEAVER,
   }: OpenOptions = {},
 ): Promise<Opened> {
   const context = await browser.newContext({
@@ -392,6 +404,7 @@ export async function open(
     origins: new Set<string>(),
     violations: [] as string[],
     rpc: { refuse } as Rpc,
+    safe,
   };
   await context.route("**/*", (route) => serve(route, opened));
   await context.addInitScript(POLICY_SCRIPT);
@@ -428,7 +441,7 @@ export const account = (page: Page, id: number) =>
 export const group = (page: Page, key: string) => hydrex(page).locator(`.group[data-group="${key}"]`);
 export const product = (page: Page, kind: string) => page.locator(`.view[data-kind="${kind}"]`);
 export const position = (page: Page) => page.locator('.view[data-view="position"]');
-export const review = (page: Page) => page.locator("#review");
+export const review = (page: Page | FrameLocator) => page.locator("#review");
 export const homeTitle = (page: Page) => page.getByRole("heading", { name: "Vote, claim and swap on Base" });
 export const appTitle = (page: Page) => page.getByRole("heading", { name: "Your wallet", level: 1 });
 export const hydrexTitle = (page: Page) => page.getByRole("heading", { name: "Hydrex", level: 1 });
@@ -666,7 +679,7 @@ export async function warmPayouts(owner: Address): Promise<void> {
 
 // A claim's review opens on what waits, unless the page found nothing to claim, or Base refused the claim: the test then
 // fails at once, with the page's words.
-export async function claimOpens(page: Page): Promise<void> {
+export async function claimOpens(page: Page | FrameLocator): Promise<void> {
   const waits = review(page).getByRole("heading", { name: "What waits" });
   const refused = review(page)
     .locator(".pages p")

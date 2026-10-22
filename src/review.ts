@@ -52,9 +52,10 @@ export type ReviewOptions = {
   prepare?(i: number): Promise<{ step: Slip; changed?: string } | undefined>;
   // Whether calls sent in one prompt must go through all together or not at all, where the wallet can.
   atomic?: boolean;
-  // Calls that need more gas together than one transaction may use go one at a time: a wallet may run the calls of
-  // one prompt as one transaction.
-  apart?: boolean;
+  // Calls that need more gas together than one transaction may use, as the parts of a large claim, go in groups that
+  // each fit one: `groups` counts the calls of each, in order. A wallet then sends the calls one at a time, as it may
+  // run the calls of one prompt as one transaction, and a Safe proposes a Safe transaction for each group.
+  groups?: number[];
 };
 
 type Review = ReviewOptions & {
@@ -64,6 +65,8 @@ type Review = ReviewOptions & {
   capabilities?: Capabilities;
   batch: boolean;
   done: Hex[];
+  // How many of the groups a Safe proposed.
+  proposed: number;
   receipts: Receipt[];
   sending: boolean;
   submitted: boolean;
@@ -125,13 +128,16 @@ function fieldOf({ label, name, code, words, under }: Field): DocumentFragment {
   return row;
 }
 
+// Calls in several groups, each a transaction of its own.
+const apart = ({ groups }: Pick<Review, "groups">): boolean => (groups?.length ?? 1) > 1;
+
 // A call as the wallet will show it. In a Safe, the Safe transaction's fields and calldata follow, for co-signers to
-// compare with Safe{Wallet}.
-function slip(step: Slip, i: number, n: number, safe: boolean, checkHref: string): DocumentFragment {
+// compare with Safe{Wallet}; `safe` names the Safe transaction it is in, and `alone` whether it is its only call.
+function slip(step: Slip, i: number, n: number, safe: string | undefined, alone: boolean, checkHref: string) {
   const item = clone("step");
   const which = n > 1 ? `${i + 1} of ${n}` : "";
   fill(item, {
-    count: safe ? ["Safe", which].filter(Boolean).join(" · ") : which,
+    count: safe ? [safe, which].filter(Boolean).join(" · ") : which,
     says: step.says,
     on: step.on,
     function: step.call,
@@ -142,15 +148,23 @@ function slip(step: Slip, i: number, n: number, safe: boolean, checkHref: string
   showHex(item.querySelector(".data")!, step.data);
   item.querySelector(".value-row")!.before(...step.fields.map(fieldOf));
   item.querySelector(".check-calls")!.setAttribute("href", checkHref);
-  show(".raw, .slip-note", safe, item);
-  show(".operation", safe && n === 1, item);
+  show(".raw, .slip-note", !!safe, item);
+  show(".operation", !!safe && alone, item);
   return item;
 }
 
 function drawSlips(state: Review): void {
   const { steps, connection, checkHref } = state;
-  const safe = !!connection.wallet.propose;
-  stepList.replaceChildren(...steps.map((step, i) => slip(step, i, steps.length, safe, checkHref)));
+  const groups = state.groups ?? [steps.length];
+  // The Safe transaction each call is in.
+  const group = groups.flatMap((size, g) => Array.from({ length: size }, () => g));
+  stepList.replaceChildren(
+    ...steps.map((step, i) => {
+      const g = group[i] ?? 0;
+      const safe = connection.wallet.propose && (apart(state) ? `Safe ${g + 1} of ${groups.length}` : "Safe");
+      return slip(step, i, steps.length, safe || undefined, groups[g] === 1, checkHref);
+    }),
+  );
 }
 
 // The review shown, while nothing is sent yet, can take other calls, as when its owner picks another way to be paid.
@@ -168,6 +182,7 @@ export function openReview(options: ReviewOptions): Opened {
     page: 0,
     batch: false,
     done: [],
+    proposed: 0,
     receipts: [],
     sending: false,
     submitted: false,
@@ -192,14 +207,14 @@ export function openReview(options: ReviewOptions): Opened {
   void capabilities(options.connection).then((found) => {
     if (state !== current || state.sending || state.submitted) return;
     state.capabilities = found;
-    state.batch = found.batch && state.steps.length > 1 && !state.apart;
+    state.batch = found.batch && state.steps.length > 1 && !apart(state);
     refreshReview();
   });
   return {
     replace(steps, more = {}) {
       if (state !== current || state.sending || state.submitted) return;
       Object.assign(state, { steps, atomic: undefined, outcomeOf: undefined, prepare: undefined, ...more });
-      state.batch = !!state.capabilities?.batch && steps.length > 1 && !state.apart;
+      state.batch = !!state.capabilities?.batch && steps.length > 1 && !apart(state);
       drawSlips(state);
       refreshReview();
     },
@@ -225,6 +240,7 @@ const atomic = (state: Review): boolean => !!state.atomic && !!state.capabilitie
 function howText(state: Review): string {
   const n = state.steps.length;
   if (state.connection.wallet.propose) {
+    if (apart(state)) return `${count(state.groups!.length, "Safe transaction", "Safe transactions")}, ${n} calls`;
     return n === 1 ? "One Safe transaction" : `One Safe transaction, ${n} calls`;
   }
   if (state.batch) return `One prompt, ${n} calls${atomic(state) ? ", all or nothing" : ""}`;
@@ -263,8 +279,12 @@ function say(state: Review, message: string, hashes: Hex[] = []): void {
   if (hashes.length) progress.append(".");
 }
 
-const wentThrough = ({ done, steps, batch }: Review): string =>
-  done.length && !batch ? ` ${done.length} of ${steps.length} transactions went through.` : "";
+const wentThrough = ({ done, steps, batch, proposed, groups }: Review): string =>
+  proposed
+    ? ` ${proposed} of ${groups?.length ?? 1} Safe transactions proposed.`
+    : done.length && !batch
+      ? ` ${done.length} of ${steps.length} transactions went through.`
+      : "";
 
 function failure(error: unknown): string {
   if (declined(error)) return "You said no in your wallet.";
@@ -281,12 +301,30 @@ const unbatched = (error: unknown): boolean => {
   return code !== undefined && UNBATCHED.includes(code);
 };
 
+// Each group of calls as a Safe transaction of its own, one after the other, each once Safe{Wallet} took the one before;
+// after a refusal, a click goes on from there.
 async function proposeAll(state: Review, propose: NonNullable<Wallet["propose"]>): Promise<void> {
-  const proposing = propose(state.steps);
-  say(state, "Waiting for your wallet…");
-  await proposing;
-  state.submitted = state.finished = true;
-  say(state, "Proposed. Sign it in Safe{Wallet}.");
+  const groups = state.groups ?? [state.steps.length];
+  while (state.proposed < groups.length) {
+    const start = groups.slice(0, state.proposed).reduce((sum, size) => sum + size, 0);
+    const proposing = propose(state.steps.slice(start, start + groups[state.proposed]!));
+    say(
+      state,
+      apart(state)
+        ? `Waiting for your wallet: Safe transaction ${state.proposed + 1} of ${groups.length}…`
+        : "Waiting for your wallet…",
+    );
+    await proposing;
+    state.proposed++;
+    state.submitted = true;
+  }
+  state.finished = true;
+  say(
+    state,
+    apart(state)
+      ? `Proposed ${groups.length} Safe transactions. Sign them in Safe{Wallet}.`
+      : "Proposed. Sign it in Safe{Wallet}.",
+  );
   if (state !== current) return;
   const proposed = clone("proposed");
   proposed.querySelector(".co-signers")!.setAttribute("href", state.checkHref);
