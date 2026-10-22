@@ -341,10 +341,13 @@ other pools.
   something. AutoMaxi asks each contract for every token, so an account owed by many contracts in many tokens, as one
   the keeper missed for weeks, would need more gas than Base allows a transaction: its claim splits into calls that each
   fit one, the most valuable first. Calls that need more than one transaction's gas together go one at a time, even from
-  a wallet that sends several in one prompt; a Safe proposes them as several Safe transactions, as few as their
-  simulated gas allows, one after the other from one click, for its owners to sign each. With "Swapped into", the
-  approvals and the swap follow, as in the swap's review, or in a review of their own after split calls; a Safe whose
-  claim takes several Safe transactions swaps later, on the swap page, as the swap follows the claim's receipts.
+  a wallet that sends several in one prompt. A Safe sends many calls in one Safe transaction, so its claim splits into
+  small calls instead, none asking a contract for a token it does not owe, which together use the least gas: #82774's
+  take 55 calls and 41 million gas, where the 12 calls a wallet sends one by one take 79 million. It proposes them as
+  several Safe transactions, as few as their simulated gas allows, one after the other from one click, for its owners to
+  sign each. With "Swapped into", the approvals and the swap follow, as in the swap's review, or in a review of their
+  own after split calls; a Safe whose claim takes several Safe transactions swaps later, on the swap page, as the swap
+  follows the claim's receipts.
 - **Done:** a receipt from the `Claimed` events: what was received, the 1%, what reached you. If the keeper claimed
   first, the receipt says the tokens came in its claim, not this one, which still cost its gas.
 

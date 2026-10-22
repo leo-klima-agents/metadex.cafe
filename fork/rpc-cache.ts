@@ -8,10 +8,10 @@ import { gunzipSync, gzipSync } from "node:zlib";
 // its requests repeat one it made before. The answers go to `file` once anvil stops, so that the next run starts with
 // them. Requests about the newest block, such as "latest", go to the upstream each time.
 //
-// The page spreads its reads over three RPCs, which the tests all send to anvil, and so to one upstream: requests for
-// logs go to it at most `logsPerSecond` a second, as Base's public RPC allows five, and all requests at most
-// `requestsPerSecond`, or as many as the upstream answers, found as it goes. anvil's go before the prefetch's. One over
-// its limit is asked again after a wait that doubles, while the requests for the same answer wait on it.
+// The page spreads its reads over three RPCs, which the tests all send to anvil, and so to one upstream. Requests go to
+// it at most `requestsPerSecond` a second, and those for logs at most `logsPerSecond`, as an upstream with known limits
+// asks; or else as fast as the upstream answers, found as it goes. anvil's go before the prefetch's. One over its limit
+// is asked again after a wait that doubles, while the requests for the same answer wait on it.
 //
 // anvil asks for what a call reads one slot at a time, as it runs it. `prefetch`, or a request posted to /prefetch, as
 // the tests post each one they send anvil, has it asked for all at once instead, before anvil gets to it: the upstream
@@ -82,22 +82,26 @@ type AccessList = { address: string; storageKeys: string[] }[];
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Turns to ask the upstream, at most `perSecond` a second, anvil's first, then the prefetch's (`later`). Without
-// `perSecond`, the rate is found as the upstream answers: it falls by a fifth at each answer over the upstream's limit,
-// and rises a little at each other.
+// Turns to ask the upstream, anvil's first, then the prefetch's (`later`): at most `perSecond` a second, or without it,
+// as fast as the upstream answers. Its limit is then found as it goes: at its first answer over its limit, the rate
+// falls to a fifth under what was asked in the second before, and again at each other such answer; each answer within
+// its limit raises it a little.
 function turns(perSecond?: number) {
-  let rate = perSecond ?? 50;
+  let rate = perSecond ?? Infinity;
   const waiting: [(() => void)[], (() => void)[]] = [[], []];
+  let started: number[] = [];
   let next = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const release = () => {
     timer = undefined;
     const now = Date.now();
-    if (now < next) return void (timer = setTimeout(release, next - now));
-    const go = waiting[0].shift() ?? waiting[1].shift();
-    if (!go) return;
-    next = now + 1_000 / rate;
-    go();
+    started = started.filter((start) => start > now - 1_000);
+    for (let go = waiting[0][0] ?? waiting[1][0]; go && now >= next; go = waiting[0][0] ?? waiting[1][0]) {
+      (waiting[0].length ? waiting[0] : waiting[1]).shift();
+      next = now + 1_000 / rate;
+      started.push(now);
+      go();
+    }
     if (waiting[0].length || waiting[1].length) timer = setTimeout(release, next - now);
   };
   return {
@@ -107,7 +111,11 @@ function turns(perSecond?: number) {
         if (!timer) release();
       }),
     answered(busy: boolean): void {
-      if (perSecond === undefined) rate = busy ? Math.max(5, rate * 0.8) : Math.min(500, rate + 0.1);
+      if (perSecond !== undefined) return;
+      const now = Date.now();
+      started = started.filter((start) => start > now - 1_000);
+      if (busy) rate = Math.max(1, Math.min(rate, started.length) * 0.8);
+      else if (rate !== Infinity) rate += 0.1;
     },
   };
 }
@@ -140,13 +148,13 @@ function txsOf({ method, params = [] }: Call): Tx[] {
 export async function serveCached(
   upstream: string,
   file: string,
-  { retries = 8, backoff = 500, logsPerSecond = 4, requestsPerSecond, block, inFlight = 16 }: Options = {},
+  { retries = 8, backoff = 500, logsPerSecond, requestsPerSecond, block, inFlight = 16 }: Options = {},
 ): Promise<Cache> {
   const answers = new Map<string, unknown>(Object.entries(read(file)));
   const pending = new Map<string, { reply: Promise<Reply>; later: boolean }>();
   const unserved = new Map<string, Refused | Reply>();
   const known = answers.size;
-  const paceLogs = paced(logsPerSecond);
+  const paceLogs = logsPerSecond === undefined ? async () => {} : paced(logsPerSecond);
   const turn = turns(requestsPerSecond);
   const prefetching = new Set<Promise<void>>();
   const queued: (() => void)[] = [];

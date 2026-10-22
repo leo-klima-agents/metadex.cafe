@@ -522,11 +522,11 @@ export async function confirmEach(page: Page, from: Address): Promise<void> {
 }
 
 // The answers a fork at `block` reads from FORK_URL, kept between runs: see rpc-cache.ts. Base's public RPC answers 25
-// requests a second from one address; another RPC, as many as it answers.
+// requests a second from one address, 5 of them for logs, as src/chain.ts knows; another RPC, as many as it answers.
 export const serveFork = (block: number): Promise<Cache> =>
   serveCached(FORK_URL, join(CACHE, `base-${block}.json.gz`), {
     block,
-    ...(process.env.BASE_RPC_URL ? {} : { requestsPerSecond: 20 }),
+    ...(process.env.BASE_RPC_URL ? {} : { requestsPerSecond: 20, logsPerSecond: 4 }),
   });
 
 // Starts anvil on a fork of Base at `block`, through the answers kept for it, and Chromium; and the hooks that put anvil

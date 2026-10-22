@@ -115,6 +115,33 @@ test("an upstream over its limit is asked again, once for all the requests for t
   await rpc.close();
 });
 
+test("without a limit given, the upstream is asked as fast as anvil asks, until it says it is over its limit", async () => {
+  const ok = { body: { result: "0x01" } };
+  const busy = { status: 429, body: { error: { code: -32005, message: "rate limit exceeded" } } };
+  // Twenty answers, then one over its limit.
+  const rpc = await upstream({ eth_getStorageAt: [...Array.from({ length: 20 }, () => ok), busy, ok] });
+  const cache = await serveCached(rpc.url, join(mkdtempSync(join(tmpdir(), "fork-cache-")), "base.json.gz"), {
+    backoff: 1,
+  });
+  const slots = (from: number, n: number) =>
+    Promise.all(
+      Array.from({ length: n }, (_, i) =>
+        ask(cache.url, "eth_getStorageAt", ["0x01", `0x${(from + i).toString(16)}`, "0x10"]),
+      ),
+    );
+  let start = Date.now();
+  await slots(0, 20);
+  assert.ok(Date.now() - start < 500, "at once");
+  await slots(20, 1);
+  // Asked 21 times in the second before it refused, it is then asked about 17 times a second.
+  start = Date.now();
+  await slots(21, 17);
+  assert.ok(Date.now() - start >= 600, `17 more took ${Date.now() - start} ms`);
+  assert.equal(cache.busy, 1);
+  await cache.close();
+  await rpc.close();
+});
+
 test("requests for logs go to the upstream at most so many a second", async () => {
   const rpc = await upstream({ eth_getLogs: { body: { result: [] } } });
   const cache = await serveCached(rpc.url, join(mkdtempSync(join(tmpdir(), "fork-cache-")), "base.json.gz"), {

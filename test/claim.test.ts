@@ -4,6 +4,7 @@ import { decodeFunctionData, encodeAbiParameters, encodeEventTopics, parseAbi, t
 import { AUTOMAXI } from "../src/config.ts";
 import {
   CLAIM_CALL_GAS,
+  SAFE_CLAIM_CALL_GAS,
   claimArgs,
   claimCalls,
   claimGas,
@@ -138,6 +139,23 @@ test("contracts that owe the same tokens share a call, and one that owes too man
     calls.reduce((n, { owed }) => n + owed.length, 0),
     40,
   );
+});
+
+test("for a Safe, a claim splits into small calls that ask each contract only for the tokens it owes", () => {
+  const many: Owed[] = Array.from({ length: 71 }, (_, i) => [
+    { contract: contract(i), token: token(i % 37), amount: 1n, fee: i % 2 === 0 },
+    ...(i % 3 === 0 ? [{ contract: contract(i), token: token((i + 1) % 37), amount: 2n, fee: i % 2 === 0 }] : []),
+  ]).flat();
+  const calls = claimCalls({ id: 82774n, owed: many }, SAFE_CLAIM_CALL_GAS);
+  const pairs = (list: Owed[]) => list.map(({ contract, token }) => `${contract} ${token}`).sort();
+  assert.deepEqual(pairs(calls.flatMap(({ owed }) => owed)), pairs(many));
+  // AutoMaxi asks each contract of a call for each of its tokens: none of those pairs owes nothing.
+  for (const { owed } of calls) {
+    const contracts = new Set(owed.map(({ contract }) => contract));
+    const tokens = new Set(owed.map(({ token }) => token));
+    assert.equal(contracts.size * tokens.size, owed.length);
+  }
+  assert.ok(calls.length > claimCalls({ id: 82774n, owed: many }).length);
 });
 
 test("a Safe proposes a split claim's calls in as few Safe transactions as their gas allows, in order", () => {

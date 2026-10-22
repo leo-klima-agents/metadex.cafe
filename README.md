@@ -32,9 +32,10 @@ This README is for whoever runs the site. The design and the plan are in [design
   epoch's pools, and the epoch before's when the keeper missed it too. AutoMaxi asks each contract for every token
   passed, and each answer reads the account's past epochs, so a claim of many contracts and tokens splits into calls
   that each fit a transaction, the most valuable first; calls that need more gas together than one transaction may use
-  go one at a time, and a Safe proposes them in as few Safe transactions as their simulated gas allows, each under 15
-  million. The review offers the rewards as they are, or swapped into one token, but not from a Safe whose claim takes
-  several Safe transactions: the swap follows the claim's receipts.
+  go one at a time. A Safe, which sends many calls in one Safe transaction, gets small calls instead, none asking a
+  contract for a token it does not owe, which together use the least gas; it proposes them in as few Safe transactions
+  as their simulated gas allows, each under 15 million. The review offers the rewards as they are, or swapped into one
+  token, but not from a Safe whose claim takes several Safe transactions: the swap follows the claim's receipts.
 - **Swapping** goes through `ImmutableSwapper`, deployed once per output token: USDC, EURC, WETH, cbBTC, AERO and HYDX.
   Each `swap(routes, deadline, skipFailed)` sells the tokens named, each along a route of one to three hops the caller
   picks, through pools of Hydrex, Aero, Aerodrome and Uniswap that it checks against each exchange's factory, and sends

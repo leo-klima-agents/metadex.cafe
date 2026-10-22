@@ -36,6 +36,10 @@ const CLAIM_GAS = { call: 100_000n, token: 80_000n, contract: 50_000n, pair: 400
 // Each call is kept under this, by the estimate, and under MAX_CLAIM_GAS, as simulated: a transaction may use 16.7 million
 // gas on Base.
 export const CLAIM_CALL_GAS = 12_000_000n;
+// A Safe sends many calls in one Safe transaction, so its claim splits into small calls instead, none asking a contract
+// for a token it does not owe: what matters is their gas together. #82774's 105 pairs take 55 calls and 41 million gas,
+// in 3 Safe transactions, where 12 calls of 12 million by the estimate take 79 million, in 6.
+export const SAFE_CLAIM_CALL_GAS = 1_500_000n;
 export const MAX_CLAIM_GAS = 15_000_000n;
 
 export function claimGas(owed: Owed[]): bigint {

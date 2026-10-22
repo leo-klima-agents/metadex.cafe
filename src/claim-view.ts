@@ -2,7 +2,9 @@ import { maxUint256, type Address } from "viem";
 import { same, type Receipt } from "./chain.ts";
 import { DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
 import {
+  CLAIM_CALL_GAS,
   MAX_CLAIM_GAS,
+  SAFE_CLAIM_CALL_GAS,
   claimCalls,
   claimGas,
   claimSlip,
@@ -126,16 +128,17 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     openReview({ name, pages: [{ title: name, body: fragment }], steps: [], checkHref, connection, hooks });
   };
   if (!owing.length) return nothing("Nothing to claim: the keeper may have just claimed it.");
-  // Each account's claim, in calls that fit a transaction, the most valuable first, so that stopping halfway still
-  // claims the most.
+  // Each account's claim, in calls that fit a transaction, or small ones for a Safe to pack together, the most valuable
+  // first, so that stopping halfway still claims the most.
   const worth = ({ owed }: Claim) =>
     dollars(
       owed.map(({ token, amount }) => ({ token, amount })),
       tokens,
       prices,
     );
+  const budget = connection.wallet.propose ? SAFE_CLAIM_CALL_GAS : CLAIM_CALL_GAS;
   const calls = owing.flatMap((claim) => {
-    const parts = claimCalls(claim).sort((a, b) => worth(b) - worth(a));
+    const parts = claimCalls(claim, budget).sort((a, b) => worth(b) - worth(a));
     return parts.map((part) => ({ part, whole: parts.length === 1 }));
   });
   const claimSlips = calls.map(({ part, whole }) => claimSlip(part, tokens, whole));
