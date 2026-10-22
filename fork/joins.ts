@@ -15,6 +15,7 @@ import {
   RECIPIENT,
   abi,
   anvil,
+  send,
   view,
   warm,
   expectApprovals,
@@ -248,7 +249,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     assert.equal(await hydrex(page).getByText("Wrong network.").isVisible(), false);
 
     const data = encodeFunctionData({ abi, functionName: "transferFrom", args: [NEWCOMER, RECIPIENT, 141n] });
-    await anvil("eth_sendTransaction", [{ from: NEWCOMER, to: VOTING_ESCROW, data }]);
+    await send({ from: NEWCOMER, to: VOTING_ESCROW, data });
     wallet.decline = false;
     await joinOwn.click();
     await toWallet(page);

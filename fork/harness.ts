@@ -133,6 +133,11 @@ export async function anvil<T>(method: string, params: unknown[] = []): Promise<
   return result;
 }
 
+// Sends a transaction from an account anvil impersonates, with no tip, as anvil 1.5 filled it in. anvil 1.8 tips 1 gwei
+// over a fee cap it takes from the base fee alone under --disable-min-priority-fee, and so refuses its own transaction.
+export const send = (tx: { from: string; to: string; data: string; gas?: string }): Promise<Hex> =>
+  anvil<Hex>("eth_sendTransaction", [{ ...tx, maxPriorityFeePerGas: "0x0" }]);
+
 export async function view(to: Address, functionName: string, args: unknown[]): Promise<Address> {
   const data = encodeFunctionData({ abi, functionName, args } as never);
   const reply = await anvil<Hex>("eth_call", [{ to, data }, "latest"]);
@@ -157,7 +162,7 @@ export async function warm(reads: () => Promise<unknown>): Promise<void> {
 // A transaction that anvil has not mined in two minutes, even reading its state from FORK_URL, fails its test there
 // and then, rather than at the suite's timeout.
 export async function mined(from: Address, to: Address, data: Hex): Promise<void> {
-  const hash = await anvil<Hex>("eth_sendTransaction", [{ from, to, data, gas: "0xf42400" }]);
+  const hash = await send({ from, to, data, gas: GAS });
   for (const deadline = Date.now() + 120_000; Date.now() < deadline;) {
     const receipt = await anvil<{ status: Hex } | null>("eth_getTransactionReceipt", [hash]);
     if (receipt) return assert.equal(receipt.status, "0x1", `${hash} failed`);
@@ -304,7 +309,7 @@ function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
         if (options.decline) return { error: { code: 4001, message: "User rejected the request." } };
         // As MetaMask does.
         if (chainId !== hex(options.chainId)) return { error: { code: -32602, message: "Wrong chain." } };
-        return { result: await anvil("eth_sendTransaction", [{ to, data, from: options.owner, gas: GAS }]) };
+        return { result: await send({ to, data, from: options.owner, gas: GAS }) };
       }
       case "wallet_getCapabilities":
         if (!options.batch) return { error: { code: 4200, message: "The test wallet does not batch." } };
@@ -317,7 +322,7 @@ function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
         const hashes: Hex[] = [];
         for (const { to, data } of calls) {
           sent.push({ to, data });
-          hashes.push(await anvil<Hex>("eth_sendTransaction", [{ to, data, from: options.owner, gas: GAS }]));
+          hashes.push(await send({ to, data, from: options.owner, gas: GAS }));
         }
         const id = `0x${(batches.size + 1).toString(16).padStart(64, "0")}`;
         batches.set(id, hashes);

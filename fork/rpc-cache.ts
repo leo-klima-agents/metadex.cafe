@@ -15,6 +15,9 @@ import { gunzipSync, gzipSync } from "node:zlib";
 // says which accounts and slots the call reads at the fork's block, through eth_createAccessList, and each is asked of
 // it behind anvil's own requests. What a call reads only on the fork, as after a test's own transactions, anvil still
 // asks for itself.
+//
+// anvil names the fork's block by its number in some requests, and by its hash in others (EIP-1898): both are asked,
+// and kept, as the number.
 
 type Call = { jsonrpc: "2.0"; id: unknown; method: string; params?: unknown[] };
 type Reply = { jsonrpc: "2.0"; id: unknown; result?: unknown; error?: unknown };
@@ -194,10 +197,11 @@ export async function serveCached(upstream: Upstream, file: string, block?: numb
   const prefetching = new Set<Promise<void>>();
   let closing = false;
   let asked = 0;
+  const at = block === undefined ? undefined : `0x${block.toString(16)}`;
 
   async function answer(call: Call): Promise<Reply> {
     asked++;
-    return answerOf(call);
+    return answerOf(byNumber(call));
   }
 
   async function answerOf(call: Call, later = false): Promise<Reply> {
@@ -226,6 +230,18 @@ export async function serveCached(upstream: Upstream, file: string, block?: numb
   }
 
   const ask = (method: string, params: unknown[]): Call => ({ jsonrpc: "2.0", id: 0, method, params });
+
+  // The fork's block by its number, where a request names it by the hash that anvil read in the block's own answer.
+  function byNumber(call: Call): Call {
+    const params = call.params ?? [];
+    const named = params.findIndex((param) => typeof (param as { blockHash?: unknown } | null)?.blockHash === "string");
+    if (at === undefined || named < 0) return call;
+    const { blockHash } = params[named] as { blockHash: string };
+    const forked = [false, true].some(
+      (full) => (answers.get(keyOf(ask("eth_getBlockByNumber", [at, full]))) as { hash?: string })?.hash === blockHash,
+    );
+    return forked ? { ...call, params: params.map((param, i) => (i === named ? at : param)) } : call;
+  }
 
   // anvil asks for an account's balance, nonce and code in one request, or in three from an upstream that does not
   // serve it.
@@ -265,14 +281,13 @@ export async function serveCached(upstream: Upstream, file: string, block?: numb
   }
 
   function prefetch(body: string): Promise<void> {
-    if (block === undefined || closing) return Promise.resolve();
+    if (at === undefined || closing) return Promise.resolve();
     let calls: Call[];
     try {
       calls = [JSON.parse(body) as Call | Call[]].flat();
     } catch {
       return Promise.resolve();
     }
-    const at = `0x${block.toString(16)}`;
     const running = Promise.all(calls.flatMap(txsOf).map((tx) => prefetchTx(tx, at)))
       .then(() => {})
       .catch(() => {})

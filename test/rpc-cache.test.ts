@@ -241,6 +241,24 @@ test("what a call reads is asked of the upstream at once, from its access list, 
   await rpc.close();
 });
 
+test("a request that names the fork's block by its hash is answered as one that names it by its number", async () => {
+  const hash = `0x${"68".repeat(32)}`;
+  const rpc = await upstream({
+    eth_getBlockByNumber: { body: { result: { number: "0x10", hash } } },
+    eth_getStorageAt: { body: { result: "0x01" } },
+  });
+  const cache = await serveCached(upstreamOf(rpc.url), fileOf(), 16);
+  const contract = "0x25b2ed7149fb8a05f6ef9407d9c8f878f59cd1e1";
+  await ask(cache.url, "eth_getBlockByNumber", ["0x10", false]);
+  assert.equal((await ask(cache.url, "eth_getStorageAt", [contract, "0x0", "0x10"])).reply.result, "0x01");
+  assert.equal((await ask(cache.url, "eth_getStorageAt", [contract, "0x0", { blockHash: hash }])).reply.result, "0x01");
+  // Another block's hash names that block.
+  await ask(cache.url, "eth_getStorageAt", [contract, "0x0", { blockHash: `0x${"ab".repeat(32)}` }]);
+  assert.deepEqual(rpc.asked, ["eth_getBlockByNumber", "eth_getStorageAt", "eth_getStorageAt"]);
+  await cache.close();
+  await rpc.close();
+});
+
 test("runs that close at once each keep their answers", async () => {
   const rpc = await upstream({ eth_getStorageAt: { body: { result: "0x01" } } });
   const file = fileOf();

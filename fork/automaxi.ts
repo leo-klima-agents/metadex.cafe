@@ -22,6 +22,7 @@ import {
   anvil,
   warm,
   mined,
+  send,
   deployAutoMaxi,
   settle,
   claimOne,
@@ -345,7 +346,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
   // Last, as it moves anvil's clock on.
   test("in a new epoch, Join reads again before any review, and the page moves on by itself", async () => {
     const data = encodeFunctionData({ abi, functionName: "setConduitApproval", args: [CONDUIT, 141n, true] });
-    await anvil("eth_sendTransaction", [{ from: NEWCOMER, to: VOTING_ESCROW, data, gas: GAS }]);
+    await send({ from: NEWCOMER, to: VOTING_ESCROW, data, gas: GAS });
     const { page } = await connected({ owner: NEWCOMER }, { flowing: true });
     await account(page, 141).getByText("Joining Carbon Impact:").waitFor();
     await anvil("evm_setNextBlockTimestamp", [FLIP + 60]);
