@@ -5,8 +5,6 @@ import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { afterEach, beforeEach } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
@@ -46,14 +44,8 @@ import { WEEK, short } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
 import { SETTLED, readEarned, readStamps, weighed } from "../src/receipts.ts";
 import { findRoute } from "../src/swap.ts";
-import { serveCached, type Cache } from "./rpc-cache.ts";
 
 export const CONDUIT = CARBON_IMPACT.address;
-// Base's public RPC serves the state of blocks a year old, as an archive RPC does. CI passes an empty BASE_RPC_URL when
-// it has none.
-const FORK_URL = process.env.BASE_RPC_URL || "https://mainnet.base.org";
-// Where the answers of FORK_URL are kept between runs: see rpc-cache.ts.
-const CACHE = process.env.FORK_CACHE || join(homedir(), ".cache", "metadex.cafe", "fork");
 export const BLOCK = 52_694_000; // Fri 16 Oct 2026, 18:22 UTC
 export const FLIP = 1_792_627_200; // Thu 22 Oct 2026, 00:00 UTC, when the epoch after BLOCK's starts
 // After the swappers' deployment in block 52,894,916: Wed 21 Oct 2026, 15:42 UTC. Carbon Impact still owed #82774 the
@@ -371,7 +363,6 @@ async function serve(route: Route, { origins, rpc, safe }: Pick<Opened, "origins
 
 let browser: Browser;
 let node: ChildProcess;
-let cache: Cache | undefined;
 let snapshot: Hex;
 const contexts: BrowserContext[] = [];
 
@@ -521,34 +512,23 @@ export async function confirmEach(page: Page, from: Address): Promise<void> {
   }
 }
 
-// The answers a fork at `block` reads from FORK_URL, kept between runs: see rpc-cache.ts. Base's public RPC answers 25
-// requests a second from one address, 5 of them for logs, as src/chain.ts knows; another RPC, as many as it answers.
-export const serveFork = (block: number): Promise<Cache> =>
-  serveCached(FORK_URL, join(CACHE, `base-${block}.json.gz`), {
-    block,
-    ...(process.env.BASE_RPC_URL ? {} : { requestsPerSecond: 20, logsPerSecond: 4 }),
-  });
-
-// Starts anvil on a fork of Base at `block`, through the answers kept for it, and Chromium; and the hooks that put anvil
-// back after each test. fork/run.ts serves the answers to all the test files at once, through FORK_CACHES; a file run on
-// its own serves its own.
+// Starts anvil on a fork of Base at `block`, and Chromium; and the hooks that put anvil back after each test. anvil
+// forks through the cache that fork/run.ts serves for `block`, in FORK_CACHES, so that every request of the run goes
+// to FORK_URL through one queue, however many files run at once.
 export async function start(block: number, owners: Address[]): Promise<void> {
-  const shared = (JSON.parse(process.env.FORK_CACHES ?? "{}") as Record<string, string>)[block];
-  if (shared) CACHE_URL = shared;
-  else {
-    cache = await serveFork(block);
-    CACHE_URL = cache.url;
-  }
+  const cached = (JSON.parse(process.env.FORK_CACHES ?? "{}") as Record<string, string>)[block];
+  if (!cached)
+    throw new Error("Run the browser tests through fork/run.ts, which serves the caches anvil forks through.");
+  CACHE_URL = cached;
   const port = await freePort();
   ANVIL = `http://127.0.0.1:${port}`;
   node = spawn(
     "anvil",
-    // A free archive RPC refuses requests over its limit now and then: anvil asks it again, after a second, up to twenty
-    // times. anvil keeps no answers of its own, so that the cache sees each request. Its gas price is the block's base
-    // fee, as on Base, where tips are next to nothing: anvil's own least tip, 1 gwei, would price gas 200 times higher.
+    // anvil keeps no answers of its own, so that the cache sees each request. Its gas price is the block's base fee, as
+    // on Base, where tips are next to nothing: anvil's own least tip, 1 gwei, would price gas 200 times higher.
     [
       ...["--fork-url", CACHE_URL, "--fork-block-number", String(block), "--port", String(port), "--auto-impersonate"],
-      ...["--retries", "20", "--fork-retry-backoff", "1000", "--no-storage-caching", "--disable-min-priority-fee"],
+      ...["--no-storage-caching", "--disable-min-priority-fee"],
     ],
     { stdio: ["ignore", "ignore", process.env.ANVIL_LOG ? "inherit" : "ignore"] },
   );
@@ -602,11 +582,6 @@ export async function stop(): Promise<void> {
     await exited;
     clearTimeout(late);
   }
-  await cache?.close();
-  if (cache)
-    console.log(
-      `${cache.asked} requests from anvil; ${cache.fetched} asked of FORK_URL, ${cache.busy} of them over its limit.`,
-    );
 }
 
 export function hooks(): void {

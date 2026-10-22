@@ -42,8 +42,8 @@ jobs:
         with:
           path: dist
 
-  # Runs the page in Chrome against forks of Base: through the BASE_RPC_URL secret if it is set, else through Base's
-  # public RPC. The forks' answers are kept in GitHub's cache from one run to the next, and saved again when a run adds
+  # Runs the page in Chrome against forks of Base: through the BASE_RPC_URL secret if it is set, else through the page's
+  # first RPC. The forks' answers are kept in GitHub's cache from one run to the next, and saved again when a run adds
   # some. The runner's image comes with Google Chrome.
   fork:
     runs-on: ubuntu-26.04

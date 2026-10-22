@@ -8,16 +8,13 @@ import { gunzipSync, gzipSync } from "node:zlib";
 // its requests repeat one it made before. The answers go to `file` once anvil stops, so that the next run starts with
 // them. Requests about the newest block, such as "latest", go to the upstream each time.
 //
-// The page spreads its reads over three RPCs, which the tests all send to anvil, and so to one upstream. Requests go to
-// it at most `requestsPerSecond` a second, and those for logs at most `logsPerSecond`, as an upstream with known limits
-// asks; or else as fast as the upstream answers, found as it goes. anvil's go before the prefetch's. One over its limit
-// is asked again after a wait that doubles, while the requests for the same answer wait on it.
+// The caches of a run, one per fork, ask the upstream through one queue: see upstreamOf.
 //
 // anvil asks for what a call reads one slot at a time, as it runs it. `prefetch`, or a request posted to /prefetch, as
 // the tests post each one they send anvil, has it asked for all at once instead, before anvil gets to it: the upstream
 // says which accounts and slots the call reads at the fork's block, through eth_createAccessList, and each is asked of
-// it in parallel, as anvil's own requests leave room. What a call reads only on the fork, as after a test's own
-// transactions, anvil still asks for itself.
+// it behind anvil's own requests. What a call reads only on the fork, as after a test's own transactions, anvil still
+// asks for itself.
 
 type Call = { jsonrpc: "2.0"; id: unknown; method: string; params?: unknown[] };
 type Reply = { jsonrpc: "2.0"; id: unknown; result?: unknown; error?: unknown };
@@ -30,8 +27,8 @@ const keyOf = ({ method, params = [] }: Call): string => `${method} ${JSON.strin
 // The tests replace globalThis.fetch while they warm anvil up, to send the page's reads to it: the upstream is asked
 // through the one there was before.
 const upstreamFetch = globalThis.fetch;
-// A method the upstream does not serve, as Base's public RPC refuses eth_getAccountInfo, which anvil then asks for in
-// three requests.
+// A method the upstream does not serve, as some RPCs refuse eth_getAccountInfo, which anvil then asks for in three
+// requests.
 const UNSERVED_STATUS = [401, 403, 405];
 const UNSERVED_CODES = [-32601, -32611];
 
@@ -49,89 +46,40 @@ class Refused extends Error {
   }
 }
 
-// Over the upstream's limit: asked again.
+// Over the upstream's limit, or out of its reach: asked again, after at least `retryAfter` milliseconds.
 class Busy extends Error {
   refused: Refused;
-  constructor(refused: Refused) {
+  retryAfter: number;
+  constructor(refused: Refused, retryAfter = 0) {
     super(refused.message);
     this.refused = refused;
+    this.retryAfter = retryAfter;
   }
 }
 
+export type Upstream = {
+  // Asks the upstream in turn. With `wanted`, the request is the prefetch's: it waits behind anvil's, and is dropped,
+  // answered with undefined, if `wanted` says no once its turn comes.
+  ask(call: Call, wanted?: () => boolean): Promise<Reply | undefined>;
+  serves(method: string): boolean;
+  // Requests sent to the upstream, and how many of them it answered over its limit.
+  fetched: number;
+  busy: number;
+};
+type UpstreamOptions = { inFlight?: number; retries?: number; backoff?: number; maxBackoff?: number };
+
 export type Cache = {
   url: string;
+  // Requests from anvil.
   asked: number;
-  fetched: number;
-  // Of those, how many the upstream answered over its limit, to be asked again.
-  busy: number;
   // The JSON-RPC request, or batch, about to go to anvil: what its calls read is fetched, without holding it up.
   prefetch(body: string): Promise<void>;
   close(): Promise<void>;
-};
-type Options = {
-  retries?: number;
-  backoff?: number;
-  logsPerSecond?: number;
-  requestsPerSecond?: number;
-  // The fork's block, at which `prefetch` reads, and how many of its requests go at once, for all the calls it reads.
-  block?: number;
-  inFlight?: number;
 };
 type Tx = { from?: string; to?: string; data?: string; input?: string; value?: string; gas?: string };
 type AccessList = { address: string; storageKeys: string[] }[];
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// Turns to ask the upstream, anvil's first, then the prefetch's (`later`): at most `perSecond` a second, or without it,
-// as fast as the upstream answers. Its limit is then found as it goes: at its first answer over its limit, the rate
-// falls to a fifth under what was asked in the second before, and again at each other such answer; each answer within
-// its limit raises it a little.
-function turns(perSecond?: number) {
-  let rate = perSecond ?? Infinity;
-  const waiting: [(() => void)[], (() => void)[]] = [[], []];
-  let started: number[] = [];
-  let next = 0;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const release = () => {
-    timer = undefined;
-    const now = Date.now();
-    started = started.filter((start) => start > now - 1_000);
-    for (let go = waiting[0][0] ?? waiting[1][0]; go && now >= next; go = waiting[0][0] ?? waiting[1][0]) {
-      (waiting[0].length ? waiting[0] : waiting[1]).shift();
-      next = now + 1_000 / rate;
-      started.push(now);
-      go();
-    }
-    if (waiting[0].length || waiting[1].length) timer = setTimeout(release, next - now);
-  };
-  return {
-    take: (later: boolean) =>
-      new Promise<void>((resolve) => {
-        waiting[later ? 1 : 0].push(resolve);
-        if (!timer) release();
-      }),
-    answered(busy: boolean): void {
-      if (perSecond !== undefined) return;
-      const now = Date.now();
-      started = started.filter((start) => start > now - 1_000);
-      if (busy) rate = Math.max(1, Math.min(rate, started.length) * 0.8);
-      else if (rate !== Infinity) rate += 0.1;
-    },
-  };
-}
-
-// Waits, if need be, so that at most `perSecond` start in any second.
-function paced(perSecond: number): () => Promise<void> {
-  let started: number[] = [];
-  return async () => {
-    for (;;) {
-      const now = Date.now();
-      started = started.filter((start) => start > now - 1_000);
-      if (started.length < perSecond) return void started.push(now);
-      await sleep(started[0]! + 1_000 - now);
-    }
-  };
-}
 
 // The transactions a request runs: eth_simulateV1's are each read on their own, though some read what an earlier one
 // wrote.
@@ -145,51 +93,40 @@ function txsOf({ method, params = [] }: Call): Tx[] {
   return [];
 }
 
-export async function serveCached(
-  upstream: string,
-  file: string,
-  { retries = 8, backoff = 500, logsPerSecond, requestsPerSecond, block, inFlight = 16 }: Options = {},
-): Promise<Cache> {
-  const answers = new Map<string, unknown>(Object.entries(read(file)));
-  const pending = new Map<string, { reply: Promise<Reply>; later: boolean }>();
+// The upstream RPC, through one queue for all the caches of a run: at most `inFlight` requests at once, anvil's first,
+// then the prefetch's. One it answers over its limit, or that does not reach it, is asked again after an exponential
+// backoff with full jitter, a wait drawn up to `backoff` doubled at each try and at most `maxBackoff`, or longer if its
+// Retry-After says so. After `retries` tries, anvil gets the refusal as it came. A method it does not serve is not
+// asked of it again.
+export function upstreamOf(
+  url: string,
+  { inFlight = 8, retries = 8, backoff = 250, maxBackoff = 10_000 }: UpstreamOptions = {},
+): Upstream {
+  const waiting: [(() => void)[], (() => void)[]] = [[], []];
   const unserved = new Map<string, Refused | Reply>();
-  const known = answers.size;
-  const paceLogs = logsPerSecond === undefined ? async () => {} : paced(logsPerSecond);
-  const turn = turns(requestsPerSecond);
-  const prefetching = new Set<Promise<void>>();
-  const queued: (() => void)[] = [];
   let free = inFlight;
-  let closing = false;
-  let asked = 0;
   let fetched = 0;
   let busy = 0;
 
-  async function fetchOne(call: Call, later: boolean): Promise<Reply> {
-    for (let attempt = 0; ; attempt++) {
-      try {
-        return await fetchOnce(call, later);
-      } catch (error) {
-        if (!(error instanceof Busy) || attempt === retries) throw error instanceof Busy ? error.refused : error;
-        busy++;
-        await sleep(Math.min(backoff * 2 ** attempt, 10_000) * (0.5 + Math.random()));
-      }
-    }
-  }
+  const take = async (later: boolean): Promise<void> => {
+    if (free) free--;
+    else await new Promise<void>((resolve) => waiting[later ? 1 : 0].push(resolve));
+  };
+  const give = (): void => {
+    const next = waiting[0].shift() ?? waiting[1].shift();
+    if (next) next();
+    else free++;
+  };
 
-  async function fetchOnce(call: Call, later: boolean): Promise<Reply> {
+  async function once(call: Call): Promise<Reply> {
     const before = unserved.get(call.method);
     if (before instanceof Refused) throw before;
     if (before) return before;
-    if (call.method === "eth_getLogs") await paceLogs();
-    await turn.take(later);
-    // anvil may have asked for it meanwhile.
-    const key = keyOf(call);
-    if (later && answers.has(key)) return { jsonrpc: "2.0", id: call.id, result: answers.get(key) };
     fetched++;
     let response: Response;
     let body: string;
     try {
-      response = await upstreamFetch(upstream, {
+      response = await upstreamFetch(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...call, id: 1 }),
@@ -208,18 +145,55 @@ export async function serveCached(
       console.error(`${response.status} ${call.method} ${JSON.stringify(call.params)} ${body.slice(0, 160)}`);
     const { code, message = "" } = (reply?.error ?? {}) as { code?: number; message?: string };
     const refusesMethod = UNSERVED_STATUS.includes(response.status) || UNSERVED_CODES.includes(code ?? 0);
-    const busy =
+    const isBusy =
       response.status === 429 || response.status >= 500 || BUSY_CODES.includes(code ?? 0) || BUSY.test(message);
-    turn.answered(busy);
+    const retryAfter = 1_000 * (Number(response.headers.get("retry-after")) || 0);
     if (!response.ok || !reply || !("result" in reply || "error" in reply)) {
       const refused = new Refused(response.status === 200 ? 503 : response.status, body);
       if (refusesMethod) unserved.set(call.method, refused);
-      throw busy ? new Busy(refused) : refused;
+      throw isBusy ? new Busy(refused, retryAfter) : refused;
     }
-    if (busy) throw new Busy(new Refused(429, body));
+    if (isBusy) throw new Busy(new Refused(429, body), retryAfter);
     if (refusesMethod) unserved.set(call.method, reply);
     return reply;
   }
+
+  return {
+    async ask(call, wanted) {
+      for (let attempt = 0; ; attempt++) {
+        await take(!!wanted);
+        let wait = 0;
+        try {
+          if (wanted && !wanted()) return undefined;
+          return await once(call);
+        } catch (error) {
+          if (!(error instanceof Busy) || attempt === retries) throw error instanceof Busy ? error.refused : error;
+          busy++;
+          wait = Math.max(error.retryAfter, Math.random() * Math.min(maxBackoff, backoff * 2 ** attempt));
+        } finally {
+          give();
+        }
+        await sleep(wait);
+      }
+    },
+    serves: (method) => !unserved.has(method),
+    get fetched() {
+      return fetched;
+    },
+    get busy() {
+      return busy;
+    },
+  };
+}
+
+// A cache of the answers about `block`, the fork's, kept in `file`.
+export async function serveCached(upstream: Upstream, file: string, block?: number): Promise<Cache> {
+  const answers = new Map<string, unknown>(Object.entries(read(file)));
+  const pending = new Map<string, { reply: Promise<Reply | undefined>; later: boolean }>();
+  const known = answers.size;
+  const prefetching = new Set<Promise<void>>();
+  let closing = false;
+  let asked = 0;
 
   async function answer(call: Call): Promise<Reply> {
     asked++;
@@ -229,16 +203,20 @@ export async function serveCached(
   async function answerOf(call: Call, later = false): Promise<Reply> {
     const key = keyOf(call);
     const cacheable = fixed(call);
-    if (cacheable && answers.has(key)) return { jsonrpc: "2.0", id: call.id, result: answers.get(key) };
+    const kept = (): Reply => ({ jsonrpc: "2.0", id: call.id, result: answers.get(key) });
+    if (cacheable && answers.has(key)) return kept();
     // Requests in flight for the same answer share the upstream's one, but anvil's does not wait for the prefetch's turn.
     const shared = cacheable ? pending.get(key) : undefined;
     let reply = shared && (later || !shared.later) ? shared.reply : undefined;
     if (!reply) {
-      reply = fetchOne(call, later);
+      reply = upstream.ask(call, later ? () => !closing && !answers.has(key) : undefined);
       if (cacheable) pending.set(key, { reply, later });
     }
     try {
-      const { result, error } = await reply;
+      const got = await reply;
+      // A prefetch dropped as anvil got the answer first, or as the cache closes.
+      if (!got) return answers.has(key) ? kept() : { jsonrpc: "2.0", id: call.id, error: { message: "Closing." } };
+      const { result, error } = got;
       // null, as for a receipt not found, may change: it is not kept.
       if (cacheable && !error && result !== null) answers.set(key, result);
       return { jsonrpc: "2.0", id: call.id, ...(error ? { error } : { result }) };
@@ -250,35 +228,22 @@ export async function serveCached(
   const ask = (method: string, params: unknown[]): Call => ({ jsonrpc: "2.0", id: 0, method, params });
 
   // anvil asks for an account's balance, nonce and code in one request, or in three from an upstream that does not
-  // serve it, as Base's public RPC.
+  // serve it.
   const accountCalls = (address: string, at: string): Call[] =>
-    (unserved.has("eth_getAccountInfo")
-      ? ["eth_getBalance", "eth_getTransactionCount", "eth_getCode"]
-      : ["eth_getAccountInfo"]
+    (upstream.serves("eth_getAccountInfo")
+      ? ["eth_getAccountInfo"]
+      : ["eth_getBalance", "eth_getTransactionCount", "eth_getCode"]
     ).map((method) => ask(method, [address, at]));
 
-  // Asks for the answers not kept yet, at most `inFlight` at a time for all the calls prefetched, until the cache closes.
-  // anvil may ask for one meanwhile. A failure is anvil's to meet.
-  async function fetchAll(calls: Call[]): Promise<void> {
-    await Promise.all(
-      calls.map(async (call) => {
-        if (free) free--;
-        else await new Promise<void>((resolve) => queued.push(resolve));
-        try {
-          if (!closing && !answers.has(keyOf(call))) await answerOf(call, true).catch(() => {});
-        } finally {
-          const next = queued.shift();
-          if (next) next();
-          else free++;
-        }
-      }),
-    );
-  }
+  // Asks for the answers not kept yet. A failure is anvil's to meet.
+  const fetchAll = (calls: Call[]): Promise<unknown> =>
+    Promise.all(calls.filter((call) => !answers.has(keyOf(call))).map((call) => answerOf(call, true).catch(() => {})));
 
   async function prefetchTx(tx: Tx, at: string): Promise<void> {
     const { from, to, data, input, value, gas } = tx ?? {};
     const call = ask("eth_createAccessList", [{ from, to, data: data ?? input, value, gas }, at]);
     const reply = await answerOf(call, true);
+    if (closing) return;
     // A call the upstream cannot trace there, as one to a contract deployed on the fork, reads as nothing, which is
     // kept, so that the next run does not ask again.
     if (reply.error) answers.set(keyOf(call), { accessList: [] });
@@ -346,12 +311,6 @@ export async function serveCached(
     get asked() {
       return asked;
     },
-    get fetched() {
-      return fetched;
-    },
-    get busy() {
-      return busy;
-    },
     prefetch,
     async close() {
       closing = true;
@@ -371,10 +330,9 @@ function read(file: string): Record<string, unknown> {
   }
 }
 
-// Other runs may have kept answers of their own meanwhile, as the test files run at once: each adds its own to the
-// file's in turn, while it holds a lock beside it. A lock a minute old was left by a run that stopped. The answers are
-// written whole to a file of the run's own, then moved over it, so that a run that stops halfway leaves the last one
-// whole.
+// Another run may have kept answers of its own meanwhile, on the same machine: each adds its own to the file's in turn,
+// while it holds a lock beside it. A lock a minute old was left by a run that stopped. The answers are written whole to
+// a file of the run's own, then moved over it, so that a run that stops halfway leaves the last one whole.
 async function keep(file: string, answers: Map<string, unknown>): Promise<void> {
   mkdirSync(dirname(file), { recursive: true });
   const lock = `${file}.lock`;

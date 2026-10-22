@@ -1,13 +1,29 @@
 import { spawn } from "node:child_process";
-import { BLOCK, RECENT, serveFork } from "./harness.ts";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { RPCS } from "../src/config.ts";
+import { BLOCK, RECENT } from "./harness.ts";
+import { serveCached, upstreamOf } from "./rpc-cache.ts";
 
-// Runs the browser test files at once, each with an anvil of its own, all forking through one cache per block: so
-// FORK_URL is asked for each answer once, however many files read it, and within its limits. The arguments go to
-// node --test, and name the files to run, all of them by default; an option takes its value after "=".
+// Runs the browser test files at once, each with an anvil of its own, all forking through one cache per block, and all
+// the caches through one queue to FORK_URL: so it is asked for each answer once, however many files read it, and at
+// most so many at a time. The arguments go to node --test, and name the files to run, all of them by default; an
+// option takes its value after "=".
+//
+// FORK_URL is the archive RPC that BASE_RPC_URL names, or else the page's own first RPC. Its answers are kept between
+// runs in FORK_CACHE: see rpc-cache.ts.
+const FORK_URL = process.env.BASE_RPC_URL || RPCS[0]!;
+const CACHE = process.env.FORK_CACHE || join(homedir(), ".cache", "metadex.cafe", "fork");
 const FILES = ["fork/views.ts", "fork/joins.ts", "fork/automaxi.ts", "fork/swap.ts", "fork/claim.ts"];
 const args = process.argv.slice(2);
 const named = args.some((arg) => !arg.startsWith("-"));
-const caches = await Promise.all([BLOCK, RECENT].map(async (block) => ({ block, cache: await serveFork(block) })));
+const upstream = upstreamOf(FORK_URL);
+const caches = await Promise.all(
+  [BLOCK, RECENT].map(async (block) => ({
+    block,
+    cache: await serveCached(upstream, join(CACHE, `base-${block}.json.gz`), block),
+  })),
+);
 const child = spawn(
   process.execPath,
   ["--test", `--test-concurrency=${FILES.length}`, ...args, ...(named ? [] : FILES)],
@@ -24,8 +40,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => ch
 const code = await new Promise<number>((resolve) => child.on("exit", (code) => resolve(code ?? 1)));
 for (const { block, cache } of caches) {
   await cache.close();
-  console.log(
-    `At block ${block}: ${cache.asked} requests from anvil; ${cache.fetched} asked of FORK_URL, ${cache.busy} of them over its limit.`,
-  );
+  console.log(`At block ${block}: ${cache.asked} requests from anvil.`);
 }
+console.log(`${upstream.fetched} requests asked of FORK_URL, ${upstream.busy} of them over its limit.`);
 process.exit(code);

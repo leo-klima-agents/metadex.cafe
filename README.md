@@ -275,14 +275,13 @@ swap with a token skipped and its approval reset, a swapper whose checks fail, a
 a Safe. Its five files run at once, each with an anvil of its own; `node fork/run.ts fork/claim.ts` runs one, and passes
 options such as `--test-name-pattern=…` on to `node --test`. It needs [anvil](https://getfoundry.sh/) and Chromium
 (`npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium or Chrome binary). `BASE_RPC_URL` is the
-archive RPC to fork from, `https://mainnet.base.org` by default, and `SCREENSHOTS` an optional folder for screenshots.
-anvil forks through `fork/rpc-cache.ts`, which asks `BASE_RPC_URL` once for each answer about the forks' blocks and
-keeps it, in `FORK_CACHE`, `~/.cache/metadex.cafe/fork` by default; `FORK_LOG=1` prints each request it still sends.
-Before anvil runs a call, the cache asks `BASE_RPC_URL` which slots it reads, and for all of them at once, as anvil's
-own requests leave room: it asks as fast as `BASE_RPC_URL` answers, or 20 a second of Base's public RPC. The first run,
-which asks for everything, takes about 25 minutes through an RPC of your own; the next ones take about two minutes.
-Base's public RPC also limits how many logs one address may ask for, so a first run through it may fail a test or two,
-and the next one picks up from the answers it kept.
+archive RPC to fork from, the page's first RPC by default, and `SCREENSHOTS` an optional folder for screenshots. anvil
+forks through `fork/rpc-cache.ts`, which asks `BASE_RPC_URL` once for each answer about the forks' blocks and keeps it,
+in `FORK_CACHE`, `~/.cache/metadex.cafe/fork` by default; `FORK_LOG=1` prints each request it still sends. Before anvil
+runs a call, the cache asks `BASE_RPC_URL` which slots it reads, and for all of them. Every request of a run goes
+through one queue, at most 8 at a time, anvil's first; one refused as over the RPC's limit is asked again after an
+exponential backoff. The first run, which asks for everything, takes about 25 minutes through an RPC of your own; the
+next ones take about two minutes.
 
 CI runs Prettier, the type check, the unit tests, `reuse lint` and the build. It then builds again from a fresh clone
 and checks that both builds are the same. It also runs the browser tests, in the runner's Chrome, with the forks'
