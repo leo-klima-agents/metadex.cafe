@@ -1,5 +1,5 @@
 # Makes the fonts in fonts/ from Google Fonts' sources at a pinned commit: Latin subsets, as WOFF2, without hinting.
-# Needs Python 3 with fonttools 4.67.0 and brotli 1.2.0. Run it from the repository's root: python3 scripts/fonts.py
+# Needs Python 3 with fonttools 4.67.0 and brotli 1.2.1. Run it from the repository's root: python3 scripts/fonts.py
 # It gives the same files on every run.
 
 import hashlib
