@@ -1356,18 +1356,15 @@
                 </dd>
               </div>
             </dl>
-            <!-- The page checks each swapper before it offers swaps into its output: only a check that failed shows. -->
-            <div class="swap-checks" hidden>
-              <h3>Failed checks</h3>
-              <ul class="checks">
-                <li data-check="chain" hidden>The RPC serves Base</li>
-                <li data-check="swap-code" hidden>Its code matches</li>
-                <li data-check="swap-output" hidden>It pays in its output token</li>
-                <li data-check="swap-treasury" hidden>Its fee recipient matches</li>
-                <li data-check="swap-fee" hidden>Its fee is 1%</li>
-                <li data-check="swap-exchanges" hidden>Its exchanges match</li>
-              </ul>
-            </div>
+            <h3>Checks</h3>
+            <ul class="checks">
+              <li data-check="chain">The RPC serves Base</li>
+              <li data-check="swap-code">Its code matches</li>
+              <li data-check="swap-output">It pays in its output token</li>
+              <li data-check="swap-treasury">Its fee recipient matches</li>
+              <li data-check="swap-fee">Its fee is 1%</li>
+              <li data-check="swap-exchanges">Its exchanges match</li>
+            </ul>
           </div>
         </div>
 
@@ -1412,58 +1409,14 @@
           </div>
           <div>
             <dt>Version</dt>
-            <dd>
-              %VERSION%
-              <button type="button" class="info" popovertarget="about-check" aria-label="metaDEX Café">
-                <span aria-hidden="true">i</span>
-              </button>
-            </dd>
+            <dd>%VERSION%</dd>
           </div>
         </dl>
-
-        <div
-          class="pop"
-          id="about-check"
-          popover
-          role="dialog"
-          aria-labelledby="about-check-title"
-          data-section="check"
-        >
-          <div class="pop-head">
-            <h3 id="about-check-title" translate="no">metaDEX Café</h3>
-            <button
-              type="button"
-              class="pop-close"
-              popovertarget="about-check"
-              popovertargetaction="hide"
-              aria-label="Close"
-            >
-              <span aria-hidden="true">×</span>
-            </button>
-          </div>
-          <dl class="rows">
-            <div>
-              <dt>Version</dt>
-              <dd>%VERSION%</dd>
-            </div>
-            <div>
-              <dt>Reads Base from</dt>
-              <dd>
-                <code translate="no">mainnet.base.org</code>, <code translate="no">base.drpc.org</code>,
-                <code translate="no">base-rpc.publicnode.com</code>
-              </dd>
-            </div>
-            <div>
-              <dt>If it goes away</dt>
-              <dd>Leave from any contract interface</dd>
-            </div>
-          </dl>
-        </div>
       </div>
     </main>
 
     <footer>
-      <p><a href="#about">About</a> <a href="#about/check">v%VERSION%</a></p>
+      <p><a href="#about">About</a></p>
     </footer>
 
     <dialog id="review" aria-labelledby="review-title">

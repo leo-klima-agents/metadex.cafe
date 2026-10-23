@@ -77,8 +77,8 @@ This README is for whoever runs the site. The design and the plan are in [design
   its last payout. The App marks the accounts paid late.
 - Joining takes two steps: what it allows, with what a week at last epoch's rate would pay and the gas of the change,
   then the calls, each a bill in its own words, with its fields in full. About (`#about`) holds the page's own facts:
-  its address, the cookies it stores, none, and its version, with the RPCs it reads in a popup.
-  [design/audit.md](design/audit.md) says why the page is laid out so.
+  its address, the cookies it stores, none, and its version. The footer leads to it, and stays at the foot of the
+  screen. [design/audit.md](design/audit.md) says why the page is laid out so.
 - Inside Safe{Wallet}, it proposes all the calls as one Safe transaction.
 
 Nobody controls the swappers either: their code fixes the fee, 1% of each route's output, the Safe it goes to, the
@@ -197,8 +197,8 @@ AutoMaxi's. A test checks it.
 
 ## Checking a deployment
 
-The same commit always builds the same files. To check what the site serves, check out the tag of the version shown in
-the page's footer, such as `v0.5.1`, then run these. The query string skips any old copy the CDN still holds right after
+The same commit always builds the same files. To check what the site serves, check out the tag of the version shown on
+the page's About, such as `v0.5.1`, then run these. The query string skips any old copy the CDN still holds right after
 a release.
 
 ```sh

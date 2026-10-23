@@ -25,7 +25,7 @@ import {
 } from "../src/config.ts";
 import { LANG, bps } from "../src/format.ts";
 import conduits from "../src/hydrex-conduits.json" with { type: "json" };
-import { ABOUT_SECTIONS, PRODUCT_SECTIONS, parse } from "../src/routes.ts";
+import { PRODUCT_SECTIONS, parse } from "../src/routes.ts";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -119,11 +119,14 @@ test("each automation's page has the same parts, in the same order, and lists ev
     const checks = [...page.matchAll(/data-check="([^"]+)"/g)].map(([, check]) => check);
     assert.deepEqual([...checks].sort(), [...failing[kind]!].sort(), kind);
   }
+  // About is its rows alone, with no popup, and the footer leads to it, without the version.
   const about = viewOf(html, 'data-view="about"');
+  assert.doesNotMatch(about, /data-section=|popover/);
   assert.deepEqual(
-    [...about.matchAll(/data-section="([^"]+)"/g)].map(([, section]) => section),
-    ABOUT_SECTIONS,
+    [...about.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
+    ["Official address", "Cookies stored", "Version"],
   );
+  assert.equal(/<footer>([\s\S]*?)<\/footer>/.exec(html)?.[1]?.trim(), '<p><a href="#about">About</a></p>');
 });
 
 test("the page may reach its RPCs and nothing else, and the README lists them", () => {
@@ -251,9 +254,8 @@ test("each swapper has its output, a checksummed address and a code hash, and th
     [...swap.matchAll(/data-check="([^"]+)"/g)].map(([, check]) => check),
     ["chain", "swap-code", "swap-output", "swap-treasury", "swap-fee", "swap-exchanges"],
   );
-  // Only a check that failed shows: each, and their list, hidden until then.
-  assert.match(swap, /<div class="swap-checks" hidden>/);
-  for (const [item] of swap.matchAll(/<li data-check="[^"]+"[^>]*>/g)) assert.match(item, /\shidden>$/, item);
+  // Every check shows, and a check that failed says so.
+  for (const [item] of swap.matchAll(/<li data-check="[^"]+"[^>]*>/g)) assert.doesNotMatch(item, /hidden/, item);
 });
 
 test("the header holds the logo and the name, and a button to connect a wallet; the wallet's pages lead back to it", () => {

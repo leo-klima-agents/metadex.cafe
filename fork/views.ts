@@ -98,17 +98,13 @@ describe("the page against a fork of Base: its views, and each account's payouts
       "Cookies stored",
       "Version",
     ]);
+    // Its rows are all there is: no popup. The footer leads to it, without the version, at the foot of the screen.
+    assert.equal(await page.locator('.view[data-view="about"]').getByRole("button").count(), 0);
+    assert.deepEqual(await page.locator("footer a").allTextContents(), ["About"]);
+    const footer = (await page.locator("footer").boundingBox())!;
+    assert.equal(Math.round(footer.y + footer.height), 844, "the footer is at the foot of the screen");
     await page.goto(`${SITE}/#about/check`);
-    // About's details are in a popup, and an address that points into it opens it, until it closes.
-    const check = page.locator('[data-section="check"]:popover-open');
-    await check.getByText("Leave from any contract interface").waitFor();
-    assert.deepEqual(await check.locator("dt").allInnerTexts(), ["Version", "Reads Base from", "If it goes away"]);
-    await page.keyboard.press("Escape");
-    await page.waitForFunction(() => location.hash === "#about");
-    await page.locator('.view[data-view="about"]').getByRole("button", { name: "metaDEX Café" }).click();
-    await check.waitFor();
-    await check.getByRole("button", { name: "Close" }).click();
-    await check.waitFor({ state: "detached" });
+    await homeTitle(page).waitFor();
     await page.goto(`${SITE}/#how-it-works`);
     await homeTitle(page).waitFor();
     assert.deepEqual(asked, [], "the page asks a wallet nothing until it is picked");

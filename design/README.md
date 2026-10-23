@@ -36,7 +36,7 @@ technical parts open from an info button, as popups.
 - **The review:** a dialog in two steps: before you join, claim or swap, with what it costs, the swap as a bill, then
   the calls, each a bill that says what it does, with its fields in full, as the wallet will show them. One prompt with
   EIP-5792 where the wallet allows it. Inside Safe{Wallet}, one Safe transaction, with its calldata word by word.
-- **About** (`#about`): the page's own facts, and in a popup its version and what it reads Base from.
+- **About** (`#about`): the page's own facts: its address, the cookies it stores, and its version.
 
 Every new screen keeps the page's rules:
 
@@ -151,7 +151,7 @@ One static page, with views addressed by the hash, as [audit.md](audit.md) lays 
 | An automation's page         | `#hydrex/carbon-impact`, `#hydrex/automaxi`; a popup, such as `…/check`   |
 | An account's page            | `#hydrex/9540`                                                            |
 | A receipt                    | `#hydrex/9540/2026-10-22`, once the page reads more payouts than the last |
-| About                        | `#about`; `#about/check`                                                  |
+| About                        | `#about`                                                                  |
 | Review                       | A dialog                                                                  |
 | Brief for co-signers         | Planned: the accounts and the automation in the address                   |
 

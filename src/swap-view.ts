@@ -713,21 +713,17 @@ export function walletChanged(): void {
   void readAllowances();
 }
 
-// Only a check that failed shows, in the popup of the swap's contracts, for the outputs it failed for.
+// Each check that failed says so, in the popup of the swap's contracts, with the outputs it failed for.
 async function checkSwappers(): Promise<void> {
   failedOutputs = await swapChecks();
-  let any = false;
   for (const item of view.querySelectorAll<HTMLElement>("[data-check]")) {
     item.querySelector(".check-failed")?.remove();
     const failing = SWAPPERS.filter(({ output }) => failedOutputs!.get(output)!.includes(item.dataset.check!));
-    item.hidden = !failing.length;
     if (!failing.length) continue;
-    any = true;
     const mark = clone("check-failed");
     mark.querySelector("b")!.textContent = `Failed for ${list(failing.map(({ symbol }) => symbol))}:`;
     item.prepend(mark);
   }
-  show(".swap-checks", any, view);
   drawAll();
 }
 

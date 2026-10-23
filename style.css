@@ -78,7 +78,12 @@
     --danger: light-dark(#ab331f, #ef816b);
   }
 }
+/* The footer stays at the foot of the screen, however short the view. */
 body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100svh;
   max-inline-size: 42rem;
   margin: 0 auto;
   padding-inline: 1.25rem;
@@ -258,6 +263,7 @@ header.site :is(.button, .connect) {
   vertical-align: middle;
 }
 main {
+  flex: 1 0 auto;
   padding-block: var(--gap-xl);
 }
 footer {

@@ -34,7 +34,7 @@ jobs:
           npm ci --ignore-scripts
           npm run build
           diff -r "$GITHUB_WORKSPACE/dist" dist
-      # A release tag must match the version the page shows in its footer.
+      # A release tag must match the version the page shows on its About.
       - if: startsWith(github.ref, 'refs/tags/v')
         run: test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
       - if: startsWith(github.ref, 'refs/tags/v')
