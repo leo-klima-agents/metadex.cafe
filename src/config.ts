@@ -62,6 +62,10 @@ export const PAIR_FACTORY: Address = "0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0
 export type Feed = { address: Address; decimals: number };
 export type Anchor = { address: Address; decimals: number; feed: Feed };
 export const WETH: Address = "0x4200000000000000000000000000000000000006";
+export const USDC: Address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+export const CBBTC: Address = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
+export const EURC: Address = "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42";
+export const HYDX: Address = "0x00000e7efa313F4E11Bfff432471eD9423AC6B30";
 const anchor = (address: Address, decimals: number, feed: Address): Anchor => ({
   address,
   decimals,
@@ -69,13 +73,13 @@ const anchor = (address: Address, decimals: number, feed: Address): Anchor => ({
 });
 export const ANCHORS: Anchor[] = [
   // USDC / USD
-  anchor("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6, "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B"),
+  anchor(USDC, 6, "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B"),
   // ETH / USD
   anchor(WETH, 18, "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70"),
   // BTC / USD
-  anchor("0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf", 8, "0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F"),
+  anchor(CBBTC, 8, "0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F"),
   // EURC / USD
-  anchor("0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42", 6, "0xDAe398520e2B67cd3f27aeF9Cf14D93D927f8250"),
+  anchor(EURC, 6, "0xDAe398520e2B67cd3f27aeF9Cf14D93D927f8250"),
 ];
 
 // The swap: ImmutableSwapper, deployed once per output token on 21 Oct 2026. Each sells the tokens its caller names for
@@ -95,7 +99,7 @@ export const SWAPPERS: Swapper[] = [
   {
     output: "usdc",
     symbol: "USDC",
-    token: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    token: USDC,
     decimals: 6,
     address: "0x31791f453d2100e728E012c9e189C0828adf4b6F",
     codeHash: "0x8d6d7ae768e36b4642c1b2d83afc4411053ef918cc78a6fa372f7b694386970b",
@@ -103,7 +107,7 @@ export const SWAPPERS: Swapper[] = [
   {
     output: "eurc",
     symbol: "EURC",
-    token: "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42",
+    token: EURC,
     decimals: 6,
     address: "0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E",
     codeHash: "0xb51455b03682699694ae84a9ee17f1fa52cef8f57100d19a684226069f23be2e",
@@ -119,7 +123,7 @@ export const SWAPPERS: Swapper[] = [
   {
     output: "cbbtc",
     symbol: "cbBTC",
-    token: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+    token: CBBTC,
     decimals: 8,
     address: "0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0",
     codeHash: "0xce9c5630b7243cbe9cbcbef1704c888e376d45f1889197ffc7d5ad6704c2ed69",
@@ -135,7 +139,7 @@ export const SWAPPERS: Swapper[] = [
   {
     output: "hydx",
     symbol: "HYDX",
-    token: "0x00000e7efa313F4E11Bfff432471eD9423AC6B30",
+    token: HYDX,
     decimals: 18,
     address: "0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC",
     codeHash: "0xfa9d0e728d29ee86a2762db1ff2d017b0779fcc73fff68e5a4a62301e1785c5d",
@@ -146,7 +150,6 @@ export const swapperOf = (output: string): Swapper | undefined => SWAPPERS.find(
 // FEE_BPS and TREASURY in its code: the same Safe as AutoMaxi's fee.
 export const SWAP_FEE_BPS = 100n;
 export const SWAP_TREASURY: Address = AUTOMAXI_TREASURY;
-export const HYDX: Address = "0x00000e7efa313F4E11Bfff432471eD9423AC6B30";
 
 // The swappers' exchanges, in the page's order. `id` is the swapper's Exchange enum and exchanges() index. Aero's basic
 // pools have a factory per curve; Uniswap v4's is its PoolManager.

@@ -14,7 +14,6 @@ import {
   blockTimes,
   dollars,
   epochBlock,
-  namesAt,
   payoutBlocks,
   payoutsIn,
   readEarned,
@@ -127,7 +126,6 @@ function fillReceipt(
   payout: Payout,
   owner: Address,
   time: number,
-  name: string,
   tokens: Map<string, Token>,
   own: boolean,
   prices?: Map<string, number>,
@@ -144,7 +142,6 @@ function fillReceipt(
     "receipt-retired-share": of(payout.retiredKvcm),
     "receipt-retired": `${payout.retiredKvcm ? "−" : ""}${amount(payout.retiredKvcm, 18)} kVCM`,
     "receipt-tonnes": `${amount(payout.tonnes, 18)} t of carbon credits`,
-    "receipt-entity": name,
     "receipt-fee-share": of(kvcm(payout.fees)),
     "receipt-paid-usd": worth(payout.paid, tokens, prices),
   });
@@ -607,7 +604,7 @@ async function draw(
 ): Promise<void> {
   const payouts = found.entries.flatMap(({ payout }) => (payout ? [payout] : []));
   const claims = found.entries.flatMap(({ walk }) => walk?.claims ?? []);
-  const [tokens, names, times] = await Promise.all([
+  const [tokens, times] = await Promise.all([
     tokensOf(
       [
         ...payouts.flatMap(({ earned, paid, fees }) => [...earned, ...paid, ...fees]),
@@ -615,7 +612,6 @@ async function draw(
       ].map(({ token }) => token),
       readLater,
     ),
-    namesAt(payouts.map(({ block }) => block)),
     blockTimes(claims.map(({ block }) => block)),
   ]);
   if (!current()) return;
@@ -630,7 +626,7 @@ async function draw(
       make = () => {
         const node = clone("receipt").firstElementChild as HTMLElement;
         const draw = (prices?: Map<string, number>) =>
-          fillReceipt(node, payout, holdings.owner, time, names.get(payout.block)!, tokens, own(), prices);
+          fillReceipt(node, payout, holdings.owner, time, tokens, own(), prices);
         return { node, priced: false, flip: weekStart(time), amounts: [...payout.earned, ...payout.paid], draw };
       };
     } else if (walk?.claims.length) {

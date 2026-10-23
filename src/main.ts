@@ -64,7 +64,6 @@ import {
   earnedByAccount,
   earningsDue,
   earningsFailed,
-  earningsOf,
   lastEarnings,
   loadEarnings,
   loadShares,
@@ -291,13 +290,8 @@ function showRecords(): void {
           : paid === undefined
             ? "…"
             : usd(per * paid);
-    const found = earningsOf(automation);
     for (const place of placesOf(automation)) {
-      fill(place, {
-        record,
-        "record-unit": typeof per === "number" ? "per 1,000 Earning Power" : "",
-        "record-when": found && typeof per === "number" ? `${day(found.start)} to ${day(found.start + WEEK)}` : "",
-      });
+      fill(place, { record, "record-unit": typeof per === "number" ? "per 1,000 Earning Power" : "" });
     }
   }
 }
@@ -584,13 +578,6 @@ function updateButtons(): void {
     }
     show(".buttons", able.length > 0, section);
     show(".pick-hint", able.length > 1 && !accounts.length, section);
-    // Claim says what it costs before anyone presses it.
-    const claiming = able.filter((account) => can.claim(account));
-    const note = section.querySelector<HTMLElement>(".claim-note");
-    if (note) {
-      note.hidden = !claiming.length;
-      fillPlural(note, claiming.length);
-    }
   }
 }
 
@@ -916,17 +903,9 @@ async function showAllows(
   show(".allows-tokens-none", !left?.length, appView);
 }
 
-// A payout under way: a line in the App, and on the page of each account it has not reached yet.
+// A payout under way: a line on Hydrex's page, and on the page of each account it has not reached yet.
 function showUnderWay(): void {
-  const notice = document.getElementById("underway")!;
-  notice.hidden = !under;
-  if (under) {
-    fill(notice, {
-      "underway-paid": list(under.paid.map(({ account }) => `#${account.id}`)),
-      "underway-left": list(under.left.map(({ account }) => `#${account.id}`)),
-    });
-    fillTime(notice, "underway-day", under.first);
-  }
+  document.getElementById("underway")!.hidden = !under;
   showPosition();
 }
 

@@ -12,6 +12,7 @@ import {
   claimedIn,
   owedOf,
   paidBy,
+  summed,
   type Claim,
 } from "./claim.ts";
 import { clone, fill, show } from "./dom.ts";
@@ -21,7 +22,7 @@ import { pricesNow, usdOf, type Token } from "./prices.ts";
 import { dollars, type Amount } from "./receipts.ts";
 import { openReview, type Hooks } from "./review.ts";
 import { hrefOf } from "./routes.ts";
-import { APPROVAL_GAS, MIDDLES, findRoute, minimumOf, paidOf, simulate } from "./swap.ts";
+import { APPROVAL_GAS, MIDDLES, findRoute, minimumOf, paidOf, partOf, simulate } from "./swap.ts";
 import { costs, gasUsd } from "./swap-calls.ts";
 import { openSwapReview, outputOff, planSteps, prefill, swapReceipt, swappersChecked, type Plan } from "./swap-view.ts";
 import { describe } from "./tokens.ts";
@@ -209,14 +210,14 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   const into = body.querySelector<HTMLElement>(".claim-into")!;
   const radios = [...body.querySelectorAll<HTMLInputElement>('input[name="receive"]')];
   // What the claims paid, from their events, token by token: what a swap after them may sell.
-  const brought = (receipts: Receipt[]): Amount[] => {
-    const all = new Map<string, Amount>();
-    const ids = owing.map(({ id }) => id);
-    for (const { token, amount } of claimedIn(receipts, ids, connection.address).flatMap(({ paid }) => paid)) {
-      all.set(key(token), { token, amount: (all.get(key(token))?.amount ?? 0n) + amount });
-    }
-    return [...all.values()];
-  };
+  const brought = (receipts: Receipt[]): Amount[] =>
+    summed(
+      claimedIn(
+        receipts,
+        owing.map(({ id }) => id),
+        connection.address,
+      ).flatMap(({ paid }) => paid),
+    );
   const asTheyAre = (receipts: Receipt[]) => {
     const fragment = claimReceipts(receipts, owing, connection.address, tokens, prices);
     const next = clone("claim-next");
@@ -313,14 +314,14 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
           const refused = next.querySelector<HTMLElement>(".claim-swap-failed")!;
           button.textContent = `Review the swap into ${swapper.symbol}`;
           // For what the claims brought, as their events say, not what the page expected: the keeper may have
-          // claimed some first.
+          // claimed some first, of a token from some of its reward contracts and not others.
           const came = brought(receipts);
           const exact: Plan = {
             swapper,
             margin: MARGIN,
-            items: items.flatMap(({ approve: _, route, ...item }) => {
+            items: items.flatMap(({ approve = 0n, ...item }) => {
               const amount = came.find(({ token }) => same(token, item.token.address))?.amount;
-              return amount ? [{ ...item, route: { ...route, amount } }] : [];
+              return amount ? [partOf(item, amount, approve)] : [];
             }),
           };
           if (!exact.items.length) button.remove();

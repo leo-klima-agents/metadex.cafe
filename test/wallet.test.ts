@@ -65,3 +65,28 @@ test("a batch is pending, done once every receipt succeeded, and failed otherwis
   assert.equal(await state({ status: 200, receipts: [receipt("0x1"), receipt("0x0")] }), "failed");
   for (const status of [400, 500, 600]) assert.equal(await state({ status }), "failed");
 });
+
+test("a wallet that failed to answer wallet_getCapabilities is asked again, unless it does not know the method", async () => {
+  const none = { batch: false, atomic: false, assets: false };
+  let asked = 0;
+  let answer: unknown = Object.assign(new Error("The wallet is locked."), { code: -32603 });
+  const wallet = connected(() => {
+    asked++;
+    return answer;
+  });
+  assert.deepEqual(await capabilities(wallet), none);
+  answer = { "0x2105": { atomic: { status: "supported" } } };
+  assert.deepEqual(await capabilities(wallet), { batch: true, atomic: true, assets: false });
+  await capabilities(wallet);
+  assert.equal(asked, 2, "an answer is kept");
+  for (const code of [4200, -32601]) {
+    let unknown = 0;
+    const old = connected(() => {
+      unknown++;
+      return Object.assign(new Error("Unknown method."), { code });
+    });
+    assert.deepEqual(await capabilities(old), none);
+    assert.deepEqual(await capabilities(old), none);
+    assert.equal(unknown, 1, `${code} is kept`);
+  }
+});

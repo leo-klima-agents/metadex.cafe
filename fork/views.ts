@@ -1,15 +1,14 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import { toFunctionSelector, toHex } from "viem";
+import { toFunctionSelector } from "viem";
 import { blockTime, read } from "../src/chain.ts";
-import { VOTER } from "../src/config.ts";
+import { KVCM, VOTER } from "../src/config.ts";
 import { readEarnings, rewardsFor, sharesOf, tokensOf } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
 import {
   SETTLED,
   blockTimes,
-  namesAt,
   payoutBlocks,
   payoutsIn,
   readEarned,
@@ -286,7 +285,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
         PAID_IDS.map(() => PAID),
       );
       const at = [...new Set(blocks.values())];
-      const [paid] = await Promise.all([payoutsIn(at), blockTimes(at), namesAt(at)]);
+      const [paid] = await Promise.all([payoutsIn(at), blockTimes(at)]);
       assert.deepEqual(
         PAID_IDS.map((id) => paid.find((payout) => payout.id === id)?.tx),
         PAID_IDS.map(() => PAID_TX),
@@ -300,11 +299,10 @@ describe("the page against a fork of Base: its views, and each account's payouts
     );
     // The App marks the account paid late.
     await account(page, 82774).getByText("Payout late").waitFor({ timeout: 120_000 });
-    // Its receipt needs the name Carbon Impact retired in at the payout's block. If that read fails, the page says so,
-    // and does not show the payouts as read.
-    const entityName = toFunctionSelector("function retiringEntityName()").slice(2);
-    const paidBlock = toHex(PAID);
-    rpc.refuse = (body) => body.includes(entityName) && body.includes(paidBlock);
+    // Its receipt needs the symbols of the tokens it paid, such as kVCM, which only the account's page reads. If that
+    // read fails, the page says so, and does not show the payouts as read.
+    const symbol = toFunctionSelector("function symbol()").slice(2);
+    rpc.refuse = (body) => body.includes(symbol) && body.includes(KVCM.slice(2).toLowerCase());
     await account(page, 82774).getByRole("link", { name: "Hydrex account #82774" }).click();
     const payoutsSection = position(page).locator(".position-payouts");
     await payoutsSection.getByText("Reading the payouts failed.").waitFor({ timeout: 120_000 });
@@ -359,6 +357,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await shoot(page, "receipt-390-dark", position(page));
     // After the flip, the page reads Carbon Impact again and fills its figures, such as .tonnes, across the page. The
     // receipts keep their own.
+    const entityName = toFunctionSelector("function retiringEntityName()").slice(2);
     const readAgain = page.waitForResponse((response) => !!response.request().postData()?.includes(entityName));
     await page.clock.setSystemTime((FLIP + 60) * 1000);
     await page.clock.runFor(30_000);

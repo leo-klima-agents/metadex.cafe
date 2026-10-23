@@ -174,11 +174,11 @@ Safe{Wallet} shows: Data and, for a single call, Operation. Data is the selector
 several calls through its MultiSend contract with operation 1: the page says so rather than show fields it cannot know.
 
 **A receipt** is one account's line in a payout run. Its header gives the epoch the payout was for. Then: earned, in
-dollars, with the tokens under it; swapped into kVCM; retired, with its share, the tonnes, the name it was retired in,
-and Klima's mark; the fee, with its share; then "Paid to you", as large as its figure, with dollars under it, and the
-payout address only when it is not the owner's own; last, the time in UTC and the transaction. Dollars use the prices of
-the flip before the payout, and follow the tokens once read. The shares are of all the payout's kVCM: Carbon Impact
-retires up to its `retireBps`, as buying the credits may cost less. #82774's payout of 23 Sept retired 31.01%.
+dollars, with the tokens under it; swapped into kVCM; retired, with its share, the tonnes and Klima's mark; the fee,
+with its share; then "Paid to you", as large as its figure, with dollars under it, and the payout address only when it
+is not the owner's own; last, the time in UTC and the transaction. Dollars use the prices of the flip before the payout,
+and follow the tokens once read. The shares are of all the payout's kVCM: Carbon Impact retires up to its `retireBps`,
+as buying the credits may cost less. #82774's payout of 23 Sept retired 31.01%.
 
 ## Klima's mark
 

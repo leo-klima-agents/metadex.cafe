@@ -120,19 +120,32 @@ export function lookupsOn(exchange: Exchange, a: Address, b: Address, spacings: 
 export const lookups = (a: Address, b: Address, spacings: Map<number, number[]>): Lookup[] =>
   BY_ID.flatMap((exchange) => lookupsOn(exchange, a, b, spacings));
 
-// Each Slipstream factory's tick spacings, read once.
-let spacingsRead: Promise<Map<number, number[]>> | undefined;
+// Each Slipstream factory's tick spacings, read once for each reader, as a reader of a past block may find others. A
+// factory that does not answer is left out, and asked again the next time.
+const spacingsRead = new WeakMap<typeof read, Promise<Map<number, number[]>>>();
 
-function spacings(): Promise<Map<number, number[]>> {
+function spacings(reader: typeof read): Promise<Map<number, number[]>> {
+  const kept = spacingsRead.get(reader);
+  if (kept) return kept;
   const slipstreams = BY_ID.filter(({ kind }) => kind === "slipstream");
-  spacingsRead ??= read(slipstreams.map(({ factory }) => call(factory, slipstreamFactoryAbi, "tickSpacings"))).then(
-    (found) => new Map(slipstreams.map(({ id }, i) => [id, ((found[i] as readonly number[]) ?? []).map(Number)])),
+  const found = reader(slipstreams.map(({ factory }) => call(factory, slipstreamFactoryAbi, "tickSpacings"))).then(
+    (replies) => {
+      if (replies.includes(undefined) && spacingsRead.get(reader) === found) spacingsRead.delete(reader);
+      return new Map(
+        slipstreams.flatMap(({ id }, i) => {
+          const reply = replies[i] as readonly number[] | undefined;
+          return reply ? [[id, reply.map(Number)] as const] : [];
+        }),
+      );
+    },
   );
-  spacingsRead.catch(() => (spacingsRead = undefined));
-  return spacingsRead;
+  spacingsRead.set(reader, found);
+  found.catch(() => spacingsRead.get(reader) === found && spacingsRead.delete(reader));
+  return found;
 }
 
-// The pools found, by reader, then by exchange and pair. A lookup that fails is dropped, to be asked again.
+// The pools found, by reader, then by exchange and pair. A lookup that fails, or whose tick spacings are unknown, is
+// not kept, so that it is asked again: it is not the same as finding no pool.
 const kept = new WeakMap<typeof read, Map<string, Promise<Way[]>>>();
 
 // Each pair's pools on the exchanges given, in their order, by pairKey. Lookups not yet kept go in one read.
@@ -150,16 +163,28 @@ export async function waysFor(
   );
   if (missing.length) {
     const slipstream = missing.some(({ exchange }) => exchange.kind === "slipstream");
-    const all = (slipstream ? spacings() : Promise.resolve(new Map<number, number[]>())).then(async (known) => {
+    const all = (slipstream ? spacings(reader) : Promise.resolve(new Map<number, number[]>())).then(async (known) => {
       const each = missing.map(({ exchange, pair: [a, b] }) => lookupsOn(exchange, a, b, known));
       const replies = await reader(each.flat().map(({ call }) => call));
       let next = 0;
-      return each.map((list) => list.flatMap((lookup) => lookup.way(replies[next++]) ?? []));
+      return each.map((list, i) => {
+        const answers = list.map(() => replies[next++]);
+        const { exchange } = missing[i]!;
+        return {
+          ways: list.flatMap((lookup, j) => lookup.way(answers[j]) ?? []),
+          failed: answers.includes(undefined) || (exchange.kind === "slipstream" && !known.has(exchange.id)),
+        };
+      });
     });
     missing.forEach(({ exchange, pair }, i) => {
-      const ways = all.then((each) => each[i]!);
-      found.set(at(exchange, pair), ways);
-      ways.catch(() => found.delete(at(exchange, pair)));
+      const id = at(exchange, pair);
+      const forget = () => found.get(id) === ways && found.delete(id);
+      const ways: Promise<Way[]> = all.then((each) => {
+        if (each[i]!.failed) forget();
+        return each[i]!.ways;
+      });
+      found.set(id, ways);
+      ways.catch(forget);
     });
   }
   return new Map(

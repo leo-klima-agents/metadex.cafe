@@ -9,12 +9,14 @@ import {
 } from "viem";
 import { call, codeHash, read, rpc, same, type Call, type Receipt } from "./chain.ts";
 import {
+  CBBTC,
   CHAIN_ID,
   EXCHANGES,
   HYDX,
   SWAPPERS,
   SWAP_FEE_BPS,
   SWAP_TREASURY,
+  USDC,
   WETH,
   type Output,
   type Swapper,
@@ -66,8 +68,6 @@ export type Result = { done: boolean; amountIn: bigint; amountOut: bigint; reaso
 
 // The tokens a route may pass through: to the output straight, or through WETH, USDC or cbBTC, and HYDX too for
 // Hydrex's tokens. A route has at most three hops.
-const USDC: Address = SWAPPERS[0]!.token;
-const CBBTC: Address = SWAPPERS.find(({ output }) => output === "cbbtc")!.token;
 export const MIDDLES: Address[] = [WETH, USDC, CBBTC];
 
 export function candidatePaths(token: Address, output: Address, hydrex = false): Address[][] {
@@ -151,6 +151,15 @@ export const feeOf = (out: bigint): bigint => (out * SWAP_FEE_BPS) / 10_000n;
 export const paidOf = (out: bigint): bigint => out - feeOf(out);
 export const minimumOf = (out: bigint, marginBps: bigint): bigint => (paidOf(out) * (10_000n - marginBps)) / 10_000n;
 
+// A route for `amount` of a token quoted for `expected`, as when a claim brings part of what the page expected: its quote
+// and its minimum shrink in proportion, so that it is not skipped for missing a minimum set for the whole. Selling less
+// moves the price less, so the share stays within reach. For as much or more, they stay as they were.
+export function partOf<T extends { route: Route; out: bigint }>(item: T, amount: bigint, expected: bigint): T {
+  if (amount >= expected) return { ...item, route: { ...item.route, amount } };
+  const share = (value: bigint) => (value * amount) / expected;
+  return { ...item, out: share(item.out), route: { ...item.route, amount, minPaid: share(item.route.minPaid) } };
+}
+
 const quoteCall = (swapper: Swapper, routes: Route[]): Call =>
   call(swapper.address, swapperAbi as never, "quote", routes);
 
@@ -193,7 +202,8 @@ export async function quoteAll(items: { swapper: Swapper; route: Route }[]): Pro
 const swapperFor = (token: Address): Swapper | undefined => SWAPPERS.find((swapper) => same(swapper.token, token));
 
 // A token's best route to the output, net of the gas each costs in the output, `gasValue` of gas. Each hop takes the
-// best of its pools for what the hop before paid; then each whole route is quoted, as its hops' pools may meet.
+// best of its pools for what the hop before paid; then each route of several hops is quoted whole, as its hops' pools
+// may meet.
 export type Found = { route: Route; out: bigint; gas: bigint };
 
 export async function findRoute(
@@ -242,13 +252,19 @@ export async function findRoute(
     open = next;
   }
   if (!complete.length) return undefined;
-  const routes = complete.map(({ hops }) => ({ token, amount, minPaid: 0n, hops }));
-  const whole = await quoteAll(routes.map((route) => ({ swapper: output, route })));
-  const options = routes.flatMap((route, i) => {
+  // A route of one hop was quoted whole already, as its hop. Longer ones are quoted again, as their hops' pools may meet.
+  const longer = complete.filter(({ hops }) => hops.length > 1);
+  const whole = longer.length
+    ? await quoteAll(longer.map(({ hops }) => ({ swapper: output, route: { token, amount, minPaid: 0n, hops } })))
+    : [];
+  const options = complete.flatMap((partial) => {
+    const route = { token, amount, minPaid: 0n, hops: partial.hops };
+    const i = longer.indexOf(partial);
     const result = whole[i];
-    if (!result?.done || result.amountOut === 0n) return [];
+    const out = i < 0 ? partial.amount : result?.done ? result.amountOut : 0n;
+    if (out === 0n) return [];
     const gas = routeGas(route);
-    return [{ route, out: result.amountOut, gas, net: result.amountOut - gasValue(gas) }];
+    return [{ route, out, gas, net: out - gasValue(gas) }];
   });
   const chosen = options.reduce<(typeof options)[number] | undefined>(
     (found, each) => (!found || each.net > found.net ? each : found),

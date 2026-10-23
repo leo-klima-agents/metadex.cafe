@@ -785,13 +785,18 @@ export function initSwap(given: SwapContext): void {
     if (scan?.reading) rescan = true;
     else rescanNow();
   });
-  // Until the checks have run once, a failed read of them is tried again within a minute.
-  const check = (): void =>
+  // Until the checks have run once, a failed read of them is tried again within a minute, by one retry at a time
+  // however many checks failed meanwhile, as the hourly one.
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  const check = (): void => {
+    clearTimeout(retry);
+    retry = undefined;
     void checkSwappers().catch((error: unknown) => {
       console.error(error);
       drawAll();
-      if (!failedOutputs) setTimeout(check, 60_000);
+      if (!failedOutputs) retry ??= setTimeout(check, 60_000);
     });
+  };
   check();
   setInterval(check, 3_600_000);
 }

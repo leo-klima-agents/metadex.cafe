@@ -224,7 +224,8 @@ export function claimedIn(receipts: Receipt[], ids: bigint[], caller: Address): 
   }));
 }
 
-const summed = (amounts: Amount[]): Amount[] => {
+// Amounts of the same token, added together.
+export const summed = (amounts: Amount[]): Amount[] => {
   const all = new Map<string, Amount>();
   for (const { token, amount } of amounts)
     all.set(key(token), { token, amount: (all.get(key(token))?.amount ?? 0n) + amount });
