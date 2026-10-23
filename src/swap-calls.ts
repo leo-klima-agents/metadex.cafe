@@ -15,7 +15,7 @@ let costsRead: { at: number; costs: Promise<Costs> } | undefined;
 // The gas price, the tip the page asks for, and ETH's price, read at most once a minute.
 export function costs(): Promise<Costs> {
   if (costsRead && Date.now() - costsRead.at < 60_000) return costsRead.costs;
-  const feed = ANCHORS.find(({ address }) => address === WETH)!.feed!;
+  const { feed } = ANCHORS.find(({ address }) => address === WETH)!;
   const found = Promise.all([
     rpc<string>("eth_gasPrice", []),
     rpc<string>("eth_maxPriorityFeePerGas", []).catch(() => undefined),

@@ -17,7 +17,7 @@ import {
 import { clone, fill, show } from "./dom.ts";
 import { count, figure, list, usd } from "./format.ts";
 import type { Entry } from "./last-payout.ts";
-import { usdOf, type Token } from "./prices.ts";
+import { pricesNow, usdOf, type Token } from "./prices.ts";
 import { dollars, type Amount } from "./receipts.ts";
 import { openReview, type Hooks } from "./review.ts";
 import { hrefOf } from "./routes.ts";
@@ -153,6 +153,16 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   const apart = groups.length > 1;
   const totals = paidBy(owing.flatMap(({ owed }) => owed));
   const paid = totals.map(({ token, paid }) => ({ token, amount: paid }));
+  // A swap is judged at prices now, as on the swap's page; what waits, at last epoch's.
+  let pricedNow: Promise<Map<string, number>> | undefined;
+  const currentPrices = () =>
+    (pricedNow ??= pricesNow(
+      [
+        ...paid.flatMap(({ token }) => tokens.get(key(token)) ?? []),
+        ...SWAPPERS.map(({ token, decimals, symbol }) => ({ address: token, decimals, symbol })),
+      ],
+      new Map(paid.map(({ token, amount }) => [key(token), amount])),
+    ).catch(() => new Map<string, number>()));
   const body = clone("claim-before");
   fill(body, {
     "claim-earned": usd(
@@ -238,23 +248,26 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     const id = ++planned;
     into.textContent = "…";
     const gasValue = () => 0n;
-    const outputPrice = prices.get(key(swapper.token));
-    const routes = await Promise.all(
-      paid.map(async ({ token, amount }) =>
-        same(token, swapper.token)
-          ? undefined
-          : findRoute(token, amount, swapper, true, gasValue).catch(() => undefined),
+    const [current, routes] = await Promise.all([
+      currentPrices(),
+      Promise.all(
+        paid.map(async ({ token, amount }) =>
+          same(token, swapper.token)
+            ? undefined
+            : findRoute(token, amount, swapper, true, gasValue).catch(() => undefined),
+        ),
       ),
-    );
+    ]);
     if (id !== planned) return;
+    const outputPrice = current.get(key(swapper.token));
     // Only tokens whose quote clears their gas twice over are swapped; the others stay as they are.
     const items: Plan["items"] = [];
     const left: string[] = [];
     paid.forEach(({ token, amount }, i) => {
       const route = routes[i];
       if (same(token, swapper.token)) return;
-      // In dollars at last epoch's prices: of what the quote fetches, or else of the token itself.
-      const price = prices.get(key(token));
+      // In dollars now: what the quote fetches, or else the token itself.
+      const price = current.get(key(token));
       const known = tokens.get(key(token));
       const worth = !route
         ? undefined

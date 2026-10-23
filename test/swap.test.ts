@@ -16,7 +16,6 @@ import {
   best,
   candidatePaths,
   feeOf,
-  lookups,
   minimumOf,
   paidOf,
   poolName,
@@ -27,8 +26,8 @@ import {
   swapGas,
   swappedIn,
   swapperAbi,
-  type Hop,
 } from "../src/swap.ts";
+import { lookups, type Hop } from "../src/pools.ts";
 
 const [USDC, , , CBBTC] = SWAPPERS.map(({ token }) => token) as [Address, Address, Address, Address];
 const AVNT: Address = "0x696F9436B67233384889472Cd7cD58A6fB5DF4f1";

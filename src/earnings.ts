@@ -2,7 +2,7 @@ import { parseAbi, type Address } from "viem";
 import { blockTime, call, read, readLater, required, same } from "./chain.ts";
 import { WEEK, clean } from "./format.ts";
 import { escrow, voter } from "./hydrex.ts";
-import { pricesAt, usdOf, type Token } from "./prices.ts";
+import { pricesAtFlip, usdOf, type Token } from "./prices.ts";
 
 // What votes earned in an epoch that has ended, from Hydrex's reward contracts. Each pool's gauge has two: one for the
 // pool's fees and one for incentives. They keep each epoch's votes and rewards, so an ended epoch's figures are final.
@@ -153,7 +153,7 @@ async function priced(
   for (const { token, amount } of rewards) amounts.set(token.address, (amounts.get(token.address) ?? 0n) + amount);
   // Only the tokens earned: the pools' own tokens are read only to name the pools.
   const earned = [...tokens.values()].filter(({ address }) => amounts.has(address));
-  const prices = await pricesAt(earned, amounts, start + WEEK, now, reader);
+  const prices = await pricesAtFlip(earned, amounts, start + WEEK, now, reader);
   return { start, votes, pools, rewards, prices };
 }
 

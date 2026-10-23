@@ -36,12 +36,14 @@ import {
   DEFAULT_OUTPUT,
   KEEPER,
   RPCS,
+  SWAPPERS,
   VOTING_ESCROW,
   swapperOf,
 } from "../src/config.ts";
 import { readEarnings, rewardsFor, type Reward } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
+import { pricesNow, type Token } from "../src/prices.ts";
 import { SETTLED, readEarned, readStamps, weighed } from "../src/receipts.ts";
 import { findRoute } from "../src/swap.ts";
 
@@ -630,7 +632,7 @@ export const balanceOf = (token: Address, owner: Address) => readOn<bigint>(toke
 export const swapView = (page: Page) => page.locator('.view[data-view="swap"]');
 
 // Reads, with no time limit, what the page reads of an owner's payouts, what the claim of #82774 reads, and the routes
-// into the default output for what it brings, which the claim's review looks for as it opens.
+// into the default output and the prices now for what it brings, which the claim's review reads as it opens.
 export async function warmPayouts(owner: Address): Promise<void> {
   await warm(async () => {
     const holdings = await readAccounts(owner);
@@ -656,11 +658,22 @@ export async function warmPayouts(owner: Address): Promise<void> {
     const brought = new Map<Address, bigint>();
     pairs.forEach(({ token }, i) => brought.set(token, (brought.get(token) ?? 0n) + (owed![i] ?? 0n)));
     const into = swapperOf(DEFAULT_OUTPUT)!;
-    await Promise.all(
-      [...brought]
-        .filter(([token, amount]) => amount > 0n && !same(token, into.token))
-        .map(([token, amount]) => findRoute(token, amount, into, true).catch(() => undefined)),
+    const tokens = new Map<Address, Token>(
+      [...earnings.rewards, ...earlier].map(({ token }) => [token.address, token]),
     );
+    const owing = [...brought].filter(([, amount]) => amount > 0n);
+    await Promise.all([
+      ...owing
+        .filter(([token]) => !same(token, into.token))
+        .map(([token, amount]) => findRoute(token, amount, into, true).catch(() => undefined)),
+      pricesNow(
+        [
+          ...owing.map(([token]) => tokens.get(token)!),
+          ...SWAPPERS.map(({ token, decimals, symbol }) => ({ address: token, decimals, symbol })),
+        ],
+        new Map(owing.map(([token, amount]) => [token.toLowerCase(), amount])),
+      ).catch(() => undefined),
+    ]);
   });
 }
 

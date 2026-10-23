@@ -535,7 +535,7 @@ export function gasCosts(): GasCost {
   return async (steps, from) => {
     const [first] = steps;
     if (!first) return 0;
-    const feed = ANCHORS.find(({ address }) => same(address, WETH))!.feed!;
+    const { feed } = ANCHORS.find(({ address }) => same(address, WETH))!;
     prices ??= Promise.all([rpc<Hex>("eth_gasPrice", []), feedAt(feed, Infinity, read)]);
     // The call's data, and about as much again for the transaction's other fields.
     const size = BigInt((first.data.length - 2) / 2 + 100);

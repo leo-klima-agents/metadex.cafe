@@ -247,9 +247,11 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   through the record of the reward worth the most that the payout claimed. Anyone allowed to claim for the account moves
   that record, such as its owner on Hydrex. The page then says that the account was last claimed outside Carbon Impact,
   and shows no receipt.
-- What votes earned is for the last epoch only, at approximate prices: each token's average price over the half hour
-  before the epoch ended, in Hydrex's pools, with Chainlink for WETH and cbBTC. A token without a deep enough pool
-  counts as nothing.
+- What votes earned is for the last epoch only.
+- Prices are approximate. USDC, WETH, cbBTC and EURC take Chainlink's; other tokens, a half-hour average in their
+  deepest pool against one of those. Prices now, for swaps, come from Aero Basic Pools, Aerodrome Basic Pools, Hydrex
+  Classic Pools and Hydrex Integral, the first of two as deep; prices at an epoch's end, for what it earned and paid,
+  from Hydrex's pools only. A token without a deep enough pool has no price.
 - Only the admin key, or a call from the owner's own address made elsewhere, can change a payout address.
 - The swap knows only the tokens on its list, Hydrex's reward tokens, those added by address, and those a wallet lists
   with ERC-7811's `wallet_getAssets`: no RPC lists a wallet's tokens. Routes pass through WETH, USDC, cbBTC and HYDX
@@ -295,7 +297,8 @@ the pinned Actions and npm packages every week.
 | `src/config.ts`                                         | What the page trusts: contract addresses and code hashes, the RPCs, and the price anchors.                                                                                                                |
 | `src/hydrex-conduits.json`                              | Hydrex's automations, as <https://api.hydrex.fi/conduits> lists them.                                                                                                                                     |
 | `src/main.ts`                                           | Startup, the wallet connection, the App, the accounts, and an account's page.                                                                                                                             |
-| `src/swap.ts`, `src/swap-calls.ts`, `src/swap-view.ts`  | The swap: candidate pools, quotes, minimums and simulation; its calls; and its page.                                                                                                                      |
+| `src/pools.ts`                                          | Each exchange's pools of two tokens, for routes and prices.                                                                                                                                               |
+| `src/swap.ts`, `src/swap-calls.ts`, `src/swap-view.ts`  | The swap: routes, quotes, minimums and simulation; its calls; and its page.                                                                                                                               |
 | `src/tokens.ts`, `src/base-tokens.json`                 | The tokens the page knows, and their balances and approvals.                                                                                                                                              |
 | `src/claim.ts`, `src/claim-view.ts`                     | Claiming through AutoMaxi: the calls from what `earned` found, and the review.                                                                                                                            |
 | `src/review.ts`                                         | The review that shows each call before the wallet asks.                                                                                                                                                   |

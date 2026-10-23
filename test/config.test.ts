@@ -50,11 +50,7 @@ test("addresses are checksummed, and code hashes are 32 bytes", () => {
     APPROVAL_LOGIC,
     VOTER,
   ];
-  const prices = [
-    ALGEBRA_FACTORY,
-    PAIR_FACTORY,
-    ...ANCHORS.flatMap(({ address, feed }) => (feed ? [address, feed] : [address])),
-  ];
+  const prices = [ALGEBRA_FACTORY, PAIR_FACTORY, ...ANCHORS.flatMap(({ address, feed }) => [address, feed.address])];
   const addresses = [...contracts, ACCOUNT_NAMES, ...prices, ...conduits.map(({ address }) => address)];
   for (const address of addresses) assert.equal(getAddress(address), address);
   const hashes = [...AUTOMATIONS.map(({ codeHash }) => codeHash), VOTING_ESCROW_IMPLEMENTATION_CODE_HASH];

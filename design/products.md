@@ -548,8 +548,8 @@ The refactor touches every level, so these come cheaply with it:
   simulation), `src/claim.ts` (the calls from what `earned` found). `src/wallet.ts` gains `wallet_getCapabilities` and
   `wallet_sendCalls`.
 - **`src/hydrex.ts`'s checks** extend to the swappers.
-- **Reuse:** `src/prices.ts` for the price check, `src/receipts.ts` for what waits, `src/review.ts` for the steps and
-  the Safe transaction.
+- **Reuse:** `src/prices.ts` for the price check (Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools, Hydrex
+  Integral), `src/receipts.ts` for what waits, `src/review.ts` for the steps and the Safe transaction.
 - **Tests:** unit tests for route candidates, minimums, and the claim's calls; fork tests at a block after the swappers'
   deployment on 21 Oct 2026: a claim, a claim and swap, a swap of several tokens with one skipped, a reset, and the
   checks failing for one output.

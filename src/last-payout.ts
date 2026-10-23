@@ -7,7 +7,7 @@ import { rewardsFor, tokensOf, type Earnings } from "./earnings.ts";
 import { WEEK, amount, bps, listWith, short, usd, utc, weekStart } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { lastEarnings } from "./last-epoch.ts";
-import { pricesAt, type Token } from "./prices.ts";
+import { pricesAtFlip, type Token } from "./prices.ts";
 import { prefill } from "./swap-view.ts";
 import {
   SETTLED,
@@ -667,7 +667,7 @@ async function draw(
         if (value > (amounts.get(token.toLowerCase()) ?? 0n)) amounts.set(token.toLowerCase(), value);
       // Other accounts, or a newer read, may have taken over by then.
       if (!current()) return;
-      const prices = await pricesAt([...tokens.values()], amounts, flip, now(), readLater).catch((error) => {
+      const prices = await pricesAtFlip([...tokens.values()], amounts, flip, now(), readLater).catch((error) => {
         console.error(error);
         return undefined;
       });

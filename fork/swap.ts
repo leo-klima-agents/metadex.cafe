@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { type Page } from "playwright-core";
-import { encodeFunctionData, getAddress, type Address, type Hex } from "viem";
-import { AUTOMATIONS, AUTOMAXI, SWAPPERS, VOTING_ESCROW } from "../src/config.ts";
+import { encodeFunctionData, getAddress, type Address } from "viem";
+import { AUTOMATIONS, AUTOMAXI, HYDX, SWAPPERS, VOTING_ESCROW } from "../src/config.ts";
 import { readEarnings } from "../src/earnings.ts";
-import { pricesAt } from "../src/prices.ts";
-import { findRoute, swapChecks } from "../src/swap.ts";
+import { pricesNow } from "../src/prices.ts";
+import { MIDDLES, findRoute, swapChecks } from "../src/swap.ts";
 import { describe as describeTokens, holdingsOf, known } from "../src/tokens.ts";
 import {
   PAYEE,
@@ -56,10 +56,10 @@ async function fund(tokens: Address[]): Promise<void> {
     // each automation's.
     await Promise.all([swapChecks(), ...AUTOMATIONS.map(({ address }) => readEarnings(address))]);
     const held = await holdingsOf(SELLER, [...known(), ...tokens], INTO_USDC.address);
-    const described = await describeTokens([...tokens, INTO_USDC.token]);
+    // The page prices the tokens its routes name too.
+    const described = await describeTokens([...tokens, INTO_USDC.token, ...MIDDLES, HYDX]);
     const amounts = new Map(tokens.map((token) => [token.toLowerCase(), held.get(token.toLowerCase())!.balance]));
-    const time = Number((await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false])).timestamp);
-    await pricesAt([...described.values()], amounts, time, time);
+    await pricesNow([...described.values()], amounts);
     for (const token of tokens) await findRoute(token, amounts.get(token.toLowerCase())!, INTO_USDC, false);
   });
 }
