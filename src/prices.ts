@@ -261,8 +261,8 @@ async function measure(
   });
 }
 
-// Each token's price at the flip, in dollars per whole token, by lower-case address. USDC is a dollar, and WETH and
-// cbBTC take Chainlink's price. Other tokens take the deepest pool of the exchanges given, in their order, that pairs
+// Each token's price at the flip, in dollars per whole token, by lower-case address. USDC, WETH and cbBTC take
+// Chainlink's price. Other tokens take the deepest pool of the exchanges given, in their order, that pairs
 // them with one of those three: the swap's page gives Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools and
 // Hydrex Integral, and the Hydrex pages Hydrex's two. A pool gives its average over the half hour before the flip, or
 // its price now if its history is too short. A token without a deep enough pool gets no price. `amounts` is how much of
@@ -276,7 +276,7 @@ export async function pricesAt(
   reader: typeof read = read,
 ): Promise<Map<string, number>> {
   const prices = new Map<string, number>();
-  const found = await Promise.all(ANCHORS.map(({ feed }) => (feed ? feedAt(feed, flip, reader) : 1)));
+  const found = await Promise.all(ANCHORS.map(({ feed }) => feedAt(feed, flip, reader)));
   ANCHORS.forEach(({ address }, i) => {
     const price = found[i];
     if (price !== undefined) prices.set(key(address), price);

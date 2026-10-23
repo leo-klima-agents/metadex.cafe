@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { zeroAddress, type Address } from "viem";
 import { same, type Call } from "../src/chain.ts";
-import { ALGEBRA_FACTORY, EXCHANGES, HYDREX_PRICING, PAIR_FACTORY, SWAP_PRICING } from "../src/config.ts";
+import {
+  ALGEBRA_FACTORY,
+  ANCHORS,
+  EXCHANGES,
+  HYDREX_PRICING,
+  PAIR_FACTORY,
+  SWAP_PRICING,
+  swapperOf,
+} from "../src/config.ts";
 import {
   SPAN,
   WINDOW,
@@ -123,12 +131,15 @@ const POOLS: Record<keyof Market, Address> = {
   aerodrome: "0x00000000000000000000000000000000000000a2",
   hydrex: "0x00000000000000000000000000000000000000a3",
 };
+// What Chainlink's USDC / USD feed answers, with its 8 decimals.
+const USDC_USD = 0.999;
+const USDC_FEED = ANCHORS.find(({ address }) => same(address, swapperOf("usdc")!.token))!.feed;
 const factoryOf = (name: string, stable = false): Address =>
   EXCHANGES.find((exchange) => exchange.name === name && !!exchange.stable === stable)!.factory;
 
 // TOKEN's volatile pools against USDC, of Aero, Aerodrome and Hydrex Classic, each with its reserves now in whole
-// tokens, TOKEN's first. Aero's reads back `average` over the window, or refuses it. No feed answers, so USDC is the only
-// anchor, and the classic pools have no observations yet.
+// tokens, TOKEN's first. Aero's reads back `average` over the window, or refuses it. Only USDC's feed answers, so USDC is
+// the only anchor, and the classic pools have no observations yet.
 function market(pools: Market, average?: [number, number]) {
   const asked = new Set<string>();
   const units = ([token, usdc]: [number, number]) => [BigInt(token) * 10n ** 18n, BigInt(usdc) * 10n ** 6n] as const;
@@ -136,6 +147,8 @@ function market(pools: Market, average?: [number, number]) {
   const reader = async (calls: Call[]) =>
     calls.map(({ address, functionName, args }) => {
       asked.add(address.toLowerCase());
+      if (same(address, USDC_FEED))
+        return functionName === "decimals" ? 8 : [1n, BigInt(USDC_USD * 1e8), 0n, BigInt(NOW), 1n];
       if (same(address, factoryOf("Aero Basic Pools"))) return poolOf("aero");
       if (same(address, factoryOf("Aerodrome Basic Pools"))) return args[2] ? zeroAddress : poolOf("aerodrome");
       if (same(address, PAIR_FACTORY)) return args[2] ? zeroAddress : poolOf("hydrex");
@@ -159,18 +172,25 @@ function market(pools: Market, average?: [number, number]) {
 const priceOf = async (reader: (calls: Call[]) => Promise<unknown[]>, exchanges = SWAP_PRICING) =>
   (await pricesAt([TOKEN], new Map(), NOW, NOW, exchanges, reader)).get(TOKEN.address);
 
+test("USDC takes Chainlink's price, and so do the tokens priced in it", async () => {
+  const usdc = swapperOf("usdc")!.token.toLowerCase();
+  const { reader } = market({ hydrex: [2_000, 8_000] });
+  close((await pricesAt([TOKEN], new Map(), NOW, NOW, SWAP_PRICING, reader)).get(usdc)!, USDC_USD);
+  close((await priceOf(reader))!, 4 * USDC_USD);
+});
+
 test("the deepest pool wins: of all four exchanges for the swap's page, of Hydrex's two for the Hydrex pages", async () => {
-  // $2,000 deep at $2 in Aero, $15,000 at $3 in Aerodrome, $8,000 at $4 in Hydrex Classic.
+  // 2,000 USDC deep at 2 USDC in Aero, 15,000 at 3 in Aerodrome, 8,000 at 4 in Hydrex Classic.
   const { reader, asked } = market({ aero: [1_000, 2_000], aerodrome: [5_000, 15_000], hydrex: [2_000, 8_000] });
-  close((await priceOf(reader))!, 3);
+  close((await priceOf(reader))!, 3 * USDC_USD);
   asked.clear();
-  close((await priceOf(reader, HYDREX_PRICING))!, 4);
+  close((await priceOf(reader, HYDREX_PRICING))!, 4 * USDC_USD);
   for (const { name, factory } of SWAP_PRICING.filter((exchange) => !HYDREX_PRICING.includes(exchange)))
     assert.ok(!asked.has(factory.toLowerCase()), `the Hydrex pages do not look in ${name}`);
 });
 
 test("an Aero pool gives its average over the window, or its price now when it refuses a window before its history", async () => {
   const pools: Market = { aero: [10_000, 20_000], hydrex: [2_000, 8_000] };
-  close((await priceOf(market(pools, [10_000, 25_000]).reader))!, 2.5);
-  close((await priceOf(market(pools).reader))!, 2);
+  close((await priceOf(market(pools, [10_000, 25_000]).reader))!, 2.5 * USDC_USD);
+  close((await priceOf(market(pools).reader))!, 2 * USDC_USD);
 });

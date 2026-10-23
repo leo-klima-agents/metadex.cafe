@@ -59,11 +59,15 @@ export const ACCOUNT_NAMES: Address = "0x998cf40a742460b4eBbFB569A0D23eA91976c0d
 // priced against.
 export const ALGEBRA_FACTORY: Address = "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E";
 export const PAIR_FACTORY: Address = "0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0";
-export type Anchor = { address: Address; decimals: number; feed?: Address };
+export type Anchor = { address: Address; decimals: number; feed: Address };
 export const WETH: Address = "0x4200000000000000000000000000000000000006";
 export const ANCHORS: Anchor[] = [
-  // USDC, counted as a dollar
-  { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+  // USDC, with Chainlink's USDC / USD feed
+  {
+    address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    decimals: 6,
+    feed: "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B",
+  },
   // WETH, with Chainlink's ETH / USD feed
   {
     address: WETH,
