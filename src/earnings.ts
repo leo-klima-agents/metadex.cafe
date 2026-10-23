@@ -228,6 +228,9 @@ export function rewardsFor(automation: Address, start: number): Promise<Reward[]
   return found;
 }
 
+// For tests: the rewards read are kept for the rest of the session.
+export const forgetRewards = (): void => paidBy.clear();
+
 // What all votes on Hydrex earned in the same epoch, for the average. Thousands of reads, after the page's own.
 export async function readAllEarnings(start: number): Promise<Earnings> {
   const [[now, votes], pools] = await Promise.all([

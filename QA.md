@@ -33,10 +33,12 @@ not have those yet: reload the page, and it shows the change.
   it does when a wallet changes account. An address with less than 0.01 ETH gets 0.1 ETH for gas.
 - **Network:** Base, or Ethereum, for the wrong network. **Can switch networks** off makes the wallet refuse to switch.
 - **Asks you before it connects, switches or sends:** off, the wallet says yes to everything at once. On, each request
-  waits in the QA wallet, which comes to the front, for Confirm or Reject, as a wallet's window does. It sends as the
-  address the page asked of, which it names, even if another is picked meanwhile.
+  waits in the QA wallet, which comes to the front, for Confirm or Reject, as a wallet's window does. It connects as the
+  address picked when the page asked, and sends from the address the page names, which the prompt names, even if another
+  is picked meanwhile.
 - **Calls:** one per prompt; or several in one prompt with EIP-5792's `wallet_sendCalls`, as Coinbase Wallet and
-  MetaMask do, all or nothing, or one by one. The page asks a wallet what it can do once per address: reload it after a
+  MetaMask do, all or nothing, or one by one. All or nothing, a batch whose calls would not all go through sends one
+  transaction that fails, and nothing else. The page asks a wallet what it can do once per address: reload it after a
   change.
 - **Fail the next transaction:** sends it with too little gas, so that Base includes it, and it fails.
 - **Lock:** the wallet shares no account any more, as when it locks.
@@ -58,7 +60,8 @@ not have those yet: reload the page, and it shows the change.
   treasury, in the pool Carbon Impact votes for most. **Hydrex's other automations vote again** makes those that stopped
   in September look as if they voted just now.
 - **The keeper,** in the `payout` scenario: sends again, one by one, the payouts that Base included after the fork's
-  block, from the keeper's own address, with their own calldata.
+  block, from the keeper's own address, with their own calldata. One that fails on the fork, as the QA wallet changed
+  it, says so, and the next is then sent.
 - **Base:** its time on the fork, which runs on a block every 2 seconds. **Next epoch** moves it to a minute after the
   next Thursday, 00:00 UTC; **12 hours later**, half a day on. The page's clock follows. Nobody votes or pays on the
   fork unasked, so a new epoch shows Carbon Impact as stopped.

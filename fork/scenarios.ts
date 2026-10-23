@@ -1,5 +1,6 @@
 import { getAddress, type Address, type Hex } from "viem";
-import { AUTOMAXI, WETH } from "../src/config.ts";
+import { AUTOMAXI, SWAPPERS, WETH } from "../src/config.ts";
+import { holdingsOf, known } from "../src/tokens.ts";
 import {
   AVNT,
   BLOCK,
@@ -17,6 +18,7 @@ import {
   autoMaxiReceipts,
   fund,
   settle,
+  warm,
   warmAtBlock,
   warmPayouts,
   warmStandings,
@@ -33,8 +35,9 @@ export type Scenario = {
   hash: string;
   // The wallets to sign as, the first one first. Each gets 0.1 ETH for gas.
   owners: Owner[];
-  // Changes the fork, then reads with no time limit what the page reads first: see warm in harness.ts.
-  setup(): Promise<void>;
+  // Changes the fork, then reads with no time limit what the page reads first, for each of `owners`, the addresses of
+  // the wallets to sign as: see warm in harness.ts.
+  setup(owners: Address[]): Promise<void>;
   // Transactions that Base included after the fork's block, which the QA wallet sends again in their order, as their
   // senders: each named by what it does.
   replays?: { hash: Hex; does: string }[];
@@ -73,7 +76,7 @@ export const SCENARIOS: Scenario[] = [
     block: BLOCK,
     hash: "#hydrex",
     owners: ACCOUNTS,
-    setup: () => warmAtBlock(ACCOUNTS.map(({ address }) => address)),
+    setup: warmAtBlock,
   },
   {
     name: "automaxi",
@@ -86,7 +89,7 @@ export const SCENARIOS: Scenario[] = [
       ...ACCOUNTS.filter(({ address }) => address === MEMBER),
     ],
     // As the browser test of AutoMaxi's receipts.
-    setup: () => autoMaxiReceipts([NEWCOMER, LEAVER, PAYEE]).then(() => {}),
+    setup: (owners) => autoMaxiReceipts(owners).then(() => {}),
   },
   {
     name: "swap",
@@ -98,7 +101,11 @@ export const SCENARIOS: Scenario[] = [
       { address: HOLDER, holds: "Carbon Impact's treasury, a Safe with many tokens" },
       { address: PAYEE, holds: "93 Hydrex accounts; #82774 in Carbon Impact, its payout late" },
     ],
-    setup: () => fund([WETH, ZORA, AVNT]),
+    // The others' balances too, as the page reads them first.
+    async setup(owners) {
+      await fund([WETH, ZORA, AVNT]);
+      await warm(() => Promise.all(owners.map((owner) => holdingsOf(owner, known(), SWAPPERS[0]!.address))));
+    },
   },
   {
     name: "claim",
@@ -106,10 +113,10 @@ export const SCENARIOS: Scenario[] = [
     block: RECENT,
     hash: "#app",
     owners: [{ address: PAYEE, holds: "93 Hydrex accounts; #82774 in AutoMaxi, its payout overdue" }],
-    async setup() {
+    async setup([owner]) {
       await approveConduit(PAYEE, AUTOMAXI.address, 82774n);
       await settle();
-      await warmPayouts(PAYEE);
+      await warmPayouts(owner!);
     },
   },
   {
@@ -123,7 +130,7 @@ export const SCENARIOS: Scenario[] = [
       { address: OWNER_35366, holds: "#35366 in Carbon Impact, its payout due" },
     ],
     replays: PAYOUTS,
-    setup: () => warmStandings([PAYEE, MEMBER, OWNER_35366], [82774n, 9540n, 35366n]),
+    setup: (owners) => warmStandings(owners, [82774n, 9540n, 35366n]),
   },
 ];
 

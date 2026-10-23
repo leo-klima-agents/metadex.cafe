@@ -24,6 +24,7 @@ import {
   parseAbi,
   parseUnits,
   toFunctionSelector,
+  toHex,
   type Address,
   type Hex,
 } from "viem";
@@ -44,10 +45,11 @@ import {
   VOTING_ESCROW_IMPLEMENTATION,
 } from "../src/config.ts";
 import conduits from "../src/hydrex-conduits.json" with { type: "json" };
-import { readEarnings, rewardsFor } from "../src/earnings.ts";
+import { forgetClaims } from "../src/claims.ts";
+import { forgetRewards, readEarnings, rewardsFor } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
 import { others } from "../src/hydrex.ts";
-import { readEarned, weighed } from "../src/receipts.ts";
+import { forgetReads, readEarned, weighed } from "../src/receipts.ts";
 import { erc20Abi, swapperAbi } from "../src/swap.ts";
 import {
   AVNT,
@@ -61,11 +63,11 @@ import {
   abi,
   anvil,
   balanceOf,
-  hex,
   included,
   mined,
   readOn,
   send,
+  sendsBatches,
   serve,
   settle,
   startAnvil,
@@ -180,11 +182,13 @@ function requestWords(method: string, params: any[], owner: Address): string {
       return `Connect as ${short(owner)}`;
     case "wallet_switchEthereumChain":
       return `Switch to ${Number(params[0].chainId) === CHAIN_ID ? "Base" : `chain ${Number(params[0].chainId)}`}`;
+    // As the address the page names, as the test wallet sends.
     case "eth_sendTransaction":
-      return `Send ${callWords(params[0])} as ${short(owner)}`;
+      return `Send ${callWords(params[0])} as ${short(params[0].from ?? owner)}`;
     case "wallet_sendCalls": {
       const calls = params[0].calls as { to: string; data: Hex }[];
-      return `Send ${calls.length} calls in one prompt as ${short(owner)}: ${calls.map(callWords).join("; ")}`;
+      const from = short(params[0].from ?? owner);
+      return `Send ${calls.length} calls in one prompt as ${from}: ${calls.map(callWords).join("; ")}`;
     }
     default:
       return method;
@@ -283,7 +287,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     return reply;
   }
   async function respond(method: string, params: any[]) {
-    // The account asked of, as the reply's note names it, even if another is picked meanwhile.
+    // The account picked as the page asks, as the reply's note names it, even if another is picked meanwhile.
     const owner = wallet.owner;
     const reply = await handle(method, params);
     if (LOGGED.has(method)) {
@@ -339,14 +343,22 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     const open = sites.get(kind);
     if (open) return open;
     const context = await browser.newContext({ viewport: null, colorScheme: null });
+    // Kept once it is set up: one that fails to be is closed, and the next open sets up another.
+    try {
+      await context.route("**/*", routeSite);
+      if (kind !== "none") {
+        await context.exposeFunction("testWallet", walletRequest);
+        await context.addInitScript(
+          walletScript(kind === "wallets" ? ["Test Wallet", "Other Wallet"] : ["Test Wallet"]),
+        );
+      }
+      await context.clock.install({ time: (await latest()).time * 1000 });
+    } catch (error) {
+      await context.close().catch(() => {});
+      throw error;
+    }
     sites.set(kind, context);
     context.on("close", () => sites.get(kind) === context && sites.delete(kind));
-    await context.route("**/*", routeSite);
-    if (kind !== "none") {
-      await context.exposeFunction("testWallet", walletRequest);
-      await context.addInitScript(walletScript(kind === "wallets" ? ["Test Wallet", "Other Wallet"] : ["Test Wallet"]));
-    }
-    await context.clock.install({ time: (await latest()).time * 1000 });
     return context;
   }
 
@@ -639,6 +651,10 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     replayed = 0;
     created.length = 0;
     typed.length = 0;
+    // What Node read of the last fork, which this one may not hold.
+    forgetRewards();
+    forgetReads();
+    forgetClaims();
     asks = false;
     Object.assign(wallet, { chainId: CHAIN_ID, switches: true, batch: false, failing: 0 });
     delete wallet.atomic;
@@ -647,15 +663,16 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     try {
       await Promise.all(windows.map((context) => context.close().catch(() => {})));
       await Promise.allSettled(requests);
-      await stopAnvil();
+      // What the closed windows asked of anvil is not answered.
+      await stopAnvil(false);
       busy = `Forking Base at block ${next.block.toLocaleString("en-GB")}…`;
       const cache = await cacheAt(next.block);
       if (closing) return;
-      await startAnvil(next.block, cache);
-      if (closing) return void (await stopAnvil());
-      for (const { address } of next.owners) await anvil("anvil_setBalance", [address, hex(FOR_GAS)]);
+      await startAnvil(next.block, cache, () => !!closing);
+      if (closing) return void (await stopAnvil(false));
+      for (const { address } of next.owners) await anvil("anvil_setBalance", [address, toHex(FOR_GAS)]);
       busy = `Setting up ${next.name}. The first time, reading Base can take several minutes…`;
-      await next.setup();
+      await next.setup(next.owners.map(({ address }) => address));
       // A block every 2 seconds, as on Base: the page reads a few blocks back, and so sees each transaction.
       await anvil("evm_setIntervalMining", [2]);
       wallet.owner = next.owners[0]!.address;
@@ -671,7 +688,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
 
   async function gas(address: Address): Promise<void> {
     if (BigInt(await anvil<Hex>("eth_getBalance", [address, "latest"])) >= FOR_GAS / 10n) return;
-    await anvil("anvil_setBalance", [address, hex(FOR_GAS)]);
+    await anvil("anvil_setBalance", [address, toHex(FOR_GAS)]);
     note(`Gave ${short(address)} 0.1 ETH for gas`);
   }
 
@@ -751,22 +768,27 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     // What waits in each epoch's pools, by contract and token. The automations' pools are mostly the same, and so are
     // the two epochs': a claim takes what waits for every epoch at once.
     const epochs = [new Map<string, Owed>(), new Map<string, Owed>()];
-    await warm(async () => {
-      for (const { address } of AUTOMATIONS) {
-        const earnings = await readEarnings(address).catch(() => undefined);
-        if (!earnings) continue;
-        const both = [earnings.rewards, await rewardsFor(address, earnings.start - WEEK)];
-        for (const [epoch, rewards] of both.entries()) {
-          const pairs = weighed(rewards, earnings.prices);
-          const [amounts = []] = await readEarned([id], pairs, "latest");
-          const fees = new Set(rewards.filter(({ fee }) => fee).map(({ contract }) => contract.toLowerCase()));
-          for (const [i, pair] of pairs.entries()) {
-            const owed = { ...pair, fee: fees.has(pair.contract.toLowerCase()) };
-            if ((amounts[i] ?? 0n) > 0n) epochs[epoch]!.set(pairKey(owed), owed);
-          }
-        }
-      }
-    });
+    // Each automation's, and each epoch's, at once.
+    await warm(() =>
+      Promise.all(
+        AUTOMATIONS.map(async ({ address }) => {
+          const earnings = await readEarnings(address).catch(() => undefined);
+          if (!earnings) return;
+          const both = [earnings.rewards, await rewardsFor(address, earnings.start - WEEK)];
+          await Promise.all(
+            both.map(async (rewards, epoch) => {
+              const pairs = weighed(rewards, earnings.prices);
+              const [amounts = []] = await readEarned([id], pairs, "latest");
+              const fees = new Set(rewards.filter(({ fee }) => fee).map(({ contract }) => contract.toLowerCase()));
+              for (const [i, pair] of pairs.entries()) {
+                const owed = { ...pair, fee: fees.has(pair.contract.toLowerCase()) };
+                if ((amounts[i] ?? 0n) > 0n) epochs[epoch]!.set(pairKey(owed), owed);
+              }
+            }),
+          );
+        }),
+      ),
+    );
     const most = (pairs: Map<string, Owed>) =>
       [...pairs.values()].sort((a, b) => b.usd - a.usd).slice(0, OWN_CLAIM_PAIRS);
     const claimed = [...new Map(epochs.flatMap(most).map((owed) => [pairKey(owed), owed])).values()];
@@ -857,11 +879,10 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       next.hash,
     ]);
     await gas(tx.from);
-    await included(
-      await send({ from: tx.from, to: tx.to, data: tx.input, gas: tx.gas }),
-      `The keeper's transaction that ${next.does}`,
-    );
+    const hash = await send({ from: tx.from, to: tx.to, data: tx.input, gas: tx.gas });
+    // Sent, it is the next one's turn, even if this one fails on a fork that the QA wallet changed.
     replayed++;
+    await included(hash, `The keeper's transaction that ${next.does}`);
     note(`The keeper ${next.does}`);
   }
 
@@ -912,7 +933,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       asks,
       switches: wallet.switches,
       // A wallet that lists its tokens sends several calls in one prompt too: see harness.ts.
-      calls: (!wallet.batch && !wallet.assets ? "one" : wallet.atomic === false ? "each" : "atomic") satisfies Calls,
+      calls: (!sendsBatches(wallet) ? "one" : wallet.atomic === false ? "each" : "atomic") satisfies Calls,
       failing: wallet.failing ?? 0,
       lists: !!wallet.assets,
       replays: current.replays && {
@@ -965,7 +986,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
         break;
       case "chain":
         wallet.chainId = Number(args[0]);
-        await emit("chainChanged", hex(wallet.chainId));
+        await emit("chainChanged", toHex(wallet.chainId));
         break;
       case "set": {
         const [key, on] = args as [string, boolean];
@@ -1050,7 +1071,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     (closing ??= (async () => {
       for (const prompt of prompts.splice(0)) prompt.answer(false);
       await browser.close().catch(() => {});
-      await stopAnvil();
+      await stopAnvil(false);
       // A start under way stops at its next step: the process may exit once it has.
       await starting;
       for (const cache of caches.values())
