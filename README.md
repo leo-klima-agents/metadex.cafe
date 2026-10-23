@@ -280,8 +280,8 @@ forks through `fork/rpc-cache.ts`, which asks `BASE_RPC_URL` once for each answe
 in `FORK_CACHE`, `~/.cache/metadex.cafe/fork` by default; `FORK_LOG=1` prints each request it still sends. Before anvil
 runs a call, the cache asks `BASE_RPC_URL` which slots it reads, and for all of them. Every request of a run goes
 through one queue, at most 8 at a time, anvil's first; one refused as over the RPC's limit is asked again after an
-exponential backoff. The first run, which asks for everything, takes about 25 minutes through an RPC of your own; the
-next ones take about two minutes.
+exponential backoff, for up to 5 minutes. The first run, which asks for everything, takes about 25 minutes through an
+RPC of your own; the next ones take about two minutes.
 
 CI runs Prettier, the type check, the unit tests, `reuse lint` and the build. It then builds again from a fresh clone
 and checks that both builds are the same. It also runs the browser tests, in the runner's Chrome, with the forks'

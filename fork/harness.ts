@@ -135,8 +135,13 @@ export async function anvil<T>(method: string, params: unknown[] = []): Promise<
 
 // Sends a transaction from an account anvil impersonates, with no tip, as anvil 1.5 filled it in. anvil 1.8 tips 1 gwei
 // over a fee cap it takes from the base fee alone under --disable-min-priority-fee, and so refuses its own transaction.
-export const send = (tx: { from: string; to: string; data: string; gas?: string }): Promise<Hex> =>
-  anvil<Hex>("eth_sendTransaction", [{ ...tx, maxPriorityFeePerGas: "0x0" }]);
+// The cache hears of it before anyone asks for its receipt, which anvil would otherwise ask FORK_URL for until it mines
+// it: see rpc-cache.ts.
+export async function send(tx: { from: string; to: string; data: string; gas?: string }): Promise<Hex> {
+  const hash = await anvil<Hex>("eth_sendTransaction", [{ ...tx, maxPriorityFeePerGas: "0x0" }]);
+  await nodeFetch(`${CACHE_URL}/sent`, { method: "POST", body: hash });
+  return hash;
+}
 
 export async function view(to: Address, functionName: string, args: unknown[]): Promise<Address> {
   const data = encodeFunctionData({ abi, functionName, args } as never);
@@ -530,19 +535,21 @@ export async function start(block: number, owners: Address[]): Promise<void> {
   node = spawn(
     "anvil",
     // anvil keeps no answers of its own, so that the cache sees each request. Its gas price is the block's base fee, as
-    // on Base, where tips are next to nothing: anvil's own least tip, 1 gwei, would price gas 200 times higher.
+    // on Base, where tips are next to nothing: anvil's own least tip, 1 gwei, would price gas 200 times higher. It waits
+    // for the cache as long as the cache waits for FORK_URL, up to 5 minutes for an answer, rather than its own 45 s.
     [
       ...["--fork-url", CACHE_URL, "--fork-block-number", String(block), "--port", String(port), "--auto-impersonate"],
-      ...["--no-storage-caching", "--disable-min-priority-fee"],
+      ...["--no-storage-caching", "--disable-min-priority-fee", "--timeout", "600000"],
     ],
     { stdio: ["ignore", "ignore", process.env.ANVIL_LOG ? "inherit" : "ignore"] },
   );
-  for (let i = 0; ; i++) {
+  // anvil listens once it has read the fork's block, which a busy FORK_URL may take minutes to answer.
+  for (;;) {
     try {
       await anvil("eth_chainId");
       break;
-    } catch (error) {
-      if (i === 60) throw error;
+    } catch {
+      if (node.exitCode !== null) throw new Error(`anvil stopped as it started, with code ${node.exitCode}.`);
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
