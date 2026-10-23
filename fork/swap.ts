@@ -190,8 +190,8 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     const failed = swap.locator('[data-check="swap-code"] .check-failed');
     await failed.waitFor();
     assert.equal(await failed.innerText(), "Failed for EURC: ");
-    // Only the checks that failed show.
-    assert.equal(await swap.locator('[data-check="chain"]').isVisible(), false);
+    // Every check shows, and only those that failed are marked.
+    assert.equal(await swap.locator('[data-check="chain"]').isVisible(), true);
     assert.equal(await swap.locator('[data-check="chain"] .check-failed').count(), 0);
   });
 
