@@ -1,8 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { zeroAddress } from "viem";
-import type { Call } from "../src/chain.ts";
-import { SPAN, WINDOW, narrow, observedPrice, pairPrice, points, tickPrice, type Search } from "../src/prices.ts";
+import { zeroAddress, type Address } from "viem";
+import { same, type Call } from "../src/chain.ts";
+import { ALGEBRA_FACTORY, EXCHANGES, HYDREX_PRICING, PAIR_FACTORY, SWAP_PRICING } from "../src/config.ts";
+import {
+  SPAN,
+  WINDOW,
+  narrow,
+  observedPrice,
+  pairPrice,
+  points,
+  pricesAt,
+  tickPrice,
+  type Search,
+  type Token,
+} from "../src/prices.ts";
 
 const close = (actual: number, expected: number, relative = 1e-9) =>
   assert.ok(Math.abs(actual - expected) <= Math.abs(expected) * relative, `${actual} is not ${expected}`);
@@ -89,4 +101,76 @@ test("a search that starts from a bound finds the same, and a read that fails en
   const broken = search(500);
   await narrow([broken], reader);
   assert.equal(broken.failed, true);
+});
+
+test("the swap's page prices in Aero's, Aerodrome's and Hydrex's pools, in that order; the Hydrex pages in Hydrex's", () => {
+  assert.deepEqual(
+    SWAP_PRICING.map(({ name }) => name),
+    ["Aero Basic Pools", "Aero Basic Pools", "Aerodrome Basic Pools", "Hydrex Classic Pools", "Hydrex Integral"],
+  );
+  assert.deepEqual(
+    HYDREX_PRICING.map(({ name }) => name),
+    ["Hydrex Classic Pools", "Hydrex Integral"],
+  );
+});
+
+const NOW = 1_792_800_000;
+// Its address sorts before USDC's, so it is token0 of each of its pools.
+const TOKEN: Token = { address: "0x0000000000000000000000000000000000000001", decimals: 18, symbol: "TKN" };
+type Market = { aero?: [number, number]; aerodrome?: [number, number]; hydrex?: [number, number] };
+const POOLS: Record<keyof Market, Address> = {
+  aero: "0x00000000000000000000000000000000000000a1",
+  aerodrome: "0x00000000000000000000000000000000000000a2",
+  hydrex: "0x00000000000000000000000000000000000000a3",
+};
+const factoryOf = (name: string, stable = false): Address =>
+  EXCHANGES.find((exchange) => exchange.name === name && !!exchange.stable === stable)!.factory;
+
+// TOKEN's volatile pools against USDC, of Aero, Aerodrome and Hydrex Classic, each with its reserves now in whole
+// tokens, TOKEN's first. Aero's reads back `average` over the window, or refuses it. No feed answers, so USDC is the only
+// anchor, and the classic pools have no observations yet.
+function market(pools: Market, average?: [number, number]) {
+  const asked = new Set<string>();
+  const units = ([token, usdc]: [number, number]) => [BigInt(token) * 10n ** 18n, BigInt(usdc) * 10n ** 6n] as const;
+  const poolOf = (name: keyof Market) => (pools[name] ? POOLS[name] : zeroAddress);
+  const reader = async (calls: Call[]) =>
+    calls.map(({ address, functionName, args }) => {
+      asked.add(address.toLowerCase());
+      if (same(address, factoryOf("Aero Basic Pools"))) return poolOf("aero");
+      if (same(address, factoryOf("Aerodrome Basic Pools"))) return args[2] ? zeroAddress : poolOf("aerodrome");
+      if (same(address, PAIR_FACTORY)) return args[2] ? zeroAddress : poolOf("hydrex");
+      if (same(address, factoryOf("Aero Basic Pools", true)) || same(address, ALGEBRA_FACTORY)) return zeroAddress;
+      const name = (Object.keys(POOLS) as (keyof Market)[]).find((each) => same(POOLS[each], address));
+      if (!name) return undefined;
+      const [token, usdc] = units(pools[name]!);
+      if (functionName === "getReserves") return [token, usdc, 0n];
+      if (functionName === "observationLength") return 0n;
+      if (functionName === "currentCumulativePrices") return [0n, 0n, BigInt(NOW)];
+      if (functionName !== "observe" || !average) return undefined;
+      const [held, paid] = units(average);
+      return [
+        [0n, held * BigInt(WINDOW)],
+        [0n, paid * BigInt(WINDOW)],
+      ];
+    });
+  return { reader, asked };
+}
+
+const priceOf = async (reader: (calls: Call[]) => Promise<unknown[]>, exchanges = SWAP_PRICING) =>
+  (await pricesAt([TOKEN], new Map(), NOW, NOW, exchanges, reader)).get(TOKEN.address);
+
+test("the deepest pool wins: of all four exchanges for the swap's page, of Hydrex's two for the Hydrex pages", async () => {
+  // $2,000 deep at $2 in Aero, $15,000 at $3 in Aerodrome, $8,000 at $4 in Hydrex Classic.
+  const { reader, asked } = market({ aero: [1_000, 2_000], aerodrome: [5_000, 15_000], hydrex: [2_000, 8_000] });
+  close((await priceOf(reader))!, 3);
+  asked.clear();
+  close((await priceOf(reader, HYDREX_PRICING))!, 4);
+  for (const { name, factory } of SWAP_PRICING.filter((exchange) => !HYDREX_PRICING.includes(exchange)))
+    assert.ok(!asked.has(factory.toLowerCase()), `the Hydrex pages do not look in ${name}`);
+});
+
+test("an Aero pool gives its average over the window, or its price now when it refuses a window before its history", async () => {
+  const pools: Market = { aero: [10_000, 20_000], hydrex: [2_000, 8_000] };
+  close((await priceOf(market(pools, [10_000, 25_000]).reader))!, 2.5);
+  close((await priceOf(market(pools).reader))!, 2);
 });

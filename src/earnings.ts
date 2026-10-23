@@ -1,5 +1,6 @@
 import { parseAbi, type Address } from "viem";
 import { blockTime, call, read, readLater, required, same } from "./chain.ts";
+import { HYDREX_PRICING } from "./config.ts";
 import { WEEK, clean } from "./format.ts";
 import { escrow, voter } from "./hydrex.ts";
 import { pricesAt, usdOf, type Token } from "./prices.ts";
@@ -153,7 +154,7 @@ async function priced(
   for (const { token, amount } of rewards) amounts.set(token.address, (amounts.get(token.address) ?? 0n) + amount);
   // Only the tokens earned: the pools' own tokens are read only to name the pools.
   const earned = [...tokens.values()].filter(({ address }) => amounts.has(address));
-  const prices = await pricesAt(earned, amounts, start + WEEK, now, reader);
+  const prices = await pricesAt(earned, amounts, start + WEEK, now, HYDREX_PRICING, reader);
   return { start, votes, pools, rewards, prices };
 }
 

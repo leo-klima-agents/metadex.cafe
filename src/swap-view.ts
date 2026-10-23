@@ -1,6 +1,15 @@
 import type { Address } from "viem";
 import { now, same, type Receipt } from "./chain.ts";
-import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Output, type Swapper } from "./config.ts";
+import {
+  AUTOMATIONS,
+  DEFAULT_OUTPUT,
+  HYDX,
+  SWAPPERS,
+  SWAP_PRICING,
+  swapperOf,
+  type Output,
+  type Swapper,
+} from "./config.ts";
 import { clone, fill, fillAddress, show, showHex } from "./dom.ts";
 import { tokensOf } from "./earnings.ts";
 import { count, figure, fraction, list, short, usd } from "./format.ts";
@@ -301,10 +310,13 @@ async function startScan(owner: Address, swapper: Swapper): Promise<void> {
     scanned.tokens = described;
     scanned.costs = found;
     const amounts = new Map(held.map((token) => [token, holdings.get(token)!.balance]));
-    scanned.prices = await pricesAt([...described.values()], amounts, now(), now()).catch((error: unknown) => {
-      console.error(error);
-      return new Map<string, number>();
-    });
+    // The deepest of Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools and Hydrex Integral prices each token.
+    scanned.prices = await pricesAt([...described.values()], amounts, now(), now(), SWAP_PRICING).catch(
+      (error: unknown) => {
+        console.error(error);
+        return new Map<string, number>();
+      },
+    );
     if (!current()) return;
     const rows = held.flatMap((address): Row[] => {
       const token = described.get(address);

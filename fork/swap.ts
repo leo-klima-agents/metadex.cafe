@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { type Page } from "playwright-core";
 import { encodeFunctionData, getAddress, type Address, type Hex } from "viem";
-import { AUTOMATIONS, AUTOMAXI, SWAPPERS, VOTING_ESCROW } from "../src/config.ts";
+import { AUTOMATIONS, AUTOMAXI, SWAPPERS, SWAP_PRICING, VOTING_ESCROW } from "../src/config.ts";
 import { readEarnings } from "../src/earnings.ts";
 import { pricesAt } from "../src/prices.ts";
 import { findRoute, swapChecks } from "../src/swap.ts";
@@ -59,7 +59,7 @@ async function fund(tokens: Address[]): Promise<void> {
     const described = await describeTokens([...tokens, INTO_USDC.token]);
     const amounts = new Map(tokens.map((token) => [token.toLowerCase(), held.get(token.toLowerCase())!.balance]));
     const time = Number((await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false])).timestamp);
-    await pricesAt([...described.values()], amounts, time, time);
+    await pricesAt([...described.values()], amounts, time, time, SWAP_PRICING);
     for (const token of tokens) await findRoute(token, amounts.get(token.toLowerCase())!, INTO_USDC, false);
   });
 }

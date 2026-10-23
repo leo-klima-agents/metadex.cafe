@@ -1,6 +1,6 @@
 import { parseAbi, zeroAddress, type Address } from "viem";
 import { call, read, same, type Call } from "./chain.ts";
-import { ALGEBRA_FACTORY, ANCHORS, PAIR_FACTORY, type Anchor } from "./config.ts";
+import { ANCHORS, type Anchor, type Exchange } from "./config.ts";
 
 export type Token = { address: Address; decimals: number; symbol: string };
 
@@ -11,14 +11,30 @@ export const WINDOW = 1800;
 // prices. A thin pool can show any price.
 const FLOOR = 250;
 const DEPTH = 10;
-// A classic pair records an observation at most every half hour, and only when it trades. Observations further apart
-// than this no longer give the price at the flip.
+// A classic pair, Aerodrome's or Hydrex's, records an observation at most every half hour, and only when it trades.
+// Observations further apart than this no longer give the price at the flip.
 export const SPAN = 4 * WINDOW;
 const POINTS_PER_ROUND = 16;
 
-const algebraFactoryAbi = parseAbi(["function poolByPair(address tokenA, address tokenB) view returns (address)"]);
+const aeroFactoryAbi = parseAbi(["function getPool(address tokenA, address tokenB) view returns (address)"]);
+const aerodromeFactoryAbi = parseAbi([
+  "function getPool(address tokenA, address tokenB, bool stable) view returns (address)",
+]);
 const pairFactoryAbi = parseAbi([
   "function getPair(address tokenA, address tokenB, bool stable) view returns (address)",
+]);
+const algebraFactoryAbi = parseAbi(["function poolByPair(address tokenA, address tokenB) view returns (address)"]);
+// Aero's basic pools keep their own history of their reserves' running sums, and read it back at any time within it.
+const aeroPoolAbi = parseAbi([
+  "function getReserves() view returns (uint256 reserve0, uint256 reserve1, uint256 blockTimestampLast)",
+  "function observe(uint32[] secondsAgos) view returns (uint256[] reserve0Cumulatives, uint256[] reserve1Cumulatives)",
+]);
+// Aerodrome's basic pools and Hydrex's classic pools, which list their observations.
+const pairAbi = parseAbi([
+  "function getReserves() view returns (uint256 reserve0, uint256 reserve1, uint256 blockTimestampLast)",
+  "function observationLength() view returns (uint256)",
+  "function observations(uint256 index) view returns (uint256 timestamp, uint256 reserve0Cumulative, uint256 reserve1Cumulative)",
+  "function currentCumulativePrices() view returns (uint256 reserve0Cumulative, uint256 reserve1Cumulative, uint256 blockTimestamp)",
 ]);
 const algebraPoolAbi = parseAbi([
   "function getReserves() view returns (uint128 reserve0, uint128 reserve1)",
@@ -27,12 +43,6 @@ const algebraPoolAbi = parseAbi([
 ]);
 const pluginAbi = parseAbi([
   "function getTimepoints(uint32[] secondsAgos) view returns (int56[] tickCumulatives, uint88[] volatilityCumulatives)",
-]);
-const pairAbi = parseAbi([
-  "function getReserves() view returns (uint256 reserve0, uint256 reserve1, uint256 blockTimestampLast)",
-  "function observationLength() view returns (uint256)",
-  "function observations(uint256 index) view returns (uint256 timestamp, uint256 reserve0Cumulative, uint256 reserve1Cumulative)",
-  "function currentCumulativePrices() view returns (uint256 reserve0Cumulative, uint256 reserve1Cumulative, uint256 blockTimestamp)",
 ]);
 const feedAbi = parseAbi([
   "function decimals() view returns (uint8)",
@@ -43,8 +53,8 @@ const feedAbi = parseAbi([
 type Round = readonly [bigint, bigint, bigint, bigint, bigint];
 // A classic pair's running sums of its reserves over time: [timestamp, reserve0, reserve1].
 type Observation = readonly [bigint, bigint, bigint];
-type Kind = "algebra" | "volatile" | "stable";
-type Pool = { address: Address; kind: Kind; token: Token; anchor: Anchor };
+// A pool of one of the exchanges that price tokens. `stable` is for a pool of reserves, whose curve it picks.
+type Pool = { address: Address; exchange: Exchange; stable: boolean; token: Token; anchor: Anchor };
 // A pool as it is now: its price for the token in dollars, its depth, and where to read its history.
 type Measured = { pool: Pool; usd: number; depth: number; plugin?: Address; length?: number; now?: Observation };
 
@@ -143,30 +153,79 @@ export async function feedAt(feed: Address, flip: number, reader: typeof read): 
   return !search.failed && before ? usd(before) : usd(latest);
 }
 
-// The pools of Hydrex's two factories that pair a token with an anchor.
-async function candidates(tokens: Token[], anchors: Anchor[], reader: typeof read): Promise<Pool[]> {
+// The reads that find an exchange's pools of a token and an anchor, one for each curve its factory makes: Aero's basic
+// pools have a factory for each, Aerodrome's and Hydrex's classic pools are volatile or stable, and Hydrex Integral's
+// are concentrated.
+function lookups(exchange: Exchange, token: Token, anchor: Anchor): { lookup: Call; stable: boolean }[] {
+  const { factory, kind } = exchange;
+  const [a, b] = [token.address, anchor.address];
+  switch (kind) {
+    case "solidly":
+      return [{ lookup: call(factory, aeroFactoryAbi, "getPool", a, b), stable: !!exchange.stable }];
+    case "aerodrome":
+      return [false, true].map((stable) => ({
+        lookup: call(factory, aerodromeFactoryAbi, "getPool", a, b, stable),
+        stable,
+      }));
+    case "pair":
+      return [false, true].map((stable) => ({
+        lookup: call(factory, pairFactoryAbi, "getPair", a, b, stable),
+        stable,
+      }));
+    case "algebra":
+      return [{ lookup: call(factory, algebraFactoryAbi, "poolByPair", a, b), stable: false }];
+    default:
+      // Other exchanges price nothing.
+      return [];
+  }
+}
+
+// The pools of the exchanges given that pair a token with an anchor, in the exchanges' order.
+async function candidates(
+  tokens: Token[],
+  anchors: Anchor[],
+  exchanges: Exchange[],
+  reader: typeof read,
+): Promise<Pool[]> {
   const options = tokens.flatMap((token) =>
-    anchors.flatMap((anchor) => (["algebra", "volatile", "stable"] as const).map((kind) => ({ token, anchor, kind }))),
-  );
-  const found = (await reader(
-    options.map(({ token, anchor, kind }) =>
-      kind === "algebra"
-        ? call(ALGEBRA_FACTORY, algebraFactoryAbi, "poolByPair", token.address, anchor.address)
-        : call(PAIR_FACTORY, pairFactoryAbi, "getPair", token.address, anchor.address, kind === "stable"),
+    exchanges.flatMap((exchange) =>
+      anchors.flatMap((anchor) =>
+        lookups(exchange, token, anchor).map(({ lookup, stable }) => ({
+          lookup,
+          pool: { exchange, stable, token, anchor },
+        })),
+      ),
     ),
-  )) as (Address | undefined)[];
-  return options.flatMap((option, i) => {
+  );
+  const found = (await reader(options.map(({ lookup }) => lookup))) as (Address | undefined)[];
+  return options.flatMap(({ pool }, i) => {
     const address = found[i];
-    return address && !same(address, zeroAddress) ? [{ ...option, address }] : [];
+    return address && !same(address, zeroAddress) ? [{ ...pool, address }] : [];
   });
 }
 
-// Both kinds of pool sort their two tokens by address.
+// Every kind of pool sorts its two tokens by address.
 const tokenFirst = ({ token, anchor }: Pool): boolean => key(token.address) < key(anchor.address);
 const decimalsOf = (pool: Pool): [number, number] =>
   tokenFirst(pool) ? [pool.token.decimals, pool.anchor.decimals] : [pool.anchor.decimals, pool.token.decimals];
 // The token's price in the anchor, from token0's price in token1.
 const inAnchor = (pool: Pool, price0: number): number => (tokenFirst(pool) ? price0 : 1 / price0);
+
+// The reads of a pool now: its reserves, then for a classic pair the number of its observations and its running sums,
+// and for a concentrated pool its tick and its plugin, which keeps its history.
+function stateOf({ address, exchange }: Pool): Call[] {
+  switch (exchange.kind) {
+    case "solidly":
+      return [call(address, aeroPoolAbi, "getReserves")];
+    case "aerodrome":
+    case "pair":
+      return ["getReserves", "observationLength", "currentCumulativePrices"].map((name) =>
+        call(address, pairAbi, name),
+      );
+    default:
+      return ["getReserves", "globalState", "plugin"].map((name) => call(address, algebraPoolAbi, name));
+  }
+}
 
 // Each pool's price and depth now, and where its history is. Pools too thin for the amount to price are dropped.
 async function measure(
@@ -175,48 +234,45 @@ async function measure(
   amounts: Map<string, bigint>,
   reader: typeof read,
 ): Promise<Measured[]> {
-  const state = await reader(
-    pools.flatMap(({ address, kind }) =>
-      kind === "algebra"
-        ? ["getReserves", "globalState", "plugin"].map((name) => call(address, algebraPoolAbi, name))
-        : ["getReserves", "observationLength", "currentCumulativePrices"].map((name) => call(address, pairAbi, name)),
-    ),
-  );
+  const reads = pools.map(stateOf);
+  const state = await reader(reads.flat());
+  let at = 0;
   return pools.flatMap((pool, i): Measured[] => {
-    const [reserves, second, third] = state.slice(3 * i, 3 * i + 3) as [
-      readonly bigint[] | undefined,
-      unknown,
-      unknown,
-    ];
-    if (!reserves || second === undefined || third === undefined) return [];
+    const values = state.slice(at, (at += reads[i]!.length));
+    if (values.includes(undefined)) return [];
+    const [reserves, second, third] = values as [readonly bigint[], unknown, unknown];
     const [decimals0, decimals1] = decimalsOf(pool);
     const [reserve0, reserve1] = [whole(reserves[0]!, decimals0), whole(reserves[1]!, decimals1)];
     if (!(reserve0 > 0 && reserve1 > 0)) return [];
     const price0 =
-      pool.kind === "algebra"
+      pool.exchange.kind === "algebra"
         ? tickPrice((second as readonly [bigint, number])[1], decimals0, decimals1)
-        : pairPrice(reserve0, reserve1, pool.kind === "stable");
+        : pairPrice(reserve0, reserve1, pool.stable);
     const anchorUsd = prices.get(key(pool.anchor.address))!;
     const usd = inAnchor(pool, price0) * anchorUsd;
     const [tokenReserve, anchorReserve] = tokenFirst(pool) ? [reserve0, reserve1] : [reserve1, reserve0];
     const depth = Math.min(tokenReserve * usd, anchorReserve * anchorUsd);
     const value = whole(amounts.get(key(pool.token.address)) ?? 0n, pool.token.decimals) * usd;
     if (!Number.isFinite(usd) || !(depth >= Math.max(FLOOR, DEPTH * value))) return [];
-    if (pool.kind === "algebra") return [{ pool, usd, depth, plugin: third as Address }];
+    if (pool.exchange.kind === "solidly") return [{ pool, usd, depth }];
+    if (pool.exchange.kind === "algebra") return [{ pool, usd, depth, plugin: third as Address }];
     const [cumulative0, cumulative1, time] = third as readonly bigint[];
     return [{ pool, usd, depth, length: Number(second as bigint), now: [time!, cumulative0!, cumulative1!] }];
   });
 }
 
 // Each token's price at the flip, in dollars per whole token, by lower-case address. USDC is a dollar, and WETH and
-// cbBTC take Chainlink's price. Other tokens take the deepest of Hydrex's pools that pairs them with one of those
-// three: its average over the half hour before the flip, or its price now if its history is too short. A token without
-// a deep enough pool gets no price. `amounts` is how much of each token will be priced.
+// cbBTC take Chainlink's price. Other tokens take the deepest pool of the exchanges given, in their order, that pairs
+// them with one of those three: the swap's page gives Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools and
+// Hydrex Integral, and the Hydrex pages Hydrex's two. A pool gives its average over the half hour before the flip, or
+// its price now if its history is too short. A token without a deep enough pool gets no price. `amounts` is how much of
+// each token will be priced.
 export async function pricesAt(
   tokens: Token[],
   amounts: Map<string, bigint>,
   flip: number,
   now: number,
+  exchanges: Exchange[],
   reader: typeof read = read,
 ): Promise<Map<string, number>> {
   const prices = new Map<string, number>();
@@ -227,7 +283,7 @@ export async function pricesAt(
   });
   const anchors = ANCHORS.filter(({ address }) => prices.has(key(address)));
   const others = tokens.filter(({ address }) => !ANCHORS.some((anchor) => same(anchor.address, address)));
-  const measured = await measure(await candidates(others, anchors, reader), prices, amounts, reader);
+  const measured = await measure(await candidates(others, anchors, exchanges, reader), prices, amounts, reader);
   const deepest = new Map<string, Measured>();
   for (const entry of measured) {
     const held = deepest.get(key(entry.pool.token.address));
@@ -235,14 +291,12 @@ export async function pricesAt(
   }
   const chosen = [...deepest.values()];
   const ago = Math.max(0, now - flip);
+  const secondsAgos = [ago + WINDOW, ago];
 
-  // Concentrated pools: the average tick over the window, from their plugin's history.
-  const algebra = chosen.filter(({ plugin }) => plugin);
-  const timepoints = reader(
-    algebra.map(({ plugin }) => call(plugin!, pluginAbi, "getTimepoints", [ago + WINDOW, ago])),
-  );
-  // Classic pairs: the observations on either side of the window. A pair records one at most every half hour, which
-  // limits how far back from its last one the window can be.
+  // Aero's basic pools: their reserves' running sums at either end of the window, from their own history.
+  const aero = chosen.filter(({ pool }) => pool.exchange.kind === "solidly");
+  // Classic pairs, Aerodrome's and Hydrex's: the observations on either side of the window. A pair records one at most
+  // every half hour, which limits how far back from its last one the window can be.
   const classic = chosen.filter(({ length }) => length !== undefined);
   const searches = classic.flatMap(({ pool, length }): Search[] => {
     const probe = (index: number) => call(pool.address, pairAbi, "observations", BigInt(index));
@@ -253,17 +307,30 @@ export async function pricesAt(
       { lo, hi: length!, probe, passes: from(flip), seen: new Map() },
     ];
   });
-  const [ticks] = await Promise.all([timepoints, narrow(searches, reader)]);
+  // Hydrex Integral's concentrated pools: the average tick over the window, from their plugin's history.
+  const algebra = chosen.filter(({ plugin }) => plugin);
+  const [histories] = await Promise.all([
+    reader([
+      ...aero.map(({ pool }) => call(pool.address, aeroPoolAbi, "observe", secondsAgos)),
+      ...algebra.map(({ plugin }) => call(plugin!, pluginAbi, "getTimepoints", secondsAgos)),
+    ]),
+    narrow(searches, reader),
+  ]);
+  const [sums, ticks] = [histories.slice(0, aero.length), histories.slice(aero.length)];
 
   // A pool whose history gives no price above zero, as one nearly empty at the flip, gives its price now.
   const set = ({ pool, usd }: Measured, price0: number | undefined) => {
     const atFlip = price0 === undefined ? undefined : inAnchor(pool, price0) * prices.get(key(pool.anchor.address))!;
     prices.set(key(pool.token.address), atFlip !== undefined && Number.isFinite(atFlip) && atFlip > 0 ? atFlip : usd);
   };
-  algebra.forEach((entry, i) => {
-    const cumulatives = (ticks[i] as readonly [readonly bigint[]] | undefined)?.[0];
+  // An Aero pool refuses a window older than its history, as when it was made since: it gives its price now.
+  aero.forEach((entry, i) => {
+    const [cumulatives0, cumulatives1] = (sums[i] as readonly [readonly bigint[], readonly bigint[]] | undefined) ?? [];
+    if (!cumulatives0 || !cumulatives1) return set(entry, undefined);
     const [decimals0, decimals1] = decimalsOf(entry.pool);
-    set(entry, cumulatives && tickPrice(Number(cumulatives[1]! - cumulatives[0]!) / WINDOW, decimals0, decimals1));
+    const first: Observation = [0n, cumulatives0[0]!, cumulatives1[0]!];
+    const last: Observation = [BigInt(WINDOW), cumulatives0[1]!, cumulatives1[1]!];
+    set(entry, observedPrice(first, last, decimals0, decimals1, entry.pool.stable));
   });
   classic.forEach((entry, i) => {
     const [start, end] = [searches[2 * i]!, searches[2 * i + 1]!];
@@ -272,7 +339,12 @@ export async function pricesAt(
     const last = end.hi < entry.length! ? (end.seen.get(end.hi) as Observation | undefined) : entry.now;
     if (start.failed || end.failed || !first || !last) return set(entry, undefined);
     const [decimals0, decimals1] = decimalsOf(entry.pool);
-    set(entry, observedPrice(first, last, decimals0, decimals1, entry.pool.kind === "stable"));
+    set(entry, observedPrice(first, last, decimals0, decimals1, entry.pool.stable));
+  });
+  algebra.forEach((entry, i) => {
+    const cumulatives = (ticks[i] as readonly [readonly bigint[]] | undefined)?.[0];
+    const [decimals0, decimals1] = decimalsOf(entry.pool);
+    set(entry, cumulatives && tickPrice(Number(cumulatives[1]! - cumulatives[0]!) / WINDOW, decimals0, decimals1));
   });
   return prices;
 }
