@@ -3,17 +3,18 @@ import { test } from "node:test";
 import { zeroAddress, type Address } from "viem";
 import { same, type Call } from "../src/chain.ts";
 import {
-  ALGEBRA_FACTORY,
   ANCHORS,
   EXCHANGES,
   HYDREX_PRICING,
-  PAIR_FACTORY,
   SWAP_PRICING,
   swapperOf,
+  type Exchange,
+  type Feed,
 } from "../src/config.ts";
 import {
   SPAN,
   WINDOW,
+  feedsAt,
   narrow,
   observedPrice,
   pairPrice,
@@ -123,66 +124,102 @@ test("the swap's page prices in Aero's, Aerodrome's and Hydrex's pools, in that 
 });
 
 const NOW = 1_792_800_000;
-// Its address sorts before USDC's, so it is token0 of each of its pools.
-const TOKEN: Token = { address: "0x0000000000000000000000000000000000000001", decimals: 18, symbol: "TKN" };
-type Market = { aero?: [number, number]; aerodrome?: [number, number]; hydrex?: [number, number] };
-const POOLS: Record<keyof Market, Address> = {
-  aero: "0x00000000000000000000000000000000000000a1",
-  aerodrome: "0x00000000000000000000000000000000000000a2",
-  hydrex: "0x00000000000000000000000000000000000000a3",
-};
 const [USDC, EURC] = [swapperOf("usdc")!.token, swapperOf("eurc")!.token];
-// What Chainlink's USDC / USD and EURC / USD feeds answer, with their 8 decimals.
+// TOKEN sorts before every anchor, so it is token0 of its pools; LATE sorts after, so it is token1.
+const TOKEN: Token = { address: "0x0000000000000000000000000000000000000001", decimals: 18, symbol: "TKN" };
+const LATE: Token = { address: "0xffffffffffffffffffffffffffffffffffffff01", decimals: 18, symbol: "LATE" };
+const USDC_TOKEN: Token = { address: USDC, decimals: 6, symbol: "USDC" };
+// Chainlink's answers, by token.
 const USDC_USD = 0.999;
 const EURC_USD = 1.15;
-const feedOf = (token: Address): Address => ANCHORS.find(({ address }) => same(address, token))!.feed;
-const ANSWERS: [Address, number][] = [
-  [feedOf(USDC), USDC_USD],
-  [feedOf(EURC), EURC_USD],
+const ANSWERS = new Map<Address, number>([
+  [USDC, USDC_USD],
+  [EURC, EURC_USD],
+]);
+const exchange = (name: string, stable = false): Exchange =>
+  EXCHANGES.find((each) => each.name === name && !!each.stable === stable)!;
+const [AERO, AERO_STABLE, AERODROME, HYDREX] = [
+  exchange("Aero Basic Pools"),
+  exchange("Aero Basic Pools", true),
+  exchange("Aerodrome Basic Pools"),
+  exchange("Hydrex Classic Pools"),
 ];
-const factoryOf = (name: string, stable = false): Address =>
-  EXCHANGES.find((exchange) => exchange.name === name && !!exchange.stable === stable)!.factory;
 
-// TOKEN's volatile pools against USDC, of Aero, Aerodrome and Hydrex Classic, each with its reserves now in whole
-// tokens, TOKEN's first. Aero's reads back `average` over the window, or refuses it. Only USDC's and EURC's feeds answer,
-// TOKEN has no pool against EURC, and the classic pools have no observations yet.
-function market(pools: Market, average?: [number, number]) {
+// A pool of `token` against `anchor`, USDC by default: its reserves now in whole tokens, the token's first, and those it
+// held throughout before, if they differ. Aero's pools keep that history, unless `fresh`; classic pools record it every
+// half hour.
+type Fake = {
+  exchange: Exchange;
+  token: Token;
+  now: [number, number];
+  held?: [number, number];
+  anchor?: Address;
+  stable?: boolean;
+  fresh?: boolean;
+};
+
+function market(pools: Fake[], answers = ANSWERS) {
   const asked = new Set<string>();
-  const units = ([token, usdc]: [number, number]) => [BigInt(token) * 10n ** 18n, BigInt(usdc) * 10n ** 6n] as const;
-  const poolOf = (name: keyof Market) => (pools[name] ? POOLS[name] : zeroAddress);
+  const addressOf = (i: number): Address => `0x${(0xa0 + i).toString(16).padStart(40, "0")}`;
+  const anchorOf = (pool: Fake) => ANCHORS.find(({ address }) => same(address, pool.anchor ?? USDC))!;
+  // A pool's reserves in its own order and units.
+  const units = (pool: Fake, [token, anchor]: [number, number]) => {
+    const amounts = [
+      BigInt(token) * 10n ** BigInt(pool.token.decimals),
+      BigInt(anchor) * 10n ** BigInt(anchorOf(pool).decimals),
+    ];
+    return pool.token.address.toLowerCase() < anchorOf(pool).address.toLowerCase() ? amounts : amounts.reverse();
+  };
+  const sumsAt = (pool: Fake, time: number) =>
+    units(pool, pool.held ?? pool.now).map((amount) => amount * BigInt(time));
+  // Classic pools' observations: every half hour, the last ten minutes ago.
+  const COUNT = 10;
+  const observedAt = (i: number) => NOW - 600 - 1800 * (COUNT - 1 - i);
   const reader = async (calls: Call[]) =>
     calls.map(({ address, functionName, args }) => {
       asked.add(address.toLowerCase());
-      const answer = ANSWERS.find(([feed]) => same(feed, address))?.[1];
-      if (answer !== undefined)
-        return functionName === "decimals" ? 8 : [1n, BigInt(Math.round(answer * 1e8)), 0n, BigInt(NOW), 1n];
-      const found = (name: keyof Market, stable = false) =>
-        !stable && same(String(args[1]), USDC) ? poolOf(name) : zeroAddress;
-      if (same(address, factoryOf("Aero Basic Pools"))) return found("aero");
-      if (same(address, factoryOf("Aerodrome Basic Pools"))) return found("aerodrome", !!args[2]);
-      if (same(address, PAIR_FACTORY)) return found("hydrex", !!args[2]);
-      if (same(address, factoryOf("Aero Basic Pools", true)) || same(address, ALGEBRA_FACTORY)) return zeroAddress;
-      const name = (Object.keys(POOLS) as (keyof Market)[]).find((each) => same(POOLS[each], address));
-      if (!name) return undefined;
-      const [token, usdc] = units(pools[name]!);
-      if (functionName === "getReserves") return [token, usdc, 0n];
-      if (functionName === "observationLength") return 0n;
-      if (functionName === "currentCumulativePrices") return [0n, 0n, BigInt(NOW)];
-      if (functionName !== "observe" || !average) return undefined;
-      const [held, paid] = units(average);
-      return [
-        [0n, held * BigInt(WINDOW)],
-        [0n, paid * BigInt(WINDOW)],
-      ];
+      const fed = ANCHORS.find(({ feed }) => same(feed.address, address));
+      if (fed) {
+        const answer = answers.get(fed.address);
+        return answer === undefined ? undefined : [1n, BigInt(Math.round(answer * 1e8)), 0n, BigInt(NOW), 1n];
+      }
+      const factory = EXCHANGES.find((each) => same(each.factory, address));
+      if (factory) {
+        const [a, b, stable] = args as [Address, Address, boolean | undefined];
+        const i = pools.findIndex(
+          (pool) =>
+            pool.exchange === factory &&
+            same(pool.token.address, a) &&
+            same(anchorOf(pool).address, b) &&
+            (stable === undefined || !!pool.stable === stable),
+        );
+        return i < 0 ? zeroAddress : addressOf(i);
+      }
+      const pool = pools.find((_, i) => same(addressOf(i), address));
+      if (!pool) return undefined;
+      switch (functionName) {
+        case "getReserves":
+          return [...units(pool, pool.now), 0n];
+        case "observe":
+          return pool.fresh
+            ? undefined
+            : [0, 1].map((side) => (args[0] as number[]).map((ago) => sumsAt(pool, NOW - ago)[side]!));
+        case "observationLength":
+          return BigInt(COUNT);
+        case "observations":
+          return [BigInt(observedAt(Number(args[0]))), ...sumsAt(pool, observedAt(Number(args[0])))];
+        case "currentCumulativePrices":
+          return [...sumsAt(pool, NOW), BigInt(NOW)];
+      }
     });
   return { reader, asked };
 }
 
-const priceOf = async (reader: (calls: Call[]) => Promise<unknown[]>, exchanges = SWAP_PRICING) =>
-  (await pricesAt([TOKEN], new Map(), NOW, NOW, exchanges, reader)).get(TOKEN.address);
+const priceOf = async (pools: Fake[], token = TOKEN, exchanges = SWAP_PRICING) =>
+  (await pricesAt([token], new Map(), NOW, NOW, exchanges, market(pools).reader)).get(token.address.toLowerCase());
 
 test("USDC and EURC take Chainlink's prices, and a token priced in USDC takes USDC's", async () => {
-  const { reader } = market({ hydrex: [2_000, 8_000] });
+  const { reader } = market([{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }]);
   for (const exchanges of [SWAP_PRICING, HYDREX_PRICING]) {
     const prices = await pricesAt([TOKEN], new Map(), NOW, NOW, exchanges, reader);
     close(prices.get(USDC.toLowerCase())!, USDC_USD);
@@ -191,18 +228,77 @@ test("USDC and EURC take Chainlink's prices, and a token priced in USDC takes US
   }
 });
 
+test("an anchor whose feed fails is priced like any other token", async () => {
+  // 11,500 USDC against 10,000 EURC at $1.15: a dollar.
+  const pools: Fake[] = [{ exchange: HYDREX, token: USDC_TOKEN, anchor: EURC, now: [11_500, 10_000] }];
+  const answers = new Map([[EURC, EURC_USD]]);
+  const prices = await pricesAt([USDC_TOKEN], new Map(), NOW, NOW, SWAP_PRICING, market(pools, answers).reader);
+  close(prices.get(USDC.toLowerCase())!, 1);
+});
+
 test("the deepest pool wins: of all four exchanges for the swap's page, of Hydrex's two for the Hydrex pages", async () => {
   // 2,000 USDC deep at 2 USDC in Aero, 15,000 at 3 in Aerodrome, 8,000 at 4 in Hydrex Classic.
-  const { reader, asked } = market({ aero: [1_000, 2_000], aerodrome: [5_000, 15_000], hydrex: [2_000, 8_000] });
-  close((await priceOf(reader))!, 3 * USDC_USD);
-  asked.clear();
-  close((await priceOf(reader, HYDREX_PRICING))!, 4 * USDC_USD);
-  for (const { name, factory } of SWAP_PRICING.filter((exchange) => !HYDREX_PRICING.includes(exchange)))
+  const pools: Fake[] = [
+    { exchange: AERO, token: TOKEN, now: [1_000, 2_000] },
+    { exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] },
+    { exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] },
+  ];
+  close((await priceOf(pools))!, 3 * USDC_USD);
+  const { reader, asked } = market(pools);
+  close((await pricesAt([TOKEN], new Map(), NOW, NOW, HYDREX_PRICING, reader)).get(TOKEN.address)!, 4 * USDC_USD);
+  for (const { name, factory } of SWAP_PRICING.filter((each) => !HYDREX_PRICING.includes(each)))
     assert.ok(!asked.has(factory.toLowerCase()), `the Hydrex pages do not look in ${name}`);
 });
 
-test("an Aero pool gives its average over the window, or its price now when it refuses a window before its history", async () => {
-  const pools: Market = { aero: [10_000, 20_000], hydrex: [2_000, 8_000] };
-  close((await priceOf(market(pools, [10_000, 25_000]).reader))!, 2.5 * USDC_USD);
-  close((await priceOf(market(pools).reader))!, 2 * USDC_USD);
+test("an Aero pool gives its average over the window, or its price now if its history is too short", async () => {
+  // At 2 USDC now, and 2.5 before; as token0 and as token1.
+  for (const token of [TOKEN, LATE]) {
+    const pool: Fake = { exchange: AERO, token, now: [10_000, 20_000], held: [10_000, 25_000] };
+    close((await priceOf([pool], token))!, 2.5 * USDC_USD);
+    close((await priceOf([{ ...pool, fresh: true }], token))!, 2 * USDC_USD);
+  }
+});
+
+test("Aero's stable factory prices on the stable curve", async () => {
+  for (const token of [TOKEN, LATE]) {
+    const price = await priceOf([{ exchange: AERO_STABLE, token, now: [1_100, 900] }], token);
+    close(price!, pairPrice(1_100, 900, true) * USDC_USD);
+  }
+});
+
+test("an Aerodrome pool gives its average between the observations around the window", async () => {
+  const pool: Fake = { exchange: AERODROME, token: TOKEN, now: [5_000, 15_000], held: [5_000, 12_500] };
+  close((await priceOf([pool]))!, 2.5 * USDC_USD);
+});
+
+test("an exchange whose pools cannot price is refused", async () => {
+  const slipstream = exchange("Aero Slipstream");
+  await assert.rejects(pricesAt([TOKEN], new Map(), NOW, NOW, [slipstream], market([]).reader), /cannot price/);
+});
+
+test("feeds: one read for the latest rounds, then one search for the rounds in effect at the flip", async () => {
+  // Two feeds, in their second phase, with a round an hour; and one that does not answer.
+  const phase = 2n << 64n;
+  const feeds: Feed[] = [1, 2, 3].map((i) => ({ address: `0x${"f".repeat(39)}${i}`, decimals: 8 }));
+  const round = (feed: number, n: number) => [
+    phase + BigInt(n),
+    BigInt(feed * 100 + n) * 10n ** 8n,
+    0n,
+    BigInt(NOW - 3_600 * (200 - n)),
+    0n,
+  ];
+  let reads = 0;
+  const reader = async (calls: Call[]) => {
+    reads++;
+    return calls.map(({ address, functionName, args }) => {
+      const feed = Number(address.at(-1));
+      if (feed === 3) return undefined;
+      return functionName === "latestRoundData" ? round(feed, 200) : round(feed, Number((args[0] as bigint) - phase));
+    });
+  };
+  // Round 150 started 50 hours before NOW, and 151 49 hours before.
+  const flip = NOW - 3_600 * 50 + 1;
+  assert.deepEqual(await feedsAt(feeds, flip, reader), [250, 350, undefined]);
+  assert.ok(reads <= 4, `${reads} reads`);
+  assert.deepEqual(await feedsAt(feeds, Infinity, reader), [300, 400, undefined]);
 });

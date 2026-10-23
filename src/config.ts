@@ -55,37 +55,27 @@ export const APPROVAL_LOGIC_CODE_HASH: Hex = "0xd1fab3adcd045439b72359a675665cb9
 export const VOTER: Address = "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b";
 export const ACCOUNT_NAMES: Address = "0x998cf40a742460b4eBbFB569A0D23eA91976c0d3";
 
-// For pricing: Hydrex's two pool factories, the only ones the Hydrex pages price in, and the tokens other tokens are
-// priced against.
+// Hydrex's pool factories.
 export const ALGEBRA_FACTORY: Address = "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E";
 export const PAIR_FACTORY: Address = "0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0";
-export type Anchor = { address: Address; decimals: number; feed: Address };
+// The tokens others are priced against, each priced by its Chainlink feed.
+export type Feed = { address: Address; decimals: number };
+export type Anchor = { address: Address; decimals: number; feed: Feed };
 export const WETH: Address = "0x4200000000000000000000000000000000000006";
+const anchor = (address: Address, decimals: number, feed: Address): Anchor => ({
+  address,
+  decimals,
+  feed: { address: feed, decimals: 8 },
+});
 export const ANCHORS: Anchor[] = [
-  // USDC, with Chainlink's USDC / USD feed
-  {
-    address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    decimals: 6,
-    feed: "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B",
-  },
-  // WETH, with Chainlink's ETH / USD feed
-  {
-    address: WETH,
-    decimals: 18,
-    feed: "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70",
-  },
-  // cbBTC, with Chainlink's BTC / USD feed
-  {
-    address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
-    decimals: 8,
-    feed: "0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F",
-  },
-  // EURC, with Chainlink's EURC / USD feed
-  {
-    address: "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42",
-    decimals: 6,
-    feed: "0xDAe398520e2B67cd3f27aeF9Cf14D93D927f8250",
-  },
+  // USDC / USD
+  anchor("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6, "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B"),
+  // ETH / USD
+  anchor(WETH, 18, "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70"),
+  // BTC / USD
+  anchor("0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf", 8, "0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F"),
+  // EURC / USD
+  anchor("0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42", 6, "0xDAe398520e2B67cd3f27aeF9Cf14D93D927f8250"),
 ];
 
 // The swap: ImmutableSwapper, deployed once per output token on 21 Oct 2026. Each sells the tokens its caller names for
@@ -158,10 +148,8 @@ export const SWAP_FEE_BPS = 100n;
 export const SWAP_TREASURY: Address = AUTOMAXI_TREASURY;
 export const HYDX: Address = "0x00000e7efa313F4E11Bfff432471eD9423AC6B30";
 
-// The exchanges each swapper trades on, in the order the page lists and checks them. `id` is each one's place in the
-// swapper's Exchange enum and in exchanges(), with the factory it checks each pool against. Aero's basic pools have a
-// factory for volatile pools and one, `stable`, for stable pools. Uniswap v4's is its PoolManager, which holds every
-// pool.
+// The swappers' exchanges, in the page's order. `id` is the swapper's Exchange enum and exchanges() index. Aero's basic
+// pools have a factory per curve; Uniswap v4's is its PoolManager.
 export type ExchangeKind = "algebra" | "pair" | "solidly" | "slipstream" | "aerodrome" | "v2" | "v3" | "v4";
 export type Exchange = { id: number; name: string; kind: ExchangeKind; factory: Address; stable?: boolean };
 export const EXCHANGES: Exchange[] = [
@@ -185,9 +173,8 @@ export const EXCHANGES: Exchange[] = [
   { id: 0, name: "Hydrex Integral", kind: "algebra", factory: ALGEBRA_FACTORY },
 ];
 
-// The exchanges whose pools price tokens against the anchors, in this order: the deepest pool that pairs a token with
-// an anchor gives its price, and the first of two as deep. The swap's page prices in Aero Basic Pools, Aerodrome Basic
-// Pools, Hydrex Classic Pools and Hydrex Integral; the Hydrex pages, in Hydrex's own two only.
+// Where tokens are priced against the anchors, in order: prices now in Aero Basic Pools, Aerodrome Basic Pools, Hydrex
+// Classic Pools and Hydrex Integral; prices at an epoch's end in Hydrex's two.
 const exchangesOf = (kind: ExchangeKind): Exchange[] => EXCHANGES.filter((exchange) => exchange.kind === kind);
 export const HYDREX_PRICING: Exchange[] = [...exchangesOf("pair"), ...exchangesOf("algebra")];
 export const SWAP_PRICING: Exchange[] = [...exchangesOf("solidly"), ...exchangesOf("aerodrome"), ...HYDREX_PRICING];

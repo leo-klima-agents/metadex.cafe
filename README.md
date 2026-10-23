@@ -223,9 +223,7 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 - **A token the swap skipped.** Its route would have fetched less than its minimum, or its token refused the transfer.
   It stays in the wallet with its approval; the receipt, Needs you and the swap's Approvals offer to reset it.
 - **A quote far under the page's own price.** The row says so, with both figures: the swapper's sources ask holders to
-  check quotes through Hydrex's Algebra and Aero's Slipstream pools against another price. The page's price comes from
-  the deepest of Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools and Hydrex Integral: see
-  [Limits](#limits).
+  check quotes through Hydrex's Algebra and Aero's Slipstream pools against another price.
 - **Paid, or claimed in part.** An epoch counts as paid once claims since it ended took more than half of what its
   rewards were worth, at last epoch's prices. A claim of a few small rewards, such as anyone may make through AutoMaxi,
   does not count, and tokens a payout leaves out, such as those that cannot be swapped, do not keep it from counting.
@@ -249,13 +247,11 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   through the record of the reward worth the most that the payout claimed. Anyone allowed to claim for the account moves
   that record, such as its owner on Hydrex. The page then says that the account was last claimed outside Carbon Impact,
   and shows no receipt.
-- What votes earned is for the last epoch only, at approximate prices: each token's average price over the half hour
-  before the epoch ended, in Hydrex's pools only, with Chainlink for USDC, WETH, cbBTC and EURC. A token without a deep
-  enough pool counts as nothing.
-- The swap's own prices, which weigh its tokens and quotes in dollars and check each quote, are each token's average
-  over the last half hour in the deepest of Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools and Hydrex
-  Integral that pairs it with USDC, WETH, cbBTC or EURC, with Chainlink for those four. Of two pools as deep, the first
-  in that order wins. A token without a deep enough pool there has no price.
+- What votes earned is for the last epoch only.
+- Prices are approximate. USDC, WETH, cbBTC and EURC take Chainlink's; other tokens, a half-hour average in their
+  deepest pool against one of those. Prices now, for swaps, come from Aero Basic Pools, Aerodrome Basic Pools, Hydrex
+  Classic Pools and Hydrex Integral, the first of two as deep; prices at an epoch's end, for what it earned and paid,
+  from Hydrex's pools only. A token without a deep enough pool has no price.
 - Only the admin key, or a call from the owner's own address made elsewhere, can change a payout address.
 - The swap knows only the tokens on its list, Hydrex's reward tokens, those added by address, and those a wallet lists
   with ERC-7811's `wallet_getAssets`: no RPC lists a wallet's tokens. Routes pass through WETH, USDC, cbBTC and HYDX
@@ -301,11 +297,12 @@ the pinned Actions and npm packages every week.
 | `src/config.ts`                                         | What the page trusts: contract addresses and code hashes, the RPCs, and the price anchors.                                                                                                                |
 | `src/hydrex-conduits.json`                              | Hydrex's automations, as <https://api.hydrex.fi/conduits> lists them.                                                                                                                                     |
 | `src/main.ts`                                           | Startup, the wallet connection, the App, the accounts, and an account's page.                                                                                                                             |
-| `src/swap.ts`, `src/swap-calls.ts`, `src/swap-view.ts`  | The swap: candidate pools, quotes, minimums and simulation; its calls; and its page.                                                                                                                      |
+| `src/pools.ts`                                          | Each exchange's pools of two tokens, for routes and prices.                                                                                                                                               |
+| `src/swap.ts`, `src/swap-calls.ts`, `src/swap-view.ts`  | The swap: routes, quotes, minimums and simulation; its calls; and its page.                                                                                                                               |
 | `src/tokens.ts`, `src/base-tokens.json`                 | The tokens the page knows, and their balances and approvals.                                                                                                                                              |
 | `src/claim.ts`, `src/claim-view.ts`                     | Claiming through AutoMaxi: the calls from what `earned` found, and the review.                                                                                                                            |
 | `src/review.ts`                                         | The review that shows each call before the wallet asks.                                                                                                                                                   |
-| `src/last-epoch.ts`, `src/earnings.ts`, `src/prices.ts` | What votes earned last epoch, and token prices: the swap's from Aero's, Aerodrome's and Hydrex's pools, the Hydrex pages' from Hydrex's.                                                                  |
+| `src/last-epoch.ts`, `src/earnings.ts`, `src/prices.ts` | What votes earned last epoch, and token prices.                                                                                                                                                           |
 | `src/last-payout.ts`, `src/receipts.ts`                 | Payouts: up to when each account was paid, what waits, and its last receipt.                                                                                                                              |
 | `src/claims.ts`                                         | AutoMaxi's claims, read back from the last one.                                                                                                                                                           |
 | `src/hydrex.ts`                                         | Hydrex's contracts: reads, account statuses, the calls, and the checks.                                                                                                                                   |

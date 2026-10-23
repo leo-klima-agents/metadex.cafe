@@ -2,11 +2,8 @@ import {
   decodeErrorResult,
   decodeEventLog,
   decodeFunctionResult,
-  encodeAbiParameters,
   encodeFunctionData,
-  keccak256,
   parseAbi,
-  zeroAddress,
   type Address,
   type Hex,
 } from "viem";
@@ -19,10 +16,10 @@ import {
   SWAP_FEE_BPS,
   SWAP_TREASURY,
   WETH,
-  type Exchange,
   type Output,
   type Swapper,
 } from "./config.ts";
+import { exchangeOf, pairKey, waysFor, type Hop, type Way } from "./pools.ts";
 import type { Tx } from "./wallet.ts";
 
 // The swap: ImmutableSwapper sells the tokens its caller names for its output, each along the route its caller picks.
@@ -64,43 +61,8 @@ export const erc20Abi = parseAbi([
   "function symbol() view returns (string)",
   "function decimals() view returns (uint8)",
 ]);
-const algebraFactoryAbi = parseAbi(["function poolByPair(address tokenA, address tokenB) view returns (address)"]);
-const pairFactoryAbi = parseAbi([
-  "function getPair(address tokenA, address tokenB, bool stable) view returns (address)",
-]);
-const solidlyFactoryAbi = parseAbi(["function getPool(address tokenA, address tokenB) view returns (address)"]);
-const aerodromeFactoryAbi = parseAbi([
-  "function getPool(address tokenA, address tokenB, bool stable) view returns (address)",
-]);
-const slipstreamFactoryAbi = parseAbi([
-  "function getPool(address tokenA, address tokenB, int24 tickSpacing) view returns (address)",
-  "function tickSpacings() view returns (int24[])",
-]);
-const v2FactoryAbi = parseAbi(["function getPair(address tokenA, address tokenB) view returns (address)"]);
-const v3FactoryAbi = parseAbi(["function getPool(address tokenA, address tokenB, uint24 fee) view returns (address)"]);
-const poolManagerAbi = parseAbi(["function extsload(bytes32 startSlot, uint256 nSlots) view returns (bytes32[])"]);
-
-export type Hop = { exchange: number; pool: Address; tokenOut: Address; fee: number; tickSpacing: number };
 export type Route = { token: Address; amount: bigint; minPaid: bigint; hops: Hop[] };
 export type Result = { done: boolean; amountIn: bigint; amountOut: bigint; reason: Hex };
-// A pool that trades one token for another.
-export type Way = Hop & { tokenIn: Address };
-
-// Uniswap v3's fee tiers, and v4's standard pools without hooks, as [fee, tick spacing].
-// The exchanges in the order of the swapper's enum, which routes are looked up in and which a hop names.
-const BY_ID = [...EXCHANGES].sort((a, b) => a.id - b.id);
-const V3_FEES = [100, 500, 3000, 10_000];
-const V4_POOLS: [number, number][] = [
-  [100, 1],
-  [500, 10],
-  [3000, 60],
-  [10_000, 200],
-];
-// Where Uniswap v4's PoolManager keeps its pools' state, by pool id.
-const V4_POOLS_SLOT = 6n;
-
-const key = (address: string): string => address.toLowerCase();
-const pairKey = (a: Address, b: Address): string => `${key(a)} ${key(b)}`;
 
 // The tokens a route may pass through: to the output straight, or through WETH, USDC or cbBTC, and HYDX too for
 // Hydrex's tokens. A route has at most three hops.
@@ -122,112 +84,6 @@ export function candidatePaths(token: Address, output: Address, hydrex = false):
   return paths;
 }
 
-// The pools that could trade `a` for `b`, one read each: every factory, every fee tier and tick spacing. Each reply
-// gives the pool, if there is one.
-type Lookup = { call: Call; way(reply: unknown): Way | undefined };
-
-function wayOf(exchange: Exchange, a: Address, b: Address, pool: unknown, fee = 0, tickSpacing = 0): Way | undefined {
-  if (typeof pool !== "string" || same(pool, zeroAddress)) return undefined;
-  return { exchange: exchange.id, pool: pool as Address, tokenIn: a, tokenOut: b, fee, tickSpacing };
-}
-
-function v4Slot(a: Address, b: Address, fee: number, tickSpacing: number): Hex {
-  const [currency0, currency1] = key(a) < key(b) ? [a, b] : [b, a];
-  const id = keccak256(
-    encodeAbiParameters(
-      [{ type: "address" }, { type: "address" }, { type: "uint24" }, { type: "int24" }, { type: "address" }],
-      [currency0, currency1, fee, tickSpacing, zeroAddress],
-    ),
-  );
-  return keccak256(encodeAbiParameters([{ type: "bytes32" }, { type: "uint256" }], [id, V4_POOLS_SLOT]));
-}
-
-export function lookups(a: Address, b: Address, spacings: Map<number, number[]>): Lookup[] {
-  return BY_ID.flatMap((exchange): Lookup[] => {
-    const { factory, kind } = exchange;
-    switch (kind) {
-      case "algebra":
-        return [
-          { call: call(factory, algebraFactoryAbi, "poolByPair", a, b), way: (pool) => wayOf(exchange, a, b, pool) },
-        ];
-      case "pair":
-        return [false, true].map((stable) => ({
-          call: call(factory, pairFactoryAbi, "getPair", a, b, stable),
-          way: (pool: unknown) => wayOf(exchange, a, b, pool),
-        }));
-      case "solidly":
-        return [
-          { call: call(factory, solidlyFactoryAbi, "getPool", a, b), way: (pool) => wayOf(exchange, a, b, pool) },
-        ];
-      case "aerodrome":
-        return [false, true].map((stable) => ({
-          call: call(factory, aerodromeFactoryAbi, "getPool", a, b, stable),
-          way: (pool: unknown) => wayOf(exchange, a, b, pool),
-        }));
-      case "slipstream":
-        return (spacings.get(exchange.id) ?? []).map((spacing) => ({
-          call: call(factory, slipstreamFactoryAbi, "getPool", a, b, spacing),
-          way: (pool: unknown) => wayOf(exchange, a, b, pool, 0, spacing),
-        }));
-      case "v2":
-        return [{ call: call(factory, v2FactoryAbi, "getPair", a, b), way: (pool) => wayOf(exchange, a, b, pool) }];
-      case "v3":
-        return V3_FEES.map((fee) => ({
-          call: call(factory, v3FactoryAbi, "getPool", a, b, fee),
-          way: (pool: unknown) => wayOf(exchange, a, b, pool, fee),
-        }));
-      case "v4":
-        // A pool is there once its price is set, and worth trying while it holds liquidity.
-        return V4_POOLS.map(([fee, spacing]) => ({
-          call: call(factory, poolManagerAbi, "extsload", v4Slot(a, b, fee, spacing), 4n),
-          way: (reply: unknown) => {
-            const [slot0, , , liquidity] = (reply as readonly Hex[] | undefined) ?? [];
-            if (!slot0 || !liquidity || BigInt(slot0) === 0n || BigInt(liquidity) % 2n ** 128n === 0n) return undefined;
-            return { exchange: exchange.id, pool: zeroAddress, tokenIn: a, tokenOut: b, fee, tickSpacing: spacing };
-          },
-        }));
-    }
-  });
-}
-
-// Each Slipstream factory's tick spacings, read once.
-let spacingsRead: Promise<Map<number, number[]>> | undefined;
-
-function spacings(): Promise<Map<number, number[]>> {
-  const slipstreams = BY_ID.filter(({ kind }) => kind === "slipstream");
-  spacingsRead ??= read(slipstreams.map(({ factory }) => call(factory, slipstreamFactoryAbi, "tickSpacings"))).then(
-    (found) => new Map(slipstreams.map(({ id }, i) => [id, ((found[i] as readonly number[]) ?? []).map(Number)])),
-  );
-  spacingsRead.catch(() => (spacingsRead = undefined));
-  return spacingsRead;
-}
-
-// The pools found for each pair of tokens, kept for the visit.
-const found = new Map<string, Promise<Way[]>>();
-
-export async function waysFor(pairs: [Address, Address][]): Promise<Map<string, Way[]>> {
-  const missing = [...new Map(pairs.map((pair) => [pairKey(...pair), pair])).values()].filter(
-    ([a, b]) => !found.has(pairKey(a, b)),
-  );
-  if (missing.length) {
-    const known = await spacings();
-    const each = missing.map(([a, b]) => lookups(a, b, known));
-    const reading = read(each.flat().map(({ call }) => call));
-    let at = 0;
-    missing.forEach(([a, b], i) => {
-      const from = at;
-      at += each[i]!.length;
-      const ways = reading.then((replies) => each[i]!.flatMap((lookup, j) => lookup.way(replies[from + j]) ?? []));
-      found.set(pairKey(a, b), ways);
-      ways.catch(() => found.delete(pairKey(a, b)));
-    });
-  }
-  return new Map(
-    await Promise.all(pairs.map(async ([a, b]) => [pairKey(a, b), await found.get(pairKey(a, b))!] as const)),
-  );
-}
-
-export const exchangeOf = (id: number): Exchange => BY_ID[id]!;
 // Aero's classic pools add an MEV tax above a tip of 1 gwei, which a quote does not see.
 export const taxed = ({ exchange }: Hop): boolean => exchangeOf(exchange).kind === "solidly";
 // Uniswap v4's pools live in its PoolManager, and have no address of their own.
