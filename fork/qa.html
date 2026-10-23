@@ -1,0 +1,402 @@
+<!doctype html>
+<!-- The QA wallet's window, which qa.ts opens beside the page. Each control calls qa(), which Node answers. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>QA wallet</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --line: color-mix(in srgb, currentColor 18%, transparent);
+        --faint: color-mix(in srgb, currentColor 60%, transparent);
+        --accent: #2f6f4f;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        font:
+          14px/1.4 system-ui,
+          sans-serif;
+        background: Canvas;
+        color: CanvasText;
+      }
+      h1 {
+        margin: 0;
+        font-size: 18px;
+      }
+      h2 {
+        margin: 0 0 8px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--faint);
+      }
+      section {
+        border-top: 1px solid var(--line);
+        padding: 12px 0;
+      }
+      label {
+        display: block;
+        margin: 6px 0;
+      }
+      select,
+      input[type="text"] {
+        font: inherit;
+        max-inline-size: 100%;
+        box-sizing: border-box;
+      }
+      #owner {
+        display: block;
+        inline-size: 100%;
+        margin-block-start: 4px;
+      }
+      form {
+        display: flex;
+        gap: 4px;
+        margin: 6px 0;
+      }
+      form input {
+        flex: 1;
+        min-inline-size: 0;
+      }
+      form button {
+        margin: 0;
+      }
+      button {
+        font: inherit;
+        margin: 2px 4px 2px 0;
+      }
+      .hint,
+      .holds {
+        color: var(--faint);
+        font-size: 12px;
+        margin: 4px 0;
+      }
+      #status {
+        margin: 6px 0 0;
+        min-block-size: 1.4em;
+      }
+      #status.busy {
+        color: var(--accent);
+      }
+      #status.failed {
+        color: #b3261e;
+      }
+      #prompts:empty,
+      #requests:empty {
+        display: none;
+      }
+      #prompts {
+        list-style: none;
+        padding: 0;
+      }
+      #prompts li {
+        border: 2px solid var(--accent);
+        border-radius: 6px;
+        padding: 8px;
+        margin: 8px 0;
+      }
+      #prompts p {
+        margin: 0 0 6px;
+        overflow-wrap: anywhere;
+      }
+      #requests {
+        padding-inline-start: 18px;
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        margin: 8px 0 0;
+      }
+      h2.sub {
+        margin-block-start: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>QA wallet</h1>
+    <p id="status" role="status"></p>
+
+    <section>
+      <h2>Scenario</h2>
+      <label>
+        <select id="scenarios" aria-label="Scenario"></select>
+        <button id="start">Start</button>
+      </label>
+      <p class="holds" id="title"></p>
+      <p class="hint">Starting a scenario, even the same one, forks Base again: it undoes every change.</p>
+    </section>
+
+    <section>
+      <h2>Wallet</h2>
+      <ol id="prompts" aria-label="Waiting for you"></ol>
+      <label>
+        Signs as
+        <select id="owner"></select>
+      </label>
+      <p class="holds" id="holds"></p>
+      <form id="other">
+        <input type="text" id="address" placeholder="Or any address on Base, 0x…" aria-label="Address" />
+        <button>Sign as it</button>
+      </form>
+      <label>
+        Network
+        <select id="chain">
+          <option value="8453">Base</option>
+          <option value="1">Ethereum</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="asks" /> Asks you before it connects, switches or sends</label>
+      <label><input type="checkbox" id="switches" /> Can switch networks</label>
+      <label>
+        Calls
+        <select id="calls">
+          <option value="one">One per prompt</option>
+          <option value="atomic">Several in one prompt, all or nothing</option>
+          <option value="each">Several in one prompt, one by one</option>
+        </select>
+      </label>
+      <p class="hint">EIP-5792's wallet_sendCalls: the page asks once per address, so reload it after a change.</p>
+      <button id="fail">Fail the next transaction</button>
+      <button id="lock">Lock</button>
+      <p class="hint" id="failing"></p>
+      <form id="away">
+        <input type="text" id="token" placeholder="AVNT, or a token's address" aria-label="Token" />
+        <button>Send it all away</button>
+      </form>
+      <p class="hint">As if spent elsewhere: the swap then skips that token.</p>
+      <form id="mint">
+        <input type="text" id="symbol" placeholder="USDC" aria-label="Symbol" />
+        <button>Give it a token of that symbol</button>
+      </form>
+      <label><input type="checkbox" id="lists" /> Lists those tokens (ERC-7811), and sends calls in one prompt</label>
+      <p class="hint">
+        A token of the QA wallet's own, at a new address: with a listed token's symbol, the page warns of it once added
+        by its address, or once the wallet lists it.
+      </p>
+    </section>
+
+    <section>
+      <h2>Open the page</h2>
+      <button data-open="wallet">With this wallet</button>
+      <button data-open="safe">In Safe{Wallet}, as a Safe</button>
+      <button data-open="wallets">With two wallets</button>
+      <button data-open="none">Without a wallet</button>
+    </section>
+
+    <section>
+      <h2>Hydrex</h2>
+      <label>Hydrex account <input type="text" id="account" placeholder="#141" size="10" /></label>
+      <form id="delegate">
+        <input type="text" id="delegatee" placeholder="0x…, Carbon Impact, USDC, or owner" aria-label="Delegate to" />
+        <button>Delegate its votes</button>
+      </form>
+      <button id="give">Give it to the address signed as</button>
+      <button id="claim-on-hydrex">Its owner claims on Hydrex</button>
+      <p class="hint">
+        As its owner can on Hydrex. Delegated to an address, Delegated to; to one of the page's automations, Partly in
+        it. Given away, its receipts were paid to its owner then. Claimed by its owner, it was last claimed outside its
+        automation.
+      </p>
+      <form id="pay-to">
+        <input type="text" id="recipient" placeholder="0x…, or owner" aria-label="Payout address" />
+        <button>Carbon Impact pays there</button>
+      </form>
+      <p class="hint">Where Carbon Impact pays the accounts of the address signed as, as its owner can set.</p>
+      <div id="replays" hidden>
+        <button id="replay"></button>
+        <p class="hint" id="replayed"></p>
+      </div>
+      <button id="move-on">Hydrex moves on to the new epoch</button>
+      <button id="keeper-votes">Carbon Impact's keeper votes</button>
+      <button id="incentive">Someone adds incentives</button>
+      <p class="hint">
+        As on Base after a flip: Hydrex moves on, until when what the epoch before earned is not final; the keeper votes
+        as it did last; and others add incentives, here 100 USDC in the pool Carbon Impact votes for most. On the fork,
+        nobody does any of it unasked. Reload the page after any change here.
+      </p>
+      <fieldset data-group="hydrex"></fieldset>
+    </section>
+
+    <section>
+      <h2>Base</h2>
+      <p id="time"></p>
+      <button data-travel="epoch">Next epoch</button>
+      <button data-travel="half-day">12 hours later</button>
+      <fieldset data-group="base"></fieldset>
+      <h2 class="sub">Checks that fail</h2>
+      <fieldset data-group="check"></fieldset>
+      <p class="hint">The page checks the contracts as it opens, then every hour: reload it after a change.</p>
+    </section>
+
+    <section>
+      <h2>What the wallet was asked</h2>
+      <ol id="requests" reversed></ol>
+    </section>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const date = new Intl.DateTimeFormat("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "UTC",
+      });
+      let shown = {};
+
+      // Draws a part again only when what it shows changed, so that a list stays open while it is used.
+      function changed(key, value) {
+        const text = JSON.stringify(value);
+        if (shown[key] === text) return false;
+        shown[key] = text;
+        return true;
+      }
+
+      function options(select, items) {
+        if (document.activeElement === select || !changed(select.id, items)) return;
+        select.replaceChildren(...items.map(([value, text]) => new Option(text, value)));
+      }
+
+      function render(state) {
+        const status = $("status");
+        const failed = state.failure || refused;
+        status.textContent = state.busy || failed;
+        status.className = state.busy ? "busy" : failed ? "failed" : "";
+        for (const control of document.querySelectorAll("button, select, input"))
+          control.disabled = !!state.busy && !control.closest("#prompts");
+
+        options(
+          $("scenarios"),
+          state.scenarios.map(({ name }) => [name, name]),
+        );
+        if (document.activeElement !== $("scenarios") && changed("scenario", state.scenario))
+          $("scenarios").value = state.scenario;
+        $("title").textContent = state.scenarios.find(({ name }) => name === $("scenarios").value)?.title ?? "";
+
+        options(
+          $("owner"),
+          state.owners.map(({ address, short, holds }) => [address, `${short} · ${holds}`]),
+        );
+        if (document.activeElement !== $("owner")) $("owner").value = state.owner;
+        $("holds").textContent = state.owner;
+        if (document.activeElement !== $("chain")) $("chain").value = String(state.chainId);
+        if (document.activeElement !== $("calls")) $("calls").value = state.calls;
+        for (const key of ["asks", "switches", "lists"]) $(key).checked = state[key];
+        $("replays").hidden = !state.replays;
+        if (state.replays) {
+          $("replay").textContent = state.replays.next ? `The keeper ${state.replays.next}` : "The keeper is done";
+          $("replay").disabled = !!state.busy || !state.replays.next;
+          $("replayed").textContent =
+            `${state.replays.sent} of the ${state.replays.total} transactions Base included after the fork's block, ` +
+            "sent again as their sender did.";
+        }
+        $("failing").textContent = state.failing
+          ? `The next ${state.failing === 1 ? "transaction" : `${state.failing} transactions`} will fail on Base.`
+          : "";
+
+        if (changed("prompts", state.prompts))
+          $("prompts").replaceChildren(
+            ...state.prompts.map(({ id, text }) => {
+              const item = document.createElement("li");
+              const words = document.createElement("p");
+              words.textContent = text;
+              const yes = Object.assign(document.createElement("button"), { textContent: "Confirm" });
+              const no = Object.assign(document.createElement("button"), { textContent: "Reject" });
+              yes.onclick = () => run("answer", id, true);
+              no.onclick = () => run("answer", id, false);
+              item.append(words, yes, no);
+              return item;
+            }),
+          );
+
+        $("time").textContent = state.time
+          ? `${date.format(state.time * 1000)} UTC · block ${state.block.toLocaleString("en-GB")}`
+          : "";
+        if (changed("faults", state.faults))
+          for (const fieldset of document.querySelectorAll("fieldset[data-group]"))
+            fieldset.replaceChildren(
+              ...state.faults
+                .filter(({ group }) => group === fieldset.dataset.group)
+                .map(({ id, label, on }) => {
+                  const box = Object.assign(document.createElement("input"), { type: "checkbox", checked: on });
+                  box.onchange = () => run("fault", id, box.checked);
+                  const line = document.createElement("label");
+                  line.append(box, ` ${label}`);
+                  return line;
+                }),
+            );
+        if (changed("log", state.log))
+          $("requests").replaceChildren(
+            ...state.log.map((line) => Object.assign(document.createElement("li"), { textContent: line })),
+          );
+      }
+
+      // Why the last command failed, shown until the next one.
+      let refused = "";
+
+      async function run(command, ...args) {
+        try {
+          const state = await window.qa(command, ...args);
+          if (command !== "state") refused = "";
+          render(state);
+        } catch (error) {
+          refused = String(error.message ?? error).replace(/^Error: /, "");
+          $("status").textContent = refused;
+          $("status").className = "failed";
+          // A box ticked for a change that failed is drawn again as it is.
+          delete shown.faults;
+        }
+      }
+
+      $("start").onclick = () => run("start", $("scenarios").value);
+      $("scenarios").onchange = () => {
+        $("title").textContent = "";
+        run("state");
+      };
+      $("owner").onchange = () => run("owner", $("owner").value);
+      $("other").onsubmit = (event) => {
+        event.preventDefault();
+        run("owner", $("address").value.trim());
+      };
+      $("chain").onchange = () => run("chain", Number($("chain").value));
+      for (const key of ["asks", "switches", "lists"]) $(key).onchange = () => run("set", key, $(key).checked);
+      $("calls").onchange = () => run("calls", $("calls").value);
+      $("give").onclick = () => run("give", $("account").value);
+      $("claim-on-hydrex").onclick = () => run("claim-on-hydrex", $("account").value);
+      $("pay-to").onsubmit = (event) => {
+        event.preventDefault();
+        run("pay-to", $("recipient").value);
+      };
+      $("mint").onsubmit = (event) => {
+        event.preventDefault();
+        run("mint", $("symbol").value);
+      };
+      $("replay").onclick = () => run("replay");
+      $("move-on").onclick = () => run("move-on");
+      $("keeper-votes").onclick = () => run("keeper-votes");
+      $("incentive").onclick = () => run("incentive");
+      $("delegate").onsubmit = (event) => {
+        event.preventDefault();
+        run("delegate", $("account").value, $("delegatee").value);
+      };
+      $("fail").onclick = () => run("fail");
+      $("away").onsubmit = (event) => {
+        event.preventDefault();
+        run("send-away", $("token").value);
+      };
+      $("lock").onclick = () => run("lock");
+      for (const button of document.querySelectorAll("[data-open]"))
+        button.onclick = () => run("open", button.dataset.open);
+      for (const button of document.querySelectorAll("[data-travel]"))
+        button.onclick = () => run("travel", button.dataset.travel);
+      // Each command answers with the state, and the state is asked for each second besides.
+      run("state");
+      setInterval(() => run("state"), 1000);
+    </script>
+  </body>
+</html>

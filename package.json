@@ -1,6 +1,6 @@
 {
   "name": "metadex.cafe",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "description": "Vote, claim and swap on Base",
   "license": "MIT",
@@ -14,6 +14,7 @@
     "format": "prettier --write .",
     "test": "node --test",
     "test:fork": "npm run build && node fork/run.ts",
+    "qa": "npm run build && node fork/qa.ts",
     "typecheck": "tsc"
   },
   "dependencies": {

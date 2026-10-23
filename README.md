@@ -119,7 +119,7 @@ Once, on GitHub and at the DNS provider:
 
 1. Set the new version, for example `npm version 0.5.0 --no-git-tag-version`, and commit.
 2. Run `npm run build` and `python3 -m http.server --directory dist 8000`, then open <http://localhost:8000/#app> with a
-   wallet. Check that joining is on.
+   wallet. Check that joining is on. To try a flow without funds, as [QA.md](QA.md) lists them, run `npm run qa`.
 3. Run the browser tests with `npm run test:fork`. CI runs them too.
 4. Tag the commit with `v` and the version, for example `v0.5.0`, and push the tag. Any other tag fails.
 
@@ -290,6 +290,11 @@ through one queue, at most 8 at a time, anvil's first; one refused as over the R
 exponential backoff, for up to 5 minutes. The first run, which asks for everything, takes about 25 minutes through an
 RPC of your own; the next ones take about two minutes.
 
+`npm run qa` opens the page by hand against the same forks, in a browser of its own, beside a wallet that signs as any
+address and steers the fork: the states the browser tests start from, Base's clock, and what can fail. The page's flows
+can be tried there without a wallet or funds of your own: [QA.md](QA.md) says which scenario each needs, and which few
+states the fork cannot show.
+
 CI runs Prettier, the type check, the unit tests, `reuse lint` and the build. It then builds again from a fresh clone
 and checks that both builds are the same. It also runs the browser tests, in the runner's Chrome, with the forks'
 answers kept in GitHub's cache from one run, or attempt, to the next, one run of a branch at a time. Dependabot updates
@@ -315,7 +320,8 @@ the pinned Actions and npm packages every week.
 | `src/routes.ts`, `src/views.ts`                         | The page's addresses, and the view each shows.                                                                                                                                                            |
 | `src/dom.ts`, `src/format.ts`                           | Page helpers, and number and date formats.                                                                                                                                                                |
 | `test/`, `fork/`                                        | Unit tests; the browser tests, which `fork/run.ts` runs at once, the harness they share in `fork/harness.ts`, and `fork/rpc-cache.ts`, which keeps the answers their forks read from Base.                |
-| `fork/fixtures/`                                        | AutoMaxi's init code, for the browser tests to deploy it on the fork.                                                                                                                                     |
+| `fork/qa.ts`, `fork/qa.html`, `fork/scenarios.ts`       | `npm run qa`: the page against a fork, the QA wallet's window beside it, and the states it can start the fork in.                                                                                         |
+| `fork/fixtures/`                                        | AutoMaxi's init code, for the browser tests to deploy it on the fork; and a token of the QA wallet's own, its source and init code.                                                                       |
 | `scripts/`                                              | The build; `fonts.py` makes `fonts/`, `icons.ts` draws the icons from `icon.svg`, and `tokens.ts` checks the list of tokens.                                                                              |
 
 ## License

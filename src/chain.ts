@@ -12,7 +12,7 @@ import { MULTICALL3, RPCS } from "./config.ts";
 
 export type Call = { address: Address; abi: Abi; functionName: string; args: unknown[] };
 
-const multicall3Abi = parseAbi([
+export const multicall3Abi = parseAbi([
   "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
   "function getCurrentBlockTimestamp() view returns (uint256 timestamp)",
 ]);

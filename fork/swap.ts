@@ -1,24 +1,25 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { type Page } from "playwright-core";
-import { encodeFunctionData, getAddress, type Address } from "viem";
-import { AUTOMATIONS, AUTOMAXI, HYDX, SWAPPERS, VOTING_ESCROW } from "../src/config.ts";
-import { readEarnings } from "../src/earnings.ts";
-import { pricesNow } from "../src/prices.ts";
-import { MIDDLES, findRoute } from "../src/swap.ts";
-import { describe as describeTokens, holdingsOf, known } from "../src/tokens.ts";
+import { encodeFunctionData } from "viem";
+import { AUTOMAXI, SWAPPERS, WETH } from "../src/config.ts";
 import {
+  AVNT,
+  HOLDER,
   PAYEE,
   RECENT,
+  SELLER,
   SITE,
   STRANGER,
-  abi,
+  ZORA,
+  approveConduit,
   app,
   balanceOf,
   claimOpens,
   confirm,
   confirmEach,
   connected,
+  fund,
   hooks,
   mined,
   readOn,
@@ -29,38 +30,10 @@ import {
   stop,
   swapView,
   tokenAbi,
-  warm,
   warmPayouts,
 } from "./harness.ts";
 
-// Carbon Impact's treasury, a Safe that holds many of the tokens its fee took.
-const HOLDER = getAddress("0xd9e966a6bfa2ae2113a34bb4dd02ded921da50af");
-const AVNT = getAddress("0x696f9436b67233384889472cd7cd58a6fb5df4f1");
-const ZORA = getAddress("0x1111111111166b7fe7bd91427724b487980afc69");
-const WETH = getAddress("0x4200000000000000000000000000000000000006");
 const INTO_USDC = SWAPPERS[0]!;
-// A wallet of the test's own, which the treasury gives three of its tokens, so that the page has only those to route.
-const SELLER = getAddress("0x0000000000000000000000000000000000c0ffee");
-
-// Gives SELLER the treasury's whole balance of each token, then reads what the page will: the balances, the prices, and
-// each token's route into USDC, with no time limit, as anvil reads the pools from FORK_URL a slot at a time.
-async function fund(tokens: Address[]): Promise<void> {
-  for (const token of tokens) {
-    const amount = await balanceOf(token, HOLDER);
-    await mined(HOLDER, token, encodeFunctionData({ abi: tokenAbi, functionName: "transfer", args: [SELLER, amount] }));
-  }
-  await warm(async () => {
-    // The page reads the balance of every token it knows, and adds last epoch's rewards, such as AVNT, once it has read
-    // each automation's.
-    await Promise.all(AUTOMATIONS.map(({ address }) => readEarnings(address)));
-    const held = await holdingsOf(SELLER, [...known(), ...tokens], INTO_USDC.address);
-    // The page prices the tokens its routes name too.
-    const described = await describeTokens([...tokens, INTO_USDC.token, ...MIDDLES, HYDX]);
-    const amounts = new Map(tokens.map((token) => [token.toLowerCase(), held.get(token.toLowerCase())!.balance]));
-    await pricesNow([...described.values()], amounts);
-    for (const token of tokens) await findRoute(token, amounts.get(token.toLowerCase())!, INTO_USDC, false);
-  });
-}
 
 // Waits until every token has its route, then ticks only those given. A token the page learns from last epoch's
 // rewards, such as AVNT, joins the list once those are read: each one asked for is waited for.
@@ -190,11 +163,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
   });
 
   test("claim, then swap what it brought into USDC in one prompt", async () => {
-    await mined(
-      PAYEE,
-      VOTING_ESCROW,
-      encodeFunctionData({ abi, functionName: "setConduitApproval", args: [AUTOMAXI.address, 82774n, true] }),
-    );
+    await approveConduit(PAYEE, AUTOMAXI.address, 82774n);
     await settle();
     await warmPayouts(PAYEE);
     const { page, sent } = await connected({ owner: PAYEE, batch: true }, { url: `${SITE}/#app` });

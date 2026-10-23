@@ -1,20 +1,18 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import { encodeFunctionData } from "viem";
-import { AUTOMAXI, VOTING_ESCROW } from "../src/config.ts";
+import { AUTOMAXI } from "../src/config.ts";
 import {
   PAYEE,
   RECENT,
   SAFE_WALLET,
   SITE,
-  abi,
+  approveConduit,
   app,
   autoMaxiAbi,
   claimOpens,
   confirmEach,
   connected,
   hooks,
-  mined,
   open,
   position,
   readOn,
@@ -33,11 +31,7 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
 
   test("an overdue payout in AutoMaxi: the App and the account say so, and Claim now claims it as it is", async () => {
     // #82774 moves to AutoMaxi, which now holds its claims, while what Carbon Impact's votes earned for it waits.
-    await mined(
-      PAYEE,
-      VOTING_ESCROW,
-      encodeFunctionData({ abi, functionName: "setConduitApproval", args: [AUTOMAXI.address, 82774n, true] }),
-    );
+    await approveConduit(PAYEE, AUTOMAXI.address, 82774n);
     await settle();
     await warmPayouts(PAYEE);
     const { page, sent, violations } = await connected(
@@ -99,11 +93,7 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
   });
 
   test("inside Safe{Wallet}, a Safe proposes a claim too large for one transaction as several Safe transactions", async () => {
-    await mined(
-      PAYEE,
-      VOTING_ESCROW,
-      encodeFunctionData({ abi, functionName: "setConduitApproval", args: [AUTOMAXI.address, 82774n, true] }),
-    );
+    await approveConduit(PAYEE, AUTOMAXI.address, 82774n);
     await settle();
     await warmPayouts(PAYEE);
     const { page, violations } = await open(false, { url: `${SAFE_WALLET}/`, safe: PAYEE });

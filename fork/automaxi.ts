@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import { encodeFunctionData, zeroAddress, type Hex } from "viem";
-import { AUTOMAXI, KEEPER, VOTING_ESCROW } from "../src/config.ts";
-import { readEarnings, rewardsFor, type Reward } from "../src/earnings.ts";
+import { encodeFunctionData, zeroAddress } from "viem";
+import { AUTOMAXI, VOTING_ESCROW } from "../src/config.ts";
+import { readEarnings } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
-import { SETTLED, readEarned, readStamps, weighed } from "../src/receipts.ts";
 import {
   CONDUIT,
   FLIP,
@@ -17,12 +16,11 @@ import {
   LEAVER,
   PAYEE,
   STRANGER,
-  GAS,
   abi,
   anvil,
   warm,
-  mined,
-  send,
+  approveConduit,
+  autoMaxiReceipts,
   deployAutoMaxi,
   settle,
   claimOne,
@@ -202,37 +200,8 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
   });
 
   test("AutoMaxi's receipts: a claim by its keeper, a stranger's dust, and where the page stops reading", async () => {
-    await deployAutoMaxi();
-    let rewards: Reward[] = [];
-    await warm(async () => {
-      rewards = (await readEarnings(CONDUIT))!.rewards;
-      await readAccounts(PAYEE);
-    });
-    const move = encodeFunctionData({
-      abi,
-      functionName: "setConduitApproval",
-      args: [AUTOMAXI.address, 82774n, true],
-    });
-    await anvil("anvil_setBalance", [PAYEE, "0x16345785d8a0000"]);
-    await anvil("anvil_setBalance", [STRANGER, "0x16345785d8a0000"]);
-    await mined(PAYEE, VOTING_ESCROW, move);
-    const usdc = rewards.filter(({ token }) => token.symbol === "USDC");
-    await claimOne(KEEPER, 82774n, usdc[0]!);
-    await claimOne(STRANGER, 82774n, usdc[1]!);
-    await settle();
     // Its standing is read in the pools Carbon Impact voted for, last epoch and the one before, as test 7 reads them.
-    // A revert drops what anvil fetched, so they are read again here, with no time limit.
-    await warm(async () => {
-      const earnings = (await readEarnings(CONDUIT))!;
-      const top = Number(await anvil<Hex>("eth_blockNumber")) - SETTLED;
-      const last = weighed(earnings.rewards, earnings.prices);
-      const before = weighed(await rewardsFor(CONDUIT, earnings.start - WEEK), earnings.prices);
-      await Promise.all([
-        readStamps([82774n], last, top),
-        readEarned([82774n], last, top),
-        readStamps([82774n], before, top),
-      ]);
-    });
+    const rewards = await autoMaxiReceipts();
     const { page, violations } = await open(
       { owner: PAYEE },
       { width: 390, height: 844, url: `${SITE}/#hydrex/82774` },
@@ -349,8 +318,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
 
   // Last, as it moves anvil's clock on.
   test("in a new epoch, Join reads again before any review, and the page moves on by itself", async () => {
-    const data = encodeFunctionData({ abi, functionName: "setConduitApproval", args: [CONDUIT, 141n, true] });
-    await send({ from: NEWCOMER, to: VOTING_ESCROW, data, gas: GAS });
+    await approveConduit(NEWCOMER, CONDUIT, 141n);
     const { page } = await connected({ owner: NEWCOMER }, { flowing: true });
     await account(page, 141).getByText("Joining Carbon Impact:").waitFor();
     await anvil("evm_setNextBlockTimestamp", [FLIP + 60]);
