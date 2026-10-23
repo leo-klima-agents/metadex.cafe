@@ -280,14 +280,15 @@ npm run build   # writes the page to dist/
 joining, leaving, a Safe, the views, the accounts' pages, and what can fail; then, after the swappers' deployment, a
 swap with a token skipped and its approval reset, a swapper whose checks fail, and a claim, as it is, swapped, and from
 a Safe. Its five files run at once, each with an anvil of its own; `node fork/run.ts fork/claim.ts` runs one, and passes
-options such as `--test-name-pattern=…` on to `node --test`. It needs [anvil](https://getfoundry.sh/) and Chromium
-(`npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium or Chrome binary). `BASE_RPC_URL` is the
-archive RPC to fork from, the page's first RPC by default, and `SCREENSHOTS` an optional folder for screenshots. anvil
-forks through `fork/rpc-cache.ts`, which asks `BASE_RPC_URL` once for each answer about the forks' blocks and keeps it,
-in `FORK_CACHE`, `~/.cache/metadex.cafe/fork` by default; `FORK_LOG=1` prints each request it still sends. Before anvil
-runs a call, the cache asks `BASE_RPC_URL` which slots it reads, and for all of them. Every request of a run goes
-through one queue, at most 8 at a time, anvil's first; one refused as over the RPC's limit is asked again after an
-exponential backoff, for up to 5 minutes. The first run, which asks for everything, takes about 25 minutes through an
+options such as `--test-name-pattern=…` on to `node --test`. It needs anvil from [Foundry](https://getfoundry.sh/)
+1.8.6, as CI runs (`curl -L https://foundry.paradigm.xyz | bash`, then, in a new shell, `foundryup --install 1.8.6`),
+and Chromium (`npx playwright-core install chromium`, or set `CHROMIUM` to a Chromium or Chrome binary). `BASE_RPC_URL`
+is the archive RPC to fork from, the page's first RPC by default, and `SCREENSHOTS` an optional folder for screenshots.
+anvil forks through `fork/rpc-cache.ts`, which asks `BASE_RPC_URL` once for each answer about the forks' blocks and
+keeps it, in `FORK_CACHE`, `~/.cache/metadex.cafe/fork` by default; `FORK_LOG=1` prints each request it still sends.
+Before anvil runs a call, the cache asks `BASE_RPC_URL` which slots it reads, and for all of them. Every request of a
+run goes through one queue, at most 8 at a time, anvil's first; one refused as over the RPC's limit is asked again after
+an exponential backoff, for up to 5 minutes. The first run, which asks for everything, takes about 25 minutes through an
 RPC of your own; the next ones take about two minutes.
 
 `npm run qa` opens the page by hand against the same forks, in a browser of its own, beside a wallet that signs as any

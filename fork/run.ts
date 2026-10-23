@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { RPCS } from "../src/config.ts";
-import { BLOCK, RECENT } from "./harness.ts";
+import { BLOCK, RECENT, anvilMissing } from "./harness.ts";
 import { serveCached, upstreamOf } from "./rpc-cache.ts";
 
 // Runs the browser test files at once, each with an anvil of its own, all forking through one cache per block, and all
@@ -17,6 +17,11 @@ const CACHE = process.env.FORK_CACHE || join(homedir(), ".cache", "metadex.cafe"
 const FILES = ["fork/views.ts", "fork/joins.ts", "fork/automaxi.ts", "fork/swap.ts", "fork/claim.ts"];
 const args = process.argv.slice(2);
 const named = args.some((arg) => !arg.startsWith("-"));
+const missing = anvilMissing();
+if (missing) {
+  console.error(missing);
+  process.exit(1);
+}
 const upstream = upstreamOf(FORK_URL);
 const caches = await Promise.all(
   [BLOCK, RECENT].map(async (block) => ({
