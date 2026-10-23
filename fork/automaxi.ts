@@ -9,6 +9,7 @@ import { SETTLED, readEarned, readStamps, weighed } from "../src/receipts.ts";
 import {
   CONDUIT,
   FLIP,
+  FOR_GAS,
   SITE,
   SAFE_WALLET,
   RPC_ORIGINS,
@@ -19,6 +20,7 @@ import {
   STRANGER,
   GAS,
   abi,
+  hex,
   anvil,
   warm,
   mined,
@@ -213,8 +215,8 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
       functionName: "setConduitApproval",
       args: [AUTOMAXI.address, 82774n, true],
     });
-    await anvil("anvil_setBalance", [PAYEE, "0x16345785d8a0000"]);
-    await anvil("anvil_setBalance", [STRANGER, "0x16345785d8a0000"]);
+    await anvil("anvil_setBalance", [PAYEE, hex(FOR_GAS)]);
+    await anvil("anvil_setBalance", [STRANGER, hex(FOR_GAS)]);
     await mined(PAYEE, VOTING_ESCROW, move);
     const usdc = rewards.filter(({ token }) => token.symbol === "USDC");
     await claimOne(KEEPER, 82774n, usdc[0]!);

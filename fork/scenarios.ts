@@ -11,6 +11,7 @@ import {
   ELSEWHERE,
   ENDED,
   FLIP,
+  FOR_GAS,
   HOLDER,
   LEAVER,
   MEMBER,
@@ -25,6 +26,7 @@ import {
   claimOne,
   deployAutoMaxi,
   fund,
+  hex,
   mined,
   settle,
   warm,
@@ -129,7 +131,7 @@ export const SCENARIOS: Scenario[] = [
       await warm(async () => {
         rewards = (await readEarnings(CONDUIT))!.rewards;
       });
-      await anvil("anvil_setBalance", [STRANGER, "0x16345785d8a0000"]);
+      await anvil("anvil_setBalance", [STRANGER, hex(FOR_GAS)]);
       await moveToAutoMaxi(82774n);
       const usdc = rewards.filter(({ token }) => token.symbol === "USDC");
       await claimOne(KEEPER, 82774n, usdc[0]!);

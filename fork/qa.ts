@@ -50,6 +50,7 @@ import { readEarned, weighed } from "../src/receipts.ts";
 import { erc20Abi, swapperAbi } from "../src/swap.ts";
 import {
   AVNT,
+  FOR_GAS,
   RPC_ORIGINS,
   SAFE_WALLET,
   SITE,
@@ -59,6 +60,7 @@ import {
   abi,
   anvil,
   balanceOf,
+  hex,
   mined,
   send,
   serve,
@@ -79,10 +81,8 @@ import { SCENARIOS, scenario as named, type Owner, type Scenario } from "./scena
 const FORK_URL = process.env.BASE_RPC_URL || RPCS[0]!;
 const CACHE = process.env.FORK_CACHE || join(homedir(), ".cache", "metadex.cafe", "fork");
 const PANEL = readFileSync(new URL("qa.html", import.meta.url), "utf8");
-const ETH = 10n ** 17n; // 0.1 ETH, for gas
 // The QA wallet's window, at the left of the screen. Chromium makes no window narrower than about 500 pixels.
 const PANEL_WIDTH = 520;
-const hex = (n: number | bigint) => `0x${n.toString(16)}`;
 // Waits, then answers null, as a receipt not found yet.
 const sleep = (ms: number) => new Promise<null>((resolve) => setTimeout(() => resolve(null), ms));
 
@@ -268,7 +268,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
             void panel.bringToFront().catch(() => {});
           }),
   };
-  const handle = testWallet(wallet, [], []);
+  const handle = testWallet(wallet);
   async function walletRequest(method: string, params: any[]) {
     const reply = await handle(method, params);
     if (LOGGED.has(method)) {
@@ -601,7 +601,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       await stopAnvil();
       busy = `Forking Base at block ${next.block.toLocaleString("en-GB")}…`;
       await startAnvil(next.block, await cacheAt(next.block));
-      for (const { address } of next.owners) await anvil("anvil_setBalance", [address, hex(ETH)]);
+      for (const { address } of next.owners) await anvil("anvil_setBalance", [address, hex(FOR_GAS)]);
       busy = `Setting up ${next.name}. The first time, reading Base can take several minutes…`;
       await next.setup();
       // A block every 2 seconds, as on Base: the page reads a few blocks back, and so sees each transaction.
@@ -618,8 +618,8 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   }
 
   async function gas(address: Address): Promise<void> {
-    if (BigInt(await anvil<Hex>("eth_getBalance", [address, "latest"])) >= ETH / 10n) return;
-    await anvil("anvil_setBalance", [address, hex(ETH)]);
+    if (BigInt(await anvil<Hex>("eth_getBalance", [address, "latest"])) >= FOR_GAS / 10n) return;
+    await anvil("anvil_setBalance", [address, hex(FOR_GAS)]);
     note(`Gave ${short(address)} 0.1 ETH for gas`);
   }
 

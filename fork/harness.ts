@@ -117,7 +117,9 @@ export const abi = parseAbi([
   "function claim(uint256 tokenId, address[] feeAddresses, address[] bribeAddresses, address[] tokens) returns (uint256[])",
 ]);
 
-const hex = (n: number) => `0x${n.toString(16)}`;
+export const hex = (n: number | bigint) => `0x${n.toString(16)}`;
+// What each wallet the tests and the QA wallet sign as gets for gas: 0.1 ETH.
+export const FOR_GAS = 10n ** 17n;
 
 // The fetch there was before warm() replaced it.
 const nodeFetch = globalThis.fetch;
@@ -186,7 +188,7 @@ export async function mined(from: Address, to: Address, data: Hex): Promise<void
 export async function deployAutoMaxi(): Promise<void> {
   const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", [hex(BLOCK), false]);
   await anvil("evm_setNextBlockTimestamp", [Number(timestamp) + 60]);
-  await anvil("anvil_setBalance", [KEEPER, "0x16345785d8a0000"]);
+  await anvil("anvil_setBalance", [KEEPER, hex(FOR_GAS)]);
   await mined(KEEPER, CREATE2_DEPLOYER, concat([SALT, INIT_CODE]));
   const at = getContractAddress({ opcode: "CREATE2", from: CREATE2_DEPLOYER, salt: SALT, bytecode: INIT_CODE });
   assert.equal(at, AUTOMAXI.address);
@@ -323,7 +325,8 @@ function starved(data: Hex): string {
   return hex(21_000 + 40 * nonzero + 10 * (bytes.length - nonzero));
 }
 
-export function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
+// Where given, `asked` gets the method of each request, and `sent` each call the page sent: the tests count them.
+export function testWallet(options: WalletOptions, sent?: Sent[], asked?: string[]) {
   let asking = false;
   const batches = new Map<string, Hex[]>();
   // Batches all or nothing that failed: their first call failed on Base, and the others were never sent.
@@ -337,7 +340,7 @@ export function testWallet(options: WalletOptions, sent: Sent[], asked: string[]
     return starved(data);
   };
   return async (method: string, params: any[]): Promise<{ result?: unknown; error?: unknown }> => {
-    asked.push(method);
+    asked?.push(method);
     switch (method) {
       case "eth_requestAccounts": {
         // As MetaMask does while its window is open.
@@ -357,7 +360,7 @@ export function testWallet(options: WalletOptions, sent: Sent[], asked: string[]
         return { result: null };
       case "eth_sendTransaction": {
         const { to, data, chainId } = params[0];
-        sent.push({ to, data });
+        sent?.push({ to, data });
         await options.sending;
         if (!(await allows(method, params))) return rejected;
         // As MetaMask does.
@@ -388,13 +391,13 @@ export function testWallet(options: WalletOptions, sent: Sent[], asked: string[]
         if (options.atomic !== false && options.failing) {
           // All or nothing: a failing batch changes nothing but the gas of its one transaction.
           const [{ to, data }] = calls as [Sent];
-          sent.push(...calls);
+          sent?.push(...calls);
           hashes.push(await send({ to, data, from: options.owner, gas: gasFor(data as Hex) }));
           reverted.add(id);
         } else {
           // One after the other, each in its own block: anvil has no account code to run them together.
           for (const { to, data } of calls) {
-            sent.push({ to, data });
+            sent?.push({ to, data });
             hashes.push(await send({ to, data, from: options.owner, gas: gasFor(data as Hex) }));
           }
         }
@@ -605,7 +608,7 @@ export async function start(block: number, owners: Address[]): Promise<void> {
   if (!cached)
     throw new Error("Run the browser tests through fork/run.ts, which serves the caches anvil forks through.");
   await startAnvil(block, cached);
-  for (const owner of owners) await anvil("anvil_setBalance", [owner, "0x16345785d8a0000"]); // 0.1 ETH
+  for (const owner of owners) await anvil("anvil_setBalance", [owner, hex(FOR_GAS)]);
   browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 }
 
