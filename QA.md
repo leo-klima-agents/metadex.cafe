@@ -1,0 +1,140 @@
+# Trying the page by hand
+
+`npm run qa` builds the page and opens it in a browser of its own, against a fork of Base in anvil, as the browser tests
+run it: at `https://metadex.cafe`, its RPCs answered by the fork, its Content Security Policy as on the site. A second
+window, the QA wallet, signs as any address on Base, and holds the controls for the fork. Nothing reaches Base: every
+transaction stays on the fork, and Safe{Wallet} is a stand-in that only takes proposals.
+
+It needs what `npm run test:fork` needs: Node 26, [anvil](https://getfoundry.sh/), and Chromium (`CHROMIUM` names one,
+as for the tests). The fork reads Base's state through `BASE_RPC_URL`, or the page's first RPC, and keeps it in
+`FORK_CACHE`, which the browser tests share. The first time, a scenario can take many minutes to start, and the page's
+first reads can fail while anvil still fetches state: **run `npm run test:fork` once first**, and each scenario then
+starts in seconds.
+
+```sh
+npm ci --ignore-scripts
+npm run qa             # the hydrex scenario
+npm run qa -- claim    # or another one
+node fork/qa.ts --list # the scenarios
+```
+
+Close the QA wallet, or press Ctrl-C, to stop. The fork's answers are then kept for the next run.
+
+## The QA wallet
+
+- **Scenario:** starts one, or the same one again, from a fresh fork. That undoes every transaction and change.
+- **Signs as:** the scenario's wallets, each with what it holds, or any address typed in. The page follows at once, as
+  it does when a wallet changes account. An address with less than 0.01 ETH gets 0.1 ETH for gas.
+- **Network:** Base, or Ethereum, for the wrong network. **Can switch networks** off makes the wallet refuse to switch.
+- **Asks you before it connects, switches or sends:** off, the wallet says yes to everything at once. On, each request
+  waits in the QA wallet, which comes to the front, for Confirm or Reject, as a wallet's window does.
+- **Sends several calls in one prompt:** EIP-5792's `wallet_sendCalls`, as Coinbase Wallet and MetaMask do. The page
+  asks a wallet what it can do once per address: reload it after a change.
+- **Fail the next transaction:** sends it with too little gas, so that Base includes it, and it fails.
+- **Lock:** the wallet shares no account any more, as when it locks.
+- **Send it all away:** sends the wallet's whole balance of a token to `0x…dEaD`, as if spent elsewhere.
+- **Open the page:** with the wallet; in Safe{Wallet}, with the address signed as for the Safe; with two wallets in the
+  browser; or with none.
+- **Base:** its time on the fork, which runs on a block every 2 seconds. **Next epoch** moves it to a minute after the
+  next Thursday, 00:00 UTC; **12 hours later**, half a day on. The page's clock follows. Nobody votes or pays on the
+  fork, so a new epoch shows Carbon Impact as stopped, and Hydrex never moves on to it.
+- **Failures:** Base's RPCs fail, or serve another chain; a contract's code changes, which fails the page's checks; or
+  Hydrex's Voter cannot be read. The page checks contracts as it opens, then every hour: reload it after a change.
+- **What the wallet was asked:** each connection, switch and transaction, and its answer.
+
+Links out of the page, such as to Basescan, open the real site, which knows nothing of the fork.
+
+## The scenarios
+
+Each is the state of some of the browser tests, which check what it shows.
+
+| Scenario   | Base on           | Signs as, first            | What it is for                                                                  |
+| ---------- | ----------------- | -------------------------- | ------------------------------------------------------------------------------- |
+| `hydrex`   | Fri 16 Oct, 19:02 | `0x0208…4C95`, #141        | Joining and leaving, the automations that stopped, receipts, and what can fail. |
+| `automaxi` | Fri 16 Oct, 19:03 | `0x0208…4C95`, #141        | AutoMaxi on Base: joining it, moving between the two, its receipts.             |
+| `swap`     | Wed 21 Oct, 15:42 | `0x0000…FFEE`, WETH ZORA … | The swap, from a wallet that holds three tokens, or Carbon Impact's treasury.   |
+| `claim`    | Wed 21 Oct, 15:42 | `0x6092…6c93`, #82774      | An overdue payout in AutoMaxi: claim it as it is, swapped, or from a Safe.      |
+
+## The flows
+
+Each line names the scenario, the wallet to sign as in the QA wallet, and what to do. Any scenario serves the views and
+the wallet's own failures. Start the scenario again to try a flow from its start: a join, once made, stays made.
+
+### The views
+
+- **Home, the App, About:** any scenario. Home, then Open app; Back and Forward; About from the footer. An address the
+  page does not know, such as `#how-it-works`, opens Home.
+- **Phone widths and dark mode:** resize the window, or open DevTools (F12): its device toolbar, and Rendering's
+  `prefers-color-scheme`.
+- **Without a wallet:** Open the page, Without a wallet. The App's Browser wallet says No wallet found, and links to
+  wallet apps; so does the header's button.
+- **Several wallets:** Open the page, With two wallets. The header's button offers a list.
+- **A wallet that locks:** connect, then Lock. The page lets the wallet go; a click connects it again.
+- **Another account in the wallet:** connect, open an account's page such as `#hydrex/141`, then sign as another
+  address: the page speaks of its owner, without actions.
+
+### Hydrex: `hydrex`
+
+| Flow                                                          | Sign as       | What to do                                                                                                                                                     |
+| ------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Join with an account of its own                               | `0x0208…4C95` | Join Carbon Impact beside #141, Continue, Confirm. #141 then says Joining Carbon Impact, votes from Thu 22 Oct.                                                |
+| Join from automations that stopped, one transaction at a time | `0x6970…a655` | Needs you: tick #2435 and #2439, Join Carbon Impact with 2 Hydrex accounts. Two transactions.                                                                  |
+| The same, in one prompt                                       | `0x6970…a655` | Tick Sends several calls in one prompt, reload, then as above: One prompt, 2 calls.                                                                            |
+| Closing between transactions                                  | `0x6970…a655` | As above, confirm the first, then Close: #2439 joins, #2435 stays.                                                                                             |
+| Leave                                                         | `0x388b…7b40` | Leave beside #9540.                                                                                                                                            |
+| Leave an automation that stopped, to vote yourself            | `0x6970…a655` | Tick #2439, Leave with 1 Hydrex account.                                                                                                                       |
+| A lock that ended                                             | `0x2518…e84d` | #123351 under the closed group: Lock ended, nothing to tick.                                                                                                   |
+| What votes earned last epoch                                  | `0x388b…7b40` | #9540: about $6 last epoch. `#hydrex/carbon-impact/record`: all of Hydrex takes thousands of reads, which the fork may not answer in time.                     |
+| A late payout, and its last receipt                           | `0x6092…6c93` | #82774: Payout late. Its page, `#hydrex/82774`, shows the receipt of the payout of Wed 23 Sep. 93 accounts: the first time, reading takes a while.             |
+| AutoMaxi before it is on Base                                 | any           | The page leaves AutoMaxi out; `#hydrex/automaxi/check` says it is not on Base yet.                                                                             |
+| An account's page, anyone's                                   | any           | `#hydrex/9540`, `#hydrex/14485`; `#hydrex/999999999` has no such account.                                                                                      |
+| Inside Safe{Wallet}                                           | `0x2573…0b16` | Open the page in Safe{Wallet}. Tick #53350 and #82206, Leave with 2 Hydrex accounts: one Safe transaction, 2 calls, then Proposed.                             |
+| The wrong network                                             | `0x0208…4C95` | Network: Ethereum. The page says Wrong network; its Switch to Base switches the wallet. With Can switch networks off, it says to switch there.                 |
+| A refusal in the wallet                                       | `0x0208…4C95` | Tick Asks you, start a join, and Reject in the QA wallet: You said no in your wallet.                                                                          |
+| A transaction that fails                                      | `0x0208…4C95` | Fail the next transaction, then join: A transaction failed on Base.                                                                                            |
+| Back while the wallet asks                                    | `0x0208…4C95` | Tick Asks you, Confirm in your wallet on the page, then Back. Confirm in the QA wallet: the account still updates.                                             |
+| Two clicks while the wallet asks to connect                   | any           | Tick Asks you, reload, click Test Wallet in the App twice: the second did not connect. Confirm: the first still does.                                          |
+| Reading Base failed                                           | any           | Tick Base's RPCs fail, reload: Reading Base failed. Untick, then Try again.                                                                                    |
+| Joining is off                                                | any           | Tick Carbon Impact's code changed, reload: joining it is off, and its Check it marks the code. The VotingEscrow's code turns joining off for every automation. |
+| The Voter cannot be read                                      | `0x6970…a655` | Tick Hydrex's Voter cannot be read, reload: the accounts still show.                                                                                           |
+| A new epoch                                                   | `0x0208…4C95` | Join with #141, then Next epoch: the page moves on to the next one, and #141 is in Carbon Impact. Nobody votes on the fork: Carbon Impact reads as stopped.    |
+
+### AutoMaxi: `automaxi`
+
+| Flow                                    | Sign as       | What to do                                                                                                      |
+| --------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------- |
+| The menu, and AutoMaxi's page           | `0x0208…4C95` | `#hydrex`: Carbon Impact, AutoMaxi and Vote yourself. AutoMaxi has no record yet. Its page: `#hydrex/automaxi`. |
+| Join AutoMaxi                           | `0x0208…4C95` | Join AutoMaxi beside #141.                                                                                      |
+| Move between the two automations        | `0x2573…0b16` | Tick #53350, Move to AutoMaxi; then Move to Carbon Impact.                                                      |
+| Leave AutoMaxi                          | `0x0208…4C95` | Once #141 is in, Leave: claims stop.                                                                            |
+| Its receipts: its keeper and a stranger | `0x6092…6c93` | `#hydrex/82774`: Receipt · #82774 · AutoMaxi, claimed by `0x0000…dEaD` and by AutoMaxi, less 1%.                |
+| Joining AutoMaxi is off                 | any           | Tick AutoMaxi's code changed, reload.                                                                           |
+
+### The swap: `swap`
+
+| Flow                                    | Sign as       | What to do                                                                                                                                      |
+| --------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Swap into USDC                          | `0x0000…FFEE` | WETH, ZORA and AVNT, each with what it fetches. The quote, the 1%, what reaches you, the least, the gas. Review, Continue, Confirm.             |
+| In one prompt, or one call at a time    | `0x0000…FFEE` | With Sends several calls in one prompt ticked and the page reloaded: one prompt, 4 calls. Without: one prompt each, the swap quoted again last. |
+| A token skipped, and its approval reset | `0x0000…FFEE` | Tick Sends several calls, reload. Review, Continue; then send all of AVNT away, and Confirm: 2 tokens sold, AVNT kept. Reset its approval.      |
+| Another output                          | `0x0000…FFEE` | `#swap/weth`, or pick it on the page.                                                                                                           |
+| The approvals given to the swappers     | `0x0000…FFEE` | After a swap, the swap's Approvals, and the App's.                                                                                              |
+| Many tokens                             | `0xd9e9…50aF` | Carbon Impact's treasury, a Safe: as a wallet, or in Safe{Wallet}.                                                                              |
+| Swaps are off                           | any           | Tick Base's RPCs serve another chain, reload: Swaps are off, without naming the check.                                                          |
+
+### Claiming: `claim`
+
+| Flow              | Sign as       | What to do                                                                                                                             |
+| ----------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| An overdue payout | `0x6092…6c93` | The App's Needs you: #82774, payout overdue. Its page, `#hydrex/82774`, says so too.                                                   |
+| Claim it as it is | `0x6092…6c93` | Claim now, Continue: several transactions, each a claim through AutoMaxi. Then the receipt, and Swap these.                            |
+| Claim it, swapped | `0x6092…6c93` | Claim now, Into, Continue: the claims, then Review the swap into USDC.                                                                 |
+| From a Safe       | `0x6092…6c93` | Open the page in Safe{Wallet}. Claim now in Needs you: as it is only, as several Safe transactions, then Proposed.                     |
+| Across the flip   | `0x6092…6c93` | Next epoch, then 12 hours later, to see the payouts across a new epoch. On the fork, Hydrex never moves on to the new epoch by itself. |
+
+## What the scenarios do not show
+
+- **A payout under way,** paid to some accounts and not yet others: it needs the keeper's own transactions.
+- **A quote far under the page's own price:** it needs a pool that far from the others.
+- **A wallet that lists its tokens** with ERC-7811's `wallet_getAssets`: the test wallet does not.
+- **Real wallets and the real Safe{Wallet}:** check those on the site itself, as [Releasing](README.md#releasing) says.

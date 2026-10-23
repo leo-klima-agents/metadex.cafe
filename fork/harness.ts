@@ -22,6 +22,7 @@ import {
   encodeFunctionData,
   getAddress,
   getContractAddress,
+  hexToBytes,
   keccak256,
   parseAbi,
   toHex,
@@ -34,6 +35,7 @@ import {
   AUTOMAXI,
   CARBON_IMPACT,
   DEFAULT_OUTPUT,
+  HYDX,
   KEEPER,
   RPCS,
   SWAPPERS,
@@ -45,10 +47,11 @@ import { WEEK, short } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
 import { pricesNow, type Token } from "../src/prices.ts";
 import { SETTLED, readEarned, readStamps, weighed } from "../src/receipts.ts";
-import { findRoute } from "../src/swap.ts";
+import { MIDDLES, findRoute } from "../src/swap.ts";
+import { describe as describeTokens, holdingsOf, known } from "../src/tokens.ts";
 
 export const CONDUIT = CARBON_IMPACT.address;
-export const BLOCK = 52_694_000; // Fri 16 Oct 2026, 18:22 UTC
+export const BLOCK = 52_694_000; // Fri 16 Oct 2026, 19:02 UTC
 export const FLIP = 1_792_627_200; // Thu 22 Oct 2026, 00:00 UTC, when the epoch after BLOCK's starts
 // After the swappers' deployment in block 52,894,916: Wed 21 Oct 2026, 15:42 UTC. Carbon Impact still owed #82774 the
 // epoch from Thu 1 Oct.
@@ -210,7 +213,7 @@ export async function expectApprovals(ids: bigint[], delegate: Address, claimer:
   }
 }
 
-type WalletOptions = {
+export type WalletOptions = {
   owner: Address;
   chainId: number;
   decline: boolean;
@@ -220,9 +223,14 @@ type WalletOptions = {
   sending?: Promise<void>;
   // Sends several calls in one prompt, with EIP-5792, as Coinbase Wallet and MetaMask do.
   batch?: boolean;
+  // Asks before it connects, switches or sends, as a wallet's window asks its owner, and says no where the answer is
+  // false. The QA wallet asks the person trying the page: see qa.ts.
+  ask?: (method: string, params: any[]) => Promise<boolean>;
+  // How many of the next transactions to send with too little gas, so that they fail on Base.
+  failing?: number;
 };
 // Fails the reads of Base whose request body `refuse` matches, and gives those `answer` answers its own reply.
-type Rpc = {
+export type Rpc = {
   refuse?: ((body: string) => boolean) | undefined;
   answer?: ((body: string) => string | undefined) | undefined;
 };
@@ -251,8 +259,9 @@ type Opened = {
 };
 
 // A wallet that announces itself to the page and hands each request to Node through testWallet, which the page's
-// Content Security Policy cannot block.
-const WALLET_SCRIPT = `(() => {
+// Content Security Policy cannot block. With several names, it announces itself as that many wallets, which all hand
+// their requests to the same testWallet.
+export const walletScript = (names: string[]) => `(() => {
   const listeners = {};
   window.testWalletEmit = (event, value) => { for (const l of listeners[event] ?? []) l(value); };
   const provider = {
@@ -265,13 +274,17 @@ const WALLET_SCRIPT = `(() => {
     on(event, listener) { (listeners[event] ??= []).push(listener); },
     removeListener() {},
   };
-  const info = { uuid: "6f1e9b4e-0c4b-4d55-9a1d-3a0b5f0e7a11", name: "Test Wallet", rdns: "test.wallet",
-    icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'/%3E" };
-  const announce = () =>
-    window.dispatchEvent(new CustomEvent("eip6963:announceProvider", { detail: Object.freeze({ info, provider }) }));
+  const icon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'/%3E";
+  const infos = ${JSON.stringify(names)}.map((name, i) =>
+    ({ uuid: "6f1e9b4e-0c4b-4d55-9a1d-3a0b5f0e7a1" + (i + 1), name, rdns: i ? "test.wallet" + i : "test.wallet", icon }));
+  const announce = () => {
+    for (const info of infos)
+      window.dispatchEvent(new CustomEvent("eip6963:announceProvider", { detail: Object.freeze({ info, provider }) }));
+  };
   window.addEventListener("eip6963:requestProvider", announce);
   announce();
 })();`;
+const WALLET_SCRIPT = walletScript(["Test Wallet"]);
 
 const POLICY_SCRIPT = `document.addEventListener("securitypolicyviolation", (event) =>
   console.error("Content Security Policy: " + event.violatedDirective + " " + event.blockedURI));`;
@@ -294,33 +307,51 @@ const safePage = (safe: Address) => `<!doctype html><meta charset="utf-8"><title
   });
 </script>`;
 
-function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
+// Gas enough for Base to take the transaction, and too little to run it: what its calldata costs at least (EIP-7623).
+function starved(data: Hex): string {
+  const bytes = hexToBytes(data);
+  const nonzero = bytes.filter(Boolean).length;
+  return hex(21_000 + 40 * nonzero + 10 * (bytes.length - nonzero));
+}
+
+export function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
   let asking = false;
   const batches = new Map<string, Hex[]>();
+  const rejected = { error: { code: 4001, message: "User rejected the request." } };
+  const allows = async (method: string, params: any[]) =>
+    !options.decline && ((await options.ask?.(method, params)) ?? true);
+  const gasFor = (data: Hex) => {
+    if (!options.failing) return GAS;
+    options.failing--;
+    return starved(data);
+  };
   return async (method: string, params: any[]): Promise<{ result?: unknown; error?: unknown }> => {
     asked.push(method);
     switch (method) {
-      case "eth_requestAccounts":
+      case "eth_requestAccounts": {
         // As MetaMask does while its window is open.
         if (asking) return { error: { code: -32002, message: "Request already pending." } };
         asking = true;
         await options.approval;
+        const allowed = (await options.ask?.(method, params)) ?? true;
         asking = false;
-        return { result: [options.owner] };
+        return allowed ? { result: [options.owner] } : rejected;
+      }
       case "eth_chainId":
         return { result: hex(options.chainId) };
       case "wallet_switchEthereumChain":
         if (!options.switches) return { error: { code: -32603, message: "Unrecognized chain ID." } };
+        if (!((await options.ask?.(method, params)) ?? true)) return rejected;
         options.chainId = Number(params[0].chainId);
         return { result: null };
       case "eth_sendTransaction": {
         const { to, data, chainId } = params[0];
         sent.push({ to, data });
         await options.sending;
-        if (options.decline) return { error: { code: 4001, message: "User rejected the request." } };
+        if (!(await allows(method, params))) return rejected;
         // As MetaMask does.
         if (chainId !== hex(options.chainId)) return { error: { code: -32602, message: "Wrong chain." } };
-        return { result: await send({ to, data, from: options.owner, gas: GAS }) };
+        return { result: await send({ to, data, from: options.owner, gas: gasFor(data) }) };
       }
       case "wallet_getCapabilities":
         if (!options.batch) return { error: { code: 4200, message: "The test wallet does not batch." } };
@@ -328,12 +359,12 @@ function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
       case "wallet_sendCalls": {
         if (!options.batch) return { error: { code: 4200, message: "The test wallet does not batch." } };
         const { calls } = params[0] as { calls: Sent[] };
-        if (options.decline) return { error: { code: 4001, message: "User rejected the request." } };
+        if (!(await allows(method, params))) return rejected;
         // One after the other, each in its own block: anvil has no account code to run them together.
         const hashes: Hex[] = [];
         for (const { to, data } of calls) {
           sent.push({ to, data });
-          hashes.push(await send({ to, data, from: options.owner, gas: GAS }));
+          hashes.push(await send({ to, data, from: options.owner, gas: gasFor(data as Hex) }));
         }
         const id = `0x${(batches.size + 1).toString(16).padStart(64, "0")}`;
         batches.set(id, hashes);
@@ -357,7 +388,10 @@ function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
 // anvil stops, the request fails in a handler that nobody awaits any more. So anvil answers them all before it stops.
 export const forwarding = new Set<Promise<string>>();
 
-async function serve(route: Route, { origins, rpc, safe }: Pick<Opened, "origins" | "rpc" | "safe">): Promise<void> {
+export async function serve(
+  route: Route,
+  { origins, rpc, safe }: Pick<Opened, "origins" | "rpc" | "safe">,
+): Promise<void> {
   const request = route.request();
   const { origin, pathname } = new URL(request.url());
   origins.add(origin);
@@ -536,6 +570,13 @@ export async function start(block: number, owners: Address[]): Promise<void> {
   const cached = (JSON.parse(process.env.FORK_CACHES ?? "{}") as Record<string, string>)[block];
   if (!cached)
     throw new Error("Run the browser tests through fork/run.ts, which serves the caches anvil forks through.");
+  await startAnvil(block, cached);
+  for (const owner of owners) await anvil("anvil_setBalance", [owner, "0x16345785d8a0000"]); // 0.1 ETH
+  browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
+}
+
+// Starts anvil on a fork of Base at `block`, through the cache at `cached`.
+export async function startAnvil(block: number, cached: string): Promise<void> {
   CACHE_URL = cached;
   const port = await freePort();
   ANVIL = `http://127.0.0.1:${port}`;
@@ -561,8 +602,6 @@ export async function start(block: number, owners: Address[]): Promise<void> {
     }
   }
   for (const token of NATIVE) await anvil("anvil_setCode", [token, "0x"]);
-  for (const owner of owners) await anvil("anvil_setBalance", [owner, "0x16345785d8a0000"]); // 0.1 ETH
-  browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 }
 
 // Starts a fork at BLOCK, for the owners there, and reads with no time limit what the page reads first, which a first
@@ -590,9 +629,13 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-// anvil busy with a request can take long to stop: after five seconds, it is made to.
 export async function stop(): Promise<void> {
   await browser?.close();
+  await stopAnvil();
+}
+
+// anvil busy with a request can take long to stop: after five seconds, it is made to.
+export async function stopAnvil(): Promise<void> {
   await Promise.allSettled(forwarding);
   if (node && node.exitCode === null && node.signalCode === null) {
     const exited = new Promise((resolve) => node.once("exit", resolve));
@@ -635,6 +678,34 @@ export async function readOn<T>(
 export const balanceOf = (token: Address, owner: Address) => readOn<bigint>(token, tokenAbi, "balanceOf", [owner]);
 
 export const swapView = (page: Page) => page.locator('.view[data-view="swap"]');
+
+// Carbon Impact's treasury, a Safe that holds many of the tokens its fee took.
+export const HOLDER = getAddress("0xd9e966a6bfa2ae2113a34bb4dd02ded921da50af");
+export const AVNT = getAddress("0x696f9436b67233384889472cd7cd58a6fb5df4f1");
+export const ZORA = getAddress("0x1111111111166b7fe7bd91427724b487980afc69");
+// A wallet of the test's own, which the treasury gives three of its tokens, so that the page has only those to route.
+export const SELLER = getAddress("0x0000000000000000000000000000000000c0ffee");
+
+// Gives SELLER the treasury's whole balance of each token, then reads what the page will: the balances, the prices, and
+// each token's route into USDC, with no time limit, as anvil reads the pools from FORK_URL a slot at a time.
+export async function fund(tokens: Address[]): Promise<void> {
+  const into = SWAPPERS[0]!;
+  for (const token of tokens) {
+    const amount = await balanceOf(token, HOLDER);
+    await mined(HOLDER, token, encodeFunctionData({ abi: tokenAbi, functionName: "transfer", args: [SELLER, amount] }));
+  }
+  await warm(async () => {
+    // The page reads the balance of every token it knows, and adds last epoch's rewards, such as AVNT, once it has read
+    // each automation's.
+    await Promise.all(AUTOMATIONS.map(({ address }) => readEarnings(address)));
+    const held = await holdingsOf(SELLER, [...known(), ...tokens], into.address);
+    // The page prices the tokens its routes name too.
+    const described = await describeTokens([...tokens, into.token, ...MIDDLES, HYDX]);
+    const amounts = new Map(tokens.map((token) => [token.toLowerCase(), held.get(token.toLowerCase())!.balance]));
+    await pricesNow([...described.values()], amounts);
+    for (const token of tokens) await findRoute(token, amounts.get(token.toLowerCase())!, into, false);
+  });
+}
 
 // Reads, with no time limit, what the page reads of an owner's payouts, what the claim of #82774 reads, and the routes
 // into the default output and the prices now for what it brings, which the claim's review reads as it opens.
