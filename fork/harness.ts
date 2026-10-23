@@ -141,8 +141,8 @@ export async function anvil<T>(method: string, params: unknown[] = []): Promise<
 // Sends a transaction from an account anvil impersonates, with no tip, as anvil 1.5 filled it in. anvil 1.8 tips 1 gwei
 // over a fee cap it takes from the base fee alone under --disable-min-priority-fee, and so refuses its own transaction.
 // The cache hears of it before anyone asks for its receipt, which anvil would otherwise ask FORK_URL for until it mines
-// it: see rpc-cache.ts.
-export async function send(tx: { from: string; to: string; data: string; gas?: string }): Promise<Hex> {
+// it: see rpc-cache.ts. Without `to`, it deploys `data`.
+export async function send(tx: { from: string; to?: string; data: string; gas?: string }): Promise<Hex> {
   const hash = await anvil<Hex>("eth_sendTransaction", [{ ...tx, maxPriorityFeePerGas: "0x0" }]);
   await nodeFetch(`${CACHE_URL}/sent`, { method: "POST", body: hash });
   return hash;
@@ -230,6 +230,9 @@ export type WalletOptions = {
   ask?: (method: string, params: any[]) => Promise<boolean>;
   // How many of the next transactions to send with too little gas, so that they fail on Base.
   failing?: number;
+  // The tokens it lists with ERC-7811's wallet_getAssets. A wallet that answers wallet_getCapabilities, as one that
+  // lists its tokens does, sends several calls in one prompt too.
+  assets?: Address[];
 };
 // Fails the reads of Base whose request body `refuse` matches, and gives those `answer` answers its own reply. `rewrite`
 // changes anvil's reply to a request, where it gives another.
@@ -360,12 +363,22 @@ export function testWallet(options: WalletOptions, sent: Sent[], asked: string[]
         return { result: await send({ to, data, from: options.owner, gas: gasFor(data) }) };
       }
       case "wallet_getCapabilities":
-        if (!options.batch) return { error: { code: 4200, message: "The test wallet does not batch." } };
+        if (!options.batch && !options.assets)
+          return { error: { code: 4200, message: "The test wallet does not batch." } };
         return {
-          result: { [hex(8453)]: { atomic: { status: options.atomic === false ? "unsupported" : "supported" } } },
+          result: {
+            [hex(8453)]: {
+              atomic: { status: options.atomic === false ? "unsupported" : "supported" },
+              ...(options.assets && { assetDiscovery: { supported: true } }),
+            },
+          },
         };
+      case "wallet_getAssets":
+        if (!options.assets) return { error: { code: 4200, message: "The test wallet does not list its tokens." } };
+        return { result: { [hex(8453)]: options.assets.map((address) => ({ address, type: "erc20" })) } };
       case "wallet_sendCalls": {
-        if (!options.batch) return { error: { code: 4200, message: "The test wallet does not batch." } };
+        if (!options.batch && !options.assets)
+          return { error: { code: 4200, message: "The test wallet does not batch." } };
         const { calls } = params[0] as { calls: Sent[] };
         if (!(await allows(method, params))) return rejected;
         // One after the other, each in its own block: anvil has no account code to run them together.

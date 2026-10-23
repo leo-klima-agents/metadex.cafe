@@ -14,12 +14,16 @@ import {
   decodeFunctionData,
   decodeFunctionResult,
   encodeAbiParameters,
+  encodeDeployData,
   encodeFunctionData,
   encodeFunctionResult,
+  getAbiItem,
   getAddress,
   isAddress,
   numberToHex,
   parseAbi,
+  parseUnits,
+  toFunctionSelector,
   type Address,
   type Hex,
 } from "viem";
@@ -34,30 +38,37 @@ import {
   MULTICALL3,
   RPCS,
   SWAPPERS,
+  USDC,
   VOTER,
   VOTING_ESCROW,
   VOTING_ESCROW_IMPLEMENTATION,
 } from "../src/config.ts";
 import conduits from "../src/hydrex-conduits.json" with { type: "json" };
+import { readEarnings, rewardsFor } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
+import { readEarned, weighed } from "../src/receipts.ts";
 import { erc20Abi, swapperAbi } from "../src/swap.ts";
 import {
   AVNT,
   RPC_ORIGINS,
   SAFE_WALLET,
   SITE,
+  HOLDER,
   STRANGER,
   ZORA,
   abi,
   anvil,
   balanceOf,
   mined,
+  send,
   serve,
+  settle,
   startAnvil,
   stopAnvil,
   testWallet,
   tokenAbi,
   walletScript,
+  warm,
   type Rpc,
   type WalletOptions,
 } from "./harness.ts";
@@ -72,6 +83,8 @@ const ETH = 10n ** 17n; // 0.1 ETH, for gas
 // The QA wallet's window, at the left of the screen. Chromium makes no window narrower than about 500 pixels.
 const PANEL_WIDTH = 520;
 const hex = (n: number | bigint) => `0x${n.toString(16)}`;
+// Waits, then answers null, as a receipt not found yet.
+const sleep = (ms: number) => new Promise<null>((resolve) => setTimeout(() => resolve(null), ms));
 
 // The windows that show the page: with the test wallet, with two wallets, or without any, as Safe{Wallet} shows it.
 type Kind = "wallet" | "wallets" | "none";
@@ -90,6 +103,44 @@ const QA_ABI = parseAbi([
   "function lastVoted(address voter) view returns (uint256)",
   "function ownerOf(uint256 tokenId) view returns (address)",
   "function delegate(uint256 tokenId, address delegatee)",
+  "function transferFrom(address from, address to, uint256 tokenId)",
+  "function minter() view returns (address)",
+  "function update_period() returns (uint256)",
+  "function _epochTimestamp() view returns (uint256)",
+  "function claimFees(address[] fees, address[][] tokens, uint256 tokenId)",
+  "function claimBribes(address[] bribes, address[][] tokens, uint256 tokenId)",
+  "function setMyPayoutRecipient(address newRecipient)",
+  "function KEEPER() view returns (address)",
+  "function vote(address[] pools, uint256[] weights)",
+  "function poolVote(address voter, uint256 index) view returns (address)",
+  "function votes(address voter, address pool) view returns (uint256)",
+  "function gauges(address pool) view returns (address)",
+  "function external_bribes(address gauge) view returns (address)",
+  "function notifyRewardAmount(address token, uint256 amount)",
+]);
+// Carbon Impact's executor module, through which its keeper votes and pays: see the README of
+// https://github.com/ldeso/hydrex-keeper.
+const CARBON_IMPACT_MODULE: Address = "0x750973E0CB728C3112561Bc8E9b235afA9B17E81";
+// A token of the QA wallet's own, deployed with a name and symbol: see fixtures/QaToken.sol.
+const QA_TOKEN_ABI = parseAbi(["constructor(string name, string symbol, uint8 decimals, uint256 supply)"]);
+const QA_TOKEN = readFileSync(new URL("fixtures/qa-token-init-code.hex", import.meta.url), "utf8").trim() as Hex;
+const QUOTE = toFunctionSelector(getAbiItem({ abi: swapperAbi, name: "quote" }));
+const SWAPPER_ADDRESSES = new Set(SWAPPERS.map(({ address }) => address.toLowerCase()));
+const SYMBOL = toFunctionSelector("function symbol()").slice(2);
+// What the owner's own claim on Hydrex takes at most, of each epoch's rewards: the most valuable.
+const OWN_CLAIM_PAIRS = 10;
+// The QA wallet's commands that send transactions of their own.
+const SENDS = new Set([
+  "delegate",
+  "give",
+  "claim-on-hydrex",
+  "pay-to",
+  "move-on",
+  "replay",
+  "keeper-votes",
+  "incentive",
+  "mint",
+  "send-away",
 ]);
 // Hydrex's automations, the page's own and the others, by name.
 const AUTOMATION_NAMES = [...conduits, ...AUTOMATIONS].map(({ name, address }) => ({
@@ -328,14 +379,18 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   const answers = new Map<string, (data: Hex) => Hex>();
   const callKey = (target: string, data: string) => `${target} ${data}`.toLowerCase();
   function rewrite(body: string, reply: string): string | undefined {
-    if (!answers.size) return undefined;
+    if (!answers.size && !quotesUnder) return undefined;
     const { method, params = [] } = JSON.parse(body) as { method: string; params?: { to?: string; data?: Hex }[] };
     const [{ to = "", data = "0x" } = {}] = params;
     if (method !== "eth_call" || !same(to, MULTICALL3)) return undefined;
     const [calls] = decodeFunctionData({ abi: QA_ABI, data }).args as readonly unknown[] as [
       { target: Address; callData: Hex }[],
     ];
-    const changes = calls.map(({ target, callData }) => answers.get(callKey(target, callData)));
+    const changes = calls.map(
+      ({ target, callData }) =>
+        answers.get(callKey(target, callData)) ??
+        (quotesUnder && SWAPPER_ADDRESSES.has(target.toLowerCase()) && callData.startsWith(QUOTE) ? under : undefined),
+    );
     const answer = JSON.parse(reply) as { result?: Hex };
     if (!changes.some(Boolean) || !answer.result) return undefined;
     const results = decodeFunctionResult({ abi: QA_ABI, functionName: "aggregate3", data: answer.result });
@@ -364,6 +419,20 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     };
   };
   const another = (): Hex => encodeAbiParameters([{ type: "address" }], [STRANGER]);
+  // Each swapper's quotes, a tenth under what its pools give: far under the page's own prices, which it says.
+  let quotesUnder = false;
+  const under = (data: Hex): Hex => {
+    const results = decodeFunctionResult({ abi: swapperAbi, functionName: "quote", data });
+    const lower = results.map((each) => ({ ...each, amountOut: (each.amountOut * 9n) / 10n }));
+    return encodeFunctionResult({ abi: swapperAbi, functionName: "quote", result: lower });
+  };
+  // The reads of Base that fail, each by what its request holds.
+  const refusing = new Set<(body: string) => boolean>();
+  rpc.refuse = (body) => [...refusing].some((refuses) => refuses(body));
+  const refused = (refuses: (body: string) => boolean) => ({
+    on: async () => void refusing.add(refuses),
+    off: async () => void refusing.delete(refuses),
+  });
   const inactive = (data: Hex): Hex => {
     const [actions, , name] = decodeFunctionResult({ abi: QA_ABI, functionName: "getConduitApprovalConfig", data });
     return encodeFunctionResult({
@@ -394,11 +463,25 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   }
 
   const FAULTS: Record<string, Fault> = {
-    "rpc-down": {
+    "rpc-down": { group: "base", label: "Base's RPCs fail", ...refused(() => true) },
+    symbols: {
       group: "base",
-      label: "Base's RPCs fail",
-      on: async () => void (rpc.refuse = () => true),
-      off: async () => void (rpc.refuse = undefined),
+      label: "Tokens' symbols cannot be read",
+      ...refused((body) => body.includes(SYMBOL)),
+    },
+    "automaxi-figures": {
+      group: "base",
+      label: "AutoMaxi's figures cannot be read",
+      // Its votes, read from the Voter for AutoMaxi's address: Carbon Impact's still read.
+      ...refused(
+        (body) => body.includes(VOTER.slice(2).toLowerCase()) && body.includes(AUTOMAXI.address.slice(2).toLowerCase()),
+      ),
+    },
+    "quotes-under": {
+      group: "base",
+      label: "Swap quotes come in a tenth under price",
+      on: async () => void (quotesUnder = true),
+      off: async () => void (quotesUnder = false),
     },
     chain: {
       group: "base",
@@ -480,7 +563,12 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     codes.clear();
     answers.clear();
     voted.clear();
-    rpc.refuse = rpc.answer = undefined;
+    refusing.clear();
+    quotesUnder = false;
+    rpc.answer = undefined;
+    replayed = 0;
+    created.length = 0;
+    delete wallet.assets;
     wallet.failing = 0;
     console.log(`Starting ${next.name}: ${next.title}`);
     try {
@@ -557,6 +645,181 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     note(`#${id}'s votes delegated to ${named?.name ?? (same(delegatee, owner) ? "its owner" : short(delegatee))}`);
   }
 
+  // An account by its number, and its owner.
+  async function accountOf(account: string): Promise<{ id: bigint; owner: Address }> {
+    const id = BigInt(account.replace(/^#/, ""));
+    const data = encodeFunctionData({ abi: QA_ABI, functionName: "ownerOf", args: [id] });
+    const reply = await anvil<Hex>("eth_call", [{ to: VOTING_ESCROW, data }, "latest"]).catch(() => undefined);
+    if (!reply) throw new Error(`Hydrex has no account #${id}.`);
+    const owner = decodeFunctionResult({ abi: QA_ABI, functionName: "ownerOf", data: reply });
+    await gas(owner);
+    return { id, owner };
+  }
+  const as = (from: Address, to: Address, functionName: string, args: unknown[]) =>
+    mined(from, to, encodeFunctionData({ abi: QA_ABI, functionName, args } as never));
+
+  // As its owner can: the new owner then votes with it, and no automation claims for it until it joins one again.
+  async function give(account: string): Promise<void> {
+    const { id, owner } = await accountOf(account);
+    if (same(owner, wallet.owner)) throw new Error(`#${id} is already ${short(owner)}'s.`);
+    await as(owner, VOTING_ESCROW, "transferFrom", [owner, wallet.owner, id]);
+    note(`Gave #${id} from ${short(owner)} to ${short(wallet.owner)}`);
+  }
+
+  // As its owner can on Hydrex: the most valuable of what waits in the pools its automations voted for in each of the
+  // last two epochs, as a payout claims, so that the page finds the record of the payout moved by a claim of another's.
+  async function claimOnHydrex(account: string): Promise<void> {
+    const { id, owner } = await accountOf(account);
+    const claimed: { contract: Address; token: Address; fee: boolean }[] = [];
+    await warm(async () => {
+      for (const { address } of AUTOMATIONS) {
+        const earnings = await readEarnings(address).catch(() => undefined);
+        if (!earnings) continue;
+        for (const rewards of [earnings.rewards, await rewardsFor(address, earnings.start - WEEK)]) {
+          const pairs = weighed(rewards, earnings.prices);
+          const [amounts = []] = await readEarned([id], pairs, "latest");
+          const fees = new Set(rewards.filter(({ fee }) => fee).map(({ contract }) => contract.toLowerCase()));
+          claimed.push(
+            ...pairs
+              .map((pair, i) => ({ ...pair, fee: fees.has(pair.contract.toLowerCase()), owed: amounts[i] ?? 0n }))
+              .filter(({ owed }) => owed > 0n)
+              .sort((a, b) => b.usd - a.usd)
+              .slice(0, OWN_CLAIM_PAIRS),
+          );
+        }
+      }
+    });
+    if (!claimed.length) throw new Error(`Nothing waits for #${id} in the pools of the last two epochs.`);
+    // A few rewards a transaction, as each reads the account's past epochs.
+    for (const fee of [true, false])
+      for (let i = 0; i < claimed.length; i += OWN_CLAIM_PAIRS / 2) {
+        const these = claimed.slice(i, i + OWN_CLAIM_PAIRS / 2).filter((each) => each.fee === fee);
+        const contracts = [...new Set(these.map(({ contract }) => contract))];
+        if (!contracts.length) continue;
+        const tokens = contracts.map((contract) =>
+          these.filter((each) => each.contract === contract).map((each) => each.token),
+        );
+        await as(owner, VOTER, fee ? "claimFees" : "claimBribes", [contracts, tokens, id]);
+      }
+    note(`#${id}'s owner claimed ${claimed.length} of its rewards on Hydrex`);
+  }
+
+  // Carbon Impact pays an owner's accounts where the owner says, or the admin key: setMyPayoutRecipient.
+  async function payTo(to: string): Promise<void> {
+    const recipient = /^(its )?owner$|^$/i.test(to)
+      ? wallet.owner
+      : isAddress(to, { strict: false })
+        ? getAddress(to)
+        : undefined;
+    if (!recipient) throw new Error(`${to} is not an address.`);
+    await as(wallet.owner, CARBON_IMPACT.address, "setMyPayoutRecipient", [recipient]);
+    note(
+      `Carbon Impact pays ${short(wallet.owner)}'s accounts to ${same(recipient, wallet.owner) ? "it" : short(recipient)}`,
+    );
+  }
+
+  // As anyone may once the epoch has flipped, and someone soon does on Base: Hydrex's Voter moves on to it, and what the
+  // epoch before earned is final.
+  async function moveOn(): Promise<void> {
+    const read = async (to: Address, functionName: string) =>
+      decodeFunctionResult({
+        abi: QA_ABI,
+        functionName,
+        data: await anvil<Hex>("eth_call", [
+          { to, data: encodeFunctionData({ abi: QA_ABI, functionName } as never) },
+          "latest",
+        ]),
+      } as never) as unknown;
+    const before = Number(await read(VOTER, "_epochTimestamp"));
+    await gas(STRANGER);
+    await as(STRANGER, (await read(VOTER, "minter")) as Address, "update_period", []);
+    const after = Number(await read(VOTER, "_epochTimestamp"));
+    if (after === before) throw new Error("Hydrex is already in this epoch: move to the next one first.");
+    note(`Hydrex moved on to the epoch from ${new Date(after * 1000).toUTCString()}`);
+  }
+
+  const view = async <T>(to: Address, functionName: string, args: unknown[] = []): Promise<T> => {
+    const data = encodeFunctionData({ abi: QA_ABI, functionName, args } as never);
+    const reply = await anvil<Hex>("eth_call", [{ to, data }, "latest"]);
+    return decodeFunctionResult({ abi: QA_ABI, functionName, data: reply } as never) as T;
+  };
+  // Carbon Impact's vote now, pool by pool: the Voter keeps it until it votes again.
+  async function lastVote(): Promise<{ pools: Address[]; weights: bigint[] }> {
+    const pools: Address[] = [];
+    for (;;) {
+      const pool = await view<Address>(VOTER, "poolVote", [CARBON_IMPACT.address, BigInt(pools.length)]).catch(
+        () => undefined,
+      );
+      if (!pool) break;
+      pools.push(pool);
+    }
+    const weights = await Promise.all(pools.map((pool) => view<bigint>(VOTER, "votes", [CARBON_IMPACT.address, pool])));
+    return { pools, weights };
+  }
+
+  // As its keeper does each week, which it does not on the fork: the vote it cast last, in the epoch now.
+  async function keeperVotes(): Promise<void> {
+    const { pools, weights } = await lastVote();
+    if (!pools.length) throw new Error("Carbon Impact has no vote to cast again.");
+    const keeper = await view<Address>(CARBON_IMPACT_MODULE, "KEEPER");
+    await gas(keeper);
+    await as(keeper, CARBON_IMPACT_MODULE, "vote", [pools, weights.map((weight) => (weight > 0n ? weight : 1n))]);
+    note(`Carbon Impact's keeper voted for ${pools.length} pools`);
+  }
+
+  // As anyone may: 100 USDC of incentives, from Carbon Impact's treasury, for the votes of this epoch in the pool that
+  // Carbon Impact votes for most, so that its votes earn something on the fork.
+  async function incentive(): Promise<void> {
+    const { pools, weights } = await lastVote();
+    if (!pools.length) throw new Error("Carbon Impact votes for no pool.");
+    const top = pools[weights.indexOf(weights.reduce((a, b) => (b > a ? b : a)))]!;
+    const contract = await view<Address>(VOTER, "external_bribes", [await view<Address>(VOTER, "gauges", [top])]);
+    const amount = 100_000_000n;
+    if ((await balanceOf(USDC, HOLDER)) < amount) throw new Error("Carbon Impact's treasury holds too little USDC.");
+    await gas(HOLDER);
+    await mined(HOLDER, USDC, encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [contract, amount] }));
+    await as(HOLDER, contract, "notifyRewardAmount", [USDC, amount]);
+    note(`Added 100 USDC of incentives to the pool ${short(top)}, which Carbon Impact votes for most`);
+  }
+
+  // Transactions that Base included after the fork's block, sent again in their order, as their senders.
+  let replayed = 0;
+  async function replay(): Promise<void> {
+    const next = current.replays?.[replayed];
+    if (!next) throw new Error("Every transaction of this scenario was sent.");
+    const tx = await anvil<{ from: Address; to: Address; input: Hex; gas: Hex }>("eth_getTransactionByHash", [
+      next.hash,
+    ]);
+    await gas(tx.from);
+    const hash = await send({ from: tx.from, to: tx.to, data: tx.input, gas: tx.gas });
+    let receipt: { status: Hex } | null = null;
+    for (const deadline = Date.now() + 120_000; !receipt && Date.now() < deadline;)
+      receipt = (await anvil<{ status: Hex } | null>("eth_getTransactionReceipt", [hash])) ?? (await sleep(250));
+    if (receipt?.status !== "0x1") throw new Error(`The keeper's transaction that ${next.does} failed on the fork.`);
+    replayed++;
+    note(`The keeper ${next.does}`);
+  }
+
+  // A token of the QA wallet's own, with a listed token's symbol, or any: it holds 1,000.
+  const created: Address[] = [];
+  async function mint(symbol: string): Promise<void> {
+    if (!symbol) throw new Error("Give the token a symbol.");
+    const listed = TOKENS.find((each) => each.symbol === symbol);
+    const decimals = (listed as { decimals?: number } | undefined)?.decimals ?? 18;
+    const data = encodeDeployData({
+      abi: QA_TOKEN_ABI,
+      bytecode: QA_TOKEN,
+      args: [`${symbol} of the QA wallet`, symbol, decimals, parseUnits("1000", decimals)],
+    });
+    const hash = await send({ from: wallet.owner, data, gas: "0x1e8480" });
+    let receipt: { contractAddress: Address | null } | null = null;
+    while (!receipt) receipt = (await anvil("eth_getTransactionReceipt", [hash])) ?? (await sleep(250));
+    const address = getAddress(receipt.contractAddress!);
+    created.push(address);
+    NAMES.set(address.toLowerCase(), `${symbol} of the QA wallet`);
+    note(`Gave ${short(wallet.owner)} 1,000 ${symbol}, a token of the QA wallet's own, at ${address}`);
+  }
+
   async function travel(to: "epoch" | "half-day"): Promise<void> {
     const { time } = await latest();
     const at = to === "epoch" ? (Math.floor(time / WEEK) + 1) * WEEK + 60 : time + 12 * 3600;
@@ -584,6 +847,12 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       switches: wallet.switches,
       calls: (!wallet.batch ? "one" : wallet.atomic === false ? "each" : "atomic") satisfies Calls,
       failing: wallet.failing ?? 0,
+      lists: !!wallet.assets,
+      replays: current.replays && {
+        sent: replayed,
+        total: current.replays.length,
+        ...(current.replays[replayed] && { next: current.replays[replayed]!.does }),
+      },
       prompts: prompts.map(({ id, text }) => ({ id, text })),
       ...now,
       faults: Object.entries(FAULTS).map(([id, { group, label }]) => ({ id, group, label, on: faults.has(id) })),
@@ -613,8 +882,34 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
         const [key, on] = args as [string, boolean];
         if (key === "asks") asks = on;
         if (key === "switches") wallet.switches = on;
+        if (key === "lists" && on) wallet.assets = created;
+        if (key === "lists" && !on) delete wallet.assets;
         break;
       }
+      case "give":
+        await give(String(args[0]).trim());
+        break;
+      case "claim-on-hydrex":
+        await claimOnHydrex(String(args[0]).trim());
+        break;
+      case "pay-to":
+        await payTo(String(args[0]).trim());
+        break;
+      case "move-on":
+        await moveOn();
+        break;
+      case "replay":
+        await replay();
+        break;
+      case "keeper-votes":
+        await keeperVotes();
+        break;
+      case "incentive":
+        await incentive();
+        break;
+      case "mint":
+        await mint(String(args[0]).trim());
+        break;
       case "calls": {
         const calls = args[0] as Calls;
         wallet.batch = calls !== "one";
@@ -659,6 +954,9 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       default:
         throw new Error(`The QA wallet has no command ${name}.`);
     }
+    // The page reads payouts a few blocks back, as Base's newest may not be on every RPC yet: the blocks after a change
+    // come at once, so that the page shows it as soon as it reads again.
+    if (SENDS.has(name)) await settle();
     return state();
   }
 

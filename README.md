@@ -321,7 +321,7 @@ the pinned Actions and npm packages every week.
 | `src/dom.ts`, `src/format.ts`                           | Page helpers, and number and date formats.                                                                                                                                                                |
 | `test/`, `fork/`                                        | Unit tests; the browser tests, which `fork/run.ts` runs at once, the harness they share in `fork/harness.ts`, and `fork/rpc-cache.ts`, which keeps the answers their forks read from Base.                |
 | `fork/qa.ts`, `fork/qa.html`, `fork/scenarios.ts`       | `npm run qa`: the page against a fork, the QA wallet's window beside it, and the states it can start the fork in.                                                                                         |
-| `fork/fixtures/`                                        | AutoMaxi's init code, for the browser tests to deploy it on the fork.                                                                                                                                     |
+| `fork/fixtures/`                                        | AutoMaxi's init code, for the browser tests to deploy it on the fork; and a token of the QA wallet's own, its source and init code.                                                                       |
 | `scripts/`                                              | The build; `fonts.py` makes `fonts/`, `icons.ts` draws the icons from `icon.svg`, and `tokens.ts` checks the list of tokens.                                                                              |
 
 ## License

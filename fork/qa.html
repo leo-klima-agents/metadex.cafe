@@ -167,6 +167,15 @@
         <button>Send it all away</button>
       </form>
       <p class="hint">As if spent elsewhere: the swap then skips that token.</p>
+      <form id="mint">
+        <input type="text" id="symbol" placeholder="USDC" aria-label="Symbol" />
+        <button>Give it a token of that symbol</button>
+      </form>
+      <label><input type="checkbox" id="lists" /> Lists those tokens (ERC-7811), and sends calls in one prompt</label>
+      <p class="hint">
+        A token of the QA wallet's own, at a new address: with a listed token's symbol, the page warns of it once added
+        by its address, or once the wallet lists it.
+      </p>
     </section>
 
     <section>
@@ -179,14 +188,34 @@
 
     <section>
       <h2>Hydrex</h2>
+      <label>Hydrex account <input type="text" id="account" placeholder="#141" size="10" /></label>
       <form id="delegate">
-        <input type="text" id="delegated" placeholder="#141" aria-label="Hydrex account" />
         <input type="text" id="delegatee" placeholder="0x…, Carbon Impact, USDC, or owner" aria-label="Delegate to" />
-        <button>Delegate</button>
+        <button>Delegate its votes</button>
       </form>
+      <button id="give">Give it to the address signed as</button>
+      <button id="claim-on-hydrex">Its owner claims on Hydrex</button>
       <p class="hint">
-        Delegates the account's votes, as its owner can on Hydrex: to an address, Delegated to; to one of the page's
-        automations, Partly in it; back to its owner. Reload the page after.
+        As its owner can on Hydrex. Delegated to an address, Delegated to; to one of the page's automations, Partly in
+        it. Given away, its receipts were paid to its owner then. Claimed by its owner, it was last claimed outside its
+        automation.
+      </p>
+      <form id="pay-to">
+        <input type="text" id="recipient" placeholder="0x…, or owner" aria-label="Payout address" />
+        <button>Carbon Impact pays there</button>
+      </form>
+      <p class="hint">Where Carbon Impact pays the accounts of the address signed as, as its owner can set.</p>
+      <div id="replays" hidden>
+        <button id="replay"></button>
+        <p class="hint" id="replayed"></p>
+      </div>
+      <button id="move-on">Hydrex moves on to the new epoch</button>
+      <button id="keeper-votes">Carbon Impact's keeper votes</button>
+      <button id="incentive">Someone adds incentives</button>
+      <p class="hint">
+        As on Base after a flip: Hydrex moves on, until when what the epoch before earned is not final; the keeper votes
+        as it did last; and others add incentives, here 100 USDC in the pool Carbon Impact votes for most. On the fork,
+        nobody does any of it unasked. Reload the page after any change here.
       </p>
       <fieldset data-group="hydrex"></fieldset>
     </section>
@@ -256,7 +285,15 @@
         $("holds").textContent = state.owner;
         if (document.activeElement !== $("chain")) $("chain").value = String(state.chainId);
         if (document.activeElement !== $("calls")) $("calls").value = state.calls;
-        for (const key of ["asks", "switches"]) $(key).checked = state[key];
+        for (const key of ["asks", "switches", "lists"]) $(key).checked = state[key];
+        $("replays").hidden = !state.replays;
+        if (state.replays) {
+          $("replay").textContent = state.replays.next ? `The keeper ${state.replays.next}` : "The keeper is done";
+          $("replay").disabled = !!state.busy || !state.replays.next;
+          $("replayed").textContent =
+            `${state.replays.sent} of the ${state.replays.total} transactions Base included after the fork's block, ` +
+            "sent again as their sender did.";
+        }
         $("failing").textContent = state.failing
           ? `The next ${state.failing === 1 ? "transaction" : `${state.failing} transactions`} will fail on Base.`
           : "";
@@ -320,11 +357,25 @@
         run("owner", $("address").value.trim());
       };
       $("chain").onchange = () => run("chain", Number($("chain").value));
-      for (const key of ["asks", "switches"]) $(key).onchange = () => run("set", key, $(key).checked);
+      for (const key of ["asks", "switches", "lists"]) $(key).onchange = () => run("set", key, $(key).checked);
       $("calls").onchange = () => run("calls", $("calls").value);
+      $("give").onclick = () => run("give", $("account").value);
+      $("claim-on-hydrex").onclick = () => run("claim-on-hydrex", $("account").value);
+      $("pay-to").onsubmit = (event) => {
+        event.preventDefault();
+        run("pay-to", $("recipient").value);
+      };
+      $("mint").onsubmit = (event) => {
+        event.preventDefault();
+        run("mint", $("symbol").value);
+      };
+      $("replay").onclick = () => run("replay");
+      $("move-on").onclick = () => run("move-on");
+      $("keeper-votes").onclick = () => run("keeper-votes");
+      $("incentive").onclick = () => run("incentive");
       $("delegate").onsubmit = (event) => {
         event.preventDefault();
-        run("delegate", $("delegated").value, $("delegatee").value);
+        run("delegate", $("account").value, $("delegatee").value);
       };
       $("fail").onclick = () => run("fail");
       $("away").onsubmit = (event) => {
