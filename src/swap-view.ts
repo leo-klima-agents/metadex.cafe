@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 import { now, same, type Receipt } from "./chain.ts";
-import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Output, type Swapper } from "./config.ts";
+import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
 import { clone, fill, fillAddress, show } from "./dom.ts";
 import { tokensOf } from "./earnings.ts";
 import { bps, count, figure, fraction, list, short, usd } from "./format.ts";
@@ -20,7 +20,7 @@ import {
   reasonOf,
   simulate,
   split,
-  swapChecks,
+  onBase,
   swapGas,
   swapReturns,
   swappedIn,
@@ -97,8 +97,8 @@ export type SwapContext = { connection(): Connection | undefined; hooks: Hooks }
 let context: SwapContext;
 let scans = 0;
 let scan: Scan | undefined;
-// Each output's failed checks, once run, and the payout's tokens and amounts to tick, for the visit.
-let failedOutputs: Map<Output, string[]> | undefined;
+// Whether the page's RPCs serve Base, once read, and the payout's tokens and amounts to tick, for the visit.
+let base: boolean | undefined;
 let prefilled: Map<string, bigint> | undefined;
 // Whether a scan under way should be followed by another, as when new tokens became known meanwhile.
 let rescan = false;
@@ -111,9 +111,8 @@ const swapperShown = (): Swapper => {
   const shown = route();
   return swapperOf(shown.view === "swap" ? shown.output : DEFAULT_OUTPUT)!;
 };
-// Until the checks have run, no output is offered; once they have, those whose checks failed are off.
-export const outputOff = (swapper: Swapper): boolean => !failedOutputs || failedOutputs.get(swapper.output)!.length > 0;
-export const swappersChecked = (): boolean => !!failedOutputs;
+// Until the page has read that its RPCs serve Base, and unless they do, no swap is offered.
+export const swapsOff = (): boolean => base !== true;
 const tell = (): void => listeners.forEach((listener) => listener());
 
 // Called once something the App shows from here changes: the swap's line, or the approvals left.
@@ -204,15 +203,12 @@ function drawAll(): void {
   show(".swap-approvals-open, .add-token", signedIn, view);
   const swapper = swapperShown();
   for (const input of view.querySelectorAll<HTMLInputElement>('input[name="output"]')) {
-    const each = swapperOf(input.value)!;
-    input.checked = each === swapper;
-    input.disabled = !!failedOutputs && outputOff(each);
+    input.checked = swapperOf(input.value) === swapper;
+    input.disabled = base === false;
     show(".output-off", input.disabled, input.closest("label")!);
   }
-  const off = failedOutputs ? SWAPPERS.filter(outputOff) : [];
-  show(".swap-off", off.length > 0, view);
-  show(".swap-unchecked", !failedOutputs, view);
-  fill(view, { "swap-off-outputs": list(off.map(({ symbol }) => symbol)) });
+  show(".swap-off", base === false, view);
+  show(".swap-unchecked", base === undefined, view);
   if (!scan || !signedIn) {
     status.hidden = summary.hidden = true;
     show(".swap-failed, .swap-none", false, view);
@@ -237,7 +233,7 @@ function summarise(scanned: Scan, ticked: Row[]): void {
   const sells = view.querySelector<HTMLElement>(".swap-sells")!;
   const breakdown = view.querySelector<HTMLElement>(".breakdown")!;
   const splitLine = view.querySelector<HTMLElement>(".swap-split")!;
-  reviewButton.disabled = !ticked.length || outputOff(swapper);
+  reviewButton.disabled = !ticked.length || swapsOff();
   sells.hidden = ticked.length > 0;
   breakdown.hidden = !ticked.length;
   if (!ticked.length) return void (splitLine.hidden = true);
@@ -495,7 +491,7 @@ async function reviewSwap(): Promise<void> {
   if (!connection || !scanned) return;
   const { swapper } = scanned;
   const ticked = scanned.rows.filter((row) => row.ticked && row.found);
-  if (!ticked.length || outputOff(swapper)) return;
+  if (!ticked.length || swapsOff()) return;
   const plan: Plan = {
     swapper,
     margin: margin(),
@@ -713,17 +709,8 @@ export function walletChanged(): void {
   void readAllowances();
 }
 
-// Each check that failed says so, in the popup of the swap's contracts, with the outputs it failed for.
-async function checkSwappers(): Promise<void> {
-  failedOutputs = await swapChecks();
-  for (const item of view.querySelectorAll<HTMLElement>("[data-check]")) {
-    item.querySelector(".check-failed")?.remove();
-    const failing = SWAPPERS.filter(({ output }) => failedOutputs!.get(output)!.includes(item.dataset.check!));
-    if (!failing.length) continue;
-    const mark = clone("check-failed");
-    mark.querySelector("b")!.textContent = `Failed for ${list(failing.map(({ symbol }) => symbol))}:`;
-    item.prepend(mark);
-  }
+async function checkBase(): Promise<void> {
+  base = await onBase();
   drawAll();
 }
 
@@ -781,16 +768,16 @@ export function initSwap(given: SwapContext): void {
     if (scan?.reading) rescan = true;
     else rescanNow();
   });
-  // Until the checks have run once, a failed read of them is tried again within a minute, by one retry at a time
-  // however many checks failed meanwhile, as the hourly one.
+  // Until the page has read once that its RPCs serve Base, a failed read is tried again within a minute, by one retry at
+  // a time however many reads failed meanwhile, as the hourly one.
   let retry: ReturnType<typeof setTimeout> | undefined;
   const check = (): void => {
     clearTimeout(retry);
     retry = undefined;
-    void checkSwappers().catch((error: unknown) => {
+    void checkBase().catch((error: unknown) => {
       console.error(error);
       drawAll();
-      if (!failedOutputs) retry ??= setTimeout(check, 60_000);
+      if (base === undefined) retry ??= setTimeout(check, 60_000);
     });
   };
   check();

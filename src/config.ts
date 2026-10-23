@@ -85,7 +85,7 @@ export const ANCHORS: Anchor[] = [
 // The swap: ImmutableSwapper, deployed once per output token on 21 Oct 2026. Each sells the tokens its caller names for
 // its output, along the routes its caller picks, through pools it checks against the twelve factories below, and sends
 // 1% of each route's output to AutoMaxi's treasury. It has no owner and no settings. Its sources are verified, with an
-// exact match, on Basescan and Sourcify; the code hashes are those its sources record.
+// exact match, on Basescan and Sourcify.
 export type Output = "usdc" | "eurc" | "weth" | "cbbtc" | "aero" | "hydx";
 export type Swapper = {
   output: Output;
@@ -93,7 +93,6 @@ export type Swapper = {
   token: Address;
   decimals: number;
   address: Address;
-  codeHash: Hex;
 };
 export const SWAPPERS: Swapper[] = [
   {
@@ -102,7 +101,6 @@ export const SWAPPERS: Swapper[] = [
     token: USDC,
     decimals: 6,
     address: "0x31791f453d2100e728E012c9e189C0828adf4b6F",
-    codeHash: "0x8d6d7ae768e36b4642c1b2d83afc4411053ef918cc78a6fa372f7b694386970b",
   },
   {
     output: "eurc",
@@ -110,7 +108,6 @@ export const SWAPPERS: Swapper[] = [
     token: EURC,
     decimals: 6,
     address: "0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E",
-    codeHash: "0xb51455b03682699694ae84a9ee17f1fa52cef8f57100d19a684226069f23be2e",
   },
   {
     output: "weth",
@@ -118,7 +115,6 @@ export const SWAPPERS: Swapper[] = [
     token: WETH,
     decimals: 18,
     address: "0xe5cbD828c2227E17f7FF8BD54C7A1e6012694Ff2",
-    codeHash: "0xf58e0a14f707b542c5eae6af6929b28e4214e723543c617c29444541207261c8",
   },
   {
     output: "cbbtc",
@@ -126,7 +122,6 @@ export const SWAPPERS: Swapper[] = [
     token: CBBTC,
     decimals: 8,
     address: "0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0",
-    codeHash: "0xce9c5630b7243cbe9cbcbef1704c888e376d45f1889197ffc7d5ad6704c2ed69",
   },
   {
     output: "aero",
@@ -134,7 +129,6 @@ export const SWAPPERS: Swapper[] = [
     token: "0x3f5bF3EdAc59d650D8fDf9657a71F2f904A3a4Ee",
     decimals: 18,
     address: "0xdd575A498C625AF96ac89efE578Dc68f4c9aB963",
-    codeHash: "0xb0f28d588145fa5aef5f44eab97bf0e7f891e60499179b72540cbaa6f80b31d1",
   },
   {
     output: "hydx",
@@ -142,14 +136,12 @@ export const SWAPPERS: Swapper[] = [
     token: HYDX,
     decimals: 18,
     address: "0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC",
-    codeHash: "0xfa9d0e728d29ee86a2762db1ff2d017b0779fcc73fff68e5a4a62301e1785c5d",
   },
 ];
 export const DEFAULT_OUTPUT: Output = "usdc";
 export const swapperOf = (output: string): Swapper | undefined => SWAPPERS.find((each) => each.output === output);
-// FEE_BPS and TREASURY in its code: the same Safe as AutoMaxi's fee.
+// FEE_BPS in its code.
 export const SWAP_FEE_BPS = 100n;
-export const SWAP_TREASURY: Address = AUTOMAXI_TREASURY;
 
 // The swappers' exchanges, in the page's order. `id` is the swapper's Exchange enum and exchanges() index. Aero's basic
 // pools have a factory per curve; Uniswap v4's is its PoolManager.

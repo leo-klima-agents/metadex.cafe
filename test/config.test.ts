@@ -97,9 +97,10 @@ test("each automation has a kind, a name and the approvals of its own, and AutoM
 
 test("each automation's page has the same parts, in the same order, and lists every check that can fail", () => {
   const html = read("index.html");
+  // Every check that can fail but the RPC's, which the page runs without naming.
   const failing: Record<string, string[]> = {
-    "carbon-impact": ["chain", "code", "contracts", "token", "approvals", "upgrade", "logic"],
-    automaxi: ["chain", "automaxi-code", "automaxi-contracts", "automaxi-approvals", "upgrade", "logic"],
+    "carbon-impact": ["code", "contracts", "token", "approvals", "upgrade", "logic"],
+    automaxi: ["automaxi-code", "automaxi-contracts", "automaxi-approvals", "upgrade", "logic"],
   };
   for (const { kind } of AUTOMATIONS) {
     const page = productOf(html, kind);
@@ -192,8 +193,8 @@ test("the page names no operator, links to no repository but Hydrex's, and shows
   assert.ok(automaxi.includes(`https://repo.sourcify.dev/8453/${AUTOMAXI.address}`));
 });
 
-test("each swapper has its output, a checksummed address and a code hash, and the swap's page links them all", async () => {
-  const { SWAPPERS, EXCHANGES, SWAP_TREASURY, AUTOMAXI_TREASURY: treasury } = await import("../src/config.ts");
+test("each swapper has its output and a checksummed address, and the swap's page links them all", async () => {
+  const { SWAPPERS, EXCHANGES, AUTOMAXI_TREASURY } = await import("../src/config.ts");
   const tokens = (await import("../src/base-tokens.json", { with: { type: "json" } })).default;
   const html = read("index.html");
   const swap = viewOf(html, 'data-view="swap"');
@@ -201,21 +202,18 @@ test("each swapper has its output, a checksummed address and a code hash, and th
     SWAPPERS.map(({ output }) => output),
     ["usdc", "eurc", "weth", "cbbtc", "aero", "hydx"],
   );
-  for (const { address, token, codeHash, symbol } of SWAPPERS) {
+  for (const { address, token, symbol } of SWAPPERS) {
     assert.equal(getAddress(address), address);
     assert.equal(getAddress(token), token);
-    assert.match(codeHash, /^0x[0-9a-f]{64}$/);
     assert.ok(swap.includes(`/address/${address}#code`), `${symbol}'s swapper is linked to its verified source`);
-    assert.ok(!html.includes(codeHash), `${symbol}'s code hash is not on the page`);
     // Every output is on the page's list of tokens.
     assert.ok(
       tokens.some((listed) => listed.address === token && listed.symbol === symbol),
       symbol,
     );
   }
-  assert.equal(SWAP_TREASURY, treasury);
   assert.equal(EXCHANGES.length, 12);
-  // The page checks the factories against each swapper's, and lists only the swappers, each under its output's name.
+  // The page lists only the swappers, each under its output's name.
   for (const { factory } of EXCHANGES) assert.equal(getAddress(factory), factory);
   const listed = [...swap.matchAll(/<dt>([^<]+)<\/dt>\s*<dd>([\s\S]*?)<\/dd>/g)].flatMap(([, name, value]) =>
     [...value!.matchAll(/\/address\/(0x[0-9a-fA-F]{40})[#"]/g)].map(([, address]) => `${name} ${address}`),
@@ -249,13 +247,9 @@ test("each swapper has its output, a checksummed address and a code hash, and th
   assert.match(slippage, /The input token stays in your wallet/);
   // The swap's own summary sets the slippage on the line of the least that may reach you.
   assert.match(swap, /<label\s*>At least, with\s*<select class="swap-margin">/);
-  assert.ok(!swap.includes(SWAP_TREASURY) && !swap.includes("2-of-3"));
-  assert.deepEqual(
-    [...swap.matchAll(/data-check="([^"]+)"/g)].map(([, check]) => check),
-    ["chain", "swap-code", "swap-output", "swap-treasury", "swap-fee", "swap-exchanges"],
-  );
-  // Every check shows, and a check that failed says so.
-  for (const [item] of swap.matchAll(/<li data-check="[^"]+"[^>]*>/g)) assert.doesNotMatch(item, /hidden/, item);
+  assert.ok(!swap.includes(AUTOMAXI_TREASURY) && !swap.includes("2-of-3"));
+  // The swappers are immutable: the page checks only that its RPCs serve Base, and says nothing of it.
+  assert.doesNotMatch(swap, /data-check=|<h3>Checks<\/h3>|serves Base/);
 });
 
 test("the header holds the logo and the name, and a button to connect a wallet; the wallet's pages lead back to it", () => {

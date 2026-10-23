@@ -5,7 +5,7 @@ import { encodeFunctionData, getAddress, type Address } from "viem";
 import { AUTOMATIONS, AUTOMAXI, HYDX, SWAPPERS, VOTING_ESCROW } from "../src/config.ts";
 import { readEarnings } from "../src/earnings.ts";
 import { pricesNow } from "../src/prices.ts";
-import { MIDDLES, findRoute, swapChecks } from "../src/swap.ts";
+import { MIDDLES, findRoute } from "../src/swap.ts";
 import { describe as describeTokens, holdingsOf, known } from "../src/tokens.ts";
 import {
   PAYEE,
@@ -13,7 +13,6 @@ import {
   SITE,
   STRANGER,
   abi,
-  anvil,
   app,
   balanceOf,
   claimOpens,
@@ -39,13 +38,12 @@ const HOLDER = getAddress("0xd9e966a6bfa2ae2113a34bb4dd02ded921da50af");
 const AVNT = getAddress("0x696f9436b67233384889472cd7cd58a6fb5df4f1");
 const ZORA = getAddress("0x1111111111166b7fe7bd91427724b487980afc69");
 const WETH = getAddress("0x4200000000000000000000000000000000000006");
-const [INTO_USDC, INTO_EURC] = SWAPPERS as [(typeof SWAPPERS)[number], (typeof SWAPPERS)[number]];
+const INTO_USDC = SWAPPERS[0]!;
 // A wallet of the test's own, which the treasury gives three of its tokens, so that the page has only those to route.
 const SELLER = getAddress("0x0000000000000000000000000000000000c0ffee");
 
-// Gives SELLER the treasury's whole balance of each token, then reads what the page will: the swappers' checks, which
-// Review waits for, the balances, the prices, and each token's route into USDC, with no time limit, as anvil reads the
-// pools from FORK_URL a slot at a time.
+// Gives SELLER the treasury's whole balance of each token, then reads what the page will: the balances, the prices, and
+// each token's route into USDC, with no time limit, as anvil reads the pools from FORK_URL a slot at a time.
 async function fund(tokens: Address[]): Promise<void> {
   for (const token of tokens) {
     const amount = await balanceOf(token, HOLDER);
@@ -54,7 +52,7 @@ async function fund(tokens: Address[]): Promise<void> {
   await warm(async () => {
     // The page reads the balance of every token it knows, and adds last epoch's rewards, such as AVNT, once it has read
     // each automation's.
-    await Promise.all([swapChecks(), ...AUTOMATIONS.map(({ address }) => readEarnings(address))]);
+    await Promise.all(AUTOMATIONS.map(({ address }) => readEarnings(address)));
     const held = await holdingsOf(SELLER, [...known(), ...tokens], INTO_USDC.address);
     // The page prices the tokens its routes name too.
     const described = await describeTokens([...tokens, INTO_USDC.token, ...MIDDLES, HYDX]);
@@ -178,21 +176,17 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.deepEqual(violations, []);
   });
 
-  test("a swapper whose checks fail turns its output off, and says which check failed", async () => {
-    await anvil("anvil_setCode", [INTO_EURC.address, "0x00"]);
-    const { page } = await connected({ owner: HOLDER }, { url: `${SITE}/#swap/eurc` });
+  test("if the page's RPCs serve another chain, no swap is offered, and the page says so", async () => {
+    const elsewhere = (body: string) =>
+      body.includes('"eth_chainId"') ? JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x1" }) : undefined;
+    const { page } = await connected({ owner: HOLDER }, { url: `${SITE}/#swap`, answer: elsewhere });
     const swap = swapView(page);
-    await swap.getByText("Swaps into EURC are off.").waitFor();
-    assert.equal(await swap.getByRole("radio", { name: /EURC/ }).isDisabled(), true);
-    assert.equal(await swap.getByRole("radio", { name: "USDC" }).isDisabled(), false);
+    await swap.getByText("Swaps are off.").waitFor();
+    for (const { symbol } of SWAPPERS)
+      assert.equal(await swap.getByRole("radio", { name: new RegExp(`^${symbol}`) }).isDisabled(), true, symbol);
     assert.equal(await swap.getByRole("button", { name: "Review" }).isDisabled(), true);
-    await page.goto(`${SITE}/#swap/eurc/check`);
-    const failed = swap.locator('[data-check="swap-code"] .check-failed');
-    await failed.waitFor();
-    assert.equal(await failed.innerText(), "Failed for EURC: ");
-    // Every check shows, and only those that failed are marked.
-    assert.equal(await swap.locator('[data-check="chain"]').isVisible(), true);
-    assert.equal(await swap.locator('[data-check="chain"] .check-failed').count(), 0);
+    // The check itself is not named anywhere.
+    assert.doesNotMatch(await page.locator("body").innerText(), /serves Base|Checks/);
   });
 
   test("claim, then swap what it brought into USDC in one prompt", async () => {

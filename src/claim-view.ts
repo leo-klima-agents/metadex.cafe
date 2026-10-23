@@ -24,7 +24,7 @@ import { openReview, type Hooks } from "./review.ts";
 import { hrefOf } from "./routes.ts";
 import { APPROVAL_GAS, MIDDLES, findRoute, minimumOf, paidOf, partOf, simulate } from "./swap.ts";
 import { costs, gasUsd } from "./swap-calls.ts";
-import { openSwapReview, outputOff, planSteps, prefill, swapReceipt, swappersChecked, type Plan } from "./swap-view.ts";
+import { openSwapReview, planSteps, prefill, swapReceipt, swapsOff, type Plan } from "./swap-view.ts";
 import { describe } from "./tokens.ts";
 import { capabilities, type Connection } from "./wallet.ts";
 
@@ -196,10 +196,10 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   const sayGas = (withSwap?: number) =>
     (gasLine.textContent = `Gas ${claimUsd === undefined ? "…" : usd(claimUsd)}${withSwap === undefined ? "" : `, ${usd(withSwap)} with the swap`}`);
   sayGas();
-  // The outputs whose checks passed, in a list to pick from.
+  // The outputs, in a list to pick from, once swaps are on.
   const select = body.querySelector<HTMLSelectElement>(".claim-output")!;
   select.replaceChildren(
-    ...SWAPPERS.filter((swapper) => !outputOff(swapper)).map((swapper) => {
+    ...(swapsOff() ? [] : SWAPPERS).map((swapper) => {
       const option = document.createElement("option");
       option.value = swapper.output;
       option.textContent = swapper.symbol;
@@ -377,15 +377,11 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     radios.find(({ value }) => value === "into")!.checked = true;
     choose();
   });
-  // Without an output whose checks passed, the swap is not offered; nor from a Safe whose claim takes several Safe
-  // transactions, as the swap follows the claim's receipts, which the Safe's owners bring once they sign.
+  // While swaps are off, the swap is not offered; nor from a Safe whose claim takes several Safe transactions, as the
+  // swap follows the claim's receipts, which the Safe's owners bring once they sign.
   const safeApart = apart && !!connection.wallet.propose;
   if (!select.options.length || safeApart) {
     radios.find(({ value }) => value === "into")!.disabled = select.disabled = true;
-    into.textContent = safeApart
-      ? "Swap them once the claims go through."
-      : swappersChecked()
-        ? "Swaps are off."
-        : "Swappers not checked yet.";
+    into.textContent = safeApart ? "Swap them once the claims go through." : "Swaps are off.";
   } else void plan(swapperOf(select.value)!);
 }

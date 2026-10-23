@@ -7,20 +7,8 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { call, codeHash, read, rpc, same, type Call, type Receipt } from "./chain.ts";
-import {
-  CBBTC,
-  CHAIN_ID,
-  EXCHANGES,
-  HYDX,
-  SWAPPERS,
-  SWAP_FEE_BPS,
-  SWAP_TREASURY,
-  USDC,
-  WETH,
-  type Output,
-  type Swapper,
-} from "./config.ts";
+import { call, read, rpc, same, type Call, type Receipt } from "./chain.ts";
+import { CBBTC, CHAIN_ID, HYDX, SWAPPERS, SWAP_FEE_BPS, USDC, WETH, type Swapper } from "./config.ts";
 import { exchangeOf, pairKey, waysFor, type Hop, type Way } from "./pools.ts";
 import type { Tx } from "./wallet.ts";
 
@@ -34,10 +22,6 @@ export const swapperAbi = parseAbi([
   "struct Result { bool done; uint256 amountIn; uint256 amountOut; bytes reason; }",
   "function swap(Route[] routes, uint256 deadline, bool skipFailed) returns (Result[] results, uint256 paid, uint256 fee)",
   "function quote(Route[] routes) returns (Result[] results)",
-  "function exchanges() view returns (address[] list)",
-  "function outputToken() view returns (address)",
-  "function TREASURY() view returns (address)",
-  "function FEE_BPS() view returns (uint256)",
   "event RouteSwapped(address indexed caller, uint256 index, address token, uint256 amountIn, uint256 amountOut)",
   "event RouteFailed(address indexed caller, uint256 index, address token, bytes reason)",
   "event Swapped(address indexed caller, uint256 paid, uint256 fee)",
@@ -379,36 +363,8 @@ export function swappedIn(receipts: Receipt[], swapper: Swapper, caller: Address
   return outcome;
 }
 
-// Each swapper's checks, as AutoMaxi's: its code, its output, where its fee goes, the fee, and the twelve factories, in
-// the page's order.
-// A failed check turns that output off. Each is named by the id of its line on the page.
-export async function swapChecks(): Promise<Map<Output, string[]>> {
-  const reads = SWAPPERS.flatMap(({ address }) =>
-    ["outputToken", "TREASURY", "FEE_BPS", "exchanges"].map((name) => call(address, swapperAbi as never, name)),
-  );
-  const [chainId, hashes, replies] = await Promise.all([
-    rpc<string>("eth_chainId", []),
-    Promise.all(SWAPPERS.map(({ address }) => codeHash(address))),
-    read(reads),
-  ]);
-  return new Map(
-    SWAPPERS.map((swapper, i) => {
-      const [output, treasury, fee, factories] = replies.slice(4 * i, 4 * i + 4) as [
-        Address | undefined,
-        Address | undefined,
-        bigint | undefined,
-        readonly Address[] | undefined,
-      ];
-      const checks: Record<string, boolean> = {
-        chain: Number(chainId) !== CHAIN_ID,
-        "swap-code": hashes[i] !== swapper.codeHash,
-        "swap-output": !same(String(output), swapper.token),
-        "swap-treasury": !same(String(treasury), SWAP_TREASURY),
-        "swap-fee": fee !== SWAP_FEE_BPS,
-        "swap-exchanges":
-          factories?.length !== EXCHANGES.length || EXCHANGES.some(({ id, factory }) => !same(factories[id]!, factory)),
-      };
-      return [swapper.output, Object.entries(checks).flatMap(([id, fails]) => (fails ? [id] : []))];
-    }),
-  );
+// Whether the page's RPCs serve Base. The swappers are immutable, so nothing else about them can change: until this is
+// read, and unless it holds, no swap is offered.
+export async function onBase(): Promise<boolean> {
+  return Number(await rpc<string>("eth_chainId", [])) === CHAIN_ID;
 }

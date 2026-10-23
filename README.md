@@ -24,7 +24,7 @@ This README is for whoever runs the site. The design and the plan are in [design
 - **Before anyone can join, the page checks** the chain, each automation's code, Carbon Impact's settings, and the code
   of Hydrex's VotingEscrow against `src/config.ts`. If a check fails, joining that automation is turned off, and the
   page marks the check on that automation's page, under Check it. Leaving always works. The checks run again every hour.
-  Until there is code at AutoMaxi's address, the page leaves AutoMaxi out. The swappers' checks are in `src/swap.ts`.
+  Until there is code at AutoMaxi's address, the page leaves AutoMaxi out.
 - **Claiming** is `claim(tokenId, feeAddresses, bribeAddresses, tokens)` on AutoMaxi, which anyone can call for any
   account in it, and which pays the owner, less 1%. AutoMaxi's keeper claims for every member right after each epoch, so
   the page offers it only for the wallet's own accounts, once a payout is overdue: half a day after the flip with
@@ -66,9 +66,9 @@ This README is for whoever runs the site. The design and the plan are in [design
 - `#swap` takes the output from its address, `#swap/weth`, USDC by default, then lists the wallet's tokens, each with
   what it fetches, ticked when the quote is worth twice its gas. What the ticked ones fetch shows line by line: the
   quote, the 1%, what reaches you, the least that may, on the line where the slippage is picked, and the gas, paid apart
-  in ETH. Its popups: its costs, what the slippage is, and the six swappers' contracts, with any check that failed, such
-  as `#swap/weth/check`; and the approvals given to the swappers. Its review shows the swap as a bill: each token with
-  its route by tokens and pools, under the gas, then the least, with the slippage that set it.
+  in ETH. Its popups: its costs, what the slippage is, and the six swappers' contracts, such as `#swap/weth/check`; and
+  the approvals given to the swappers. Its review shows the swap as a bill: each token with its route by tokens and
+  pools, under the gas, then the least, with the slippage that set it.
 - Each automation has a page, `#hydrex/carbon-impact` and `#hydrex/automaxi`: its key figures (what it takes, what it
   pays in, what it paid last epoch, and what it retired or who controls it), and a way to join. Everything else is in
   popups: its six fee facts, how it did against all of Hydrex, joining and leaving, who controls what, and Check it.
@@ -82,8 +82,8 @@ This README is for whoever runs the site. The design and the plan are in [design
 - Inside Safe{Wallet}, it proposes all the calls as one Safe transaction.
 
 Nobody controls the swappers either: their code fixes the fee, 1% of each route's output, the Safe it goes to, the
-output and the twelve factories, and the page checks all of them, and each swapper's code hash, before it offers swaps
-into its output.
+output and the twelve factories. As nothing about them can change, the page does not check them: it offers swaps once it
+has read that its RPCs serve Base, and says nothing of it.
 
 One admin key controls Carbon Impact. It can change the share retired (up to 100%), the fee (up to 1%), the payout
 tokens, the swap routers, any owner's payout address, and who claims and votes for it. The page always shows the
@@ -135,7 +135,7 @@ in `src/hydrex.ts`:
 
 | Check                                         | Marked on       | What changed                                                                              |
 | --------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------- |
-| `chain`: the RPC serves Base                  | Both pages      | An RPC answered for another chain.                                                        |
+| `chain`: the RPC serves Base                  | Not shown       | An RPC answered for another chain. Joining both, and every swap, turn off.                |
 | `code`: Carbon Impact's code                  | Carbon Impact's | Carbon Impact's code.                                                                     |
 | `contracts`: its VotingEscrow and Voter       | Carbon Impact's | `veToken()` or `voter()` on Carbon Impact.                                                |
 | `token`: it pays in kVCM                      | Carbon Impact's | `kvcm()` on Carbon Impact.                                                                |
@@ -145,11 +145,6 @@ in `src/hydrex.ts`:
 | `automaxi-approvals`: what joining approves   | AutoMaxi's      | `getConduitApprovalConfig` on the VotingEscrow, for AutoMaxi.                             |
 | `upgrade`: the VotingEscrow                   | Both pages      | The VotingEscrow's implementation, or its code.                                           |
 | `logic`: its approval logic                   | Both pages      | `approvalLogic()` on the VotingEscrow, or its code.                                       |
-| `swap-code`: a swapper's code                 | The swap's      | The code at that output's swapper. Swaps into that output turn off.                       |
-| `swap-output`: its output token               | The swap's      | `outputToken()` on that swapper.                                                          |
-| `swap-treasury`: where its fee goes           | The swap's      | `TREASURY()` on that swapper.                                                             |
-| `swap-fee`: its fee                           | The swap's      | `FEE_BPS()` on that swapper.                                                              |
-| `swap-exchanges`: its twelve factories        | The swap's      | `exchanges()` on that swapper, against `EXCHANGES` in `src/config.ts`.                    |
 
 Read what changed, and decide whether the page should trust it. If it should, update `src/config.ts`, run the tests and
 release. These [Foundry](https://getfoundry.sh/) commands print the values that `src/config.ts` holds:
@@ -176,9 +171,8 @@ done
 When Hydrex adds or removes automations, update `src/hydrex-conduits.json` from <https://api.hydrex.fi/conduits>. If
 Hydrex lists AutoMaxi, the page still treats it as its own.
 
-The swappers were deployed on 21 Oct 2026, from block 52,894,916. Each one's code hash, in `src/config.ts`, is the one
-its sources record, and `cast keccak $(cast code $SWAPPER --rpc-url $RPC)` prints it. Their sources are verified, with
-an exact match, on Basescan and Sourcify, which the page links to, and name no author and no repository.
+The swappers were deployed on 21 Oct 2026, from block 52,894,916. Their sources are verified, with an exact match, on
+Basescan and Sourcify, which the page links to, and name no author and no repository.
 
 The page's list of tokens, `src/base-tokens.json`, lives in the repository, so that the build stays reproducible, and is
 kept by hand. `node scripts/tokens.ts` checks each token's symbol and decimals against Base; `--add 0x…` adds one, and

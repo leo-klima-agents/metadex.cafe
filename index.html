@@ -677,7 +677,6 @@
           </dl>
           <h3>Checks</h3>
           <ul class="checks">
-            <li data-check="chain">The RPC serves Base</li>
             <li data-check="code">Its code matches</li>
             <li data-check="contracts">Its VotingEscrow and Voter match</li>
             <li data-check="token">It pays in kVCM</li>
@@ -1038,7 +1037,6 @@
           </dl>
           <h3>Checks</h3>
           <ul class="checks">
-            <li data-check="chain">The RPC serves Base</li>
             <li data-check="automaxi-code">Its code matches</li>
             <li data-check="automaxi-contracts">Its VotingEscrow and Voter match</li>
             <li data-check="automaxi-approvals">Joining approves voting and claiming only</li>
@@ -1152,8 +1150,7 @@
           </button>
         </div>
         <p class="notice swap-off" role="alert" hidden>
-          <span class="shape failed" aria-hidden="true"></span>Swaps into <span class="swap-off-outputs"></span> are
-          off. <a href="#swap/check">Why</a>
+          <span class="shape failed" aria-hidden="true"></span>Swaps are off.
         </p>
         <p class="wrong-chain notice" role="alert" hidden>
           <span class="to-switch">
@@ -1164,7 +1161,7 @@
           <span class="safe-elsewhere" hidden>This Safe isn't on Base.</span>
         </p>
         <div class="swap-form">
-          <p class="swap-unchecked small" role="status">Checking the swappers…</p>
+          <p class="swap-unchecked small" role="status">Loading…</p>
           <fieldset class="outputs">
             <legend class="label">Receive</legend>
             <p class="output-choices"></p>
@@ -1355,15 +1352,6 @@
                 </dd>
               </div>
             </dl>
-            <h3>Checks</h3>
-            <ul class="checks">
-              <li data-check="chain">The RPC serves Base</li>
-              <li data-check="swap-code">Its code matches</li>
-              <li data-check="swap-output">It pays in its output token</li>
-              <li data-check="swap-treasury">Its fee recipient matches</li>
-              <li data-check="swap-fee">Its fee is 1%</li>
-              <li data-check="swap-exchanges">Its exchanges match</li>
-            </ul>
           </div>
         </div>
 

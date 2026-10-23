@@ -221,8 +221,11 @@ type WalletOptions = {
   // Sends several calls in one prompt, with EIP-5792, as Coinbase Wallet and MetaMask do.
   batch?: boolean;
 };
-// Fails the reads of Base whose request body it matches.
-type Rpc = { refuse?: ((body: string) => boolean) | undefined };
+// Fails the reads of Base whose request body `refuse` matches, and gives those `answer` answers its own reply.
+type Rpc = {
+  refuse?: ((body: string) => boolean) | undefined;
+  answer?: ((body: string) => string | undefined) | undefined;
+};
 type OpenOptions = {
   width?: number;
   height?: number;
@@ -231,6 +234,7 @@ type OpenOptions = {
   flowing?: boolean;
   script?: boolean;
   refuse?: Rpc["refuse"];
+  answer?: Rpc["answer"];
   // The Safe that Safe{Wallet}'s page holds.
   safe?: Address;
 };
@@ -364,6 +368,9 @@ async function serve(route: Route, { origins, rpc, safe }: Pick<Opened, "origins
   if (RPC_ORIGINS.includes(origin)) {
     if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: CORS });
     if (rpc.refuse?.(request.postData() ?? "")) return route.abort();
+    const answered = rpc.answer?.(request.postData() ?? "");
+    if (answered !== undefined)
+      return route.fulfill({ headers: { ...CORS, "content-type": "application/json" }, body: answered });
     const reply = post(request.postData() ?? "");
     forwarding.add(reply);
     const body = await reply.finally(() => forwarding.delete(reply));
@@ -388,6 +395,7 @@ export async function open(
     flowing = false,
     script = true,
     refuse,
+    answer,
     safe = LEAVER,
   }: OpenOptions = {},
 ): Promise<Opened> {
@@ -406,7 +414,7 @@ export async function open(
     asked: [] as string[],
     origins: new Set<string>(),
     violations: [] as string[],
-    rpc: { refuse } as Rpc,
+    rpc: { refuse, answer } as Rpc,
     safe,
   };
   await context.route("**/*", (route) => serve(route, opened));
