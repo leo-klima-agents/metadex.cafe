@@ -212,14 +212,14 @@ test("each swapper has its output, a checksummed address and a code hash, and th
   }
   assert.equal(SWAP_TREASURY, treasury);
   assert.equal(EXCHANGES.length, 12);
-  // The factories, in the order the page checks them, each under its exchange's name.
+  // The page checks the factories against each swapper's, and lists only the swappers, each under its output's name.
   for (const { factory } of EXCHANGES) assert.equal(getAddress(factory), factory);
   const listed = [...swap.matchAll(/<dt>([^<]+)<\/dt>\s*<dd>([\s\S]*?)<\/dd>/g)].flatMap(([, name, value]) =>
-    [...value!.matchAll(/\/address\/(0x[0-9a-fA-F]{40})"/g)].map(([, address]) => `${name} ${address}`),
+    [...value!.matchAll(/\/address\/(0x[0-9a-fA-F]{40})[#"]/g)].map(([, address]) => `${name} ${address}`),
   );
   assert.deepEqual(
-    listed.filter((line) => EXCHANGES.some(({ factory }) => line.endsWith(factory))),
-    EXCHANGES.map(({ name, factory }) => `${name} ${factory}`),
+    listed,
+    SWAPPERS.map(({ symbol, address }) => `${symbol} Swapper ${address}`),
   );
   // The page's list of tokens: checksummed, each once.
   for (const { address } of tokens) assert.equal(getAddress(address), address);
@@ -240,7 +240,7 @@ test("each swapper has its output, a checksummed address and a code hash, and th
   const slippage = /<p class="label">Slippage<\/p>\s*<dl class="rows">[\s\S]*?<\/dl>/.exec(swap)?.[0] ?? "";
   assert.deepEqual(
     [...slippage.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
-    ["What it is", "When unmet"],
+    ["What it is", "When exceeded"],
   );
   assert.match(slippage, /How much less than quoted you accept for each token/);
   assert.match(slippage, /The token isn't swapped and stays in your wallet/);

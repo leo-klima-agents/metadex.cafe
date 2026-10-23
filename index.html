@@ -1288,29 +1288,15 @@
               <dd>How much less than quoted you accept for each token</dd>
             </div>
             <div>
-              <dt>When unmet</dt>
+              <dt>When exceeded</dt>
               <dd>The token isn't swapped and stays in your wallet</dd>
             </div>
           </dl>
-          <div data-section="control">
-            <p class="label">Who controls what</p>
-            <dl class="rows">
-              <div>
-                <dt>Swapper contracts</dt>
-                <dd>Nobody</dd>
-              </div>
-              <div>
-                <dt>Exchanges</dt>
-                <dd>Their pools' fees; your minimum still holds</dd>
-              </div>
-            </dl>
-          </div>
           <div data-section="check">
             <p class="label">Smart contracts</p>
-            <h3>Swapper contracts</h3>
             <dl class="rows">
               <div>
-                <dt>Into USDC</dt>
+                <dt>USDC Swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0x31791f453d2100e728E012c9e189C0828adf4b6F#code"
@@ -1320,7 +1306,7 @@
                 </dd>
               </div>
               <div>
-                <dt>Into EURC</dt>
+                <dt>EURC Swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E#code"
@@ -1330,7 +1316,7 @@
                 </dd>
               </div>
               <div>
-                <dt>Into WETH</dt>
+                <dt>WETH Swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0xe5cbD828c2227E17f7FF8BD54C7A1e6012694Ff2#code"
@@ -1340,7 +1326,7 @@
                 </dd>
               </div>
               <div>
-                <dt>Into cbBTC</dt>
+                <dt>cbBTC Swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0#code"
@@ -1350,7 +1336,7 @@
                 </dd>
               </div>
               <div>
-                <dt>Into AERO</dt>
+                <dt>AERO Swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0xdd575A498C625AF96ac89efE578Dc68f4c9aB963#code"
@@ -1360,129 +1346,11 @@
                 </dd>
               </div>
               <div>
-                <dt>Into HYDX</dt>
+                <dt>HYDX Swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC#code"
                       >0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC</a
-                    ></code
-                  >
-                </dd>
-              </div>
-            </dl>
-            <p class="small">Source verified on BaseScan and Sourcify</p>
-            <h3>Exchange contracts</h3>
-            <dl class="rows">
-              <div>
-                <dt>Aero Basic Pools</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x8E6a9FCd1d638CC760Ffba397605Fe3355dE76D2"
-                      >0x8E6a9FCd1d638CC760Ffba397605Fe3355dE76D2</a
-                    ></code
-                  ><br /><code translate="no"
-                    ><a href="https://basescan.org/address/0x78589E876edcEbdce72ee3436ab3c9AD3a7cEF2D"
-                      >0x78589E876edcEbdce72ee3436ab3c9AD3a7cEF2D</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Aero Slipstream</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x9CB220581b91b0C83223012FE69688b92aD07a76"
-                      >0x9CB220581b91b0C83223012FE69688b92aD07a76</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Aerodrome Basic Pools</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x420DD381b31aEf6683db6B902084cB0FFECe40Da"
-                      >0x420DD381b31aEf6683db6B902084cB0FFECe40Da</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Aerodrome Slipstream V3</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef"
-                      >0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Aerodrome Slipstream V2</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a"
-                      >0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Aerodrome Slipstream</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A"
-                      >0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Uniswap v4</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x498581fF718922c3f8e6A244956aF099B2652b2b"
-                      >0x498581fF718922c3f8e6A244956aF099B2652b2b</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Uniswap v3</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x33128a8fC17869897dcE68Ed026d694621f6FDfD"
-                      >0x33128a8fC17869897dcE68Ed026d694621f6FDfD</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Uniswap v2</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6"
-                      >0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Hydrex Classic Pools</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0"
-                      >0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Hydrex Integral</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E"
-                      >0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E</a
                     ></code
                   >
                 </dd>
@@ -1497,7 +1365,7 @@
                 <li data-check="swap-output" hidden>It pays in its output token</li>
                 <li data-check="swap-treasury" hidden>Its fee recipient matches</li>
                 <li data-check="swap-fee" hidden>Its fee is 1%</li>
-                <li data-check="swap-exchanges" hidden>Its exchanges are the ones above</li>
+                <li data-check="swap-exchanges" hidden>Its exchanges match</li>
               </ul>
             </div>
           </div>

@@ -66,9 +66,9 @@ This README is for whoever runs the site. The design and the plan are in [design
 - `#swap` takes the output from its address, `#swap/weth`, USDC by default, then lists the wallet's tokens, each with
   what it fetches, ticked when the quote is worth twice its gas. What the ticked ones fetch shows line by line: the
   quote, the 1%, what reaches you, the least that may, on the line where the slippage is picked, and the gas, paid apart
-  in ETH. Its popups: its costs, what the slippage sets, who controls what and its smart contracts, with any check that
-  failed, such as `#swap/weth/check`; and the approvals given to the swappers. Its review shows the swap as a bill: each
-  token with its route by tokens and pools, under the gas, then the least, with the slippage that set it.
+  in ETH. Its popups: its costs, what the slippage is, and the six swappers' contracts, with any check that failed, such
+  as `#swap/weth/check`; and the approvals given to the swappers. Its review shows the swap as a bill: each token with
+  its route by tokens and pools, under the gas, then the least, with the slippage that set it.
 - Each automation has a page, `#hydrex/carbon-impact` and `#hydrex/automaxi`: its key figures (what it takes, what it
   pays in, what it paid last epoch, and what it retired or who controls it), and a way to join. Everything else is in
   popups: its six fee facts, how it did against all of Hydrex, joining and leaving, who controls what, and Check it.

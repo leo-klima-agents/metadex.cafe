@@ -27,8 +27,7 @@ technical parts open from an info button, as popups.
   as cards like the accounts': with many accounts, it was easy to miss.
 - **The swap** (`#swap`, `#swap/weth`), "Your Wallet › Swap tokens": the output, the wallet's tokens, what the ticked
   ones fetch line by line, from the quote down to the least that may reach you, with the slippage picked on that line,
-  and popups: its costs, what the slippage sets, who controls what and its smart contracts; approvals you gave the
-  swappers.
+  and popups: its costs, what the slippage is, and the six swappers' contracts; approvals you gave the swappers.
 - **An automation's page** (`#hydrex/carbon-impact`, `#hydrex/automaxi`): its status, its key figures, and your accounts
   in it and Join. Info buttons beside them open fee facts, against all of Hydrex, joining and leaving, one of its own,
   and Check it, with who controls what.

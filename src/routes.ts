@@ -21,7 +21,7 @@ export const PRODUCT_SECTIONS: Record<Kind, string[]> = {
   "carbon-impact": ["fees", "record", "joining", "carbon", "check", "control"],
   automaxi: ["fees", "record", "votes", "joining", "check", "control"],
 };
-export const SWAP_SECTIONS = ["fees", "control", "check", "approvals"];
+export const SWAP_SECTIONS = ["fees", "check", "approvals"];
 
 // Hydrex's accounts are numbered from 1. A number has at most 78 digits, as a uint256.
 const ACCOUNT = /^[1-9]\d{0,77}$/;
