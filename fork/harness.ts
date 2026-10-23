@@ -221,18 +221,22 @@ export type WalletOptions = {
   approval?: Promise<void>;
   // Holds back the answer to a transaction until it settles, as a wallet does while its window is open.
   sending?: Promise<void>;
-  // Sends several calls in one prompt, with EIP-5792, as Coinbase Wallet and MetaMask do.
+  // Sends several calls in one prompt, with EIP-5792, as Coinbase Wallet and MetaMask do: all or nothing, unless `atomic`
+  // is false.
   batch?: boolean;
+  atomic?: boolean;
   // Asks before it connects, switches or sends, as a wallet's window asks its owner, and says no where the answer is
   // false. The QA wallet asks the person trying the page: see qa.ts.
   ask?: (method: string, params: any[]) => Promise<boolean>;
   // How many of the next transactions to send with too little gas, so that they fail on Base.
   failing?: number;
 };
-// Fails the reads of Base whose request body `refuse` matches, and gives those `answer` answers its own reply.
+// Fails the reads of Base whose request body `refuse` matches, and gives those `answer` answers its own reply. `rewrite`
+// changes anvil's reply to a request, where it gives another.
 export type Rpc = {
   refuse?: ((body: string) => boolean) | undefined;
   answer?: ((body: string) => string | undefined) | undefined;
+  rewrite?: ((body: string, reply: string) => string | undefined) | undefined;
 };
 type OpenOptions = {
   width?: number;
@@ -256,6 +260,8 @@ type Opened = {
   violations: string[];
   rpc: Rpc;
   safe: Address;
+  // The chain Safe{Wallet} says the Safe is on, Base unless set.
+  safeChainId?: number;
 };
 
 // A wallet that announces itself to the page and hands each request to Node through testWallet, which the page's
@@ -289,7 +295,7 @@ const WALLET_SCRIPT = walletScript(["Test Wallet"]);
 const POLICY_SCRIPT = `document.addEventListener("securitypolicyviolation", (event) =>
   console.error("Content Security Policy: " + event.violatedDirective + " " + event.blockedURI));`;
 
-const safePage = (safe: Address) => `<!doctype html><meta charset="utf-8"><title>Safe{Wallet}</title>
+const safePage = (safe: Address, chainId = 8453) => `<!doctype html><meta charset="utf-8"><title>Safe{Wallet}</title>
 <iframe src="${SITE}/" style="inline-size: 100%; block-size: 95vh; border: 0"></iframe>
 <script>
   window.received = [];
@@ -297,7 +303,7 @@ const safePage = (safe: Address) => `<!doctype html><meta charset="utf-8"><title
     if (origin !== "${SITE}" || !data?.method) return;
     window.received.push({ method: data.method, params: data.params });
     const answers = {
-      getSafeInfo: { safeAddress: "${safe}", chainId: 8453, threshold: 2, owners: [], isReadOnly: false },
+      getSafeInfo: { safeAddress: "${safe}", chainId: ${chainId}, threshold: 2, owners: [], isReadOnly: false },
       sendTransactions: { safeTxHash: "0x${"ab".repeat(32)}" },
     };
     const reply = data.method in answers
@@ -355,7 +361,9 @@ export function testWallet(options: WalletOptions, sent: Sent[], asked: string[]
       }
       case "wallet_getCapabilities":
         if (!options.batch) return { error: { code: 4200, message: "The test wallet does not batch." } };
-        return { result: { [hex(8453)]: { atomic: { status: "supported" } } } };
+        return {
+          result: { [hex(8453)]: { atomic: { status: options.atomic === false ? "unsupported" : "supported" } } },
+        };
       case "wallet_sendCalls": {
         if (!options.batch) return { error: { code: 4200, message: "The test wallet does not batch." } };
         const { calls } = params[0] as { calls: Sent[] };
@@ -376,7 +384,7 @@ export function testWallet(options: WalletOptions, sent: Sent[], asked: string[]
           hashes.map((hash) => anvil<{ status: Hex } | null>("eth_getTransactionReceipt", [hash])),
         );
         if (receipts.some((receipt) => !receipt)) return { result: { status: 100 } };
-        return { result: { status: 200, atomic: true, receipts } };
+        return { result: { status: 200, atomic: options.atomic !== false, receipts } };
       }
       default:
         return { error: { code: 4200, message: `The test wallet does not answer ${method}.` } };
@@ -390,7 +398,7 @@ export const forwarding = new Set<Promise<string>>();
 
 export async function serve(
   route: Route,
-  { origins, rpc, safe }: Pick<Opened, "origins" | "rpc" | "safe">,
+  { origins, rpc, safe, safeChainId }: Pick<Opened, "origins" | "rpc" | "safe" | "safeChainId">,
 ): Promise<void> {
   const request = route.request();
   const { origin, pathname } = new URL(request.url());
@@ -407,10 +415,11 @@ export async function serve(
       return route.fulfill({ headers: { ...CORS, "content-type": "application/json" }, body: answered });
     const reply = post(request.postData() ?? "");
     forwarding.add(reply);
-    const body = await reply.finally(() => forwarding.delete(reply));
+    const answer = await reply.finally(() => forwarding.delete(reply));
+    const body = rpc.rewrite?.(request.postData() ?? "", answer) ?? answer;
     return route.fulfill({ headers: { ...CORS, "content-type": "application/json" }, body });
   }
-  if (origin === SAFE_WALLET) return route.fulfill({ contentType: "text/html", body: safePage(safe) });
+  if (origin === SAFE_WALLET) return route.fulfill({ contentType: "text/html", body: safePage(safe, safeChainId) });
   return route.abort();
 }
 

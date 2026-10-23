@@ -291,9 +291,9 @@ exponential backoff, for up to 5 minutes. The first run, which asks for everythi
 RPC of your own; the next ones take about two minutes.
 
 `npm run qa` opens the page by hand against the same forks, in a browser of its own, beside a wallet that signs as any
-address and steers the fork: the states the browser tests start from, Base's clock, and what can fail. Every flow of the
-page can be tried there without a wallet or funds of your own: [QA.md](QA.md) says how, and which scenario each flow
-needs.
+address and steers the fork: the states the browser tests start from, Base's clock, and what can fail. The page's flows
+can be tried there without a wallet or funds of your own: [QA.md](QA.md) says which scenario each needs, and which few
+states the fork cannot show.
 
 CI runs Prettier, the type check, the unit tests, `reuse lint` and the build. It then builds again from a fresh clone
 and checks that both builds are the same. It also runs the browser tests, in the runner's Chrome, with the forks'

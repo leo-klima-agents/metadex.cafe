@@ -110,6 +110,9 @@
         padding: 0;
         margin: 8px 0 0;
       }
+      h2.sub {
+        margin-block-start: 12px;
+      }
     </style>
   </head>
   <body>
@@ -147,7 +150,15 @@
       </label>
       <label><input type="checkbox" id="asks" /> Asks you before it connects, switches or sends</label>
       <label><input type="checkbox" id="switches" /> Can switch networks</label>
-      <label><input type="checkbox" id="batch" /> Sends several calls in one prompt (EIP-5792), once reloaded</label>
+      <label>
+        Calls
+        <select id="calls">
+          <option value="one">One per prompt</option>
+          <option value="atomic">Several in one prompt, all or nothing</option>
+          <option value="each">Several in one prompt, one by one</option>
+        </select>
+      </label>
+      <p class="hint">EIP-5792's wallet_sendCalls: the page asks once per address, so reload it after a change.</p>
       <button id="fail">Fail the next transaction</button>
       <button id="lock">Lock</button>
       <p class="hint" id="failing"></p>
@@ -167,11 +178,27 @@
     </section>
 
     <section>
+      <h2>Hydrex</h2>
+      <form id="delegate">
+        <input type="text" id="delegated" placeholder="#141" aria-label="Hydrex account" />
+        <input type="text" id="delegatee" placeholder="0x…, Carbon Impact, USDC, or owner" aria-label="Delegate to" />
+        <button>Delegate</button>
+      </form>
+      <p class="hint">
+        Delegates the account's votes, as its owner can on Hydrex: to an address, Delegated to; to one of the page's
+        automations, Partly in it; back to its owner. Reload the page after.
+      </p>
+      <fieldset data-group="hydrex"></fieldset>
+    </section>
+
+    <section>
       <h2>Base</h2>
       <p id="time"></p>
       <button data-travel="epoch">Next epoch</button>
       <button data-travel="half-day">12 hours later</button>
-      <fieldset id="faults"></fieldset>
+      <fieldset data-group="base"></fieldset>
+      <h2 class="sub">Checks that fail</h2>
+      <fieldset data-group="check"></fieldset>
       <p class="hint">The page checks the contracts as it opens, then every hour: reload it after a change.</p>
     </section>
 
@@ -228,7 +255,8 @@
         if (document.activeElement !== $("owner")) $("owner").value = state.owner;
         $("holds").textContent = state.owner;
         if (document.activeElement !== $("chain")) $("chain").value = String(state.chainId);
-        for (const key of ["asks", "switches", "batch"]) $(key).checked = state[key];
+        if (document.activeElement !== $("calls")) $("calls").value = state.calls;
+        for (const key of ["asks", "switches"]) $(key).checked = state[key];
         $("failing").textContent = state.failing
           ? `The next ${state.failing === 1 ? "transaction" : `${state.failing} transactions`} will fail on Base.`
           : "";
@@ -252,15 +280,18 @@
           ? `${date.format(state.time * 1000)} UTC · block ${state.block.toLocaleString("en-GB")}`
           : "";
         if (changed("faults", state.faults))
-          $("faults").replaceChildren(
-            ...state.faults.map(({ id, label, on }) => {
-              const box = Object.assign(document.createElement("input"), { type: "checkbox", checked: on });
-              box.onchange = () => run("fault", id, box.checked);
-              const line = document.createElement("label");
-              line.append(box, ` ${label}`);
-              return line;
-            }),
-          );
+          for (const fieldset of document.querySelectorAll("fieldset[data-group]"))
+            fieldset.replaceChildren(
+              ...state.faults
+                .filter(({ group }) => group === fieldset.dataset.group)
+                .map(({ id, label, on }) => {
+                  const box = Object.assign(document.createElement("input"), { type: "checkbox", checked: on });
+                  box.onchange = () => run("fault", id, box.checked);
+                  const line = document.createElement("label");
+                  line.append(box, ` ${label}`);
+                  return line;
+                }),
+            );
         if (changed("log", state.log))
           $("requests").replaceChildren(
             ...state.log.map((line) => Object.assign(document.createElement("li"), { textContent: line })),
@@ -289,7 +320,12 @@
         run("owner", $("address").value.trim());
       };
       $("chain").onchange = () => run("chain", Number($("chain").value));
-      for (const key of ["asks", "switches", "batch"]) $(key).onchange = () => run("set", key, $(key).checked);
+      for (const key of ["asks", "switches"]) $(key).onchange = () => run("set", key, $(key).checked);
+      $("calls").onchange = () => run("calls", $("calls").value);
+      $("delegate").onsubmit = (event) => {
+        event.preventDefault();
+        run("delegate", $("delegated").value, $("delegatee").value);
+      };
       $("fail").onclick = () => run("fail");
       $("away").onsubmit = (event) => {
         event.preventDefault();

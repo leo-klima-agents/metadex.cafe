@@ -66,7 +66,7 @@ const moveToAutoMaxi = (id: bigint) =>
 export const SCENARIOS: Scenario[] = [
   {
     name: "hydrex",
-    title: "Fri 16 Oct 2026: Carbon Impact, the automations that stopped, and accounts in every state",
+    title: "Fri 16 Oct 2026: Carbon Impact, the automations that stopped in September, and accounts in or out of them",
     block: BLOCK,
     hash: "#hydrex",
     owners: ACCOUNTS,

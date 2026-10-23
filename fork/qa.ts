@@ -10,18 +10,35 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { chromium, type BrowserContext, type Page, type Route } from "playwright-core";
-import { decodeFunctionData, encodeFunctionData, getAddress, isAddress, type Address, type Hex } from "viem";
-import tokens from "../src/base-tokens.json" with { type: "json" };
 import {
+  decodeFunctionData,
+  decodeFunctionResult,
+  encodeAbiParameters,
+  encodeFunctionData,
+  encodeFunctionResult,
+  getAddress,
+  isAddress,
+  numberToHex,
+  parseAbi,
+  type Address,
+  type Hex,
+} from "viem";
+import tokens from "../src/base-tokens.json" with { type: "json" };
+import { same } from "../src/chain.ts";
+import {
+  APPROVAL_LOGIC,
+  AUTOMATIONS,
   AUTOMAXI,
   CARBON_IMPACT,
   CHAIN_ID,
+  MULTICALL3,
   RPCS,
   SWAPPERS,
   VOTER,
   VOTING_ESCROW,
   VOTING_ESCROW_IMPLEMENTATION,
 } from "../src/config.ts";
+import conduits from "../src/hydrex-conduits.json" with { type: "json" };
 import { WEEK, short } from "../src/format.ts";
 import { erc20Abi, swapperAbi } from "../src/swap.ts";
 import {
@@ -59,7 +76,27 @@ const hex = (n: number | bigint) => `0x${n.toString(16)}`;
 // The windows that show the page: with the test wallet, with two wallets, or without any, as Safe{Wallet} shows it.
 type Kind = "wallet" | "wallets" | "none";
 type Prompt = { id: number; text: string; answer: (yes: boolean) => void };
-type Fault = { label: string; on(): Promise<void>; off(): Promise<void> };
+// A change to Base that the QA wallet can make and undo: a failure of Base, a check of the page's that fails, or a state
+// of Hydrex's.
+type Fault = { group: "base" | "check" | "hydrex"; label: string; on(): Promise<void>; off(): Promise<void> };
+// How the wallet sends several calls: one per prompt, in one prompt all or nothing, or in one prompt one by one.
+type Calls = "one" | "atomic" | "each";
+
+const QA_ABI = parseAbi([
+  "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
+  "function veToken() view returns (address)",
+  "function kvcm() view returns (address)",
+  "function getConduitApprovalConfig(address conduit) view returns (uint8[] actions, bool active, string name)",
+  "function lastVoted(address voter) view returns (uint256)",
+  "function ownerOf(uint256 tokenId) view returns (address)",
+  "function delegate(uint256 tokenId, address delegatee)",
+]);
+// Hydrex's automations, the page's own and the others, by name.
+const AUTOMATION_NAMES = [...conduits, ...AUTOMATIONS].map(({ name, address }) => ({
+  name,
+  address: getAddress(address),
+}));
+const OTHERS = conduits.filter(({ address }) => !AUTOMATIONS.some((automation) => same(automation.address, address)));
 
 // The tokens the QA wallet can send away by symbol: the page's list, and those the scenarios give.
 const TOKENS: { symbol: string; address: string }[] = [
@@ -187,12 +224,16 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   }
 
   // The page's own requests go to the fork; a link out of it opens as it would anywhere.
-  const rpc: Rpc = {};
+  const rpc: Rpc = { rewrite: (body, reply) => rewrite(body, reply) };
   const shared = {
     origins: new Set<string>(),
     rpc,
+    // Safe{Wallet} holds the address signed as, on the wallet's network.
     get safe() {
       return wallet.owner;
+    },
+    get safeChainId() {
+      return wallet.chainId;
     },
   };
   function routeSite(route: Route): Promise<void> {
@@ -264,10 +305,14 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
 
   // What changed code, by address, to put back.
   const codes = new Map<Address, Hex>();
-  const code = (address: Address, change: (code: Hex) => Hex) => ({
+  const present = async (address: Address, name: string): Promise<Hex> => {
+    const found = await anvil<Hex>("eth_getCode", [address, "latest"]);
+    if (found === "0x") throw new Error(`${name} is not on Base in this scenario.`);
+    return found;
+  };
+  const code = (address: Address, name: string, change: (code: Hex) => Hex) => ({
     async on() {
-      const was = await anvil<Hex>("eth_getCode", [address, "latest"]);
-      if (was === "0x") throw new Error("There is no code there in this scenario.");
+      const was = await present(address, name);
       codes.set(address, was);
       await anvil("anvil_setCode", [address, change(was)]);
     },
@@ -277,23 +322,148 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   });
   // A byte after the code changes its hash, not what it does.
   const longer = (code: Hex): Hex => `${code}00`;
+
+  // Reads whose answer is changed, by the contract and calldata of each, inside the page's Multicall3 batches: so one
+  // read answers otherwise, and Base stays as it is.
+  const answers = new Map<string, (data: Hex) => Hex>();
+  const callKey = (target: string, data: string) => `${target} ${data}`.toLowerCase();
+  function rewrite(body: string, reply: string): string | undefined {
+    if (!answers.size) return undefined;
+    const { method, params = [] } = JSON.parse(body) as { method: string; params?: { to?: string; data?: Hex }[] };
+    const [{ to = "", data = "0x" } = {}] = params;
+    if (method !== "eth_call" || !same(to, MULTICALL3)) return undefined;
+    const [calls] = decodeFunctionData({ abi: QA_ABI, data }).args as readonly unknown[] as [
+      { target: Address; callData: Hex }[],
+    ];
+    const changes = calls.map(({ target, callData }) => answers.get(callKey(target, callData)));
+    const answer = JSON.parse(reply) as { result?: Hex };
+    if (!changes.some(Boolean) || !answer.result) return undefined;
+    const results = decodeFunctionResult({ abi: QA_ABI, functionName: "aggregate3", data: answer.result });
+    const result = results.map((each, i) =>
+      each.success && changes[i] ? { ...each, returnData: changes[i](each.returnData) } : each,
+    );
+    return JSON.stringify({
+      ...answer,
+      result: encodeFunctionResult({ abi: QA_ABI, functionName: "aggregate3", result }),
+    });
+  }
+  const answered = (
+    target: Address,
+    name: string,
+    functionName: string,
+    args: unknown[],
+    change: (data: Hex) => Hex,
+  ) => {
+    const key = callKey(target, encodeFunctionData({ abi: QA_ABI, functionName, args } as never));
+    return {
+      async on() {
+        await present(target, name);
+        answers.set(key, change);
+      },
+      off: async () => void answers.delete(key),
+    };
+  };
+  const another = (): Hex => encodeAbiParameters([{ type: "address" }], [STRANGER]);
+  const inactive = (data: Hex): Hex => {
+    const [actions, , name] = decodeFunctionResult({ abi: QA_ABI, functionName: "getConduitApprovalConfig", data });
+    return encodeFunctionResult({
+      abi: QA_ABI,
+      functionName: "getConduitApprovalConfig",
+      result: [actions, false, name],
+    });
+  };
+
+  // When each of Hydrex's other automations last voted, kept in the Voter's storage, by the slot that holds it.
+  const voted = new Map<Hex, Hex>();
+  async function voteAgain(): Promise<void> {
+    const { time } = await latest();
+    for (const { address, name } of OTHERS) {
+      const data = encodeFunctionData({ abi: QA_ABI, functionName: "lastVoted", args: [getAddress(address)] });
+      const was = await anvil<Hex>("eth_call", [{ to: VOTER, data }, "latest"]);
+      const { accessList } = await anvil<{ accessList: { address: string; storageKeys: Hex[] }[] }>(
+        "eth_createAccessList",
+        [{ to: VOTER, data }, "latest"],
+      );
+      let slot: Hex | undefined;
+      for (const key of accessList.filter((each) => same(each.address, VOTER)).flatMap((each) => each.storageKeys))
+        if (BigInt(await anvil<Hex>("eth_getStorageAt", [VOTER, key, "latest"])) === BigInt(was)) slot = key;
+      if (!slot || BigInt(was) === 0n) throw new Error(`The Voter's record of when ${name} voted was not found.`);
+      voted.set(slot, was);
+      await anvil("anvil_setStorageAt", [VOTER, slot, numberToHex(time, { size: 32 })]);
+    }
+  }
+
   const FAULTS: Record<string, Fault> = {
     "rpc-down": {
+      group: "base",
       label: "Base's RPCs fail",
       on: async () => void (rpc.refuse = () => true),
       off: async () => void (rpc.refuse = undefined),
     },
-    "other-chain": {
+    chain: {
+      group: "base",
       label: "Base's RPCs serve another chain",
       on: async () =>
         void (rpc.answer = (body) =>
           body.includes('"eth_chainId"') ? JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x1" }) : undefined),
       off: async () => void (rpc.answer = undefined),
     },
-    "carbon-impact-code": { label: "Carbon Impact's code changed", ...code(CARBON_IMPACT.address, longer) },
-    "automaxi-code": { label: "AutoMaxi's code changed", ...code(AUTOMAXI.address, longer) },
-    "escrow-code": { label: "The VotingEscrow's code changed", ...code(VOTING_ESCROW_IMPLEMENTATION, longer) },
-    "voter-gone": { label: "Hydrex's Voter cannot be read", ...code(VOTER, () => "0x") },
+    "voter-gone": { group: "base", label: "Hydrex's Voter cannot be read", ...code(VOTER, "The Voter", () => "0x") },
+    // As the README's table names them, by the ids of their messages on the page.
+    code: {
+      group: "check",
+      label: "code: Carbon Impact's code",
+      ...code(CARBON_IMPACT.address, "Carbon Impact", longer),
+    },
+    contracts: {
+      group: "check",
+      label: "contracts: Carbon Impact's VotingEscrow",
+      ...answered(CARBON_IMPACT.address, "Carbon Impact", "veToken", [], another),
+    },
+    token: {
+      group: "check",
+      label: "token: Carbon Impact's payout token",
+      ...answered(CARBON_IMPACT.address, "Carbon Impact", "kvcm", [], another),
+    },
+    approvals: {
+      group: "check",
+      label: "approvals: what joining Carbon Impact approves",
+      ...answered(VOTING_ESCROW, "The VotingEscrow", "getConduitApprovalConfig", [CARBON_IMPACT.address], inactive),
+    },
+    "automaxi-code": {
+      group: "check",
+      label: "automaxi-code: AutoMaxi's code",
+      ...code(AUTOMAXI.address, "AutoMaxi", longer),
+    },
+    "automaxi-contracts": {
+      group: "check",
+      label: "automaxi-contracts: AutoMaxi's VotingEscrow",
+      ...answered(AUTOMAXI.address, "AutoMaxi", "veToken", [], another),
+    },
+    "automaxi-approvals": {
+      group: "check",
+      label: "automaxi-approvals: what joining AutoMaxi approves",
+      ...answered(VOTING_ESCROW, "AutoMaxi", "getConduitApprovalConfig", [AUTOMAXI.address], inactive),
+    },
+    upgrade: {
+      group: "check",
+      label: "upgrade: the VotingEscrow's code",
+      ...code(VOTING_ESCROW_IMPLEMENTATION, "The VotingEscrow", longer),
+    },
+    logic: {
+      group: "check",
+      label: "logic: the VotingEscrow's approval logic",
+      ...code(APPROVAL_LOGIC, "The approval logic", longer),
+    },
+    "others-vote": {
+      group: "hydrex",
+      label: "Hydrex's other automations vote again",
+      on: voteAgain,
+      async off() {
+        for (const [slot, was] of voted) await anvil("anvil_setStorageAt", [VOTER, slot, was]);
+        voted.clear();
+      },
+    },
   };
   const faults = new Set<string>();
 
@@ -308,6 +478,8 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     current = next;
     faults.clear();
     codes.clear();
+    answers.clear();
+    voted.clear();
     rpc.refuse = rpc.answer = undefined;
     wallet.failing = 0;
     console.log(`Starting ${next.name}: ${next.title}`);
@@ -320,8 +492,8 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       // A block every 2 seconds, as on Base: the page reads a few blocks back, and so sees each transaction.
       await anvil("evm_setIntervalMining", [2]);
       wallet.owner = next.owners[0]!.address;
-      busy = "";
       await open("wallet");
+      busy = "";
       console.log(`Ready: ${next.name}.`);
     } catch (error) {
       busy = "";
@@ -330,15 +502,18 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     }
   }
 
+  async function gas(address: Address): Promise<void> {
+    if (BigInt(await anvil<Hex>("eth_getBalance", [address, "latest"])) >= ETH / 10n) return;
+    await anvil("anvil_setBalance", [address, hex(ETH)]);
+    note(`Gave ${short(address)} 0.1 ETH for gas`);
+  }
+
   async function setOwner(address: string): Promise<void> {
     if (!isAddress(address, { strict: false })) throw new Error(`${address} is not an address.`);
     const owner = getAddress(address);
     if (![...current.owners, ...typed].some((each) => each.address === owner))
       typed.push({ address: owner, holds: "an address you typed" });
-    if (BigInt(await anvil<Hex>("eth_getBalance", [owner, "latest"])) < ETH / 10n) {
-      await anvil("anvil_setBalance", [owner, hex(ETH)]);
-      note(`Gave ${short(owner)} 0.1 ETH for gas`);
-    }
+    await gas(owner);
     wallet.owner = owner;
     await emit("accountsChanged", [owner]);
   }
@@ -357,6 +532,29 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     note(
       `Sent all of ${short(wallet.owner)}'s ${NAMES.get(address.toLowerCase()) ?? short(address)} to ${short(STRANGER)}`,
     );
+  }
+
+  // As its owner can on Hydrex: to an automation by its name, back to the owner, or to any address.
+  async function delegate(account: string, to: string): Promise<void> {
+    const id = BigInt(account.replace(/^#/, ""));
+    const data = encodeFunctionData({ abi: QA_ABI, functionName: "ownerOf", args: [id] });
+    const reply = await anvil<Hex>("eth_call", [{ to: VOTING_ESCROW, data }, "latest"]).catch(() => undefined);
+    if (!reply) throw new Error(`Hydrex has no account #${id}.`);
+    const owner = decodeFunctionResult({ abi: QA_ABI, functionName: "ownerOf", data: reply });
+    const named = AUTOMATION_NAMES.find(({ name }) => name.toLowerCase() === to.toLowerCase());
+    const delegatee = /^(its )?owner$/i.test(to)
+      ? owner
+      : isAddress(to, { strict: false })
+        ? getAddress(to)
+        : named?.address;
+    if (!delegatee) throw new Error(`${to} is neither an address nor one of Hydrex's automations.`);
+    await gas(owner);
+    await mined(
+      owner,
+      VOTING_ESCROW,
+      encodeFunctionData({ abi: QA_ABI, functionName: "delegate", args: [id, delegatee] }),
+    );
+    note(`#${id}'s votes delegated to ${named?.name ?? (same(delegatee, owner) ? "its owner" : short(delegatee))}`);
   }
 
   async function travel(to: "epoch" | "half-day"): Promise<void> {
@@ -384,11 +582,11 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       chainId: wallet.chainId,
       asks,
       switches: wallet.switches,
-      batch: !!wallet.batch,
+      calls: (!wallet.batch ? "one" : wallet.atomic === false ? "each" : "atomic") satisfies Calls,
       failing: wallet.failing ?? 0,
       prompts: prompts.map(({ id, text }) => ({ id, text })),
       ...now,
-      faults: Object.entries(FAULTS).map(([id, { label }]) => ({ id, label, on: faults.has(id) })),
+      faults: Object.entries(FAULTS).map(([id, { group, label }]) => ({ id, group, label, on: faults.has(id) })),
       log,
     };
   }
@@ -415,9 +613,17 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
         const [key, on] = args as [string, boolean];
         if (key === "asks") asks = on;
         if (key === "switches") wallet.switches = on;
-        if (key === "batch") wallet.batch = on;
         break;
       }
+      case "calls": {
+        const calls = args[0] as Calls;
+        wallet.batch = calls !== "one";
+        wallet.atomic = calls !== "each";
+        break;
+      }
+      case "delegate":
+        await delegate(String(args[0]).trim(), String(args[1]).trim());
+        break;
       case "fail":
         wallet.failing = (wallet.failing ?? 0) + 1;
         break;
