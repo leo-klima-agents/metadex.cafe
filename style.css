@@ -238,6 +238,9 @@ header.site > .name img {
   flex: none;
   inline-size: 1.75rem;
   block-size: 1.75rem;
+  /* Its square is as dark as the dark theme's paper: a hairline keeps its edge. */
+  border-radius: 22%;
+  box-shadow: 0 0 0 1px var(--line);
 }
 header.site :is(.button, .connect) {
   min-block-size: 2.5rem;
