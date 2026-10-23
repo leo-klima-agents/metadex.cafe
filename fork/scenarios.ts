@@ -1,17 +1,10 @@
-import { encodeFunctionData, getAddress, type Address, type Hex } from "viem";
-import { AUTOMATIONS, AUTOMAXI, KEEPER, VOTING_ESCROW, WETH } from "../src/config.ts";
-import { readEarnings, rewardsFor, type Reward } from "../src/earnings.ts";
-import { WEEK } from "../src/format.ts";
-import { readAccounts } from "../src/hydrex.ts";
-import { SETTLED, readEarned, readStamps, weighed } from "../src/receipts.ts";
+import { getAddress, type Address, type Hex } from "viem";
+import { AUTOMAXI, WETH } from "../src/config.ts";
 import {
   AVNT,
   BLOCK,
-  CONDUIT,
   ELSEWHERE,
   ENDED,
-  FLIP,
-  FOR_GAS,
   HOLDER,
   LEAVER,
   MEMBER,
@@ -19,18 +12,14 @@ import {
   PAYEE,
   RECENT,
   SELLER,
-  STRANGER,
   ZORA,
-  abi,
-  anvil,
-  claimOne,
-  deployAutoMaxi,
+  approveConduit,
+  autoMaxiReceipts,
   fund,
-  hex,
-  mined,
   settle,
-  warm,
+  warmAtBlock,
   warmPayouts,
+  warmStandings,
 } from "./harness.ts";
 
 // The states that `npm run qa` puts a fork of Base in, for trying the page's flows by hand: each is the state of some
@@ -77,28 +66,6 @@ const PAYOUTS: { hash: Hex; does: string }[] = [
   { hash: "0xe06850e6ed95c1994461e1e82850538f5cf7607eb3e0686efdc8b534195c843c", does: "pays #9540" },
 ];
 
-// Reads with no time limit what the page reads first, and what an account's page reads of the payouts of `ids` in
-// Carbon Impact's pools, last epoch's and the one before's.
-const warmStandings = (owners: Address[], ids: bigint[]) =>
-  warm(async () => {
-    const [earnings] = await Promise.all([
-      readEarnings(CONDUIT),
-      readEarnings(AUTOMAXI.address),
-      ...owners.map((owner) => readAccounts(owner)),
-    ]);
-    const top = Number(await anvil<Hex>("eth_blockNumber")) - SETTLED;
-    const last = weighed(earnings!.rewards, earnings!.prices);
-    const before = weighed(await rewardsFor(CONDUIT, earnings!.start - WEEK), earnings!.prices);
-    await Promise.all([readStamps(ids, last, top), readEarned(ids, last, top), readStamps(ids, before, top)]);
-  });
-
-const moveToAutoMaxi = (id: bigint) =>
-  mined(
-    PAYEE,
-    VOTING_ESCROW,
-    encodeFunctionData({ abi, functionName: "setConduitApproval", args: [AUTOMAXI.address, id, true] }),
-  );
-
 export const SCENARIOS: Scenario[] = [
   {
     name: "hydrex",
@@ -106,14 +73,7 @@ export const SCENARIOS: Scenario[] = [
     block: BLOCK,
     hash: "#hydrex",
     owners: ACCOUNTS,
-    setup: () =>
-      warm(() =>
-        Promise.all([
-          ...ACCOUNTS.map(({ address }) => readAccounts(address)),
-          ...AUTOMATIONS.map(({ address }) => readEarnings(address)),
-          rewardsFor(CONDUIT, FLIP - 3 * WEEK),
-        ]),
-      ),
+    setup: () => warmAtBlock(ACCOUNTS.map(({ address }) => address)),
   },
   {
     name: "automaxi",
@@ -125,20 +85,8 @@ export const SCENARIOS: Scenario[] = [
       { address: PAYEE, holds: "93 Hydrex accounts; #82774 in AutoMaxi, with receipts" },
       ...ACCOUNTS.filter(({ address }) => address === MEMBER),
     ],
-    async setup() {
-      await deployAutoMaxi();
-      let rewards: Reward[] = [];
-      await warm(async () => {
-        rewards = (await readEarnings(CONDUIT))!.rewards;
-      });
-      await anvil("anvil_setBalance", [STRANGER, hex(FOR_GAS)]);
-      await moveToAutoMaxi(82774n);
-      const usdc = rewards.filter(({ token }) => token.symbol === "USDC");
-      await claimOne(KEEPER, 82774n, usdc[0]!);
-      await claimOne(STRANGER, 82774n, usdc[1]!);
-      await settle();
-      await warmStandings([NEWCOMER, LEAVER, PAYEE], [82774n]);
-    },
+    // As the browser test of AutoMaxi's receipts.
+    setup: () => autoMaxiReceipts([NEWCOMER, LEAVER, PAYEE]).then(() => {}),
   },
   {
     name: "swap",
@@ -159,7 +107,7 @@ export const SCENARIOS: Scenario[] = [
     hash: "#app",
     owners: [{ address: PAYEE, holds: "93 Hydrex accounts; #82774 in AutoMaxi, its payout overdue" }],
     async setup() {
-      await moveToAutoMaxi(82774n);
+      await approveConduit(PAYEE, AUTOMAXI.address, 82774n);
       await settle();
       await warmPayouts(PAYEE);
     },

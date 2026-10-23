@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { serveCached, upstreamOf } from "../fork/rpc-cache.ts";
+import { runsCalls, serveCached, upstreamOf } from "../fork/rpc-cache.ts";
 
 type Answer = { status?: number; headers?: Record<string, string>; body: unknown };
 // An upstream RPC that counts what it is asked, and how many requests it had at once, and answers each method as
@@ -247,6 +247,17 @@ test("what a call reads is asked of the upstream at once, from its access list, 
   assert.equal(through.fetched, fetched);
   await cache.close();
   await rpc.close();
+});
+
+test("only a request that runs a transaction has reads to prefetch", () => {
+  const tx = { from: "0x0000000000000000000000000000000000c0FFEE", to: "0x4200000000000000000000000000000000000006" };
+  const body = (method: string, params: unknown[]) => ({ jsonrpc: "2.0", id: 1, method, params });
+  assert.equal(runsCalls(JSON.stringify(body("eth_call", [tx, "latest"]))), true);
+  assert.equal(runsCalls(JSON.stringify(body("eth_simulateV1", [{ blockStateCalls: [{ calls: [tx] }] }]))), true);
+  assert.equal(runsCalls(JSON.stringify([body("eth_blockNumber", []), body("eth_estimateGas", [tx])])), true);
+  assert.equal(runsCalls(JSON.stringify(body("eth_blockNumber", []))), false);
+  assert.equal(runsCalls(JSON.stringify(body("eth_getTransactionReceipt", [`0x${"ab".repeat(32)}`]))), false);
+  assert.equal(runsCalls("not JSON"), false);
 });
 
 test("a request that names the fork's block by its hash is answered as one that names it by its number", async () => {

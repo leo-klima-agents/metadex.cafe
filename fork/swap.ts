@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { type Page } from "playwright-core";
 import { encodeFunctionData } from "viem";
-import { AUTOMAXI, SWAPPERS, VOTING_ESCROW, WETH } from "../src/config.ts";
+import { AUTOMAXI, SWAPPERS, WETH } from "../src/config.ts";
 import {
   AVNT,
   HOLDER,
@@ -12,7 +12,7 @@ import {
   SITE,
   STRANGER,
   ZORA,
-  abi,
+  approveConduit,
   app,
   balanceOf,
   claimOpens,
@@ -163,11 +163,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
   });
 
   test("claim, then swap what it brought into USDC in one prompt", async () => {
-    await mined(
-      PAYEE,
-      VOTING_ESCROW,
-      encodeFunctionData({ abi, functionName: "setConduitApproval", args: [AUTOMAXI.address, 82774n, true] }),
-    );
+    await approveConduit(PAYEE, AUTOMAXI.address, 82774n);
     await settle();
     await warmPayouts(PAYEE);
     const { page, sent } = await connected({ owner: PAYEE, batch: true }, { url: `${SITE}/#app` });

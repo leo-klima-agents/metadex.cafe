@@ -26,18 +26,22 @@ Close the QA wallet, or press Ctrl-C, to stop. The fork's answers are then kept 
 Each change the QA wallet makes to the fork mines the few blocks that the page reads behind Base's newest, as an RPC may
 not have those yet: reload the page, and it shows the change.
 
-- **Scenario:** starts one, or the same one again, from a fresh fork. That undoes every transaction and change.
+- **Scenario:** starts one, or the same one again, from a fresh fork. That undoes every transaction and change, and puts
+  the wallet back as it was at first: signing as the scenario's first wallet, on Base, able to switch, not asking, one
+  call per prompt, with no address typed in.
 - **Signs as:** the scenario's wallets, each with what it holds, or any address typed in. The page follows at once, as
   it does when a wallet changes account. An address with less than 0.01 ETH gets 0.1 ETH for gas.
 - **Network:** Base, or Ethereum, for the wrong network. **Can switch networks** off makes the wallet refuse to switch.
 - **Asks you before it connects, switches or sends:** off, the wallet says yes to everything at once. On, each request
-  waits in the QA wallet, which comes to the front, for Confirm or Reject, as a wallet's window does.
+  waits in the QA wallet, which comes to the front, for Confirm or Reject, as a wallet's window does. It sends as the
+  address the page asked of, which it names, even if another is picked meanwhile.
 - **Calls:** one per prompt; or several in one prompt with EIP-5792's `wallet_sendCalls`, as Coinbase Wallet and
   MetaMask do, all or nothing, or one by one. The page asks a wallet what it can do once per address: reload it after a
   change.
 - **Fail the next transaction:** sends it with too little gas, so that Base includes it, and it fails.
 - **Lock:** the wallet shares no account any more, as when it locks.
-- **Send it all away:** sends the wallet's whole balance of a token to `0x…dEaD`, as if spent elsewhere.
+- **Send it all away:** sends the wallet's whole balance of a token to `0x…dEaD`, as if spent elsewhere. By symbol, the
+  one the wallet holds of the listed tokens so named: two are AERO.
 - **Give it a token of that symbol:** deploys a token of the QA wallet's own, `fork/fixtures/QaToken.sol`, at a new
   address, with the symbol given, and 1,000 of it to the wallet. **Lists those tokens** answers ERC-7811's
   `wallet_getAssets` with them, as a wallet that lists its tokens does; such a wallet answers `wallet_getCapabilities`,
@@ -46,8 +50,8 @@ not have those yet: reload the page, and it shows the change.
   with two wallets in the browser; or with none.
 - **Hydrex,** for the account typed in, as its owner can on Hydrex: **Delegate its votes** to any address, to one of
   Hydrex's automations by its name, or back to its owner; **Give it to the address signed as**; **Its owner claims on
-  Hydrex** the most valuable of what waits for it. **Carbon Impact pays there** sets where Carbon Impact pays the
-  accounts of the address signed as.
+  Hydrex** the most valuable of what waits for it in the pools of each of the last two epochs, ten of each at most.
+  **Carbon Impact pays there** sets where Carbon Impact pays the accounts of the address signed as.
 - **Hydrex, as on Base each week,** which nobody does on the fork unasked: **Hydrex moves on to the new epoch** after a
   flip, through its minter, until when what the epoch before earned is not final; **Carbon Impact's keeper votes** as
   Carbon Impact did last, through its executor module; **Someone adds incentives:** 100 USDC, from Carbon Impact's
@@ -58,9 +62,9 @@ not have those yet: reload the page, and it shows the change.
 - **Base:** its time on the fork, which runs on a block every 2 seconds. **Next epoch** moves it to a minute after the
   next Thursday, 00:00 UTC; **12 hours later**, half a day on. The page's clock follows. Nobody votes or pays on the
   fork unasked, so a new epoch shows Carbon Impact as stopped.
-- **Failures:** Base's RPCs fail, or serve another chain; Hydrex's Voter cannot be read; tokens' symbols cannot be read;
-  AutoMaxi's figures cannot be read, while Carbon Impact's can; or the swappers' quotes come in a tenth under what their
-  pools give.
+- **Failures:** Base's RPCs fail, or serve another chain; Hydrex's Voter cannot be read; tokens' symbols cannot be read,
+  each such read failing on its own, as a token's would; Carbon Impact's figures cannot be read, while AutoMaxi's can,
+  or the other way round; or the swappers' quotes come in a tenth under what their pools give.
 - **Checks that fail:** each of the page's checks, by the id the README's table gives it, fails on its own. A code check
   fails as the contract's code changes; the others, as the fork answers that one read otherwise. The page checks
   contracts as it opens, then every hour: reload it after a change.
@@ -117,7 +121,8 @@ the wallet's own failures. Start the scenario again to try a flow from its start
 | Payouts not final yet, then final                             | `0x388b…7b40` | Next epoch, then `#hydrex/9540`: Not final yet. Hydrex moves on, reload: Late, with its receipt.                                                                            |
 | Nothing to pay                                                | `0x388b…7b40` | As above, then Next epoch and Hydrex moves on again: Carbon Impact earned nothing in either epoch on the fork, and `#hydrex/9540` says Nothing to pay.                      |
 | Not paid yet                                                  | `0x0208…4C95` | Join Carbon Impact with #141; Next epoch; Hydrex moves on; Carbon Impact's keeper votes; Someone adds incentives; Next epoch; Hydrex moves on: `#hydrex/141`, Not paid yet. |
-| Payouts that cannot be read                                   | `0x6092…6c93` | Tick Tokens' symbols cannot be read, open `#hydrex/82774`: Reading the payouts failed. Untick, then Try again.                                                              |
+| Payouts that cannot be read                                   | `0x6092…6c93` | Tick Carbon Impact's figures cannot be read, open `#hydrex/82774`: Reading the payouts failed. Untick, then Try again.                                                      |
+| Tokens whose symbol cannot be read                            | `0x6092…6c93` | Tick Tokens' symbols cannot be read, reload `#hydrex/82774`: its receipt earned 8.56 ? and 89.04 ?, and paid its owner 727.11 ?.                                            |
 | AutoMaxi before it is on Base                                 | any           | The page leaves AutoMaxi out; `#hydrex/automaxi/check` says it is not on Base yet.                                                                                          |
 | An account's page, anyone's                                   | any           | `#hydrex/9540`, `#hydrex/14485`; `#hydrex/999999999` has no such account.                                                                                                   |
 | Inside Safe{Wallet}                                           | `0x2573…0b16` | Open the page in Safe{Wallet}. Tick #53350 and #82206, Leave with 2 Hydrex accounts: one Safe transaction, 2 calls, then Proposed.                                          |
@@ -218,7 +223,7 @@ An account's payouts, on its page, in `standingItem` in `src/last-payout.ts`:
 | A receipt paid To another address              | `payout`, #82774, as in Paid to another address above                 |
 | A receipt Paid to its owner then               | `payout`, #35366 once given                                           |
 | AutoMaxi's receipts, Last 10 blocks only       | `claim`, #82774 once the page's claim of it went through              |
-| Reading the payouts failed                     | any, with Tokens' symbols, or AutoMaxi's figures, that cannot be read |
+| Reading the payouts failed                     | any, with Carbon Impact's figures, or AutoMaxi's, that cannot be read |
 
 Each of the page's checks, in `failedChecks` in `src/hydrex.ts`, can fail on its own: `chain` as Base's RPCs serve
 another chain, the others under Checks that fail. AutoMaxi's need a scenario where it is on Base.

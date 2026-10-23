@@ -103,6 +103,15 @@ function txsOf({ method, params = [] }: Call): Tx[] {
   return [];
 }
 
+// Whether a request's body runs a transaction, whose reads a prefetch would fetch: the tests post only those.
+export function runsCalls(body: string): boolean {
+  try {
+    return [JSON.parse(body) as Call | Call[]].flat().some((call) => txsOf(call).length > 0);
+  } catch {
+    return false;
+  }
+}
+
 // The upstream RPC, through one queue for all the caches of a run: at most `inFlight` requests at once, anvil's first,
 // then the prefetch's. One it answers over its limit, or that does not reach it, is asked again after an exponential
 // backoff with full jitter, a wait drawn up to `backoff` doubled at each try and at most `maxBackoff`, or longer if its

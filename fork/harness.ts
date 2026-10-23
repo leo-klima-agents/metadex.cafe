@@ -26,6 +26,7 @@ import {
   keccak256,
   parseAbi,
   toHex,
+  type Abi,
   type Address,
   type Hex,
 } from "viem";
@@ -49,6 +50,7 @@ import { pricesNow, type Token } from "../src/prices.ts";
 import { SETTLED, readEarned, readStamps, weighed } from "../src/receipts.ts";
 import { MIDDLES, findRoute } from "../src/swap.ts";
 import { describe as describeTokens, holdingsOf, known } from "../src/tokens.ts";
+import { runsCalls } from "./rpc-cache.ts";
 
 export const CONDUIT = CARBON_IMPACT.address;
 export const BLOCK = 52_694_000; // Fri 16 Oct 2026, 19:02 UTC
@@ -124,9 +126,11 @@ export const FOR_GAS = 10n ** 17n;
 // The fetch there was before warm() replaced it.
 const nodeFetch = globalThis.fetch;
 
-// What a request to anvil reads is fetched from FORK_URL meanwhile, all at once: see rpc-cache.ts.
-const prefetch = (body: string): void =>
-  void nodeFetch(`${CACHE_URL}/prefetch`, { method: "POST", body }).catch(() => {});
+// What a request to anvil reads is fetched from FORK_URL meanwhile, all at once: see rpc-cache.ts. A request that runs
+// no transaction, such as a poll of the newest block, reads nothing to fetch.
+const prefetch = (body: string): void => {
+  if (runsCalls(body)) void nodeFetch(`${CACHE_URL}/prefetch`, { method: "POST", body }).catch(() => {});
+};
 
 async function post(body: string): Promise<string> {
   prefetch(body);
@@ -170,18 +174,34 @@ export async function warm(reads: () => Promise<unknown>): Promise<void> {
   }
 }
 
-// Sends a transaction, and waits for Base, or anvil, to include it.
-// A transaction that anvil has not mined in two minutes, even reading its state from FORK_URL, fails its test there
-// and then, rather than at the suite's timeout.
-export async function mined(from: Address, to: Address, data: Hex): Promise<void> {
-  const hash = await send({ from, to, data, gas: GAS });
+export type Receipt = { status: Hex; contractAddress: Address | null };
+
+// Waits for anvil to include a transaction, named `what` if it fails. One that failed, or that anvil has not mined in
+// two minutes, even reading its state from FORK_URL, fails its test there and then, rather than at the suite's timeout.
+export async function included(hash: Hex, what: string = hash): Promise<Receipt> {
   for (const deadline = Date.now() + 120_000; Date.now() < deadline;) {
-    const receipt = await anvil<{ status: Hex } | null>("eth_getTransactionReceipt", [hash]);
-    if (receipt) return assert.equal(receipt.status, "0x1", `${hash} failed`);
+    const receipt = await anvil<Receipt | null>("eth_getTransactionReceipt", [hash]);
+    if (receipt) {
+      assert.equal(receipt.status, "0x1", `${what} failed on the fork`);
+      return receipt;
+    }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  assert.fail(`${hash} was not mined in two minutes`);
+  assert.fail(`${what} was not mined in two minutes`);
 }
+
+// Sends a transaction, and waits for anvil to include it.
+export async function mined(from: Address, to: Address, data: Hex): Promise<void> {
+  await included(await send({ from, to, data, gas: GAS }));
+}
+
+// Has the VotingEscrow approve `conduit` for account `id`, or no longer: as joining or leaving an automation does.
+export const approveConduit = (owner: Address, conduit: Address, id: bigint, approve = true) =>
+  mined(
+    owner,
+    VOTING_ESCROW,
+    encodeFunctionData({ abi, functionName: "setConduitApproval", args: [conduit, id, approve] }),
+  );
 
 // AutoMaxi's constructor needs fresh Chainlink prices and Base's sequencer up. anvil's clock runs on from the fork's,
 // so it deploys a minute after BLOCK.
@@ -329,8 +349,7 @@ function starved(data: Hex): string {
 export function testWallet(options: WalletOptions, sent?: Sent[], asked?: string[]) {
   let asking = false;
   const batches = new Map<string, Hex[]>();
-  // Batches all or nothing that failed: their first call failed on Base, and the others were never sent.
-  const reverted = new Set<string>();
+  let nextBatch = 1;
   const rejected = { error: { code: 4001, message: "User rejected the request." } };
   const allows = async (method: string, params: any[]) =>
     !options.decline && ((await options.ask?.(method, params)) ?? true);
@@ -341,6 +360,8 @@ export function testWallet(options: WalletOptions, sent?: Sent[], asked?: string
   };
   return async (method: string, params: any[]): Promise<{ result?: unknown; error?: unknown }> => {
     asked?.push(method);
+    // The account the page asked of, which a wallet signs as, even if its owner picks another meanwhile.
+    const signer = options.owner;
     switch (method) {
       case "eth_requestAccounts": {
         // As MetaMask does while its window is open.
@@ -365,7 +386,7 @@ export function testWallet(options: WalletOptions, sent?: Sent[], asked?: string
         if (!(await allows(method, params))) return rejected;
         // As MetaMask does.
         if (chainId !== hex(options.chainId)) return { error: { code: -32602, message: "Wrong chain." } };
-        return { result: await send({ to, data, from: options.owner, gas: gasFor(data) }) };
+        return { result: await send({ to, data, from: signer, gas: gasFor(data) }) };
       }
       case "wallet_getCapabilities":
         if (!options.batch && !options.assets)
@@ -378,30 +399,35 @@ export function testWallet(options: WalletOptions, sent?: Sent[], asked?: string
             },
           },
         };
-      case "wallet_getAssets":
+      case "wallet_getAssets": {
         if (!options.assets) return { error: { code: 4200, message: "The test wallet does not list its tokens." } };
-        return { result: { [hex(8453)]: options.assets.map((address) => ({ address, type: "erc20" })) } };
+        // Those the account asked about holds, as a wallet lists them.
+        const { account } = params[0] as { account: Address };
+        const held = await Promise.all(options.assets.map(async (token) => (await balanceOf(token, account)) > 0n));
+        const listed = options.assets.filter((_, i) => held[i]);
+        return { result: { [hex(8453)]: listed.map((address) => ({ address, type: "erc20" })) } };
+      }
       case "wallet_sendCalls": {
         if (!options.batch && !options.assets)
           return { error: { code: 4200, message: "The test wallet does not batch." } };
         const { calls } = params[0] as { calls: Sent[] };
         if (!(await allows(method, params))) return rejected;
-        const id = `0x${(batches.size + 1).toString(16).padStart(64, "0")}`;
+        // Its id at once, before another batch can take the same.
+        const id = `0x${(nextBatch++).toString(16).padStart(64, "0")}`;
         const hashes: Hex[] = [];
+        batches.set(id, hashes);
         if (options.atomic !== false && options.failing) {
           // All or nothing: a failing batch changes nothing but the gas of its one transaction.
           const [{ to, data }] = calls as [Sent];
           sent?.push(...calls);
-          hashes.push(await send({ to, data, from: options.owner, gas: gasFor(data as Hex) }));
-          reverted.add(id);
+          hashes.push(await send({ to, data, from: signer, gas: gasFor(data as Hex) }));
         } else {
           // One after the other, each in its own block: anvil has no account code to run them together.
           for (const { to, data } of calls) {
             sent?.push({ to, data });
-            hashes.push(await send({ to, data, from: options.owner, gas: gasFor(data as Hex) }));
+            hashes.push(await send({ to, data, from: signer, gas: gasFor(data as Hex) }));
           }
         }
-        batches.set(id, hashes);
         return { result: { id } };
       }
       case "wallet_getCallsStatus": {
@@ -410,8 +436,9 @@ export function testWallet(options: WalletOptions, sent?: Sent[], asked?: string
           hashes.map((hash) => anvil<{ status: Hex } | null>("eth_getTransactionReceipt", [hash])),
         );
         if (receipts.some((receipt) => !receipt)) return { result: { status: 100 } };
-        // EIP-5792's 500: reverted whole.
-        const status = reverted.has(params[0] as string) ? 500 : 200;
+        // EIP-5792's codes: 200 included, 500 reverted whole, 600 reverted in part.
+        const failed = receipts.filter((receipt) => receipt!.status !== "0x1").length;
+        const status = !failed ? 200 : failed === receipts.length ? 500 : 600;
         return { result: { status, atomic: options.atomic !== false, receipts } };
       }
       default:
@@ -641,20 +668,61 @@ export async function startAnvil(block: number, cached: string): Promise<void> {
   for (const token of NATIVE) await anvil("anvil_setCode", [token, "0x"]);
 }
 
-// Starts a fork at BLOCK, for the owners there, and reads with no time limit what the page reads first, which a first
-// run fetches from FORK_URL for minutes: each owner's accounts, and what each automation earned last epoch. And as
-// Carbon Impact paid nothing from Wed 23 Sep, for any account in it the payouts also read the pools of the epoch from
-// Thu 1 Oct, among every pool's reward contracts.
+// Starts a fork at BLOCK, for the owners there, and reads what the page reads first.
 export async function startAtBlock(): Promise<void> {
   const owners = [MEMBER, NEWCOMER, ELSEWHERE, LEAVER, ENDED];
   await start(BLOCK, owners);
-  await warm(() =>
+  await warmAtBlock(owners);
+}
+
+// Reads with no time limit what the page reads first at BLOCK, which a first run fetches from FORK_URL for minutes:
+// each owner's accounts, and what each automation earned last epoch. And as Carbon Impact paid nothing from Wed 23 Sep,
+// for any account in it the payouts also read the pools of the epoch from Thu 1 Oct, among every pool's reward
+// contracts.
+export const warmAtBlock = (owners: Address[]) =>
+  warm(() =>
     Promise.all([
       ...owners.map((owner) => readAccounts(owner)),
       ...AUTOMATIONS.map(({ address }) => readEarnings(address)),
       rewardsFor(CONDUIT, FLIP - 3 * WEEK),
     ]),
   );
+
+// Reads with no time limit what the page reads first of each automation and of `owners`, and what an account's page
+// reads of the payouts of `ids` in Carbon Impact's pools, last epoch's and the one before's. A revert drops what anvil
+// fetched, so a test reads them again after its own transactions.
+export const warmStandings = (owners: Address[], ids: bigint[]) =>
+  warm(async () => {
+    const [earnings] = await Promise.all([
+      readEarnings(CONDUIT),
+      readEarnings(AUTOMAXI.address),
+      ...owners.map((owner) => readAccounts(owner)),
+    ]);
+    const top = Number(await anvil<Hex>("eth_blockNumber")) - SETTLED;
+    const last = weighed(earnings!.rewards, earnings!.prices);
+    const before = weighed(await rewardsFor(CONDUIT, earnings!.start - WEEK), earnings!.prices);
+    await Promise.all([readStamps(ids, last, top), readEarned(ids, last, top), readStamps(ids, before, top)]);
+  });
+
+// AutoMaxi on Base, with #82774 in it, claimed by its keeper and then by a stranger, a USDC reward each; and what the
+// page reads of it, and of `owners`, read with no time limit. It answers Carbon Impact's rewards of last epoch, which
+// AutoMaxi's accounts earn in the same pools.
+export async function autoMaxiReceipts(owners: Address[] = []): Promise<Reward[]> {
+  await deployAutoMaxi();
+  let rewards: Reward[] = [];
+  await warm(async () => {
+    rewards = (await readEarnings(CONDUIT))!.rewards;
+    await readAccounts(PAYEE);
+  });
+  await anvil("anvil_setBalance", [PAYEE, hex(FOR_GAS)]);
+  await anvil("anvil_setBalance", [STRANGER, hex(FOR_GAS)]);
+  await approveConduit(PAYEE, AUTOMAXI.address, 82774n);
+  const usdc = rewards.filter(({ token }) => token.symbol === "USDC");
+  await claimOne(KEEPER, 82774n, usdc[0]!);
+  await claimOne(STRANGER, 82774n, usdc[1]!);
+  await settle();
+  await warmStandings(owners, [82774n]);
+  return rewards;
 }
 
 // A port nothing listens on now.
@@ -702,12 +770,8 @@ export const tokenAbi = parseAbi([
 ]);
 export const autoMaxiAbi = parseAbi(["function lastClaimBlock(uint256 tokenId) view returns (uint256)"]);
 
-export async function readOn<T>(
-  to: Address,
-  abi: typeof tokenAbi | typeof autoMaxiAbi,
-  functionName: string,
-  args: unknown[],
-): Promise<T> {
+// A contract's answer on the fork, at its newest block.
+export async function readOn<T>(to: Address, abi: Abi, functionName: string, args: unknown[] = []): Promise<T> {
   const data = encodeFunctionData({ abi, functionName, args } as never);
   const reply = await anvil<Hex>("eth_call", [{ to, data }, "latest"]);
   return decodeFunctionResult({ abi, functionName, data: reply } as never) as T;

@@ -28,7 +28,7 @@ import {
   type Hex,
 } from "viem";
 import tokens from "../src/base-tokens.json" with { type: "json" };
-import { same } from "../src/chain.ts";
+import { multicall3Abi, same } from "../src/chain.ts";
 import {
   APPROVAL_LOGIC,
   AUTOMATIONS,
@@ -46,6 +46,7 @@ import {
 import conduits from "../src/hydrex-conduits.json" with { type: "json" };
 import { readEarnings, rewardsFor } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
+import { others } from "../src/hydrex.ts";
 import { readEarned, weighed } from "../src/receipts.ts";
 import { erc20Abi, swapperAbi } from "../src/swap.ts";
 import {
@@ -61,7 +62,9 @@ import {
   anvil,
   balanceOf,
   hex,
+  included,
   mined,
+  readOn,
   send,
   serve,
   settle,
@@ -83,8 +86,6 @@ const CACHE = process.env.FORK_CACHE || join(homedir(), ".cache", "metadex.cafe"
 const PANEL = readFileSync(new URL("qa.html", import.meta.url), "utf8");
 // The QA wallet's window, at the left of the screen. Chromium makes no window narrower than about 500 pixels.
 const PANEL_WIDTH = 520;
-// Waits, then answers null, as a receipt not found yet.
-const sleep = (ms: number) => new Promise<null>((resolve) => setTimeout(() => resolve(null), ms));
 
 // The windows that show the page: with the test wallet, with two wallets, or without any, as Safe{Wallet} shows it.
 type Kind = "wallet" | "wallets" | "none";
@@ -96,7 +97,6 @@ type Fault = { group: "base" | "check" | "hydrex"; label: string; on(): Promise<
 type Calls = "one" | "atomic" | "each";
 
 const QA_ABI = parseAbi([
-  "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
   "function veToken() view returns (address)",
   "function kvcm() view returns (address)",
   "function getConduitApprovalConfig(address conduit) view returns (uint8[] actions, bool active, string name)",
@@ -112,6 +112,7 @@ const QA_ABI = parseAbi([
   "function setMyPayoutRecipient(address newRecipient)",
   "function KEEPER() view returns (address)",
   "function vote(address[] pools, uint256[] weights)",
+  "function poolVoteLength(address voter) view returns (uint256)",
   "function poolVote(address voter, uint256 index) view returns (address)",
   "function votes(address voter, address pool) view returns (uint256)",
   "function gauges(address pool) view returns (address)",
@@ -126,8 +127,8 @@ const QA_TOKEN_ABI = parseAbi(["constructor(string name, string symbol, uint8 de
 const QA_TOKEN = readFileSync(new URL("fixtures/qa-token-init-code.hex", import.meta.url), "utf8").trim() as Hex;
 const QUOTE = toFunctionSelector(getAbiItem({ abi: swapperAbi, name: "quote" }));
 const SWAPPER_ADDRESSES = new Set(SWAPPERS.map(({ address }) => address.toLowerCase()));
-const SYMBOL = toFunctionSelector("function symbol()").slice(2);
-// What the owner's own claim on Hydrex takes at most, of each epoch's rewards: the most valuable.
+const SYMBOL = toFunctionSelector("function symbol()");
+// What the owner's own claim on Hydrex takes at most of each of the last two epochs' rewards: the most valuable.
 const OWN_CLAIM_PAIRS = 10;
 // The QA wallet's commands that send transactions of their own.
 const SENDS = new Set([
@@ -147,7 +148,6 @@ const AUTOMATION_NAMES = [...conduits, ...AUTOMATIONS].map(({ name, address }) =
   name,
   address: getAddress(address),
 }));
-const OTHERS = conduits.filter(({ address }) => !AUTOMATIONS.some((automation) => same(automation.address, address)));
 
 // The tokens the QA wallet can send away by symbol: the page's list, and those the scenarios give.
 const TOKENS: { symbol: string; address: string }[] = [
@@ -160,6 +160,7 @@ const NAMES = new Map<string, string>([
   ...TOKENS.map(({ address, symbol }): [string, string] => [address.toLowerCase(), symbol]),
   ...SWAPPERS.map(({ address, symbol }): [string, string] => [address.toLowerCase(), `the ${symbol} swapper`]),
   [VOTING_ESCROW.toLowerCase(), "Hydrex's VotingEscrow"],
+  [VOTER.toLowerCase(), "Hydrex's Voter"],
   [CARBON_IMPACT.address.toLowerCase(), "Carbon Impact"],
   [AUTOMAXI.address.toLowerCase(), "AutoMaxi"],
 ]);
@@ -180,10 +181,10 @@ function requestWords(method: string, params: any[], owner: Address): string {
     case "wallet_switchEthereumChain":
       return `Switch to ${Number(params[0].chainId) === CHAIN_ID ? "Base" : `chain ${Number(params[0].chainId)}`}`;
     case "eth_sendTransaction":
-      return `Send ${callWords(params[0])}`;
+      return `Send ${callWords(params[0])} as ${short(owner)}`;
     case "wallet_sendCalls": {
       const calls = params[0].calls as { to: string; data: Hex }[];
-      return `Send ${calls.length} calls in one prompt: ${calls.map(callWords).join("; ")}`;
+      return `Send ${calls.length} calls in one prompt as ${short(owner)}: ${calls.map(callWords).join("; ")}`;
     }
     default:
       return method;
@@ -239,6 +240,9 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   let prompted = 0;
   const log: string[] = [];
   let asks = false;
+  // Once the session closes; and the scenario's start that runs or waits its turn, which never fails.
+  let closing: Promise<void> | undefined;
+  let starting: Promise<void> = Promise.resolve();
 
   const note = (line: string) => {
     const time = new Date().toISOString().slice(11, 19);
@@ -269,12 +273,23 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
           }),
   };
   const handle = testWallet(wallet);
-  async function walletRequest(method: string, params: any[]) {
+  // The wallet's requests that Node has not answered yet: a scenario's start waits for them, so that none sends what is
+  // left of it to the next scenario's fork.
+  const requests = new Set<Promise<unknown>>();
+  function walletRequest(method: string, params: any[]) {
+    const reply = respond(method, params);
+    requests.add(reply);
+    void reply.catch(() => {}).finally(() => requests.delete(reply));
+    return reply;
+  }
+  async function respond(method: string, params: any[]) {
+    // The account asked of, as the reply's note names it, even if another is picked meanwhile.
+    const owner = wallet.owner;
     const reply = await handle(method, params);
     if (LOGGED.has(method)) {
       const { result, error } = reply as { result?: unknown; error?: { message: string } };
       const outcome = error ? error.message : typeof result === "string" ? `sent ${result.slice(0, 10)}…` : "done";
-      note(`${requestWords(method, params, wallet.owner)}: ${outcome}`);
+      note(`${requestWords(method, params, owner)}: ${outcome}`);
     }
     return reply;
   }
@@ -307,11 +322,15 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     ]);
     return { block: Number(number), time: Number(timestamp) };
   };
-  // A contract's answer on the fork, at its newest block.
+  // A contract's answer on the fork, at its newest block. One without code there, as a failure ticked below may leave it,
+  // says so rather than that its empty answer cannot be decoded.
   const view = async <T>(to: Address, functionName: string, args: unknown[] = []): Promise<T> => {
-    const data = encodeFunctionData({ abi: QA_ABI, functionName, args } as never);
-    const reply = await anvil<Hex>("eth_call", [{ to, data }, "latest"]);
-    return decodeFunctionResult({ abi: QA_ABI, functionName, data: reply } as never) as T;
+    try {
+      return await readOn<T>(to, QA_ABI, functionName, args);
+    } catch (error) {
+      if ((await anvil<Hex>("eth_getCode", [to, "latest"])) !== "0x") throw error;
+      throw new Error(`${NAMES.get(to.toLowerCase()) ?? short(to)} has no code on the fork: is a failure ticked?`);
+    }
   };
 
   // Each window's clock starts at Base's time on the fork, then runs, as in the browser tests.
@@ -386,31 +405,34 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   const longer = (code: Hex): Hex => `${code}00`;
 
   // Reads whose answer is changed, by the contract and calldata of each, inside the page's Multicall3 batches: so one
-  // read answers otherwise, and Base stays as it is.
+  // read answers otherwise, and Base stays as it is. Those that `failing` matches fail on their own, as a call that
+  // reverts, and the batch's other reads still answer.
   const answers = new Map<string, (data: Hex) => Hex>();
+  const failing = new Set<(target: Address, callData: Hex) => boolean>();
   const callKey = (target: string, data: string) => `${target} ${data}`.toLowerCase();
+  type Result = { success: boolean; returnData: Hex };
+  function changeOf(target: Address, callData: Hex): ((result: Result) => Result) | undefined {
+    if ([...failing].some((fails) => fails(target, callData))) return () => ({ success: false, returnData: "0x" });
+    const change =
+      answers.get(callKey(target, callData)) ??
+      (quotesUnder && SWAPPER_ADDRESSES.has(target.toLowerCase()) && callData.startsWith(QUOTE) ? under : undefined);
+    return change && ((result) => (result.success ? { ...result, returnData: change(result.returnData) } : result));
+  }
   function rewrite(body: string, reply: string): string | undefined {
-    if (!answers.size && !quotesUnder) return undefined;
+    if (!answers.size && !failing.size && !quotesUnder) return undefined;
     const { method, params = [] } = JSON.parse(body) as { method: string; params?: { to?: string; data?: Hex }[] };
     const [{ to = "", data = "0x" } = {}] = params;
     if (method !== "eth_call" || !same(to, MULTICALL3)) return undefined;
-    const [calls] = decodeFunctionData({ abi: QA_ABI, data }).args as readonly unknown[] as [
-      { target: Address; callData: Hex }[],
-    ];
-    const changes = calls.map(
-      ({ target, callData }) =>
-        answers.get(callKey(target, callData)) ??
-        (quotesUnder && SWAPPER_ADDRESSES.has(target.toLowerCase()) && callData.startsWith(QUOTE) ? under : undefined),
-    );
+    const { functionName, args } = decodeFunctionData({ abi: multicall3Abi, data });
+    if (functionName !== "aggregate3") return undefined;
+    const changes = args[0].map(({ target, callData }) => changeOf(target, callData));
     const answer = JSON.parse(reply) as { result?: Hex };
     if (!changes.some(Boolean) || !answer.result) return undefined;
-    const results = decodeFunctionResult({ abi: QA_ABI, functionName: "aggregate3", data: answer.result });
-    const result = results.map((each, i) =>
-      each.success && changes[i] ? { ...each, returnData: changes[i](each.returnData) } : each,
-    );
+    const results = decodeFunctionResult({ abi: multicall3Abi, functionName: "aggregate3", data: answer.result });
+    const result = results.map((each, i) => changes[i]?.(each) ?? each);
     return JSON.stringify({
       ...answer,
-      result: encodeFunctionResult({ abi: QA_ABI, functionName: "aggregate3", result }),
+      result: encodeFunctionResult({ abi: multicall3Abi, functionName: "aggregate3", result }),
     });
   }
   // Only once `about`, the contract the read is about, is on Base.
@@ -438,13 +460,23 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     const lower = results.map((each) => ({ ...each, amountOut: (each.amountOut * 9n) / 10n }));
     return encodeFunctionResult({ abi: swapperAbi, functionName: "quote", result: lower });
   };
-  // The reads of Base that fail, each by what its request holds.
+  // The requests to Base that fail, each by what it holds.
   const refusing = new Set<(body: string) => boolean>();
   rpc.refuse = (body) => [...refusing].some((refuses) => refuses(body));
   const refused = (refuses: (body: string) => boolean) => ({
     on: async () => void refusing.add(refuses),
     off: async () => void refusing.delete(refuses),
   });
+  // The reads that fail on their own.
+  const fail = (fails: (target: Address, callData: Hex) => boolean) => ({
+    on: async () => void failing.add(fails),
+    off: async () => void failing.delete(fails),
+  });
+  // An automation's figures: what the Voter answers about it.
+  const figuresOf = (automation: Address) => {
+    const word = automation.slice(2).toLowerCase();
+    return fail((target, callData) => same(target, VOTER) && callData.toLowerCase().includes(word));
+  };
   const inactive = (data: Hex): Hex => {
     const [actions, , name] = decodeFunctionResult({ abi: QA_ABI, functionName: "getConduitApprovalConfig", data });
     return encodeFunctionResult({
@@ -458,28 +490,34 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   const voted = new Map<Hex, Hex>();
   async function voteAgain(): Promise<void> {
     const { time } = await latest();
-    // What it changed, put back if it cannot change them all.
+    // What it changed, put back if it fails; and the automations that never voted, which have no record to move on.
     const changed = new Map<Hex, Hex>();
+    const left: string[] = [];
     try {
-      for (const { address, name } of OTHERS) {
+      for (const { address, name } of others) {
+        const was = await view<bigint>(VOTER, "lastVoted", [getAddress(address)]);
         const data = encodeFunctionData({ abi: QA_ABI, functionName: "lastVoted", args: [getAddress(address)] });
-        const was = await anvil<Hex>("eth_call", [{ to: VOTER, data }, "latest"]);
         const { accessList } = await anvil<{ accessList: { address: string; storageKeys: Hex[] }[] }>(
           "eth_createAccessList",
           [{ to: VOTER, data }, "latest"],
         );
-        let slot: Hex | undefined;
-        for (const key of accessList.filter((each) => same(each.address, VOTER)).flatMap((each) => each.storageKeys))
-          if (BigInt(await anvil<Hex>("eth_getStorageAt", [VOTER, key, "latest"])) === BigInt(was)) slot = key;
-        if (!slot || BigInt(was) === 0n) throw new Error(`The Voter's record of when ${name} voted was not found.`);
-        changed.set(slot, was);
-        await anvil("anvil_setStorageAt", [VOTER, slot, numberToHex(time, { size: 32 })]);
+        const keys = accessList.filter((each) => same(each.address, VOTER)).flatMap((each) => each.storageKeys);
+        const stored = await Promise.all(keys.map((key) => anvil<Hex>("eth_getStorageAt", [VOTER, key, "latest"])));
+        const at = stored.findIndex((value) => BigInt(value) === was);
+        if (!was || at < 0) {
+          left.push(name);
+          continue;
+        }
+        changed.set(keys[at]!, stored[at]!);
+        await anvil("anvil_setStorageAt", [VOTER, keys[at]!, numberToHex(time, { size: 32 })]);
       }
+      if (!changed.size) throw new Error("The Voter has no record of when Hydrex's other automations voted.");
     } catch (error) {
       for (const [slot, was] of changed) await anvil("anvil_setStorageAt", [VOTER, slot, was]);
       throw error;
     }
     for (const [slot, was] of changed) voted.set(slot, was);
+    if (left.length) note(`${left.join(", ")}: never voted, and still look stopped`);
   }
 
   const FAULTS: Record<string, Fault> = {
@@ -487,15 +525,18 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     symbols: {
       group: "base",
       label: "Tokens' symbols cannot be read",
-      ...refused((body) => body.includes(SYMBOL)),
+      ...fail((_, callData) => callData.startsWith(SYMBOL)),
+    },
+    "carbon-impact-figures": {
+      group: "base",
+      label: "Carbon Impact's figures cannot be read",
+      // Its votes, read from the Voter for Carbon Impact's address: AutoMaxi's still read.
+      ...figuresOf(CARBON_IMPACT.address),
     },
     "automaxi-figures": {
       group: "base",
       label: "AutoMaxi's figures cannot be read",
-      // Its votes, read from the Voter for AutoMaxi's address: Carbon Impact's still read.
-      ...refused(
-        (body) => body.includes(VOTER.slice(2).toLowerCase()) && body.includes(AUTOMAXI.address.slice(2).toLowerCase()),
-      ),
+      ...figuresOf(AUTOMAXI.address),
     },
     "quotes-under": {
       group: "base",
@@ -576,31 +617,42 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   };
   const faults = new Set<string>();
 
-  // Never fails: what goes wrong shows in the QA wallet, which can start a scenario again.
+  // Never fails: what goes wrong shows in the QA wallet, which can start a scenario again. Each starts as the first did,
+  // with the wallet as it was then. Once the session closes, a start stops at its next step, and stops any anvil it
+  // started.
   async function start(next: Scenario): Promise<void> {
+    if (closing) return;
     failure = "";
     busy = `Starting ${next.name}…`;
     for (const prompt of prompts.splice(0)) prompt.answer(false);
-    const closing = [...sites.values()];
+    const windows = [...sites.values()];
     sites.clear();
     current = next;
     faults.clear();
     codes.clear();
     answers.clear();
+    failing.clear();
     voted.clear();
     refusing.clear();
     quotesUnder = false;
     rpc.answer = undefined;
     replayed = 0;
     created.length = 0;
+    typed.length = 0;
+    asks = false;
+    Object.assign(wallet, { chainId: CHAIN_ID, switches: true, batch: false, failing: 0 });
+    delete wallet.atomic;
     delete wallet.assets;
-    wallet.failing = 0;
     console.log(`Starting ${next.name}: ${next.title}`);
     try {
-      await Promise.all(closing.map((context) => context.close().catch(() => {})));
+      await Promise.all(windows.map((context) => context.close().catch(() => {})));
+      await Promise.allSettled(requests);
       await stopAnvil();
       busy = `Forking Base at block ${next.block.toLocaleString("en-GB")}…`;
-      await startAnvil(next.block, await cacheAt(next.block));
+      const cache = await cacheAt(next.block);
+      if (closing) return;
+      await startAnvil(next.block, cache);
+      if (closing) return void (await stopAnvil());
       for (const { address } of next.owners) await anvil("anvil_setBalance", [address, hex(FOR_GAS)]);
       busy = `Setting up ${next.name}. The first time, reading Base can take several minutes…`;
       await next.setup();
@@ -633,15 +685,23 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     await emit("accountsChanged", [owner]);
   }
 
-  // As if spent elsewhere, as the swap test does to a token between the review and the wallet.
+  // As if spent elsewhere, as the swap test does to a token between the review and the wallet. By symbol, the token the
+  // wallet holds of those the list names so: two are AERO.
   async function sendAway(token: string): Promise<void> {
-    const found = isAddress(token, { strict: false })
-      ? getAddress(token)
-      : TOKENS.find(({ symbol }) => symbol.toLowerCase() === token.toLowerCase())?.address;
-    if (!found) throw new Error(`The QA wallet knows no token ${token}: give its address.`);
-    const address = getAddress(found);
-    const amount = await balanceOf(address, wallet.owner);
-    if (!amount) throw new Error(`${short(wallet.owner)} holds none of ${NAMES.get(address.toLowerCase()) ?? token}.`);
+    const named = isAddress(token, { strict: false })
+      ? [getAddress(token)]
+      : TOKENS.filter(({ symbol }) => symbol.toLowerCase() === token.toLowerCase()).map(({ address }) =>
+          getAddress(address),
+        );
+    if (!named.length) throw new Error(`The QA wallet knows no token ${token}: give its address.`);
+    const balances = await Promise.all(named.map((address) => balanceOf(address, wallet.owner)));
+    const held = named.filter((_, i) => balances[i]! > 0n);
+    if (held.length > 1)
+      throw new Error(`${short(wallet.owner)} holds ${held.length} tokens named ${token}: give the address of one.`);
+    const [address] = held;
+    if (!address)
+      throw new Error(`${short(wallet.owner)} holds none of ${NAMES.get(named[0]!.toLowerCase()) ?? token}.`);
+    const amount = balances[named.indexOf(address)]!;
     const data = encodeFunctionData({ abi: tokenAbi, functionName: "transfer", args: [STRANGER, amount] });
     await mined(wallet.owner, address, data);
     note(
@@ -686,37 +746,43 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   // last two epochs, as a payout claims, so that the page finds the record of the payout moved by a claim of another's.
   async function claimOnHydrex(account: string): Promise<void> {
     const { id, owner } = await accountOf(account);
-    const claimed: { contract: Address; token: Address; fee: boolean }[] = [];
+    type Owed = { contract: Address; token: Address; fee: boolean; usd: number };
+    const pairKey = ({ contract, token }: Owed) => `${contract} ${token}`.toLowerCase();
+    // What waits in each epoch's pools, by contract and token. The automations' pools are mostly the same, and so are
+    // the two epochs': a claim takes what waits for every epoch at once.
+    const epochs = [new Map<string, Owed>(), new Map<string, Owed>()];
     await warm(async () => {
       for (const { address } of AUTOMATIONS) {
         const earnings = await readEarnings(address).catch(() => undefined);
         if (!earnings) continue;
-        for (const rewards of [earnings.rewards, await rewardsFor(address, earnings.start - WEEK)]) {
+        const both = [earnings.rewards, await rewardsFor(address, earnings.start - WEEK)];
+        for (const [epoch, rewards] of both.entries()) {
           const pairs = weighed(rewards, earnings.prices);
           const [amounts = []] = await readEarned([id], pairs, "latest");
           const fees = new Set(rewards.filter(({ fee }) => fee).map(({ contract }) => contract.toLowerCase()));
-          claimed.push(
-            ...pairs
-              .map((pair, i) => ({ ...pair, fee: fees.has(pair.contract.toLowerCase()), owed: amounts[i] ?? 0n }))
-              .filter(({ owed }) => owed > 0n)
-              .sort((a, b) => b.usd - a.usd)
-              .slice(0, OWN_CLAIM_PAIRS),
-          );
+          for (const [i, pair] of pairs.entries()) {
+            const owed = { ...pair, fee: fees.has(pair.contract.toLowerCase()) };
+            if ((amounts[i] ?? 0n) > 0n) epochs[epoch]!.set(pairKey(owed), owed);
+          }
         }
       }
     });
+    const most = (pairs: Map<string, Owed>) =>
+      [...pairs.values()].sort((a, b) => b.usd - a.usd).slice(0, OWN_CLAIM_PAIRS);
+    const claimed = [...new Map(epochs.flatMap(most).map((owed) => [pairKey(owed), owed])).values()];
     if (!claimed.length) throw new Error(`Nothing waits for #${id} in the pools of the last two epochs.`);
     // A few rewards a transaction, as each reads the account's past epochs.
-    for (const fee of [true, false])
-      for (let i = 0; i < claimed.length; i += OWN_CLAIM_PAIRS / 2) {
-        const these = claimed.slice(i, i + OWN_CLAIM_PAIRS / 2).filter((each) => each.fee === fee);
+    for (const fee of [true, false]) {
+      const kind = claimed.filter((each) => each.fee === fee);
+      for (let i = 0; i < kind.length; i += OWN_CLAIM_PAIRS / 2) {
+        const these = kind.slice(i, i + OWN_CLAIM_PAIRS / 2);
         const contracts = [...new Set(these.map(({ contract }) => contract))];
-        if (!contracts.length) continue;
         const tokens = contracts.map((contract) =>
           these.filter((each) => each.contract === contract).map((each) => each.token),
         );
         await as(owner, VOTER, fee ? "claimFees" : "claimBribes", [contracts, tokens, id]);
       }
+    }
     note(`#${id}'s owner claimed ${claimed.length} of its rewards on Hydrex`);
   }
 
@@ -747,14 +813,12 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
 
   // Carbon Impact's vote now, pool by pool: the Voter keeps it until it votes again.
   async function lastVote(): Promise<{ pools: Address[]; weights: bigint[] }> {
-    const pools: Address[] = [];
-    for (;;) {
-      const pool = await view<Address>(VOTER, "poolVote", [CARBON_IMPACT.address, BigInt(pools.length)]).catch(
-        () => undefined,
-      );
-      if (!pool) break;
-      pools.push(pool);
-    }
+    const length = await view<bigint>(VOTER, "poolVoteLength", [CARBON_IMPACT.address]);
+    const pools = await Promise.all(
+      Array.from({ length: Number(length) }, (_, i) =>
+        view<Address>(VOTER, "poolVote", [CARBON_IMPACT.address, BigInt(i)]),
+      ),
+    );
     const weights = await Promise.all(pools.map((pool) => view<bigint>(VOTER, "votes", [CARBON_IMPACT.address, pool])));
     return { pools, weights };
   }
@@ -782,20 +846,6 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     await mined(HOLDER, USDC, encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [contract, amount] }));
     await as(HOLDER, contract, "notifyRewardAmount", [USDC, amount]);
     note(`Added 100 USDC of incentives to the pool ${short(top)}, which Carbon Impact votes for most`);
-  }
-
-  // A transaction's receipt once the fork includes it, within two minutes, as mined() in harness.ts waits; one that
-  // failed, or did not come, says so.
-  async function included(hash: Hex, what: string): Promise<{ status: Hex; contractAddress: Address | null }> {
-    for (const deadline = Date.now() + 120_000; Date.now() < deadline; await sleep(250)) {
-      const receipt = await anvil<{ status: Hex; contractAddress: Address | null } | null>(
-        "eth_getTransactionReceipt",
-        [hash],
-      );
-      if (receipt?.status === "0x1") return receipt;
-      if (receipt) throw new Error(`${what} failed on the fork.`);
-    }
-    throw new Error(`${what} was not included in two minutes.`);
   }
 
   // Transactions that Base included after the fork's block, sent again in their order, as their senders.
@@ -901,7 +951,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       if (!next) throw new Error(`No scenario is named ${args[0]}.`);
       // At once, so that no command is taken until it has started; the commands taken before it finish first.
       busy = `Starting ${next.name}…`;
-      void inTurn(() => start(next));
+      starting = inTurn(() => start(next));
       return state();
     }
     await inTurn(() => run(name, args));
@@ -996,12 +1046,13 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   await place(panel, 0);
   await panel.goto("https://qa.test/");
 
-  let closing: Promise<void> | undefined;
   const close = () =>
     (closing ??= (async () => {
       for (const prompt of prompts.splice(0)) prompt.answer(false);
       await browser.close().catch(() => {});
       await stopAnvil();
+      // A start under way stops at its next step: the process may exit once it has.
+      await starting;
       for (const cache of caches.values())
         await cache.then((each) => each.close()).catch((error: unknown) => console.error(error));
       console.log(`${upstream.fetched} requests asked of FORK_URL, ${upstream.busy} of them over its limit.`);
@@ -1011,7 +1062,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     panel.on("close", () => resolve());
   }).then(close);
 
-  const started = inTurn(() => start(first));
+  const started = (starting = inTurn(() => start(first)));
   return { panel, command, sites: () => [...sites.values()], started, closed, close };
 }
 

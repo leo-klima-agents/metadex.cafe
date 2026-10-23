@@ -88,7 +88,9 @@ export const autoMaxi = (functionName: string, ...args: unknown[]) =>
   call(AUTOMAXI.address, autoMaxiAbi, functionName, ...args);
 
 // Hydrex's other automations. If Hydrex lists one of the page's own, the page still treats it as its own.
-const others = conduits.filter(({ address }) => !AUTOMATIONS.some((automation) => same(address, automation.address)));
+export const others = conduits.filter(
+  ({ address }) => !AUTOMATIONS.some((automation) => same(address, automation.address)),
+);
 
 export const LockType = { timed: 0, rolling: 1, permanent: 2 } as const;
 
