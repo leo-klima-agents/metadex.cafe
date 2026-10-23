@@ -89,7 +89,7 @@ export type Way = Hop & { tokenIn: Address };
 // Uniswap v3's fee tiers, and v4's standard pools without hooks, as [fee, tick spacing].
 // The exchanges in the order of the swapper's enum, which routes are looked up in and which a hop names.
 const BY_ID = [...EXCHANGES].sort((a, b) => a.id - b.id);
-const V3_FEES = [100, 500, 3000, 10_000];
+export const V3_FEES = [100, 500, 3000, 10_000];
 const V4_POOLS: [number, number][] = [
   [100, 1],
   [500, 10],
@@ -190,12 +190,12 @@ export function lookups(a: Address, b: Address, spacings: Map<number, number[]>)
   });
 }
 
-// Each Slipstream factory's tick spacings, read once.
+// Each Slipstream factory's tick spacings, by exchange id, read once.
 let spacingsRead: Promise<Map<number, number[]>> | undefined;
 
-function spacings(): Promise<Map<number, number[]>> {
+export function spacings(reader: typeof read = read): Promise<Map<number, number[]>> {
   const slipstreams = BY_ID.filter(({ kind }) => kind === "slipstream");
-  spacingsRead ??= read(slipstreams.map(({ factory }) => call(factory, slipstreamFactoryAbi, "tickSpacings"))).then(
+  spacingsRead ??= reader(slipstreams.map(({ factory }) => call(factory, slipstreamFactoryAbi, "tickSpacings"))).then(
     (found) => new Map(slipstreams.map(({ id }, i) => [id, ((found[i] as readonly number[]) ?? []).map(Number)])),
   );
   spacingsRead.catch(() => (spacingsRead = undefined));
