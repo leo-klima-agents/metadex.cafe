@@ -132,10 +132,12 @@ and works in one colour.
 
 ## Navigation
 
-- **The header is the same on every view, at every width:** the name, which leads Home, and the app, as the one button,
-  which shows the wallet once connected. On the App itself, the button reads as where you are.
-- **A breadcrumb** leads back to the App from every page below it, as wallets' browsers and Safe{Wallet}'s frame have no
-  address bar.
+- **The header is the same on every view, at every width:** the logo and the name, which lead Home, and one button:
+  "Connect a wallet", or the wallet's chip once connected, which leads to the App. On the App itself, the chip reads as
+  where you are.
+- **The title of every page below the App leads back to it,** before the page's own name, in the heading's face and
+  quieter: "Your Wallet › Hydrex", "Your Wallet › Hydrex › Carbon Impact". Wallets' browsers and Safe{Wallet}'s frame
+  have no address bar. Home and About are the page's own, and have none.
 - **A view repeats only its own main action,** as a button, such as "Open the app" on Home. It never offers a second way
   to a page the header already leads to.
 - **Within a view, a link leads to a section and says what it holds,** such as "What it means" or "More on leaving",
@@ -157,9 +159,14 @@ went badly too.
 - **Sizes:** 13 px for call slips, with an 84 px column for the labels on a phone as on a desktop, and 14 px for
   receipts.
 
-**A call** opens with what it is, "Your wallet will ask · 1 of 2", and the page's own words, such as "#9540 joins Carbon
-Impact.". Then a row per field: To, with the contract's name under it; Call; Conduit, with its name; Account; Approve;
-Value. Its foot links to how to check the calls.
+**A call** is a bill of its own: the name, then what it is, "Call 1 of 2", and the page's own words, such as "#9540
+joins Carbon Impact.". Then a row per field, in full, with nothing to open: To, with the contract's name under it; Call;
+Conduit, with its name; Hydrex account; Approve; Value. Its foot links to how to check the calls.
+
+**A swap** is a bill before the wallet asks: the name, "Quote · swap into cbBTC", with a token's symbol in its own case
+among the capitals, and the gas under it, as it is paid apart, in ETH. Then a line per token, with what it fetches and
+its route by tokens and pools, "→ WETH via Hydrex Integral → USDC via Uniswap v3 0.05%", without addresses. Then what
+they fetch, the 1%, "Reaches you", and "At least", with the slippage that set it.
 
 **In a Safe,** it opens with "In a Safe · one transaction to sign", or "In a Safe · call 1 of 2", and adds the fields
 Safe{Wallet} shows: Data and, for a single call, Operation. Data is the selector, then each 32-byte word on two lines of

@@ -128,7 +128,7 @@ export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true
     on: "AutoMaxi",
     call: "claim",
     fields: [
-      { label: "Account", name: "account", code: String(id) },
+      { label: "Hydrex account", name: "account", code: String(id) },
       { label: "Fees from", name: "fee-contracts", code: fees, under: "Pools' fees contracts that owe it" },
       {
         label: "Incentives from",

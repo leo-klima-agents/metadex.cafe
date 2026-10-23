@@ -90,12 +90,17 @@ export const taxed = ({ exchange }: Hop): boolean => exchangeOf(exchange).kind =
 export const poolless = ({ exchange }: Hop): boolean => exchangeOf(exchange).kind === "v4";
 export const MAX_TIP = 1_000_000_000n;
 
-// A hop's pool in words: "Uniswap v3 0.05%", "Aero Slipstream, tick spacing 100".
-export function poolName({ exchange, fee, tickSpacing }: Hop): string {
+// A hop's pool by its exchange, and its fee where the exchange has tiers: "Uniswap v3 0.05%", "Aero Slipstream".
+export function hopName({ exchange, fee }: Hop): string {
   const { name, kind } = exchangeOf(exchange);
-  if (kind === "v3" || kind === "v4") return `${name} ${fee / 10_000}%`;
-  if (kind === "slipstream") return `${name}, tick spacing ${tickSpacing}`;
-  return name;
+  return kind === "v3" || kind === "v4" ? `${name} ${fee / 10_000}%` : name;
+}
+
+// A hop's pool in full, as a call names it: "Uniswap v3 0.05%", "Aero Slipstream, tick spacing 100".
+export function poolName(hop: Hop): string {
+  return exchangeOf(hop.exchange).kind === "slipstream"
+    ? `${hopName(hop)}, tick spacing ${hop.tickSpacing}`
+    : hopName(hop);
 }
 
 // The best of a hop's pools by what each pays, unless it is one of Aero's classic pools, which wins only by more than

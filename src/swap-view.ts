@@ -1,9 +1,9 @@
 import type { Address } from "viem";
 import { now, same, type Receipt } from "./chain.ts";
 import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Output, type Swapper } from "./config.ts";
-import { clone, fill, fillAddress, show, showHex } from "./dom.ts";
+import { clone, fill, fillAddress, show } from "./dom.ts";
 import { tokensOf } from "./earnings.ts";
-import { count, figure, fraction, list, short, usd } from "./format.ts";
+import { bps, count, figure, fraction, list, short, usd } from "./format.ts";
 import { earningsOf, onEarnings } from "./last-epoch.ts";
 import { pricesNow, usdOf, type Token } from "./prices.ts";
 import type { Amount } from "./receipts.ts";
@@ -27,7 +27,7 @@ import {
   type Found,
   type Route,
 } from "./swap.ts";
-import { approveSlip, costs, gasUsd, pathWords, swapSlip, type Costs } from "./swap-calls.ts";
+import { approveSlip, costs, gasUsd, hopsWords, swapSlip, type Costs } from "./swap-calls.ts";
 import {
   allowancesOf,
   describe,
@@ -47,7 +47,7 @@ import { walletAssets, type Connection } from "./wallet.ts";
 // here too.
 
 const view = document.querySelector<HTMLElement>('.view[data-view="swap"]')!;
-const form = view.querySelector<HTMLElement>(".swap-form")!;
+const summary = view.querySelector<HTMLElement>(".swap-summary")!;
 const rowsList = view.querySelector<HTMLElement>(".swap-rows")!;
 const status = view.querySelector<HTMLElement>(".swap-status")!;
 const reviewButton = view.querySelector<HTMLButtonElement>(".swap-review")!;
@@ -200,7 +200,8 @@ function drawRow(row: Row, scanned: Scan): void {
 
 function drawAll(): void {
   const signedIn = !!context.connection();
-  form.hidden = !signedIn;
+  // Without a wallet, the outputs show, and the tokens' list says that no wallet is connected.
+  show(".swap-approvals-open, .add-token", signedIn, view);
   const swapper = swapperShown();
   for (const input of view.querySelectorAll<HTMLInputElement>('input[name="output"]')) {
     const each = swapperOf(input.value)!;
@@ -212,7 +213,12 @@ function drawAll(): void {
   show(".swap-off", off.length > 0, view);
   show(".swap-unchecked", !failedOutputs, view);
   fill(view, { "swap-off-outputs": list(off.map(({ symbol }) => symbol)) });
-  if (!scan || !signedIn) return;
+  if (!scan || !signedIn) {
+    status.hidden = summary.hidden = true;
+    show(".swap-failed, .swap-none", false, view);
+    return void fill(view, { "swap-ticked": "" });
+  }
+  summary.hidden = false;
   const scanned = scan;
   show(".swap-failed", scanned.failed, view);
   show(".swap-none", !scanned.reading && !scanned.failed && !scanned.rows.length, view);
@@ -224,18 +230,17 @@ function drawAll(): void {
   summarise(scanned, ticked);
 }
 
-// What the ticked tokens fetch together: earned, then taken, then what reaches you, and the calls the wallet will see.
+// What the ticked tokens fetch together, row by row: the quote, less the 1%, is what reaches you, and the slippage picked
+// sets the least that may. Gas is paid apart, in ETH.
 function summarise(scanned: Scan, ticked: Row[]): void {
   const { swapper } = scanned;
-  const sells = view.querySelector(".swap-sells")!;
-  const costsLine = view.querySelector<HTMLElement>(".swap-costs")!;
+  const sells = view.querySelector<HTMLElement>(".swap-sells")!;
+  const breakdown = view.querySelector<HTMLElement>(".breakdown")!;
   const splitLine = view.querySelector<HTMLElement>(".swap-split")!;
   reviewButton.disabled = !ticked.length || outputOff(swapper);
-  if (!ticked.length) {
-    sells.textContent = "Pick tokens to sell";
-    costsLine.hidden = splitLine.hidden = true;
-    return;
-  }
+  sells.hidden = ticked.length > 0;
+  breakdown.hidden = !ticked.length;
+  if (!ticked.length) return void (splitLine.hidden = true);
   const out = ticked.reduce((sum, row) => sum + row.found!.out, 0n);
   const least = ticked.reduce((sum, row) => sum + minimumOf(row.found!.out, margin()), 0n);
   const fee = ticked.reduce((sum, row) => sum + feeOf(row.found!.out), 0n);
@@ -243,10 +248,14 @@ function summarise(scanned: Scan, ticked: Row[]): void {
   const swaps = split(ticked.map((row) => row.found!.route)).length;
   const gas = BigInt(approvals) * APPROVAL_GAS + swapGas(ticked.map((row) => row.found!.route));
   const dollars = scanned.costs && gasUsd(gas, scanned.costs);
-  const symbol = swapper.symbol;
-  sells.textContent = `≈ ${figure(paidOf(out), swapper.decimals)} ${symbol}, at least ${figure(least, swapper.decimals)}`;
-  costsLine.textContent = `Fee ≈ ${figure(fee, swapper.decimals)} ${symbol} · Gas ${dollars === undefined ? "…" : usd(dollars)}`;
-  costsLine.hidden = false;
+  const of = (amount: bigint) => `${figure(amount, swapper.decimals)} ${swapper.symbol}`;
+  fill(breakdown, {
+    "swap-quoted": `≈ ${of(out)}`,
+    "swap-fee": `− ${of(fee)}`,
+    "swap-paid": `≈ ${of(out - fee)}`,
+    "swap-least": of(least),
+    "swap-gas": dollars === undefined ? "…" : usd(dollars),
+  });
   splitLine.hidden = swaps < 2;
   splitLine.textContent = `${swaps} swaps`;
 }
@@ -453,10 +462,13 @@ export async function resetReview(these: Allowance[]): Promise<void> {
 }
 
 // The review of a swap: the routes, each with its minimum, and the approvals it needs, run through Base first. `approve`
-// is what to approve, when not the route's amount, as for a swap of a whole balance after a claim.
+// is what to approve, when not the route's amount, as for a swap of a whole balance after a claim. `margin` is the
+// slippage that set the minimums, which `yours` says the owner picked.
 export type Plan = {
   swapper: Swapper;
   items: { token: Token; route: Route; out: bigint; allowance: bigint; approve?: bigint }[];
+  margin: bigint;
+  yours?: boolean;
 };
 
 export async function planSteps(
@@ -486,6 +498,8 @@ async function reviewSwap(): Promise<void> {
   if (!ticked.length || outputOff(swapper)) return;
   const plan: Plan = {
     swapper,
+    margin: margin(),
+    yours: true,
     items: ticked.map((row) => ({
       token: row.token,
       route: { ...row.found!.route, amount: row.amount, minPaid: minimumOf(row.found!.out, margin()) },
@@ -546,8 +560,11 @@ export async function openSwapReview(
       );
     });
   });
+  // A bill: each token, what it fetches and its route by its tokens and pools, then what they all fetch, the 1%, what
+  // reaches you, and the least that may, which the slippage sets. Gas heads it, as it is paid apart, in ETH.
   const body = clone("swap-before");
   const lines = body.querySelector(".swap-lines")!;
+  const of = (amount: bigint) => `${figure(amount, swapper.decimals)} ${swapper.symbol}`;
   let out = 0n;
   let least = 0n;
   for (const { token, route } of plan.items) {
@@ -558,19 +575,9 @@ export async function openSwapReview(
     fill(line, {
       "line-symbol": token.symbol,
       "line-amount": figure(route.amount, token.decimals),
-      "line-fetches": reason
-        ? "skipped"
-        : `≈ ${figure(paidOf(fetched), swapper.decimals)} ${swapper.symbol}, at least ${figure(route.minPaid, swapper.decimals)}`,
+      "line-fetches": reason ? "skipped" : `≈ ${of(fetched)}`,
+      "line-route": hopsWords(route, tokens),
     });
-    line.querySelector(".line-route")!.replaceChildren(
-      ...pathWords(route, tokens).map((word) => {
-        if (typeof word === "string") return word;
-        const code = document.createElement("code");
-        code.translate = false;
-        showHex(code, word.code);
-        return code;
-      }),
-    );
     show(".line-skip", !!reason, line);
     if (reason) fill(line, { "line-skip-words": `Skipped: ${reason}` });
     lines.append(line);
@@ -581,19 +588,19 @@ export async function openSwapReview(
     : BigInt(approvals.length) * APPROVAL_GAS + swapGas(plan.items.map(({ route }) => route));
   const dollars = found ? gasUsd(gas, found) : undefined;
   fill(body, {
-    "swap-fetched": `≈ ${figure(out, swapper.decimals)} ${swapper.symbol}`,
-    "swap-fee": `≈ −${figure(fee, swapper.decimals)} ${swapper.symbol}`,
-    "swap-paid": `≈ ${figure(out - fee, swapper.decimals)} ${swapper.symbol}`,
-    "swap-least": `At least ${figure(least, swapper.decimals)} ${swapper.symbol}`,
+    "swap-output": swapper.symbol,
+    "swap-fetched": `≈ ${of(out)}`,
+    "swap-fee": `− ${of(fee)}`,
+    "swap-paid": `≈ ${of(out - fee)}`,
+    "swap-least": of(least),
+    "swap-slippage": `${plan.yours ? "Your slippage" : "Slippage"}: ${bps(plan.margin)}`,
     "swap-gas": dollars === undefined ? `${gas.toLocaleString("en-GB")} gas` : usd(dollars),
     "swap-simulated": "Not simulated: these are quotes.",
   });
   show(".swap-simulated", !simulated, body);
-  const safe = !!connection.wallet.propose;
-  show(".swap-safe", safe, body);
   const pages: ReviewPage[] = [{ title: "What you swap", body }, { title: "What your wallet will ask" }];
   openReview({
-    name: `Swap into ${swapper.symbol}`,
+    name: ["Swap into ", { code: swapper.symbol }],
     pages,
     steps,
     checkHref: hrefOf({ view: "swap", output: swapper.output, section: "check" }),
@@ -706,16 +713,21 @@ export function walletChanged(): void {
   void readAllowances();
 }
 
+// Only a check that failed shows, in the popup of the swap's contracts, for the outputs it failed for.
 async function checkSwappers(): Promise<void> {
   failedOutputs = await swapChecks();
+  let any = false;
   for (const item of view.querySelectorAll<HTMLElement>("[data-check]")) {
     item.querySelector(".check-failed")?.remove();
     const failing = SWAPPERS.filter(({ output }) => failedOutputs!.get(output)!.includes(item.dataset.check!));
+    item.hidden = !failing.length;
     if (!failing.length) continue;
+    any = true;
     const mark = clone("check-failed");
     mark.querySelector("b")!.textContent = `Failed for ${list(failing.map(({ symbol }) => symbol))}:`;
     item.prepend(mark);
   }
+  show(".swap-checks", any, view);
   drawAll();
 }
 

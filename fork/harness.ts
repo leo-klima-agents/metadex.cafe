@@ -427,10 +427,13 @@ export async function open(
   return { page, ...opened };
 }
 
+// The header's button, which connects the one wallet in the browser at once.
+export const connectButton = (page: Page) => page.locator("header").getByRole("button", { name: "Connect a wallet" });
+
 // Connected on the Hydrex accounts' page, unless `options` says where.
 export async function connected(wallet: Partial<WalletOptions>, options?: OpenOptions): Promise<Opened> {
   const opened = await open(wallet, { url: `${SITE}/#hydrex`, ...options });
-  await opened.page.getByRole("button", { name: "Test Wallet" }).click();
+  await connectButton(opened.page).click();
   return opened;
 }
 
@@ -446,8 +449,8 @@ export const product = (page: Page, kind: string) => page.locator(`.view[data-ki
 export const position = (page: Page) => page.locator('.view[data-view="position"]');
 export const review = (page: Page | FrameLocator) => page.locator("#review");
 export const homeTitle = (page: Page) => page.getByRole("heading", { name: "Vote, claim and swap on Base" });
-export const appTitle = (page: Page) => page.getByRole("heading", { name: "Your wallet", level: 1 });
-export const hydrexTitle = (page: Page) => page.getByRole("heading", { name: "Hydrex", level: 1 });
+export const appTitle = (page: Page) => page.getByRole("heading", { name: "Your Wallet", level: 1, exact: true });
+export const hydrexTitle = (page: Page) => page.getByRole("heading", { name: "Hydrex", level: 1, exact: true });
 export const toHydrex = (page: Page) => page.goto(`${SITE}/#hydrex`);
 export const chip = (page: Page, owner: Address) => page.locator("header").getByText(short(owner));
 
@@ -466,14 +469,8 @@ export async function nextEpoch(page: Page, day: RegExp): Promise<void> {
   );
 }
 
-// Opens each call's fields in the review, as someone checking them would.
-export async function openCalls(page: Page): Promise<void> {
-  const closed = review(page).locator(".slip-details:not([open]) > summary");
-  while (await closed.count()) await closed.first().click();
-}
-
 export async function pick(page: Page, ...ids: number[]): Promise<void> {
-  for (const id of ids) await page.getByRole("checkbox", { name: `Pick Account #${id}` }).check();
+  for (const id of ids) await page.getByRole("checkbox", { name: `Pick Hydrex account #${id}` }).check();
 }
 
 export async function shoot(page: Page, name: string, part?: Locator): Promise<void> {

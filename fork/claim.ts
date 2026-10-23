@@ -47,13 +47,16 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
     const needs = app(page).locator("#needs");
     const line = needs.locator("li").filter({ hasText: "#82774: payout overdue" });
     await line.waitFor({ timeout: 600_000 });
-    assert.match(await line.innerText(), /^#82774: payout overdue, at least (≈|<)\s\$[\d,.]+ in \d+ tokens?/);
+    assert.match(
+      await line.innerText(),
+      /^Hydrex account #82774: payout overdue, at least (≈|<)\s\$[\d,.]+ in \d+ tokens?/,
+    );
     await shoot(page, "needs-overdue-390-light");
     await page.goto(`${SITE}/#hydrex/82774`);
     await position(page).getByText("Payout overdue:").waitFor();
     await position(page).getByRole("button", { name: "Claim now" }).click();
     await claimOpens(page);
-    await review(page).getByText("Claim for #82774 · 1 of 2").waitFor();
+    await review(page).getByText("Claim for Hydrex account #82774 · 1 of 2").waitFor();
     assert.equal(
       await review(page)
         .getByRole("radio", { name: /As they are/ })
@@ -121,8 +124,8 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
     const [, safeTxs = "", calls = ""] = /^(\d+) Safe transactions, (\d+) calls$/.exec(how) ?? [];
     assert.ok(Number(safeTxs) > 1 && Number(calls) > Number(safeTxs), how);
     const counts = await dialog.locator(".count").allTextContents();
-    assert.equal(counts[0], `Safe 1 of ${safeTxs} · 1 of ${calls}`);
-    assert.equal(counts.at(-1), `Safe ${safeTxs} of ${safeTxs} · ${calls} of ${calls}`);
+    assert.equal(counts[0], `Safe 1 of ${safeTxs} · Call 1 of ${calls}`);
+    assert.equal(counts.at(-1), `Safe ${safeTxs} of ${safeTxs} · Call ${calls} of ${calls}`);
     await shoot(page, "safe-claim-1440-light");
     await dialog.getByRole("button", { name: "Propose in Safe{Wallet}" }).click();
     await dialog.getByText(`Proposed ${safeTxs} Safe transactions. Sign them in Safe{Wallet}.`).waitFor();

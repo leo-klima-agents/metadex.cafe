@@ -3,7 +3,7 @@ import { parse, type Route } from "./routes.ts";
 
 // The page is one HTML file split into views, one for each kind of page. The hash says which, as a route: this shows
 // its view, sets the title, marks the header's link to the view shown, and opens the section asked for, in its popup.
-// Home shows until the script runs, and is the App once a wallet is connected.
+// Home shows until the script runs, and stays Home once a wallet is connected: the wallet's chip leads to the App.
 
 const views = [...document.querySelectorAll<HTMLElement>(".view")];
 const home = views.find(({ dataset }) => dataset.view === "home")!;
@@ -11,7 +11,6 @@ const pops = [...document.querySelectorAll<HTMLElement>(".pop[popover]")];
 const listeners: ((route: Route) => void)[] = [];
 let current: Route = { view: "home" };
 let currentView: HTMLElement | undefined;
-let connected = false;
 
 export const route = (): Route => current;
 
@@ -25,13 +24,6 @@ function closePops(): void {
   for (const pop of pops) if (isOpen(pop)) pop.hidePopover?.();
 }
 
-// With a wallet connected, Home is the App: the name in the header then leads there.
-export function setConnected(now: boolean): void {
-  if (now === connected) return;
-  connected = now;
-  if (parse(location.hash).view === "home") showRoute(false);
-}
-
 function viewOf(route: Route): HTMLElement {
   const found = views.find(
     ({ dataset }) => dataset.view === route.view && (route.view !== "product" || dataset.kind === route.kind),
@@ -40,18 +32,17 @@ function viewOf(route: Route): HTMLElement {
 }
 
 const titleOf = (route: Route, view: HTMLElement): string =>
-  route.view === "position" ? `Account #${route.id} · metaDEX Café` : (view.dataset.title ?? document.title);
+  route.view === "position" ? `Hydrex account #${route.id} · metaDEX Café` : (view.dataset.title ?? document.title);
 
 function showRoute(moved: boolean): void {
-  const parsed = parse(location.hash);
-  const next: Route = parsed.view === "home" && connected ? { view: "app" } : parsed;
+  const next = parse(location.hash);
   const view = viewOf(next);
   const changed =
     view !== currentView || (next.view === "position" && current.view === "position" && next.id !== current.id);
   closePops();
   for (const each of views) each.hidden = each !== view;
   document.title = titleOf(next, view);
-  // The header's button reads as where you are on the App itself. Home's own button stands in for it there.
+  // The wallet's chip in the header reads as where you are on the App itself.
   document.documentElement.dataset.view = next.view;
   const toApp = document.querySelector("header.site .to-app")!;
   if (next.view === "app") toApp.setAttribute("aria-current", "page");

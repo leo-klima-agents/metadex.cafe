@@ -16,7 +16,7 @@ export type Route =
 // The sections each page has, in the order they come. Most open a popup; some are a part of one, as "control" is of
 // "check".
 export const APP_SECTIONS = ["allows"];
-export const ABOUT_SECTIONS = ["check", "safe", "figures"];
+export const ABOUT_SECTIONS = ["check"];
 export const PRODUCT_SECTIONS: Record<Kind, string[]> = {
   "carbon-impact": ["fees", "record", "joining", "carbon", "check", "control"],
   automaxi: ["fees", "record", "votes", "joining", "check", "control"],

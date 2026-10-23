@@ -16,6 +16,7 @@ import {
   best,
   candidatePaths,
   feeOf,
+  hopName,
   minimumOf,
   paidOf,
   poolName,
@@ -127,6 +128,10 @@ test("the page lists each of the swapper's twelve exchanges once, by its place i
   assert.equal(poolName(hop(10, USDC, 500)), "Uniswap v3 0.05%");
   assert.equal(poolName(hop(4, USDC, 0, 100)), "Aero Slipstream, tick spacing 100");
   assert.equal(poolName(hop(0)), "Hydrex Integral");
+  // A bill names a hop's pool without its tick spacing, and without its address.
+  assert.equal(hopName(hop(10, USDC, 500)), "Uniswap v3 0.05%");
+  assert.equal(hopName(hop(4, USDC, 0, 100)), "Aero Slipstream");
+  assert.equal(hopName(hop(0)), "Hydrex Integral");
 });
 
 test("Aero's classic pools win a hop only by more than 1%, as their tax is not in the quote", () => {

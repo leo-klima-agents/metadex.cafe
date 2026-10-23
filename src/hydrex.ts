@@ -386,7 +386,7 @@ function approval({ id }: Account, approve: boolean, says: string, target: Targe
         code: target.address,
         under: conduitName,
       },
-      { label: "Account", name: "account", code: String(id) },
+      { label: "Hydrex account", name: "account", code: String(id) },
       { label: "Approve", name: "approve", code: String(approve) },
     ],
     note: `The selector, then each 32-byte word on two lines: the conduit, ${id} as ${id.toString(16)}, and ${approve} as ${Number(approve)}.`,

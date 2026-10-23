@@ -31,6 +31,8 @@ import { capabilities, type Connection } from "./wallet.ts";
 // it, then the calls; and its receipt.
 
 const key = (address: string): string => address.toLowerCase();
+// The slippage of a swap after a claim: the swap's page's own default.
+const MARGIN = 50n;
 
 // What reached the owner in each claim of the page's own, from its Claimed events.
 function claimReceipts(
@@ -117,7 +119,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   const prices = entries[0]!.earnings!.prices;
   const owing = claims.filter(({ owed }) => owed.length);
   const which = list(entries.map(({ account }) => `#${account.id}`));
-  const name = `Claim for ${which}`;
+  const name = `Claim for ${entries.length === 1 ? "Hydrex account" : "Hydrex accounts"} ${which}`;
   const checkHref = hrefOf({ view: "product", kind: "automaxi", section: "check" });
   // Nothing to send: the review says why, and asks nothing.
   const nothing = (words: string) => {
@@ -281,7 +283,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
         return void left.push(tokens.get(key(token))?.symbol ?? token);
       items.push({
         token: tokens.get(key(token))!,
-        route: { ...route.route, amount: maxUint256, minPaid: minimumOf(route.out, 50n) },
+        route: { ...route.route, amount: maxUint256, minPaid: minimumOf(route.out, MARGIN) },
         out: route.out,
         allowance: 0n,
         approve: amount,
@@ -299,7 +301,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       if (chosen) opened.replace(claimSlips, { outcomeOf: asTheyAre });
       return;
     }
-    const swapPlan: Plan = { swapper, items };
+    const swapPlan: Plan = { swapper, items, margin: MARGIN };
     if (!together) {
       // The claim first; its receipt then opens the swap's own review, for the amounts it brought.
       opened.replace(claimSlips, {
@@ -315,6 +317,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
           const came = brought(receipts);
           const exact: Plan = {
             swapper,
+            margin: MARGIN,
             items: items.flatMap(({ approve: _, route, ...item }) => {
               const amount = came.find(({ token }) => same(token, item.token.address))?.amount;
               return amount ? [{ ...item, route: { ...route, amount } }] : [];

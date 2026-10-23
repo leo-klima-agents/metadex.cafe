@@ -97,20 +97,45 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       "USDC unless the address names another",
     );
     await tickOnly(page, ["WETH", "ZORA", "AVNT"]);
-    await swap
-      .locator(".swap-sells")
-      .getByText(/^≈ [\d,.]+ USDC, at least [\d,.]+$/)
+    // What they fetch, line by line: the quote, less the 1%, is what reaches you; the slippage picked sets the least
+    // that may; and gas is paid apart, in ETH.
+    const summary = swap.locator(".breakdown");
+    await summary
+      .locator(".swap-paid")
+      .getByText(/^≈ [\d,.]+ USDC$/)
+      .waitFor();
+    const labels = await summary.locator("dt").allInnerTexts();
+    assert.deepEqual(
+      [labels[0], labels[1], labels[2], labels[4]],
+      ["Quote", "Fee 1%", "Reaches you", "Gas, paid in ETH"],
+    );
+    assert.match(labels[3]!, /^At least, with/);
+    assert.equal(await summary.getByRole("combobox", { name: /At least, with/ }).inputValue(), "50");
+    assert.match(await summary.locator(".swap-quoted").innerText(), /^≈ [\d,.]+ USDC$/);
+    assert.match(await summary.locator(".swap-fee").innerText(), /^− [\d,.]+ USDC$/);
+    assert.match(await summary.locator(".swap-least").innerText(), /^[\d,.]+ USDC$/);
+    await summary
+      .locator(".swap-gas")
+      .getByText(/^(≈|<)\s\$/)
       .waitFor();
     assert.match(await swap.locator(".swap-ticked").innerText(), /^· 3 of \d+$/);
-    await swap
-      .locator(".swap-costs")
-      .getByText(/^Fee ≈ [\d,.]+ USDC · Gas /)
-      .waitFor();
     await shoot(page, "swap-390-light");
     await swap.getByRole("button", { name: "Review" }).click();
     await review(page).getByRole("heading", { name: "What you swap" }).waitFor({ timeout: 300_000 });
     assert.equal(await review(page).locator(".swap-simulated").isVisible(), false, "run through Base");
-    assert.equal(await review(page).locator(".swap-lines li").count(), 3);
+    // A bill: each token with its route by tokens and pools, no addresses, under the gas; then the least, which the
+    // slippage set.
+    const bill = review(page).locator(".pages .receipt");
+    assert.equal(await bill.locator(".receipt-name").innerText(), "metaDEX Café");
+    assert.equal(await bill.locator(".label code").innerText(), "USDC");
+    assert.equal(await review(page).locator(".step-count code").innerText(), "USDC");
+    assert.match(await bill.locator(".receipt-day").innerText(), /^Gas (≈|<)\s\$[\d.]+, paid in ETH$/);
+    assert.equal(await bill.locator(".swap-lines li").count(), 3);
+    for (const route of await bill.locator(".line-route").allInnerTexts()) {
+      assert.match(route, /^(→ \S+ via [^→]+?)( → \S+ via [^→]+?)*$/, route);
+      assert.doesNotMatch(route, /0x|tick spacing/, route);
+    }
+    assert.equal(await bill.locator(".swap-slippage").innerText(), "Your slippage: 0.5%");
     await review(page).getByRole("button", { name: "Continue" }).click();
     await review(page).getByText("One prompt, 4 calls, all or nothing").waitFor();
     const says = await review(page).locator(".says").allTextContents();
@@ -165,6 +190,8 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     const failed = swap.locator('[data-check="swap-code"] .check-failed');
     await failed.waitFor();
     assert.equal(await failed.innerText(), "Failed for EURC: ");
+    // Only the checks that failed show.
+    assert.equal(await swap.locator('[data-check="chain"]').isVisible(), false);
     assert.equal(await swap.locator('[data-check="chain"] .check-failed').count(), 0);
   });
 

@@ -47,18 +47,28 @@ This README is for whoever runs the site. The design and the plan are in [design
 - **Batching:** where the wallet answers EIP-5792's `wallet_getCapabilities`, the page sends all the calls of a review
   in one prompt with `wallet_sendCalls`, all or nothing where it can. From a Safe, one Safe transaction. Otherwise one
   prompt per call; the swap is then quoted again before the wallet asks for it, and never with a lower minimum.
-- Home is a heading and the button to the App (`#app`); once a wallet is connected, Home is the App. The App starts with
-  what needs you across the products, each with one action: an account in a stopped automation, an overdue payout,
-  approvals left to the swappers. Then the products, each with what you hold in it: the Hydrex automations (`#hydrex`)
-  and the swap (`#swap`). Its Approvals button lists every approval this wallet gave the café's contracts, with the call
-  that undoes it.
+- The header holds the logo and the name, which lead Home, and on every view a button that connects a wallet: at once
+  when the browser has one, from a list when it has several. Once one is connected, the wallet's chip, which leads to
+  the App, takes its place. Only the App lists the wallets in the page too.
+- Home is a heading and the button to the App (`#app`), and stays Home once a wallet is connected. The App, "Your
+  Wallet", starts with what needs you across the products, each with one action: a Hydrex account in a stopped
+  automation, an overdue payout, approvals left to the swappers. Then the products, each with what you hold in it: the
+  Hydrex automations (`#hydrex`) and the swap (`#swap`). Its Approvals button lists every approval this wallet gave the
+  café's contracts, with the call that undoes it. The pages under it name the way back in their title, as "Your Wallet ›
+  Hydrex"; Home and About do not.
+- The page always says "Hydrex account", as "account" alone means an address in crypto: "8 Hydrex accounts", "Hydrex
+  Main Protocol Account #26432".
 - Details open from a round info button beside what they explain, as a popup: on a phone, a sheet from the foot of the
   screen. A popup has an address of its own, such as `#hydrex/carbon-impact/check`.
-- `#hydrex` starts with the wallet's accounts, in groups: those that need their owner, those in each automation, and the
-  others. Then the menu: each automation, and voting yourself, with what each takes and what it paid last epoch.
+- `#hydrex` starts with the automations, in one box, a row each: each automation, and voting yourself, with what each
+  takes, what it pays in and what it paid last epoch. Then the wallet's Hydrex accounts, in groups a level below: those
+  that need their owner, those in each automation, and the others.
 - `#swap` takes the output from its address, `#swap/weth`, USDC by default, then lists the wallet's tokens, each with
-  its route and what it fetches, ticked when the quote is worth twice its gas. Its popups: its costs, who controls what
-  and its smart contracts, such as `#swap/weth/check`; and the approvals given to the swappers.
+  what it fetches, ticked when the quote is worth twice its gas. What the ticked ones fetch shows line by line: the
+  quote, the 1%, what reaches you, the least that may, on the line where the slippage is picked, and the gas, paid apart
+  in ETH. Its popups: its costs, what the slippage sets, who controls what and its smart contracts, with any check that
+  failed, such as `#swap/weth/check`; and the approvals given to the swappers. Its review shows the swap as a bill: each
+  token with its route by tokens and pools, under the gas, then the least, with the slippage that set it.
 - Each automation has a page, `#hydrex/carbon-impact` and `#hydrex/automaxi`: its key figures (what it takes, what it
   pays in, what it paid last epoch, and what it retired or who controls it), and a way to join. Everything else is in
   popups: its six fee facts, how it did against all of Hydrex, joining and leaving, who controls what, and Check it.
@@ -66,8 +76,9 @@ This README is for whoever runs the site. The design and the plan are in [design
   owner can do with it, and, in an automation, up to when it has been paid, what waits to be claimed, and the receipt of
   its last payout. The App marks the accounts paid late.
 - Joining takes two steps: what it allows, with what a week at last epoch's rate would pay and the gas of the change,
-  then the calls, each in its own words, with its fields behind an info button. About (`#about`) holds the page's own
-  facts, and how its figures are read, in a popup. [design/audit.md](design/audit.md) says why the page is laid out so.
+  then the calls, each a bill in its own words, with its fields in full. About (`#about`) holds the page's own facts:
+  its address, the cookies it stores, none, and its version, with the RPCs it reads in a popup.
+  [design/audit.md](design/audit.md) says why the page is laid out so.
 - Inside Safe{Wallet}, it proposes all the calls as one Safe transaction.
 
 Nobody controls the swappers either: their code fixes the fee, 1% of each route's output, the Safe it goes to, the

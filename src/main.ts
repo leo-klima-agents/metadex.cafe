@@ -1,5 +1,5 @@
 import { getAddress, type Address } from "viem";
-import { onRoute, route, setConnected } from "./views.ts";
+import { onRoute, route } from "./views.ts";
 import { now, same, sawBlock } from "./chain.ts";
 import {
   AUTOMATIONS,
@@ -12,7 +12,7 @@ import {
   type Automation,
   type Kind,
 } from "./config.ts";
-import { clone, fill, fillAddress, fillOwn, fillPlural, fillTime, groupAllHex, show } from "./dom.ts";
+import { clone, fill, fillAddress, fillOwn, fillPlural, fillTime, groupAllHex, isOpen, show } from "./dom.ts";
 import {
   WEEK,
   bps,
@@ -128,6 +128,11 @@ type Viewing = {
 let viewing: Viewing | undefined;
 const viewerOwns = (owner: Address): boolean => !!connection && same(owner, connection.address);
 
+// "Account" alone means an address in crypto, so the page always says "Hydrex account": "Hydrex account #9540", or
+// "Hydrex Main Protocol Account #26432" for one its owner named.
+const accountName = (name: string): string =>
+  !name ? "Hydrex account" : /^hydrex\b/i.test(name) ? name : `Hydrex ${name}`;
+
 // The App reads the wallet's payouts only to mark those paid late; an account's page draws its own.
 const appPayouts = payouts(undefined, (found, underWay) => {
   late = new Set(found.entries.flatMap(({ standing, account }) => (standing?.late ? [account.id] : [])));
@@ -237,6 +242,7 @@ function showCarbonImpact(found: CarbonImpact): void {
   }
   fill(document, {
     "impact-state": stopped ? "Stopped" : "Running",
+    "impact-voted-words": stopped ? " since " : " · voted ",
     tonnes: units(tonnes),
     retired: bps(retireBps),
     fee: feeBps === undefined ? "…" : bps(feeBps),
@@ -312,7 +318,7 @@ function showAutoMaxi(): void {
     shape.classList.remove("idle", "running", "stopped");
     shape.classList.add(!fresh?.voted ? "idle" : stopped ? "stopped" : "running");
   }
-  fill(document, { "automaxi-state": state });
+  fill(document, { "automaxi-state": state, "automaxi-voted-words": stopped ? " since " : " · voted " });
   if (fresh?.voted) fillTime(document, "automaxi-voted", fresh.voted);
   show(".automaxi-voted-line", !!fresh?.voted);
 }
@@ -452,7 +458,7 @@ function statusLine(status: Status, own: boolean): DocumentFragment {
 
 function accountItem({ account, status }: Member, group: string, pickable: boolean): DocumentFragment {
   const item = clone("account");
-  const name = account.name || "Account";
+  const name = accountName(account.name);
   fill(item, { name, id: `#${account.id}`, votes: earningPower(account.votes) });
   item.querySelector("a.account-link")!.setAttribute("href", hrefOf({ view: "position", id: account.id }));
   // A group of an automation needs not say its accounts are in it.
@@ -501,7 +507,7 @@ function showAccounts(keepTicked = false): void {
       box.checked = kept.has(box.value);
     fill(section, {
       count: `· ${these.length}`,
-      "nothing-count": count(these.length, "account without votes", "accounts without votes"),
+      "nothing-count": count(these.length, "Hydrex account without votes", "Hydrex accounts without votes"),
     });
     actionable.set(section, able);
     section.hidden = !these.length;
@@ -573,7 +579,8 @@ function updateButtons(): void {
       const n = accounts.filter(allowed).length;
       button.hidden = !able.some(allowed);
       button.disabled = !n;
-      button.textContent = able.length > 1 && n ? `${verb} with ${count(n, "account", "accounts")}` : verb;
+      button.textContent =
+        able.length > 1 && n ? `${verb} with ${count(n, "Hydrex account", "Hydrex accounts")}` : verb;
     }
     show(".buttons", able.length > 0, section);
     show(".pick-hint", able.length > 1 && !accounts.length, section);
@@ -775,16 +782,17 @@ function showApp(): void {
     for (const account of accounts) {
       const status = statusOf(account, owner, now(), epochStart);
       const change = { link: hrefOf({ view: "position", id: account.id }), label: "Change" };
+      const named = `Hydrex account #${account.id}`;
       if (status.kind === "stopped")
         items.push(
-          need("stopped", `#${account.id} earns nothing: ${status.name} stopped ${day(status.voted)}`, change),
+          need("stopped", `${named} earns nothing: ${status.name} stopped since ${day(status.voted)}`, change),
         );
       if (status.kind === "partly")
-        items.push(need("stopped", `#${account.id} is partly in ${status.automation.name}`, change));
+        items.push(need("stopped", `${named} is partly in ${status.automation.name}`, change));
     }
     for (const entry of overdue()) {
       items.push(
-        need("stopped", `#${entry.account.id}: payout overdue, ${waitsLine(entry)}`, {
+        need("stopped", `Hydrex account #${entry.account.id}: payout overdue, ${waitsLine(entry)}`, {
           label: "Claim now",
           button: (event) => claim([entry.account], showApp, event.currentTarget as HTMLButtonElement),
         }),
@@ -830,7 +838,7 @@ function showApp(): void {
       }).length;
       return n ? [`${n} in ${automation.name}`] : [];
     });
-    hydrexYours.textContent = [count(full.length, "account", "accounts"), ...counts].join(" · ");
+    hydrexYours.textContent = [count(full.length, "Hydrex account", "Hydrex accounts"), ...counts].join(" · ");
   }
   const swapYours = appView.querySelector<HTMLElement>(".swap-yours")!;
   const line = connection ? swapLine() : undefined;
@@ -867,10 +875,10 @@ async function showAllows(
       const votes = same(account.delegate, automation.address);
       const claims = same(account.claimer, automation.address);
       const what = votes && claims ? "votes and claims" : votes ? "votes" : "claims";
-      return { words: `#${account.id} · ${automation.name}: ${what}`, action: "leave" as Action };
+      return { words: `Hydrex account #${account.id} · ${automation.name}: ${what}`, action: "leave" as Action };
     });
     const other = automationName(account.delegate);
-    if (other) theirs.push({ words: `#${account.id} · ${other}: votes`, action: "self" });
+    if (other) theirs.push({ words: `Hydrex account #${account.id} · ${other}: votes`, action: "self" });
     return theirs.map((line) => ({ ...line, account }));
   });
   const drawn = [
@@ -981,13 +989,13 @@ function showPosition(): void {
   fill(view, { "position-id": `#${target.id}` });
   showActions(own?.accounts[0]);
   if (!holdings) {
-    document.title = `Account #${target.id} · metaDEX Café`;
-    return void fill(view, { "position-name": "Account" });
+    document.title = `Hydrex account #${target.id} · metaDEX Café`;
+    return void fill(view, { "position-name": accountName("") });
   }
   const account = holdings.accounts[0]!;
   const { owner, epochStart, payout } = holdings;
   const status = statusOf(account, owner, now(), epochStart);
-  const name = account.name || "Account";
+  const name = accountName(account.name);
   const theirs = !viewerOwns(owner);
   document.title = `${name} #${account.id} · metaDEX Café`;
   fill(view, {
@@ -1052,11 +1060,19 @@ onRoute((next) => {
   void loadPosition();
 });
 
+// The header: a button to connect a wallet, or the wallet's chip, which leads to the App. Only the App and the header's
+// popup hold the wallet buttons; elsewhere, a line says that no wallet is connected.
+const connectButton = document.querySelector<HTMLButtonElement>("header.site .connect")!;
+const connectPop = document.getElementById("connect")!;
+// Older browsers refuse to show a popup already shown, or to hide one already hidden.
+const showConnectPop = (shown: boolean): void => {
+  if (isOpen(connectPop) !== shown) (shown ? connectPop.showPopover : connectPop.hidePopover)?.call(connectPop);
+};
+
 function showConnection(): void {
-  setConnected(!!connection);
-  show(".wallet-slot", !connection);
-  show(".to-app .open", !connection);
-  show(".to-app .wallet-state", !!connection);
+  show(".wallet-slot, header.site .connect, .no-wallet-yet", !connection);
+  show("header.site .to-app", !!connection);
+  if (connection) showConnectPop(false);
   show("#epoch", !!connection);
   show(".wrong-chain", !!connection && connection.chainId !== CHAIN_ID);
   if (connection) {
@@ -1122,29 +1138,46 @@ function letGo(): void {
   showApp();
 }
 
+// Connects a wallet picked from a list, or from the header's button. What goes wrong shows where the wallets are listed:
+// from the header, in its popup.
+function pickWallet(wallet: Wallet, fromHeader = false): void {
+  const click = ++clicks;
+  show(".wallet-failed, .no-wallet", false);
+  fill(document, { "connecting-wallet": wallet.name });
+  show(".connecting");
+  connectButton.disabled = true;
+  connectTo(wallet)
+    .catch((error) => {
+      if (click !== clicks || declined(error)) return;
+      if (fromHeader) showConnectPop(true);
+      if (error instanceof NoWallet) return show(".no-wallet");
+      console.error(error);
+      fill(document, { "failed-wallet": wallet.name });
+      show(".wallet-failed");
+    })
+    .finally(() => {
+      if (click !== clicks) return;
+      show(".connecting", false);
+      connectButton.disabled = false;
+    });
+}
+
 function walletButton(wallet: Wallet): DocumentFragment {
   const item = clone("wallet");
   fill(item, { name: wallet.name });
   if (wallet.icon) Object.assign(item.querySelector("img")!, { src: wallet.icon, hidden: false });
-  item.querySelector("button")!.addEventListener("click", () => {
-    const click = ++clicks;
-    show(".wallet-failed, .no-wallet", false);
-    fill(document, { "connecting-wallet": wallet.name });
-    show(".connecting");
-    connectTo(wallet)
-      .catch((error) => {
-        if (click !== clicks || declined(error)) return;
-        if (error instanceof NoWallet) return show(".no-wallet");
-        console.error(error);
-        fill(document, { "failed-wallet": wallet.name });
-        show(".wallet-failed");
-      })
-      .finally(() => {
-        if (click === clicks) show(".connecting", false);
-      });
-  });
+  item.querySelector("button")!.addEventListener("click", () => pickWallet(wallet));
   return item;
 }
+
+// With one wallet in the browser, the header's button connects it at once; with several, it lists them, or a browser
+// without popups finds them on the App.
+let wallets: Wallet[] = [];
+connectButton.addEventListener("click", () => {
+  if (wallets.length === 1) pickWallet(wallets[0]!, true);
+  else if ("showPopover" in connectPop) showConnectPop(true);
+  else location.hash = "#app";
+});
 
 for (const slot of document.querySelectorAll(".wallet-slot")) slot.append(clone("wallet-picker"));
 initSwap({ connection: () => connection, hooks });
@@ -1176,8 +1209,9 @@ for (const button of document.querySelectorAll(".wrong-chain .switch"))
   });
 positionView.querySelector(".position-again")!.addEventListener("click", () => void loadPosition());
 
-findWallets((wallets) => {
-  for (const place of document.querySelectorAll(".wallet-buttons")) place.replaceChildren(...wallets.map(walletButton));
+findWallets((found) => {
+  wallets = found;
+  for (const place of document.querySelectorAll(".wallet-buttons")) place.replaceChildren(...found.map(walletButton));
 });
 safeWallet()
   .then((wallet) => wallet && connectTo(wallet))

@@ -106,8 +106,8 @@ test("each automation's page has the same parts, in the same order, and lists ev
     const sections = [...page.matchAll(/data-section="([^"]+)"/g)].map(([, section]) => section);
     assert.deepEqual(sections, PRODUCT_SECTIONS[kind], kind);
     const parts = [...page.matchAll(/<(h1|h2)[^>]*>([^<]+)</g)].map(([, , text]) => text!.trim());
-    // Only the name and the accounts are headings: the rest of the page is its key figures, and popups.
-    assert.deepEqual(parts, [AUTOMATIONS.find((each) => each.kind === kind)!.name, "Your accounts", "Can join"]);
+    // Only the name and the Hydrex accounts are headings: the rest of the page is its key figures, and popups.
+    assert.deepEqual(parts, [AUTOMATIONS.find((each) => each.kind === kind)!.name, "Your Hydrex accounts", "Can join"]);
     // Each popup opens from an info button, and holds a section or none: each section is in one.
     const pops = [...page.matchAll(/<div\s+class="pop[^"]*"\s+id="([^"]+)"\s+popover\b/g)].map(([, id]) => id!);
     for (const id of pops) assert.match(page, new RegExp(`popovertarget="${id}"\\s+aria-label=`), `${id} has a button`);
@@ -234,13 +234,67 @@ test("each swapper has its output, a checksummed address and a code hash, and th
   const facts = /<dl class="fee-facts">[\s\S]*?<\/dl>/.exec(swap)?.[0] ?? "";
   assert.deepEqual(
     [...facts.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
-    ["Swap fee", "Pool fees", "Price impact", "Slippage", "Gas"],
+    ["Swap fee", "Pool fees", "Price impact", "Gas"],
   );
+  // What the slippage picked sets, right after the costs: each token's minimum, and what happens below it.
+  const slippage = /<p class="label">Your slippage<\/p>\s*<dl class="rows">[\s\S]*?<\/dl>/.exec(swap)?.[0] ?? "";
+  assert.match(slippage, /its quote, less the fee, less your slippage/);
+  assert.match(slippage, /The token is skipped, and stays in your wallet/);
+  // The swap's own summary sets the slippage on the line of the least that may reach you.
+  assert.match(swap, /<label\s*>At least, with\s*<select class="swap-margin">/);
   assert.ok(!swap.includes(SWAP_TREASURY) && !swap.includes("2-of-3"));
   assert.deepEqual(
     [...swap.matchAll(/data-check="([^"]+)"/g)].map(([, check]) => check),
     ["chain", "swap-code", "swap-output", "swap-treasury", "swap-fee", "swap-exchanges"],
   );
+  // Only a check that failed shows: each, and their list, hidden until then.
+  assert.match(swap, /<div class="swap-checks" hidden>/);
+  for (const [item] of swap.matchAll(/<li data-check="[^"]+"[^>]*>/g)) assert.match(item, /\shidden>$/, item);
+});
+
+test("the header holds the logo and the name, and a button to connect a wallet; the wallet's pages lead back to it", () => {
+  const html = read("index.html");
+  const header = /<header class="site">[\s\S]*?<\/header>/.exec(html)?.[0] ?? "";
+  assert.match(header, /<a class="name" href="#"><img src="icon\.svg" alt="" [^>]*\/> metaDEX Café<\/a>/);
+  assert.match(header, /<button type="button" class="connect">Connect a wallet<\/button>/);
+  assert.match(header, /<a class="to-app button wallet-state" href="#app" hidden/);
+  // Home and About are the page's own; the App is "Your Wallet", and every other view names the way back to it first.
+  const trail = (view: string) => /<nav class="trail" aria-label="Breadcrumb">(.*?)<\/nav>/.exec(view)?.[1];
+  for (const name of ["home", "about"]) assert.equal(trail(viewOf(html, `data-view="${name}"`)), undefined, name);
+  assert.match(viewOf(html, 'data-view="app"'), /<h1 tabindex="-1">Your Wallet<\/h1>/);
+  for (const name of ["hydrex", "swap"]) {
+    assert.equal(trail(viewOf(html, `data-view="${name}"`)), '<a href="#app">Your Wallet</a>', name);
+  }
+  for (const view of [
+    productOf(html, "carbon-impact"),
+    productOf(html, "automaxi"),
+    viewOf(html, 'data-view="position"'),
+  ]) {
+    assert.equal(trail(view), '<a href="#app">Your Wallet</a><a href="#hydrex">Hydrex</a>');
+  }
+  // Only the App and the header's popup hold the wallet buttons.
+  assert.equal(html.match(/<div class="wallet-slot"><\/div>/g)?.length, 2);
+  assert.ok(viewOf(html, 'data-view="app"').includes('<div class="wallet-slot"></div>'));
+  assert.ok(header.includes('<div class="wallet-slot"></div>'));
+});
+
+test("on Hydrex's page, the automations come before the Hydrex accounts, whose groups are a level below", () => {
+  const hydrex = viewOf(read("index.html"), 'data-view="hydrex"');
+  const headings = [...hydrex.matchAll(/<(h[1-3])[^>]*>([\s\S]*?)<\/\1>/g)].map(
+    ([, level, inner]) => `${level} ${inner!.replace(/<[^>]+>/g, "").trim()}`,
+  );
+  assert.deepEqual(headings, [
+    "h1 Hydrex",
+    "h2 Automations",
+    "h3 Carbon Impact",
+    "h3 AutoMaxi",
+    "h3 Vote yourself",
+    "h2 Your Hydrex accounts",
+    "h3 Needs you",
+    "h3 In Carbon Impact",
+    "h3 In AutoMaxi",
+    "h3 Other Hydrex accounts",
+  ]);
 });
 
 test("AutoMaxi's page no longer says that owners can claim on Hydrex without its fee, but still does for leaving", () => {
