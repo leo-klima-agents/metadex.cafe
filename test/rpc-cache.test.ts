@@ -60,6 +60,7 @@ test("the fork's cache asks the upstream once for an answer about a block, and k
     eth_getStorageAt: { body: { result: "0x01" } },
     eth_getBlockByNumber: { body: { result: { number: "0x10" } } },
     eth_getTransactionReceipt: { body: { result: null } },
+    eth_gasPrice: { body: { result: "0x4c4b40" } },
     eth_call: { body: { error: { code: 3, message: "execution reverted" } } },
   });
   const file = fileOf();
@@ -73,10 +74,12 @@ test("the fork's cache asks the upstream once for an answer about a block, and k
   ]);
   assert.deepEqual([one.reply.id, one.reply.result, two.reply.id, two.reply.result], [1, "0x01", 2, "0x01"]);
   assert.equal((await ask(cache.url, "eth_getStorageAt", slot)).reply.result, "0x01");
-  // The newest block moves, a receipt not found may be found later, and an error is not an answer: each is asked again.
+  // The newest block moves, and an error is not an answer: each is asked again. A receipt not found, as of a
+  // transaction sent on the fork, and the gas price, which a fork of a past block needs once, are asked once a run.
   for (let i = 0; i < 2; i++) {
     await ask(cache.url, "eth_getBlockByNumber", ["latest", false]);
-    await ask(cache.url, "eth_getTransactionReceipt", ["0xab"]);
+    assert.equal((await ask(cache.url, "eth_getTransactionReceipt", ["0xab"])).reply.result, null);
+    assert.equal((await ask(cache.url, "eth_gasPrice", [])).reply.result, "0x4c4b40");
     assert.deepEqual((await ask(cache.url, "eth_call", [{}, "0x3240a70"])).reply.error, {
       code: 3,
       message: "execution reverted",
@@ -85,19 +88,21 @@ test("the fork's cache asks the upstream once for an answer about a block, and k
   assert.deepEqual([...rpc.asked].sort(), [
     "eth_call",
     "eth_call",
+    "eth_gasPrice",
     "eth_getBlockByNumber",
     "eth_getBlockByNumber",
     "eth_getStorageAt",
     "eth_getTransactionReceipt",
-    "eth_getTransactionReceipt",
   ]);
-  assert.deepEqual([cache.asked, through.fetched], [9, 7]);
+  assert.deepEqual([cache.asked, through.fetched], [11, 7]);
   await cache.close();
-  // The next run reads it from the file.
+  // The next run reads the slot from the file, and asks for the receipt again.
   const again = upstreamOf(rpc.url);
   const next = await serveCached(again, file);
   assert.equal((await ask(next.url, "eth_getStorageAt", slot)).reply.result, "0x01");
   assert.equal(again.fetched, 0);
+  await ask(next.url, "eth_getTransactionReceipt", ["0xab"]);
+  assert.equal(again.fetched, 1);
   await next.close();
   await rpc.close();
 });
@@ -105,7 +110,7 @@ test("the fork's cache asks the upstream once for an answer about a block, and k
 test("an upstream over its limit is asked again, once for all the requests for the same answer", async () => {
   const busy = { status: 429, body: { error: { code: -32011, message: "request limit reached" } } };
   const rpc = await upstream({ eth_getLogs: [busy, busy, { body: { result: [] } }], eth_getCode: busy });
-  const through = upstreamOf(rpc.url, { retries: 3, backoff: 1 });
+  const through = upstreamOf(rpc.url, { patience: 200, backoff: 1, maxBackoff: 10 });
   const cache = await serveCached(through, fileOf());
   const logs = [{ fromBlock: "0x10", toBlock: "0x10", address: "0x01", topics: [] }];
   const replies = await Promise.all([1, 2, 3].map((id) => ask(cache.url, "eth_getLogs", logs, id)));
@@ -118,13 +123,16 @@ test("an upstream over its limit is asked again, once for all the requests for t
     ],
   );
   assert.deepEqual(rpc.asked, ["eth_getLogs", "eth_getLogs", "eth_getLogs"]);
-  // Still over its limit after every try: anvil is answered as the upstream answered.
+  // Still over its limit once its patience runs out: anvil is answered as the upstream answered.
+  const start = Date.now();
   const { status, reply } = await ask(cache.url, "eth_getCode", ["0x01", "0x10"]);
   assert.equal(status, 429);
   assert.deepEqual(reply.error, { code: -32011, message: "request limit reached" });
-  assert.equal(rpc.asked.filter((method) => method === "eth_getCode").length, 4);
-  // Two answers over its limit for the logs, three for the code, then asked again.
-  assert.equal(through.busy, 5);
+  assert.ok(Date.now() - start >= 200, "asked again for as long as its patience");
+  const code = rpc.asked.filter((method) => method === "eth_getCode").length;
+  assert.ok(code > 2, `asked ${code} times`);
+  // Two answers over its limit for the logs, each but the last for the code, then asked again.
+  assert.equal(through.busy, 2 + code - 1);
   await cache.close();
   await rpc.close();
 });
@@ -255,6 +263,25 @@ test("a request that names the fork's block by its hash is answered as one that 
   // Another block's hash names that block.
   await ask(cache.url, "eth_getStorageAt", [contract, "0x0", { blockHash: `0x${"ab".repeat(32)}` }]);
   assert.deepEqual(rpc.asked, ["eth_getBlockByNumber", "eth_getStorageAt", "eth_getStorageAt"]);
+  await cache.close();
+  await rpc.close();
+});
+
+test("a transaction sent on the fork is not found without asking the upstream", async () => {
+  const rpc = await upstream({ eth_getTransactionReceipt: { body: { result: { status: "0x1" } } } });
+  const cache = await serveCached(upstreamOf(rpc.url), fileOf(), 16);
+  const hash = `0x${"5d".repeat(32)}`;
+  await fetch(`${cache.url}/sent`, { method: "POST", body: hash });
+  assert.equal(
+    (await ask(cache.url, "eth_getTransactionReceipt", [hash.toUpperCase().replace("0X", "0x")])).reply.result,
+    null,
+  );
+  assert.equal((await ask(cache.url, "eth_getTransactionByHash", [hash])).reply.result, null);
+  // Base's own transactions are still asked for.
+  assert.deepEqual((await ask(cache.url, "eth_getTransactionReceipt", [`0x${"ab".repeat(32)}`])).reply.result, {
+    status: "0x1",
+  });
+  assert.deepEqual(rpc.asked, ["eth_getTransactionReceipt"]);
   await cache.close();
   await rpc.close();
 });

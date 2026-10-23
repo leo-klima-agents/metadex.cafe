@@ -18,6 +18,11 @@ import { gunzipSync, gzipSync } from "node:zlib";
 //
 // anvil names the fork's block by its number in some requests, and by its hash in others (EIP-1898): both are asked,
 // and kept, as the number.
+//
+// What is not kept, an answer about Base's newest block or a transaction not found, is asked once a run: a fork of a
+// past block needs the gas price only once. anvil asks the upstream for the receipt of a transaction sent on the fork,
+// which it never has, until anvil mines it: a transaction posted to /sent, as the tests post each one they send anvil,
+// is not found without asking.
 
 type Call = { jsonrpc: "2.0"; id: unknown; method: string; params?: unknown[] };
 type Reply = { jsonrpc: "2.0"; id: unknown; result?: unknown; error?: unknown };
@@ -69,7 +74,7 @@ export type Upstream = {
   fetched: number;
   busy: number;
 };
-type UpstreamOptions = { inFlight?: number; retries?: number; backoff?: number; maxBackoff?: number };
+type UpstreamOptions = { inFlight?: number; patience?: number; backoff?: number; maxBackoff?: number };
 
 export type Cache = {
   url: string;
@@ -77,6 +82,8 @@ export type Cache = {
   asked: number;
   // The JSON-RPC request, or batch, about to go to anvil: what its calls read is fetched, without holding it up.
   prefetch(body: string): Promise<void>;
+  // The hash of a transaction sent on the fork.
+  sent(hash: string): void;
   close(): Promise<void>;
 };
 type Tx = { from?: string; to?: string; data?: string; input?: string; value?: string; gas?: string };
@@ -99,11 +106,12 @@ function txsOf({ method, params = [] }: Call): Tx[] {
 // The upstream RPC, through one queue for all the caches of a run: at most `inFlight` requests at once, anvil's first,
 // then the prefetch's. One it answers over its limit, or that does not reach it, is asked again after an exponential
 // backoff with full jitter, a wait drawn up to `backoff` doubled at each try and at most `maxBackoff`, or longer if its
-// Retry-After says so. After `retries` tries, anvil gets the refusal as it came. A method it does not serve is not
-// asked of it again.
+// Retry-After says so. Once it has refused a request for `patience` milliseconds, anvil gets the refusal as it came: a
+// test can only fail on an answer that does not come, so the upstream's limit sets the pace, as slow as it is. A method
+// it does not serve is not asked of it again.
 export function upstreamOf(
   url: string,
-  { inFlight = 8, retries = 8, backoff = 250, maxBackoff = 10_000 }: UpstreamOptions = {},
+  { inFlight = 8, patience = 300_000, backoff = 250, maxBackoff = 10_000 }: UpstreamOptions = {},
 ): Upstream {
   const waiting: [(() => void)[], (() => void)[]] = [[], []];
   const unserved = new Map<string, Refused | Reply>();
@@ -163,6 +171,7 @@ export function upstreamOf(
 
   return {
     async ask(call, wanted) {
+      const since = Date.now();
       for (let attempt = 0; ; attempt++) {
         await take(!!wanted);
         let wait = 0;
@@ -170,7 +179,8 @@ export function upstreamOf(
           if (wanted && !wanted()) return undefined;
           return await once(call);
         } catch (error) {
-          if (!(error instanceof Busy) || attempt === retries) throw error instanceof Busy ? error.refused : error;
+          if (!(error instanceof Busy) || Date.now() - since >= patience)
+            throw error instanceof Busy ? error.refused : error;
           busy++;
           wait = Math.max(error.retryAfter, Math.random() * Math.min(maxBackoff, backoff * 2 ** attempt));
         } finally {
@@ -193,6 +203,11 @@ export function upstreamOf(
 export async function serveCached(upstream: Upstream, file: string, block?: number): Promise<Cache> {
   const answers = new Map<string, unknown>(Object.entries(read(file)));
   const pending = new Map<string, { reply: Promise<Reply | undefined>; later: boolean }>();
+  // What is not kept, for this run only, and the transactions sent on the fork.
+  const forRun = new Map<string, unknown>();
+  const sentHere = new Set<string>();
+  const sent = (hash: string): void => void sentHere.add(hash.trim().toLowerCase());
+  const BY_HASH = new Set(["eth_getTransactionReceipt", "eth_getTransactionByHash"]);
   const known = answers.size;
   const prefetching = new Set<Promise<void>>();
   let closing = false;
@@ -209,6 +224,9 @@ export async function serveCached(upstream: Upstream, file: string, block?: numb
     const cacheable = fixed(call);
     const kept = (): Reply => ({ jsonrpc: "2.0", id: call.id, result: answers.get(key) });
     if (cacheable && answers.has(key)) return kept();
+    if (forRun.has(key)) return { jsonrpc: "2.0", id: call.id, result: forRun.get(key) };
+    if (BY_HASH.has(call.method) && sentHere.has(String(call.params?.[0]).toLowerCase()))
+      return { jsonrpc: "2.0", id: call.id, result: null };
     // Requests in flight for the same answer share the upstream's one, but anvil's does not wait for the prefetch's turn.
     const shared = cacheable ? pending.get(key) : undefined;
     let reply = shared && (later || !shared.later) ? shared.reply : undefined;
@@ -221,8 +239,9 @@ export async function serveCached(upstream: Upstream, file: string, block?: numb
       // A prefetch dropped as anvil got the answer first, or as the cache closes.
       if (!got) return answers.has(key) ? kept() : { jsonrpc: "2.0", id: call.id, error: { message: "Closing." } };
       const { result, error } = got;
-      // null, as for a receipt not found, may change: it is not kept.
+      // null, as for a receipt not found, may change: it is not kept, but asked once a run.
       if (cacheable && !error && result !== null) answers.set(key, result);
+      else if (!error && (result === null || MOVING_METHODS.has(call.method))) forRun.set(key, result);
       return { jsonrpc: "2.0", id: call.id, ...(error ? { error } : { result }) };
     } finally {
       if (pending.get(key)?.reply === reply) pending.delete(key);
@@ -305,6 +324,10 @@ export async function serveCached(upstream: Upstream, file: string, block?: numb
         response.writeHead(202).end();
         return void prefetch(body);
       }
+      if (request.url === "/sent") {
+        sent(body);
+        return void response.writeHead(204).end();
+      }
       try {
         const calls = JSON.parse(body) as Call | Call[];
         const replies = await Promise.all((Array.isArray(calls) ? calls : [calls]).map(answer));
@@ -327,6 +350,7 @@ export async function serveCached(upstream: Upstream, file: string, block?: numb
       return asked;
     },
     prefetch,
+    sent,
     async close() {
       closing = true;
       await Promise.allSettled(prefetching);
