@@ -1261,9 +1261,12 @@
               <span aria-hidden="true">×</span>
             </button>
           </div>
-          <!-- What the quote holds first, then what comes on top of it. -->
           <p class="label">Costs</p>
           <dl class="fee-facts">
+            <div>
+              <dt>Swap fee</dt>
+              <dd>1%, taken from the swap's output token</dd>
+            </div>
             <div>
               <dt>Pool fees</dt>
               <dd>Each pool's own, part of the quote</dd>
@@ -1271,10 +1274,6 @@
             <div>
               <dt>Price impact</dt>
               <dd>Grows with the amount, part of the quote</dd>
-            </div>
-            <div>
-              <dt>Swap fee</dt>
-              <dd>1%, taken from the swap's output</dd>
             </div>
             <div>
               <dt>Gas</dt>
@@ -1285,11 +1284,11 @@
           <dl class="rows">
             <div>
               <dt>What it is</dt>
-              <dd>How much less than quoted you accept for each token</dd>
+              <dd>How much less than quoted you accept</dd>
             </div>
             <div>
-              <dt>When exceeded</dt>
-              <dd>The token isn't swapped and stays in your wallet</dd>
+              <dt>When unmet</dt>
+              <dd>The input token stays in your wallet</dd>
             </div>
           </dl>
           <div data-section="check">
