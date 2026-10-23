@@ -55,11 +55,17 @@ async function injected(): Promise<Provider> {
   return provider;
 }
 
+const SAFE_ORIGIN = "https://app.safe.global";
+
 export async function safeWallet(): Promise<Wallet | undefined> {
   if (window.parent === window) return undefined;
+  // The frame's parent, where the browser says: Chrome and Safari name it, others give the referrer.
+  const parent = location.ancestorOrigins?.[0] ?? (document.referrer && new URL(document.referrer).origin);
+  // In another site's frame, nothing answers.
+  if (parent && parent !== SAFE_ORIGIN) return undefined;
   const sdk = new SafeAppsSDK({ allowedDomains: [/^https:\/\/app\.safe\.global$/] });
-  // In any other frame, nothing answers.
-  const timeout = new Promise<undefined>((resolve) => setTimeout(resolve, 1_000));
+  // Safe{Wallet} answers, however busy the page; where the browser does not say whose frame it is, a second.
+  const timeout = new Promise<undefined>((resolve) => setTimeout(resolve, parent ? 10_000 : 1_000));
   const info = await Promise.race([sdk.safe.getInfo(), timeout]).catch(() => undefined);
   if (!info) return undefined;
   const provider: Provider = {
