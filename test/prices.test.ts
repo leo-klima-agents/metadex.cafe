@@ -131,15 +131,21 @@ const POOLS: Record<keyof Market, Address> = {
   aerodrome: "0x00000000000000000000000000000000000000a2",
   hydrex: "0x00000000000000000000000000000000000000a3",
 };
-// What Chainlink's USDC / USD feed answers, with its 8 decimals.
+const [USDC, EURC] = [swapperOf("usdc")!.token, swapperOf("eurc")!.token];
+// What Chainlink's USDC / USD and EURC / USD feeds answer, with their 8 decimals.
 const USDC_USD = 0.999;
-const USDC_FEED = ANCHORS.find(({ address }) => same(address, swapperOf("usdc")!.token))!.feed;
+const EURC_USD = 1.15;
+const feedOf = (token: Address): Address => ANCHORS.find(({ address }) => same(address, token))!.feed;
+const ANSWERS: [Address, number][] = [
+  [feedOf(USDC), USDC_USD],
+  [feedOf(EURC), EURC_USD],
+];
 const factoryOf = (name: string, stable = false): Address =>
   EXCHANGES.find((exchange) => exchange.name === name && !!exchange.stable === stable)!.factory;
 
 // TOKEN's volatile pools against USDC, of Aero, Aerodrome and Hydrex Classic, each with its reserves now in whole
-// tokens, TOKEN's first. Aero's reads back `average` over the window, or refuses it. Only USDC's feed answers, so USDC is
-// the only anchor, and the classic pools have no observations yet.
+// tokens, TOKEN's first. Aero's reads back `average` over the window, or refuses it. Only USDC's and EURC's feeds answer,
+// TOKEN has no pool against EURC, and the classic pools have no observations yet.
 function market(pools: Market, average?: [number, number]) {
   const asked = new Set<string>();
   const units = ([token, usdc]: [number, number]) => [BigInt(token) * 10n ** 18n, BigInt(usdc) * 10n ** 6n] as const;
@@ -147,11 +153,14 @@ function market(pools: Market, average?: [number, number]) {
   const reader = async (calls: Call[]) =>
     calls.map(({ address, functionName, args }) => {
       asked.add(address.toLowerCase());
-      if (same(address, USDC_FEED))
-        return functionName === "decimals" ? 8 : [1n, BigInt(USDC_USD * 1e8), 0n, BigInt(NOW), 1n];
-      if (same(address, factoryOf("Aero Basic Pools"))) return poolOf("aero");
-      if (same(address, factoryOf("Aerodrome Basic Pools"))) return args[2] ? zeroAddress : poolOf("aerodrome");
-      if (same(address, PAIR_FACTORY)) return args[2] ? zeroAddress : poolOf("hydrex");
+      const answer = ANSWERS.find(([feed]) => same(feed, address))?.[1];
+      if (answer !== undefined)
+        return functionName === "decimals" ? 8 : [1n, BigInt(Math.round(answer * 1e8)), 0n, BigInt(NOW), 1n];
+      const found = (name: keyof Market, stable = false) =>
+        !stable && same(String(args[1]), USDC) ? poolOf(name) : zeroAddress;
+      if (same(address, factoryOf("Aero Basic Pools"))) return found("aero");
+      if (same(address, factoryOf("Aerodrome Basic Pools"))) return found("aerodrome", !!args[2]);
+      if (same(address, PAIR_FACTORY)) return found("hydrex", !!args[2]);
       if (same(address, factoryOf("Aero Basic Pools", true)) || same(address, ALGEBRA_FACTORY)) return zeroAddress;
       const name = (Object.keys(POOLS) as (keyof Market)[]).find((each) => same(POOLS[each], address));
       if (!name) return undefined;
@@ -172,11 +181,14 @@ function market(pools: Market, average?: [number, number]) {
 const priceOf = async (reader: (calls: Call[]) => Promise<unknown[]>, exchanges = SWAP_PRICING) =>
   (await pricesAt([TOKEN], new Map(), NOW, NOW, exchanges, reader)).get(TOKEN.address);
 
-test("USDC takes Chainlink's price, and so do the tokens priced in it", async () => {
-  const usdc = swapperOf("usdc")!.token.toLowerCase();
+test("USDC and EURC take Chainlink's prices, and a token priced in USDC takes USDC's", async () => {
   const { reader } = market({ hydrex: [2_000, 8_000] });
-  close((await pricesAt([TOKEN], new Map(), NOW, NOW, SWAP_PRICING, reader)).get(usdc)!, USDC_USD);
-  close((await priceOf(reader))!, 4 * USDC_USD);
+  for (const exchanges of [SWAP_PRICING, HYDREX_PRICING]) {
+    const prices = await pricesAt([TOKEN], new Map(), NOW, NOW, exchanges, reader);
+    close(prices.get(USDC.toLowerCase())!, USDC_USD);
+    close(prices.get(EURC.toLowerCase())!, EURC_USD);
+    close(prices.get(TOKEN.address)!, 4 * USDC_USD);
+  }
 });
 
 test("the deepest pool wins: of all four exchanges for the swap's page, of Hydrex's two for the Hydrex pages", async () => {

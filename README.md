@@ -250,12 +250,12 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   that record, such as its owner on Hydrex. The page then says that the account was last claimed outside Carbon Impact,
   and shows no receipt.
 - What votes earned is for the last epoch only, at approximate prices: each token's average price over the half hour
-  before the epoch ended, in Hydrex's pools only, with Chainlink for USDC, WETH and cbBTC. A token without a deep enough
-  pool counts as nothing.
+  before the epoch ended, in Hydrex's pools only, with Chainlink for USDC, WETH, cbBTC and EURC. A token without a deep
+  enough pool counts as nothing.
 - The swap's own prices, which weigh its tokens and quotes in dollars and check each quote, are each token's average
   over the last half hour in the deepest of Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools and Hydrex
-  Integral that pairs it with USDC, WETH or cbBTC, with Chainlink for those three. Of two pools as deep, the first in
-  that order wins. A token without a deep enough pool there has no price.
+  Integral that pairs it with USDC, WETH, cbBTC or EURC, with Chainlink for those four. Of two pools as deep, the first
+  in that order wins. A token without a deep enough pool there has no price.
 - Only the admin key, or a call from the owner's own address made elsewhere, can change a payout address.
 - The swap knows only the tokens on its list, Hydrex's reward tokens, those added by address, and those a wallet lists
   with ERC-7811's `wallet_getAssets`: no RPC lists a wallet's tokens. Routes pass through WETH, USDC, cbBTC and HYDX

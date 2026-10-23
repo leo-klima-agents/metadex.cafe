@@ -80,6 +80,12 @@ export const ANCHORS: Anchor[] = [
     decimals: 8,
     feed: "0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F",
   },
+  // EURC, with Chainlink's EURC / USD feed
+  {
+    address: "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42",
+    decimals: 6,
+    feed: "0xDAe398520e2B67cd3f27aeF9Cf14D93D927f8250",
+  },
 ];
 
 // The swap: ImmutableSwapper, deployed once per output token on 21 Oct 2026. Each sells the tokens its caller names for
