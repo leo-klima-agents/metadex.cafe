@@ -674,18 +674,14 @@ function review(accounts: Account[], action: Action, automation?: Automation): v
   if (!connection || !shown) return;
   const { owner, epochStart } = shown;
   const settings = carbonImpact;
-  const which = list(accounts.map(({ id }) => `#${id}`));
   const prepare = (id: string): DocumentFragment => {
     const part = clone(id);
-    fill(part, { which });
     fillTime(part, "next", epochStart + WEEK, utc);
     fillPlural(part, accounts.length);
     if (settings) {
       fill(part, {
         retired: bps(settings.retireBps),
         fee: settings.feeBps === undefined ? "…" : bps(settings.feeBps),
-        "max-fee": settings.maxFeeBps === undefined ? "…" : bps(settings.maxFeeBps),
-        entity: settings.entity,
       });
     }
     return part;
@@ -693,21 +689,8 @@ function review(accounts: Account[], action: Action, automation?: Automation): v
   const checkOf = ({ kind }: Automation) => hrefOf({ view: "product", kind, section: "check" });
   if (action === "join" && automation) {
     const prefix = traits[automation.kind].templates;
+    // Which automation each account leaves, if any, its call says on the next page.
     const before = prepare(`${prefix}join-before`);
-    const statuses = accounts.map((account) => ({ account, status: statusOf(account, owner, now(), epochStart) }));
-    const stopped = statuses.flatMap(({ account, status }) => (status.kind === "stopped" ? [account] : []));
-    // Accounts in a running automation, the page's other one included, move out of it.
-    const running = statuses.flatMap(({ account, status }) => {
-      if (status.kind === "other") return [`#${account.id} out of ${status.name}`];
-      const elsewhere = "automation" in status && status.kind !== "left" && status.automation !== automation;
-      return elsewhere ? [`#${account.id} out of ${status.automation.name}`] : [];
-    });
-    fill(before, {
-      "stopped-which": list(stopped.map(({ id, delegate }) => `#${id} is in ${automationName(delegate)}`)),
-      "running-which": list(running),
-    });
-    show(".from-stopped", stopped.length > 0, before);
-    show(".from-running", running.length > 0, before);
     estimate(before.querySelector(".estimate")!, accounts, automation, owner);
     const pages = [{ title: "Before you join", body: before }, { title: "What your wallet will ask" }];
     const steps = join(accounts, automation);
