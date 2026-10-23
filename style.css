@@ -1201,11 +1201,11 @@ dialog .receipt {
   color: var(--quiet);
   overflow-wrap: anywhere;
 }
-/* What a field holds goes on a line of its own, under it. */
-.fields .under {
+/* What a field holds goes on a line of its own, above it, as a token's symbol goes above its address. */
+.fields .description {
   display: block;
 }
-.fields .under,
+.fields .description,
 .fields .call,
 .slip-note {
   color: var(--quiet);

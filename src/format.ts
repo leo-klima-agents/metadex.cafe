@@ -111,7 +111,7 @@ export function hexLines(hex: string): string[][] {
 // 0000 0000 0000 0000
 // 0000 0000 0000
 export function walletLines(address: string): string[][] {
-  const cells = ["0x", ...(address.slice(2).match(/.{1,4}/g) ?? [])];
+  const cells = hexLines(address)[0]!;
   return [cells.slice(0, 4), cells.slice(4, 8), cells.slice(8)];
 }
 

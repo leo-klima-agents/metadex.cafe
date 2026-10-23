@@ -186,8 +186,10 @@ went badly too.
   receipts.
 
 **A call** is a bill of its own: the name, then what it is, "Call 1 of 2", and the page's own words, such as "#9540
-joins Carbon Impact.". Then a row per field, in full, with nothing to open: To, with the contract's name under it; Call;
-Conduit, with its name; Hydrex account; Approve; Value. Its foot links to how to check the calls.
+joins Carbon Impact.". Then a row per field, in full, with nothing to open: To, with the contract's name above it; Call;
+Conduit, with its name above it; Hydrex account; Approve; Value. What a field holds always goes above its value, as a
+token's symbol goes above its address. A list of addresses, such as a claim's reward contracts and tokens, takes as many
+columns as fit: two in the review on a desktop, one on a phone.
 
 **A swap** is a bill before the wallet asks: the name, "Quote · swap into cbBTC", with a token's symbol in its own case
 among the capitals, and the gas under it, as it is paid apart, in ETH. Then a line per token, with what it fetches and

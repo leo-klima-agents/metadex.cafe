@@ -12,6 +12,7 @@ import {
   SITE,
   STRANGER,
   ZORA,
+  elsewhere,
   approveConduit,
   app,
   balanceOf,
@@ -150,8 +151,6 @@ describe("the swap and the claim against a fork after the swappers' deployment",
   });
 
   test("if the page's RPCs serve another chain, no swap is offered, and the page says so", async () => {
-    const elsewhere = (body: string) =>
-      body.includes('"eth_chainId"') ? JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x1" }) : undefined;
     const { page } = await connected({ owner: HOLDER }, { url: `${SITE}/#swap`, answer: elsewhere });
     const swap = swapView(page);
     await swap.getByText("Swaps are off.").waitFor();

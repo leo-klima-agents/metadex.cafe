@@ -130,7 +130,20 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await connectButton(hydrexFirst.page).click();
     await chip(hydrexFirst.page, NEWCOMER).waitFor();
     assert.equal(new URL(hydrexFirst.page.url()).hash, "#hydrex");
-    assert.deepEqual(violations, []);
+    // A wallet asked on Hydrex's page and answered once its owner went Home leaves them there.
+    let approve = () => {};
+    const approval = new Promise<void>((resolve) => (approve = resolve));
+    const late = await open({ owner: NEWCOMER, approval }, { url: `${SITE}/#hydrex` });
+    await hydrexTitle(late.page).waitFor();
+    await connectButton(late.page).click();
+    await late.page.locator("header.site").getByRole("link", { name: "metaDEX Café" }).click();
+    await homeTitle(late.page).waitFor();
+    approve();
+    await chip(late.page, NEWCOMER).waitFor();
+    assert.equal(new URL(late.page.url()).hash, "");
+    assert.equal(await homeTitle(late.page).isVisible(), true);
+    for (const each of [violations, other.violations, hydrexFirst.violations, late.violations])
+      assert.deepEqual(each, []);
   });
 
   test("without the script, Home shows and says that the page needs it", async () => {
@@ -427,7 +440,10 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await nothing.locator("summary").click();
     await account(page, 123351).getByText("Lock ended").waitFor();
     assert.equal(await account(page, 123351).locator(".pick").isVisible(), false);
-    assert.equal(await account(page, 123351).getByRole("checkbox").count(), 0, "nothing to tick");
+    // Its box is there, hidden and disabled, and nothing shows where it would be clicked.
+    const box = account(page, 123351).locator(".pick");
+    assert.equal(await box.isDisabled(), true, "nothing can tick it");
+    assert.equal(await account(page, 123351).locator(".tick").isVisible(), false, "nothing to click");
     assert.equal(await nothing.getByRole("button").count(), 0);
     await account(page, 123364).waitFor();
     // An automation's page lists those that can join it, and says when the wallet has none, as an address with no

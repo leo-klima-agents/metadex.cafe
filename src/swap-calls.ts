@@ -78,8 +78,8 @@ export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Sli
     on: `The ${token.symbol} token`,
     call: "approve",
     fields: [
-      { label: "Spender", name: "spender", code: swapper.address, under: `The ${swapper.symbol} swapper` },
-      { label: "Amount", name: "amount", code: String(amount), under: amount ? words : "Nothing" },
+      { label: "Spender", name: "spender", code: swapper.address, description: `The ${swapper.symbol} swapper` },
+      { label: "Amount", name: "amount", code: String(amount), description: amount ? words : "Nothing" },
     ],
     note: `The selector, then each 32-byte word on two lines: the swapper, and ${amount} as ${amount.toString(16)}.`,
   };
@@ -114,12 +114,12 @@ export function swapSlip(
           whole ? `All your ${symbolOf(tokens, route.token)}, up to what this approves` : undefined,
         ),
       })),
-      { label: "Deadline", name: "deadline", code: String(deadline), under: utc(Number(deadline)) },
+      { label: "Deadline", name: "deadline", code: String(deadline), description: utc(Number(deadline)) },
       {
         label: "Skip failed",
         name: "skip",
         code: "true",
-        under: "A route under its minimum is skipped, and its token stays in your wallet.",
+        description: "A route under its minimum is skipped, and its token stays in your wallet.",
       },
     ],
     note: "The selector, then each 32-byte word on two lines: where the routes start, the deadline, true as 1, then each route.",

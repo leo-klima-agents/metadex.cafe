@@ -386,7 +386,7 @@ function approval({ id }: Account, approve: boolean, says: string, target: Targe
         label: "Conduit",
         name: "conduit",
         code: target.address,
-        under: conduitName,
+        description: conduitName,
       },
       { label: "Hydrex account", name: "account", code: String(id) },
       { label: "Approve", name: "approve", code: String(approve) },

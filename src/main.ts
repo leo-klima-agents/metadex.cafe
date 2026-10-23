@@ -466,7 +466,8 @@ function accountItem({ account, status }: Member, group: string, pickable: boole
   show(".late", late.has(account.id), item);
   if (pickable) {
     const box = item.querySelector<HTMLInputElement>(".pick")!;
-    // A hidden box stays disabled, so that a click on its row cannot tick it.
+    // Only a box that can act shows: the template's is hidden and disabled, so that nothing, not even a keyboard or a
+    // script, can tick an account whose group cannot act on it.
     box.hidden = box.disabled = false;
     box.value = String(account.id);
     box.ariaLabel = `Pick ${name} #${account.id}`;
@@ -1049,11 +1050,15 @@ function showConnection(): void {
   refreshReview();
 }
 
-// Whether the wallet connected, and this attempt is the one that counts.
-async function connectTo(wallet: Wallet): Promise<boolean> {
+// Home and About are the page's own; a wallet connected there leads on to the App.
+const leadsToApp = (): boolean => ["home", "about"].includes(route().view);
+
+// A wallet connected from Home or About leads on to the App, unless its owner went to another page meanwhile.
+async function connectTo(wallet: Wallet): Promise<void> {
   const attempt = ++attempts;
+  const fromOwn = leadsToApp();
   const connected = await connect(wallet);
-  if (!connected || attempt <= ignoredUpTo) return false;
+  if (!connected || attempt <= ignoredUpTo) return;
   ignoredUpTo = attempt;
   show(".wallet-failed, .no-wallet", false);
   listen(connected.provider);
@@ -1061,7 +1066,7 @@ async function connectTo(wallet: Wallet): Promise<boolean> {
   showConnection();
   loadAccounts();
   walletChanged();
-  return true;
+  if (fromOwn && leadsToApp()) location.hash = "#app";
 }
 
 function listen(provider: Provider): void {
@@ -1105,7 +1110,7 @@ function letGo(): void {
 }
 
 // Connects a wallet picked from a list, or from the header's button. What goes wrong shows where the wallets are listed:
-// from the header, in its popup. A wallet connected from Home or About leads on to the App.
+// from the header, in its popup.
 function pickWallet(wallet: Wallet, fromHeader = false): void {
   const click = ++clicks;
   show(".wallet-failed, .no-wallet", false);
@@ -1113,10 +1118,6 @@ function pickWallet(wallet: Wallet, fromHeader = false): void {
   show(".connecting");
   connectButton.disabled = true;
   connectTo(wallet)
-    .then((connected) => {
-      const { view } = route();
-      if (connected && click === clicks && (view === "home" || view === "about")) location.hash = "#app";
-    })
     .catch((error) => {
       if (click !== clicks || declined(error)) return;
       if (fromHeader) showConnectPop(true);

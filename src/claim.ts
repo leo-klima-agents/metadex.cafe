@@ -130,12 +130,12 @@ export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true
     call: "claim",
     fields: [
       { label: "Hydrex account", name: "account", code: String(id) },
-      { label: "Fees from", name: "fee-contracts", code: fees, under: "Pools' fees contracts that owe it" },
+      { label: "Fees from", name: "fee-contracts", code: fees, description: "Pools' fees contracts that owe it" },
       {
         label: "Incentives from",
         name: "bribe-contracts",
         code: bribes,
-        under: "Pools' incentives contracts that owe it",
+        description: "Pools' incentives contracts that owe it",
       },
       { label: "Tokens", name: "tokens", code: claimed, tags: symbols },
     ],

@@ -18,16 +18,16 @@ import {
 } from "./wallet.ts";
 
 // A field of a call as the wallet shows it: an address, a number or a list of them, in the mono face, or words, which
-// may hold addresses. A list's items can each have a tag above them, such as a token's symbol. `under` names what the
-// field holds, such as the contract an address is. `name` is the class of its value, and of its `under` with "-name"
-// after it.
+// may hold addresses. `description` says what the field holds, above it, such as the contract an address is; a list's
+// items can each have a tag above them too, such as a token's symbol. `name` is the class of its value, and of its
+// description with "-name" after it.
 export type Field = {
   label: string;
   name?: string;
   code?: string | string[];
   tags?: string[];
   words?: (string | { code: string })[];
-  under?: string;
+  description?: string;
 };
 // A call: the page's own words, the contract it goes to, and its fields. `note` says how its calldata reads, for
 // co-signers.
@@ -95,14 +95,26 @@ let current: Review | undefined;
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const HASH = /^0x[0-9a-fA-F]{64}$/;
 
-// A field's address is laid out as the wallet will show it, for the two to be compared line by line; one within words,
-// such as a pool's in a route, keeps to the text's lines.
-function codeOf(text: string, name?: string, inWords = false): HTMLElement {
+function newCode(name?: string): HTMLElement {
   const code = document.createElement("code");
   code.translate = false;
   if (name) code.className = name;
-  if (ADDRESS.test(text) && !inWords) showWalletAddress(code, text);
-  else if (ADDRESS.test(text) || HASH.test(text)) showHex(code, text);
+  return code;
+}
+
+// A field's address is laid out as the wallet will show it, for the two to be compared line by line.
+function codeOf(text: string, name?: string): HTMLElement {
+  const code = newCode(name);
+  if (ADDRESS.test(text)) showWalletAddress(code, text);
+  else if (HASH.test(text)) showHex(code, text);
+  else code.textContent = text;
+  return code;
+}
+
+// An address within words, such as a pool's in a route, keeps to the text's lines.
+function inlineCode(text: string): HTMLElement {
+  const code = newCode();
+  if (ADDRESS.test(text) || HASH.test(text)) showHex(code, text);
   else code.textContent = text;
   return code;
 }
@@ -115,11 +127,7 @@ function listOf(items: string[], tags: string[] = []): HTMLElement {
     ...items.map((item, i) => {
       const cell = document.createElement("span");
       const tag = tags[i];
-      if (tag) {
-        const code = Object.assign(document.createElement("code"), { className: "tag", textContent: tag });
-        code.translate = false;
-        cell.append(code);
-      }
+      if (tag) cell.append(Object.assign(newCode("tag"), { textContent: tag }));
       cell.append(codeOf(item));
       return cell;
     }),
@@ -127,10 +135,16 @@ function listOf(items: string[], tags: string[] = []): HTMLElement {
   return list;
 }
 
-function fieldOf({ label, name, code, tags, words, under }: Field): DocumentFragment {
+function fieldOf({ label, name, code, tags, words, description }: Field): DocumentFragment {
   const row = clone("field");
   row.querySelector("dt")!.textContent = label;
   const value = row.querySelector("dd")!;
+  if (description !== undefined) {
+    const above = document.createElement("span");
+    above.className = `description${name ? ` ${name}-name` : ""}`;
+    above.textContent = description;
+    value.append(above);
+  }
   if (Array.isArray(code)) {
     if (name) value.classList.add(name);
     value.append(code.length ? listOf(code, tags) : "None");
@@ -138,14 +152,8 @@ function fieldOf({ label, name, code, tags, words, under }: Field): DocumentFrag
   if (words) {
     const span = document.createElement("span");
     span.className = `words${name ? ` ${name}` : ""}`;
-    span.append(...words.map((word) => (typeof word === "string" ? word : codeOf(word.code, undefined, true))));
+    span.append(...words.map((word) => (typeof word === "string" ? word : inlineCode(word.code))));
     value.append(span);
-  }
-  if (under !== undefined) {
-    const below = document.createElement("span");
-    below.className = `under${name ? ` ${name}-name` : ""}`;
-    below.textContent = under;
-    value.append(below);
   }
   return row;
 }
@@ -251,7 +259,7 @@ function showPage(page: number): void {
   title.textContent = titles[page]!;
   const words = typeof name === "string" ? [name] : name;
   stepCount.replaceChildren(
-    ...words.map((word) => (typeof word === "string" ? word : codeOf(word.code, undefined, true))),
+    ...words.map((word) => (typeof word === "string" ? word : inlineCode(word.code))),
     ` · ${page + 1} of ${titles.length}`,
   );
   stepCount.hidden = titles.length === 1;
