@@ -176,9 +176,7 @@ export const EXCHANGES: Exchange[] = [
 ];
 
 // For pricing: the exchanges whose pools price other tokens against the anchors, by id, in the order they are read:
-// Aero Slipstream, Aero Basic Pools, Aerodrome Slipstream, Aerodrome Basic Pools, Uniswap v3, Hydrex Classic Pools and
-// Hydrex Integral. Each keeps a history of its prices. Uniswap v2 and v4 keep none, so they would give today's price
-// for any flip.
-export const PRICE_EXCHANGES: Exchange[] = [4, 2, 3, 6, 7, 8, 5, 10, 1, 0].map((id) =>
+// Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools and Hydrex Integral.
+export const PRICE_EXCHANGES: Exchange[] = [2, 3, 5, 1, 0].map((id) =>
   EXCHANGES.find((exchange) => exchange.id === id)!,
 );
