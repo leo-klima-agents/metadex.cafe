@@ -79,20 +79,19 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     const frame = page.frameLocator("iframe");
     const dialog = frame.locator("#review");
     await frame.locator("header").getByText(short(LEAVER)).waitFor();
-    assert.equal(await frame.getByRole("heading", { name: "Your wallet", level: 1 }).isVisible(), true);
+    assert.equal(await frame.getByRole("heading", { name: "Your Wallet", level: 1, exact: true }).isVisible(), true);
     assert.equal(await frame.getByRole("heading", { name: "Vote, claim and swap on Base" }).isVisible(), false);
     await frame.getByRole("link", { name: "Hydrex automations" }).click();
-    await frame.getByRole("checkbox", { name: "Pick Account #53350" }).check();
-    await frame.getByRole("checkbox", { name: "Pick Account #82206" }).check();
-    await frame.getByRole("button", { name: "Leave with 2 accounts" }).click();
+    await frame.getByRole("checkbox", { name: "Pick Hydrex account #53350" }).check();
+    await frame.getByRole("checkbox", { name: "Pick Hydrex account #82206" }).check();
+    await frame.getByRole("button", { name: "Leave with 2 Hydrex accounts" }).click();
     await dialog.getByText(/^One Safe transaction, 2 calls$/).waitFor();
-    // Co-signers open each call to compare its fields and calldata with Safe{Wallet}'s.
-    for (const summary of await dialog.locator(".slip-details > summary").all()) await summary.click();
+    // Co-signers compare each call's fields and calldata, shown in full, with Safe{Wallet}'s.
     const call = dialog.locator(".slip").first();
     assert.equal(await call.locator(".conduit").innerText(), CONDUIT, "co-signers see the address, not only its name");
     assert.equal(await call.locator(".conduit-name").innerText(), "Carbon Impact");
     assert.equal(await call.locator(".call").innerText(), "100 bytes:");
-    assert.equal(await call.locator(".count").textContent(), "Safe · 1 of 2");
+    assert.equal(await call.locator(".count").textContent(), "Safe · Call 1 of 2");
     assert.equal(
       await call.locator(".slip-note").innerText(),
       "The selector, then each 32-byte word on two lines: the conduit, 53350 as d066, and false as 0.",
@@ -148,7 +147,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await group(page, "other").getByRole("button", { name: "Join AutoMaxi", exact: true }).click();
     await review(page).getByText("Join AutoMaxi · 1 of 2").waitFor();
     await review(page)
-      .getByText("Anyone can then claim the rewards this account has not claimed yet, less 1%.")
+      .getByText("Anyone can then claim the rewards this Hydrex account has not claimed yet, less 1%.")
       .waitFor();
     await review(page).getByRole("link", { name: "Fixed" }).waitFor();
     await review(page)
@@ -172,7 +171,9 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     const own = member.page;
     await group(own, "in:carbon-impact").getByText("#53350").waitFor();
     await pick(own, 53350);
-    await group(own, "in:carbon-impact").getByRole("button", { name: "Move to AutoMaxi with 1 account" }).click();
+    await group(own, "in:carbon-impact")
+      .getByRole("button", { name: "Move to AutoMaxi with 1 Hydrex account" })
+      .click();
     await toWallet(own);
     assert.deepEqual(await review(own).locator(".says").allTextContents(), [
       "#53350 leaves Carbon Impact and joins AutoMaxi.",
@@ -293,10 +294,13 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     // #141 and #42877 can join it, so its button waits for a tick.
     assert.equal(await maxi.getByRole("button", { name: "Join AutoMaxi", exact: true }).isDisabled(), true);
     await pick(page, 141);
-    await maxi.getByRole("button", { name: "Join AutoMaxi with 1 account" }).click();
+    await maxi.getByRole("button", { name: "Join AutoMaxi with 1 Hydrex account" }).click();
     await review(page).getByText("Join AutoMaxi · 1 of 2").waitFor();
     await page.keyboard.press("Escape");
-    await page.locator("header.site").getByRole("link", { name: "metaDEX Café" }).click();
+    // Its title leads back to Hydrex, and to the wallet.
+    const trail = maxi.getByRole("navigation", { name: "Breadcrumb" });
+    assert.deepEqual(await trail.getByRole("link").allInnerTexts(), ["Your Wallet", "Hydrex"]);
+    await trail.getByRole("link", { name: "Your Wallet" }).click();
     await appTitle(page).waitFor();
 
     await page.goto(`${SITE}/#hydrex/carbon-impact`);
@@ -326,7 +330,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
 
     // An account's page: the wallet's own has its actions; another's names its owner.
     await page.goto(`${SITE}/#hydrex/141`);
-    await position(page).getByRole("heading", { name: "Account #141", level: 1 }).waitFor();
+    await position(page).getByRole("heading", { name: "Hydrex account #141", level: 1 }).waitFor();
     await position(page).getByText("You vote with it").waitFor();
     await position(page).getByRole("button", { name: "Join AutoMaxi", exact: true }).waitFor();
     await page.goto(`${SITE}/#hydrex/9540`);
@@ -339,7 +343,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
       0,
     );
     await page.goto(`${SITE}/#hydrex/999999999`);
-    await position(page).getByText("No such account.").waitFor();
+    await position(page).getByText("No such Hydrex account.").waitFor();
     assert.deepEqual(violations, []);
   });
 

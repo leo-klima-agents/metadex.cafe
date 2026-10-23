@@ -1,15 +1,14 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import { toFunctionSelector, toHex } from "viem";
+import { toFunctionSelector } from "viem";
 import { blockTime, read } from "../src/chain.ts";
-import { VOTER } from "../src/config.ts";
+import { KVCM, VOTER } from "../src/config.ts";
 import { readEarnings, rewardsFor, sharesOf, tokensOf } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
 import {
   SETTLED,
   blockTimes,
-  namesAt,
   payoutBlocks,
   payoutsIn,
   readEarned,
@@ -47,6 +46,7 @@ import {
   appTitle,
   hydrexTitle,
   toHydrex,
+  connectButton,
   pick,
   shoot,
   stop,
@@ -64,17 +64,20 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await homeTitle(page).waitFor();
     assert.equal(await appTitle(page).isVisible(), false);
     assert.equal(await page.title(), "metaDEX Café");
-    // Home holds a heading and its one button, which stands in for the header's.
+    // Home holds a heading and its one button; the header, the logo and the name, and a button to connect a wallet.
     const home = page.locator('.view[data-view="home"]');
     assert.deepEqual(await home.locator(".buttons a").allTextContents(), ["Open app"]);
+    await connectButton(page).waitFor();
     assert.equal(await page.locator("header .to-app").isVisible(), false);
+    assert.equal(await page.locator("header.site > .name img").getAttribute("src"), "icon.svg");
+    assert.equal(await page.getByRole("navigation", { name: "Breadcrumb" }).count(), 0, "Home is the page's own");
     assert.equal(await page.evaluate(() => document.documentElement.scrollHeight), 844, "Home fits one screen");
     await shoot(page, "home-390-light");
     await home.getByRole("link", { name: "Open app" }).click();
     await appTitle(page).waitFor();
     assert.equal(await homeTitle(page).isVisible(), false);
-    assert.equal(await page.title(), "Your wallet · metaDEX Café");
-    assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Your wallet");
+    assert.equal(await page.title(), "Your Wallet · metaDEX Café");
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Your Wallet");
     // The App lists the products: the Hydrex automations, and the swap.
     assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), ["Hydrex automations", "Swap tokens"]);
     assert.equal(await page.locator("header .to-app").getAttribute("aria-current"), "page");
@@ -89,16 +92,19 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await page.locator("footer").getByRole("link", { name: "About" }).click();
     await page.getByRole("heading", { name: "About", level: 1 }).waitFor();
     assert.equal(await page.title(), "About · metaDEX Café");
-    await page.goto(`${SITE}/#about/figures`);
-    // About's details are in popups, and an address that points into one opens it, until it closes.
-    const figures = page.locator('[data-section="figures"]:popover-open');
-    await figures.getByText("1.3 × votes, as on Hydrex").waitFor();
-    await page.keyboard.press("Escape");
-    await page.waitForFunction(() => location.hash === "#about");
-    await page.getByRole("button", { name: "How the figures are read" }).click();
-    await figures.waitFor();
-    await figures.getByRole("button", { name: "Close" }).click();
-    await figures.waitFor({ state: "detached" });
+    assert.equal(await page.getByRole("navigation", { name: "Breadcrumb" }).count(), 0, "About is the page's own");
+    assert.deepEqual(await page.locator('.view[data-view="about"] > .rows dt').allInnerTexts(), [
+      "Official address",
+      "Cookies stored",
+      "Version",
+    ]);
+    // Its rows are all there is: no popup. The footer leads to it, without the version, at the foot of the screen.
+    assert.equal(await page.locator('.view[data-view="about"]').getByRole("button").count(), 0);
+    assert.deepEqual(await page.locator("footer a").allTextContents(), ["About"]);
+    const footer = (await page.locator("footer").boundingBox())!;
+    assert.equal(Math.round(footer.y + footer.height), 844, "the footer is at the foot of the screen");
+    await page.goto(`${SITE}/#about/check`);
+    await homeTitle(page).waitFor();
     await page.goto(`${SITE}/#how-it-works`);
     await homeTitle(page).waitFor();
     assert.deepEqual(asked, [], "the page asks a wallet nothing until it is picked");
@@ -116,7 +122,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
   test("a link in the review opens its section, Back keeps the ticks, and an account's page says what stopped", async () => {
     const { page, violations } = await connected({ owner: ELSEWHERE }, { width: 390, height: 844 });
     await pick(page, 2435, 2439);
-    await page.getByRole("button", { name: "Join Carbon Impact with 2 accounts" }).click();
+    await page.getByRole("button", { name: "Join Carbon Impact with 2 Hydrex accounts" }).click();
     await review(page).getByRole("heading", { name: "Before you join" }).waitFor();
     await review(page).getByRole("link", { name: "Can change" }).click();
     assert.equal(await review(page).isVisible(), false);
@@ -126,12 +132,13 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await appTitle(page).isVisible(), false);
     await page.goBack();
     await hydrexTitle(page).waitFor();
-    assert.equal(await page.getByRole("checkbox", { name: "Pick Account #2439" }).isChecked(), true);
-    await page.getByRole("button", { name: "Join Carbon Impact with 2 accounts" }).waitFor();
-    await account(page, 2439).getByRole("link", { name: "Account #2439" }).click();
-    await position(page).getByRole("heading", { name: "Account #2439", level: 1 }).waitFor();
+    assert.equal(await page.getByRole("checkbox", { name: "Pick Hydrex account #2439" }).isChecked(), true);
+    await page.getByRole("button", { name: "Join Carbon Impact with 2 Hydrex accounts" }).waitFor();
+    await account(page, 2439).getByRole("link", { name: "Hydrex account #2439" }).click();
+    await position(page).getByRole("heading", { name: "Hydrex account #2439", level: 1 }).waitFor();
     assert.equal(new URL(page.url()).hash, "#hydrex/2439");
-    assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), "Account #2439");
+    assert.equal(await page.title(), "Hydrex account #2439 · metaDEX Café");
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), "Hydrex account #2439");
     await position(page)
       .locator(".position-stopped")
       .getByText(/Earns nothing\s+since\s+Thu,? 10 Sept?\./)
@@ -140,24 +147,35 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await position(page).getByRole("button", { name: "Leave", exact: true }).waitFor();
     assert.equal(await position(page).locator(".position-owner-row").isVisible(), false, "its own account");
     await shoot(page, "stopped-account-390-light");
-    await position(page).getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Hydrex" }).click();
+    // Its title leads back: "Your Wallet › Hydrex › Hydrex account #2439".
+    const trail = position(page).getByRole("navigation", { name: "Breadcrumb" });
+    assert.deepEqual(await trail.getByRole("link").allInnerTexts(), ["Your Wallet", "Hydrex"]);
+    await trail.getByRole("link", { name: "Hydrex" }).click();
     await hydrexTitle(page).waitFor();
-    // With a wallet connected, Home is the App: the name in the header leads there.
-    assert.equal(await hydrex(page).getByRole("navigation", { name: "Breadcrumb" }).count(), 0);
-    await page.locator("header.site").getByRole("link", { name: "metaDEX Café" }).click();
+    // Hydrex's page leads back to the wallet, the App.
+    await hydrex(page)
+      .getByRole("navigation", { name: "Breadcrumb" })
+      .getByRole("link", { name: "Your Wallet" })
+      .click();
     await appTitle(page).waitFor();
-    assert.equal(new URL(page.url()).hash, "");
-    assert.equal(await page.title(), "Your wallet · metaDEX Café");
+    assert.equal(new URL(page.url()).hash, "#app");
+    assert.equal(await page.title(), "Your Wallet · metaDEX Café");
     assert.equal(await homeTitle(page).isVisible(), false);
     // The App says what needs you across the products: here, the accounts in automations that stopped.
     const needs = app(page).locator("#needs");
     await needs.getByRole("heading", { name: "Needs you · 2" }).waitFor();
-    await needs.getByText(/^#2439 earns nothing: USDC stopped Wed,? 9 Sept?$/).waitFor();
+    await needs.getByText(/^Hydrex account #2439 earns nothing: USDC stopped since Wed,? 9 Sept?$/).waitFor();
     assert.equal(
       await needs.locator("li").filter({ hasText: "#2439" }).getByRole("link", { name: "Change" }).getAttribute("href"),
       "#hydrex/2439",
     );
-    await app(page).locator(".hydrex-yours").getByText("2 accounts", { exact: true }).waitFor();
+    await app(page).locator(".hydrex-yours").getByText("2 Hydrex accounts", { exact: true }).waitFor();
+    // With a wallet connected, Home is still Home: the name in the header leads there.
+    await page.locator("header.site").getByRole("link", { name: "metaDEX Café" }).click();
+    await homeTitle(page).waitFor();
+    assert.equal(new URL(page.url()).hash, "");
+    assert.equal(await page.title(), "metaDEX Café");
+    assert.equal(await appTitle(page).isVisible(), false);
     assert.deepEqual(violations, []);
   });
 
@@ -263,7 +281,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
         PAID_IDS.map(() => PAID),
       );
       const at = [...new Set(blocks.values())];
-      const [paid] = await Promise.all([payoutsIn(at), blockTimes(at), namesAt(at)]);
+      const [paid] = await Promise.all([payoutsIn(at), blockTimes(at)]);
       assert.deepEqual(
         PAID_IDS.map((id) => paid.find((payout) => payout.id === id)?.tx),
         PAID_IDS.map(() => PAID_TX),
@@ -277,12 +295,11 @@ describe("the page against a fork of Base: its views, and each account's payouts
     );
     // The App marks the account paid late.
     await account(page, 82774).getByText("Payout late").waitFor({ timeout: 120_000 });
-    // Its receipt needs the name Carbon Impact retired in at the payout's block. If that read fails, the page says so,
-    // and does not show the payouts as read.
-    const entityName = toFunctionSelector("function retiringEntityName()").slice(2);
-    const paidBlock = toHex(PAID);
-    rpc.refuse = (body) => body.includes(entityName) && body.includes(paidBlock);
-    await account(page, 82774).getByRole("link", { name: "Account #82774" }).click();
+    // Its receipt needs the symbols of the tokens it paid, such as kVCM, which only the account's page reads. If that
+    // read fails, the page says so, and does not show the payouts as read.
+    const symbol = toFunctionSelector("function symbol()").slice(2);
+    rpc.refuse = (body) => body.includes(symbol) && body.includes(KVCM.slice(2).toLowerCase());
+    await account(page, 82774).getByRole("link", { name: "Hydrex account #82774" }).click();
     const payoutsSection = position(page).locator(".position-payouts");
     await payoutsSection.getByText("Reading the payouts failed.").waitFor({ timeout: 120_000 });
     await page.waitForTimeout(500);
@@ -294,7 +311,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     const receipt = standing.locator(".receipt");
     await receipt.first().waitFor({ timeout: 120_000 });
     assert.equal(await standing.count(), 1);
-    assert.equal(await position(page).locator("h1").innerText(), "Account #82774");
+    assert.equal(await position(page).locator("h1").innerText(), "Hydrex account #82774");
     // On Fri 16 Oct, Carbon Impact owed it the epoch from Thu 1 Oct, and had paid nothing since Wed 23 Sep.
     assert.match(await standing.locator(".standing-late").innerText(), /^Late · paid up to Thu,? 17 Sept?$/);
     assert.equal(await standing.locator(".standing-paid").isVisible(), false);
@@ -336,6 +353,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await shoot(page, "receipt-390-dark", position(page));
     // After the flip, the page reads Carbon Impact again and fills its figures, such as .tonnes, across the page. The
     // receipts keep their own.
+    const entityName = toFunctionSelector("function retiringEntityName()").slice(2);
     const readAgain = page.waitForResponse((response) => !!response.request().postData()?.includes(entityName));
     await page.clock.setSystemTime((FLIP + 60) * 1000);
     await page.clock.runFor(30_000);
@@ -369,13 +387,13 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await position(page).locator(".position-owner-row").getByText(short(NEWCOMER)).waitFor();
     assert.equal(await actions.isVisible(), false);
     await page.evaluate(() => (window as any).testWalletEmit("accountsChanged", []));
-    await page.locator("header").getByText("Open app").waitFor();
+    await connectButton(page).waitFor();
     assert.equal(await position(page).getByText("Its owner votes with it").isVisible(), true);
     assert.equal(await actions.isVisible(), false);
     await page.goto(`${SITE}/#app`);
     await app(page).getByText("Connect a wallet").waitFor();
     for (const part of ["#accounts", "#none", "#epoch"]) assert.equal(await page.locator(part).isVisible(), false);
-    await page.locator("header").getByText("Open app").waitFor();
+    await connectButton(page).waitFor();
     await page.getByRole("button", { name: "Test Wallet" }).click();
     await toHydrex(page);
     await account(page, 141).waitFor();
@@ -399,7 +417,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await impact.getByRole("button", { name: "Join Carbon Impact", exact: true }).waitFor();
     assert.equal(await impact.locator(".mine-none").isVisible(), false);
     await page.evaluate((other) => (window as any).testWalletEmit("accountsChanged", [other]), RECIPIENT);
-    await impact.getByText("No account can join.").waitFor();
+    await impact.getByText("No Hydrex account can join.").waitFor();
   });
 
   test("without a wallet in the browser, Browser wallet links to wallet apps", async () => {
@@ -414,6 +432,13 @@ describe("the page against a fork of Base: its views, and each account's payouts
     ]);
     await shoot(page, "no-wallet-390-light");
     assert.equal(await page.locator("#accounts").isVisible(), false);
+    // The header's button, which would connect the one wallet at once, says so in its popup.
+    await page.goto(`${SITE}/#hydrex`);
+    await hydrex(page).getByText("No wallet connected.").waitFor();
+    await connectButton(page).click();
+    const pop = page.locator("#connect:popover-open");
+    await pop.getByText("No wallet found.").waitFor();
+    assert.deepEqual(await pop.locator(".no-wallet a").allTextContents(), ["Coinbase Wallet", "MetaMask"]);
   });
 
   test("if the Voter cannot be read, the accounts still show", async () => {

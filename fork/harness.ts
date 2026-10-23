@@ -221,8 +221,11 @@ type WalletOptions = {
   // Sends several calls in one prompt, with EIP-5792, as Coinbase Wallet and MetaMask do.
   batch?: boolean;
 };
-// Fails the reads of Base whose request body it matches.
-type Rpc = { refuse?: ((body: string) => boolean) | undefined };
+// Fails the reads of Base whose request body `refuse` matches, and gives those `answer` answers its own reply.
+type Rpc = {
+  refuse?: ((body: string) => boolean) | undefined;
+  answer?: ((body: string) => string | undefined) | undefined;
+};
 type OpenOptions = {
   width?: number;
   height?: number;
@@ -231,6 +234,7 @@ type OpenOptions = {
   flowing?: boolean;
   script?: boolean;
   refuse?: Rpc["refuse"];
+  answer?: Rpc["answer"];
   // The Safe that Safe{Wallet}'s page holds.
   safe?: Address;
 };
@@ -364,6 +368,9 @@ async function serve(route: Route, { origins, rpc, safe }: Pick<Opened, "origins
   if (RPC_ORIGINS.includes(origin)) {
     if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: CORS });
     if (rpc.refuse?.(request.postData() ?? "")) return route.abort();
+    const answered = rpc.answer?.(request.postData() ?? "");
+    if (answered !== undefined)
+      return route.fulfill({ headers: { ...CORS, "content-type": "application/json" }, body: answered });
     const reply = post(request.postData() ?? "");
     forwarding.add(reply);
     const body = await reply.finally(() => forwarding.delete(reply));
@@ -388,6 +395,7 @@ export async function open(
     flowing = false,
     script = true,
     refuse,
+    answer,
     safe = LEAVER,
   }: OpenOptions = {},
 ): Promise<Opened> {
@@ -406,7 +414,7 @@ export async function open(
     asked: [] as string[],
     origins: new Set<string>(),
     violations: [] as string[],
-    rpc: { refuse } as Rpc,
+    rpc: { refuse, answer } as Rpc,
     safe,
   };
   await context.route("**/*", (route) => serve(route, opened));
@@ -427,10 +435,13 @@ export async function open(
   return { page, ...opened };
 }
 
+// The header's button, which connects the one wallet in the browser at once.
+export const connectButton = (page: Page) => page.locator("header").getByRole("button", { name: "Connect a wallet" });
+
 // Connected on the Hydrex accounts' page, unless `options` says where.
 export async function connected(wallet: Partial<WalletOptions>, options?: OpenOptions): Promise<Opened> {
   const opened = await open(wallet, { url: `${SITE}/#hydrex`, ...options });
-  await opened.page.getByRole("button", { name: "Test Wallet" }).click();
+  await connectButton(opened.page).click();
   return opened;
 }
 
@@ -446,8 +457,8 @@ export const product = (page: Page, kind: string) => page.locator(`.view[data-ki
 export const position = (page: Page) => page.locator('.view[data-view="position"]');
 export const review = (page: Page | FrameLocator) => page.locator("#review");
 export const homeTitle = (page: Page) => page.getByRole("heading", { name: "Vote, claim and swap on Base" });
-export const appTitle = (page: Page) => page.getByRole("heading", { name: "Your wallet", level: 1 });
-export const hydrexTitle = (page: Page) => page.getByRole("heading", { name: "Hydrex", level: 1 });
+export const appTitle = (page: Page) => page.getByRole("heading", { name: "Your Wallet", level: 1, exact: true });
+export const hydrexTitle = (page: Page) => page.getByRole("heading", { name: "Hydrex", level: 1, exact: true });
 export const toHydrex = (page: Page) => page.goto(`${SITE}/#hydrex`);
 export const chip = (page: Page, owner: Address) => page.locator("header").getByText(short(owner));
 
@@ -466,14 +477,8 @@ export async function nextEpoch(page: Page, day: RegExp): Promise<void> {
   );
 }
 
-// Opens each call's fields in the review, as someone checking them would.
-export async function openCalls(page: Page): Promise<void> {
-  const closed = review(page).locator(".slip-details:not([open]) > summary");
-  while (await closed.count()) await closed.first().click();
-}
-
 export async function pick(page: Page, ...ids: number[]): Promise<void> {
-  for (const id of ids) await page.getByRole("checkbox", { name: `Pick Account #${id}` }).check();
+  for (const id of ids) await page.getByRole("checkbox", { name: `Pick Hydrex account #${id}` }).check();
 }
 
 export async function shoot(page: Page, name: string, part?: Locator): Promise<void> {

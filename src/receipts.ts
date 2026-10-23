@@ -1,9 +1,8 @@
 import { decodeEventLog, numberToHex, parseAbi, type Address, type Hex } from "viem";
 import { blockTime, call, read, readLater, required, rpc, type Call } from "./chain.ts";
 import { CARBON_IMPACT } from "./config.ts";
-import { WEEK, clean } from "./format.ts";
+import { WEEK } from "./format.ts";
 import type { Reward } from "./earnings.ts";
-import { carbonImpact } from "./hydrex.ts";
 import { usdOf, type Token } from "./prices.ts";
 
 // Hydrex's reward contracts record, for each account and token, the start of the epoch up to which they have paid the
@@ -427,23 +426,7 @@ export async function blockTimes(blocks: number[]): Promise<Map<number, number>>
   return new Map(blocks.map((block) => [block, times.get(block)!]));
 }
 
-// The name Carbon Impact retired in at each block. Its admin can change the name, so each receipt shows the one in use
-// at its payout. Each is read once.
-const names = new Map<number, string>();
-
-export async function namesAt(blocks: number[]): Promise<Map<number, string>> {
-  const missing = [...new Set(blocks)].filter((block) => !names.has(block));
-  const found = await Promise.all(
-    missing.map(async (block) => {
-      const [name] = required(await readLater([carbonImpact("retiringEntityName")], block)) as [string];
-      return clean(name);
-    }),
-  );
-  missing.forEach((block, i) => names.set(block, found[i]!));
-  return new Map(blocks.map((block) => [block, names.get(block)!]));
-}
-
 // For tests: what the reads above found is kept for the rest of the session.
 export function forgetReads(): void {
-  for (const kept of [searched, firsts, logsOf, times, names]) kept.clear();
+  for (const kept of [searched, firsts, logsOf, times]) kept.clear();
 }

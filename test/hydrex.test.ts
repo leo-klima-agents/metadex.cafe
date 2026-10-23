@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { encodeFunctionData, parseAbi, zeroAddress, type Address } from "viem";
+import {
+  decodeFunctionData,
+  encodeAbiParameters,
+  encodeFunctionData,
+  encodeFunctionResult,
+  parseAbi,
+  toFunctionSelector,
+  zeroAddress,
+  type Address,
+  type Hex,
+} from "viem";
 import { AUTOMAXI, CARBON_IMPACT, VOTING_ESCROW, type Automation } from "../src/config.ts";
 import { WEEK } from "../src/format.ts";
 import {
@@ -11,6 +21,7 @@ import {
   join,
   leave,
   leaveOther,
+  readAccount,
   statusOf,
   type Account,
   type Step,
@@ -248,4 +259,43 @@ test("until AutoMaxi is on Base, the page leaves it out", () => {
   const changes = { delegate: MAXI, delegateAtStart: MAXI, claimer: MAXI };
   assert.deepEqual(statusWith(changes, [CARBON_IMPACT]), { kind: "delegated", to: MAXI });
   assert.equal(groupOf(account(changes), statusWith(changes, [CARBON_IMPACT]), [CARBON_IMPACT]), "other");
+});
+
+test("an account whose ownerOf fails is asked again on its own before it is taken for gone", async () => {
+  const multicall = parseAbi([
+    "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
+  ]);
+  const ownerOf = toFunctionSelector("function ownerOf(uint256)");
+  const timestamp = toFunctionSelector("function getCurrentBlockTimestamp()");
+  // What each ownerOf answers in turn, undefined for a call that fails; every other call fails but the block's time.
+  let owners: (Address | undefined)[] = [];
+  let asked = 0;
+  const original = globalThis.fetch;
+  globalThis.fetch = async (_, init) => {
+    const { params } = JSON.parse(String(init?.body)) as { params: [{ data: Hex }] };
+    const { args } = decodeFunctionData({ abi: multicall, data: params[0].data });
+    const replies = args[0].map(({ callData }) => {
+      const failed = { success: false, returnData: "0x" as Hex };
+      if (callData.startsWith(ownerOf)) {
+        const owner = owners[asked++];
+        return owner ? { success: true, returnData: encodeAbiParameters([{ type: "address" }], [owner]) } : failed;
+      }
+      if (callData.startsWith(timestamp))
+        return { success: true, returnData: encodeAbiParameters([{ type: "uint256" }], [1_792_627_200n]) };
+      return failed;
+    });
+    const result = encodeFunctionResult({ abi: multicall, functionName: "aggregate3", result: replies });
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }));
+  };
+  try {
+    owners = [undefined, undefined];
+    assert.equal(await readAccount(9540n), undefined, "it fails again: Hydrex has no such account");
+    assert.equal(asked, 2);
+    // It answers the second time: the account is read, and fails here on its details, rather than being taken for gone.
+    [owners, asked] = [[undefined, OWNER], 0];
+    await assert.rejects(readAccount(9540n), /A read from Base failed/);
+    assert.equal(asked, 2);
+  } finally {
+    globalThis.fetch = original;
+  }
 });

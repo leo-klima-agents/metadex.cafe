@@ -12,6 +12,7 @@ import {
   claimedIn,
   owedOf,
   paidBy,
+  summed,
   type Claim,
 } from "./claim.ts";
 import { clone, fill, show } from "./dom.ts";
@@ -21,9 +22,9 @@ import { pricesNow, usdOf, type Token } from "./prices.ts";
 import { dollars, type Amount } from "./receipts.ts";
 import { openReview, type Hooks } from "./review.ts";
 import { hrefOf } from "./routes.ts";
-import { APPROVAL_GAS, MIDDLES, findRoute, minimumOf, paidOf, simulate } from "./swap.ts";
+import { APPROVAL_GAS, MIDDLES, findRoute, minimumOf, paidOf, partOf, simulate } from "./swap.ts";
 import { costs, gasUsd } from "./swap-calls.ts";
-import { openSwapReview, outputOff, planSteps, prefill, swapReceipt, swappersChecked, type Plan } from "./swap-view.ts";
+import { openSwapReview, planSteps, prefill, swapReceipt, swapsOff, type Plan } from "./swap-view.ts";
 import { describe } from "./tokens.ts";
 import { capabilities, type Connection } from "./wallet.ts";
 
@@ -31,6 +32,8 @@ import { capabilities, type Connection } from "./wallet.ts";
 // it, then the calls; and its receipt.
 
 const key = (address: string): string => address.toLowerCase();
+// The slippage of a swap after a claim: the swap's page's own default.
+const MARGIN = 50n;
 
 // What reached the owner in each claim of the page's own, from its Claimed events.
 function claimReceipts(
@@ -117,7 +120,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   const prices = entries[0]!.earnings!.prices;
   const owing = claims.filter(({ owed }) => owed.length);
   const which = list(entries.map(({ account }) => `#${account.id}`));
-  const name = `Claim for ${which}`;
+  const name = `Claim for ${entries.length === 1 ? "Hydrex account" : "Hydrex accounts"} ${which}`;
   const checkHref = hrefOf({ view: "product", kind: "automaxi", section: "check" });
   // Nothing to send: the review says why, and asks nothing.
   const nothing = (words: string) => {
@@ -193,10 +196,10 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   const sayGas = (withSwap?: number) =>
     (gasLine.textContent = `Gas ${claimUsd === undefined ? "…" : usd(claimUsd)}${withSwap === undefined ? "" : `, ${usd(withSwap)} with the swap`}`);
   sayGas();
-  // The outputs whose checks passed, in a list to pick from.
+  // The outputs, in a list to pick from, once swaps are on.
   const select = body.querySelector<HTMLSelectElement>(".claim-output")!;
   select.replaceChildren(
-    ...SWAPPERS.filter((swapper) => !outputOff(swapper)).map((swapper) => {
+    ...(swapsOff() ? [] : SWAPPERS).map((swapper) => {
       const option = document.createElement("option");
       option.value = swapper.output;
       option.textContent = swapper.symbol;
@@ -207,14 +210,14 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   const into = body.querySelector<HTMLElement>(".claim-into")!;
   const radios = [...body.querySelectorAll<HTMLInputElement>('input[name="receive"]')];
   // What the claims paid, from their events, token by token: what a swap after them may sell.
-  const brought = (receipts: Receipt[]): Amount[] => {
-    const all = new Map<string, Amount>();
-    const ids = owing.map(({ id }) => id);
-    for (const { token, amount } of claimedIn(receipts, ids, connection.address).flatMap(({ paid }) => paid)) {
-      all.set(key(token), { token, amount: (all.get(key(token))?.amount ?? 0n) + amount });
-    }
-    return [...all.values()];
-  };
+  const brought = (receipts: Receipt[]): Amount[] =>
+    summed(
+      claimedIn(
+        receipts,
+        owing.map(({ id }) => id),
+        connection.address,
+      ).flatMap(({ paid }) => paid),
+    );
   const asTheyAre = (receipts: Receipt[]) => {
     const fragment = claimReceipts(receipts, owing, connection.address, tokens, prices);
     const next = clone("claim-next");
@@ -281,7 +284,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
         return void left.push(tokens.get(key(token))?.symbol ?? token);
       items.push({
         token: tokens.get(key(token))!,
-        route: { ...route.route, amount: maxUint256, minPaid: minimumOf(route.out, 50n) },
+        route: { ...route.route, amount: maxUint256, minPaid: minimumOf(route.out, MARGIN) },
         out: route.out,
         allowance: 0n,
         approve: amount,
@@ -299,7 +302,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       if (chosen) opened.replace(claimSlips, { outcomeOf: asTheyAre });
       return;
     }
-    const swapPlan: Plan = { swapper, items };
+    const swapPlan: Plan = { swapper, items, margin: MARGIN };
     if (!together) {
       // The claim first; its receipt then opens the swap's own review, for the amounts it brought.
       opened.replace(claimSlips, {
@@ -311,13 +314,14 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
           const refused = next.querySelector<HTMLElement>(".claim-swap-failed")!;
           button.textContent = `Review the swap into ${swapper.symbol}`;
           // For what the claims brought, as their events say, not what the page expected: the keeper may have
-          // claimed some first.
+          // claimed some first, of a token from some of its reward contracts and not others.
           const came = brought(receipts);
           const exact: Plan = {
             swapper,
-            items: items.flatMap(({ approve: _, route, ...item }) => {
+            margin: MARGIN,
+            items: items.flatMap(({ approve = 0n, ...item }) => {
               const amount = came.find(({ token }) => same(token, item.token.address))?.amount;
-              return amount ? [{ ...item, route: { ...route, amount } }] : [];
+              return amount ? [partOf(item, amount, approve)] : [];
             }),
           };
           if (!exact.items.length) button.remove();
@@ -373,15 +377,11 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     radios.find(({ value }) => value === "into")!.checked = true;
     choose();
   });
-  // Without an output whose checks passed, the swap is not offered; nor from a Safe whose claim takes several Safe
-  // transactions, as the swap follows the claim's receipts, which the Safe's owners bring once they sign.
+  // While swaps are off, the swap is not offered; nor from a Safe whose claim takes several Safe transactions, as the
+  // swap follows the claim's receipts, which the Safe's owners bring once they sign.
   const safeApart = apart && !!connection.wallet.propose;
   if (!select.options.length || safeApart) {
     radios.find(({ value }) => value === "into")!.disabled = select.disabled = true;
-    into.textContent = safeApart
-      ? "Swap them once the claims go through."
-      : swappersChecked()
-        ? "Swaps are off."
-        : "Swappers not checked yet.";
+    into.textContent = safeApart ? "Swap them once the claims go through." : "Swaps are off.";
   } else void plan(swapperOf(select.value)!);
 }

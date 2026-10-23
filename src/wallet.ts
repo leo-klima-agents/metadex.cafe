@@ -25,6 +25,8 @@ const HEX_CHAIN_ID = `0x${CHAIN_ID.toString(16)}`;
 const USER_REJECTED = 4001;
 const UNSUPPORTED_METHOD = 4200;
 const UNKNOWN_CHAIN = 4902;
+// A wallet that does not support a method, or does not know it.
+const UNKNOWN_METHOD = [UNSUPPORTED_METHOD, -32601];
 
 export class NoWallet extends Error {}
 
@@ -134,7 +136,8 @@ export const sendTransaction = async ({ provider, address }: Connection, { to, d
 
 // What a wallet can do beyond one transaction at a time, from EIP-5792's wallet_getCapabilities: send several calls in
 // one prompt, all or nothing (`atomic`), and list the tokens it holds (ERC-7811's `assets`). Asked once per wallet and
-// address: a wallet that does not answer can do neither.
+// address: a wallet that does not know the method can do neither. One that failed otherwise, as while it was locked,
+// can do neither for now, and is asked again the next time.
 export type Capabilities = { batch: boolean; atomic: boolean; assets: boolean };
 const NONE: Capabilities = { batch: false, atomic: false, assets: false };
 const asked = new WeakMap<Provider, Map<string, Promise<Capabilities>>>();
@@ -157,7 +160,10 @@ export function capabilities({ wallet, provider, address }: Connection): Promise
         // A wallet that answers sends calls together, even if not all or nothing.
         return { batch: true, atomic, assets: base.assetDiscovery?.supported === true };
       })
-      .catch(() => NONE);
+      .catch((error: unknown) => {
+        if (!UNKNOWN_METHOD.includes(code(error) ?? 0) && byAddress.get(key) === found) byAddress.delete(key);
+        return NONE;
+      });
     byAddress.set(key, found);
   }
   return found;

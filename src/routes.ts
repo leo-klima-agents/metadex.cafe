@@ -2,13 +2,13 @@ import { DEFAULT_OUTPUT, byKind, swapperOf, type Kind, type Output } from "./con
 
 // The page's addresses. Each is a fragment, which never reaches a server: `#app`, `#about`, `#hydrex`,
 // `#hydrex/carbon-impact`, `#hydrex/9540`, `#swap`, `#swap/weth`. A page's section is one more part, such as
-// `#about/check` or `#swap/weth/check`. Anything else is Home.
+// `#hydrex/carbon-impact/check` or `#swap/weth/check`. Anything else is Home.
 
 export type Route =
   | { view: "home" }
   | { view: "app"; section?: string }
   | { view: "hydrex" }
-  | { view: "about"; section?: string }
+  | { view: "about" }
   | { view: "product"; kind: Kind; section?: string }
   | { view: "position"; id: bigint }
   | { view: "swap"; output: Output; section?: string };
@@ -16,12 +16,11 @@ export type Route =
 // The sections each page has, in the order they come. Most open a popup; some are a part of one, as "control" is of
 // "check".
 export const APP_SECTIONS = ["allows"];
-export const ABOUT_SECTIONS = ["check", "safe", "figures"];
 export const PRODUCT_SECTIONS: Record<Kind, string[]> = {
   "carbon-impact": ["fees", "record", "joining", "carbon", "check", "control"],
   automaxi: ["fees", "record", "votes", "joining", "check", "control"],
 };
-export const SWAP_SECTIONS = ["fees", "control", "check", "approvals"];
+export const SWAP_SECTIONS = ["fees", "check", "approvals"];
 
 // Hydrex's accounts are numbered from 1. A number has at most 78 digits, as a uint256.
 const ACCOUNT = /^[1-9]\d{0,77}$/;
@@ -53,10 +52,7 @@ export function parse(hash: string): Route {
     if (second === undefined) return { view: "app" };
     return third === undefined && APP_SECTIONS.includes(second) ? { view: "app", section: second } : HOME;
   }
-  if (first === "about") {
-    if (second === undefined) return { view: "about" };
-    return third === undefined && ABOUT_SECTIONS.includes(second) ? { view: "about", section: second } : HOME;
-  }
+  if (first === "about") return second === undefined ? { view: "about" } : HOME;
   if (first === "swap") return swapRoute(second, third);
   if (first !== "hydrex") return HOME;
   if (second === undefined) return { view: "hydrex" };
@@ -77,7 +73,7 @@ export function hrefOf(route: Route): string {
     case "hydrex":
       return "#hydrex";
     case "about":
-      return route.section ? `#about/${route.section}` : "#about";
+      return "#about";
     case "product":
       return `#hydrex/${route.kind}${route.section ? `/${route.section}` : ""}`;
     case "position":

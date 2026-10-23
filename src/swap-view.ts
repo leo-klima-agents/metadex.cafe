@@ -1,9 +1,9 @@
 import type { Address } from "viem";
 import { now, same, type Receipt } from "./chain.ts";
-import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Output, type Swapper } from "./config.ts";
-import { clone, fill, fillAddress, show, showHex } from "./dom.ts";
+import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
+import { clone, fill, fillAddress, show } from "./dom.ts";
 import { tokensOf } from "./earnings.ts";
-import { count, figure, fraction, list, short, usd } from "./format.ts";
+import { bps, count, figure, fraction, list, short, usd } from "./format.ts";
 import { earningsOf, onEarnings } from "./last-epoch.ts";
 import { pricesNow, usdOf, type Token } from "./prices.ts";
 import type { Amount } from "./receipts.ts";
@@ -20,14 +20,14 @@ import {
   reasonOf,
   simulate,
   split,
-  swapChecks,
+  onBase,
   swapGas,
   swapReturns,
   swappedIn,
   type Found,
   type Route,
 } from "./swap.ts";
-import { approveSlip, costs, gasUsd, pathWords, swapSlip, type Costs } from "./swap-calls.ts";
+import { approveSlip, costs, gasUsd, hopsWords, swapSlip, type Costs } from "./swap-calls.ts";
 import {
   allowancesOf,
   describe,
@@ -47,7 +47,7 @@ import { walletAssets, type Connection } from "./wallet.ts";
 // here too.
 
 const view = document.querySelector<HTMLElement>('.view[data-view="swap"]')!;
-const form = view.querySelector<HTMLElement>(".swap-form")!;
+const summary = view.querySelector<HTMLElement>(".swap-summary")!;
 const rowsList = view.querySelector<HTMLElement>(".swap-rows")!;
 const status = view.querySelector<HTMLElement>(".swap-status")!;
 const reviewButton = view.querySelector<HTMLButtonElement>(".swap-review")!;
@@ -97,8 +97,8 @@ export type SwapContext = { connection(): Connection | undefined; hooks: Hooks }
 let context: SwapContext;
 let scans = 0;
 let scan: Scan | undefined;
-// Each output's failed checks, once run, and the payout's tokens and amounts to tick, for the visit.
-let failedOutputs: Map<Output, string[]> | undefined;
+// Whether the page's RPCs serve Base, once read, and the payout's tokens and amounts to tick, for the visit.
+let base: boolean | undefined;
 let prefilled: Map<string, bigint> | undefined;
 // Whether a scan under way should be followed by another, as when new tokens became known meanwhile.
 let rescan = false;
@@ -111,9 +111,8 @@ const swapperShown = (): Swapper => {
   const shown = route();
   return swapperOf(shown.view === "swap" ? shown.output : DEFAULT_OUTPUT)!;
 };
-// Until the checks have run, no output is offered; once they have, those whose checks failed are off.
-export const outputOff = (swapper: Swapper): boolean => !failedOutputs || failedOutputs.get(swapper.output)!.length > 0;
-export const swappersChecked = (): boolean => !!failedOutputs;
+// Until the page has read that its RPCs serve Base, and unless they do, no swap is offered.
+export const swapsOff = (): boolean => base !== true;
 const tell = (): void => listeners.forEach((listener) => listener());
 
 // Called once something the App shows from here changes: the swap's line, or the approvals left.
@@ -200,19 +199,22 @@ function drawRow(row: Row, scanned: Scan): void {
 
 function drawAll(): void {
   const signedIn = !!context.connection();
-  form.hidden = !signedIn;
+  // Without a wallet, the outputs show, and the tokens' list says that no wallet is connected.
+  show(".swap-approvals-open, .add-token", signedIn, view);
   const swapper = swapperShown();
   for (const input of view.querySelectorAll<HTMLInputElement>('input[name="output"]')) {
-    const each = swapperOf(input.value)!;
-    input.checked = each === swapper;
-    input.disabled = !!failedOutputs && outputOff(each);
+    input.checked = swapperOf(input.value) === swapper;
+    input.disabled = base === false;
     show(".output-off", input.disabled, input.closest("label")!);
   }
-  const off = failedOutputs ? SWAPPERS.filter(outputOff) : [];
-  show(".swap-off", off.length > 0, view);
-  show(".swap-unchecked", !failedOutputs, view);
-  fill(view, { "swap-off-outputs": list(off.map(({ symbol }) => symbol)) });
-  if (!scan || !signedIn) return;
+  show(".swap-off", base === false, view);
+  show(".swap-unchecked", base === undefined, view);
+  if (!scan || !signedIn) {
+    status.hidden = summary.hidden = true;
+    show(".swap-failed, .swap-none", false, view);
+    return void fill(view, { "swap-ticked": "" });
+  }
+  summary.hidden = false;
   const scanned = scan;
   show(".swap-failed", scanned.failed, view);
   show(".swap-none", !scanned.reading && !scanned.failed && !scanned.rows.length, view);
@@ -224,18 +226,17 @@ function drawAll(): void {
   summarise(scanned, ticked);
 }
 
-// What the ticked tokens fetch together: earned, then taken, then what reaches you, and the calls the wallet will see.
+// What the ticked tokens fetch together, row by row: the quote, less the 1%, is what reaches you, and the slippage picked
+// sets the least that may. Gas is paid apart, in ETH.
 function summarise(scanned: Scan, ticked: Row[]): void {
   const { swapper } = scanned;
-  const sells = view.querySelector(".swap-sells")!;
-  const costsLine = view.querySelector<HTMLElement>(".swap-costs")!;
+  const sells = view.querySelector<HTMLElement>(".swap-sells")!;
+  const breakdown = view.querySelector<HTMLElement>(".breakdown")!;
   const splitLine = view.querySelector<HTMLElement>(".swap-split")!;
-  reviewButton.disabled = !ticked.length || outputOff(swapper);
-  if (!ticked.length) {
-    sells.textContent = "Pick tokens to sell";
-    costsLine.hidden = splitLine.hidden = true;
-    return;
-  }
+  reviewButton.disabled = !ticked.length || swapsOff();
+  sells.hidden = ticked.length > 0;
+  breakdown.hidden = !ticked.length;
+  if (!ticked.length) return void (splitLine.hidden = true);
   const out = ticked.reduce((sum, row) => sum + row.found!.out, 0n);
   const least = ticked.reduce((sum, row) => sum + minimumOf(row.found!.out, margin()), 0n);
   const fee = ticked.reduce((sum, row) => sum + feeOf(row.found!.out), 0n);
@@ -243,10 +244,14 @@ function summarise(scanned: Scan, ticked: Row[]): void {
   const swaps = split(ticked.map((row) => row.found!.route)).length;
   const gas = BigInt(approvals) * APPROVAL_GAS + swapGas(ticked.map((row) => row.found!.route));
   const dollars = scanned.costs && gasUsd(gas, scanned.costs);
-  const symbol = swapper.symbol;
-  sells.textContent = `≈ ${figure(paidOf(out), swapper.decimals)} ${symbol}, at least ${figure(least, swapper.decimals)}`;
-  costsLine.textContent = `Fee ≈ ${figure(fee, swapper.decimals)} ${symbol} · Gas ${dollars === undefined ? "…" : usd(dollars)}`;
-  costsLine.hidden = false;
+  const of = (amount: bigint) => `${figure(amount, swapper.decimals)} ${swapper.symbol}`;
+  fill(breakdown, {
+    "swap-quoted": `≈ ${of(out)}`,
+    "swap-fee": `− ${of(fee)}`,
+    "swap-paid": `≈ ${of(out - fee)}`,
+    "swap-least": of(least),
+    "swap-gas": dollars === undefined ? "…" : usd(dollars),
+  });
   splitLine.hidden = swaps < 2;
   splitLine.textContent = `${swaps} swaps`;
 }
@@ -453,10 +458,13 @@ export async function resetReview(these: Allowance[]): Promise<void> {
 }
 
 // The review of a swap: the routes, each with its minimum, and the approvals it needs, run through Base first. `approve`
-// is what to approve, when not the route's amount, as for a swap of a whole balance after a claim.
+// is what to approve, when not the route's amount, as for a swap of a whole balance after a claim. `margin` is the
+// slippage that set the minimums, which `yours` says the owner picked.
 export type Plan = {
   swapper: Swapper;
   items: { token: Token; route: Route; out: bigint; allowance: bigint; approve?: bigint }[];
+  margin: bigint;
+  yours?: boolean;
 };
 
 export async function planSteps(
@@ -483,9 +491,11 @@ async function reviewSwap(): Promise<void> {
   if (!connection || !scanned) return;
   const { swapper } = scanned;
   const ticked = scanned.rows.filter((row) => row.ticked && row.found);
-  if (!ticked.length || outputOff(swapper)) return;
+  if (!ticked.length || swapsOff()) return;
   const plan: Plan = {
     swapper,
+    margin: margin(),
+    yours: true,
     items: ticked.map((row) => ({
       token: row.token,
       route: { ...row.found!.route, amount: row.amount, minPaid: minimumOf(row.found!.out, margin()) },
@@ -546,8 +556,11 @@ export async function openSwapReview(
       );
     });
   });
+  // A bill: each token, what it fetches and its route by its tokens and pools, then what they all fetch, the 1%, what
+  // reaches you, and the least that may, which the slippage sets. Gas heads it, as it is paid apart, in ETH.
   const body = clone("swap-before");
   const lines = body.querySelector(".swap-lines")!;
+  const of = (amount: bigint) => `${figure(amount, swapper.decimals)} ${swapper.symbol}`;
   let out = 0n;
   let least = 0n;
   for (const { token, route } of plan.items) {
@@ -558,19 +571,9 @@ export async function openSwapReview(
     fill(line, {
       "line-symbol": token.symbol,
       "line-amount": figure(route.amount, token.decimals),
-      "line-fetches": reason
-        ? "skipped"
-        : `≈ ${figure(paidOf(fetched), swapper.decimals)} ${swapper.symbol}, at least ${figure(route.minPaid, swapper.decimals)}`,
+      "line-fetches": reason ? "skipped" : `≈ ${of(fetched)}`,
+      "line-route": hopsWords(route, tokens),
     });
-    line.querySelector(".line-route")!.replaceChildren(
-      ...pathWords(route, tokens).map((word) => {
-        if (typeof word === "string") return word;
-        const code = document.createElement("code");
-        code.translate = false;
-        showHex(code, word.code);
-        return code;
-      }),
-    );
     show(".line-skip", !!reason, line);
     if (reason) fill(line, { "line-skip-words": `Skipped: ${reason}` });
     lines.append(line);
@@ -581,19 +584,19 @@ export async function openSwapReview(
     : BigInt(approvals.length) * APPROVAL_GAS + swapGas(plan.items.map(({ route }) => route));
   const dollars = found ? gasUsd(gas, found) : undefined;
   fill(body, {
-    "swap-fetched": `≈ ${figure(out, swapper.decimals)} ${swapper.symbol}`,
-    "swap-fee": `≈ −${figure(fee, swapper.decimals)} ${swapper.symbol}`,
-    "swap-paid": `≈ ${figure(out - fee, swapper.decimals)} ${swapper.symbol}`,
-    "swap-least": `At least ${figure(least, swapper.decimals)} ${swapper.symbol}`,
+    "swap-output": swapper.symbol,
+    "swap-fetched": `≈ ${of(out)}`,
+    "swap-fee": `− ${of(fee)}`,
+    "swap-paid": `≈ ${of(out - fee)}`,
+    "swap-least": of(least),
+    "swap-slippage": `${plan.yours ? "Your slippage" : "Slippage"}: ${bps(plan.margin)}`,
     "swap-gas": dollars === undefined ? `${gas.toLocaleString("en-GB")} gas` : usd(dollars),
     "swap-simulated": "Not simulated: these are quotes.",
   });
   show(".swap-simulated", !simulated, body);
-  const safe = !!connection.wallet.propose;
-  show(".swap-safe", safe, body);
   const pages: ReviewPage[] = [{ title: "What you swap", body }, { title: "What your wallet will ask" }];
   openReview({
-    name: `Swap into ${swapper.symbol}`,
+    name: ["Swap into ", { code: swapper.symbol }],
     pages,
     steps,
     checkHref: hrefOf({ view: "swap", output: swapper.output, section: "check" }),
@@ -706,16 +709,8 @@ export function walletChanged(): void {
   void readAllowances();
 }
 
-async function checkSwappers(): Promise<void> {
-  failedOutputs = await swapChecks();
-  for (const item of view.querySelectorAll<HTMLElement>("[data-check]")) {
-    item.querySelector(".check-failed")?.remove();
-    const failing = SWAPPERS.filter(({ output }) => failedOutputs!.get(output)!.includes(item.dataset.check!));
-    if (!failing.length) continue;
-    const mark = clone("check-failed");
-    mark.querySelector("b")!.textContent = `Failed for ${list(failing.map(({ symbol }) => symbol))}:`;
-    item.prepend(mark);
-  }
+async function checkBase(): Promise<void> {
+  base = await onBase();
   drawAll();
 }
 
@@ -773,13 +768,18 @@ export function initSwap(given: SwapContext): void {
     if (scan?.reading) rescan = true;
     else rescanNow();
   });
-  // Until the checks have run once, a failed read of them is tried again within a minute.
-  const check = (): void =>
-    void checkSwappers().catch((error: unknown) => {
+  // Until the page has read once that its RPCs serve Base, a failed read is tried again within a minute, by one retry at
+  // a time however many reads failed meanwhile, as the hourly one.
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  const check = (): void => {
+    clearTimeout(retry);
+    retry = undefined;
+    void checkBase().catch((error: unknown) => {
       console.error(error);
       drawAll();
-      if (!failedOutputs) setTimeout(check, 60_000);
+      if (base === undefined) retry ??= setTimeout(check, 60_000);
     });
+  };
   check();
   setInterval(check, 3_600_000);
 }

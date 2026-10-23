@@ -2,7 +2,6 @@ import { encodeFunctionData, keccak256, parseAbi, zeroAddress, type Address, typ
 import { blockTime, call, codeHash, implementation, read, required, rpc, same, type Call } from "./chain.ts";
 import {
   ACCOUNT_NAMES,
-  ANCHORS,
   APPROVAL_LOGIC,
   APPROVAL_LOGIC_CODE_HASH,
   AUTOMATIONS,
@@ -14,13 +13,12 @@ import {
   VOTING_ESCROW,
   VOTING_ESCROW_IMPLEMENTATION,
   VOTING_ESCROW_IMPLEMENTATION_CODE_HASH,
-  WETH,
   type Automation,
   type Kind,
 } from "./config.ts";
 import { WEEK, clean, list, weekStart } from "./format.ts";
 import conduits from "./hydrex-conduits.json" with { type: "json" };
-import { feedAt } from "./prices.ts";
+import { costs } from "./swap-calls.ts";
 import type { Slip } from "./review.ts";
 import type { Tx } from "./wallet.ts";
 
@@ -265,9 +263,11 @@ export async function readAccounts(owner: Address): Promise<Holdings> {
 }
 
 // One account, whoever owns it, as its owner's holdings of that account alone. Undefined if Hydrex has no account with
-// that number, as when it was never minted, or was merged or withdrawn.
+// that number, as when it was never minted, or was merged or withdrawn: ownerOf then fails, as a call can that fails for
+// another reason, so a failed one is asked again on its own before the account is taken for gone.
 export async function readAccount(id: bigint): Promise<Holdings | undefined> {
-  const [owner, time, ...voted] = await withContext([escrow("ownerOf", id)]);
+  const [first, time, ...voted] = await withContext([escrow("ownerOf", id)]);
+  const owner = first ?? (await read([escrow("ownerOf", id)]))[0];
   if (owner === undefined) return undefined;
   required([time]);
   const epochStart = epochAt(time);
@@ -386,7 +386,7 @@ function approval({ id }: Account, approve: boolean, says: string, target: Targe
         code: target.address,
         under: conduitName,
       },
-      { label: "Account", name: "account", code: String(id) },
+      { label: "Hydrex account", name: "account", code: String(id) },
       { label: "Approve", name: "approve", code: String(approve) },
     ],
     note: `The selector, then each 32-byte word on two lines: the conduit, ${id} as ${id.toString(16)}, and ${approve} as ${Number(approve)}.`,
@@ -516,11 +516,11 @@ export async function failedChecks(): Promise<Checks> {
 
 // What gas costs in dollars for some calls from `from`, at today's prices: each costs about what the first does, as they
 // differ only by account, plus the most Base charges to post it to Ethereum. Undefined if ETH has no price. The gas
-// price, ETH's price, and what posting costs for each size of call, are read once for all the calls priced.
+// price and ETH's price are the swap's, read at most once a minute; what posting costs for each size of call is read
+// once for all the calls priced.
 export type GasCost = (steps: Tx[], from: Address) => Promise<number | undefined>;
 
 export function gasCosts(): GasCost {
-  let prices: Promise<[Hex, number | undefined]> | undefined;
   const posting = new Map<bigint, Promise<bigint>>();
   const postingOf = (size: bigint): Promise<bigint> => {
     if (!posting.has(size)) {
@@ -535,17 +535,15 @@ export function gasCosts(): GasCost {
   return async (steps, from) => {
     const [first] = steps;
     if (!first) return 0;
-    const { feed } = ANCHORS.find(({ address }) => same(address, WETH))!;
-    prices ??= Promise.all([rpc<Hex>("eth_gasPrice", []), feedAt(feed, Infinity, read)]);
     // The call's data, and about as much again for the transaction's other fields.
     const size = BigInt((first.data.length - 2) / 2 + 100);
-    const [[gasPrice, ethUsd], gas, l1] = await Promise.all([
-      prices,
+    const [{ gasPrice, ethUsd }, gas, l1] = await Promise.all([
+      costs(),
       rpc<Hex>("eth_estimateGas", [{ from, to: first.to, data: first.data }]),
       postingOf(size),
     ]);
     if (ethUsd === undefined) return undefined;
-    const wei = (BigInt(gas) * BigInt(gasPrice) + l1) * BigInt(steps.length);
+    const wei = (BigInt(gas) * gasPrice + l1) * BigInt(steps.length);
     return (Number(wei) / 1e18) * ethUsd;
   };
 }

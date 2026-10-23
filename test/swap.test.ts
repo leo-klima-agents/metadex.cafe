@@ -6,6 +6,7 @@ import {
   encodeEventTopics,
   encodeFunctionResult,
   parseAbi,
+  toFunctionSelector,
   zeroAddress,
   type Address,
   type Hex,
@@ -16,8 +17,12 @@ import {
   best,
   candidatePaths,
   feeOf,
+  findRoute,
+  hopName,
   minimumOf,
+  onBase,
   paidOf,
+  partOf,
   poolName,
   quoteAll,
   routeGas,
@@ -127,6 +132,10 @@ test("the page lists each of the swapper's twelve exchanges once, by its place i
   assert.equal(poolName(hop(10, USDC, 500)), "Uniswap v3 0.05%");
   assert.equal(poolName(hop(4, USDC, 0, 100)), "Aero Slipstream, tick spacing 100");
   assert.equal(poolName(hop(0)), "Hydrex Integral");
+  // A bill names a hop's pool without its tick spacing, and without its address.
+  assert.equal(hopName(hop(10, USDC, 500)), "Uniswap v3 0.05%");
+  assert.equal(hopName(hop(4, USDC, 0, 100)), "Aero Slipstream");
+  assert.equal(hopName(hop(0)), "Hydrex Integral");
 });
 
 test("Aero's classic pools win a hop only by more than 1%, as their tax is not in the quote", () => {
@@ -258,4 +267,77 @@ test("a swap's receipt counts only the caller's own routes", () => {
     paid: 99n,
     fee: 1n,
   });
+});
+
+test("a route for part of what it was quoted for shrinks its quote and minimum in proportion, and not for more", () => {
+  const item = { out: 1_000n, route: { token: AVNT, amount: 100n, minPaid: 985n, hops: [hop(10)] } };
+  assert.deepEqual(partOf(item, 60n, 100n), { out: 600n, route: { ...item.route, amount: 60n, minPaid: 591n } });
+  assert.deepEqual(partOf(item, 100n, 100n), { ...item, route: { ...item.route, amount: 100n } });
+  assert.deepEqual(partOf(item, 120n, 100n), { ...item, route: { ...item.route, amount: 120n } });
+});
+
+test("a route of one hop is quoted once, as its hop, and not again as a whole", async () => {
+  const multicall = parseAbi([
+    "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
+  ]);
+  const v3 = EXCHANGES.find(({ kind }) => kind === "v3")!;
+  const v3Abi = parseAbi(["function getPool(address tokenA, address tokenB, uint24 fee) view returns (address)"]);
+  const quote = toFunctionSelector(
+    "function quote((address,uint256,uint256,(uint8,address,address,uint24,int24)[])[])",
+  );
+  const tickSpacings = toFunctionSelector("function tickSpacings()");
+  const extsload = toFunctionSelector("function extsload(bytes32,uint256)");
+  // The only pool is Uniswap v3's at 0.05% from AVNT to USDC, which pays twice what it takes.
+  let quoted = 0;
+  const original = globalThis.fetch;
+  globalThis.fetch = async (_, init) => {
+    const { params } = JSON.parse(String(init?.body)) as { params: [{ data: Hex }] };
+    const { args } = decodeFunctionData({ abi: multicall, data: params[0].data });
+    const replies = args[0].map(({ target, callData }) => {
+      const ok = (returnData: Hex) => ({ success: true, returnData });
+      if (callData.startsWith(quote)) {
+        const { args: routes } = decodeFunctionData({ abi: swapperAbi, data: callData });
+        const results = (routes[0] as readonly { amount: bigint }[]).map(({ amount }) => {
+          quoted++;
+          return { done: true, amountIn: amount, amountOut: 2n * amount, reason: "0x" as Hex };
+        });
+        return ok(encodeFunctionResult({ abi: swapperAbi, functionName: "quote", result: results }));
+      }
+      if (callData.startsWith(tickSpacings)) return ok(encodeAbiParameters([{ type: "int24[]" }], [[]]));
+      if (callData.startsWith(extsload))
+        return ok(encodeAbiParameters([{ type: "bytes32[]" }], [Array(4).fill(`0x${"0".repeat(64)}`)]));
+      let pool: Address = zeroAddress;
+      if (target.toLowerCase() === v3.factory.toLowerCase()) {
+        const {
+          args: [a, b, fee],
+        } = decodeFunctionData({ abi: v3Abi, data: callData });
+        if (a.toLowerCase() === AVNT.toLowerCase() && b.toLowerCase() === USDC.toLowerCase() && fee === 500)
+          pool = POOL;
+      }
+      return ok(encodeAbiParameters([{ type: "address" }], [pool]));
+    });
+    const result = encodeFunctionResult({ abi: multicall, functionName: "aggregate3", result: replies });
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }));
+  };
+  try {
+    const found = await findRoute(AVNT, 1_000n, SWAPPERS[0]!, false);
+    assert.equal(found?.out, 2_000n);
+    assert.equal(found?.route.hops.length, 1);
+    assert.equal(quoted, 1);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("swaps are offered only while the page's RPCs serve Base", async () => {
+  const original = globalThis.fetch;
+  let chainId = "0x2105";
+  globalThis.fetch = async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: chainId }));
+  try {
+    assert.equal(await onBase(), true);
+    chainId = "0x1";
+    assert.equal(await onBase(), false);
+  } finally {
+    globalThis.fetch = original;
+  }
 });

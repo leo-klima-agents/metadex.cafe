@@ -25,7 +25,7 @@ import {
 } from "../src/config.ts";
 import { LANG, bps } from "../src/format.ts";
 import conduits from "../src/hydrex-conduits.json" with { type: "json" };
-import { ABOUT_SECTIONS, PRODUCT_SECTIONS, parse } from "../src/routes.ts";
+import { PRODUCT_SECTIONS, parse } from "../src/routes.ts";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -97,17 +97,18 @@ test("each automation has a kind, a name and the approvals of its own, and AutoM
 
 test("each automation's page has the same parts, in the same order, and lists every check that can fail", () => {
   const html = read("index.html");
+  // Every check that can fail but the RPC's, which the page runs without naming.
   const failing: Record<string, string[]> = {
-    "carbon-impact": ["chain", "code", "contracts", "token", "approvals", "upgrade", "logic"],
-    automaxi: ["chain", "automaxi-code", "automaxi-contracts", "automaxi-approvals", "upgrade", "logic"],
+    "carbon-impact": ["code", "contracts", "token", "approvals", "upgrade", "logic"],
+    automaxi: ["automaxi-code", "automaxi-contracts", "automaxi-approvals", "upgrade", "logic"],
   };
   for (const { kind } of AUTOMATIONS) {
     const page = productOf(html, kind);
     const sections = [...page.matchAll(/data-section="([^"]+)"/g)].map(([, section]) => section);
     assert.deepEqual(sections, PRODUCT_SECTIONS[kind], kind);
     const parts = [...page.matchAll(/<(h1|h2)[^>]*>([^<]+)</g)].map(([, , text]) => text!.trim());
-    // Only the name and the accounts are headings: the rest of the page is its key figures, and popups.
-    assert.deepEqual(parts, [AUTOMATIONS.find((each) => each.kind === kind)!.name, "Your accounts", "Can join"]);
+    // Only the name and the Hydrex accounts are headings: the rest of the page is its key figures, and popups.
+    assert.deepEqual(parts, [AUTOMATIONS.find((each) => each.kind === kind)!.name, "Your Hydrex accounts", "Can join"]);
     // Each popup opens from an info button, and holds a section or none: each section is in one.
     const pops = [...page.matchAll(/<div\s+class="pop[^"]*"\s+id="([^"]+)"\s+popover\b/g)].map(([, id]) => id!);
     for (const id of pops) assert.match(page, new RegExp(`popovertarget="${id}"\\s+aria-label=`), `${id} has a button`);
@@ -119,11 +120,14 @@ test("each automation's page has the same parts, in the same order, and lists ev
     const checks = [...page.matchAll(/data-check="([^"]+)"/g)].map(([, check]) => check);
     assert.deepEqual([...checks].sort(), [...failing[kind]!].sort(), kind);
   }
+  // About is its rows alone, with no popup, and the footer leads to it, without the version.
   const about = viewOf(html, 'data-view="about"');
+  assert.doesNotMatch(about, /data-section=|popover/);
   assert.deepEqual(
-    [...about.matchAll(/data-section="([^"]+)"/g)].map(([, section]) => section),
-    ABOUT_SECTIONS,
+    [...about.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
+    ["Official address", "Cookies stored", "Version"],
   );
+  assert.equal(/<footer>([\s\S]*?)<\/footer>/.exec(html)?.[1]?.trim(), '<p><a href="#about">About</a></p>');
 });
 
 test("the page may reach its RPCs and nothing else, and the README lists them", () => {
@@ -189,8 +193,8 @@ test("the page names no operator, links to no repository but Hydrex's, and shows
   assert.ok(automaxi.includes(`https://repo.sourcify.dev/8453/${AUTOMAXI.address}`));
 });
 
-test("each swapper has its output, a checksummed address and a code hash, and the swap's page links them all", async () => {
-  const { SWAPPERS, EXCHANGES, SWAP_TREASURY, AUTOMAXI_TREASURY: treasury } = await import("../src/config.ts");
+test("each swapper has its output and a checksummed address, and the swap's page links them all", async () => {
+  const { SWAPPERS, EXCHANGES, AUTOMAXI_TREASURY } = await import("../src/config.ts");
   const tokens = (await import("../src/base-tokens.json", { with: { type: "json" } })).default;
   const html = read("index.html");
   const swap = viewOf(html, 'data-view="swap"');
@@ -198,28 +202,25 @@ test("each swapper has its output, a checksummed address and a code hash, and th
     SWAPPERS.map(({ output }) => output),
     ["usdc", "eurc", "weth", "cbbtc", "aero", "hydx"],
   );
-  for (const { address, token, codeHash, symbol } of SWAPPERS) {
+  for (const { address, token, symbol } of SWAPPERS) {
     assert.equal(getAddress(address), address);
     assert.equal(getAddress(token), token);
-    assert.match(codeHash, /^0x[0-9a-f]{64}$/);
     assert.ok(swap.includes(`/address/${address}#code`), `${symbol}'s swapper is linked to its verified source`);
-    assert.ok(!html.includes(codeHash), `${symbol}'s code hash is not on the page`);
     // Every output is on the page's list of tokens.
     assert.ok(
       tokens.some((listed) => listed.address === token && listed.symbol === symbol),
       symbol,
     );
   }
-  assert.equal(SWAP_TREASURY, treasury);
   assert.equal(EXCHANGES.length, 12);
-  // The factories, in the order the page checks them, each under its exchange's name.
+  // The page lists only the swappers, each under its output's name.
   for (const { factory } of EXCHANGES) assert.equal(getAddress(factory), factory);
   const listed = [...swap.matchAll(/<dt>([^<]+)<\/dt>\s*<dd>([\s\S]*?)<\/dd>/g)].flatMap(([, name, value]) =>
-    [...value!.matchAll(/\/address\/(0x[0-9a-fA-F]{40})"/g)].map(([, address]) => `${name} ${address}`),
+    [...value!.matchAll(/\/address\/(0x[0-9a-fA-F]{40})[#"]/g)].map(([, address]) => `${name} ${address}`),
   );
   assert.deepEqual(
-    listed.filter((line) => EXCHANGES.some(({ factory }) => line.endsWith(factory))),
-    EXCHANGES.map(({ name, factory }) => `${name} ${factory}`),
+    listed,
+    SWAPPERS.map(({ symbol, address }) => `${symbol} Swapper ${address}`),
   );
   // The page's list of tokens: checksummed, each once.
   for (const { address } of tokens) assert.equal(getAddress(address), address);
@@ -234,13 +235,66 @@ test("each swapper has its output, a checksummed address and a code hash, and th
   const facts = /<dl class="fee-facts">[\s\S]*?<\/dl>/.exec(swap)?.[0] ?? "";
   assert.deepEqual(
     [...facts.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
-    ["Swap fee", "Pool fees", "Price impact", "Slippage", "Gas"],
+    ["Swap fee", "Pool fees", "Price impact", "Gas"],
   );
-  assert.ok(!swap.includes(SWAP_TREASURY) && !swap.includes("2-of-3"));
+  // What the slippage picked is, right after the costs, and what happens to a token that falls short of it.
+  const slippage = /<p class="label">Slippage<\/p>\s*<dl class="rows">[\s\S]*?<\/dl>/.exec(swap)?.[0] ?? "";
   assert.deepEqual(
-    [...swap.matchAll(/data-check="([^"]+)"/g)].map(([, check]) => check),
-    ["chain", "swap-code", "swap-output", "swap-treasury", "swap-fee", "swap-exchanges"],
+    [...slippage.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
+    ["What it is", "When unmet"],
   );
+  assert.match(slippage, /How much less than quoted you accept/);
+  assert.match(slippage, /The input token stays in your wallet/);
+  // The swap's own summary sets the slippage on the line of the least that may reach you.
+  assert.match(swap, /<label\s*>At least, with\s*<select class="swap-margin">/);
+  assert.ok(!swap.includes(AUTOMAXI_TREASURY) && !swap.includes("2-of-3"));
+  // The swappers are immutable: the page checks only that its RPCs serve Base, and says nothing of it.
+  assert.doesNotMatch(swap, /data-check=|<h3>Checks<\/h3>|serves Base/);
+});
+
+test("the header holds the logo and the name, and a button to connect a wallet; the wallet's pages lead back to it", () => {
+  const html = read("index.html");
+  const header = /<header class="site">[\s\S]*?<\/header>/.exec(html)?.[0] ?? "";
+  assert.match(header, /<a class="name" href="#"><img src="icon\.svg" alt="" [^>]*\/> metaDEX Café<\/a>/);
+  assert.match(header, /<button type="button" class="connect">Connect a wallet<\/button>/);
+  assert.match(header, /<a class="to-app button wallet-state" href="#app" hidden/);
+  // Home and About are the page's own; the App is "Your Wallet", and every other view names the way back to it first.
+  const trail = (view: string) => /<nav class="trail" aria-label="Breadcrumb">(.*?)<\/nav>/.exec(view)?.[1];
+  for (const name of ["home", "about"]) assert.equal(trail(viewOf(html, `data-view="${name}"`)), undefined, name);
+  assert.match(viewOf(html, 'data-view="app"'), /<h1 tabindex="-1">Your Wallet<\/h1>/);
+  for (const name of ["hydrex", "swap"]) {
+    assert.equal(trail(viewOf(html, `data-view="${name}"`)), '<a href="#app">Your Wallet</a>', name);
+  }
+  for (const view of [
+    productOf(html, "carbon-impact"),
+    productOf(html, "automaxi"),
+    viewOf(html, 'data-view="position"'),
+  ]) {
+    assert.equal(trail(view), '<a href="#app">Your Wallet</a><a href="#hydrex">Hydrex</a>');
+  }
+  // Only the App and the header's popup hold the wallet buttons.
+  assert.equal(html.match(/<div class="wallet-slot"><\/div>/g)?.length, 2);
+  assert.ok(viewOf(html, 'data-view="app"').includes('<div class="wallet-slot"></div>'));
+  assert.ok(header.includes('<div class="wallet-slot"></div>'));
+});
+
+test("on Hydrex's page, the automations come before the Hydrex accounts, whose groups are a level below", () => {
+  const hydrex = viewOf(read("index.html"), 'data-view="hydrex"');
+  const headings = [...hydrex.matchAll(/<(h[1-3])[^>]*>([\s\S]*?)<\/\1>/g)].map(
+    ([, level, inner]) => `${level} ${inner!.replace(/<[^>]+>/g, "").trim()}`,
+  );
+  assert.deepEqual(headings, [
+    "h1 Hydrex",
+    "h2 Automations",
+    "h3 Carbon Impact",
+    "h3 AutoMaxi",
+    "h3 Vote yourself",
+    "h2 Your Hydrex accounts",
+    "h3 Needs you",
+    "h3 In Carbon Impact",
+    "h3 In AutoMaxi",
+    "h3 Other Hydrex accounts",
+  ]);
 });
 
 test("AutoMaxi's page no longer says that owners can claim on Hydrex without its fee, but still does for leaving", () => {

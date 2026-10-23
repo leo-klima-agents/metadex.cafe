@@ -19,15 +19,24 @@
   </head>
   <body>
     <header class="site">
-      <a class="name" href="#">metaDEX Café</a>
+      <a class="name" href="#"><img src="icon.svg" alt="" width="28" height="28" /> metaDEX Café</a>
       <nav aria-label="Site">
-        <a class="to-app button" href="#app"
-          ><span class="open">Open app</span
-          ><span class="wallet-state" hidden
-            ><span class="visually-hidden">Your wallet, connected as </span
-            ><span class="wallet-short" translate="no"></span></span
+        <button type="button" class="connect">Connect a wallet</button>
+        <a class="to-app button wallet-state" href="#app" hidden
+          ><span class="visually-hidden">Your Wallet, connected as </span
+          ><span class="wallet-short" translate="no"></span
         ></a>
       </nav>
+      <!-- With one wallet in the browser, the button connects it at once; with several, or none, it opens this. -->
+      <div class="pop" id="connect" popover role="dialog" aria-labelledby="connect-title">
+        <div class="pop-head">
+          <h3 id="connect-title">Connect a wallet</h3>
+          <button type="button" class="pop-close" popovertarget="connect" popovertargetaction="hide" aria-label="Close">
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
+        <div class="wallet-slot"></div>
+      </div>
     </header>
 
     <main>
@@ -36,16 +45,17 @@
         <strong>Reading Base failed.</strong> <button type="button" class="again secondary compact">Try again</button>
       </p>
 
-      <!-- One view for each kind of page. The route in the hash picks the one shown, and Home is the App once a wallet
-           is connected: see src/views.ts. Details open from an info button, as a popup at the foot of each view. -->
+      <!-- One view for each kind of page. The route in the hash picks the one shown: see src/views.ts. The pages of the
+           wallet name the way back to it above their own, as "Your Wallet › Hydrex". Details open from an info button,
+           as a popup at the foot of each view. -->
       <div class="view home" data-view="home" data-title="metaDEX Café">
         <h1 tabindex="-1">Vote, claim and swap on Base</h1>
         <p class="buttons"><a class="button" href="#app">Open app</a></p>
       </div>
 
-      <div class="view" data-view="app" data-title="Your wallet · metaDEX Café" hidden>
+      <div class="view" data-view="app" data-title="Your Wallet · metaDEX Café" hidden>
         <div class="title-line">
-          <h1 tabindex="-1">Your wallet</h1>
+          <h1 tabindex="-1">Your Wallet</h1>
           <button type="button" class="secondary compact allows-open" popovertarget="app-allows" hidden>
             Approvals
           </button>
@@ -106,7 +116,10 @@
       </div>
 
       <div class="view" data-view="hydrex" data-title="Hydrex · metaDEX Café" hidden>
-        <h1 tabindex="-1">Hydrex</h1>
+        <div class="title-line">
+          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your Wallet</a></nav>
+          <h1 tabindex="-1">Hydrex</h1>
+        </div>
         <p class="notice checks-failed" data-kind="carbon-impact" role="alert" hidden>
           <span class="shape failed" aria-hidden="true"></span>Joining Carbon Impact is off.
           <a href="#hydrex/carbon-impact/check">Why</a>
@@ -115,7 +128,6 @@
           <span class="shape failed" aria-hidden="true"></span>Joining AutoMaxi is off.
           <a href="#hydrex/automaxi/check">Why</a>
         </p>
-        <div class="wallet-slot"></div>
         <p class="wrong-chain notice" role="alert" hidden>
           <span class="to-switch">
             Wrong network.
@@ -125,66 +137,19 @@
           <span class="safe-elsewhere" hidden>This Safe isn't on Base.</span>
         </p>
         <p id="underway" class="notice" hidden>Payout under way.</p>
-        <p id="epoch" class="epoch" hidden>Next epoch <span class="countdown">soon</span></p>
-        <p class="accounts-reading small" role="status" hidden>Loading…</p>
-        <p id="none" hidden>No accounts. <a href="https://www.hydrex.fi/accounts">Lock HYDX on Hydrex</a></p>
 
-        <div id="accounts" hidden>
-          <section class="group" data-group="needs" aria-labelledby="group-needs" hidden>
-            <h2 id="group-needs">Needs you <span class="count"></span></h2>
-            <ul class="accounts"></ul>
-            <p class="buttons">
-              <button type="button" data-action="join" data-automation="carbon-impact">Join Carbon Impact</button>
-              <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
-              <button type="button" data-action="self" class="secondary">Leave</button>
-            </p>
-          </section>
-          <section class="group" data-group="in:carbon-impact" aria-labelledby="group-carbon-impact" hidden>
-            <h2 id="group-carbon-impact">Carbon Impact <span class="count"></span></h2>
-            <ul class="accounts"></ul>
-            <p class="buttons">
-              <button type="button" data-action="leave" class="secondary">Leave</button>
-              <button type="button" data-action="join" data-automation="automaxi" class="secondary">
-                Move to AutoMaxi
-              </button>
-            </p>
-          </section>
-          <section class="group" data-group="in:automaxi" aria-labelledby="group-automaxi" hidden>
-            <h2 id="group-automaxi">AutoMaxi <span class="count"></span></h2>
-            <ul class="accounts"></ul>
-            <p class="buttons">
-              <button type="button" data-action="claim">Claim</button>
-              <button type="button" data-action="leave" class="secondary">Leave</button>
-              <button type="button" data-action="join" data-automation="carbon-impact" class="secondary">
-                Move to Carbon Impact
-              </button>
-            </p>
-          </section>
-          <section class="group" data-group="other" aria-labelledby="group-other" hidden>
-            <h2 id="group-other">Other accounts <span class="count"></span></h2>
-            <ul class="accounts"></ul>
-            <p class="buttons">
-              <button type="button" data-action="join" data-automation="carbon-impact">Join Carbon Impact</button>
-              <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
-              <button type="button" data-action="self" class="secondary">Leave</button>
-            </p>
-          </section>
-          <details class="group nothing" data-group="closed" hidden>
-            <summary class="nothing-count"></summary>
-            <ul class="accounts"></ul>
-          </details>
-        </div>
-
+        <!-- The automations come first, in one box, a row each, however many Hydrex accounts follow. -->
         <section id="menu" aria-labelledby="menu-title">
           <h2 id="menu-title">Automations</h2>
-          <ul class="menu">
+          <ul class="menu table">
             <li class="choice" data-choice="carbon-impact">
               <div class="choice-head">
                 <h3><a href="#hydrex/carbon-impact">Carbon Impact</a></h3>
                 <p class="small state">
                   <span class="state-normal"
                     ><span class="shape running impact-shape" aria-hidden="true"></span
-                    ><b class="impact-state">Running</b> · voted <time class="impact-voted">…</time></span
+                    ><b class="impact-state">Running</b><span class="impact-voted-words"> · voted </span
+                    ><time class="impact-voted">…</time></span
                   ><span class="state-failed" hidden
                     ><span class="shape failed" aria-hidden="true"></span><b>Joining off</b></span
                   >
@@ -211,7 +176,9 @@
                 <p class="small state">
                   <span class="state-normal"
                     ><span class="shape idle automaxi-shape" aria-hidden="true"></span><b class="automaxi-state">…</b
-                    ><span class="automaxi-voted-line" hidden> · voted <time class="automaxi-voted"></time></span></span
+                    ><span class="automaxi-voted-line" hidden
+                      ><span class="automaxi-voted-words"> · voted </span
+                      ><time class="automaxi-voted"></time></span></span
                   ><span class="state-failed" hidden
                     ><span class="shape failed" aria-hidden="true"></span><b>Joining off</b></span
                   >
@@ -253,6 +220,63 @@
             </li>
           </ul>
         </section>
+
+        <!-- Then the wallet's Hydrex accounts, in groups a level below: those that need their owner, those in each
+             automation, the others, and a fold for those with nothing to vote with. -->
+        <section id="yours" aria-labelledby="yours-title">
+          <div class="group-head">
+            <h2 id="yours-title">Your Hydrex accounts</h2>
+            <p id="epoch" class="epoch" hidden>Next epoch <span class="countdown">soon</span></p>
+          </div>
+          <p class="no-wallet-yet small">No wallet connected.</p>
+          <p class="accounts-reading small" role="status" hidden>Loading…</p>
+          <p id="none" hidden>No Hydrex accounts. <a href="https://www.hydrex.fi/accounts">Lock HYDX on Hydrex</a></p>
+          <div id="accounts" hidden>
+            <section class="group" data-group="needs" aria-labelledby="group-needs" hidden>
+              <h3 id="group-needs">Needs you <span class="count"></span></h3>
+              <ul class="accounts"></ul>
+              <p class="buttons">
+                <button type="button" data-action="join" data-automation="carbon-impact">Join Carbon Impact</button>
+                <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
+                <button type="button" data-action="self" class="secondary">Leave</button>
+              </p>
+            </section>
+            <section class="group" data-group="in:carbon-impact" aria-labelledby="group-carbon-impact" hidden>
+              <h3 id="group-carbon-impact">In Carbon Impact <span class="count"></span></h3>
+              <ul class="accounts"></ul>
+              <p class="buttons">
+                <button type="button" data-action="leave" class="secondary">Leave</button>
+                <button type="button" data-action="join" data-automation="automaxi" class="secondary">
+                  Move to AutoMaxi
+                </button>
+              </p>
+            </section>
+            <section class="group" data-group="in:automaxi" aria-labelledby="group-automaxi" hidden>
+              <h3 id="group-automaxi">In AutoMaxi <span class="count"></span></h3>
+              <ul class="accounts"></ul>
+              <p class="buttons">
+                <button type="button" data-action="claim">Claim</button>
+                <button type="button" data-action="leave" class="secondary">Leave</button>
+                <button type="button" data-action="join" data-automation="carbon-impact" class="secondary">
+                  Move to Carbon Impact
+                </button>
+              </p>
+            </section>
+            <section class="group" data-group="other" aria-labelledby="group-other" hidden>
+              <h3 id="group-other">Other Hydrex accounts <span class="count"></span></h3>
+              <ul class="accounts"></ul>
+              <p class="buttons">
+                <button type="button" data-action="join" data-automation="carbon-impact">Join Carbon Impact</button>
+                <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
+                <button type="button" data-action="self" class="secondary">Leave</button>
+              </p>
+            </section>
+            <details class="group nothing" data-group="closed" hidden>
+              <summary class="nothing-count"></summary>
+              <ul class="accounts"></ul>
+            </details>
+          </div>
+        </section>
       </div>
 
       <div
@@ -262,13 +286,15 @@
         data-title="Carbon Impact · metaDEX Café"
         hidden
       >
-        <nav class="crumbs" aria-label="Breadcrumb"><a href="#hydrex">Hydrex</a></nav>
-        <h1 tabindex="-1">Carbon Impact</h1>
+        <div class="title-line">
+          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your Wallet</a><a href="#hydrex">Hydrex</a></nav>
+          <h1 tabindex="-1">Carbon Impact</h1>
+        </div>
         <div class="state-line">
           <p class="state">
             <span class="state-normal"
-              ><span class="shape running impact-shape" aria-hidden="true"></span><b class="impact-state">Running</b> ·
-              voted <time class="impact-voted">…</time></span
+              ><span class="shape running impact-shape" aria-hidden="true"></span><b class="impact-state">Running</b
+              ><span class="impact-voted-words"> · voted </span><time class="impact-voted">…</time></span
             ><span class="state-failed" hidden
               ><span class="shape failed" aria-hidden="true"></span><b>Joining off</b></span
             >
@@ -317,13 +343,12 @@
             <dd class="sub through"><img src="klima-protocol.svg" alt="" width="24" height="24" /> Klima Protocol</dd>
           </div>
         </dl>
-        <div class="wallet-slot"></div>
         <p class="accounts-reading small" role="status" hidden>Loading…</p>
         <div class="mine" hidden>
-          <p class="mine-none" hidden>No account can join.</p>
+          <p class="mine-none" hidden>No Hydrex account can join.</p>
           <section class="group" data-group="in:carbon-impact" aria-labelledby="mine-carbon-impact" hidden>
             <div class="group-head">
-              <h2 id="mine-carbon-impact">Your accounts</h2>
+              <h2 id="mine-carbon-impact">Your Hydrex accounts</h2>
               <button type="button" class="info" popovertarget="ci-joining" aria-label="Joining and leaving">
                 <span aria-hidden="true">i</span>
               </button>
@@ -495,7 +520,7 @@
               <dd>Move at the next epoch, <time class="next-epoch">Thursday, 00:00 UTC</time></dd>
             </div>
             <div>
-              <dt>Your account</dt>
+              <dt>Your Hydrex account</dt>
               <dd>Stays in your wallet</dd>
             </div>
             <div>
@@ -585,7 +610,7 @@
               </div>
               <div>
                 <dt>Nobody</dt>
-                <dd>Can move your account or HYDX</dd>
+                <dd>Can move your Hydrex account or HYDX</dd>
               </div>
             </dl>
           </div>
@@ -652,7 +677,6 @@
           </dl>
           <h3>Checks</h3>
           <ul class="checks">
-            <li data-check="chain">The RPC serves Base</li>
             <li data-check="code">Its code matches</li>
             <li data-check="contracts">Its VotingEscrow and Voter match</li>
             <li data-check="token">It pays in kVCM</li>
@@ -664,14 +688,17 @@
       </div>
 
       <div class="view product" data-view="product" data-kind="automaxi" data-title="AutoMaxi · metaDEX Café" hidden>
-        <nav class="crumbs" aria-label="Breadcrumb"><a href="#hydrex">Hydrex</a></nav>
-        <h1 tabindex="-1">AutoMaxi</h1>
+        <div class="title-line">
+          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your Wallet</a><a href="#hydrex">Hydrex</a></nav>
+          <h1 tabindex="-1">AutoMaxi</h1>
+        </div>
         <p class="automaxi-absent notice" hidden>Not on Base yet.</p>
         <div class="state-line">
           <p class="state">
             <span class="state-normal"
               ><span class="shape idle automaxi-shape" aria-hidden="true"></span><b class="automaxi-state">…</b
-              ><span class="automaxi-voted-line" hidden> · voted <time class="automaxi-voted"></time></span></span
+              ><span class="automaxi-voted-line" hidden
+                ><span class="automaxi-voted-words"> · voted </span><time class="automaxi-voted"></time></span></span
             ><span class="state-failed" hidden
               ><span class="shape failed" aria-hidden="true"></span><b>Joining off</b></span
             >
@@ -719,13 +746,12 @@
           </div>
         </dl>
         <div data-needs="automaxi" hidden>
-          <div class="wallet-slot"></div>
           <p class="accounts-reading small" role="status" hidden>Loading…</p>
           <div class="mine" hidden>
-            <p class="mine-none" hidden>No account can join.</p>
+            <p class="mine-none" hidden>No Hydrex account can join.</p>
             <section class="group" data-group="in:automaxi" aria-labelledby="mine-automaxi" hidden>
               <div class="group-head">
-                <h2 id="mine-automaxi">Your accounts</h2>
+                <h2 id="mine-automaxi">Your Hydrex accounts</h2>
                 <button type="button" class="info" popovertarget="am-joining" aria-label="Joining and leaving">
                   <span aria-hidden="true">i</span>
                 </button>
@@ -916,7 +942,7 @@
               <dd>Move at the next epoch, <time class="next-epoch">Thursday, 00:00 UTC</time></dd>
             </div>
             <div>
-              <dt>Your account</dt>
+              <dt>Your Hydrex account</dt>
               <dd>Stays in your wallet</dd>
             </div>
             <div>
@@ -1011,7 +1037,6 @@
           </dl>
           <h3>Checks</h3>
           <ul class="checks">
-            <li data-check="chain">The RPC serves Base</li>
             <li data-check="automaxi-code">Its code matches</li>
             <li data-check="automaxi-contracts">Its VotingEscrow and Voter match</li>
             <li data-check="automaxi-approvals">Joining approves voting and claiming only</li>
@@ -1022,14 +1047,18 @@
       </div>
 
       <div class="view" data-view="position" data-title="Account · metaDEX Café" hidden>
-        <nav class="crumbs" aria-label="Breadcrumb"><a href="#hydrex">Hydrex</a></nav>
-        <h1 tabindex="-1"><bdi class="position-name" translate="no">Account</bdi> <span class="position-id"></span></h1>
+        <div class="title-line">
+          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your Wallet</a><a href="#hydrex">Hydrex</a></nav>
+          <h1 tabindex="-1">
+            <bdi class="position-name" translate="no">Hydrex account</bdi> <span class="position-id"></span>
+          </h1>
+        </div>
         <p class="position-reading small" role="status">Loading…</p>
         <p class="position-failed notice" role="alert" hidden>
-          Reading the account failed.
+          Reading the Hydrex account failed.
           <button type="button" class="position-again secondary compact">Try again</button>
         </p>
-        <p class="position-none" hidden>No such account.</p>
+        <p class="position-none" hidden>No such Hydrex account.</p>
         <div class="position-found" hidden>
           <p class="position-status state"></p>
           <dl class="facts tiles">
@@ -1114,16 +1143,15 @@
 
       <div class="view swap" data-view="swap" data-title="Swap · metaDEX Café" hidden>
         <div class="title-line">
+          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your Wallet</a></nav>
           <h1 tabindex="-1">Swap tokens</h1>
           <button type="button" class="info" popovertarget="swap-info" aria-label="Costs and contracts">
             <span aria-hidden="true">i</span>
           </button>
         </div>
         <p class="notice swap-off" role="alert" hidden>
-          <span class="shape failed" aria-hidden="true"></span>Swaps into <span class="swap-off-outputs"></span> are
-          off. <a href="#swap/check">Why</a>
+          <span class="shape failed" aria-hidden="true"></span>Swaps are off.
         </p>
-        <div class="wallet-slot"></div>
         <p class="wrong-chain notice" role="alert" hidden>
           <span class="to-switch">
             Wrong network.
@@ -1132,8 +1160,8 @@
           </span>
           <span class="safe-elsewhere" hidden>This Safe isn't on Base.</span>
         </p>
-        <div class="swap-form" hidden>
-          <p class="swap-unchecked small" role="status">Checking the swappers…</p>
+        <div class="swap-form">
+          <p class="swap-unchecked small" role="status">Loading…</p>
           <fieldset class="outputs">
             <legend class="label">Receive</legend>
             <p class="output-choices"></p>
@@ -1141,16 +1169,19 @@
           <section class="swap-tokens" aria-labelledby="swap-tokens-title">
             <div class="group-head">
               <h2 id="swap-tokens-title">Sell <span class="swap-ticked"></span></h2>
-              <button type="button" class="secondary compact" popovertarget="swap-approvals">Approvals</button>
+              <button type="button" class="secondary compact swap-approvals-open" popovertarget="swap-approvals" hidden>
+                Approvals
+              </button>
             </div>
-            <p class="swap-status small" role="status">Loading…</p>
+            <p class="no-wallet-yet small">No wallet connected.</p>
+            <p class="swap-status small" role="status" hidden>Loading…</p>
             <p class="swap-failed notice" role="alert" hidden>
               Reading your tokens failed.
               <button type="button" class="swap-again secondary compact">Try again</button>
             </p>
             <p class="swap-none" hidden>No tokens to sell.</p>
             <ul class="swap-rows accounts"></ul>
-            <details class="add-token">
+            <details class="add-token" hidden>
               <summary>Add a token</summary>
               <p class="add-line">
                 <label
@@ -1169,20 +1200,45 @@
               <p class="add-failed small" role="alert" hidden></p>
             </details>
           </section>
-          <section class="swap-summary" aria-label="Summary">
-            <p class="swap-sells"></p>
-            <p class="small swap-costs" hidden></p>
-            <p class="small swap-split" hidden></p>
+          <!-- What the ticked tokens fetch, then the 1% it takes, then what reaches you, and the least that may, which
+               the slippage picked sets. Gas is paid apart, in ETH. -->
+          <section class="swap-summary" aria-label="Summary" hidden>
+            <p class="swap-sells small">Pick tokens to sell</p>
+            <dl class="breakdown" hidden>
+              <div>
+                <dt>Quote</dt>
+                <dd class="swap-quoted"></dd>
+              </div>
+              <div>
+                <dt>Fee 1%</dt>
+                <dd class="swap-fee"></dd>
+              </div>
+              <div class="sum">
+                <dt>Reaches you</dt>
+                <dd class="swap-paid"></dd>
+              </div>
+              <div>
+                <dt>
+                  <label
+                    >At least, with
+                    <select class="swap-margin">
+                      <option value="10">0.1%</option>
+                      <option value="50" selected>0.5%</option>
+                      <option value="100">1%</option>
+                      <option value="300">3%</option>
+                    </select>
+                    slippage</label
+                  >
+                </dt>
+                <dd class="swap-least"></dd>
+              </div>
+              <div>
+                <dt>Gas, paid in ETH</dt>
+                <dd class="swap-gas"></dd>
+              </div>
+            </dl>
             <p class="swap-bar">
-              <label class="small"
-                >Slippage
-                <select class="swap-margin">
-                  <option value="10">0.1%</option>
-                  <option value="50" selected>0.5%</option>
-                  <option value="100">1%</option>
-                  <option value="300">3%</option>
-                </select></label
-              >
+              <span class="small swap-split" hidden></span>
               <button type="button" class="swap-review" disabled>Review</button>
             </p>
             <p class="swap-review-failed notice" role="alert" hidden></p>
@@ -1202,47 +1258,41 @@
               <span aria-hidden="true">×</span>
             </button>
           </div>
+          <p class="label">Costs</p>
           <dl class="fee-facts">
             <div>
               <dt>Swap fee</dt>
-              <dd>1% of what each token fetches</dd>
+              <dd>1%, taken from the swap's output token</dd>
             </div>
             <div>
               <dt>Pool fees</dt>
-              <dd>Each pool's own, in the quote</dd>
+              <dd>Each pool's own, part of the quote</dd>
             </div>
             <div>
               <dt>Price impact</dt>
-              <dd>Grows with the amount, in the quote</dd>
-            </div>
-            <div>
-              <dt>Slippage</dt>
-              <dd>At most your margin, 0.5% by default</dd>
+              <dd>Grows with the amount, part of the quote</dd>
             </div>
             <div>
               <dt>Gas</dt>
-              <dd>Paid in ETH, shown before you confirm</dd>
+              <dd>Paid separately, in ETH</dd>
             </div>
           </dl>
-          <div data-section="control">
-            <p class="label">Who controls what</p>
-            <dl class="rows">
-              <div>
-                <dt>Swapper contracts</dt>
-                <dd>Immutable</dd>
-              </div>
-              <div>
-                <dt>Exchanges</dt>
-                <dd>Pools' fees, down to your minimum</dd>
-              </div>
-            </dl>
-          </div>
+          <p class="label">Slippage</p>
+          <dl class="rows">
+            <div>
+              <dt>What it is</dt>
+              <dd>How much less than quoted you accept</dd>
+            </div>
+            <div>
+              <dt>When unmet</dt>
+              <dd>The input token stays in your wallet</dd>
+            </div>
+          </dl>
           <div data-section="check">
             <p class="label">Smart contracts</p>
-            <h3>Swapper contracts</h3>
             <dl class="rows">
               <div>
-                <dt>Into USDC</dt>
+                <dt>USDC Swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0x31791f453d2100e728E012c9e189C0828adf4b6F#code"
@@ -1252,7 +1302,7 @@
                 </dd>
               </div>
               <div>
-                <dt>Into EURC</dt>
+                <dt>EURC Swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E#code"
@@ -1262,7 +1312,7 @@
                 </dd>
               </div>
               <div>
-                <dt>Into WETH</dt>
+                <dt>WETH Swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0xe5cbD828c2227E17f7FF8BD54C7A1e6012694Ff2#code"
@@ -1272,7 +1322,7 @@
                 </dd>
               </div>
               <div>
-                <dt>Into cbBTC</dt>
+                <dt>cbBTC Swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0#code"
@@ -1282,7 +1332,7 @@
                 </dd>
               </div>
               <div>
-                <dt>Into AERO</dt>
+                <dt>AERO Swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0xdd575A498C625AF96ac89efE578Dc68f4c9aB963#code"
@@ -1292,7 +1342,7 @@
                 </dd>
               </div>
               <div>
-                <dt>Into HYDX</dt>
+                <dt>HYDX Swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC#code"
@@ -1302,133 +1352,6 @@
                 </dd>
               </div>
             </dl>
-            <p class="small">Source verified on BaseScan and Sourcify</p>
-            <h3>Exchange contracts</h3>
-            <dl class="rows">
-              <div>
-                <dt>Aero Basic Pools</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x8E6a9FCd1d638CC760Ffba397605Fe3355dE76D2"
-                      >0x8E6a9FCd1d638CC760Ffba397605Fe3355dE76D2</a
-                    ></code
-                  ><br /><code translate="no"
-                    ><a href="https://basescan.org/address/0x78589E876edcEbdce72ee3436ab3c9AD3a7cEF2D"
-                      >0x78589E876edcEbdce72ee3436ab3c9AD3a7cEF2D</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Aero Slipstream</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x9CB220581b91b0C83223012FE69688b92aD07a76"
-                      >0x9CB220581b91b0C83223012FE69688b92aD07a76</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Aerodrome Basic Pools</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x420DD381b31aEf6683db6B902084cB0FFECe40Da"
-                      >0x420DD381b31aEf6683db6B902084cB0FFECe40Da</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Aerodrome Slipstream V3</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef"
-                      >0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Aerodrome Slipstream V2</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a"
-                      >0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Aerodrome Slipstream</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A"
-                      >0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Uniswap v4</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x498581fF718922c3f8e6A244956aF099B2652b2b"
-                      >0x498581fF718922c3f8e6A244956aF099B2652b2b</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Uniswap v3</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x33128a8fC17869897dcE68Ed026d694621f6FDfD"
-                      >0x33128a8fC17869897dcE68Ed026d694621f6FDfD</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Uniswap v2</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6"
-                      >0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Hydrex Classic Pools</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0"
-                      >0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0</a
-                    ></code
-                  >
-                </dd>
-              </div>
-              <div>
-                <dt>Hydrex Integral</dt>
-                <dd>
-                  <code translate="no"
-                    ><a href="https://basescan.org/address/0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E"
-                      >0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E</a
-                    ></code
-                  >
-                </dd>
-              </div>
-            </dl>
-            <h3>Checks</h3>
-            <ul class="checks">
-              <li data-check="chain">The RPC serves Base</li>
-              <li data-check="swap-code">Its code matches</li>
-              <li data-check="swap-output">It pays in its output token</li>
-              <li data-check="swap-treasury">Its fee recipient matches</li>
-              <li data-check="swap-fee">Its fee is 1%</li>
-              <li data-check="swap-exchanges">Its exchanges are the ones above</li>
-            </ul>
           </div>
         </div>
 
@@ -1473,130 +1396,14 @@
           </div>
           <div>
             <dt>Version</dt>
-            <dd>
-              %VERSION%
-              <button type="button" class="info" popovertarget="about-check" aria-label="metaDEX Café">
-                <span aria-hidden="true">i</span>
-              </button>
-            </dd>
-          </div>
-          <div>
-            <dt>Figures</dt>
-            <dd>
-              From Base
-              <button type="button" class="info" popovertarget="about-figures" aria-label="How the figures are read">
-                <span aria-hidden="true">i</span>
-              </button>
-            </dd>
+            <dd>%VERSION%</dd>
           </div>
         </dl>
-
-        <div
-          class="pop"
-          id="about-check"
-          popover
-          role="dialog"
-          aria-labelledby="about-check-title"
-          data-section="check"
-        >
-          <div class="pop-head">
-            <h3 id="about-check-title" translate="no">metaDEX Café</h3>
-            <button
-              type="button"
-              class="pop-close"
-              popovertarget="about-check"
-              popovertargetaction="hide"
-              aria-label="Close"
-            >
-              <span aria-hidden="true">×</span>
-            </button>
-          </div>
-          <dl class="rows">
-            <div>
-              <dt>Version</dt>
-              <dd>%VERSION%</dd>
-            </div>
-            <div>
-              <dt>Reads Base from</dt>
-              <dd>
-                <code translate="no">mainnet.base.org</code>, <code translate="no">base.drpc.org</code>,
-                <code translate="no">base-rpc.publicnode.com</code>
-              </dd>
-            </div>
-            <div>
-              <dt>Asks your wallet for</dt>
-              <dd>Transactions only, never signatures</dd>
-            </div>
-            <div data-section="safe">
-              <dt>From a Safe</dt>
-              <dd>Add it as a custom Safe App</dd>
-            </div>
-            <div>
-              <dt>If it goes away</dt>
-              <dd>Leave from any contract interface</dd>
-            </div>
-          </dl>
-        </div>
-
-        <div
-          class="pop"
-          id="about-figures"
-          popover
-          role="dialog"
-          aria-labelledby="about-figures-title"
-          data-section="figures"
-        >
-          <div class="pop-head">
-            <h3 id="about-figures-title">How the figures are read</h3>
-            <button
-              type="button"
-              class="pop-close"
-              popovertarget="about-figures"
-              popovertargetaction="hide"
-              aria-label="Close"
-            >
-              <span aria-hidden="true">×</span>
-            </button>
-          </div>
-          <dl class="rows">
-            <div>
-              <dt>Prices now</dt>
-              <dd>
-                Chainlink for USDC, WETH, cbBTC and EURC; others, half-hour averages in the deepest of Aero Basic Pools,
-                Aerodrome Basic Pools, Hydrex Classic Pools and Hydrex Integral
-              </dd>
-            </div>
-            <div>
-              <dt>Epoch prices</dt>
-              <dd>The same at the epoch's end, in Hydrex's pools only</dd>
-            </div>
-            <div>
-              <dt>Earning Power</dt>
-              <dd>1.3 × votes, as on Hydrex</dd>
-            </div>
-            <div>
-              <dt>Earned</dt>
-              <dd>Fees and incentives</dd>
-            </div>
-            <div>
-              <dt>Paid</dt>
-              <dd>Once claims took over half an epoch's rewards</dd>
-            </div>
-            <div>
-              <dt>Waiting</dt>
-              <dd>At least: last epoch's pools only</dd>
-            </div>
-            <div>
-              <dt>Swap quotes</dt>
-              <dd>The swapper's own, simulated on Base</dd>
-            </div>
-          </dl>
-        </div>
       </div>
     </main>
 
     <footer>
-      <p><a href="#about">About</a> <a href="#about/check">v%VERSION%</a></p>
+      <p><a href="#about">About</a></p>
     </footer>
 
     <dialog id="review" aria-labelledby="review-title">
@@ -1664,40 +1471,39 @@
         </label>
       </li>
     </template>
+    <!-- A call, as a bill of its own, its fields in full, as the wallet will show them. -->
     <template id="step">
-      <li class="slip">
+      <li class="slip receipt">
+        <p class="receipt-name">metaDEX Café</p>
         <p class="count label"></p>
         <p class="says"></p>
-        <details class="slip-details">
-          <summary class="info" aria-label="Call details"><span aria-hidden="true">i</span></summary>
-          <dl class="fields">
-            <div>
-              <dt>To</dt>
-              <dd><code class="to" translate="no"></code><br /><span class="on under"></span></dd>
-            </div>
-            <div>
-              <dt>Call</dt>
-              <dd><code class="function" translate="no"></code></dd>
-            </div>
-            <div class="value-row">
-              <dt>Value</dt>
-              <dd><code translate="no">0</code> ETH</dd>
-            </div>
-            <div class="raw" hidden>
-              <dt>Data</dt>
-              <dd class="call"></dd>
-              <dd class="bytes"><code class="data" translate="no"></code></dd>
-            </div>
-            <div class="operation" hidden>
-              <dt>Operation</dt>
-              <dd><code translate="no">0</code> · call</dd>
-            </div>
-          </dl>
-          <div class="slip-foot">
-            <p class="slip-note" hidden></p>
-            <p class="check"><a class="check-calls">How to check</a> <span class="label">On Base</span></p>
+        <dl class="fields">
+          <div>
+            <dt>To</dt>
+            <dd><code class="to" translate="no"></code><br /><span class="on under"></span></dd>
           </div>
-        </details>
+          <div>
+            <dt>Call</dt>
+            <dd><code class="function" translate="no"></code></dd>
+          </div>
+          <div class="value-row">
+            <dt>Value</dt>
+            <dd><code translate="no">0</code> ETH</dd>
+          </div>
+          <div class="raw" hidden>
+            <dt>Data</dt>
+            <dd class="call"></dd>
+            <dd class="bytes"><code class="data" translate="no"></code></dd>
+          </div>
+          <div class="operation" hidden>
+            <dt>Operation</dt>
+            <dd><code translate="no">0</code> · call</dd>
+          </div>
+        </dl>
+        <div class="slip-foot">
+          <p class="slip-note" hidden></p>
+          <p class="check"><a class="check-calls">How to check</a> <span class="label">On Base</span></p>
+        </div>
       </li>
     </template>
     <template id="field">
@@ -1711,8 +1517,9 @@
       <div class="callout">
         <p>
           <strong
-            >It also claims the rewards <span data-one="this account has" data-many="these accounts have"></span> not
-            claimed yet.</strong
+            >It also claims the rewards
+            <span data-one="this Hydrex account has" data-many="these Hydrex accounts have"></span> not claimed
+            yet.</strong
           >
         </p>
         <p class="buttons">
@@ -1749,7 +1556,8 @@
         <p>
           <strong
             >Anyone can then claim the rewards
-            <span data-one="this account has" data-many="these accounts have"></span> not claimed yet, less 1%.</strong
+            <span data-one="this Hydrex account has" data-many="these Hydrex accounts have"></span> not claimed yet,
+            less 1%.</strong
           >
         </p>
         <p class="buttons">
@@ -1981,28 +1789,37 @@
         <button type="button" class="reset secondary compact">Reset</button>
       </li>
     </template>
+    <!-- The swap before the wallet asks, as a bill: each token and its route, then what they fetch, the 1%, what
+         reaches you, and the least that may, which the slippage sets. Gas is paid apart, in ETH, so it heads the bill. -->
     <template id="swap-before">
-      <ul class="swap-lines"></ul>
-      <dl class="lines swap-figures">
-        <div>
-          <dt>Fetched</dt>
-          <dd class="value swap-fetched"></dd>
-        </div>
-        <div>
-          <dt>Fee 1%</dt>
-          <dd class="value swap-fee"></dd>
-        </div>
-      </dl>
-      <dl class="total swap-figures">
-        <div>
-          <dt>Reaches you</dt>
-          <dd class="value swap-paid"></dd>
-          <dd class="detail swap-least"></dd>
-        </div>
-      </dl>
-      <p class="swap-skips notice" hidden></p>
+      <article class="slip receipt">
+        <p class="receipt-name">metaDEX Café</p>
+        <p class="label">Quote · swap into <code class="swap-output" translate="no"></code></p>
+        <p class="receipt-day">Gas <span class="swap-gas"></span>, paid in ETH</p>
+        <ul class="swap-lines"></ul>
+        <dl class="lines">
+          <div>
+            <dt>Fetched</dt>
+            <dd class="value swap-fetched"></dd>
+          </div>
+          <div>
+            <dt>Fee 1%</dt>
+            <dd class="value swap-fee"></dd>
+          </div>
+        </dl>
+        <dl class="total">
+          <div>
+            <dt>Reaches you</dt>
+            <dd class="value swap-paid"></dd>
+          </div>
+          <div class="least">
+            <dt>At least</dt>
+            <dd class="value swap-least"></dd>
+            <dd class="detail swap-slippage"></dd>
+          </div>
+        </dl>
+      </article>
       <p class="swap-simulated notice" hidden></p>
-      <p class="small">Gas <span class="swap-gas"></span></p>
     </template>
     <template id="swap-line">
       <li>
@@ -2011,8 +1828,8 @@
             ><b><code class="line-symbol" translate="no"></code></b> <span class="line-amount"></span></span
           ><span class="line-fetches"></span
         ></span>
-        <span class="small line-route"></span>
-        <span class="small line-skip" hidden
+        <span class="line-route"></span>
+        <span class="line-skip" hidden
           ><span class="shape stopped" aria-hidden="true"></span><span class="line-skip-words"></span
         ></span>
       </li>
@@ -2020,7 +1837,7 @@
     <template id="swap-receipt">
       <article class="slip receipt">
         <p class="receipt-name">metaDEX Café</p>
-        <p class="label">Receipt · swap into <span class="swap-receipt-output"></span></p>
+        <p class="label">Receipt · swap into <code class="swap-receipt-output" translate="no"></code></p>
         <dl class="lines">
           <div>
             <dt>Sold</dt>
@@ -2169,7 +1986,7 @@
     ></template>
     <template id="stopped">
       <span class="shape stopped" aria-hidden="true"></span
-      ><strong>In <bdi class="automation" translate="no"></bdi></strong> · stopped <time class="voted"></time
+      ><strong>In <bdi class="automation" translate="no"></bdi></strong> · stopped since <time class="voted"></time
     ></template>
     <template id="other">
       <span class="shape elsewhere" aria-hidden="true"></span

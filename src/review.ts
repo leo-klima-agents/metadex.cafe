@@ -36,7 +36,8 @@ export type Hooks = { closed(submitted: boolean): void; switched(): void };
 export type ReviewPage = { title: string; body?: DocumentFragment };
 
 export type ReviewOptions = {
-  name: string;
+  // Above each page's title, in capitals, but for the code in it, such as a token's symbol: "Swap into cbBTC".
+  name: string | (string | { code: string })[];
   pages: ReviewPage[];
   steps: Slip[];
   // Where the product's page explains the calls, for the slips and the co-signers.
@@ -131,13 +132,14 @@ function fieldOf({ label, name, code, words, under }: Field): DocumentFragment {
 // Calls in several groups, each a transaction of its own.
 const apart = ({ groups }: Pick<Review, "groups">): boolean => (groups?.length ?? 1) > 1;
 
-// A call as the wallet will show it. In a Safe, the Safe transaction's fields and calldata follow, for co-signers to
-// compare with Safe{Wallet}; `safe` names the Safe transaction it is in, and `alone` whether it is its only call.
+// A call as the wallet will show it, as a bill, its fields in full. In a Safe, the Safe transaction's fields and calldata
+// follow, for co-signers to compare with Safe{Wallet}; `safe` names the Safe transaction it is in, and `alone` whether it
+// is its only call.
 function slip(step: Slip, i: number, n: number, safe: string | undefined, alone: boolean, checkHref: string) {
   const item = clone("step");
-  const which = n > 1 ? `${i + 1} of ${n}` : "";
+  const which = n > 1 ? `Call ${i + 1} of ${n}` : "Call";
   fill(item, {
-    count: safe ? [safe, which].filter(Boolean).join(" · ") : which,
+    count: safe ? `${safe} · ${which}` : which,
     says: step.says,
     on: step.on,
     function: step.call,
@@ -226,7 +228,11 @@ function showPage(page: number): void {
   const { name, titles } = current;
   current.page = page;
   title.textContent = titles[page]!;
-  stepCount.textContent = `${name} · ${page + 1} of ${titles.length}`;
+  const words = typeof name === "string" ? [name] : name;
+  stepCount.replaceChildren(
+    ...words.map((word) => (typeof word === "string" ? word : codeOf(word.code))),
+    ` · ${page + 1} of ${titles.length}`,
+  );
   stepCount.hidden = titles.length === 1;
   [...pageList.children].forEach((element, i) => ((element as HTMLElement).hidden = i !== page));
   // A review with nothing to send has no calls to show.
