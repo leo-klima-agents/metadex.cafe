@@ -2,7 +2,7 @@ import { decodeEventLog, encodeFunctionData, parseAbi, type Address, type Hex } 
 import { same, type Receipt } from "./chain.ts";
 import { AUTOMAXI, AUTOMAXI_FEE_BPS } from "./config.ts";
 import { rewardsFor, type Reward } from "./earnings.ts";
-import { WEEK, count, list } from "./format.ts";
+import { WEEK, count } from "./format.ts";
 import type { Entry } from "./last-payout.ts";
 import type { Token } from "./prices.ts";
 import { readEarned, type Amount } from "./receipts.ts";
@@ -119,7 +119,8 @@ export function paidBy(owed: Owed[]): { token: Address; earned: bigint; fee: big
 export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true): Slip {
   const args = claimArgs(claim);
   const [id, fees, bribes, claimed] = args;
-  const symbols = claimed.map((token) => tokens.get(key(token))?.symbol ?? token);
+  // A token the page could not name has no tag: its address is all there is.
+  const symbols = claimed.map((token) => tokens.get(key(token))?.symbol ?? "");
   const from = whole ? "" : ` from ${count(fees.length + bribes.length, "reward contract", "reward contracts")}`;
   return {
     to: AUTOMAXI.address,
@@ -136,7 +137,7 @@ export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true
         code: bribes,
         under: "Pools' incentives contracts that owe it",
       },
-      { label: "Tokens", name: "tokens", code: claimed, under: list(symbols) },
+      { label: "Tokens", name: "tokens", code: claimed, tags: symbols },
     ],
     note: "The selector, then each 32-byte word on two lines: the account, where each list starts, then each list, its length first.",
   };

@@ -18,12 +18,14 @@ import {
 } from "./wallet.ts";
 
 // A field of a call as the wallet shows it: an address, a number or a list of them, in the mono face, or words, which
-// may hold addresses. `under` names what the field holds, such as the contract an address is. `name` is the class of
-// its value, and of its `under` with "-name" after it.
+// may hold addresses. A list's items can each have a tag above them, such as a token's symbol. `under` names what the
+// field holds, such as the contract an address is. `name` is the class of its value, and of its `under` with "-name"
+// after it.
 export type Field = {
   label: string;
   name?: string;
   code?: string | string[];
+  tags?: string[];
   words?: (string | { code: string })[];
   under?: string;
 };
@@ -105,19 +107,34 @@ function codeOf(text: string, name?: string, inWords = false): HTMLElement {
   return code;
 }
 
-function fieldOf({ label, name, code, words, under }: Field): DocumentFragment {
+// A list of addresses, in as many columns as fit, each under its tag when it has one.
+function listOf(items: string[], tags: string[] = []): HTMLElement {
+  const list = document.createElement("span");
+  list.className = "code-list";
+  list.append(
+    ...items.map((item, i) => {
+      const cell = document.createElement("span");
+      const tag = tags[i];
+      if (tag) {
+        const code = Object.assign(document.createElement("code"), { className: "tag", textContent: tag });
+        code.translate = false;
+        cell.append(code);
+      }
+      cell.append(codeOf(item));
+      return cell;
+    }),
+  );
+  return list;
+}
+
+function fieldOf({ label, name, code, tags, words, under }: Field): DocumentFragment {
   const row = clone("field");
   row.querySelector("dt")!.textContent = label;
   const value = row.querySelector("dd")!;
-  if (code !== undefined) {
-    const lines = Array.isArray(code) ? code : [code];
-    lines.forEach((line, i) => {
-      if (i) value.append(document.createElement("br"));
-      value.append(codeOf(line, Array.isArray(code) ? undefined : name));
-    });
-    if (Array.isArray(code) && name) value.classList.add(name);
-    if (!lines.length) value.append("None");
-  }
+  if (Array.isArray(code)) {
+    if (name) value.classList.add(name);
+    value.append(code.length ? listOf(code, tags) : "None");
+  } else if (code !== undefined) value.append(codeOf(code, name));
   if (words) {
     const span = document.createElement("span");
     span.className = `words${name ? ` ${name}` : ""}`;
@@ -128,7 +145,7 @@ function fieldOf({ label, name, code, words, under }: Field): DocumentFragment {
     const below = document.createElement("span");
     below.className = `under${name ? ` ${name}-name` : ""}`;
     below.textContent = under;
-    value.append(document.createElement("br"), below);
+    value.append(below);
   }
   return row;
 }

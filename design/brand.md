@@ -182,7 +182,7 @@ went badly too.
 - **Rules:** a dashed rule between sections, and a double rule above the total. The total comes last and larger, then
   the time and the transaction.
 - **The same lines in the same order** every week, so that a change shows.
-- **Sizes:** 13 px for call slips, with an 84 px column for the labels on a phone as on a desktop, and 14 px for
+- **Sizes:** 13 px for call slips, with a 96 px column for the labels on a phone as on a desktop, and 14 px for
   receipts.
 
 **A call** is a bill of its own: the name, then what it is, "Call 1 of 2", and the page's own words, such as "#9540

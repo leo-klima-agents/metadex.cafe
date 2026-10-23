@@ -1179,9 +1179,31 @@ dialog .receipt {
 }
 .fields > div {
   display: grid;
-  grid-template-columns: 5.25rem minmax(0, 1fr);
+  grid-template-columns: 6rem minmax(0, 1fr);
   column-gap: 0.625rem;
   align-items: baseline;
+}
+/* A label breaks between its words, never inside one: "Incentives / from". */
+.fields dt {
+  overflow-wrap: normal;
+}
+/* A list of addresses: as many columns as fit, an address wide each, a token's symbol above its address. */
+.code-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 19ch);
+  gap: var(--gap) var(--gap-l);
+}
+.code-list > span {
+  display: grid;
+  align-content: start;
+}
+.code-list .tag {
+  color: var(--quiet);
+  overflow-wrap: anywhere;
+}
+/* What a field holds goes on a line of its own, under it. */
+.fields .under {
+  display: block;
 }
 .fields .under,
 .fields .call,
