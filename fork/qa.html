@@ -264,8 +264,9 @@
 
       function render(state) {
         const status = $("status");
-        status.textContent = state.busy || state.failure || "";
-        status.className = state.busy ? "busy" : state.failure ? "failed" : "";
+        const failed = state.failure || refused;
+        status.textContent = state.busy || failed;
+        status.className = state.busy ? "busy" : failed ? "failed" : "";
         for (const control of document.querySelectorAll("button, select, input"))
           control.disabled = !!state.busy && !control.closest("#prompts");
 
@@ -335,11 +336,17 @@
           );
       }
 
+      // Why the last command failed, shown until the next one.
+      let refused = "";
+
       async function run(command, ...args) {
         try {
-          render(await window.qa(command, ...args));
+          const state = await window.qa(command, ...args);
+          if (command !== "state") refused = "";
+          render(state);
         } catch (error) {
-          $("status").textContent = String(error.message ?? error).replace(/^Error: /, "");
+          refused = String(error.message ?? error).replace(/^Error: /, "");
+          $("status").textContent = refused;
           $("status").className = "failed";
           // A box ticked for a change that failed is drawn again as it is.
           delete shown.faults;

@@ -75,6 +75,21 @@ const PAYOUTS: { hash: Hex; does: string }[] = [
   { hash: "0xe06850e6ed95c1994461e1e82850538f5cf7607eb3e0686efdc8b534195c843c", does: "pays #9540" },
 ];
 
+// Reads with no time limit what the page reads first, and what an account's page reads of the payouts of `ids` in
+// Carbon Impact's pools, last epoch's and the one before's.
+const warmStandings = (owners: Address[], ids: bigint[]) =>
+  warm(async () => {
+    const [earnings] = await Promise.all([
+      readEarnings(CONDUIT),
+      readEarnings(AUTOMAXI.address),
+      ...owners.map((owner) => readAccounts(owner)),
+    ]);
+    const top = Number(await anvil<Hex>("eth_blockNumber")) - SETTLED;
+    const last = weighed(earnings!.rewards, earnings!.prices);
+    const before = weighed(await rewardsFor(CONDUIT, earnings!.start - WEEK), earnings!.prices);
+    await Promise.all([readStamps(ids, last, top), readEarned(ids, last, top), readStamps(ids, before, top)]);
+  });
+
 const moveToAutoMaxi = (id: bigint) =>
   mined(
     PAYEE,
@@ -104,10 +119,9 @@ export const SCENARIOS: Scenario[] = [
     block: BLOCK,
     hash: "#hydrex/automaxi",
     owners: [
-      { address: NEWCOMER, holds: "#141, its own; #42877, in Liquid Hydrex, which stopped" },
-      { address: LEAVER, holds: "#53350 and #82206 in Carbon Impact" },
+      ...ACCOUNTS.filter(({ address }) => [NEWCOMER, LEAVER].includes(address)),
       { address: PAYEE, holds: "93 Hydrex accounts; #82774 in AutoMaxi, with receipts" },
-      { address: MEMBER, holds: "#9540 in Carbon Impact; #14485, its own" },
+      ...ACCOUNTS.filter(({ address }) => address === MEMBER),
     ],
     async setup() {
       await deployAutoMaxi();
@@ -121,23 +135,7 @@ export const SCENARIOS: Scenario[] = [
       await claimOne(KEEPER, 82774n, usdc[0]!);
       await claimOne(STRANGER, 82774n, usdc[1]!);
       await settle();
-      await warm(async () => {
-        const [earnings] = await Promise.all([
-          readEarnings(CONDUIT),
-          readEarnings(AUTOMAXI.address),
-          readAccounts(NEWCOMER),
-          readAccounts(LEAVER),
-          readAccounts(PAYEE),
-        ]);
-        const top = Number(await anvil<Hex>("eth_blockNumber")) - SETTLED;
-        const last = weighed(earnings!.rewards, earnings!.prices);
-        const before = weighed(await rewardsFor(CONDUIT, earnings!.start - WEEK), earnings!.prices);
-        await Promise.all([
-          readStamps([82774n], last, top),
-          readEarned([82774n], last, top),
-          readStamps([82774n], before, top),
-        ]);
-      });
+      await warmStandings([NEWCOMER, LEAVER, PAYEE], [82774n]);
     },
   },
   {
@@ -175,19 +173,7 @@ export const SCENARIOS: Scenario[] = [
       { address: OWNER_35366, holds: "#35366 in Carbon Impact, its payout due" },
     ],
     replays: PAYOUTS,
-    setup: () =>
-      warm(async () => {
-        const [earnings] = await Promise.all([
-          readEarnings(CONDUIT),
-          readEarnings(AUTOMAXI.address),
-          ...[PAYEE, MEMBER, OWNER_35366].map((owner) => readAccounts(owner)),
-        ]);
-        const ids = [82774n, 9540n, 35366n];
-        const top = Number(await anvil<Hex>("eth_blockNumber")) - SETTLED;
-        const last = weighed(earnings!.rewards, earnings!.prices);
-        const before = weighed(await rewardsFor(CONDUIT, earnings!.start - WEEK), earnings!.prices);
-        await Promise.all([readStamps(ids, last, top), readEarned(ids, last, top), readStamps(ids, before, top)]);
-      }),
+    setup: () => warmStandings([PAYEE, MEMBER, OWNER_35366], [82774n, 9540n, 35366n]),
   },
 ];
 

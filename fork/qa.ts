@@ -213,8 +213,13 @@ export type Session = {
 export async function launch(first: Scenario, { headless = false } = {}): Promise<Session> {
   const upstream = upstreamOf(FORK_URL);
   const caches = new Map<number, Promise<Cache>>();
+  // A cache that failed to start is tried again the next time.
   const cacheAt = async (block: number): Promise<string> => {
-    if (!caches.has(block)) caches.set(block, serveCached(upstream, join(CACHE, `base-${block}.json.gz`), block));
+    if (!caches.has(block)) {
+      const cache = serveCached(upstream, join(CACHE, `base-${block}.json.gz`), block);
+      caches.set(block, cache);
+      cache.catch(() => caches.get(block) === cache && caches.delete(block));
+    }
     return (await caches.get(block)!).url;
   };
 
@@ -301,6 +306,12 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       false,
     ]);
     return { block: Number(number), time: Number(timestamp) };
+  };
+  // A contract's answer on the fork, at its newest block.
+  const view = async <T>(to: Address, functionName: string, args: unknown[] = []): Promise<T> => {
+    const data = encodeFunctionData({ abi: QA_ABI, functionName, args } as never);
+    const reply = await anvil<Hex>("eth_call", [{ to, data }, "latest"]);
+    return decodeFunctionResult({ abi: QA_ABI, functionName, data: reply } as never) as T;
   };
 
   // Each window's clock starts at Base's time on the fork, then runs, as in the browser tests.
@@ -402,17 +413,18 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       result: encodeFunctionResult({ abi: QA_ABI, functionName: "aggregate3", result }),
     });
   }
+  // Only once `about`, the contract the read is about, is on Base.
   const answered = (
     target: Address,
-    name: string,
     functionName: string,
     args: unknown[],
     change: (data: Hex) => Hex,
+    [about, name]: [Address, string],
   ) => {
     const key = callKey(target, encodeFunctionData({ abi: QA_ABI, functionName, args } as never));
     return {
       async on() {
-        await present(target, name);
+        await present(about, name);
         answers.set(key, change);
       },
       off: async () => void answers.delete(key),
@@ -446,20 +458,28 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   const voted = new Map<Hex, Hex>();
   async function voteAgain(): Promise<void> {
     const { time } = await latest();
-    for (const { address, name } of OTHERS) {
-      const data = encodeFunctionData({ abi: QA_ABI, functionName: "lastVoted", args: [getAddress(address)] });
-      const was = await anvil<Hex>("eth_call", [{ to: VOTER, data }, "latest"]);
-      const { accessList } = await anvil<{ accessList: { address: string; storageKeys: Hex[] }[] }>(
-        "eth_createAccessList",
-        [{ to: VOTER, data }, "latest"],
-      );
-      let slot: Hex | undefined;
-      for (const key of accessList.filter((each) => same(each.address, VOTER)).flatMap((each) => each.storageKeys))
-        if (BigInt(await anvil<Hex>("eth_getStorageAt", [VOTER, key, "latest"])) === BigInt(was)) slot = key;
-      if (!slot || BigInt(was) === 0n) throw new Error(`The Voter's record of when ${name} voted was not found.`);
-      voted.set(slot, was);
-      await anvil("anvil_setStorageAt", [VOTER, slot, numberToHex(time, { size: 32 })]);
+    // What it changed, put back if it cannot change them all.
+    const changed = new Map<Hex, Hex>();
+    try {
+      for (const { address, name } of OTHERS) {
+        const data = encodeFunctionData({ abi: QA_ABI, functionName: "lastVoted", args: [getAddress(address)] });
+        const was = await anvil<Hex>("eth_call", [{ to: VOTER, data }, "latest"]);
+        const { accessList } = await anvil<{ accessList: { address: string; storageKeys: Hex[] }[] }>(
+          "eth_createAccessList",
+          [{ to: VOTER, data }, "latest"],
+        );
+        let slot: Hex | undefined;
+        for (const key of accessList.filter((each) => same(each.address, VOTER)).flatMap((each) => each.storageKeys))
+          if (BigInt(await anvil<Hex>("eth_getStorageAt", [VOTER, key, "latest"])) === BigInt(was)) slot = key;
+        if (!slot || BigInt(was) === 0n) throw new Error(`The Voter's record of when ${name} voted was not found.`);
+        changed.set(slot, was);
+        await anvil("anvil_setStorageAt", [VOTER, slot, numberToHex(time, { size: 32 })]);
+      }
+    } catch (error) {
+      for (const [slot, was] of changed) await anvil("anvil_setStorageAt", [VOTER, slot, was]);
+      throw error;
     }
+    for (const [slot, was] of changed) voted.set(slot, was);
   }
 
   const FAULTS: Record<string, Fault> = {
@@ -501,17 +521,20 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     contracts: {
       group: "check",
       label: "contracts: Carbon Impact's VotingEscrow",
-      ...answered(CARBON_IMPACT.address, "Carbon Impact", "veToken", [], another),
+      ...answered(CARBON_IMPACT.address, "veToken", [], another, [CARBON_IMPACT.address, "Carbon Impact"]),
     },
     token: {
       group: "check",
       label: "token: Carbon Impact's payout token",
-      ...answered(CARBON_IMPACT.address, "Carbon Impact", "kvcm", [], another),
+      ...answered(CARBON_IMPACT.address, "kvcm", [], another, [CARBON_IMPACT.address, "Carbon Impact"]),
     },
     approvals: {
       group: "check",
       label: "approvals: what joining Carbon Impact approves",
-      ...answered(VOTING_ESCROW, "The VotingEscrow", "getConduitApprovalConfig", [CARBON_IMPACT.address], inactive),
+      ...answered(VOTING_ESCROW, "getConduitApprovalConfig", [CARBON_IMPACT.address], inactive, [
+        CARBON_IMPACT.address,
+        "Carbon Impact",
+      ]),
     },
     "automaxi-code": {
       group: "check",
@@ -521,12 +544,15 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     "automaxi-contracts": {
       group: "check",
       label: "automaxi-contracts: AutoMaxi's VotingEscrow",
-      ...answered(AUTOMAXI.address, "AutoMaxi", "veToken", [], another),
+      ...answered(AUTOMAXI.address, "veToken", [], another, [AUTOMAXI.address, "AutoMaxi"]),
     },
     "automaxi-approvals": {
       group: "check",
       label: "automaxi-approvals: what joining AutoMaxi approves",
-      ...answered(VOTING_ESCROW, "AutoMaxi", "getConduitApprovalConfig", [AUTOMAXI.address], inactive),
+      ...answered(VOTING_ESCROW, "getConduitApprovalConfig", [AUTOMAXI.address], inactive, [
+        AUTOMAXI.address,
+        "AutoMaxi",
+      ]),
     },
     upgrade: {
       group: "check",
@@ -550,14 +576,13 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   };
   const faults = new Set<string>();
 
+  // Never fails: what goes wrong shows in the QA wallet, which can start a scenario again.
   async function start(next: Scenario): Promise<void> {
     failure = "";
     busy = `Starting ${next.name}…`;
     for (const prompt of prompts.splice(0)) prompt.answer(false);
     const closing = [...sites.values()];
     sites.clear();
-    await Promise.all(closing.map((context) => context.close()));
-    await stopAnvil();
     current = next;
     faults.clear();
     codes.clear();
@@ -572,6 +597,8 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     wallet.failing = 0;
     console.log(`Starting ${next.name}: ${next.title}`);
     try {
+      await Promise.all(closing.map((context) => context.close().catch(() => {})));
+      await stopAnvil();
       busy = `Forking Base at block ${next.block.toLocaleString("en-GB")}…`;
       await startAnvil(next.block, await cacheAt(next.block));
       for (const { address } of next.owners) await anvil("anvil_setBalance", [address, hex(ETH)]);
@@ -624,11 +651,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
 
   // As its owner can on Hydrex: to an automation by its name, back to the owner, or to any address.
   async function delegate(account: string, to: string): Promise<void> {
-    const id = BigInt(account.replace(/^#/, ""));
-    const data = encodeFunctionData({ abi: QA_ABI, functionName: "ownerOf", args: [id] });
-    const reply = await anvil<Hex>("eth_call", [{ to: VOTING_ESCROW, data }, "latest"]).catch(() => undefined);
-    if (!reply) throw new Error(`Hydrex has no account #${id}.`);
-    const owner = decodeFunctionResult({ abi: QA_ABI, functionName: "ownerOf", data: reply });
+    const { id, owner } = await accountOf(account);
     const named = AUTOMATION_NAMES.find(({ name }) => name.toLowerCase() === to.toLowerCase());
     const delegatee = /^(its )?owner$/i.test(to)
       ? owner
@@ -636,22 +659,15 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
         ? getAddress(to)
         : named?.address;
     if (!delegatee) throw new Error(`${to} is neither an address nor one of Hydrex's automations.`);
-    await gas(owner);
-    await mined(
-      owner,
-      VOTING_ESCROW,
-      encodeFunctionData({ abi: QA_ABI, functionName: "delegate", args: [id, delegatee] }),
-    );
+    await as(owner, VOTING_ESCROW, "delegate", [id, delegatee]);
     note(`#${id}'s votes delegated to ${named?.name ?? (same(delegatee, owner) ? "its owner" : short(delegatee))}`);
   }
 
   // An account by its number, and its owner.
   async function accountOf(account: string): Promise<{ id: bigint; owner: Address }> {
     const id = BigInt(account.replace(/^#/, ""));
-    const data = encodeFunctionData({ abi: QA_ABI, functionName: "ownerOf", args: [id] });
-    const reply = await anvil<Hex>("eth_call", [{ to: VOTING_ESCROW, data }, "latest"]).catch(() => undefined);
-    if (!reply) throw new Error(`Hydrex has no account #${id}.`);
-    const owner = decodeFunctionResult({ abi: QA_ABI, functionName: "ownerOf", data: reply });
+    const owner = await view<Address>(VOTING_ESCROW, "ownerOf", [id]).catch(() => undefined);
+    if (!owner) throw new Error(`Hydrex has no account #${id}.`);
     await gas(owner);
     return { id, owner };
   }
@@ -721,28 +737,14 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   // As anyone may once the epoch has flipped, and someone soon does on Base: Hydrex's Voter moves on to it, and what the
   // epoch before earned is final.
   async function moveOn(): Promise<void> {
-    const read = async (to: Address, functionName: string) =>
-      decodeFunctionResult({
-        abi: QA_ABI,
-        functionName,
-        data: await anvil<Hex>("eth_call", [
-          { to, data: encodeFunctionData({ abi: QA_ABI, functionName } as never) },
-          "latest",
-        ]),
-      } as never) as unknown;
-    const before = Number(await read(VOTER, "_epochTimestamp"));
+    const before = Number(await view<bigint>(VOTER, "_epochTimestamp"));
     await gas(STRANGER);
-    await as(STRANGER, (await read(VOTER, "minter")) as Address, "update_period", []);
-    const after = Number(await read(VOTER, "_epochTimestamp"));
+    await as(STRANGER, await view<Address>(VOTER, "minter"), "update_period", []);
+    const after = Number(await view<bigint>(VOTER, "_epochTimestamp"));
     if (after === before) throw new Error("Hydrex is already in this epoch: move to the next one first.");
     note(`Hydrex moved on to the epoch from ${new Date(after * 1000).toUTCString()}`);
   }
 
-  const view = async <T>(to: Address, functionName: string, args: unknown[] = []): Promise<T> => {
-    const data = encodeFunctionData({ abi: QA_ABI, functionName, args } as never);
-    const reply = await anvil<Hex>("eth_call", [{ to, data }, "latest"]);
-    return decodeFunctionResult({ abi: QA_ABI, functionName, data: reply } as never) as T;
-  };
   // Carbon Impact's vote now, pool by pool: the Voter keeps it until it votes again.
   async function lastVote(): Promise<{ pools: Address[]; weights: bigint[] }> {
     const pools: Address[] = [];
@@ -782,6 +784,20 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     note(`Added 100 USDC of incentives to the pool ${short(top)}, which Carbon Impact votes for most`);
   }
 
+  // A transaction's receipt once the fork includes it, within two minutes, as mined() in harness.ts waits; one that
+  // failed, or did not come, says so.
+  async function included(hash: Hex, what: string): Promise<{ status: Hex; contractAddress: Address | null }> {
+    for (const deadline = Date.now() + 120_000; Date.now() < deadline; await sleep(250)) {
+      const receipt = await anvil<{ status: Hex; contractAddress: Address | null } | null>(
+        "eth_getTransactionReceipt",
+        [hash],
+      );
+      if (receipt?.status === "0x1") return receipt;
+      if (receipt) throw new Error(`${what} failed on the fork.`);
+    }
+    throw new Error(`${what} was not included in two minutes.`);
+  }
+
   // Transactions that Base included after the fork's block, sent again in their order, as their senders.
   let replayed = 0;
   async function replay(): Promise<void> {
@@ -791,11 +807,10 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       next.hash,
     ]);
     await gas(tx.from);
-    const hash = await send({ from: tx.from, to: tx.to, data: tx.input, gas: tx.gas });
-    let receipt: { status: Hex } | null = null;
-    for (const deadline = Date.now() + 120_000; !receipt && Date.now() < deadline;)
-      receipt = (await anvil<{ status: Hex } | null>("eth_getTransactionReceipt", [hash])) ?? (await sleep(250));
-    if (receipt?.status !== "0x1") throw new Error(`The keeper's transaction that ${next.does} failed on the fork.`);
+    await included(
+      await send({ from: tx.from, to: tx.to, data: tx.input, gas: tx.gas }),
+      `The keeper's transaction that ${next.does}`,
+    );
     replayed++;
     note(`The keeper ${next.does}`);
   }
@@ -804,16 +819,17 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   const created: Address[] = [];
   async function mint(symbol: string): Promise<void> {
     if (!symbol) throw new Error("Give the token a symbol.");
-    const listed = TOKENS.find((each) => each.symbol === symbol);
+    const listed = TOKENS.find((each) => each.symbol.toLowerCase() === symbol.toLowerCase());
     const decimals = (listed as { decimals?: number } | undefined)?.decimals ?? 18;
     const data = encodeDeployData({
       abi: QA_TOKEN_ABI,
       bytecode: QA_TOKEN,
       args: [`${symbol} of the QA wallet`, symbol, decimals, parseUnits("1000", decimals)],
     });
-    const hash = await send({ from: wallet.owner, data, gas: "0x1e8480" });
-    let receipt: { contractAddress: Address | null } | null = null;
-    while (!receipt) receipt = (await anvil("eth_getTransactionReceipt", [hash])) ?? (await sleep(250));
+    const receipt = await included(
+      await send({ from: wallet.owner, data, gas: "0x1e8480" }),
+      `The deployment of ${symbol}`,
+    );
     const address = getAddress(receipt.contractAddress!);
     created.push(address);
     NAMES.set(address.toLowerCase(), `${symbol} of the QA wallet`);
@@ -845,7 +861,8 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       chainId: wallet.chainId,
       asks,
       switches: wallet.switches,
-      calls: (!wallet.batch ? "one" : wallet.atomic === false ? "each" : "atomic") satisfies Calls,
+      // A wallet that lists its tokens sends several calls in one prompt too: see harness.ts.
+      calls: (!wallet.batch && !wallet.assets ? "one" : wallet.atomic === false ? "each" : "atomic") satisfies Calls,
       failing: wallet.failing ?? 0,
       lists: !!wallet.assets,
       replays: current.replays && {
@@ -860,17 +877,39 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     };
   }
 
+  // The commands run one at a time, each once the one before is done: none then acts on a fork that a scenario's start
+  // replaced, nor reads Base through warm() while another does, as warm() changes the process's fetch.
+  let queue: Promise<unknown> = Promise.resolve();
+  function inTurn<T>(run: () => Promise<T>): Promise<T> {
+    const result = queue.then(run);
+    queue = result.catch(() => {});
+    return result;
+  }
+
   async function command(name: string, ...args: any[]): Promise<unknown> {
-    if (name !== "state" && name !== "answer" && busy) throw new Error("Wait until the scenario has started.");
+    // What the panel asks each second, and the answers to the wallet's prompts, which a command may be waiting for.
+    if (name === "state") return state();
+    if (name === "answer") {
+      const [id, yes] = args as [number, boolean];
+      const index = prompts.findIndex((prompt) => prompt.id === id);
+      if (index >= 0) prompts.splice(index, 1)[0]!.answer(yes);
+      return state();
+    }
+    if (busy) throw new Error("Wait until the scenario has started.");
+    if (name === "start") {
+      const next = named(args[0]);
+      if (!next) throw new Error(`No scenario is named ${args[0]}.`);
+      // At once, so that no command is taken until it has started; the commands taken before it finish first.
+      busy = `Starting ${next.name}…`;
+      void inTurn(() => start(next));
+      return state();
+    }
+    await inTurn(() => run(name, args));
+    return state();
+  }
+
+  async function run(name: string, args: any[]): Promise<void> {
     switch (name) {
-      case "state":
-        break;
-      case "start": {
-        const next = named(args[0]);
-        if (!next) throw new Error(`No scenario is named ${args[0]}.`);
-        void start(next);
-        break;
-      }
       case "owner":
         await setOwner(args[0]);
         break;
@@ -929,12 +968,6 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
         await emit("accountsChanged", []);
         note("Locked");
         break;
-      case "answer": {
-        const [id, yes] = args as [number, boolean];
-        const index = prompts.findIndex((prompt) => prompt.id === id);
-        if (index >= 0) prompts.splice(index, 1)[0]!.answer(yes);
-        break;
-      }
       case "open":
         await open(args[0]);
         break;
@@ -957,7 +990,6 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     // The page reads payouts a few blocks back, as Base's newest may not be on every RPC yet: the blocks after a change
     // come at once, so that the page shows it as soon as it reads again.
     if (SENDS.has(name)) await settle();
-    return state();
   }
 
   await panelContext.exposeFunction("qa", command);
@@ -970,7 +1002,8 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       for (const prompt of prompts.splice(0)) prompt.answer(false);
       await browser.close().catch(() => {});
       await stopAnvil();
-      for (const cache of caches.values()) await (await cache).close();
+      for (const cache of caches.values())
+        await cache.then((each) => each.close()).catch((error: unknown) => console.error(error));
       console.log(`${upstream.fetched} requests asked of FORK_URL, ${upstream.busy} of them over its limit.`);
     })());
   const closed = new Promise<void>((resolve) => {
@@ -978,7 +1011,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     panel.on("close", () => resolve());
   }).then(close);
 
-  const started = start(first);
+  const started = inTurn(() => start(first));
   return { panel, command, sites: () => [...sites.values()], started, closed, close };
 }
 

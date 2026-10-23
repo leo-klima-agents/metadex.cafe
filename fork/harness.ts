@@ -326,6 +326,8 @@ function starved(data: Hex): string {
 export function testWallet(options: WalletOptions, sent: Sent[], asked: string[]) {
   let asking = false;
   const batches = new Map<string, Hex[]>();
+  // Batches all or nothing that failed: their first call failed on Base, and the others were never sent.
+  const reverted = new Set<string>();
   const rejected = { error: { code: 4001, message: "User rejected the request." } };
   const allows = async (method: string, params: any[]) =>
     !options.decline && ((await options.ask?.(method, params)) ?? true);
@@ -381,13 +383,21 @@ export function testWallet(options: WalletOptions, sent: Sent[], asked: string[]
           return { error: { code: 4200, message: "The test wallet does not batch." } };
         const { calls } = params[0] as { calls: Sent[] };
         if (!(await allows(method, params))) return rejected;
-        // One after the other, each in its own block: anvil has no account code to run them together.
-        const hashes: Hex[] = [];
-        for (const { to, data } of calls) {
-          sent.push({ to, data });
-          hashes.push(await send({ to, data, from: options.owner, gas: gasFor(data as Hex) }));
-        }
         const id = `0x${(batches.size + 1).toString(16).padStart(64, "0")}`;
+        const hashes: Hex[] = [];
+        if (options.atomic !== false && options.failing) {
+          // All or nothing: a failing batch changes nothing but the gas of its one transaction.
+          const [{ to, data }] = calls as [Sent];
+          sent.push(...calls);
+          hashes.push(await send({ to, data, from: options.owner, gas: gasFor(data as Hex) }));
+          reverted.add(id);
+        } else {
+          // One after the other, each in its own block: anvil has no account code to run them together.
+          for (const { to, data } of calls) {
+            sent.push({ to, data });
+            hashes.push(await send({ to, data, from: options.owner, gas: gasFor(data as Hex) }));
+          }
+        }
         batches.set(id, hashes);
         return { result: { id } };
       }
@@ -397,7 +407,9 @@ export function testWallet(options: WalletOptions, sent: Sent[], asked: string[]
           hashes.map((hash) => anvil<{ status: Hex } | null>("eth_getTransactionReceipt", [hash])),
         );
         if (receipts.some((receipt) => !receipt)) return { result: { status: 100 } };
-        return { result: { status: 200, atomic: options.atomic !== false, receipts } };
+        // EIP-5792's 500: reverted whole.
+        const status = reverted.has(params[0] as string) ? 500 : 200;
+        return { result: { status, atomic: options.atomic !== false, receipts } };
       }
       default:
         return { error: { code: 4200, message: `The test wallet does not answer ${method}.` } };

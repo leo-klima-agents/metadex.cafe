@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { type Page } from "playwright-core";
-import { encodeFunctionData, getAddress } from "viem";
-import { AUTOMAXI, SWAPPERS, VOTING_ESCROW } from "../src/config.ts";
+import { encodeFunctionData } from "viem";
+import { AUTOMAXI, SWAPPERS, VOTING_ESCROW, WETH } from "../src/config.ts";
 import {
   AVNT,
   HOLDER,
@@ -33,7 +33,6 @@ import {
   warmPayouts,
 } from "./harness.ts";
 
-const WETH = getAddress("0x4200000000000000000000000000000000000006");
 const INTO_USDC = SWAPPERS[0]!;
 
 // Waits until every token has its route, then ticks only those given. A token the page learns from last epoch's
