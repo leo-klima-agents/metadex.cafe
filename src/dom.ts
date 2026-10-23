@@ -1,5 +1,5 @@
 import type { Address, Hex } from "viem";
-import { day, hexLines } from "./format.ts";
+import { day, hexLines, walletLines } from "./format.ts";
 
 const BASESCAN = "https://basescan.org";
 
@@ -63,6 +63,22 @@ export function showHex(element: Element, hex: string): void {
   }
   element.classList.add("hex");
   element.classList.toggle("halves", lines.length === 1);
+  element.replaceChildren(fragment);
+}
+
+// Writes an address as the wallet will show it, on three lines, as hardware wallets do: see walletLines(). As with
+// showHex(), CSS lays out the groups, so a copy is still the plain address.
+export function showWalletAddress(element: Element, address: string): void {
+  const fragment = document.createDocumentFragment();
+  walletLines(address).forEach((line, i) =>
+    line.forEach((text, j) => {
+      const span = Object.assign(document.createElement("span"), { textContent: text });
+      if (i && !j) span.className = "line";
+      fragment.append(span);
+    }),
+  );
+  element.classList.add("hex", "wallet");
+  element.classList.remove("halves");
   element.replaceChildren(fragment);
 }
 

@@ -1,7 +1,7 @@
 import type { Hex } from "viem";
 import { waitForReceipt, type Receipt } from "./chain.ts";
 import { CHAIN_ID } from "./config.ts";
-import { clone, fill, show, showHex, txLink } from "./dom.ts";
+import { clone, fill, show, showHex, showWalletAddress, txLink } from "./dom.ts";
 import { count } from "./format.ts";
 import {
   callsStatus,
@@ -90,13 +90,17 @@ const confirm = part<HTMLButtonElement>(".confirm");
 const back = part(".back");
 let current: Review | undefined;
 
-const HEX = /^0x([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/;
+const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const HASH = /^0x[0-9a-fA-F]{64}$/;
 
-function codeOf(text: string, name?: string): HTMLElement {
+// A field's address is laid out as the wallet will show it, for the two to be compared line by line; one within words,
+// such as a pool's in a route, keeps to the text's lines.
+function codeOf(text: string, name?: string, inWords = false): HTMLElement {
   const code = document.createElement("code");
   code.translate = false;
   if (name) code.className = name;
-  if (HEX.test(text)) showHex(code, text);
+  if (ADDRESS.test(text) && !inWords) showWalletAddress(code, text);
+  else if (ADDRESS.test(text) || HASH.test(text)) showHex(code, text);
   else code.textContent = text;
   return code;
 }
@@ -117,7 +121,7 @@ function fieldOf({ label, name, code, words, under }: Field): DocumentFragment {
   if (words) {
     const span = document.createElement("span");
     span.className = `words${name ? ` ${name}` : ""}`;
-    span.append(...words.map((word) => (typeof word === "string" ? word : codeOf(word.code))));
+    span.append(...words.map((word) => (typeof word === "string" ? word : codeOf(word.code, undefined, true))));
     value.append(span);
   }
   if (under !== undefined) {
@@ -146,7 +150,7 @@ function slip(step: Slip, i: number, n: number, safe: string | undefined, alone:
     call: `${(step.data.length - 2) / 2} bytes:`,
     "slip-note": step.note ?? "The selector, then each 32-byte word on two lines.",
   });
-  showHex(item.querySelector(".to")!, step.to);
+  showWalletAddress(item.querySelector(".to")!, step.to);
   showHex(item.querySelector(".data")!, step.data);
   item.querySelector(".value-row")!.before(...step.fields.map(fieldOf));
   item.querySelector(".check-calls")!.setAttribute("href", checkHref);
@@ -230,7 +234,7 @@ function showPage(page: number): void {
   title.textContent = titles[page]!;
   const words = typeof name === "string" ? [name] : name;
   stepCount.replaceChildren(
-    ...words.map((word) => (typeof word === "string" ? word : codeOf(word.code))),
+    ...words.map((word) => (typeof word === "string" ? word : codeOf(word.code, undefined, true))),
     ` · ${page + 1} of ${titles.length}`,
   );
   stepCount.hidden = titles.length === 1;

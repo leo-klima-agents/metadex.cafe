@@ -58,6 +58,15 @@ The brand helps people recognise the page; the page teaches them to check the ad
 - **Addresses and hashes in full,** checksummed, in groups of four, wherever someone checks:
   `0xdE91 885c F35a c57D F0c4 A75c 1686 2127 dBe8 317c`. A copy gives them without spaces. Only the wallet chip and
   links to a transaction use the short form, as they are there to recognise or to follow, not to check.
+- **In a call, an address as the wallet will show it,** on three lines of four columns, as hardware wallets do, so that
+  the two compare line by line:
+
+  ```
+    0x dE91 885c F35a
+  c57D F0c4 A75c 1686
+  2127 dBe8 317c
+  ```
+
 - **Token symbols in the mono face,** as untrusted text: a symbol is whatever its contract says. The address goes beside
   it, and a symbol that copies a listed token's, at another address, says so. No symbol becomes a link.
 - **Calls in Safe's order** of fields, as Safe asks signers to check them
@@ -67,7 +76,7 @@ The brand helps people recognise the page; the page teaches them to check the ad
 
 | Face                       | Weights  | Used for                                                       |
 | -------------------------- | -------- | -------------------------------------------------------------- |
-| Young Serif                | 400      | The name, and `h1` and `h2` headings. It has one weight.       |
+| Young Serif                | 400      | The name, `h1` and `h2`, and popups' titles. One weight.       |
 | Atkinson Hyperlegible Next | 400, 700 | Text. 600 takes 700.                                           |
 | Atkinson Hyperlegible Mono | 400, 600 | `code`, labels, slips and receipts: addresses, calls, figures. |
 
@@ -142,6 +151,23 @@ and works in one colour.
   to a page the header already leads to.
 - **Within a view, a link leads to a section and says what it holds,** such as "What it means" or "More on leaving",
   never "How it works" or "Learn more".
+
+## Layout and controls
+
+`style.css` holds one scale for each of these, as custom properties: gaps, radii and text sizes.
+
+- **Headings by level, the same on every view:** `h1` in the serif, 32 px; `h2`, and the titles of popups and of the
+  review, in the serif, 20 px; `h3`, a group's heading or a card's title, in the sans, 16 px, bold; a popup's own
+  headings, such as Contracts or Checks, as labels. A count beside a heading is quiet, in the sans: "Needs you · 2".
+- **Cards:** one edge, one radius and one padding for every card. A card that leads somewhere is a link as large as the
+  card, its title in ink, with a chevron at its end, or an arrow when it leaves the page. What else it holds, such as an
+  account's box to tick or a link in its status, stays apart from that link: never a link inside a control.
+- **Links look like links:** underlined, in the accent. The breadcrumb is quieter, and underlined on hover. A link to
+  Hydrex's app, where something is done rather than checked, opens apart and ends with "↗".
+- **Buttons look like buttons:** filled for the main action of a group, outlined for the others, compact inside a line
+  or a notice. In a row, the main action comes first, a move between automations next, and Leave last. A link that does
+  a button's job, such as a need's "Change", is drawn as a button.
+- **Empty and loading lines are quiet and small:** "Loading…", "No record yet.", "No tokens to sell.".
 
 ## Slips and receipts
 

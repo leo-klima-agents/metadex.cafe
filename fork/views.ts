@@ -47,6 +47,7 @@ import {
   hydrexTitle,
   toHydrex,
   connectButton,
+  chip,
   pick,
   shoot,
   stop,
@@ -108,6 +109,27 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await page.goto(`${SITE}/#how-it-works`);
     await homeTitle(page).waitFor();
     assert.deepEqual(asked, [], "the page asks a wallet nothing until it is picked");
+    assert.deepEqual(violations, []);
+  });
+
+  test("a wallet connected on Home or About leads on to the App, and Home stays Home afterwards", async () => {
+    const { page, violations } = await open({ owner: NEWCOMER });
+    await homeTitle(page).waitFor();
+    await connectButton(page).click();
+    await appTitle(page).waitFor();
+    assert.equal(new URL(page.url()).hash, "#app");
+    await page.locator("header.site").getByRole("link", { name: "metaDEX Café" }).click();
+    await homeTitle(page).waitFor();
+    // From About too, and from no other page.
+    const other = await open({ owner: NEWCOMER }, { url: `${SITE}/#about` });
+    await other.page.getByRole("heading", { name: "About", level: 1 }).waitFor();
+    await connectButton(other.page).click();
+    await appTitle(other.page).waitFor();
+    const hydrexFirst = await open({ owner: NEWCOMER }, { url: `${SITE}/#hydrex` });
+    await hydrexTitle(hydrexFirst.page).waitFor();
+    await connectButton(hydrexFirst.page).click();
+    await chip(hydrexFirst.page, NEWCOMER).waitFor();
+    assert.equal(new URL(hydrexFirst.page.url()).hash, "#hydrex");
     assert.deepEqual(violations, []);
   });
 
@@ -405,10 +427,8 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await nothing.locator("summary").click();
     await account(page, 123351).getByText("Lock ended").waitFor();
     assert.equal(await account(page, 123351).locator(".pick").isVisible(), false);
+    assert.equal(await account(page, 123351).getByRole("checkbox").count(), 0, "nothing to tick");
     assert.equal(await nothing.getByRole("button").count(), 0);
-    // Playwright refuses a click on a label whose box is disabled, which is the point: force it, as a person would.
-    await account(page, 123351).locator(".small").click({ force: true });
-    assert.equal(await account(page, 123351).locator(".pick").isChecked(), false);
     await account(page, 123364).waitFor();
     // An automation's page lists those that can join it, and says when the wallet has none, as an address with no
     // account has.

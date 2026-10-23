@@ -1004,6 +1004,8 @@ function showActions(account: Account | undefined): void {
     if (automation) {
       const moves = !!account && AUTOMATIONS.some((other) => other !== automation && canLeave(account, other));
       button.textContent = `${moves ? "Move to" : "Join"} ${automation.name}`;
+      // A move is a secondary action, as in the groups of Hydrex's page.
+      button.classList.toggle("secondary", moves);
     }
     button.hidden = !allowed;
     any ||= allowed;
@@ -1047,10 +1049,11 @@ function showConnection(): void {
   refreshReview();
 }
 
-async function connectTo(wallet: Wallet): Promise<void> {
+// Whether the wallet connected, and this attempt is the one that counts.
+async function connectTo(wallet: Wallet): Promise<boolean> {
   const attempt = ++attempts;
   const connected = await connect(wallet);
-  if (!connected || attempt <= ignoredUpTo) return;
+  if (!connected || attempt <= ignoredUpTo) return false;
   ignoredUpTo = attempt;
   show(".wallet-failed, .no-wallet", false);
   listen(connected.provider);
@@ -1058,6 +1061,7 @@ async function connectTo(wallet: Wallet): Promise<void> {
   showConnection();
   loadAccounts();
   walletChanged();
+  return true;
 }
 
 function listen(provider: Provider): void {
@@ -1101,7 +1105,7 @@ function letGo(): void {
 }
 
 // Connects a wallet picked from a list, or from the header's button. What goes wrong shows where the wallets are listed:
-// from the header, in its popup.
+// from the header, in its popup. A wallet connected from Home or About leads on to the App.
 function pickWallet(wallet: Wallet, fromHeader = false): void {
   const click = ++clicks;
   show(".wallet-failed, .no-wallet", false);
@@ -1109,6 +1113,10 @@ function pickWallet(wallet: Wallet, fromHeader = false): void {
   show(".connecting");
   connectButton.disabled = true;
   connectTo(wallet)
+    .then((connected) => {
+      const { view } = route();
+      if (connected && click === clicks && (view === "home" || view === "about")) location.hash = "#app";
+    })
     .catch((error) => {
       if (click !== clicks || declined(error)) return;
       if (fromHeader) showConnectPop(true);
