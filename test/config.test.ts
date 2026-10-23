@@ -234,12 +234,16 @@ test("each swapper has its output, a checksummed address and a code hash, and th
   const facts = /<dl class="fee-facts">[\s\S]*?<\/dl>/.exec(swap)?.[0] ?? "";
   assert.deepEqual(
     [...facts.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
-    ["Swap fee", "Pool fees", "Price impact", "Gas"],
+    ["Pool fees", "Price impact", "Swap fee", "Gas"],
   );
-  // What the slippage picked sets, right after the costs: each token's minimum, and what happens below it.
-  const slippage = /<p class="label">Your slippage<\/p>\s*<dl class="rows">[\s\S]*?<\/dl>/.exec(swap)?.[0] ?? "";
-  assert.match(slippage, /its quote, less the fee, less your slippage/);
-  assert.match(slippage, /The token is skipped, and stays in your wallet/);
+  // What the slippage picked is, right after the costs, and what happens to a token that falls short of it.
+  const slippage = /<p class="label">Slippage<\/p>\s*<dl class="rows">[\s\S]*?<\/dl>/.exec(swap)?.[0] ?? "";
+  assert.deepEqual(
+    [...slippage.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
+    ["What it is", "When unmet"],
+  );
+  assert.match(slippage, /How much less than quoted you accept for each token/);
+  assert.match(slippage, /The token isn't swapped and stays in your wallet/);
   // The swap's own summary sets the slippage on the line of the least that may reach you.
   assert.match(swap, /<label\s*>At least, with\s*<select class="swap-margin">/);
   assert.ok(!swap.includes(SWAP_TREASURY) && !swap.includes("2-of-3"));

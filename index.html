@@ -1261,38 +1261,35 @@
               <span aria-hidden="true">×</span>
             </button>
           </div>
+          <!-- What the quote holds first, then what comes on top of it. -->
           <p class="label">Costs</p>
           <dl class="fee-facts">
             <div>
-              <dt>Swap fee</dt>
-              <dd>1%</dd>
-            </div>
-            <div>
               <dt>Pool fees</dt>
-              <dd>In the quote</dd>
+              <dd>Each pool's own, part of the quote</dd>
             </div>
             <div>
               <dt>Price impact</dt>
-              <dd>In the quote</dd>
+              <dd>Grows with the amount, part of the quote</dd>
+            </div>
+            <div>
+              <dt>Swap fee</dt>
+              <dd>1%, taken from the swap's output</dd>
             </div>
             <div>
               <dt>Gas</dt>
-              <dd>Paid in ETH, not taken from the swap</dd>
+              <dd>Paid separately, in ETH</dd>
             </div>
           </dl>
-          <p class="label">Your slippage</p>
+          <p class="label">Slippage</p>
           <dl class="rows">
             <div>
-              <dt>Sets</dt>
-              <dd>Each token's minimum: its quote, less the fee, less your slippage</dd>
+              <dt>What it is</dt>
+              <dd>How much less than quoted you accept for each token</dd>
             </div>
             <div>
-              <dt>Below its minimum</dt>
-              <dd>The token is skipped, and stays in your wallet</dd>
-            </div>
-            <div>
-              <dt>By default</dt>
-              <dd>0.5%</dd>
+              <dt>When unmet</dt>
+              <dd>The token isn't swapped and stays in your wallet</dd>
             </div>
           </dl>
           <div data-section="control">
