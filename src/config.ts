@@ -55,9 +55,10 @@ export const APPROVAL_LOGIC_CODE_HASH: Hex = "0xd1fab3adcd045439b72359a675665cb9
 export const VOTER: Address = "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b";
 export const ACCOUNT_NAMES: Address = "0x998cf40a742460b4eBbFB569A0D23eA91976c0d3";
 
-// For pricing rewards: Hydrex's two pool factories, and the tokens other tokens are priced against.
+// Hydrex's two pool factories.
 export const ALGEBRA_FACTORY: Address = "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E";
 export const PAIR_FACTORY: Address = "0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0";
+// For pricing: the tokens other tokens are priced against.
 export type Anchor = { address: Address; decimals: number; feed?: Address };
 export const WETH: Address = "0x4200000000000000000000000000000000000006";
 export const ANCHORS: Anchor[] = [
@@ -149,12 +150,19 @@ export const HYDX: Address = "0x00000e7efa313F4E11Bfff432471eD9423AC6B30";
 
 // The exchanges each swapper trades on, in the order the page lists and checks them. `id` is each one's place in the
 // swapper's Exchange enum and in exchanges(), with the factory it checks each pool against. Aero's basic pools have a
-// factory for volatile pools and one for stable pools. Uniswap v4's is its PoolManager, which holds every pool.
+// factory for volatile pools and one for stable pools, which is marked. Uniswap v4's is its PoolManager, which holds
+// every pool.
 export type ExchangeKind = "algebra" | "pair" | "solidly" | "slipstream" | "aerodrome" | "v2" | "v3" | "v4";
-export type Exchange = { id: number; name: string; kind: ExchangeKind; factory: Address };
+export type Exchange = { id: number; name: string; kind: ExchangeKind; factory: Address; stable?: boolean };
 export const EXCHANGES: Exchange[] = [
   { id: 2, name: "Aero Basic Pools", kind: "solidly", factory: "0x8E6a9FCd1d638CC760Ffba397605Fe3355dE76D2" },
-  { id: 3, name: "Aero Basic Pools", kind: "solidly", factory: "0x78589E876edcEbdce72ee3436ab3c9AD3a7cEF2D" },
+  {
+    id: 3,
+    name: "Aero Basic Pools",
+    kind: "solidly",
+    factory: "0x78589E876edcEbdce72ee3436ab3c9AD3a7cEF2D",
+    stable: true,
+  },
   { id: 4, name: "Aero Slipstream", kind: "slipstream", factory: "0x9CB220581b91b0C83223012FE69688b92aD07a76" },
   { id: 5, name: "Aerodrome Basic Pools", kind: "aerodrome", factory: "0x420DD381b31aEf6683db6B902084cB0FFECe40Da" },
   { id: 8, name: "Aerodrome Slipstream V3", kind: "slipstream", factory: "0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef" },
@@ -166,3 +174,9 @@ export const EXCHANGES: Exchange[] = [
   { id: 1, name: "Hydrex Classic Pools", kind: "pair", factory: PAIR_FACTORY },
   { id: 0, name: "Hydrex Integral", kind: "algebra", factory: ALGEBRA_FACTORY },
 ];
+
+// For pricing: the exchanges whose pools price other tokens against the anchors, by id, in the order they are read:
+// Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools and Hydrex Integral.
+export const PRICE_EXCHANGES: Exchange[] = [2, 3, 5, 1, 0].map((id) =>
+  EXCHANGES.find((exchange) => exchange.id === id)!,
+);

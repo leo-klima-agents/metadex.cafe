@@ -1,8 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { zeroAddress } from "viem";
+import { zeroAddress, type Address } from "viem";
 import type { Call } from "../src/chain.ts";
-import { SPAN, WINDOW, narrow, observedPrice, pairPrice, points, tickPrice, type Search } from "../src/prices.ts";
+import { EXCHANGES, PRICE_EXCHANGES } from "../src/config.ts";
+import {
+  SPAN,
+  WINDOW,
+  narrow,
+  observedPrice,
+  pairPrice,
+  points,
+  pricesAt,
+  tickPrice,
+  type Search,
+} from "../src/prices.ts";
 
 const close = (actual: number, expected: number, relative = 1e-9) =>
   assert.ok(Math.abs(actual - expected) <= Math.abs(expected) * relative, `${actual} is not ${expected}`);
@@ -89,4 +100,114 @@ test("a search that starts from a bound finds the same, and a read that fails en
   const broken = search(500);
   await narrow([broken], reader);
   assert.equal(broken.failed, true);
+});
+
+test("prices come from the pools of four exchanges, in order", () => {
+  assert.deepEqual(
+    [...new Set(PRICE_EXCHANGES.map(({ name }) => name))],
+    ["Aero Basic Pools", "Aerodrome Basic Pools", "Hydrex Classic Pools", "Hydrex Integral"],
+  );
+  // Every factory of those exchanges, once: both of Aero's basic pools'.
+  const names = new Set(PRICE_EXCHANGES.map(({ name }) => name));
+  assert.deepEqual(
+    PRICE_EXCHANGES.map(({ id }) => id).sort(),
+    EXCHANGES.filter(({ name }) => names.has(name))
+      .map(({ id }) => id)
+      .sort(),
+  );
+});
+
+// A chain with USDC as the only anchor, and two tokens below its address, so each is its pools' token0. TOKEN trades in
+// a deep Aero basic pool and a shallower Hydrex Integral pool. LONE trades only in an Aero basic pool.
+const USDC: Address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+const TOKEN: Address = "0x0000000000000000000000000000000000000a01";
+const LONE: Address = "0x0000000000000000000000000000000000000a02";
+const factoryOf = (id: number): Address => EXCHANGES.find((each) => each.id === id)!.factory;
+const [AERO_VOLATILE, ALGEBRA] = [factoryOf(2), factoryOf(0)];
+const POOLS = {
+  aero: "0x0000000000000000000000000000000000000b01",
+  algebra: "0x0000000000000000000000000000000000000b02",
+  lone: "0x0000000000000000000000000000000000000b03",
+  plugin: "0x0000000000000000000000000000000000000b04",
+} as const;
+const E18 = 10n ** 18n;
+const E6 = 10n ** 6n;
+// The tick at which a token of 18 decimals is worth `usd` in USDC.
+const tickAt = (usd: number) => Math.round(Math.log(usd / 1e12) / Math.log(1.0001));
+
+function chain(aeroHistory: boolean) {
+  const asked: string[] = [];
+  const is = (a: unknown, b: string) => typeof a === "string" && a.toLowerCase() === b.toLowerCase();
+  const answer = ({ address, functionName, args }: Call): unknown => {
+    switch (functionName) {
+      case "getPool":
+        if (is(address, AERO_VOLATILE) && is(args[0], TOKEN)) return POOLS.aero;
+        if (is(address, AERO_VOLATILE) && is(args[0], LONE)) return POOLS.lone;
+        return zeroAddress;
+      case "poolByPair":
+        return is(address, ALGEBRA) && is(args[0], TOKEN) ? POOLS.algebra : zeroAddress;
+      case "getPair":
+        return zeroAddress;
+      // The Aero pool holds $3M a side at $3, LONE's $1M a side at $0.50, and the Hydrex Integral pool $200,000 a side
+      // at $2.
+      case "getReserves":
+        if (is(address, POOLS.aero)) return [1_000_000n * E18, 3_000_000n * E6, 0n];
+        if (is(address, POOLS.lone)) return [2_000_000n * E18, 1_000_000n * E6, 0n];
+        return [100_000n * E18, 200_000n * E6];
+      case "globalState":
+        return [0n, tickAt(2), 0, 0, 0, true];
+      case "plugin":
+        return POOLS.plugin;
+      // Over the window, the Aero pool held 280,000 USDC for 100,000 tokens, $2.80, and the Hydrex Integral pool's tick
+      // averaged $2.50. LONE's pool keeps no history that far back.
+      case "observe":
+        asked.push(address);
+        if (is(address, POOLS.aero) && aeroHistory)
+          return [
+            [0n, 100_000n * E18 * BigInt(WINDOW)],
+            [0n, 280_000n * E6 * BigInt(WINDOW)],
+          ];
+        return undefined;
+      case "getTimepoints":
+        asked.push(address);
+        return [
+          [0n, BigInt(tickAt(2.5) * WINDOW)],
+          [0n, 0n],
+        ];
+      default:
+        return undefined;
+    }
+  };
+  const reader = async (calls: Call[]) => calls.map(answer);
+  return { reader, asked };
+}
+
+const tokens = [
+  { address: TOKEN, decimals: 18, symbol: "TOKEN" },
+  { address: LONE, decimals: 18, symbol: "LONE" },
+];
+const flip = 1_792_627_200;
+
+test("the deepest pool whose history reaches the flip gives the price", async () => {
+  const { reader, asked } = chain(true);
+  const prices = await pricesAt(tokens, new Map(), flip, flip + 3_600, reader);
+  close(prices.get(USDC.toLowerCase())!, 1);
+  close(prices.get(TOKEN)!, 2.8);
+  assert.ok(!asked.includes(POOLS.plugin), "the shallower pool is not asked");
+});
+
+test("a pool whose history falls short gives way to the next, and a token without any takes its price now", async () => {
+  const { reader, asked } = chain(false);
+  const prices = await pricesAt(tokens, new Map(), flip, flip + 3_600, reader);
+  close(prices.get(TOKEN)!, 2.5, 1e-3);
+  assert.deepEqual(asked, [POOLS.aero, POOLS.lone, POOLS.plugin]);
+  close(prices.get(LONE)!, 0.5);
+});
+
+test("a pool too thin for the amount priced does not count", async () => {
+  const { reader } = chain(true);
+  // A million TOKEN, about $3M, needs $30M in a pool: neither the Aero pool's $3M nor the Hydrex Integral pool's
+  // $200,000 is enough.
+  const prices = await pricesAt(tokens, new Map([[TOKEN, 1_000_000n * E18]]), flip, flip + 3_600, reader);
+  assert.equal(prices.get(TOKEN), undefined);
 });

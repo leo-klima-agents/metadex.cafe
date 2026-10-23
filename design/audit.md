@@ -294,10 +294,11 @@ are read for that one account, where `last-payout.ts` reads an owner's.
 6. If this page goes away: the accounts stay as they are, and leaving is one call that any contract interface, such as
    Basescan's, can make.
 7. **How the figures are read** (`figures`), the one place for the page's methods: the prices (each token's average over
-   the half hour before the epoch ended, in the deepest of Hydrex's pools; Chainlink for WETH and cbBTC; the depth a
-   pool needs; and that a token without one counts for nothing); Earning Power as Hydrex shows it, 1.3 times the votes;
-   fees and incentives, and why Hydrex's own figures are lower; when the page counts an epoch as paid; and why what
-   waits to be claimed is a floor. Figures marked "≈" elsewhere can link here.
+   the half hour before the epoch ended, in the deepest pool of Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic
+   Pools or Hydrex Integral whose history reaches that far; Chainlink for WETH and cbBTC; the depth a pool needs; and
+   that a token without one counts for nothing); Earning Power as Hydrex shows it, 1.3 times the votes; fees and
+   incentives, and why Hydrex's own figures are lower; when the page counts an epoch as paid; and why what waits to be
+   claimed is a floor. Figures marked "≈" elsewhere can link here.
 
 ### The review
 
