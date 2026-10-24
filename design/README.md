@@ -21,12 +21,12 @@ technical parts open from an info button, as popups.
 - **The App** (`#app`): what needs you across the products, each with one action; then the products, the Hydrex
   automations and the swap, each with what you hold in it; and Approvals, what this wallet allows, in a popup. See
   [products.md](products.md).
-- **Hydrex** (`#hydrex`), "Your Wallet › Hydrex": the automations first, in one box, a row each: each automation and
+- **Hydrex** (`#hydrex`), "Your wallet › Hydrex": the automations first, in one box, a row each: each automation and
   voting yourself, with what it takes, what it pays in and what it paid last epoch. Then, with a wallet, its Hydrex
   accounts, in groups a level below: those that need their owner, those in each automation, the others, and a fold for
   those with nothing to vote with. Each row leads to the account's page. The menu used to come last, under the groups,
   as cards like the accounts': with many accounts, it was easy to miss.
-- **The swap** (`#swap`, `#swap/weth`), "Your Wallet › Swap tokens": the output, the wallet's tokens, what the ticked
+- **The swap** (`#swap`, `#swap/weth`), "Your wallet › Swap tokens": the output, the wallet's tokens, what the ticked
   ones fetch line by line, from the quote down to the least that may reach you, with the slippage picked on that line,
   and popups: its costs, what the slippage is, and the six swappers' contracts; approvals you gave the swappers.
 - **An automation's page** (`#hydrex/carbon-impact`, `#hydrex/automaxi`): its status, its key figures, and your accounts

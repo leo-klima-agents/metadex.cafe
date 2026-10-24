@@ -77,8 +77,8 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await home.getByRole("link", { name: "Open app" }).click();
     await appTitle(page).waitFor();
     assert.equal(await homeTitle(page).isVisible(), false);
-    assert.equal(await page.title(), "Your Wallet · metaDEX Café");
-    assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Your Wallet");
+    assert.equal(await page.title(), "Your wallet · metaDEX Café");
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Your wallet");
     // The App lists the products: the Hydrex automations, and the swap.
     assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), ["Hydrex automations", "Swap tokens"]);
     assert.equal(await page.locator("header .to-app").getAttribute("aria-current"), "page");
@@ -182,19 +182,19 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await position(page).getByRole("button", { name: "Leave", exact: true }).waitFor();
     assert.equal(await position(page).locator(".position-owner-row").isVisible(), false, "its own account");
     await shoot(page, "stopped-account-390-light");
-    // Its title leads back: "Your Wallet › Hydrex › Account #2439".
+    // Its title leads back: "Your wallet › Hydrex › Account #2439".
     const trail = position(page).getByRole("navigation", { name: "Breadcrumb" });
-    assert.deepEqual(await trail.getByRole("link").allInnerTexts(), ["Your Wallet", "Hydrex"]);
+    assert.deepEqual(await trail.getByRole("link").allInnerTexts(), ["Your wallet", "Hydrex"]);
     await trail.getByRole("link", { name: "Hydrex" }).click();
     await hydrexTitle(page).waitFor();
     // Hydrex's page leads back to the wallet, the App.
     await hydrex(page)
       .getByRole("navigation", { name: "Breadcrumb" })
-      .getByRole("link", { name: "Your Wallet" })
+      .getByRole("link", { name: "Your wallet" })
       .click();
     await appTitle(page).waitFor();
     assert.equal(new URL(page.url()).hash, "#app");
-    assert.equal(await page.title(), "Your Wallet · metaDEX Café");
+    assert.equal(await page.title(), "Your wallet · metaDEX Café");
     assert.equal(await homeTitle(page).isVisible(), false);
     // The App says what needs you across the products: here, the accounts in automations that stopped.
     const needs = app(page).locator("#needs");

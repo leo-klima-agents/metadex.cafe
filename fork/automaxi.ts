@@ -77,7 +77,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     const frame = page.frameLocator("iframe");
     const dialog = frame.locator("#review");
     await frame.locator("header").getByText(short(LEAVER)).waitFor();
-    assert.equal(await frame.getByRole("heading", { name: "Your Wallet", level: 1, exact: true }).isVisible(), true);
+    assert.equal(await frame.getByRole("heading", { name: "Your wallet", level: 1, exact: true }).isVisible(), true);
     assert.equal(await frame.getByRole("heading", { name: "Vote, claim and swap on Base" }).isVisible(), false);
     await frame.getByRole("link", { name: "Hydrex automations" }).click();
     await frame.getByRole("checkbox", { name: "Pick Hydrex account #53350" }).check();
@@ -268,8 +268,8 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await page.keyboard.press("Escape");
     // Its title leads back to Hydrex, and to the wallet.
     const trail = maxi.getByRole("navigation", { name: "Breadcrumb" });
-    assert.deepEqual(await trail.getByRole("link").allInnerTexts(), ["Your Wallet", "Hydrex"]);
-    await trail.getByRole("link", { name: "Your Wallet" }).click();
+    assert.deepEqual(await trail.getByRole("link").allInnerTexts(), ["Your wallet", "Hydrex"]);
+    await trail.getByRole("link", { name: "Your wallet" }).click();
     await appTitle(page).waitFor();
 
     await page.goto(`${SITE}/#hydrex/carbon-impact`);

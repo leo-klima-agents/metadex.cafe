@@ -170,12 +170,12 @@ function showGas(element: Element, wei: bigint, prices: Prices | undefined): voi
 function judge(row: Row, scanned: Scan): void {
   const { found } = row;
   if (row.failed) {
-    row.reason = "not read";
+    row.reason = "Not read";
     return;
   }
   if (found === undefined) return;
   if (found === null) {
-    row.reason = "no route";
+    row.reason = "No route";
     return;
   }
   row.worth =
@@ -183,7 +183,7 @@ function judge(row: Row, scanned: Scan): void {
     (row.price === undefined ? undefined : worthOf(row.amount, row.token.decimals, row.price));
   const gas = found.gas + (row.allowance < row.amount ? APPROVAL_GAS : 0n);
   const cost = scanned.costs ? (gasCost(gas, scanned.costs, scanned.prices)?.value ?? 0) : 0;
-  row.reason = row.worth === undefined ? "no price" : row.worth < CLEARS * cost ? "below gas" : undefined;
+  row.reason = row.worth === undefined ? "No price" : row.worth < CLEARS * cost ? "Below gas" : undefined;
 }
 
 function drawRow(row: Row, scanned: Scan): void {
@@ -592,7 +592,7 @@ export async function openSwapReview(
     fill(line, {
       "line-symbol": token.symbol,
       "line-amount": figure(route.amount, token.decimals),
-      "line-fetches": reason ? "skipped" : "",
+      "line-fetches": reason ? "Skipped" : "",
       "line-route": hopsWords(route, tokens),
     });
     if (!reason) showOutput(line.querySelector(".line-fetches")!, fetched, swapper, prices);

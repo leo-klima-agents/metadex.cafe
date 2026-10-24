@@ -227,7 +227,7 @@ test("each swapper has its output and a checksummed address, and the swap's page
   );
   assert.deepEqual(
     listed,
-    SWAPPERS.map(({ symbol, address }) => `${symbol} Swapper ${address}`),
+    SWAPPERS.map(({ symbol, address }) => `${symbol} swapper ${address}`),
   );
   // The page's list of tokens: checksummed, each once.
   for (const { address } of tokens) assert.equal(getAddress(address), address);
@@ -265,19 +265,19 @@ test("the header holds the logo and the name, and a button to connect a wallet; 
   assert.match(header, /<a class="name" href="#"><img src="icon\.svg" alt="" [^>]*\/> metaDEX Café<\/a>/);
   assert.match(header, /<button type="button" class="connect">Connect a wallet<\/button>/);
   assert.match(header, /<a class="to-app button wallet-state" href="#app" hidden/);
-  // Home and About are the page's own; the App is "Your Wallet", and every other view names the way back to it first.
+  // Home and About are the page's own; the App is "Your wallet", and every other view names the way back to it first.
   const trail = (view: string) => /<nav class="trail" aria-label="Breadcrumb">(.*?)<\/nav>/.exec(view)?.[1];
   for (const name of ["home", "about"]) assert.equal(trail(viewOf(html, `data-view="${name}"`)), undefined, name);
-  assert.match(viewOf(html, 'data-view="app"'), /<h1 tabindex="-1">Your Wallet<\/h1>/);
+  assert.match(viewOf(html, 'data-view="app"'), /<h1 tabindex="-1">Your wallet<\/h1>/);
   for (const name of ["hydrex", "swap"]) {
-    assert.equal(trail(viewOf(html, `data-view="${name}"`)), '<a href="#app">Your Wallet</a>', name);
+    assert.equal(trail(viewOf(html, `data-view="${name}"`)), '<a href="#app">Your wallet</a>', name);
   }
   for (const view of [
     productOf(html, "carbon-impact"),
     productOf(html, "automaxi"),
     viewOf(html, 'data-view="position"'),
   ]) {
-    assert.equal(trail(view), '<a href="#app">Your Wallet</a><a href="#hydrex">Hydrex</a>');
+    assert.equal(trail(view), '<a href="#app">Your wallet</a><a href="#hydrex">Hydrex</a>');
   }
   // Only the App and the header's popup hold the wallet buttons.
   assert.equal(html.match(/<div class="wallet-slot"><\/div>/g)?.length, 2);

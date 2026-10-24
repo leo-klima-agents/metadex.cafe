@@ -350,7 +350,7 @@ section > * + *,
   margin-inline-start: auto;
 }
 /* The pages of the wallet lead back to it in their title, before their own name, in the heading's face and quieter:
-   "Your Wallet › Hydrex". */
+   "Your wallet › Hydrex". */
 .title-line:has(> .trail) {
   column-gap: 0.6rem;
 }

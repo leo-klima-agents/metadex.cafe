@@ -600,7 +600,7 @@ export const product = (page: Page, kind: string) => page.locator(`.view[data-ki
 export const position = (page: Page) => page.locator('.view[data-view="position"]');
 export const review = (page: Page | FrameLocator) => page.locator("#review");
 export const homeTitle = (page: Page) => page.getByRole("heading", { name: "Vote, claim and swap on Base" });
-export const appTitle = (page: Page) => page.getByRole("heading", { name: "Your Wallet", level: 1, exact: true });
+export const appTitle = (page: Page) => page.getByRole("heading", { name: "Your wallet", level: 1, exact: true });
 export const hydrexTitle = (page: Page) => page.getByRole("heading", { name: "Hydrex", level: 1, exact: true });
 export const toHydrex = (page: Page) => page.goto(`${SITE}/#hydrex`);
 export const chip = (page: Page, owner: Address) => page.locator("header").getByText(short(owner));

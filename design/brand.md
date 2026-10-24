@@ -145,7 +145,7 @@ and works in one colour.
   "Connect a wallet", or the wallet's chip once connected, which leads to the App. On the App itself, the chip reads as
   where you are.
 - **The title of every page below the App leads back to it,** before the page's own name, in the heading's face and
-  quieter: "Your Wallet › Hydrex", "Your Wallet › Hydrex › Carbon Impact". Wallets' browsers and Safe{Wallet}'s frame
+  quieter: "Your wallet › Hydrex", "Your wallet › Hydrex › Carbon Impact". Wallets' browsers and Safe{Wallet}'s frame
   have no address bar. Home and About are the page's own, and have none.
 - **A view repeats only its own main action,** as a button, such as "Open the app" on Home. It never offers a second way
   to a page the header already leads to.

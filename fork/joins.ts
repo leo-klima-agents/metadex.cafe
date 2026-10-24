@@ -142,7 +142,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await chip(page, NEWCOMER).waitFor();
     await page
       .locator("header")
-      .getByRole("link", { name: /Your Wallet, connected as 0x0208…4C95/ })
+      .getByRole("link", { name: /Your wallet, connected as 0x0208…4C95/ })
       .click();
     await appTitle(page).waitFor();
     assert.equal(await homeTitle(page).isVisible(), false);

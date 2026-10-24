@@ -23,7 +23,7 @@
       <nav aria-label="Site">
         <button type="button" class="connect">Connect a wallet</button>
         <a class="to-app button wallet-state" href="#app" hidden
-          ><span class="visually-hidden">Your Wallet, connected as </span
+          ><span class="visually-hidden">Your wallet, connected as </span
           ><span class="wallet-short" translate="no"></span
         ></a>
       </nav>
@@ -46,16 +46,16 @@
       </p>
 
       <!-- One view for each kind of page. The route in the hash picks the one shown: see src/views.ts. The pages of the
-           wallet name the way back to it above their own, as "Your Wallet › Hydrex". Details open from an info button,
+           wallet name the way back to it above their own, as "Your wallet › Hydrex". Details open from an info button,
            as a popup at the foot of each view. -->
       <div class="view home" data-view="home" data-title="metaDEX Café">
         <h1 tabindex="-1">Vote, claim and swap on Base</h1>
         <p class="buttons"><a class="button" href="#app">Open app</a></p>
       </div>
 
-      <div class="view" data-view="app" data-title="Your Wallet · metaDEX Café" hidden>
+      <div class="view" data-view="app" data-title="Your wallet · metaDEX Café" hidden>
         <div class="title-line">
-          <h1 tabindex="-1">Your Wallet</h1>
+          <h1 tabindex="-1">Your wallet</h1>
           <button type="button" class="secondary compact allows-open" popovertarget="app-allows" hidden>
             Approvals
           </button>
@@ -117,7 +117,7 @@
 
       <div class="view" data-view="hydrex" data-title="Hydrex · metaDEX Café" hidden>
         <div class="title-line">
-          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your Wallet</a></nav>
+          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your wallet</a></nav>
           <h1 tabindex="-1">Hydrex</h1>
         </div>
         <p class="notice checks-failed" data-kind="carbon-impact" role="alert" hidden>
@@ -292,7 +292,7 @@
         hidden
       >
         <div class="title-line">
-          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your Wallet</a><a href="#hydrex">Hydrex</a></nav>
+          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your wallet</a><a href="#hydrex">Hydrex</a></nav>
           <h1 tabindex="-1">Carbon Impact</h1>
         </div>
         <div class="state-line">
@@ -694,7 +694,7 @@
 
       <div class="view product" data-view="product" data-kind="automaxi" data-title="AutoMaxi · metaDEX Café" hidden>
         <div class="title-line">
-          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your Wallet</a><a href="#hydrex">Hydrex</a></nav>
+          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your wallet</a><a href="#hydrex">Hydrex</a></nav>
           <h1 tabindex="-1">AutoMaxi</h1>
         </div>
         <p class="automaxi-absent notice" hidden>Not on Base yet.</p>
@@ -1053,7 +1053,7 @@
 
       <div class="view" data-view="position" data-title="Account · metaDEX Café" hidden>
         <div class="title-line">
-          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your Wallet</a><a href="#hydrex">Hydrex</a></nav>
+          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your wallet</a><a href="#hydrex">Hydrex</a></nav>
           <h1 tabindex="-1">
             <bdi class="position-name" translate="no">Account</bdi> <span class="position-id"></span>
           </h1>
@@ -1148,7 +1148,7 @@
 
       <div class="view swap" data-view="swap" data-title="Swap · metaDEX Café" hidden>
         <div class="title-line">
-          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your Wallet</a></nav>
+          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your wallet</a></nav>
           <h1 tabindex="-1">Swap tokens</h1>
           <button type="button" class="info" popovertarget="swap-info" aria-label="Costs and contracts">
             <span aria-hidden="true">i</span>
@@ -1297,7 +1297,7 @@
             <h4 class="label">Contracts</h4>
             <dl class="rows">
               <div>
-                <dt>USDC Swapper</dt>
+                <dt>USDC swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0x31791f453d2100e728E012c9e189C0828adf4b6F#code"
@@ -1307,7 +1307,7 @@
                 </dd>
               </div>
               <div>
-                <dt>EURC Swapper</dt>
+                <dt>EURC swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E#code"
@@ -1317,7 +1317,7 @@
                 </dd>
               </div>
               <div>
-                <dt>WETH Swapper</dt>
+                <dt>WETH swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0xe5cbD828c2227E17f7FF8BD54C7A1e6012694Ff2#code"
@@ -1327,7 +1327,7 @@
                 </dd>
               </div>
               <div>
-                <dt>cbBTC Swapper</dt>
+                <dt>cbBTC swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0#code"
@@ -1337,7 +1337,7 @@
                 </dd>
               </div>
               <div>
-                <dt>AERO Swapper</dt>
+                <dt>AERO swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0xdd575A498C625AF96ac89efE578Dc68f4c9aB963#code"
@@ -1347,7 +1347,7 @@
                 </dd>
               </div>
               <div>
-                <dt>HYDX Swapper</dt>
+                <dt>HYDX swapper</dt>
                 <dd>
                   <code translate="no"
                     ><a href="https://basescan.org/address/0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC#code"
