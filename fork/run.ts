@@ -1,9 +1,7 @@
 import { spawn } from "node:child_process";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { RPCS } from "../src/config.ts";
 import { BLOCK, RECENT } from "./harness.ts";
-import { serveCached, upstreamOf } from "./rpc-cache.ts";
+import { cacheFileOf, forkUrl, serveCached, upstreamOf } from "./rpc-cache.ts";
 
 // Runs the browser test files at once, each with an anvil of its own, all forking through one cache per block, and all
 // the caches through one queue to FORK_URL: so it is asked for each answer once, however many files read it, and at
@@ -12,8 +10,7 @@ import { serveCached, upstreamOf } from "./rpc-cache.ts";
 //
 // FORK_URL is the archive RPC that BASE_RPC_URL names, or else the page's own first RPC. Its answers are kept between
 // runs in FORK_CACHE: see rpc-cache.ts.
-const FORK_URL = process.env.BASE_RPC_URL || RPCS[0]!;
-const CACHE = process.env.FORK_CACHE || join(homedir(), ".cache", "metadex.cafe", "fork");
+const FORK_URL = forkUrl(RPCS[0]!);
 const FILES = ["fork/views.ts", "fork/joins.ts", "fork/automaxi.ts", "fork/swap.ts", "fork/claim.ts"];
 const args = process.argv.slice(2);
 const named = args.some((arg) => !arg.startsWith("-"));
@@ -21,7 +18,7 @@ const upstream = upstreamOf(FORK_URL);
 const caches = await Promise.all(
   [BLOCK, RECENT].map(async (block) => ({
     block,
-    cache: await serveCached(upstream, join(CACHE, `base-${block}.json.gz`), block),
+    cache: await serveCached(upstream, cacheFileOf(block), block),
   })),
 );
 const child = spawn(

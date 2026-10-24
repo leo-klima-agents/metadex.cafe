@@ -40,14 +40,17 @@ not have those yet: reload the page, and it shows the change.
   MetaMask do, all or nothing, or one by one. All or nothing, a batch whose calls would not all go through sends one
   transaction that fails, and nothing else. The page asks a wallet what it can do once per address: reload it after a
   change.
-- **Fail the next transaction:** sends it with too little gas, so that Base includes it, and it fails.
+- **Fail the next transaction:** sends it with too little gas, so that Base includes it, and it fails. A call that runs
+  on less gas than its calldata already pays for (EIP-7623's floor) cannot fail so: the wallet then refuses to send it,
+  and the page shows the error.
 - **Lock:** the wallet shares no account any more, as when it locks.
 - **Send it all away:** sends the wallet's whole balance of a token to `0x…dEaD`, as if spent elsewhere. By symbol, the
   one the wallet holds of the listed tokens so named: two are AERO.
 - **Give it a token of that symbol:** deploys a token of the QA wallet's own, `fork/fixtures/QaToken.sol`, at a new
   address, with the symbol given, and 1,000 of it to the wallet. **Lists those tokens** answers ERC-7811's
   `wallet_getAssets` with them, as a wallet that lists its tokens does; such a wallet answers `wallet_getCapabilities`,
-  so the page also sends several calls in one prompt.
+  so the page also sends several calls in one prompt: ticking it turns one call per prompt into all or nothing, and
+  picking one call per prompt unticks it. The log says so either way.
 - **Open the page:** with the wallet; in Safe{Wallet}, with the address signed as for the Safe, on the wallet's network;
   with two wallets in the browser; or with none.
 - **Hydrex,** for the account typed in, as its owner can on Hydrex: **Delegate its votes** to any address, to one of

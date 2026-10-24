@@ -47,6 +47,7 @@ import {
   hydrexTitle,
   toHydrex,
   connectButton,
+  chip,
   pick,
   shoot,
   stop,
@@ -111,6 +112,40 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.deepEqual(violations, []);
   });
 
+  test("a wallet connected on Home or About leads on to the App, and Home stays Home afterwards", async () => {
+    const { page, violations } = await open({ owner: NEWCOMER });
+    await homeTitle(page).waitFor();
+    await connectButton(page).click();
+    await appTitle(page).waitFor();
+    assert.equal(new URL(page.url()).hash, "#app");
+    await page.locator("header.site").getByRole("link", { name: "metaDEX Café" }).click();
+    await homeTitle(page).waitFor();
+    // From About too, and from no other page.
+    const other = await open({ owner: NEWCOMER }, { url: `${SITE}/#about` });
+    await other.page.getByRole("heading", { name: "About", level: 1 }).waitFor();
+    await connectButton(other.page).click();
+    await appTitle(other.page).waitFor();
+    const hydrexFirst = await open({ owner: NEWCOMER }, { url: `${SITE}/#hydrex` });
+    await hydrexTitle(hydrexFirst.page).waitFor();
+    await connectButton(hydrexFirst.page).click();
+    await chip(hydrexFirst.page, NEWCOMER).waitFor();
+    assert.equal(new URL(hydrexFirst.page.url()).hash, "#hydrex");
+    // A wallet asked on Hydrex's page and answered once its owner went Home leaves them there.
+    let approve = () => {};
+    const approval = new Promise<void>((resolve) => (approve = resolve));
+    const late = await open({ owner: NEWCOMER, approval }, { url: `${SITE}/#hydrex` });
+    await hydrexTitle(late.page).waitFor();
+    await connectButton(late.page).click();
+    await late.page.locator("header.site").getByRole("link", { name: "metaDEX Café" }).click();
+    await homeTitle(late.page).waitFor();
+    approve();
+    await chip(late.page, NEWCOMER).waitFor();
+    assert.equal(new URL(late.page.url()).hash, "");
+    assert.equal(await homeTitle(late.page).isVisible(), true);
+    for (const each of [violations, other.violations, hydrexFirst.violations, late.violations])
+      assert.deepEqual(each, []);
+  });
+
   test("without the script, Home shows and says that the page needs it", async () => {
     const { page } = await open(false, { url: `${SITE}/#app`, script: false });
     await homeTitle(page).waitFor();
@@ -135,10 +170,10 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await page.getByRole("checkbox", { name: "Pick Hydrex account #2439" }).isChecked(), true);
     await page.getByRole("button", { name: "Join Carbon Impact with 2 Hydrex accounts" }).waitFor();
     await account(page, 2439).getByRole("link", { name: "Hydrex account #2439" }).click();
-    await position(page).getByRole("heading", { name: "Hydrex account #2439", level: 1 }).waitFor();
+    await position(page).getByRole("heading", { name: "Account #2439", level: 1 }).waitFor();
     assert.equal(new URL(page.url()).hash, "#hydrex/2439");
     assert.equal(await page.title(), "Hydrex account #2439 · metaDEX Café");
-    assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), "Hydrex account #2439");
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), "Account #2439");
     await position(page)
       .locator(".position-stopped")
       .getByText(/Earns nothing\s+since\s+Thu,? 10 Sept?\./)
@@ -147,7 +182,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await position(page).getByRole("button", { name: "Leave", exact: true }).waitFor();
     assert.equal(await position(page).locator(".position-owner-row").isVisible(), false, "its own account");
     await shoot(page, "stopped-account-390-light");
-    // Its title leads back: "Your Wallet › Hydrex › Hydrex account #2439".
+    // Its title leads back: "Your Wallet › Hydrex › Account #2439".
     const trail = position(page).getByRole("navigation", { name: "Breadcrumb" });
     assert.deepEqual(await trail.getByRole("link").allInnerTexts(), ["Your Wallet", "Hydrex"]);
     await trail.getByRole("link", { name: "Hydrex" }).click();
@@ -311,7 +346,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     const receipt = standing.locator(".receipt");
     await receipt.first().waitFor({ timeout: 120_000 });
     assert.equal(await standing.count(), 1);
-    assert.equal(await position(page).locator("h1").innerText(), "Hydrex account #82774");
+    assert.equal(await position(page).locator("h1").innerText(), "Account #82774");
     // On Fri 16 Oct, Carbon Impact owed it the epoch from Thu 1 Oct, and had paid nothing since Wed 23 Sep.
     assert.match(await standing.locator(".standing-late").innerText(), /^Late · paid up to Thu,? 17 Sept?$/);
     assert.equal(await standing.locator(".standing-paid").isVisible(), false);
@@ -319,7 +354,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await standing.locator(".standing-outside").isVisible(), false);
     assert.equal(await position(page).locator(".position-underway").isVisible(), false);
     assert.equal(await receipt.count(), 1);
-    assert.equal(await receipt.locator(".receipt-id").innerText(), "#82774");
+    assert.equal(await receipt.locator(".receipt-id").textContent(), "Account #82774");
     assert.equal(await receipt.locator(".receipt-earned").innerText(), "8.56 USDC and 89.04 HYDX");
     assert.equal(await receipt.locator(".receipt-swapped").innerText(), "1,053.92 kVCM");
     assert.equal(await receipt.locator(".receipt-retired").innerText(), "−326.80 kVCM");
@@ -405,10 +440,11 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await nothing.locator("summary").click();
     await account(page, 123351).getByText("Lock ended").waitFor();
     assert.equal(await account(page, 123351).locator(".pick").isVisible(), false);
+    // Its box is there, hidden and disabled, and nothing shows where it would be clicked.
+    const box = account(page, 123351).locator(".pick");
+    assert.equal(await box.isDisabled(), true, "nothing can tick it");
+    assert.equal(await account(page, 123351).locator(".tick").isVisible(), false, "nothing to click");
     assert.equal(await nothing.getByRole("button").count(), 0);
-    // Playwright refuses a click on a label whose box is disabled, which is the point: force it, as a person would.
-    await account(page, 123351).locator(".small").click({ force: true });
-    assert.equal(await account(page, 123351).locator(".pick").isChecked(), false);
     await account(page, 123364).waitFor();
     // An automation's page lists those that can join it, and says when the wallet has none, as an address with no
     // account has.

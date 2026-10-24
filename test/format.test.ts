@@ -17,6 +17,7 @@ import {
   units,
   until,
   usd,
+  walletLines,
   weekStart,
   when,
 } from "../src/format.ts";
@@ -109,6 +110,16 @@ test("hex in groups of four: an address or a hash on one line, calldata a line f
   assert.equal(lines.length, 4);
   assert.deepEqual(lines[2]!.slice(-2), ["0000", "2544"]);
   assert.equal(lines.flat().join(""), data, "the groups are the hex, with nothing added");
+});
+
+test("an address as hardware wallets show it: three lines of four columns, the 0x first", () => {
+  const address = "0xdE91885cF35ac57DF0c4A75c16862127dBe8317c";
+  assert.deepEqual(walletLines(address), [
+    ["0x", "dE91", "885c", "F35a"],
+    ["c57D", "F0c4", "A75c", "1686"],
+    ["2127", "dBe8", "317c"],
+  ]);
+  assert.equal(walletLines(address).flat().join(""), address, "the groups are the address, with nothing added");
 });
 
 test("amounts of a token, from its decimals", () => {

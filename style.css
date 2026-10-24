@@ -42,6 +42,14 @@
   --gap-l: 1rem;
   --gap-xl: 2rem;
   --radius: 12px;
+  /* Controls inside a line, such as an input or a select, and calldata: a smaller radius. */
+  --radius-s: 8px;
+  /* One size for each kind of text. */
+  --text-label: 0.8125rem;
+  --text-small: 0.875rem;
+  --text-h3: 1rem;
+  --text-h2: 1.25rem;
+  --text-h1: 2rem;
   /* Light colours first, for browsers without light-dark(). */
   color-scheme: light;
   --paper: #fdfcf9;
@@ -100,6 +108,7 @@ body {
 h1,
 h2,
 h3,
+h4,
 p,
 ul,
 ol,
@@ -115,14 +124,16 @@ h2 {
   line-height: 1.2;
 }
 h1 {
-  font-size: 2rem;
+  font-size: var(--text-h1);
   letter-spacing: -0.01em;
 }
 h2 {
-  font-size: 1.25rem;
+  font-size: var(--text-h2);
 }
-h3 {
-  font-size: 1rem;
+h3,
+h4 {
+  font-size: var(--text-h3);
+  font-weight: 700;
   line-height: 1.4;
 }
 ul,
@@ -149,7 +160,7 @@ a:hover {
 }
 .small {
   color: var(--quiet);
-  font-size: 0.875rem;
+  font-size: var(--text-small);
 }
 /* Labels: small capitals in the mono face. */
 .label,
@@ -159,10 +170,14 @@ dialog .step-count,
 .lines dt {
   color: var(--quiet);
   font-family: var(--mono);
-  font-size: 0.8125rem;
+  font-size: var(--text-label);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+/* A fieldset's legend lines up with what follows it. */
+legend {
+  padding: 0;
 }
 /* A token's symbol keeps its case among capitals: "SWAP INTO cbBTC", not "SWAP INTO CBBTC". */
 :is(.label, dialog .step-count, .lines dt, .total dt) code {
@@ -191,7 +206,7 @@ table,
 .hex {
   overflow-wrap: normal;
 }
-.hex > span:not(.half):not(:last-child),
+.hex:not(.wallet) > span:not(.half):not(:last-child),
 .half > span:not(:last-child) {
   margin-inline-end: 0.4ch;
 }
@@ -211,6 +226,19 @@ table,
 .half:first-child::after {
   content: " ";
   word-spacing: -0.6ch;
+}
+/* An address as the wallet will show it, in a call: three lines of four columns, the "0x" right-aligned in the first,
+   as hardware wallets show it. See showWalletAddress(). */
+.hex.wallet {
+  display: inline-block;
+  white-space: nowrap;
+  baseline-source: first;
+}
+.hex.wallet > :first-child {
+  padding-inline-start: 2ch;
+}
+.hex.wallet > span:not(:first-child, .line) {
+  margin-inline-start: 1ch;
 }
 a.hex {
   text-decoration: none;
@@ -270,7 +298,7 @@ footer {
   padding-block: var(--gap-l) var(--gap-xl);
   border-block-start: 1px solid var(--line);
   color: var(--quiet);
-  font-size: 0.875rem;
+  font-size: var(--text-small);
 }
 footer p {
   display: flex;
@@ -299,6 +327,7 @@ main > .notice {
   margin-block-end: var(--gap-l);
 }
 .view > .title-line + :is(.state-line, .automaxi-absent),
+.view > .title-line ~ .position-found,
 .view > .automaxi-absent + .state-line,
 .view > .state-line + .notice {
   margin-block-start: var(--gap-s);
@@ -332,7 +361,7 @@ section > * + *,
 .trail a {
   color: var(--quiet);
   font-family: var(--serif);
-  font-size: 2rem;
+  font-size: var(--text-h1);
   letter-spacing: -0.01em;
   line-height: 1.2;
   text-decoration: none;
@@ -343,6 +372,8 @@ section > * + *,
 }
 .trail a:hover {
   color: var(--ink);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
 }
 .view h1:focus,
 .view h2:focus,
@@ -409,7 +440,7 @@ button:disabled {
   min-block-size: 2.25rem;
   padding-block: 0.25rem;
   padding-inline: 0.875rem;
-  font-size: 0.875rem;
+  font-size: var(--text-small);
 }
 button img {
   inline-size: 1.5rem;
@@ -467,7 +498,7 @@ button img {
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--card);
-  font-size: 0.875rem;
+  font-size: var(--text-small);
 }
 
 /* Notices say what is wrong or under way; a callout, what to know before going on. */
@@ -490,7 +521,8 @@ button img {
   color: var(--danger);
 }
 
-/* Cards: the menu's choices, the accounts, the tokens, and what needs you. */
+/* Cards: the menu's choices, the accounts, the tokens, what needs you, and approvals. Every card has the same edge and
+   padding. */
 .menu,
 .accounts,
 .needs-list,
@@ -506,32 +538,63 @@ button img {
   margin: 0;
 }
 .choice,
-.accounts label,
+.account-card,
+.swap-rows label,
 .need,
 .allowance,
 .wallets,
+.receive,
 .facts.tiles > div {
+  padding: var(--gap) var(--gap-l);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--card);
 }
-.choice {
-  position: relative;
-  display: grid;
-  gap: var(--gap-s);
-  padding: var(--gap-l) 1.25rem;
+/* A card's title, in the sans, in ink: a choice's, an account's. */
+.choice h3,
+.account-link {
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: var(--text-h3);
+  font-weight: 700;
+  line-height: 1.4;
 }
-/* The whole card leads to the choice's page. */
-.choice h3 a::after {
+.choice {
+  display: grid;
+  gap: 0.125rem;
+}
+.choice > .facts {
+  margin-block-start: var(--gap-s);
+}
+/* "≈ $0.37", then what it is per, under it. */
+.choice .record-unit {
+  display: block;
+}
+/* A card that leads somewhere is a link as large as the card, with a chevron at its end, or an arrow when it leaves the
+   page. What else it holds, such as an account's box, stays above the link. */
+.choice:has(h3 a),
+.account-card {
+  position: relative;
+  padding-inline-end: 3rem;
+}
+:is(.choice h3 a, .account-link)::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
 }
-.choice:has(h3 a) {
-  padding-inline-end: 3rem;
+.choice h3 a,
+.account-link {
+  color: inherit;
+  text-decoration: none;
 }
-.choice:has(h3 a)::before {
+.account-card .tick,
+.account-card .about a:not(.account-link) {
+  position: relative;
+  z-index: 1;
+}
+.choice:has(h3 a)::before,
+.account-card::before {
   content: "";
   position: absolute;
   inset-block-start: 50%;
@@ -542,20 +605,23 @@ button img {
   border-inline-end: 2px solid var(--quiet);
   transform: translateY(-50%) rotate(45deg);
 }
-.choice:has(h3 a):hover {
+.choice:has(h3 a[target="_blank"])::before {
+  content: "\2197";
+  inline-size: auto;
+  block-size: auto;
+  border: 0;
+  color: var(--quiet);
+  font-size: 1.125rem;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+:is(.choice:has(h3 a), .account-card):hover {
   border-color: var(--edge);
 }
-.choice:has(h3 a):hover::before {
+.choice:has(h3 a):hover::before,
+.account-card:hover::before {
   border-color: var(--ink);
-}
-.choice h3 {
-  font-family: var(--serif);
-  font-size: 1.125rem;
-  font-weight: 400;
-}
-.choice h3 a {
-  color: inherit;
-  text-decoration: none;
+  color: var(--ink);
 }
 .choice-head {
   display: flex;
@@ -563,10 +629,6 @@ button img {
   align-items: baseline;
   justify-content: space-between;
   gap: var(--gap-xs) var(--gap-l);
-}
-.yours {
-  color: var(--ink);
-  font-weight: 700;
 }
 /* The automations on Hydrex's page: one box, a row each, their figures in columns, so that they read apart from the
    Hydrex accounts' cards. */
@@ -594,42 +656,61 @@ button img {
   gap: var(--gap-s) var(--gap-l);
 }
 
-.accounts label {
+/* An account: its box, when it can be ticked, then its name, figures and status. The box's target reaches the card's
+   edge. */
+.account-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: var(--gap);
+  align-items: start;
+}
+.account-card:has(.pick:not([hidden])) {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.account-card .tick {
+  display: flex;
+  align-self: stretch;
+  margin-block: calc(-1 * var(--gap));
+  margin-inline-start: calc(-1 * var(--gap-l));
+  padding-block: var(--gap);
+  padding-inline-start: var(--gap-l);
+  cursor: pointer;
+}
+.account-card .tick:has(> .pick[hidden]) {
+  display: none;
+}
+.account-card:has(.pick:checked) {
+  border-color: var(--accent);
+  background: var(--tint);
+}
+.about {
+  display: grid;
+  grid-column: -2;
+  gap: 0.125rem;
+}
+.about > * {
+  justify-self: start;
+}
+/* A token to sell: the whole card ticks it. */
+.swap-rows label {
   display: grid;
   grid-template-columns: 1.5rem minmax(0, 1fr);
   column-gap: var(--gap);
   align-items: start;
-  padding: var(--gap) var(--gap-l);
-}
-.accounts .about {
-  display: grid;
-  grid-column: 2;
-  gap: 0.125rem;
-}
-.accounts .about > * {
-  justify-self: start;
-}
-.accounts label:has(.pick:not([hidden])) {
   cursor: pointer;
 }
-.accounts label:has(.pick:not([hidden])):hover {
+.swap-rows label:hover {
   border-color: var(--edge);
 }
-.accounts label:has(.pick:checked) {
+.swap-rows label:has(.pick:checked) {
   border-color: var(--accent);
   background: var(--tint);
 }
-.accounts:not(:has(.pick:not([hidden]))) label {
-  grid-template-columns: minmax(0, 1fr);
+.swap-rows label:has(.pick:disabled) {
+  cursor: default;
 }
-.accounts:not(:has(.pick:not([hidden]))) .about {
-  grid-column: 1;
-}
-.account-link {
-  text-decoration: none;
-}
-.account-link:hover b {
-  text-decoration: underline;
+.swap-rows label:has(.pick:disabled):hover {
+  border-color: var(--line);
 }
 input[type="checkbox"] {
   inline-size: 1.25rem;
@@ -645,20 +726,14 @@ input[type="radio"] {
   accent-color: var(--accent);
 }
 
-.group :is(h2, h3) .count,
-.needs .count {
+/* A count beside a heading, whatever the heading's level: "Needs you · 2", "Sell · 3 of 4". */
+:is(h2, h3) :is(.count, .swap-ticked) {
   color: var(--quiet);
   font-family: var(--sans);
-  font-size: 1rem;
+  font-size: var(--text-h3);
+  font-weight: 400;
 }
-/* The wallet's Hydrex accounts, a level under the automations: each group of them under a heading of its own. */
-.group > h3 {
-  font-size: 1.0625rem;
-}
-details.nothing > summary {
-  color: var(--quiet);
-  font-size: 0.875rem;
-}
+/* The fold of the accounts with nothing to vote with, as quiet as the other folds. */
 details.nothing > .accounts {
   margin-block-start: var(--gap);
 }
@@ -667,7 +742,6 @@ details.nothing > .accounts {
   display: flex;
   gap: var(--gap);
   align-items: baseline;
-  padding: var(--gap) var(--gap-l);
 }
 .need .shape {
   flex: none;
@@ -681,20 +755,22 @@ details.nothing > .accounts {
   justify-content: space-between;
   gap: var(--gap-s) var(--gap-l);
 }
+/* Its words take the room, so that its action stays at the end of the line until the line is too narrow. */
+.need-words {
+  flex: 1 1 16rem;
+}
 .allowance {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--gap-s) var(--gap-l);
-  padding: var(--gap-s) var(--gap-s) var(--gap-s) var(--gap-l);
 }
 
 /* The wallet picker, wherever a view needs a wallet. */
 .wallets {
   display: grid;
   gap: var(--gap);
-  padding: var(--gap-l) 1.25rem;
 }
 /* In the header's popup, its title says what the list is for. */
 .pop .wallets {
@@ -725,8 +801,15 @@ details.nothing > .accounts {
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
   gap: var(--gap-s);
 }
-.facts.tiles > div {
-  padding: var(--gap) var(--gap-l);
+/* A tile's label keeps the height of an info button, whether it has one or not, so that the figures line up. */
+.facts.tiles dt {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  min-block-size: 1.375rem;
+}
+.facts.tiles dt .info {
+  margin: 0;
 }
 .facts.tiles dd {
   font-size: 1.125rem;
@@ -741,7 +824,7 @@ details.nothing > .accounts {
 .facts dd.sub,
 .facts dd .small {
   color: var(--quiet);
-  font-size: 0.875rem;
+  font-size: var(--text-small);
   font-weight: 400;
 }
 .facts dd:empty {
@@ -758,7 +841,7 @@ details.nothing > .accounts {
 }
 .epoch {
   color: var(--quiet);
-  font-size: 0.875rem;
+  font-size: var(--text-small);
 }
 
 /* Details open from a small round info button beside what they explain: as a popup over the page, or as a fold in a
@@ -780,7 +863,7 @@ details.nothing > .accounts {
   background: var(--card);
   color: var(--quiet);
   font-family: var(--serif);
-  font-size: 0.8125rem;
+  font-size: var(--text-label);
   font-weight: 400;
   line-height: 1;
   letter-spacing: 0;
@@ -853,10 +936,12 @@ details[open] > summary.info {
   border-block-end: 1px solid var(--line);
   background: var(--paper);
 }
-.pop-head h3 {
+.pop-head h3,
+#review-title {
   font-family: var(--serif);
-  font-size: 1.25rem;
+  font-size: var(--text-h2);
   font-weight: 400;
+  line-height: 1.2;
 }
 .pop-close {
   flex: none;
@@ -885,10 +970,10 @@ details[open] > summary.info {
 .pop > .pop-head + * {
   margin-block-start: var(--gap-l);
 }
-.pop :is(h3, .label):not(.pop-head h3) {
+.pop h4 {
   margin-block-start: var(--gap-l);
 }
-.pop :is(h3, .label) + * {
+.pop h4 + * {
   margin-block-start: var(--gap-s);
 }
 @media (max-width: 30rem) {
@@ -903,9 +988,17 @@ details[open] > summary.info {
     margin: auto 0 0;
   }
 }
+/* A fold's summary: quiet and small, after a chevron that turns as it opens. */
 summary {
   list-style: none;
   cursor: pointer;
+}
+summary:not(.info) {
+  color: var(--quiet);
+  font-size: var(--text-small);
+}
+summary:not(.info):hover {
+  color: var(--ink);
 }
 summary::-webkit-details-marker {
   display: none;
@@ -938,7 +1031,7 @@ details[open] > summary:not(.info)::before {
 }
 :is(.fee-facts, .rows) dt {
   color: var(--quiet);
-  font-size: 0.875rem;
+  font-size: var(--text-small);
 }
 /* A row with two addresses, such as Aero's two factories for its basic pools, keeps them apart. */
 :is(.fee-facts, .rows) dd > br + code {
@@ -961,7 +1054,7 @@ details[open] > summary:not(.info)::before {
 }
 .scroll table {
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: var(--text-small);
   overflow-wrap: normal;
 }
 .scroll :is(th, td) {
@@ -1017,7 +1110,6 @@ dialog .step-count {
 }
 #review-title {
   margin-block: 1.25rem var(--gap-l);
-  font-size: 1.5rem;
 }
 dialog .step-count:not([hidden]) + h2 {
   margin-block-start: var(--gap-xs);
@@ -1058,7 +1150,7 @@ dialog .foot {
   border-radius: var(--radius);
   background: var(--card);
   font-family: var(--mono);
-  font-size: 0.8125rem;
+  font-size: var(--text-label);
 }
 .slip .says {
   margin-block-start: 0.375rem;
@@ -1070,6 +1162,10 @@ dialog .foot {
 /* A call's bill: its words under the name and the count, then its fields. */
 .slip.receipt > .says {
   margin-block-start: var(--gap);
+}
+/* In the review, a slip is as wide as what is around it. */
+dialog .receipt {
+  max-inline-size: none;
 }
 .steps > .slip + .slip {
   margin-block-start: var(--gap-l);
@@ -1083,11 +1179,33 @@ dialog .foot {
 }
 .fields > div {
   display: grid;
-  grid-template-columns: 5.25rem minmax(0, 1fr);
+  grid-template-columns: 6rem minmax(0, 1fr);
   column-gap: 0.625rem;
   align-items: baseline;
 }
-.fields .under,
+/* A label breaks between its words, never inside one: "Incentives / from". */
+.fields dt {
+  overflow-wrap: normal;
+}
+/* A list of addresses: as many columns as fit, an address wide each, a token's symbol above its address. */
+.code-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 19ch);
+  gap: var(--gap) var(--gap-l);
+}
+.code-list > span {
+  display: grid;
+  align-content: start;
+}
+.code-list .tag {
+  color: var(--quiet);
+  overflow-wrap: anywhere;
+}
+/* What a field holds goes on a line of its own, above it, as a token's symbol goes above its address. */
+.fields .description {
+  display: block;
+}
+.fields .description,
 .fields .call,
 .slip-note {
   color: var(--quiet);
@@ -1106,7 +1224,7 @@ dialog .foot {
   max-inline-size: 36ch;
   margin-block-start: 0.375rem;
   padding: var(--gap-s) 0.625rem;
-  border-radius: 6px;
+  border-radius: var(--radius-s);
   background: var(--tint);
   line-height: 1.55;
 }
@@ -1118,7 +1236,7 @@ dialog .foot {
 }
 .slip-note {
   margin-block-end: var(--gap-s);
-  font-size: 0.875rem;
+  font-size: var(--text-small);
 }
 .slip-foot .check,
 .receipt-foot {
@@ -1131,12 +1249,12 @@ dialog .foot {
 .slip-foot a,
 .receipt-foot a {
   font-family: var(--sans);
-  font-size: 0.875rem;
+  font-size: var(--text-small);
 }
 .receipt {
   max-inline-size: 28rem;
   padding-inline: 1.25rem;
-  font-size: 0.875rem;
+  font-size: var(--text-small);
 }
 .receipt-name {
   font-family: var(--serif);
@@ -1173,7 +1291,7 @@ dialog .foot {
   grid-column: 1 / -1;
   color: var(--quiet);
   font-family: var(--sans);
-  font-size: 0.8125rem;
+  font-size: var(--text-label);
 }
 .total .detail {
   flex-basis: 100%;
@@ -1224,7 +1342,7 @@ dialog .foot {
   margin-block-start: var(--gap-s);
   color: var(--quiet);
   font-family: var(--sans);
-  font-size: 0.8125rem;
+  font-size: var(--text-label);
 }
 .receipt-swap {
   margin-block-start: var(--gap);
@@ -1328,20 +1446,16 @@ dialog .foot {
 .line-skip {
   color: var(--quiet);
   font-family: var(--sans);
-  font-size: 0.8125rem;
+  font-size: var(--text-label);
 }
 .total > div + div {
   margin-block-start: var(--gap-xs);
 }
 .total .least :is(dt, .value) {
-  font-size: 0.875rem;
+  font-size: var(--text-small);
 }
 .swap-tokens > .add-token {
   margin-block-start: var(--gap-l);
-}
-.add-token > summary {
-  color: var(--quiet);
-  font-size: 0.875rem;
 }
 .add-line {
   display: flex;
@@ -1358,7 +1472,7 @@ select {
   min-block-size: 2.75rem;
   padding-inline: var(--gap-s);
   border: 1px solid var(--edge);
-  border-radius: 8px;
+  border-radius: var(--radius-s);
   background: var(--card);
   color: var(--ink);
   font: inherit;
@@ -1385,7 +1499,7 @@ select {
 .breakdown {
   display: grid;
   gap: 0.125rem;
-  font-size: 0.875rem;
+  font-size: var(--text-small);
 }
 .breakdown > div {
   display: flex;
@@ -1416,7 +1530,7 @@ select {
 .breakdown select {
   min-block-size: 1.75rem;
   padding-inline: var(--gap-xs);
-  font-size: 0.875rem;
+  font-size: var(--text-small);
 }
 .swap-bar {
   display: flex;
@@ -1449,12 +1563,6 @@ select {
   justify-content: space-between;
   gap: var(--gap-s);
   margin-block-start: var(--gap);
-}
-.receive {
-  padding: var(--gap) var(--gap-l);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--card);
 }
 .receive > p + p {
   margin-block-start: var(--gap-s);

@@ -106,10 +106,10 @@
               <span aria-hidden="true">×</span>
             </button>
           </div>
-          <p class="label">Automations</p>
+          <h4 class="label">Automations</h4>
           <p class="allows-none small" hidden>None</p>
           <ul class="allows-accounts"></ul>
-          <p class="label">Swappers</p>
+          <h4 class="label">Swappers</h4>
           <p class="allows-tokens-none small" hidden>None</p>
           <ul class="allows-tokens"></ul>
         </div>
@@ -201,7 +201,7 @@
             </li>
             <li class="choice" data-choice="self">
               <div class="choice-head">
-                <h3><a href="https://www.hydrex.fi/">Vote yourself</a></h3>
+                <h3><a href="https://www.hydrex.fi/" target="_blank" rel="noopener">Vote yourself</a></h3>
               </div>
               <dl class="facts">
                 <div>
@@ -230,7 +230,12 @@
           </div>
           <p class="no-wallet-yet small">No wallet connected.</p>
           <p class="accounts-reading small" role="status" hidden>Loading…</p>
-          <p id="none" hidden>No Hydrex accounts. <a href="https://www.hydrex.fi/accounts">Lock HYDX on Hydrex</a></p>
+          <p id="none" class="small" hidden>
+            No Hydrex accounts.
+            <a href="https://www.hydrex.fi/accounts" target="_blank" rel="noopener"
+              >Lock HYDX on Hydrex <span aria-hidden="true">↗</span></a
+            >
+          </p>
           <div id="accounts" hidden>
             <section class="group" data-group="needs" aria-labelledby="group-needs" hidden>
               <h3 id="group-needs">Needs you <span class="count"></span></h3>
@@ -245,10 +250,10 @@
               <h3 id="group-carbon-impact">In Carbon Impact <span class="count"></span></h3>
               <ul class="accounts"></ul>
               <p class="buttons">
-                <button type="button" data-action="leave" class="secondary">Leave</button>
                 <button type="button" data-action="join" data-automation="automaxi" class="secondary">
                   Move to AutoMaxi
                 </button>
+                <button type="button" data-action="leave" class="secondary">Leave</button>
               </p>
             </section>
             <section class="group" data-group="in:automaxi" aria-labelledby="group-automaxi" hidden>
@@ -256,10 +261,10 @@
               <ul class="accounts"></ul>
               <p class="buttons">
                 <button type="button" data-action="claim">Claim</button>
-                <button type="button" data-action="leave" class="secondary">Leave</button>
                 <button type="button" data-action="join" data-automation="carbon-impact" class="secondary">
                   Move to Carbon Impact
                 </button>
+                <button type="button" data-action="leave" class="secondary">Leave</button>
               </p>
             </section>
             <section class="group" data-group="other" aria-labelledby="group-other" hidden>
@@ -345,7 +350,7 @@
         </dl>
         <p class="accounts-reading small" role="status" hidden>Loading…</p>
         <div class="mine" hidden>
-          <p class="mine-none" hidden>No Hydrex account can join.</p>
+          <p class="mine-none small" hidden>No Hydrex account can join.</p>
           <section class="group" data-group="in:carbon-impact" aria-labelledby="mine-carbon-impact" hidden>
             <div class="group-head">
               <h2 id="mine-carbon-impact">Your Hydrex accounts</h2>
@@ -424,7 +429,7 @@
             </button>
           </div>
           <p class="record-waiting small">Loading…</p>
-          <p class="record-none" hidden>No record yet.</p>
+          <p class="record-none small" hidden>No record yet.</p>
           <div class="record-found" hidden>
             <div class="scroll">
               <table class="earnings">
@@ -614,7 +619,7 @@
               </div>
             </dl>
           </div>
-          <p class="label">Contracts</p>
+          <h4 class="label">Contracts</h4>
           <dl class="rows">
             <div>
               <dt>Carbon Impact</dt>
@@ -675,7 +680,7 @@
               <dd>The same with <code>false</code></dd>
             </div>
           </dl>
-          <h3>Checks</h3>
+          <h4 class="label">Checks</h4>
           <ul class="checks">
             <li data-check="code">Its code matches</li>
             <li data-check="contracts">Its VotingEscrow and Voter match</li>
@@ -737,7 +742,7 @@
           </div>
           <div>
             <dt>
-              Controlled by
+              Owner
               <button type="button" class="info" popovertarget="am-check" aria-label="Who controls what">
                 <span aria-hidden="true">i</span>
               </button>
@@ -748,7 +753,7 @@
         <div data-needs="automaxi" hidden>
           <p class="accounts-reading small" role="status" hidden>Loading…</p>
           <div class="mine" hidden>
-            <p class="mine-none" hidden>No Hydrex account can join.</p>
+            <p class="mine-none small" hidden>No Hydrex account can join.</p>
             <section class="group" data-group="in:automaxi" aria-labelledby="mine-automaxi" hidden>
               <div class="group-head">
                 <h2 id="mine-automaxi">Your Hydrex accounts</h2>
@@ -833,7 +838,7 @@
             </button>
           </div>
           <p class="record-waiting small">Loading…</p>
-          <p class="record-none" hidden>No record yet.</p>
+          <p class="record-none small" hidden>No record yet.</p>
           <div class="record-found" hidden>
             <div class="scroll">
               <table class="earnings">
@@ -897,7 +902,7 @@
               </table>
             </div>
           </div>
-          <p class="label">How it votes</p>
+          <h4 class="label">How it votes</h4>
           <div data-section="votes">
             <dl class="rows">
               <div>
@@ -977,7 +982,7 @@
               </div>
             </dl>
           </div>
-          <p class="label">Contracts</p>
+          <h4 class="label">Contracts</h4>
           <dl class="rows">
             <div>
               <dt>AutoMaxi</dt>
@@ -1035,7 +1040,7 @@
               <dd>The same with <code>false</code></dd>
             </div>
           </dl>
-          <h3>Checks</h3>
+          <h4 class="label">Checks</h4>
           <ul class="checks">
             <li data-check="automaxi-code">Its code matches</li>
             <li data-check="automaxi-contracts">Its VotingEscrow and Voter match</li>
@@ -1050,7 +1055,7 @@
         <div class="title-line">
           <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your Wallet</a><a href="#hydrex">Hydrex</a></nav>
           <h1 tabindex="-1">
-            <bdi class="position-name" translate="no">Hydrex account</bdi> <span class="position-id"></span>
+            <bdi class="position-name" translate="no">Account</bdi> <span class="position-id"></span>
           </h1>
         </div>
         <p class="position-reading small" role="status">Loading…</p>
@@ -1058,7 +1063,7 @@
           Reading the Hydrex account failed.
           <button type="button" class="position-again secondary compact">Try again</button>
         </p>
-        <p class="position-none" hidden>No such Hydrex account.</p>
+        <p class="position-none small" hidden>No such Hydrex account.</p>
         <div class="position-found" hidden>
           <p class="position-status state"></p>
           <dl class="facts tiles">
@@ -1179,7 +1184,7 @@
               Reading your tokens failed.
               <button type="button" class="swap-again secondary compact">Try again</button>
             </p>
-            <p class="swap-none" hidden>No tokens to sell.</p>
+            <p class="swap-none small" hidden>No tokens to sell.</p>
             <ul class="swap-rows accounts"></ul>
             <details class="add-token" hidden>
               <summary>Add a token</summary>
@@ -1258,7 +1263,7 @@
               <span aria-hidden="true">×</span>
             </button>
           </div>
-          <p class="label">Costs</p>
+          <h4 class="label">Costs</h4>
           <dl class="fee-facts">
             <div>
               <dt>Swap fee</dt>
@@ -1277,7 +1282,7 @@
               <dd>Paid separately, in ETH</dd>
             </div>
           </dl>
-          <p class="label">Slippage</p>
+          <h4 class="label">Slippage</h4>
           <dl class="rows">
             <div>
               <dt>What it is</dt>
@@ -1289,7 +1294,7 @@
             </div>
           </dl>
           <div data-section="check">
-            <p class="label">Smart contracts</p>
+            <h4 class="label">Contracts</h4>
             <dl class="rows">
               <div>
                 <dt>USDC Swapper</dt>
@@ -1364,7 +1369,7 @@
           data-section="approvals"
         >
           <div class="pop-head">
-            <h3 id="swap-approvals-title">Your approvals</h3>
+            <h3 id="swap-approvals-title">Approvals</h3>
             <button
               type="button"
               class="pop-close"
@@ -1453,22 +1458,19 @@
       <button type="button" class="secondary"><img alt="" hidden /> <bdi class="name" translate="no"></bdi></button>
     </template>
     <template id="account">
-      <li>
-        <label>
-          <input type="checkbox" class="pick" hidden disabled />
-          <span class="about">
-            <a class="account-link"
-              ><b><bdi class="name" translate="no"></bdi> <span class="id"></span></b></a
-            ><span class="small meta"
-              ><span class="votes"></span> Earning Power<span class="earned" hidden>
-                · <span class="earned-usd"></span> last epoch</span
-              ></span
-            ><span class="status-line"><span class="status"></span></span
-            ><span class="late" hidden
-              ><span class="shape stopped" aria-hidden="true"></span><strong>Payout late</strong></span
-            >
-          </span>
-        </label>
+      <li class="account-card">
+        <label class="tick"><input type="checkbox" class="pick" hidden disabled /></label>
+        <span class="about">
+          <a class="account-link"><bdi class="name" translate="no"></bdi> <span class="id"></span></a
+          ><span class="small meta"
+            ><span class="votes"></span> Earning Power<span class="earned" hidden>
+              · <span class="earned-usd"></span> last epoch</span
+            ></span
+          ><span class="status-line"><span class="status"></span></span
+          ><span class="late" hidden
+            ><span class="shape stopped" aria-hidden="true"></span><strong>Payout late</strong></span
+          >
+        </span>
       </li>
     </template>
     <!-- A call, as a bill of its own, its fields in full, as the wallet will show them. -->
@@ -1480,7 +1482,7 @@
         <dl class="fields">
           <div>
             <dt>To</dt>
-            <dd><code class="to" translate="no"></code><br /><span class="on under"></span></dd>
+            <dd><span class="on description"></span><code class="to" translate="no"></code></dd>
           </div>
           <div>
             <dt>Call</dt>
@@ -1873,7 +1875,7 @@
       <li class="need">
         <span class="shape" aria-hidden="true"></span
         ><span class="need-body"
-          ><span class="need-words"></span> <a class="need-link" hidden></a
+          ><span class="need-words"></span> <a class="need-link button secondary compact" hidden></a
           ><button type="button" class="need-button secondary compact" hidden></button
         ></span>
       </li>
@@ -2008,7 +2010,12 @@
     ></template>
     <template id="ended">
       <span class="shape idle" aria-hidden="true"></span><strong>Lock ended</strong>
-      <span data-own-only>· <a href="https://www.hydrex.fi/accounts">Extend</a></span></template
+      <span data-own-only
+        >·
+        <a href="https://www.hydrex.fi/accounts" target="_blank" rel="noopener"
+          >Extend <span aria-hidden="true">↗</span></a
+        ></span
+      ></template
     >
     <template id="empty"><span class="shape idle" aria-hidden="true"></span><strong>Empty</strong></template>
   </body>

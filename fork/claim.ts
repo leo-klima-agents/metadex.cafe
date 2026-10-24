@@ -67,7 +67,7 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
     assert.ok(says.length > 1);
     assert.ok(
       says.every((each) =>
-        /^Claims #82774's rewards from \d+ reward contracts? through AutoMaxi, which pays them to you, less 1%\.$/.test(
+        /^Claims account #82774's rewards from \d+ reward contracts? through AutoMaxi, which pays them to you, less 1%\.$/.test(
           each,
         ),
       ),
@@ -83,7 +83,7 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
     assert.equal(await review(page).locator(".how").textContent(), `${says.length} transactions`);
     await confirmEach(page, PAYEE);
     const receipt = review(page).locator(".receipt");
-    assert.equal(await receipt.locator(".claim-receipt-id").innerText(), "#82774");
+    assert.equal(await receipt.locator(".claim-receipt-id").textContent(), "Account #82774");
     assert.notEqual(await receipt.locator(".claim-receipt-paid").innerText(), "Nothing");
     assert.match(await receipt.locator(".claim-receipt-fee").innerText(), /^−/);
     await review(page).getByRole("link", { name: "Swap these" }).waitFor();

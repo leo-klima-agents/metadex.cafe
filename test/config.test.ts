@@ -238,7 +238,7 @@ test("each swapper has its output and a checksummed address, and the swap's page
     ["Swap fee", "Pool fees", "Price impact", "Gas"],
   );
   // What the slippage picked is, right after the costs, and what happens to a token that falls short of it.
-  const slippage = /<p class="label">Slippage<\/p>\s*<dl class="rows">[\s\S]*?<\/dl>/.exec(swap)?.[0] ?? "";
+  const slippage = /<h4 class="label">Slippage<\/h4>\s*<dl class="rows">[\s\S]*?<\/dl>/.exec(swap)?.[0] ?? "";
   assert.deepEqual(
     [...slippage.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
     ["What it is", "When unmet"],
@@ -249,7 +249,7 @@ test("each swapper has its output and a checksummed address, and the swap's page
   assert.match(swap, /<label\s*>At least, with\s*<select class="swap-margin">/);
   assert.ok(!swap.includes(AUTOMAXI_TREASURY) && !swap.includes("2-of-3"));
   // The swappers are immutable: the page checks only that its RPCs serve Base, and says nothing of it.
-  assert.doesNotMatch(swap, /data-check=|<h3>Checks<\/h3>|serves Base/);
+  assert.doesNotMatch(swap, /data-check=|>Checks<\/h4>|serves Base/);
 });
 
 test("the header holds the logo and the name, and a button to connect a wallet; the wallet's pages lead back to it", () => {

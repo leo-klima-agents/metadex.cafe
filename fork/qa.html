@@ -283,10 +283,12 @@
           state.owners.map(({ address, short, holds }) => [address, `${short} · ${holds}`]),
         );
         if (document.activeElement !== $("owner")) $("owner").value = state.owner;
-        $("holds").textContent = state.owner;
-        if (document.activeElement !== $("chain")) $("chain").value = String(state.chainId);
-        if (document.activeElement !== $("calls")) $("calls").value = state.calls;
-        for (const key of ["asks", "switches", "lists"]) $(key).checked = state[key];
+        // What the owner signed as holds, in full: the closed select cuts it short.
+        $("holds").textContent = state.owners.find(({ address }) => address === state.owner)?.holds ?? "";
+        // A control whose change is on its way keeps what was picked until the answer comes.
+        if (document.activeElement !== $("chain") && !pending.has("chain")) $("chain").value = String(state.chainId);
+        if (document.activeElement !== $("calls") && !pending.has("calls")) $("calls").value = state.calls;
+        for (const key of ["asks", "switches", "lists"]) if (!pending.has(key)) $(key).checked = state[key];
         $("replays").hidden = !state.replays;
         if (state.replays) {
           $("replay").textContent = state.replays.next ? `The keeper ${state.replays.next}` : "The keeper is done";
@@ -336,8 +338,11 @@
           );
       }
 
-      // Why the last command failed, shown until the next one.
+      // Why the last command failed, shown until the next one. A poll for the state that fails says so only until the
+      // next poll.
       let refused = "";
+      // The controls whose change is on its way.
+      const pending = new Set();
 
       async function run(command, ...args) {
         try {
@@ -345,11 +350,22 @@
           if (command !== "state") refused = "";
           render(state);
         } catch (error) {
-          refused = String(error.message ?? error).replace(/^Error: /, "");
-          $("status").textContent = refused;
+          const why = String(error.message ?? error).replace(/^Error: /, "");
+          if (command !== "state") refused = why;
+          $("status").textContent = why;
           $("status").className = "failed";
           // A box ticked for a change that failed is drawn again as it is.
           delete shown.faults;
+        }
+      }
+
+      // A change made from a control, which the polls leave alone until it is answered.
+      async function change(control, command, ...args) {
+        pending.add(control);
+        try {
+          await run(command, ...args);
+        } finally {
+          pending.delete(control);
         }
       }
 
@@ -363,9 +379,9 @@
         event.preventDefault();
         run("owner", $("address").value.trim());
       };
-      $("chain").onchange = () => run("chain", Number($("chain").value));
-      for (const key of ["asks", "switches", "lists"]) $(key).onchange = () => run("set", key, $(key).checked);
-      $("calls").onchange = () => run("calls", $("calls").value);
+      $("chain").onchange = () => change("chain", "chain", Number($("chain").value));
+      for (const key of ["asks", "switches", "lists"]) $(key).onchange = () => change(key, "set", key, $(key).checked);
+      $("calls").onchange = () => change("calls", "calls", $("calls").value);
       $("give").onclick = () => run("give", $("account").value);
       $("claim-on-hydrex").onclick = () => run("claim-on-hydrex", $("account").value);
       $("pay-to").onsubmit = (event) => {

@@ -106,6 +106,15 @@ export function hexLines(hex: string): string[][] {
   return [[hex.slice(0, 10)], ...(hex.slice(10).match(/.{1,64}/g) ?? []).map(groups)];
 }
 
+// An address as hardware wallets show it, on three lines of four columns, the "0x" in the first column:
+//   0x 0000 0000 0000
+// 0000 0000 0000 0000
+// 0000 0000 0000
+export function walletLines(address: string): string[][] {
+  const cells = hexLines(address)[0]!;
+  return [cells.slice(0, 4), cells.slice(4, 8), cells.slice(8)];
+}
+
 export const list = (items: string[]): string => and.format(items);
 
 // The items with the words between them, as list() would join them: [a, ", ", b, " and ", c].

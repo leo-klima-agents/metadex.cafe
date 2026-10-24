@@ -136,7 +136,7 @@ function fillReceipt(
   const swapped = all - kvcm(payout.earned);
   const of = (part: bigint) => (all ? bps((part * 10_000n + all / 2n) / all) : "");
   fill(item, {
-    "receipt-id": `#${payout.id}`,
+    "receipt-id": `Account #${payout.id}`,
     "receipt-earned-usd": worth(payout.earned, tokens, prices),
     "receipt-swapped": `${amount(swapped > 0n ? swapped : 0n, 18)} kVCM`,
     "receipt-retired-share": of(payout.retiredKvcm),
@@ -192,7 +192,7 @@ function fillClaims(
     "Paid to its owner",
   );
   fill(item, {
-    "receipt-id": `#${id}`,
+    "receipt-id": `Account #${id}`,
     "receipt-fee-share": bps(AUTOMAXI_FEE_BPS),
     "receipt-claimed-usd": worth(received, tokens, prices),
     "receipt-fee-usd": worth(fees, tokens, prices),

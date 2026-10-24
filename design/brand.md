@@ -58,6 +58,15 @@ The brand helps people recognise the page; the page teaches them to check the ad
 - **Addresses and hashes in full,** checksummed, in groups of four, wherever someone checks:
   `0xdE91 885c F35a c57D F0c4 A75c 1686 2127 dBe8 317c`. A copy gives them without spaces. Only the wallet chip and
   links to a transaction use the short form, as they are there to recognise or to follow, not to check.
+- **In a call, an address as the wallet will show it,** on three lines of four columns, as hardware wallets do, so that
+  the two compare line by line:
+
+  ```
+    0x dE91 885c F35a
+  c57D F0c4 A75c 1686
+  2127 dBe8 317c
+  ```
+
 - **Token symbols in the mono face,** as untrusted text: a symbol is whatever its contract says. The address goes beside
   it, and a symbol that copies a listed token's, at another address, says so. No symbol becomes a link.
 - **Calls in Safe's order** of fields, as Safe asks signers to check them
@@ -67,7 +76,7 @@ The brand helps people recognise the page; the page teaches them to check the ad
 
 | Face                       | Weights  | Used for                                                       |
 | -------------------------- | -------- | -------------------------------------------------------------- |
-| Young Serif                | 400      | The name, and `h1` and `h2` headings. It has one weight.       |
+| Young Serif                | 400      | The name, `h1` and `h2`, and popups' titles. One weight.       |
 | Atkinson Hyperlegible Next | 400, 700 | Text. 600 takes 700.                                           |
 | Atkinson Hyperlegible Mono | 400, 600 | `code`, labels, slips and receipts: addresses, calls, figures. |
 
@@ -143,6 +152,23 @@ and works in one colour.
 - **Within a view, a link leads to a section and says what it holds,** such as "What it means" or "More on leaving",
   never "How it works" or "Learn more".
 
+## Layout and controls
+
+`style.css` holds one scale for each of these, as custom properties: gaps, radii and text sizes.
+
+- **Headings by level, the same on every view:** `h1` in the serif, 32 px; `h2`, and the titles of popups and of the
+  review, in the serif, 20 px; `h3`, a group's heading or a card's title, in the sans, 16 px, bold; a popup's own
+  headings, such as Contracts or Checks, as labels. A count beside a heading is quiet, in the sans: "Needs you · 2".
+- **Cards:** one edge, one radius and one padding for every card. A card that leads somewhere is a link as large as the
+  card, its title in ink, with a chevron at its end, or an arrow when it leaves the page. What else it holds, such as an
+  account's box to tick or a link in its status, stays apart from that link: never a link inside a control.
+- **Links look like links:** underlined, in the accent. The breadcrumb is quieter, and underlined on hover. A link to
+  Hydrex's app, where something is done rather than checked, opens apart and ends with "↗".
+- **Buttons look like buttons:** filled for the main action of a group, outlined for the others, compact inside a line
+  or a notice. In a row, the main action comes first, a move between automations next, and Leave last. A link that does
+  a button's job, such as a need's "Change", is drawn as a button.
+- **Empty and loading lines are quiet and small:** "Loading…", "No record yet.", "No tokens to sell.".
+
 ## Slips and receipts
 
 Wherever someone checks figures or addresses (the calls in the review, receipts, statements, the brief for co-signers),
@@ -156,17 +182,21 @@ went badly too.
 - **Rules:** a dashed rule between sections, and a double rule above the total. The total comes last and larger, then
   the time and the transaction.
 - **The same lines in the same order** every week, so that a change shows.
-- **Sizes:** 13 px for call slips, with an 84 px column for the labels on a phone as on a desktop, and 14 px for
+- **Sizes:** 13 px for call slips, with a 96 px column for the labels on a phone as on a desktop, and 14 px for
   receipts.
 
-**A call** is a bill of its own: the name, then what it is, "Call 1 of 2", and the page's own words, such as "#9540
-joins Carbon Impact.". Then a row per field, in full, with nothing to open: To, with the contract's name under it; Call;
-Conduit, with its name; Hydrex account; Approve; Value. Its foot links to how to check the calls.
+**A call** is a bill of its own: the name, then what it is, "Call 1 of 2", and the page's own words, such as "Account
+#9540 joins Carbon Impact.": an account is always named as one, never by its number alone. Then a row per field, in
+full, with nothing to open: To, with the contract's name above it; Call; Conduit, with its name above it; Account;
+Approve; Value. What a field holds always goes above its value, as a token's symbol goes above its address. A list of
+addresses, such as a claim's reward contracts and tokens, takes as many columns as fit: two in the review on a desktop,
+one on a phone.
 
 **A swap** is a bill before the wallet asks: the name, "Quote · swap into cbBTC", with a token's symbol in its own case
 among the capitals, and the gas under it, as it is paid apart, in ETH. Then a line per token, with what it fetches and
-its route by tokens and pools, "→ WETH via Hydrex Integral → USDC via Uniswap v3 0.05%", without addresses. Then what
-they fetch, the 1%, "Reaches you", and "At least", with the slippage that set it.
+its route by tokens, then who runs its pools, each once, "ZORA → WETH → USDC via Aerodrome, Uniswap", without addresses
+or fee tiers: the calls name each pool in full. Then what they fetch, the 1%, "Reaches you", and "At least", with the
+slippage that set it.
 
 **In a Safe,** it opens with "In a Safe · one transaction to sign", or "In a Safe · call 1 of 2", and adds the fields
 Safe{Wallet} shows: Data and, for a single call, Operation. Data is the selector, then each 32-byte word on two lines of

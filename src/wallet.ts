@@ -55,13 +55,22 @@ async function injected(): Promise<Provider> {
   return provider;
 }
 
-const SAFE_ORIGIN = "https://app.safe.global";
+// Where Safe{Wallet} runs: the page answers no other frame, and the SDK takes messages from no other.
+export const SAFE_ORIGIN = "https://app.safe.global";
+export const SAFE_DOMAIN = new RegExp(`^${SAFE_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
+
+// The origin of the page that frames this one, when the browser says. An opaque origin, "null", as a sandboxed frame or
+// one framed without a referrer has, says nothing: the SDK's handshake decides then.
+export function parentOrigin(ancestor: string | undefined, referrer: string): string | undefined {
+  const origin = ancestor ?? (referrer ? new URL(referrer).origin : "");
+  return origin && origin !== "null" ? origin : undefined;
+}
 
 export async function safeWallet(): Promise<Wallet | undefined> {
   if (window.parent === window) return undefined;
-  const parent = location.ancestorOrigins?.[0] ?? (document.referrer && new URL(document.referrer).origin);
+  const parent = parentOrigin(location.ancestorOrigins?.[0], document.referrer);
   if (parent && parent !== SAFE_ORIGIN) return undefined;
-  const sdk = new SafeAppsSDK({ allowedDomains: [/^https:\/\/app\.safe\.global$/] });
+  const sdk = new SafeAppsSDK({ allowedDomains: [SAFE_DOMAIN] });
   const timeout = new Promise<undefined>((resolve) => setTimeout(resolve, parent ? 10_000 : 1_000));
   const info = await Promise.race([sdk.safe.getInfo(), timeout]).catch(() => undefined);
   if (!info) return undefined;

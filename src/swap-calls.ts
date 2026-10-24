@@ -4,7 +4,7 @@ import { ANCHORS, WETH, type Swapper } from "./config.ts";
 import { figure, utc } from "./format.ts";
 import { feedAt, type Token } from "./prices.ts";
 import type { Field, Slip } from "./review.ts";
-import { MAX_TIP, approve, hopName, poolName, poolless, swapCall, type Route } from "./swap.ts";
+import { MAX_TIP, approve, poolName, poolless, swapCall, venueOf, type Route } from "./swap.ts";
 
 // The calls of a swap, as the review shows them, and what gas costs.
 
@@ -46,10 +46,12 @@ export function pathWords(route: Route, tokens: Map<string, Token>): NonNullable
   ]);
 }
 
-// A route's hops by their tokens and pools, without addresses, as a bill shows them: "→ WETH via Hydrex Integral → USDC
-// via Uniswap v3 0.05%".
-export const hopsWords = (route: Route, tokens: Map<string, Token>): string =>
-  route.hops.map((hop) => `→ ${symbolOf(tokens, hop.tokenOut)} via ${hopName(hop)}`).join(" ");
+// A route as a bill shows it: its tokens, then who runs its pools, each once, without addresses or fee tiers:
+// "ZORA → WETH → USDC via Aerodrome, Uniswap". The calls name each pool in full.
+export function hopsWords(route: Route, tokens: Map<string, Token>): string {
+  const path = [route.token, ...route.hops.map(({ tokenOut }) => tokenOut)].map((token) => symbolOf(tokens, token));
+  return `${path.join(" → ")} via ${[...new Set(route.hops.map(venueOf))].join(", ")}`;
+}
 
 // A route in words: "41.2 AVNT, Hydrex Integral 0x… to WETH, Uniswap v3 0.05% 0x… to USDC, at least 0.60 USDC". A
 // swap of a whole balance, as after a claim, says so instead of an amount.
@@ -78,8 +80,8 @@ export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Sli
     on: `The ${token.symbol} token`,
     call: "approve",
     fields: [
-      { label: "Spender", name: "spender", code: swapper.address, under: `The ${swapper.symbol} swapper` },
-      { label: "Amount", name: "amount", code: String(amount), under: amount ? words : "Nothing" },
+      { label: "Spender", name: "spender", code: swapper.address, description: `The ${swapper.symbol} swapper` },
+      { label: "Amount", name: "amount", code: String(amount), description: amount ? words : "Nothing" },
     ],
     note: `The selector, then each 32-byte word on two lines: the swapper, and ${amount} as ${amount.toString(16)}.`,
   };
@@ -114,12 +116,12 @@ export function swapSlip(
           whole ? `All your ${symbolOf(tokens, route.token)}, up to what this approves` : undefined,
         ),
       })),
-      { label: "Deadline", name: "deadline", code: String(deadline), under: utc(Number(deadline)) },
+      { label: "Deadline", name: "deadline", code: String(deadline), description: utc(Number(deadline)) },
       {
         label: "Skip failed",
         name: "skip",
         code: "true",
-        under: "A route under its minimum is skipped, and its token stays in your wallet.",
+        description: "A route under its minimum is skipped, and its token stays in your wallet.",
       },
     ],
     note: "The selector, then each 32-byte word on two lines: where the routes start, the deadline, true as 1, then each route.",

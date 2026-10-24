@@ -7,8 +7,6 @@
 // anvil forks through the same caches as the browser tests, in FORK_CACHE, from BASE_RPC_URL: after `npm run
 // test:fork`, each scenario starts in seconds. CHROMIUM names the browser, as for the tests.
 import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { chromium, type BrowserContext, type Page, type Route } from "playwright-core";
 import {
   decodeFunctionData,
@@ -60,6 +58,7 @@ import {
   HOLDER,
   STRANGER,
   ZORA,
+  elsewhere,
   abi,
   anvil,
   balanceOf,
@@ -77,14 +76,14 @@ import {
   walletScript,
   warm,
   type Rpc,
+  type Sendable,
   type WalletOptions,
 } from "./harness.ts";
-import { serveCached, upstreamOf, type Cache } from "./rpc-cache.ts";
+import { cacheFileOf, forkUrl, serveCached, upstreamOf, type Cache } from "./rpc-cache.ts";
 import { SCENARIOS, scenario as named, type Owner, type Scenario } from "./scenarios.ts";
 
-// As fork/run.ts has them.
-const FORK_URL = process.env.BASE_RPC_URL || RPCS[0]!;
-const CACHE = process.env.FORK_CACHE || join(homedir(), ".cache", "metadex.cafe", "fork");
+// As fork/run.ts has it.
+const FORK_URL = forkUrl(RPCS[0]!);
 const PANEL = readFileSync(new URL("qa.html", import.meta.url), "utf8");
 // The QA wallet's window, at the left of the screen. Chromium makes no window narrower than about 500 pixels.
 const PANEL_WIDTH = 520;
@@ -151,11 +150,14 @@ const AUTOMATION_NAMES = [...conduits, ...AUTOMATIONS].map(({ name, address }) =
   address: getAddress(address),
 }));
 
-// The tokens the QA wallet can send away by symbol: the page's list, and those the scenarios give.
+// The tokens the QA wallet can send away by symbol: the page's list, and those the scenarios give that it lacks, each
+// once.
 const TOKENS: { symbol: string; address: string }[] = [
   ...tokens,
-  { symbol: "AVNT", address: AVNT },
-  { symbol: "ZORA", address: ZORA },
+  ...[
+    { symbol: "AVNT", address: AVNT },
+    { symbol: "ZORA", address: ZORA },
+  ].filter(({ address }) => !tokens.some((listed) => listed.address.toLowerCase() === address.toLowerCase())),
 ];
 // Names for the contracts the wallet is asked to call.
 const NAMES = new Map<string, string>([
@@ -221,7 +223,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   // A cache that failed to start is tried again the next time.
   const cacheAt = async (block: number): Promise<string> => {
     if (!caches.has(block)) {
-      const cache = serveCached(upstream, join(CACHE, `base-${block}.json.gz`), block);
+      const cache = serveCached(upstream, cacheFileOf(block), block);
       caches.set(block, cache);
       cache.catch(() => caches.get(block) === cache && caches.delete(block));
     }
@@ -559,9 +561,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     chain: {
       group: "base",
       label: "Base's RPCs serve another chain",
-      on: async () =>
-        void (rpc.answer = (body) =>
-          body.includes('"eth_chainId"') ? JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x1" }) : undefined),
+      on: async () => void (rpc.answer = elsewhere),
       off: async () => void (rpc.answer = undefined),
     },
     "voter-gone": { group: "base", label: "Hydrex's Voter cannot be read", ...code(VOTER, "The Voter", () => "0x") },
@@ -656,7 +656,15 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     forgetReads();
     forgetClaims();
     asks = false;
-    Object.assign(wallet, { chainId: CHAIN_ID, switches: true, batch: false, failing: 0 });
+    // The wallet signs as the new scenario's first owner from the start, even if it fails to start: never as the last
+    // one's, on a fork where its owners mean nothing.
+    Object.assign(wallet, {
+      owner: next.owners[0]!.address,
+      chainId: CHAIN_ID,
+      switches: true,
+      batch: false,
+      failing: 0,
+    });
     delete wallet.atomic;
     delete wallet.assets;
     console.log(`Starting ${next.name}: ${next.title}`);
@@ -675,7 +683,6 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       await next.setup(next.owners.map(({ address }) => address));
       // A block every 2 seconds, as on Base: the page reads a few blocks back, and so sees each transaction.
       await anvil("evm_setIntervalMining", [2]);
-      wallet.owner = next.owners[0]!.address;
       await open("wallet");
       busy = "";
       console.log(`Ready: ${next.name}.`);
@@ -875,11 +882,29 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   async function replay(): Promise<void> {
     const next = current.replays?.[replayed];
     if (!next) throw new Error("Every transaction of this scenario was sent.");
-    const tx = await anvil<{ from: Address; to: Address; input: Hex; gas: Hex }>("eth_getTransactionByHash", [
-      next.hash,
-    ]);
+    const tx = await anvil<{
+      from: Address;
+      to: Address | null;
+      input: Hex;
+      gas: Hex;
+      value: Hex;
+      accessList?: Sendable["accessList"];
+    } | null>("eth_getTransactionByHash", [next.hash]);
+    if (!tx) throw new Error(`Base's RPC does not know ${short(next.hash)}, the transaction that ${next.does}.`);
     await gas(tx.from);
-    const hash = await send({ from: tx.from, to: tx.to, data: tx.input, gas: tx.gas });
+    // Enough ETH for what it carried too, whatever its sender spent on the fork meanwhile.
+    const balance = BigInt(await anvil<Hex>("eth_getBalance", [tx.from, "latest"]));
+    if (balance < BigInt(tx.value) + FOR_GAS / 10n)
+      await anvil("anvil_setBalance", [tx.from, toHex(BigInt(tx.value) + FOR_GAS)]);
+    // As Base included it: what it sent, with the ETH and the access list it carried.
+    const hash = await send({
+      from: tx.from,
+      ...(tx.to && { to: tx.to }),
+      data: tx.input,
+      gas: tx.gas,
+      value: tx.value,
+      ...(tx.accessList?.length && { accessList: tx.accessList }),
+    });
     // Sent, it is the next one's turn, even if this one fails on a fork that the QA wallet changed.
     replayed++;
     await included(hash, `The keeper's transaction that ${next.does}`);
@@ -967,6 +992,11 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       return state();
     }
     if (busy) throw new Error("Wait until the scenario has started.");
+    // How the wallet answers: flags, set at once rather than behind a command that may take minutes.
+    if (name === "set" || name === "calls") {
+      configure(name, args);
+      return state();
+    }
     if (name === "start") {
       const next = named(args[0]);
       if (!next) throw new Error(`No scenario is named ${args[0]}.`);
@@ -979,6 +1009,33 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     return state();
   }
 
+  // A wallet that lists its tokens answers wallet_getCapabilities, and so, by EIP-5792, sends several calls in one
+  // prompt: lists and one call per prompt do not go together, and picking one turns the other off, saying so.
+  function configure(name: string, args: any[]): void {
+    if (name === "calls") {
+      const calls = args[0] as Calls;
+      wallet.batch = calls !== "one";
+      wallet.atomic = calls !== "each";
+      if (calls === "one" && wallet.assets) {
+        delete wallet.assets;
+        note("One call per prompt: the wallet no longer lists its tokens, as a wallet that does sends calls together");
+      }
+      return;
+    }
+    const [key, on] = args as [string, boolean];
+    if (key === "asks") asks = on;
+    if (key === "switches") wallet.switches = on;
+    if (key === "lists" && !on) delete wallet.assets;
+    if (key === "lists" && on) {
+      wallet.assets = created;
+      if (!wallet.batch) {
+        wallet.batch = true;
+        wallet.atomic = true;
+        note("Lists its tokens: the wallet now sends several calls in one prompt, all or nothing");
+      }
+    }
+  }
+
   async function run(name: string, args: any[]): Promise<void> {
     switch (name) {
       case "owner":
@@ -988,14 +1045,6 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
         wallet.chainId = Number(args[0]);
         await emit("chainChanged", toHex(wallet.chainId));
         break;
-      case "set": {
-        const [key, on] = args as [string, boolean];
-        if (key === "asks") asks = on;
-        if (key === "switches") wallet.switches = on;
-        if (key === "lists" && on) wallet.assets = created;
-        if (key === "lists" && !on) delete wallet.assets;
-        break;
-      }
       case "give":
         await give(String(args[0]).trim());
         break;
@@ -1020,12 +1069,6 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       case "mint":
         await mint(String(args[0]).trim());
         break;
-      case "calls": {
-        const calls = args[0] as Calls;
-        wallet.batch = calls !== "one";
-        wallet.atomic = calls !== "each";
-        break;
-      }
       case "delegate":
         await delegate(String(args[0]).trim(), String(args[1]).trim());
         break;
