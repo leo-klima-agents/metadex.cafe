@@ -74,7 +74,8 @@ import {
   perThousandOf,
   showAbsent,
 } from "./last-epoch.ts";
-import { UNDER_WAY, payouts, waitingWords, type Entry, type Found, type UnderWay } from "./last-payout.ts";
+import { UNDER_WAY, payouts, type Entry, type Found, type UnderWay } from "./last-payout.ts";
+import { waitingWords } from "./receipts.ts";
 import { closeReview, openReview, refreshReview, type Hooks } from "./review.ts";
 import { hrefOf } from "./routes.ts";
 import { openClaim } from "./claim-view.ts";
@@ -178,11 +179,12 @@ const overdue = (): Entry[] =>
 // What waits for an overdue account, in words, at prices now, or else in tokens: "≈ $1.84 in 9 tokens".
 function waitsLine({ standing }: Entry): () => string {
   const { waiting, unknown, late } = standing!;
-  const priced = appFound?.waiting;
+  // The read it is of, whose prices may come after.
+  const read = appFound;
   return () => {
-    const { worth, tokens } = waitingWords(waiting, priced);
+    const { worth, partial, tokens } = waitingWords(waiting, read?.waiting);
     if (!tokens) return "from the epoch before last";
-    return `${unknown || late ? "at least " : ""}${worth ? `${worth} in ${tokens}` : tokens}`;
+    return `${unknown || late || partial ? "at least " : ""}${worth ? `${worth} in ${tokens}` : tokens}`;
   };
 }
 // An account's page that is not the wallet's tells a payout under way from its owner's other accounts, which it reads

@@ -2,9 +2,9 @@ import type { Address, Hex } from "viem";
 import { blockTime, now, readLater, required, rpc, same, type Call } from "./chain.ts";
 import { lastClaimBlocks, readClaimsAt, totals, walkClaims, WALK_LIMIT, type Walk } from "./claims.ts";
 import { AUTOMATIONS, AUTOMAXI_FEE_BPS, KEEPER, KVCM, type Automation, type Kind } from "./config.ts";
-import { clone, fill, fillAddress, fillOwn, fillTime, live, show, showHex, txUrl } from "./dom.ts";
+import { clone, fill, fillAddress, fillOwn, fillTime, rewrite, show, showHex, txUrl } from "./dom.ts";
 import { rewardsFor, tokensOf, type Earnings } from "./earnings.ts";
-import { WEEK, amount, bps, count, listWith, money, moneyAt, short, utc, weekStart } from "./format.ts";
+import { WEEK, amount, bps, listWith, money, moneyAt, short, utc, weekStart } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { lastEarnings } from "./last-epoch.ts";
 import { pricesAtFlip, pricesNow, type Prices, type Token } from "./prices.ts";
@@ -13,6 +13,7 @@ import {
   SETTLED,
   blockTimes,
   valueAt,
+  waitingWords,
   epochBlock,
   payoutBlocks,
   payoutsIn,
@@ -25,6 +26,7 @@ import {
   type Amount,
   type Payout,
   type Standing,
+  type Waiting,
 } from "./receipts.ts";
 
 // The payouts of accounts in the page's automations: for each, up to when it has been paid and what waits to be
@@ -61,13 +63,10 @@ export type Entry = Part & {
   // epoch's flip is due to it.
   due: boolean;
 };
-// What waits for the accounts, at prices now, with the tokens' decimals; until they are read, or without them, it shows
-// in tokens.
-export type Waiting = { tokens: Map<string, Token>; prices: Prices };
 // The prices of what waits read lately, with the tokens they were asked for, whether their decimals could be read or
 // not: any payouts whose tokens they cover, the App's or an account page's, take them rather than read them again.
 const FRESH = 300_000;
-let pricings: { at: number; asked: Set<string>; waiting: Promise<Waiting | undefined> }[] = [];
+let pricings: { at: number; amounts: Map<string, bigint>; waiting: Promise<Waiting | undefined> }[] = [];
 export type Found = { epochStart: number; entries: Entry[]; waiting?: Waiting };
 // A payout under way: the accounts it has reached since the flip, those still due, and when it first paid one.
 export type UnderWay = { paid: Entry[]; left: Entry[]; first: number };
@@ -85,8 +84,6 @@ type Drawn = {
 type Signal = { call: Call; paid: (answer: unknown) => boolean };
 // Each receipt drawn, by its owner and what it shows. Only those of the last draw are kept.
 const drawn = new Map<string, Drawn>();
-// Each line of what waits drawn, with its account's entry, to draw again once priced.
-const waitingLines = new WeakMap<Element, Entry>();
 
 // The automation an account is in or joining, or else the one it is leaving.
 const automationOf = ({ delegate, claimer, delegateAtStart }: Account): Automation | undefined =>
@@ -240,32 +237,14 @@ function ownWords(element: Element, own: string, theirs: string): void {
   Object.assign((element as HTMLElement).dataset, { own, theirs });
 }
 
-// What waits for an account, in words: its worth at prices now, if read and above nothing, as "≈ $1.84", and its
-// tokens, as "9 tokens", unless there are none.
-export function waitingWords(waiting: Amount[], priced: Waiting | undefined): { worth?: string; tokens?: string } {
-  const value = priced ? valueAt(waiting, priced.tokens, priced.prices) : 0;
-  const n = new Set(waiting.map(({ token }) => token.toLowerCase())).size;
-  return {
-    ...(value > 0 && { worth: money(moneyAt(value, priced!.prices)) }),
-    ...(n > 0 && { tokens: count(n, "token", "tokens") }),
-  };
-}
-
-// What waits to be claimed in last epoch's pools, as far as it could be read: at prices now, or else in tokens.
+// What waits to be claimed in last epoch's pools, as far as it could be read and priced: at prices now, or else in
+// tokens.
 function waitingLine({ waiting, unknown }: Standing, priced: Waiting | undefined): string {
-  const { worth, tokens } = waitingWords(waiting, priced);
+  const { worth, partial, tokens } = waitingWords(waiting, priced);
   const what = worth ?? tokens;
-  if (unknown && what) return `At least ${what} waiting`;
+  if ((unknown || partial) && what) return `At least ${what} waiting`;
   if (unknown) return "Waiting: not read";
   return what ? `${what} waiting` : "Nothing waiting";
-}
-
-// The section's lines of what waits, at prices now.
-function drawWaiting(section: HTMLElement, waiting: Waiting): void {
-  for (const line of section.querySelectorAll(".standing-waiting")) {
-    const { standing, earnings } = waitingLines.get(line) ?? {};
-    if (standing && earnings) live(line, () => waitingLine(standing, waiting));
-  }
 }
 
 // The most of each token among the amounts, by lower-case address: how deep a pool must be to price it.
@@ -276,17 +255,20 @@ function largestAmounts(amounts: Amount[]): Map<string, bigint> {
   return largest;
 }
 
-// What waits for the accounts, at prices now: those read lately, if they cover its tokens, or else read.
+// What waits for the accounts, at prices now: those read lately, if they were asked for each of its tokens, for at least
+// as much of it, as a pool deep enough for more is deep enough for less; or else read.
 function waitingFor(entries: Entry[]): Promise<Waiting | undefined> {
   const amounts = largestAmounts(entries.flatMap(({ standing }) => standing?.waiting ?? []));
   if (!amounts.size) return Promise.resolve(undefined);
   const time = Date.now();
   pricings = pricings.filter(({ at }) => time - at < FRESH);
-  const kept = pricings.find(({ asked }) => [...amounts.keys()].every((token) => asked.has(token)));
+  const kept = pricings.find((pricing) =>
+    [...amounts].every(([token, amount]) => (pricing.amounts.get(token) ?? -1n) >= amount),
+  );
   if (kept) return kept.waiting;
   const pricing = {
     at: time,
-    asked: new Set(amounts.keys()),
+    amounts,
     waiting: (async () => {
       const tokens = await tokensOf([...amounts.keys()] as Address[], readLater);
       return { tokens, prices: await pricesNow([...tokens.values()], amounts, readLater) };
@@ -301,7 +283,8 @@ function waitingFor(entries: Entry[]): Promise<Waiting | undefined> {
   return pricing.waiting;
 }
 
-function standingItem(entry: Entry, epochStart: number, own: boolean, waiting?: Waiting, receipt?: HTMLElement) {
+// `read` is the read it is of, whose prices of what waits may come after.
+function standingItem(entry: Entry, epochStart: number, own: boolean, read: Found, receipt?: HTMLElement) {
   const { automation, voter, account, standing, earnings, early, note, time } = entry;
   const item = clone("standing");
   const through = standing?.through ?? 0;
@@ -309,9 +292,8 @@ function standingItem(entry: Entry, epochStart: number, own: boolean, waiting?: 
   fill(item, {
     "standing-automation": automation.name,
     "standing-voter": voter.name,
-    "standing-waiting": standing && earnings ? () => waitingLine(standing, waiting) : "",
+    "standing-waiting": standing && earnings ? () => waitingLine(standing, read.waiting) : "",
   });
-  waitingLines.set(item.querySelector(".standing-waiting")!, entry);
   if (through) fillTime(item, "standing-through", through);
   fillTime(item, "late-from", epochStart - 2 * WEEK);
   fillTime(item, "late-to", epochStart - WEEK);
@@ -620,7 +602,7 @@ export function payouts(
     const waiting = await waitingFor(read.entries);
     if (!waiting || waiting === read.waiting || !current()) return;
     read.waiting = waiting;
-    if (section) drawWaiting(section, waiting);
+    rewrite();
     priced?.(read);
   }
 
@@ -725,9 +707,7 @@ async function draw(
   section
     .querySelector(".standings")!
     .replaceChildren(
-      ...found.entries.map((entry) =>
-        standingItem(entry, found.epochStart, own(), found.waiting, receipts.get(entry)?.node),
-      ),
+      ...found.entries.map((entry) => standingItem(entry, found.epochStart, own(), found, receipts.get(entry)?.node)),
     );
   const unpriced = [...new Set(receipts.values())].filter(({ priced }) => !priced);
   void Promise.all(

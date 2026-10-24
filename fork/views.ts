@@ -353,7 +353,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     // What waits shows in tokens at once, then at prices now.
     await standing
       .locator(".standing-waiting")
-      .getByText(/^≈\s\$\d[\d,.]* waiting$/)
+      .getByText(/^(At least )?≈\s\$\d[\d,.]* waiting$/)
       .waitFor();
     assert.equal(await standing.locator(".standing-outside").isVisible(), false);
     assert.equal(await position(page).locator(".position-underway").isVisible(), false);

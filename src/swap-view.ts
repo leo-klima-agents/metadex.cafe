@@ -166,6 +166,26 @@ function showGas(element: Element, wei: bigint, prices: Prices | undefined): voi
   showWorth(element, `${figure(wei, 18)} ETH`, cost && (() => money(cost)));
 }
 
+// A swap's figures, as the summary and the bill both show them: what it fetches, in the element `fetched` names, the 1%,
+// what reaches you, the least that may, and the gas; without the gas price, `noCosts`.
+function showBill(
+  root: ParentNode,
+  fetched: string,
+  { out, fee, least, gas }: { out: bigint; fee: bigint; least: bigint; gas: bigint },
+  swapper: Swapper,
+  prices: Prices | undefined,
+  found: Costs | undefined,
+  noCosts: string,
+): void {
+  const part = (name: string) => root.querySelector(`.${name}`)!;
+  showOutput(part(fetched), out, swapper, prices);
+  showOutput(part("swap-fee"), fee, swapper, prices, "− ");
+  showOutput(part("swap-paid"), out - fee, swapper, prices);
+  showOutput(part("swap-least"), least, swapper, prices);
+  if (found) showGas(part("swap-gas"), gas * found.gasPrice, prices);
+  else fill(root, { "swap-gas": noCosts });
+}
+
 // Whether a row is worth its gas, and why not, in words.
 function judge(row: Row, scanned: Scan): void {
   const { found } = row;
@@ -265,13 +285,7 @@ function summarise(scanned: Scan, ticked: Row[]): void {
   const swaps = split(ticked.map((row) => row.found!.route)).length;
   const gas = BigInt(approvals) * APPROVAL_GAS + swapGas(ticked.map((row) => row.found!.route));
   const { costs: found, prices } = scanned;
-  const part = (name: string) => breakdown.querySelector(`.${name}`)!;
-  showOutput(part("swap-quoted"), out, swapper, prices);
-  showOutput(part("swap-fee"), fee, swapper, prices, "− ");
-  showOutput(part("swap-paid"), out - fee, swapper, prices);
-  showOutput(part("swap-least"), least, swapper, prices);
-  if (found) showGas(part("swap-gas"), gas * found.gasPrice, prices);
-  else fill(breakdown, { "swap-gas": "…" });
+  showBill(breakdown, "swap-quoted", { out, fee, least, gas }, swapper, prices, found, "…");
   splitLine.hidden = swaps < 2;
   splitLine.textContent = `${swaps} swaps`;
 }
@@ -605,13 +619,15 @@ export async function openSwapReview(
     ? simulated.reduce((sum, { gas }) => sum + gas, 0n)
     : BigInt(approvals.length) * APPROVAL_GAS + swapGas(plan.items.map(({ route }) => route));
 
-  const part = (name: string) => body.querySelector(`.${name}`)!;
-  showOutput(part("swap-fetched"), out, swapper, prices);
-  showOutput(part("swap-fee"), fee, swapper, prices, "− ");
-  showOutput(part("swap-paid"), out - fee, swapper, prices);
-  showOutput(part("swap-least"), least, swapper, prices);
-  if (found) showGas(part("swap-gas"), gas * found.gasPrice, prices);
-  else fill(body, { "swap-gas": `${gas.toLocaleString("en-GB")} gas` });
+  showBill(
+    body,
+    "swap-fetched",
+    { out, fee, least, gas },
+    swapper,
+    prices,
+    found,
+    `${gas.toLocaleString("en-GB")} gas`,
+  );
   fill(body, {
     "swap-output": swapper.symbol,
     "swap-slippage": `${plan.yours ? "Your slippage" : "Slippage"}: ${bps(plan.margin)}`,

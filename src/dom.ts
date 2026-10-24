@@ -22,25 +22,33 @@ export function clone(id: string): DocumentFragment {
   return (document.getElementById(id) as HTMLTemplateElement).content.cloneNode(true) as DocumentFragment;
 }
 
-// Text that shows money, with how to write it: once another currency is picked, one listener writes each again, wherever
-// it is, in a view or a review. Plain text written over it ends that.
+// Text that shows money, with how to write it from what it shows: once another currency is picked, or what it shows
+// changes, as prices come, one call writes each again, wherever it is, in a view or a review. Plain text written over
+// it ends that. An element gone from memory leaves the set.
 const writers = new WeakMap<Element, () => string>();
 const written = new Set<WeakRef<Element>>();
+const gone = new FinalizationRegistry<WeakRef<Element>>((ref) => written.delete(ref));
 
 export function live(element: Element, write: () => string): void {
-  if (!writers.has(element)) written.add(new WeakRef(element));
+  if (!writers.has(element)) {
+    const ref = new WeakRef(element);
+    written.add(ref);
+    gone.register(element, ref);
+  }
   writers.set(element, write);
   element.textContent = write();
 }
 
-onCurrency(() => {
+export function rewrite(): void {
   for (const ref of written) {
     const element = ref.deref();
     const write = element && writers.get(element);
     if (write) element.textContent = write();
     else written.delete(ref);
   }
-});
+}
+
+onCurrency(rewrite);
 
 // An exact amount, then what it is worth, if known, quieter, under it: "0.01472 USDC", "≈ $0.01".
 export function showWorth(element: Element, exact: string, worth?: () => string): void {

@@ -18,8 +18,10 @@ import {
   readStamps,
   standingOf,
   valueAt,
+  waitingWords,
   watchedOf,
   weighed,
+  weightAt,
   type Log,
   type Pair,
   type Records,
@@ -522,3 +524,38 @@ beforeEach(() => {
   forgetReads();
 });
 afterEach(() => (globalThis.fetch = original));
+
+test("claims are ranked at a stand-in's price for a token without one then, which is never shown", () => {
+  const prices = pricesIn("USD", [[USDC.toLowerCase(), 1]]);
+  prices.standIns.set(WETH.toLowerCase(), 4_000);
+  const [small, large] = [[{ token: USDC, amount: 2_500_000n }], [{ token: WETH, amount: 10n ** 15n }]];
+  assert.equal(valueAt(large, tokens, prices), 0);
+  assert.ok(weightAt(large, tokens, prices) > weightAt(small, tokens, prices), "WETH's $4 before USDC's $2.50");
+});
+
+test("what waits, in words: its worth says it leaves out tokens without a price, or decimals, that wait too", () => {
+  const waiting = [
+    { token: USDC, amount: 2_500_000n },
+    { token: WETH, amount: 10n ** 15n },
+  ];
+  const priced = (entries: [string, number][]) => ({ tokens, prices: pricesIn("USD", entries) });
+  const both = waitingWords(
+    waiting,
+    priced([
+      [USDC.toLowerCase(), 1],
+      [WETH.toLowerCase(), 4_000],
+    ]),
+  );
+  assert.deepEqual(both, { worth: "≈\u00a0$6.50", partial: false, tokens: "2 tokens" });
+  const usdcOnly = waitingWords(waiting, priced([[USDC.toLowerCase(), 1]]));
+  assert.deepEqual(usdcOnly, { worth: "≈\u00a0$2.50", partial: true, tokens: "2 tokens" });
+  assert.deepEqual(waitingWords(waiting, undefined), { partial: false, tokens: "2 tokens" }, "in tokens until priced");
+  const kvcm = waitingWords(
+    [...waiting, { token: KVCM, amount: 1n }],
+    priced([
+      [USDC.toLowerCase(), 1],
+      [WETH.toLowerCase(), 4_000],
+    ]),
+  );
+  assert.equal(kvcm.partial, true, "kVCM's decimals are not known here");
+});

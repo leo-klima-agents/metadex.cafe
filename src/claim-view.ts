@@ -19,7 +19,7 @@ import { clone, fill, live, show } from "./dom.ts";
 import { count, figure, list, money, moneyAt } from "./format.ts";
 import type { Entry } from "./last-payout.ts";
 import { pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
-import { valueAt, type Amount } from "./receipts.ts";
+import { valueAt, weightAt, type Amount } from "./receipts.ts";
 import { openReview, type Hooks } from "./review.ts";
 import { hrefOf } from "./routes.ts";
 import { APPROVAL_GAS, MIDDLES, findRoute, minimumOf, paidOf, partOf, simulate } from "./swap.ts";
@@ -134,9 +134,10 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   const totals = paidBy(owing.flatMap(({ owed }) => owed));
   const paid = totals.map(({ token, paid }) => ({ token, amount: paid }));
   // Each account's claim, in calls that fit a transaction, or small ones for a Safe to pack together, the most valuable
-  // at last epoch's prices first, so that stopping halfway still claims the most.
+  // at last epoch's prices first, or at a stand-in's for a token without one, so that stopping halfway still claims the
+  // most.
   const worth = ({ owed }: Claim) =>
-    valueAt(
+    weightAt(
       owed.map(({ token, amount }) => ({ token, amount })),
       tokens,
       entries[0]!.earnings!.prices,

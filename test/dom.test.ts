@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fill, live } from "../src/dom.ts";
+import { fill, live, rewrite } from "../src/dom.ts";
 import { money, moneyAt, setCurrency } from "../src/format.ts";
 
 // An element as far as text goes, and a root that holds it under one class.
@@ -26,4 +26,14 @@ test("money is written again in the currency picked, wherever it is, until plain
     setCurrency("USD");
   }
   assert.equal(direct.textContent, "≈ $10.00");
+});
+
+test("money is written again from what it shows, once that changes", () => {
+  const state = { value: 1 };
+  const shown = element();
+  live(shown, () => money({ value: state.value, unit: "USD" }));
+  assert.equal(shown.textContent, "≈\u00a0$1.00");
+  state.value = 2;
+  rewrite();
+  assert.equal(shown.textContent, "≈\u00a0$2.00");
 });

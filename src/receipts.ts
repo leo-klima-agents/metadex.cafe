@@ -1,7 +1,7 @@
 import { decodeEventLog, numberToHex, parseAbi, type Address, type Hex } from "viem";
 import { blockTime, call, read, readLater, required, rpc, type Call } from "./chain.ts";
 import { CARBON_IMPACT } from "./config.ts";
-import { WEEK } from "./format.ts";
+import { WEEK, count, money, moneyAt } from "./format.ts";
 import type { Reward } from "./earnings.ts";
 import { worthOf, type Prices, type Token } from "./prices.ts";
 
@@ -98,8 +98,7 @@ export type Pair = { contract: Address; token: Address };
 // An amount of a token that a reward contract owes.
 export type Owed = Amount & { contract: Address };
 // A pair among an epoch's rewards, with what it paid the automation's votes at the epoch's prices, or 0 if that is
-// unknown. An
-// account's share is the same in each, so this weighs the pairs for every account.
+// unknown. An account's share is the same in each, so this weighs the pairs for every account.
 export type Weighed = Pair & { value: number };
 // An automation's rewards in the epoch from `start`.
 export type Rewards = { start: number; pairs: Weighed[] };
@@ -260,8 +259,18 @@ export async function readEarned(
 // What the amounts are worth at the given prices, in their unit. A token without a price, or whose decimals are unknown,
 // counts for nothing.
 export function valueAt(found: Amount[], tokens: Map<string, Token>, prices: Prices): number {
+  return worthIn(found, tokens, (token) => prices.of.get(token));
+}
+
+// What the amounts weigh against others at the given prices, a token without a price then at its stand-in, today's:
+// to rank them, never to show.
+export function weightAt(found: Amount[], tokens: Map<string, Token>, prices: Prices): number {
+  return worthIn(found, tokens, (token) => prices.of.get(token) ?? prices.standIns.get(token));
+}
+
+function worthIn(found: Amount[], tokens: Map<string, Token>, priceOf: (token: string) => number | undefined): number {
   return found.reduce((sum, { token, amount }) => {
-    const [known, price] = [tokens.get(token.toLowerCase()), prices.of.get(token.toLowerCase())];
+    const [known, price] = [tokens.get(token.toLowerCase()), priceOf(token.toLowerCase())];
     return known && price !== undefined ? sum + worthOf(amount, known.decimals, price) : sum;
   }, 0);
 }
@@ -433,4 +442,24 @@ export async function blockTimes(blocks: number[]): Promise<Map<number, number>>
 // For tests: what the reads above found is kept for the rest of the session.
 export function forgetReads(): void {
   for (const kept of [searched, firsts, logsOf, times]) kept.clear();
+}
+
+// What waits for the accounts, at prices now, with the tokens' decimals; until they are read, or without them, it shows
+// in tokens.
+export type Waiting = { tokens: Map<string, Token>; prices: Prices };
+
+// What waits for an account, in words: its worth at prices now, if read and above nothing, as "≈ $1.84", whether that
+// leaves out tokens without a price, and its tokens, as "9 tokens", unless there are none.
+export function waitingWords(
+  waiting: Amount[],
+  priced: Waiting | undefined,
+): { worth?: string; partial: boolean; tokens?: string } {
+  const value = priced ? valueAt(waiting, priced.tokens, priced.prices) : 0;
+  const addresses = new Set(waiting.map(({ token }) => token.toLowerCase()));
+  const partial = [...addresses].some((token) => !priced?.tokens.has(token) || !priced.prices.of.has(token));
+  return {
+    ...(value > 0 && { worth: money(moneyAt(value, priced!.prices)) }),
+    partial: value > 0 && partial,
+    ...(addresses.size > 0 && { tokens: count(addresses.size, "token", "tokens") }),
+  };
 }

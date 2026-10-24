@@ -304,6 +304,23 @@ test("each currency's rate goes with dollar prices, read with the anchors' feeds
   assert.deepEqual(inUsdc.rates, {});
 });
 
+test("now, the feeds' latest rounds are read once a minute, and shared by the prices read meanwhile", async () => {
+  const { reader } = market([{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }]);
+  let rounds = 0;
+  const counting = async (calls: Call[]) => {
+    rounds += calls.filter(({ functionName }) => functionName === "latestRoundData").length;
+    return reader(calls);
+  };
+  const first = await pricesAt([TOKEN], new Map(), NOW, NOW, HYDREX_PRICING, counting);
+  const read = rounds;
+  const second = await pricesAt([TOKEN], new Map(), NOW, NOW, HYDREX_PRICING, counting);
+  assert.ok(read > 0);
+  assert.equal(rounds, read, "the second read no feed again");
+  assert.deepEqual(second.of, first.of);
+  await pricesAt([TOKEN], new Map(), NOW - 3_600, NOW, HYDREX_PRICING, counting);
+  assert.ok(rounds > read, "a past flip reads its own rounds");
+});
+
 test("the deepest pool wins: of all four exchanges for the swap's page, of Hydrex's two for the Hydrex pages", async () => {
   // 2,000 USDC deep at 2 USDC in Aero, 15,000 at 3 in Aerodrome, 8,000 at 4 in Hydrex Classic.
   const pools: Fake[] = [

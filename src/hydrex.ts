@@ -537,7 +537,8 @@ export function gasCosts(): GasCost {
   };
   return async (steps, from) => {
     const [first] = steps;
-    if (!first) return { wei: 0n, prices: await anchorsNow() };
+    // Nothing to send costs nothing, in any currency: no prices are read for it.
+    if (!first) return { wei: 0n, prices: undefined };
     // The call's data, and about as much again for the transaction's other fields.
     const size = BigInt((first.data.length - 2) / 2 + 100);
     const [{ gasPrice }, gas, l1, prices] = await Promise.all([
