@@ -50,6 +50,7 @@ import { pricesNow, type Token } from "../src/prices.ts";
 import { SETTLED, readEarned, readStamps, weighed } from "../src/receipts.ts";
 import { MIDDLES, findRoute } from "../src/swap.ts";
 import { describe as describeTokens, holdingsOf, known } from "../src/tokens.ts";
+import { SAFE_ORIGIN } from "../src/wallet.ts";
 import { runsCalls } from "./rpc-cache.ts";
 
 export const CONDUIT = CARBON_IMPACT.address;
@@ -63,10 +64,23 @@ export const RECENT = 52_904_000;
 let ANVIL = "";
 let CACHE_URL = "";
 export const SITE = "https://metadex.cafe";
-export const SAFE_WALLET = "https://app.safe.global";
+export const SAFE_WALLET = SAFE_ORIGIN;
 const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 const SCREENSHOTS = process.env.SCREENSHOTS;
 export const RPC_ORIGINS = RPCS.map((url) => new URL(url).origin);
+// An answer for the page's RPCs as if they served another chain, Ethereum's: its id to eth_chainId, asked alone, with the
+// request's own id. Anything else goes to the fork.
+export function elsewhere(body: string): string | undefined {
+  let call: { id?: unknown; method?: string };
+  try {
+    call = JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+  return call.method === "eth_chainId"
+    ? JSON.stringify({ jsonrpc: "2.0", id: call.id ?? 1, result: "0x1" })
+    : undefined;
+}
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type" };
 
 // Owners at BLOCK.
@@ -147,7 +161,16 @@ export async function anvil<T>(method: string, params: unknown[] = []): Promise<
 // over a fee cap it takes from the base fee alone under --disable-min-priority-fee, and so refuses its own transaction.
 // The cache hears of it before anyone asks for its receipt, which anvil would otherwise ask FORK_URL for until it mines
 // it: see rpc-cache.ts. Without `to`, it deploys `data`.
-export async function send(tx: { from: string; to?: string; data: string; gas?: string }): Promise<Hex> {
+export type Sendable = {
+  from: string;
+  to?: string;
+  data: string;
+  gas?: string;
+  value?: string;
+  accessList?: { address: string; storageKeys: string[] }[];
+};
+
+export async function send(tx: Sendable): Promise<Hex> {
   const hash = await anvil<Hex>("eth_sendTransaction", [{ ...tx, maxPriorityFeePerGas: "0x0" }]);
   await nodeFetch(`${CACHE_URL}/sent`, { method: "POST", body: hash });
   return hash;
@@ -340,10 +363,19 @@ const safePage = (safe: Address, chainId = 8453) => `<!doctype html><meta charse
 </script>`;
 
 // Gas enough for Base to take the transaction, and too little to run it: what its calldata costs at least (EIP-7623).
-function starved(data: Hex): string {
+// That floor leaves the call some gas, 24 for each nonzero byte of calldata and 6 for each zero: a call that runs on so
+// little would go through, so the wallet refuses to send it rather than report a failure that did not happen. A call
+// that reverts fails whatever its gas.
+async function starved(from: Address, to: Address, data: Hex): Promise<string> {
   const bytes = hexToBytes(data);
   const nonzero = bytes.filter(Boolean).length;
-  return toHex(21_000 + 40 * nonzero + 10 * (bytes.length - nonzero));
+  const floor = 21_000n + 40n * BigInt(nonzero) + 10n * BigInt(bytes.length - nonzero);
+  const needed = await anvil<Hex>("eth_estimateGas", [{ from, to, data }]).then(BigInt, () => undefined);
+  if (needed !== undefined && needed <= floor)
+    throw new Error(
+      `A call to ${to} runs on ${needed} gas, which its calldata's floor already gives it: it cannot fail.`,
+    );
+  return toHex(floor);
 }
 
 // Whether each of the calls goes through, one after the other, as a wallet that runs them in one transaction finds.
@@ -364,10 +396,10 @@ export function testWallet(options: WalletOptions, sent?: Sent[], asked?: string
   const rejected = { error: { code: 4001, message: "User rejected the request." } };
   const allows = async (method: string, params: any[]) =>
     !options.decline && ((await options.ask?.(method, params)) ?? true);
-  const gasFor = (data: Hex) => {
+  const gasFor = async (from: Address, to: Address, data: Hex) => {
     if (!options.failing) return GAS;
     options.failing--;
-    return starved(data);
+    return starved(from, to, data);
   };
   return async (method: string, params: any[]): Promise<{ result?: unknown; error?: unknown }> => {
     asked?.push(method);
@@ -399,7 +431,7 @@ export function testWallet(options: WalletOptions, sent?: Sent[], asked?: string
         if (!(await allows(method, params))) return rejected;
         // As MetaMask does.
         if (chainId !== toHex(options.chainId)) return { error: { code: -32602, message: "Wrong chain." } };
-        return { result: await send({ to, data, from: signer, gas: gasFor(data) }) };
+        return { result: await send({ to, data, from: signer, gas: await gasFor(signer, to, data) }) };
       }
       case "wallet_getCapabilities":
         if (!sendsBatches(options)) return { error: { code: 4200, message: "The test wallet does not batch." } };
@@ -433,12 +465,12 @@ export function testWallet(options: WalletOptions, sent?: Sent[], asked?: string
           const [{ to, data }] = calls as [Sent];
           sent?.push(...calls);
           if (options.failing) options.failing--;
-          hashes.push(await send({ to, data, from: signer, gas: starved(data as Hex) }));
+          hashes.push(await send({ to, data, from: signer, gas: await starved(signer, to as Address, data as Hex) }));
         } else {
           // One after the other, each in its own block: anvil has no account code to run them together.
           for (const { to, data } of calls) {
             sent?.push({ to, data });
-            hashes.push(await send({ to, data, from: signer, gas: gasFor(data as Hex) }));
+            hashes.push(await send({ to, data, from: signer, gas: await gasFor(signer, to as Address, data as Hex) }));
           }
         }
         return { result: { id } };

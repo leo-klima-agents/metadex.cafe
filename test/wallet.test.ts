@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { callsStatus, capabilities, type Connection, type Provider } from "../src/wallet.ts";
+import {
+  SAFE_DOMAIN,
+  SAFE_ORIGIN,
+  callsStatus,
+  capabilities,
+  parentOrigin,
+  type Connection,
+  type Provider,
+} from "../src/wallet.ts";
 
 const ADDRESS = "0x0208DdBc05a91e1B937E8B3140B62ef22A274C95";
 const connected = (answer: (method: string, params: unknown) => unknown, propose = false): Connection => {
@@ -89,4 +97,17 @@ test("a wallet that failed to answer wallet_getCapabilities is asked again, unle
     assert.deepEqual(await capabilities(old), none);
     assert.equal(unknown, 1, `${code} is kept`);
   }
+});
+
+test("a frame's parent is Safe{Wallet} only at its origin, and an opaque origin leaves it to the SDK to say", () => {
+  assert.ok(SAFE_DOMAIN.test(SAFE_ORIGIN));
+  assert.ok(!SAFE_DOMAIN.test("https://appXsafe.global"), "the dots are dots");
+  assert.ok(!SAFE_DOMAIN.test(`${SAFE_ORIGIN}.evil.example`));
+  assert.equal(parentOrigin(SAFE_ORIGIN, ""), SAFE_ORIGIN);
+  assert.equal(parentOrigin(undefined, `${SAFE_ORIGIN}/apps/open?safe=base:0x1`), SAFE_ORIGIN);
+  assert.equal(parentOrigin("https://evil.example", ""), "https://evil.example");
+  // Unknown: a sandboxed frame, one framed without a referrer, or none at all.
+  assert.equal(parentOrigin("null", ""), undefined);
+  assert.equal(parentOrigin(undefined, "about:blank"), undefined);
+  assert.equal(parentOrigin(undefined, ""), undefined);
 });

@@ -80,8 +80,8 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await review(page).getByRole("heading", { name: "What your wallet will ask" }).waitFor();
     await review(page).locator(".how").getByText("2 transactions", { exact: true }).waitFor();
     assert.deepEqual(await review(page).locator(".says").allTextContents(), [
-      "#2439 leaves the USDC automation and joins Carbon Impact.",
-      "#2435 leaves the Hydrex Lock Maxi automation and joins Carbon Impact.",
+      "Account #2439 leaves the USDC automation and joins Carbon Impact.",
+      "Account #2435 leaves the Hydrex Lock Maxi automation and joins Carbon Impact.",
     ]);
     assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["Carbon Impact", "Carbon Impact"]);
     assert.deepEqual(await review(page).locator(".account").allTextContents(), ["2439", "2435"]);
@@ -152,7 +152,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await group(page, "other").getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
     await toWallet(page);
     assert.equal(await review(page).locator(".how").isVisible(), false, "one transaction needs no line");
-    assert.deepEqual(await review(page).locator(".says").allTextContents(), ["#141 joins Carbon Impact."]);
+    assert.deepEqual(await review(page).locator(".says").allTextContents(), ["Account #141 joins Carbon Impact."]);
     await confirm(page);
     assert.equal(sent.length, 1);
     await expectApprovals([141n], CONDUIT, CONDUIT);
@@ -220,7 +220,9 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await group(page, "needs").getByRole("button", { name: "Leave with 1 Hydrex account" }).click();
     await review(page).getByRole("heading", { name: "Leave USDC" }).waitFor();
     await review(page).locator(".pages").getByText("Claims stop").waitFor();
-    assert.deepEqual(await review(page).locator(".says").allTextContents(), ["#2439 leaves the USDC automation."]);
+    assert.deepEqual(await review(page).locator(".says").allTextContents(), [
+      "Account #2439 leaves the USDC automation.",
+    ]);
     assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["The USDC automation"]);
     assert.equal(await review(page).locator(".conduit").innerText(), USDC);
     assert.equal(await review(page).locator(".approve").innerText(), "false");

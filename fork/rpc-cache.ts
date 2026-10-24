@@ -1,6 +1,7 @@
 import { createServer, type Server } from "node:http";
 import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 
 // What anvil forks from: a JSON-RPC server that asks the upstream RPC once for each answer about a fixed block, and keeps
@@ -23,6 +24,12 @@ import { gunzipSync, gzipSync } from "node:zlib";
 // past block needs the gas price only once. anvil asks the upstream for the receipt of a transaction sent on the fork,
 // which it never has, until anvil mines it: a transaction posted to /sent, as the tests post each one they send anvil,
 // is not found without asking.
+
+// The archive RPC that BASE_RPC_URL names, or else the page's own first RPC, and where its answers are kept between runs,
+// one file per block: the browser tests (run.ts) and the QA wallet (qa.ts) share them.
+export const forkUrl = (fallback: string): string => process.env.BASE_RPC_URL || fallback;
+export const FORK_CACHE = process.env.FORK_CACHE || join(homedir(), ".cache", "metadex.cafe", "fork");
+export const cacheFileOf = (block: number): string => join(FORK_CACHE, `base-${block}.json.gz`);
 
 type Call = { jsonrpc: "2.0"; id: unknown; method: string; params?: unknown[] };
 type Reply = { jsonrpc: "2.0"; id: unknown; result?: unknown; error?: unknown };
@@ -103,14 +110,17 @@ function txsOf({ method, params = [] }: Call): Tx[] {
   return [];
 }
 
-// Whether a request's body runs a transaction, whose reads a prefetch would fetch: the tests post only those.
-export function runsCalls(body: string): boolean {
+// The transactions a request's body runs, whose reads a prefetch fetches: none for a body that is not JSON.
+function txsIn(body: string): Tx[] {
   try {
-    return [JSON.parse(body) as Call | Call[]].flat().some((call) => txsOf(call).length > 0);
+    return [JSON.parse(body) as Call | Call[]].flat().flatMap(txsOf);
   } catch {
-    return false;
+    return [];
   }
 }
+
+// Whether a request's body runs a transaction, whose reads a prefetch would fetch: the tests post only those.
+export const runsCalls = (body: string): boolean => txsIn(body).length > 0;
 
 // The upstream RPC, through one queue for all the caches of a run: at most `inFlight` requests at once, anvil's first,
 // then the prefetch's. One it answers over its limit, or that does not reach it, is asked again after an exponential
@@ -309,14 +319,9 @@ export async function serveCached(upstream: Upstream, file: string, block?: numb
   }
 
   function prefetch(body: string): Promise<void> {
-    if (at === undefined || closing) return Promise.resolve();
-    let calls: Call[];
-    try {
-      calls = [JSON.parse(body) as Call | Call[]].flat();
-    } catch {
-      return Promise.resolve();
-    }
-    const running = Promise.all(calls.flatMap(txsOf).map((tx) => prefetchTx(tx, at)))
+    const txs = txsIn(body);
+    if (at === undefined || closing || !txs.length) return Promise.resolve();
+    const running = Promise.all(txs.map((tx) => prefetchTx(tx, at)))
       .then(() => {})
       .catch(() => {})
       .finally(() => prefetching.delete(running));

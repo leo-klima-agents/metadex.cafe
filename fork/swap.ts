@@ -12,6 +12,7 @@ import {
   SITE,
   STRANGER,
   ZORA,
+  elsewhere,
   approveConduit,
   app,
   balanceOf,
@@ -102,9 +103,14 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.equal(await review(page).locator(".step-count code").innerText(), "USDC");
     assert.match(await bill.locator(".receipt-day").innerText(), /^Gas (≈|<)\s\$[\d.]+, paid in ETH$/);
     assert.equal(await bill.locator(".swap-lines li").count(), 3);
+    // "ZORA → WETH → USDC via Aerodrome, Uniswap": the tokens, then who runs the pools, each once.
     for (const route of await bill.locator(".line-route").allInnerTexts()) {
-      assert.match(route, /^(→ \S+ via [^→]+?)( → \S+ via [^→]+?)*$/, route);
-      assert.doesNotMatch(route, /0x|tick spacing/, route);
+      assert.match(
+        route,
+        /^\S+( → \S+){1,3} via (Aero|Aerodrome|Uniswap|Hydrex)(, (Aero|Aerodrome|Uniswap|Hydrex))*$/,
+        route,
+      );
+      assert.doesNotMatch(route, /0x|tick spacing|%/, route);
     }
     assert.equal(await bill.locator(".swap-slippage").innerText(), "Your slippage: 0.5%");
     await review(page).getByRole("button", { name: "Continue" }).click();
@@ -150,8 +156,6 @@ describe("the swap and the claim against a fork after the swappers' deployment",
   });
 
   test("if the page's RPCs serve another chain, no swap is offered, and the page says so", async () => {
-    const elsewhere = (body: string) =>
-      body.includes('"eth_chainId"') ? JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x1" }) : undefined;
     const { page } = await connected({ owner: HOLDER }, { url: `${SITE}/#swap`, answer: elsewhere });
     const swap = swapView(page);
     await swap.getByText("Swaps are off.").waitFor();
@@ -180,7 +184,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     // Its calls need more gas than one transaction may use, so the swap cannot join them: they go one at a time, even
     // from a wallet that sends several in one prompt, and the swap follows, of what they brought.
     const claims = await review(page).locator(".says").allTextContents();
-    assert.ok(claims.length > 1 && claims.every((each) => /^Claims #82774's rewards from /.test(each)));
+    assert.ok(claims.length > 1 && claims.every((each) => /^Claims account #82774's rewards from /.test(each)));
     assert.equal(await review(page).locator(".how").textContent(), `${claims.length} transactions`);
     const before = await balanceOf(INTO_USDC.token, PAYEE);
     await confirmEach(page, PAYEE);

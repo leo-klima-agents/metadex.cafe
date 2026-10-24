@@ -1,5 +1,5 @@
 import type { Address, Hex } from "viem";
-import { day, hexLines } from "./format.ts";
+import { day, hexLines, walletLines } from "./format.ts";
 
 const BASESCAN = "https://basescan.org";
 
@@ -51,19 +51,34 @@ export function showHex(element: Element, hex: string): void {
       span.append(...half.map(group));
       fragment.append(span);
     });
-  } else {
-    lines.forEach((line, i) =>
-      line.forEach((text, j) => {
-        if (i || j) fragment.append(document.createElement("wbr"));
-        const span = group(text);
-        if (i && !j) span.className = "line";
-        fragment.append(span);
-      }),
-    );
-  }
+  } else fragment.append(linesOf(lines, true));
   element.classList.add("hex");
+  element.classList.remove("wallet");
   element.classList.toggle("halves", lines.length === 1);
   element.replaceChildren(fragment);
+}
+
+// Lines of groups, a span each; CSS starts a line at each "line" span. With `breaks`, a line may also wrap between
+// groups.
+function linesOf(lines: string[][], breaks: boolean): DocumentFragment {
+  const fragment = document.createDocumentFragment();
+  lines.forEach((line, i) =>
+    line.forEach((text, j) => {
+      if (breaks && (i || j)) fragment.append(document.createElement("wbr"));
+      const span = Object.assign(document.createElement("span"), { textContent: text });
+      if (i && !j) span.className = "line";
+      fragment.append(span);
+    }),
+  );
+  return fragment;
+}
+
+// Writes an address as the wallet will show it, on three lines, as hardware wallets do: see walletLines(). As with
+// showHex(), CSS lays out the groups, so a copy is still the plain address.
+export function showWalletAddress(element: Element, address: string): void {
+  element.classList.add("hex", "wallet");
+  element.classList.remove("halves");
+  element.replaceChildren(linesOf(walletLines(address), false));
 }
 
 export function groupAllHex(root: ParentNode): void {

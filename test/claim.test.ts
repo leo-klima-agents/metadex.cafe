@@ -97,7 +97,7 @@ test("a claim that fits one call stays one, as claimArgs gives it", () => {
   assert.deepEqual(claimArgs(calls[0]!), claimArgs({ id: 9540n, owed }));
   assert.equal(
     claimSlip(calls[0]!, new Map()).says,
-    "Claims #9540's rewards through AutoMaxi, which pays them to you, less 1%.",
+    "Claims account #9540's rewards through AutoMaxi, which pays them to you, less 1%.",
   );
 });
 
@@ -119,7 +119,7 @@ test("a claim too large for one transaction is split into calls that each fit, e
     assert.equal(calls.filter(({ owed }) => owed.some((o) => o.contract === contract(i))).length, 1);
   assert.match(
     claimSlip(calls[0]!, new Map(), false).says,
-    /^Claims #82774's rewards from \d+ reward contracts? through AutoMaxi/,
+    /^Claims account #82774's rewards from \d+ reward contracts? through AutoMaxi/,
   );
 });
 

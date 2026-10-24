@@ -50,12 +50,12 @@ This README is for whoever runs the site. The design and the plan are in [design
 - The header holds the logo and the name, which lead Home, and on every view a button that connects a wallet: at once
   when the browser has one, from a list when it has several. Once one is connected, the wallet's chip, which leads to
   the App, takes its place. Only the App lists the wallets in the page too.
-- Home is a heading and the button to the App (`#app`), and stays Home once a wallet is connected. The App, "Your
-  Wallet", starts with what needs you across the products, each with one action: a Hydrex account in a stopped
-  automation, an overdue payout, approvals left to the swappers. Then the products, each with what you hold in it: the
-  Hydrex automations (`#hydrex`) and the swap (`#swap`). Its Approvals button lists every approval this wallet gave the
-  café's contracts, with the call that undoes it. The pages under it name the way back in their title, as "Your Wallet ›
-  Hydrex"; Home and About do not.
+- Home is a heading and the button to the App (`#app`). A wallet connected on Home or About leads on to the App; the
+  name in the header still leads Home afterwards. The App, "Your Wallet", starts with what needs you across the
+  products, each with one action: a Hydrex account in a stopped automation, an overdue payout, approvals left to the
+  swappers. Then the products, each with what you hold in it: the Hydrex automations (`#hydrex`) and the swap (`#swap`).
+  Its Approvals button lists every approval this wallet gave the café's contracts, with the call that undoes it. The
+  pages under it name the way back in their title, as "Your Wallet › Hydrex"; Home and About do not.
 - The page always says "Hydrex account", as "account" alone means an address in crypto: "8 Hydrex accounts", "Hydrex
   Main Protocol Account #26432".
 - Details open from a round info button beside what they explain, as a popup: on a phone, a sheet from the foot of the

@@ -127,10 +127,12 @@ type Viewing = {
 let viewing: Viewing | undefined;
 const viewerOwns = (owner: Address): boolean => !!connection && same(owner, connection.address);
 
-// "Account" alone means an address in crypto, so the page always says "Hydrex account": "Hydrex account #9540", or
-// "Hydrex Main Protocol Account #26432" for one its owner named.
+// "Account" alone means an address in crypto, so the page says "Hydrex account": "Hydrex account #9540", or "Hydrex
+// Main Protocol Account #26432" for one its owner named. An account's own page says "Account #9540", or the name its
+// owner gave it, as is: its title already leads back through Hydrex. So do the bills, whose calls go to Hydrex.
 const accountName = (name: string): string =>
   !name ? "Hydrex account" : /^hydrex\b/i.test(name) ? name : `Hydrex ${name}`;
+const pageName = (name: string): string => name || "Account";
 
 // The App reads the wallet's payouts only to mark those paid late; an account's page draws its own.
 const appPayouts = payouts(undefined, (found, underWay) => {
@@ -466,7 +468,8 @@ function accountItem({ account, status }: Member, group: string, pickable: boole
   show(".late", late.has(account.id), item);
   if (pickable) {
     const box = item.querySelector<HTMLInputElement>(".pick")!;
-    // A hidden box stays disabled, so that a click on its row cannot tick it.
+    // Only a box that can act shows: the template's is hidden and disabled, so that nothing, not even a keyboard or a
+    // script, can tick an account whose group cannot act on it.
     box.hidden = box.disabled = false;
     box.value = String(account.id);
     box.ariaLabel = `Pick ${name} #${account.id}`;
@@ -952,7 +955,7 @@ function showPosition(): void {
   showActions(own?.accounts[0]);
   if (!holdings) {
     document.title = `Hydrex account #${target.id} · metaDEX Café`;
-    return void fill(view, { "position-name": accountName("") });
+    return void fill(view, { "position-name": pageName("") });
   }
   const account = holdings.accounts[0]!;
   const { owner, epochStart, payout } = holdings;
@@ -961,7 +964,7 @@ function showPosition(): void {
   const theirs = !viewerOwns(owner);
   document.title = `${name} #${account.id} · metaDEX Café`;
   fill(view, {
-    "position-name": name,
+    "position-name": pageName(account.name),
     "position-kind": account.amount === 0n ? "Empty" : accountKind(account),
     "position-votes": earningPower(account.votes),
   });
@@ -1004,6 +1007,8 @@ function showActions(account: Account | undefined): void {
     if (automation) {
       const moves = !!account && AUTOMATIONS.some((other) => other !== automation && canLeave(account, other));
       button.textContent = `${moves ? "Move to" : "Join"} ${automation.name}`;
+      // A move is a secondary action, as in the groups of Hydrex's page.
+      button.classList.toggle("secondary", moves);
     }
     button.hidden = !allowed;
     any ||= allowed;
@@ -1047,8 +1052,13 @@ function showConnection(): void {
   refreshReview();
 }
 
+// Home and About are the page's own; a wallet connected there leads on to the App.
+const leadsToApp = (): boolean => ["home", "about"].includes(route().view);
+
+// A wallet connected from Home or About leads on to the App, unless its owner went to another page meanwhile.
 async function connectTo(wallet: Wallet): Promise<void> {
   const attempt = ++attempts;
+  const fromOwn = leadsToApp();
   const connected = await connect(wallet);
   if (!connected || attempt <= ignoredUpTo) return;
   ignoredUpTo = attempt;
@@ -1058,6 +1068,7 @@ async function connectTo(wallet: Wallet): Promise<void> {
   showConnection();
   loadAccounts();
   walletChanged();
+  if (fromOwn && leadsToApp()) location.hash = "#app";
 }
 
 function listen(provider: Provider): void {

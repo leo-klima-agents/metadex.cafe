@@ -16,7 +16,8 @@ technical parts open from an info button, as popups.
 
 - **The header,** on every view: the logo and the name, which lead Home, and a button that connects a wallet, or the
   wallet's chip once one is, which leads to the App.
-- **Home** (`/`): what the café does, in a heading, and the one button. It stays Home once a wallet is connected.
+- **Home** (`/`): what the café does, in a heading, and the one button. A wallet connected there, or on About, leads on
+  to the App.
 - **The App** (`#app`): what needs you across the products, each with one action; then the products, the Hydrex
   automations and the swap, each with what you hold in it; and Approvals, what this wallet allows, in a popup. See
   [products.md](products.md).
@@ -44,7 +45,8 @@ Every new screen keeps the page's rules:
 - The page checks an automation's code and settings before anyone can join. Leaving always works.
 - Each call is shown before the wallet asks, as the wallet will show it.
 - No server, no key, nothing stored. The page reaches three Base RPCs and nothing else.
-- Addresses and hashes in full, in groups of four. Only the wallet chip and transaction links use the short form.
+- Addresses and hashes in full, in groups of four; in a call, an address as the wallet will show it. Only the wallet
+  chip and transaction links use the short form.
 - Each status has a shape and words, never colour alone.
 
 ## Who it is for
