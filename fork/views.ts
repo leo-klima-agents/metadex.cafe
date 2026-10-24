@@ -382,7 +382,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
       `https://basescan.org/tx/${PAID_TX}`,
     );
     await receipt
-      .locator(".receipt-paid-usd")
+      .locator(".receipt-paid-worth")
       .getByText(/^≈\s\$\d/)
       .waitFor({ timeout: 120_000 });
     // Its payout address, its owner's own, is behind an info button.

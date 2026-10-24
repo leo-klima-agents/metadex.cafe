@@ -1,7 +1,7 @@
 import { AUTOMATIONS, byKind, type Automation, type Kind } from "./config.ts";
 import { clone, fill, fillAddress, isOpen, show } from "./dom.ts";
 import { readAllEarnings, readEarnings, sharesOf, valueOf, type Earnings } from "./earnings.ts";
-import { WEEK, compact, count, fraction, money, moneyAt, onCurrency, toEarningPower, type Money } from "./format.ts";
+import { WEEK, compact, count, fraction, money, moneyAt, toEarningPower, type Money } from "./format.ts";
 import type { Holdings } from "./hydrex.ts";
 
 // What the automations' votes earned last epoch: each automation's line on the menu and on its page, each account's
@@ -22,9 +22,6 @@ const listeners: ((kind: Kind, outcome: Outcome) => void)[] = [];
 // All of Hydrex, for each epoch, read once for every automation's fold; and the epoch each fold compares.
 const allOf = new Map<number, Promise<Earnings>>();
 const compared = new Map<Kind, number>();
-// Each fold's comparison shown: its automation's figures, and both columns' values, at all of Hydrex's prices.
-type Comparison = { mine: Earnings; ours: Value; all: Earnings; average: Value };
-const comparisons = new Map<Kind, Comparison>();
 // Each account's share of each automation's votes in the epoch from `start`, by account number, whoever holds it:
 // undefined for an account not in it. `asked` holds the accounts whose shares are read or being read.
 type Shares = { start: number; of: Map<bigint, number | undefined>; asked: Set<bigint> };
@@ -147,10 +144,10 @@ function showColumn(table: HTMLElement, column: "ours" | "all", { votes, pools }
   fill(table, {
     [`${column}.earning-power`]: compact(toEarningPower(votes)),
     [`${column}.pools`]: count(pools.length, "pool", "pools"),
-    [`${column}.earned`]: value ? money(moneyAt(value.total, value)) : "…",
-    [`${column}.fees`]: value ? money(moneyAt(value.fees, value)) : "…",
-    [`${column}.incentives`]: value ? money(moneyAt(value.incentives, value)) : "…",
-    [`${column}.per-power`]: per === undefined ? "…" : money(moneyAt(per, value!)),
+    [`${column}.earned`]: value ? () => money(moneyAt(value.total, value)) : "…",
+    [`${column}.fees`]: value ? () => money(moneyAt(value.fees, value)) : "…",
+    [`${column}.incentives`]: value ? () => money(moneyAt(value.incentives, value)) : "…",
+    [`${column}.per-power`]: per === undefined ? "…" : () => money(moneyAt(per, value!)),
   });
 }
 
@@ -159,7 +156,7 @@ function showPools(fold: HTMLElement, { pools, votes }: Earnings, value: Value):
     const row = clone("earned-pool");
     fillAddress(row, "pool", pool.address, pool.name);
     const earnedThere = value.byPool.get(pool.address.toLowerCase()) ?? 0;
-    fill(row, { share: fraction(Number(pool.votes) / Number(votes)), usd: money(moneyAt(earnedThere, value)) });
+    fill(row, { share: fraction(Number(pool.votes) / Number(votes)), worth: () => money(moneyAt(earnedThere, value)) });
     return row;
   });
   fold.querySelector(".earned-pools tbody")!.replaceChildren(...rows);
@@ -212,7 +209,6 @@ function compare(automation: Automation): void {
       if (earned.get(kind)?.found !== mine) return;
       const ours = valueOf({ ...mine, prices: all.prices });
       const average = valueOf(all);
-      comparisons.set(kind, { mine, ours, all, average });
       showColumn(table, "ours", mine, ours);
       showColumn(table, "all", all, average);
       const ratio = perThousand(ours.total, mine.votes) / perThousand(average.total, all.votes);
@@ -247,20 +243,6 @@ onEarnings((kind, outcome) => {
 export function showAbsent(automation: Automation): void {
   part(foldOf(automation), "record-waiting").textContent = "Not on Base yet.";
 }
-
-// Another currency: each automation's figures again, and its comparison if shown, from the values found, with no read.
-onCurrency(() => {
-  for (const [kind, { found, value }] of earned) {
-    const fold = foldOf(byKind(kind)!);
-    const table = part(fold, "earnings");
-    const shown = comparisons.get(kind);
-    if (shown?.mine === found) {
-      showColumn(table, "ours", found, shown.ours);
-      showColumn(table, "all", shown.all, shown.average);
-    } else showColumn(table, "ours", found, value);
-    showPools(fold, found, value);
-  }
-});
 
 for (const automation of AUTOMATIONS) {
   const fold = foldOf(automation);

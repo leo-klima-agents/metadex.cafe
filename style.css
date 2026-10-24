@@ -1325,7 +1325,7 @@ dialog .receipt {
   margin-inline-start: auto;
   text-align: end;
 }
-.total .dollars {
+.total .worth {
   flex-basis: 100%;
   color: var(--quiet);
   text-align: end;

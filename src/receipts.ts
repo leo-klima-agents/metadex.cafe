@@ -3,7 +3,7 @@ import { blockTime, call, read, readLater, required, rpc, type Call } from "./ch
 import { CARBON_IMPACT } from "./config.ts";
 import { WEEK } from "./format.ts";
 import type { Reward } from "./earnings.ts";
-import { usdOf, type Token } from "./prices.ts";
+import { worthOf, type Prices, type Token } from "./prices.ts";
 
 // Hydrex's reward contracts record, for each account and token, the start of the epoch up to which they have paid the
 // account. Every claim sets it to the start of the current epoch, even when nothing was owed, and it only grows. A claim
@@ -97,9 +97,10 @@ export async function firstReached<T>(
 export type Pair = { contract: Address; token: Address };
 // An amount of a token that a reward contract owes.
 export type Owed = Amount & { contract: Address };
-// A pair among an epoch's rewards, with what it paid the automation's votes in dollars, or 0 if that is unknown. An
+// A pair among an epoch's rewards, with what it paid the automation's votes at the epoch's prices, or 0 if that is
+// unknown. An
 // account's share is the same in each, so this weighs the pairs for every account.
-export type Weighed = Pair & { usd: number };
+export type Weighed = Pair & { value: number };
 // An automation's rewards in the epoch from `start`.
 export type Rewards = { start: number; pairs: Weighed[] };
 export type Standing = {
@@ -121,21 +122,23 @@ export type Standing = {
 // record in each of the epoch before's, if it voted with the automation then.
 export type Records = { last: number[]; earned: (bigint | undefined)[]; before: number[] };
 
-// Each of an epoch's rewards, weighed at the given prices: last epoch's, for the epoch before's too.
-export const weighed = (rewards: Reward[], prices: Map<string, number>): Weighed[] =>
+// Each of an epoch's rewards, weighed at the given prices: last epoch's, for the epoch before's too. A token without a
+// price then is weighed at its stand-in, today's, rather than as nothing.
+export const weighed = (rewards: Reward[], prices: Prices): Weighed[] =>
   rewards.map(({ contract, token, amount }) => {
-    const price = prices.get(token.address.toLowerCase());
-    return { contract, token: token.address, usd: price === undefined ? 0 : usdOf(amount, token.decimals, price) };
+    const address = token.address.toLowerCase();
+    const price = prices.of.get(address) ?? prices.standIns.get(address);
+    return { contract, token: token.address, value: price === undefined ? 0 : worthOf(amount, token.decimals, price) };
   });
 
 // The read of an account's record in a pair.
 export const stampOf = (id: bigint, { contract, token }: Pair): Call =>
   call(contract, rewardsAbi, "tokenTimestamp", id, token);
 
-// Each pair's weight: its dollars, or the same for each when none has a price.
+// Each pair's weight: its value, or the same for each when none has a price.
 function weights(pairs: Weighed[]): number[] {
-  const priced = pairs.some(({ usd }) => usd > 0);
-  return pairs.map(({ usd }) => (priced ? usd : 1));
+  const priced = pairs.some(({ value }) => value > 0);
+  return pairs.map(({ value }) => (priced ? value : 1));
 }
 
 const sum = (values: number[]): number => values.reduce((total, value) => total + value, 0);
@@ -256,10 +259,10 @@ export async function readEarned(
 
 // What the amounts are worth at the given prices, in their unit. A token without a price, or whose decimals are unknown,
 // counts for nothing.
-export function dollars(found: Amount[], tokens: Map<string, Token>, prices: Map<string, number>): number {
+export function valueAt(found: Amount[], tokens: Map<string, Token>, prices: Prices): number {
   return found.reduce((sum, { token, amount }) => {
-    const [known, price] = [tokens.get(token.toLowerCase()), prices.get(token.toLowerCase())];
-    return known && price !== undefined ? sum + usdOf(amount, known.decimals, price) : sum;
+    const [known, price] = [tokens.get(token.toLowerCase()), prices.of.get(token.toLowerCase())];
+    return known && price !== undefined ? sum + worthOf(amount, known.decimals, price) : sum;
   }, 0);
 }
 

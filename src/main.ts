@@ -12,7 +12,7 @@ import {
   type Automation,
   type Kind,
 } from "./config.ts";
-import { clone, fill, fillAddress, fillOwn, fillPlural, fillTime, groupAllHex, isOpen, show } from "./dom.ts";
+import { clone, fill, fillAddress, fillOwn, fillPlural, fillTime, groupAllHex, isOpen, live, show } from "./dom.ts";
 import {
   WEEK,
   bps,
@@ -24,7 +24,6 @@ import {
   list,
   money,
   moneyAt,
-  onCurrency,
   setCurrency,
   short,
   toEarningPower,
@@ -79,6 +78,7 @@ import { UNDER_WAY, payouts, waitingWords, type Entry, type Found, type UnderWay
 import { closeReview, openReview, refreshReview, type Hooks } from "./review.ts";
 import { hrefOf } from "./routes.ts";
 import { openClaim } from "./claim-view.ts";
+import { gasWords } from "./swap-calls.ts";
 import { allowancesLeft, initSwap, onSwapChange, resetReview, swapLine, walletChanged } from "./swap-view.ts";
 import { describe } from "./tokens.ts";
 import {
@@ -176,11 +176,14 @@ const overdue = (): Entry[] =>
   });
 
 // What waits for an overdue account, in words, at prices now, or else in tokens: "≈ $1.84 in 9 tokens".
-function waitsLine({ standing }: Entry): string {
+function waitsLine({ standing }: Entry): () => string {
   const { waiting, unknown, late } = standing!;
-  const { worth, tokens } = waitingWords(waiting, appFound?.waiting);
-  if (!tokens) return "from the epoch before last";
-  return `${unknown || late ? "at least " : ""}${worth ? `${worth} in ${tokens}` : tokens}`;
+  const priced = appFound?.waiting;
+  return () => {
+    const { worth, tokens } = waitingWords(waiting, priced);
+    if (!tokens) return "from the epoch before last";
+    return `${unknown || late ? "at least " : ""}${worth ? `${worth} in ${tokens}` : tokens}`;
+  };
 }
 // An account's page that is not the wallet's tells a payout under way from its owner's other accounts, which it reads
 // once while the account awaits its payout.
@@ -302,7 +305,7 @@ function showRecords(): void {
           ? "No record yet"
           : paid === undefined
             ? "…"
-            : money(moneyAt(per.value * paid, per));
+            : () => money(moneyAt(per.value * paid, per));
     for (const place of placesOf(automation)) {
       fill(place, { record, "record-unit": per ? "per 1,000 Earning Power" : "" });
     }
@@ -473,7 +476,7 @@ function accountItem({ account, status }: Member, group: string, pickable: boole
   else item.querySelector(".status")!.replaceWith(statusLine(status, true));
   const earned = earnedByAccount(account.id);
   if (earned !== undefined) {
-    fill(item, { "earned-usd": money(earned) });
+    fill(item, { "earned-worth": () => money(earned) });
     show(".earned", true, item);
   }
   show(".late", late.has(account.id), item);
@@ -665,20 +668,17 @@ function estimate(element: Element, accounts: Account[], automation: Automation,
     .then(
       (per) => {
         const paid = traits[automation.kind].paid();
-        week.textContent =
-          per === null
-            ? "No record yet"
-            : per === undefined || paid === undefined
-              ? noEstimate
-              : money(moneyAt(per.value * thousands * paid, per));
+        if (per && paid !== undefined) live(week, () => money(moneyAt(per.value * thousands * paid, per)));
+        else fill(element, { "estimate-week": per === null ? "No record yet" : noEstimate });
       },
-      () => (week.textContent = noEstimate),
+      () => fill(element, { "estimate-week": noEstimate }),
     );
+  // Without ETH's price, in the ETH that pays it.
   gasCosts()(join(accounts, automation), owner).then(
-    (cost) => (gas.textContent = cost === undefined ? "Not read" : money(cost)),
+    ({ wei, prices }) => live(gas, () => gasWords(wei, prices)),
     (error) => {
       console.error(error);
-      gas.textContent = "Not read";
+      fill(element, { "estimate-gas": "Not read" });
     },
   );
 }
@@ -738,7 +738,7 @@ const appView = document.querySelector<HTMLElement>('.view[data-view="app"]')!;
 
 function need(
   shape: string,
-  words: string,
+  words: string | (() => string),
   act: { link?: string; button?: (event: MouseEvent) => void; label: string },
 ): DocumentFragment {
   const item = clone("need");
@@ -775,8 +775,9 @@ function showApp(): void {
         items.push(need("stopped", `${named} is partly in ${status.automation.name}`, change));
     }
     for (const entry of overdue()) {
+      const waits = waitsLine(entry);
       items.push(
-        need("stopped", `Hydrex account #${entry.account.id}: payout overdue, ${waitsLine(entry)}`, {
+        need("stopped", () => `Hydrex account #${entry.account.id}: payout overdue, ${waits()}`, {
           label: "Claim now",
           button: (event) => claim([entry.account], showApp, event.currentTarget as HTMLButtonElement),
         }),
@@ -828,12 +829,13 @@ function showApp(): void {
   const line = connection ? swapLine() : undefined;
   swapYours.hidden = !line;
   if (line) {
-    swapYours.textContent =
+    live(swapYours, () =>
       line.reading && !line.count
         ? "…"
         : line.count
           ? `${count(line.count, "token", "tokens")} · ${money(line.worth)}${line.reading ? " · …" : ""}`
-          : "Nothing to swap";
+          : "Nothing to swap",
+    );
   }
   void showAllows(holdings, left);
   // A payout becomes overdue as time passes: the groups' Claim follows.
@@ -981,7 +983,7 @@ function showPosition(): void {
   });
   view.querySelector(".position-status")!.replaceChildren(statusLine(status, !theirs));
   const earned = earnedByAccount(account.id);
-  if (earned !== undefined) fill(view, { "position-earned": money(earned) });
+  if (earned !== undefined) fill(view, { "position-earned": () => money(earned) });
   show(".position-earned-row", earned !== undefined, view);
   show(".position-owner-row", theirs, view);
   fillAddress(view, "position-owner", owner, short(owner));
@@ -1169,12 +1171,7 @@ onSwapChange(showApp);
 // The footer's currency, for the visit: every figure in money is drawn again in it.
 const currencySelect = document.querySelector<HTMLSelectElement>("footer .currency")!;
 currencySelect.addEventListener("change", () => setCurrency(currencySelect.value as Currency));
-onCurrency(() => {
-  showRecords();
-  showAccounts(true);
-  showApp();
-  showPosition();
-});
+
 groupAllHex(document);
 // A reload keeps the hash, and so the view.
 document.querySelector("#error .again")!.addEventListener("click", () => location.reload());

@@ -258,10 +258,12 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   does not answer, a half-hour average in their deepest pool against one of those priced. Prices now, for swaps, gas and
   what waits to be claimed, come from Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools and Hydrex Integral,
   the first of two as deep; prices at an epoch's end, for what it earned and paid, from Hydrex's pools only, and only
-  from what they and Chainlink recorded then: a feed without a round of that time, or a pool without its history, gives
-  no price rather than today's. If none of Chainlink's feeds answers, the figures are in USDC instead of dollars, from
-  the pools alone. In euros, a figure in dollars is converted at Chainlink's EUR / USD of its own time, at the flip or
-  now; without a round of that time, it stays in dollars. A token without a deep enough pool has no price.
+  from what they and Chainlink recorded then: a feed without a round of that time gives no price, and a pool without its
+  history gives way to the next deepest. A token none of whose pools has one has no price at that time; its price now
+  only weighs its rewards against the others, to tell a payout from a claim of a few small ones, and is never shown. If
+  none of Chainlink's feeds answers, the figures are in USDC instead of dollars, from the pools alone. In euros, a
+  figure in dollars is converted at Chainlink's EUR / USD of its own time, at the flip or now; without a round of that
+  time, it stays in dollars. Gas without ETH's price shows in ETH. A token without a deep enough pool has no price.
 - Only the admin key, or a call from the owner's own address made elsewhere, can change a payout address.
 - The swap knows only the tokens on its list, Hydrex's reward tokens, those added by address, and those a wallet lists
   with ERC-7811's `wallet_getAssets`: no RPC lists a wallet's tokens. Routes pass through WETH, USDC, cbBTC and HYDX

@@ -1,5 +1,5 @@
 import type { Address, Hex } from "viem";
-import { day, hexLines, walletLines } from "./format.ts";
+import { day, hexLines, onCurrency, walletLines } from "./format.ts";
 
 const BASESCAN = "https://basescan.org";
 
@@ -22,9 +22,36 @@ export function clone(id: string): DocumentFragment {
   return (document.getElementById(id) as HTMLTemplateElement).content.cloneNode(true) as DocumentFragment;
 }
 
-export function fill(root: ParentNode, textByClass: Record<string, string>): void {
+// Text that shows money, with how to write it: once another currency is picked, one listener writes each again, wherever
+// it is, in a view or a review. Plain text written over it ends that.
+const writers = new WeakMap<Element, () => string>();
+const written = new Set<WeakRef<Element>>();
+
+export function live(element: Element, write: () => string): void {
+  if (!writers.has(element)) written.add(new WeakRef(element));
+  writers.set(element, write);
+  element.textContent = write();
+}
+
+onCurrency(() => {
+  for (const ref of written) {
+    const element = ref.deref();
+    const write = element && writers.get(element);
+    if (write) element.textContent = write();
+    else written.delete(ref);
+  }
+});
+
+// Each element of each class gets its text, or, for money, how to write it.
+export function fill(root: ParentNode, textByClass: Record<string, string | (() => string)>): void {
   for (const [name, text] of Object.entries(textByClass)) {
-    for (const element of root.querySelectorAll(`.${name}`)) element.textContent = text;
+    for (const element of root.querySelectorAll(`.${name}`)) {
+      if (typeof text === "function") live(element, text);
+      else {
+        writers.delete(element);
+        element.textContent = text;
+      }
+    }
   }
 }
 

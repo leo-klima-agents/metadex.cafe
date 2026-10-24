@@ -219,7 +219,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     assert.equal(await receipt.locator(".receipt-stopped").isVisible(), false);
     // USDC counts as a dollar.
     await receipt
-      .locator(".receipt-paid-usd")
+      .locator(".receipt-paid-worth")
       .getByText(/^(≈|<)\s\$/)
       .waitFor({ timeout: 120_000 });
     await shoot(page, "automaxi-receipt-390-light", position(page));

@@ -3,11 +3,10 @@ import { afterEach, beforeEach, test } from "node:test";
 import { encodeAbiParameters, encodeEventTopics, parseAbi, parseAbiParameters, type Address, type Hex } from "viem";
 import { blockTime, resetRateLimits, type Call } from "../src/chain.ts";
 import { WEEK } from "../src/format.ts";
-import type { Token } from "../src/prices.ts";
+import { pricesIn, type Token } from "../src/prices.ts";
 import {
   BLOCK_TIME,
   blockTimes,
-  dollars,
   firstBlockAt,
   firstReached,
   forgetReads,
@@ -18,6 +17,7 @@ import {
   readEarned,
   readStamps,
   standingOf,
+  valueAt,
   watchedOf,
   weighed,
   type Log,
@@ -311,15 +311,18 @@ const usdc: Token = { address: USDC, decimals: 6, symbol: "USDC" };
 const weth: Token = { address: WETH, decimals: 18, symbol: "WETH" };
 const tokens = new Map([usdc, weth].map((token) => [token.address.toLowerCase(), token]));
 
-test("dollars, at the prices of each token", () => {
+test("what amounts are worth, at the prices of each token", () => {
   const waiting = [
     { contract: FEES, token: USDC, amount: 2_500_000n },
     { contract: BRIBES, token: WETH, amount: 10n ** 15n },
   ];
-  const prices = new Map([[USDC.toLowerCase(), 1]]);
-  assert.equal(dollars(waiting, tokens, prices), 2.5, "WETH has no price here");
-  assert.equal(dollars(waiting, tokens, new Map([...prices, [WETH.toLowerCase(), 4_000]])), 6.5);
-  assert.equal(dollars([{ token: KVCM, amount: 10n ** 18n }], tokens, new Map([[KVCM.toLowerCase(), 1]])), 0);
+  const usdcOnly: [string, number] = [USDC.toLowerCase(), 1];
+  assert.equal(valueAt(waiting, tokens, pricesIn("USD", [usdcOnly])), 2.5, "WETH has no price here");
+  assert.equal(valueAt(waiting, tokens, pricesIn("USD", [usdcOnly, [WETH.toLowerCase(), 4_000]])), 6.5);
+  assert.equal(valueAt([{ token: KVCM, amount: 10n ** 18n }], tokens, pricesIn("USD", [[KVCM.toLowerCase(), 1]])), 0);
+  const standIn = pricesIn("USD", [usdcOnly]);
+  standIn.standIns.set(WETH.toLowerCase(), 4_000);
+  assert.equal(valueAt(waiting, tokens, standIn), 2.5, "a stand-in is never shown");
 });
 
 // On Fri 16 Oct, in the epoch from Oct 15: last epoch ran from Oct 8, and the one before from Oct 1. Last epoch's
@@ -331,16 +334,16 @@ const kvcmBribes: Pair = { contract: BRIBES, token: KVCM };
 const last: Rewards = {
   start: OCT_8,
   pairs: [
-    { ...fees, usd: 90 },
-    { ...bribes, usd: 8 },
-    { ...kvcmBribes, usd: 2 },
+    { ...fees, value: 90 },
+    { ...bribes, value: 8 },
+    { ...kvcmBribes, value: 2 },
   ],
 };
 const before: Rewards = {
   start: OCT_1,
   pairs: [
-    { ...fees, usd: 60 },
-    { ...bribes, usd: 40 },
+    { ...fees, value: 60 },
+    { ...bribes, value: 40 },
   ],
 };
 const both = { last: true, before: true };
@@ -356,7 +359,7 @@ test("an epoch is paid once claims since it ended took more than half of what it
   assert.equal(paidFor(before.pairs, [end, 0], OCT_8), true, "claimed after the next epoch ended still counts");
   assert.equal(paidFor(before.pairs, [OCT_1, OCT_1], OCT_8), false, "claimed before it ended");
   assert.equal(paidFor([], [], end), true, "nothing to pay");
-  const unpriced = last.pairs.map((pair) => ({ ...pair, usd: 0 }));
+  const unpriced = last.pairs.map((pair) => ({ ...pair, value: 0 }));
   assert.equal(paidFor(unpriced, [end, end, 0], end), true, "with no prices, most of the rewards");
   assert.equal(paidFor(unpriced, [end, 0, 0], end), false);
 });
@@ -364,13 +367,13 @@ test("an epoch is paid once claims since it ended took more than half of what it
 test("the rewards watched for a payout: the fewest worth half of all", () => {
   assert.deepEqual(watchedOf(last.pairs), [last.pairs[0]]);
   assert.deepEqual(watchedOf(before.pairs), [before.pairs[0]], "exactly half will do");
-  const even = [30, 25, 25, 20].map((usd, i) => ({
+  const even = [30, 25, 25, 20].map((value, i) => ({
     contract: BRIBES,
     token: `0x${String(i).repeat(40)}` as Address,
-    usd,
+    value,
   }));
   assert.deepEqual(
-    watchedOf(even).map(({ usd }) => usd),
+    watchedOf(even).map(({ value }) => value),
     [30, 25],
   );
   assert.deepEqual(watchedOf([]), []);
@@ -421,15 +424,24 @@ test("late, never paid, joined since, and what could not be read", () => {
   assert.equal(partly.unknown, true);
 });
 
-test("each reward weighed at last epoch's prices; none for a token without one", () => {
+test("each reward weighed at last epoch's prices, or its stand-in, today's; none for a token without either", () => {
   const rewards = [
     { pool: FEES, contract: FEES, token: usdc, amount: 90_000_000n, fee: true },
     { pool: FEES, contract: BRIBES, token: weth, amount: 10n ** 18n, fee: false },
   ];
-  assert.deepEqual(weighed(rewards, new Map([[USDC.toLowerCase(), 1]])), [
-    { ...fees, usd: 90 },
-    { ...bribes, usd: 0 },
+  const prices = pricesIn("USD", [[USDC.toLowerCase(), 1]]);
+  assert.deepEqual(weighed(rewards, prices), [
+    { ...fees, value: 90 },
+    { ...bribes, value: 0 },
   ]);
+  // WETH had no price at the flip: weighed at today's, it keeps a claim of the USDC alone from passing for a payout.
+  prices.standIns.set(WETH.toLowerCase(), 2_500);
+  const pairs = weighed(rewards, prices);
+  assert.deepEqual(pairs, [
+    { ...fees, value: 90 },
+    { ...bribes, value: 2_500 },
+  ]);
+  assert.equal(paidFor(pairs, [OCT_15, 0], OCT_15), false);
 });
 
 test("what waits is read in small batches, as each earned() can take a million gas; a failed one is unknown", async () => {

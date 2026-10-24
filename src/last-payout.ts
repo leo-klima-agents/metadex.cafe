@@ -2,9 +2,9 @@ import type { Address, Hex } from "viem";
 import { blockTime, now, readLater, required, rpc, same, type Call } from "./chain.ts";
 import { lastClaimBlocks, readClaimsAt, totals, walkClaims, WALK_LIMIT, type Walk } from "./claims.ts";
 import { AUTOMATIONS, AUTOMAXI_FEE_BPS, KEEPER, KVCM, type Automation, type Kind } from "./config.ts";
-import { clone, fill, fillAddress, fillOwn, fillTime, show, showHex, txUrl } from "./dom.ts";
+import { clone, fill, fillAddress, fillOwn, fillTime, live, show, showHex, txUrl } from "./dom.ts";
 import { rewardsFor, tokensOf, type Earnings } from "./earnings.ts";
-import { WEEK, amount, bps, count, listWith, money, moneyAt, onCurrency, short, utc, weekStart } from "./format.ts";
+import { WEEK, amount, bps, count, listWith, money, moneyAt, short, utc, weekStart } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { lastEarnings } from "./last-epoch.ts";
 import { pricesAtFlip, pricesNow, type Prices, type Token } from "./prices.ts";
@@ -12,7 +12,7 @@ import { prefill } from "./swap-view.ts";
 import {
   SETTLED,
   blockTimes,
-  dollars,
+  valueAt,
   epochBlock,
   payoutBlocks,
   payoutsIn,
@@ -61,19 +61,20 @@ export type Entry = Part & {
   // epoch's flip is due to it.
   due: boolean;
 };
-// What waits for the accounts, at prices now, with the tokens' decimals, and when they were read; until they are read,
-// or without them, it shows in tokens.
-export type Waiting = { tokens: Map<string, Token>; prices: Prices; at: number };
-// Prices of what waits this recent are not read again for a new read of the same owner's payouts.
+// What waits for the accounts, at prices now, with the tokens' decimals; until they are read, or without them, it shows
+// in tokens.
+export type Waiting = { tokens: Map<string, Token>; prices: Prices };
+// The prices of what waits read lately, with the tokens they were asked for, whether their decimals could be read or
+// not: any payouts whose tokens they cover, the App's or an account page's, take them rather than read them again.
 const FRESH = 300_000;
+let pricings: { at: number; asked: Set<string>; waiting: Promise<Waiting | undefined> }[] = [];
 export type Found = { epochStart: number; entries: Entry[]; waiting?: Waiting };
 // A payout under way: the accounts it has reached since the flip, those still due, and when it first paid one.
 export type UnderWay = { paid: Entry[]; left: Entry[]; first: number };
-// A receipt drawn, which is drawn again once prices are read, and at them once another currency is picked.
+// A receipt drawn, which is drawn again once prices are read.
 type Drawn = {
   node: HTMLElement;
   priced: boolean;
-  prices?: Prices;
   flip: number;
   amounts: Amount[];
   draw(prices?: Prices): void;
@@ -86,10 +87,6 @@ type Signal = { call: Call; paid: (answer: unknown) => boolean };
 const drawn = new Map<string, Drawn>();
 // Each line of what waits drawn, with its account's entry, to draw again once priced.
 const waitingLines = new WeakMap<Element, Entry>();
-
-onCurrency(() => {
-  for (const receipt of drawn.values()) if (receipt.prices) receipt.draw(receipt.prices);
-});
 
 // The automation an account is in or joining, or else the one it is leaving.
 const automationOf = ({ delegate, claimer, delegateAtStart }: Account): Automation | undefined =>
@@ -124,9 +121,9 @@ function showAmounts(element: Element, found: Amount[], tokens: Map<string, Toke
   element.replaceChildren(sign, ...listWith<Node | string>(items));
 }
 
-function worth(found: Amount[], tokens: Map<string, Token>, prices: Prices | undefined): string {
-  const total = prices ? dollars(found, tokens, prices) : 0;
-  return total > 0 ? money(moneyAt(total, prices!)) : "";
+function worth(found: Amount[], tokens: Map<string, Token>, prices: Prices | undefined): string | (() => string) {
+  const total = prices ? valueAt(found, tokens, prices) : 0;
+  return total > 0 ? () => money(moneyAt(total, prices!)) : "";
 }
 
 const kvcm = (found: Amount[]): bigint => found.find(({ token }) => same(token, KVCM))?.amount ?? 0n;
@@ -149,13 +146,13 @@ function fillReceipt(
   const of = (part: bigint) => (all ? bps((part * 10_000n + all / 2n) / all) : "");
   fill(item, {
     "receipt-id": `Account #${payout.id}`,
-    "receipt-earned-usd": worth(payout.earned, tokens, prices),
+    "receipt-earned-worth": worth(payout.earned, tokens, prices),
     "receipt-swapped": `${amount(swapped > 0n ? swapped : 0n, 18)} kVCM`,
     "receipt-retired-share": of(payout.retiredKvcm),
     "receipt-retired": `${payout.retiredKvcm ? "−" : ""}${amount(payout.retiredKvcm, 18)} kVCM`,
     "receipt-tonnes": `${amount(payout.tonnes, 18)} t of carbon credits`,
     "receipt-fee-share": of(kvcm(payout.fees)),
-    "receipt-paid-usd": worth(payout.paid, tokens, prices),
+    "receipt-paid-worth": worth(payout.paid, tokens, prices),
   });
   showAmounts(item.querySelector(".receipt-earned")!, payout.earned, tokens);
   showAmounts(item.querySelector(".receipt-fee")!, payout.fees, tokens, payout.fees.length ? "−" : "");
@@ -206,9 +203,9 @@ function fillClaims(
   fill(item, {
     "receipt-id": `Account #${id}`,
     "receipt-fee-share": bps(AUTOMAXI_FEE_BPS),
-    "receipt-claimed-usd": worth(received, tokens, prices),
-    "receipt-fee-usd": worth(fees, tokens, prices),
-    "receipt-paid-usd": worth(paid, tokens, prices),
+    "receipt-claimed-worth": worth(received, tokens, prices),
+    "receipt-fee-worth": worth(fees, tokens, prices),
+    "receipt-paid-worth": worth(paid, tokens, prices),
     "receipt-limit": String(WALK_LIMIT),
   });
   showAmounts(item.querySelector(".receipt-claimed")!, received, tokens, "", "Nothing");
@@ -246,7 +243,7 @@ function ownWords(element: Element, own: string, theirs: string): void {
 // What waits for an account, in words: its worth at prices now, if read and above nothing, as "≈ $1.84", and its
 // tokens, as "9 tokens", unless there are none.
 export function waitingWords(waiting: Amount[], priced: Waiting | undefined): { worth?: string; tokens?: string } {
-  const value = priced ? dollars(waiting, priced.tokens, priced.prices) : 0;
+  const value = priced ? valueAt(waiting, priced.tokens, priced.prices) : 0;
   const n = new Set(waiting.map(({ token }) => token.toLowerCase())).size;
   return {
     ...(value > 0 && { worth: money(moneyAt(value, priced!.prices)) }),
@@ -266,19 +263,42 @@ function waitingLine({ waiting, unknown }: Standing, priced: Waiting | undefined
 // The section's lines of what waits, at prices now.
 function drawWaiting(section: HTMLElement, waiting: Waiting): void {
   for (const line of section.querySelectorAll(".standing-waiting")) {
-    const entry = waitingLines.get(line);
-    if (entry?.standing && entry.earnings) line.textContent = waitingLine(entry.standing, waiting);
+    const { standing, earnings } = waitingLines.get(line) ?? {};
+    if (standing && earnings) live(line, () => waitingLine(standing, waiting));
   }
 }
 
-// What waits for the accounts, at prices now. A pool must be deep enough for the most of a token that waits for one.
-async function waitingNow(entries: Entry[]): Promise<Waiting | undefined> {
-  const amounts = new Map<string, bigint>();
-  for (const { token, amount: value } of entries.flatMap(({ standing }) => standing?.waiting ?? []))
-    if (value > (amounts.get(token.toLowerCase()) ?? 0n)) amounts.set(token.toLowerCase(), value);
-  if (!amounts.size) return undefined;
-  const tokens = await tokensOf([...amounts.keys()] as Address[], readLater);
-  return { tokens, prices: await pricesNow([...tokens.values()], amounts, readLater), at: Date.now() };
+// The most of each token among the amounts, by lower-case address: how deep a pool must be to price it.
+function largestAmounts(amounts: Amount[]): Map<string, bigint> {
+  const largest = new Map<string, bigint>();
+  for (const { token, amount: value } of amounts)
+    if (value > (largest.get(token.toLowerCase()) ?? 0n)) largest.set(token.toLowerCase(), value);
+  return largest;
+}
+
+// What waits for the accounts, at prices now: those read lately, if they cover its tokens, or else read.
+function waitingFor(entries: Entry[]): Promise<Waiting | undefined> {
+  const amounts = largestAmounts(entries.flatMap(({ standing }) => standing?.waiting ?? []));
+  if (!amounts.size) return Promise.resolve(undefined);
+  const time = Date.now();
+  pricings = pricings.filter(({ at }) => time - at < FRESH);
+  const kept = pricings.find(({ asked }) => [...amounts.keys()].every((token) => asked.has(token)));
+  if (kept) return kept.waiting;
+  const pricing = {
+    at: time,
+    asked: new Set(amounts.keys()),
+    waiting: (async () => {
+      const tokens = await tokensOf([...amounts.keys()] as Address[], readLater);
+      return { tokens, prices: await pricesNow([...tokens.values()], amounts, readLater) };
+    })().catch((error: unknown) => {
+      // A failed read is not kept: the next asks again.
+      console.error(error);
+      pricings = pricings.filter((each) => each !== pricing);
+      return undefined;
+    }),
+  };
+  pricings.push(pricing);
+  return pricing.waiting;
 }
 
 function standingItem(entry: Entry, epochStart: number, own: boolean, waiting?: Waiting, receipt?: HTMLElement) {
@@ -289,7 +309,7 @@ function standingItem(entry: Entry, epochStart: number, own: boolean, waiting?: 
   fill(item, {
     "standing-automation": automation.name,
     "standing-voter": voter.name,
-    "standing-waiting": standing && earnings ? waitingLine(standing, waiting) : "",
+    "standing-waiting": standing && earnings ? () => waitingLine(standing, waiting) : "",
   });
   waitingLines.set(item.querySelector(".standing-waiting")!, entry);
   if (through) fillTime(item, "standing-through", through);
@@ -595,27 +615,14 @@ export function payouts(
     setState("found");
   }
 
-  // What waits, at prices now, drawn again once read, unless the prices it kept are recent and price all its tokens.
-  // Without them, it stays as it was.
+  // What waits, at prices now, drawn again once read, unless they are those it kept. Without them, it stays as it was.
   async function price(read: Found, current: () => boolean): Promise<void> {
-    const kept = read.waiting;
-    const covered = read.entries.every(({ standing }) =>
-      (standing?.waiting ?? []).every(({ token }) => kept?.tokens.has(token.toLowerCase())),
-    );
-    if (kept && covered && Date.now() - kept.at < FRESH) return;
-    const waiting = await waitingNow(read.entries).catch((error: unknown) => {
-      console.error(error);
-      return undefined;
-    });
-    if (!waiting || !current()) return;
+    const waiting = await waitingFor(read.entries);
+    if (!waiting || waiting === read.waiting || !current()) return;
     read.waiting = waiting;
     if (section) drawWaiting(section, waiting);
     priced?.(read);
   }
-
-  onCurrency(() => {
-    if (section && latest?.waiting) drawWaiting(section, latest.waiting);
-  });
 
   // Whether the payouts should be read again. A failed check is tried again at the next.
   async function moved(): Promise<boolean> {
@@ -726,10 +733,8 @@ async function draw(
   void Promise.all(
     [...new Set(unpriced.map((receipt) => receipt.flip))].map(async (flip) => {
       const these = unpriced.filter((receipt) => receipt.flip === flip);
-      // A pool must be deep enough for the largest amount of the token that any receipt shows in dollars.
-      const amounts = new Map<string, bigint>();
-      for (const { token, amount: value } of these.flatMap((receipt) => receipt.amounts))
-        if (value > (amounts.get(token.toLowerCase()) ?? 0n)) amounts.set(token.toLowerCase(), value);
+      // A pool must be deep enough for the largest amount of the token that any receipt shows.
+      const amounts = largestAmounts(these.flatMap((receipt) => receipt.amounts));
       // Other accounts, or a newer read, may have taken over by then.
       if (!current()) return;
       const prices = await pricesAtFlip([...tokens.values()], amounts, flip, now(), readLater).catch((error) => {
@@ -739,7 +744,7 @@ async function draw(
       if (!prices) return;
       for (const receipt of these) {
         receipt.draw(prices);
-        Object.assign(receipt, { priced: true, prices });
+        receipt.priced = true;
       }
     }),
   );

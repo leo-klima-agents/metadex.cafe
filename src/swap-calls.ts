@@ -1,7 +1,7 @@
 import type { Address } from "viem";
 import { rpc } from "./chain.ts";
 import { WETH, type Swapper } from "./config.ts";
-import { figure, moneyAt, utc, type Money } from "./format.ts";
+import { figure, money, moneyAt, utc, type Money } from "./format.ts";
 import type { Prices, Token } from "./prices.ts";
 import type { Field, Slip } from "./review.ts";
 import { MAX_TIP, approve, poolName, poolless, swapCall, venueOf, type Route } from "./swap.ts";
@@ -31,12 +31,18 @@ export function costs(): Promise<Costs> {
 // What wei of ETH cost at the prices given, ETH's among them, so that it compares with what they value: undefined
 // without one.
 export function ethCost(wei: bigint, prices: Prices | undefined): Money | undefined {
-  const eth = prices?.get(WETH.toLowerCase());
+  const eth = prices?.of.get(WETH.toLowerCase());
   return eth === undefined ? undefined : moneyAt((Number(wei) / 1e18) * eth, prices!);
 }
 
 export const gasCost = (gas: bigint, { gasPrice }: Costs, prices: Prices | undefined): Money | undefined =>
   ethCost(gas * gasPrice, prices);
+
+// What gas costs, in words: at the prices given, or else in the ETH that pays it.
+export function gasWords(wei: bigint, prices: Prices | undefined): string {
+  const cost = ethCost(wei, prices);
+  return cost ? money(cost) : `${figure(wei, 18)} ETH`;
+}
 
 const symbolOf = (tokens: Map<string, Token>, address: Address): string =>
   tokens.get(address.toLowerCase())?.symbol ?? address;

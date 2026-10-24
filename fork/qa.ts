@@ -770,7 +770,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   // last two epochs, as a payout claims, so that the page finds the record of the payout moved by a claim of another's.
   async function claimOnHydrex(account: string): Promise<void> {
     const { id, owner } = await accountOf(account);
-    type Owed = { contract: Address; token: Address; fee: boolean; usd: number };
+    type Owed = { contract: Address; token: Address; fee: boolean; value: number };
     const pairKey = ({ contract, token }: Owed) => `${contract} ${token}`.toLowerCase();
     // What waits in each epoch's pools, by contract and token. The automations' pools are mostly the same, and so are
     // the two epochs': a claim takes what waits for every epoch at once.
@@ -797,7 +797,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       ),
     );
     const most = (pairs: Map<string, Owed>) =>
-      [...pairs.values()].sort((a, b) => b.usd - a.usd).slice(0, OWN_CLAIM_PAIRS);
+      [...pairs.values()].sort((a, b) => b.value - a.value).slice(0, OWN_CLAIM_PAIRS);
     const claimed = [...new Map(epochs.flatMap(most).map((owed) => [pairKey(owed), owed])).values()];
     if (!claimed.length) throw new Error(`Nothing waits for #${id} in the pools of the last two epochs.`);
     // A few rewards a transaction, as each reads the account's past epochs.
