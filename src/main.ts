@@ -127,10 +127,12 @@ type Viewing = {
 let viewing: Viewing | undefined;
 const viewerOwns = (owner: Address): boolean => !!connection && same(owner, connection.address);
 
-// "Account" alone means an address in crypto, so the page always says "Hydrex account": "Hydrex account #9540", or
-// "Hydrex Main Protocol Account #26432" for one its owner named.
+// "Account" alone means an address in crypto, so the page says "Hydrex account": "Hydrex account #9540", or "Hydrex
+// Main Protocol Account #26432" for one its owner named. An account's own page says "Account #9540", or the name its
+// owner gave it, as is: its title already leads back through Hydrex. So do the bills, whose calls go to Hydrex.
 const accountName = (name: string): string =>
   !name ? "Hydrex account" : /^hydrex\b/i.test(name) ? name : `Hydrex ${name}`;
+const pageName = (name: string): string => name || "Account";
 
 // The App reads the wallet's payouts only to mark those paid late; an account's page draws its own.
 const appPayouts = payouts(undefined, (found, underWay) => {
@@ -953,7 +955,7 @@ function showPosition(): void {
   showActions(own?.accounts[0]);
   if (!holdings) {
     document.title = `Hydrex account #${target.id} · metaDEX Café`;
-    return void fill(view, { "position-name": accountName("") });
+    return void fill(view, { "position-name": pageName("") });
   }
   const account = holdings.accounts[0]!;
   const { owner, epochStart, payout } = holdings;
@@ -962,7 +964,7 @@ function showPosition(): void {
   const theirs = !viewerOwns(owner);
   document.title = `${name} #${account.id} · metaDEX Café`;
   fill(view, {
-    "position-name": name,
+    "position-name": pageName(account.name),
     "position-kind": account.amount === 0n ? "Empty" : accountKind(account),
     "position-votes": earningPower(account.votes),
   });

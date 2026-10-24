@@ -125,11 +125,11 @@ export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true
   return {
     to: AUTOMAXI.address,
     data: encodeFunctionData({ abi: autoMaxiAbi, functionName: "claim", args }),
-    says: `Claims #${id}'s rewards${from} through AutoMaxi, which pays them to you, less 1%.`,
+    says: `Claims account #${id}'s rewards${from} through AutoMaxi, which pays them to you, less 1%.`,
     on: "AutoMaxi",
     call: "claim",
     fields: [
-      { label: "Hydrex account", name: "account", code: String(id) },
+      { label: "Account", name: "account", code: String(id) },
       { label: "Fees from", name: "fee-contracts", code: fees, description: "Pools' fees contracts that owe it" },
       {
         label: "Incentives from",

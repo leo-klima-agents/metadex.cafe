@@ -155,7 +155,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     assert.equal(await review(page).locator(".fee-facts").count(), 0, "the fee facts are on its page");
     await shoot(page, "automaxi-join-1-1440-light");
     await review(page).getByRole("button", { name: "Continue" }).click();
-    assert.deepEqual(await review(page).locator(".says").allTextContents(), ["#141 joins AutoMaxi."]);
+    assert.deepEqual(await review(page).locator(".says").allTextContents(), ["Account #141 joins AutoMaxi."]);
     assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["AutoMaxi"]);
     assert.equal(await review(page).locator(".conduit").textContent(), AUTOMAXI.address);
     await confirm(page);
@@ -174,7 +174,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
       .click();
     await toWallet(own);
     assert.deepEqual(await review(own).locator(".says").allTextContents(), [
-      "#53350 leaves Carbon Impact and joins AutoMaxi.",
+      "Account #53350 leaves Carbon Impact and joins AutoMaxi.",
     ]);
     await confirm(own);
     await expectApprovals([53350n], AUTOMAXI.address, AUTOMAXI.address);
@@ -182,7 +182,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await group(own, "in:automaxi").getByRole("button", { name: "Move to Carbon Impact", exact: true }).click();
     await toWallet(own);
     assert.deepEqual(await review(own).locator(".says").allTextContents(), [
-      "#53350 leaves AutoMaxi and joins Carbon Impact.",
+      "Account #53350 leaves AutoMaxi and joins Carbon Impact.",
     ]);
     await confirm(own);
     await expectApprovals([53350n], CONDUIT, CONDUIT);
@@ -210,7 +210,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     const receipt = standing.locator(".receipt");
     await receipt.waitFor({ timeout: 120_000 });
     await position(page).locator(".position-status").getByText("Joining AutoMaxi:").waitFor();
-    assert.equal(await receipt.locator(".label").first().textContent(), "Receipt · #82774 · AutoMaxi");
+    assert.equal(await receipt.locator(".label").first().textContent(), "Receipt · Account #82774 · AutoMaxi");
     assert.match(await receipt.locator(".receipt-claimed").innerText(), /^(< )?[\d,.]+ USDC$/);
     assert.equal(await receipt.locator(".receipt-fee-share").innerText(), "1%");
     assert.match(await receipt.locator(".receipt-fee").innerText(), /^−[\d,.<\s]+ USDC$/);
@@ -299,7 +299,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
 
     // An account's page: the wallet's own has its actions; another's names its owner.
     await page.goto(`${SITE}/#hydrex/141`);
-    await position(page).getByRole("heading", { name: "Hydrex account #141", level: 1 }).waitFor();
+    await position(page).getByRole("heading", { name: "Account #141", level: 1 }).waitFor();
     await position(page).getByText("You vote with it").waitFor();
     await position(page).getByRole("button", { name: "Join AutoMaxi", exact: true }).waitFor();
     await page.goto(`${SITE}/#hydrex/9540`);

@@ -63,7 +63,7 @@ function claimReceipts(
     const receipt = clone("claim-receipt");
     const value = dollars(received, tokens, prices);
     fill(receipt, {
-      "claim-receipt-id": `#${id}`,
+      "claim-receipt-id": `Account #${id}`,
       "claim-receipt-usd": value > 0 ? usd(value) : "",
       "claim-receipt-claimed": words(received),
       "claim-receipt-fee": words(fees, "−"),

@@ -170,10 +170,10 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await page.getByRole("checkbox", { name: "Pick Hydrex account #2439" }).isChecked(), true);
     await page.getByRole("button", { name: "Join Carbon Impact with 2 Hydrex accounts" }).waitFor();
     await account(page, 2439).getByRole("link", { name: "Hydrex account #2439" }).click();
-    await position(page).getByRole("heading", { name: "Hydrex account #2439", level: 1 }).waitFor();
+    await position(page).getByRole("heading", { name: "Account #2439", level: 1 }).waitFor();
     assert.equal(new URL(page.url()).hash, "#hydrex/2439");
     assert.equal(await page.title(), "Hydrex account #2439 · metaDEX Café");
-    assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), "Hydrex account #2439");
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), "Account #2439");
     await position(page)
       .locator(".position-stopped")
       .getByText(/Earns nothing\s+since\s+Thu,? 10 Sept?\./)
@@ -182,7 +182,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await position(page).getByRole("button", { name: "Leave", exact: true }).waitFor();
     assert.equal(await position(page).locator(".position-owner-row").isVisible(), false, "its own account");
     await shoot(page, "stopped-account-390-light");
-    // Its title leads back: "Your Wallet › Hydrex › Hydrex account #2439".
+    // Its title leads back: "Your Wallet › Hydrex › Account #2439".
     const trail = position(page).getByRole("navigation", { name: "Breadcrumb" });
     assert.deepEqual(await trail.getByRole("link").allInnerTexts(), ["Your Wallet", "Hydrex"]);
     await trail.getByRole("link", { name: "Hydrex" }).click();
@@ -346,7 +346,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     const receipt = standing.locator(".receipt");
     await receipt.first().waitFor({ timeout: 120_000 });
     assert.equal(await standing.count(), 1);
-    assert.equal(await position(page).locator("h1").innerText(), "Hydrex account #82774");
+    assert.equal(await position(page).locator("h1").innerText(), "Account #82774");
     // On Fri 16 Oct, Carbon Impact owed it the epoch from Thu 1 Oct, and had paid nothing since Wed 23 Sep.
     assert.match(await standing.locator(".standing-late").innerText(), /^Late · paid up to Thu,? 17 Sept?$/);
     assert.equal(await standing.locator(".standing-paid").isVisible(), false);
@@ -354,7 +354,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await standing.locator(".standing-outside").isVisible(), false);
     assert.equal(await position(page).locator(".position-underway").isVisible(), false);
     assert.equal(await receipt.count(), 1);
-    assert.equal(await receipt.locator(".receipt-id").innerText(), "#82774");
+    assert.equal(await receipt.locator(".receipt-id").textContent(), "Account #82774");
     assert.equal(await receipt.locator(".receipt-earned").innerText(), "8.56 USDC and 89.04 HYDX");
     assert.equal(await receipt.locator(".receipt-swapped").innerText(), "1,053.92 kVCM");
     assert.equal(await receipt.locator(".receipt-retired").innerText(), "−326.80 kVCM");

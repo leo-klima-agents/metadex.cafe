@@ -164,7 +164,7 @@ test("who can join and who can leave", () => {
 test("joining sets the conduit's approval on the VotingEscrow", () => {
   const [step] = join([account()], CARBON_IMPACT);
   assert.deepEqual(txs([step!]), [approval(141n, true)]);
-  assert.equal(step!.says, "#141 joins Carbon Impact.");
+  assert.equal(step!.says, "Account #141 joins Carbon Impact.");
   assert.deepEqual([step!.conduit, step!.id, step!.approve], [CONDUIT, 141n, true]);
   assert.equal(step!.on, "Hydrex's VotingEscrow");
   assert.equal(step!.conduitName, "Carbon Impact");
@@ -183,9 +183,9 @@ test("an account in other automations joins directly, one call per account, nami
   assert.deepEqual(
     steps.map(({ says }) => says),
     [
-      "#141 leaves the Liquid Hydrex automation and joins Carbon Impact.",
-      "#42 leaves the Hydrex Lock Maxi and USDC automations and joins Carbon Impact.",
-      "#7 leaves the USDC automation and joins Carbon Impact.",
+      "Account #141 leaves the Liquid Hydrex automation and joins Carbon Impact.",
+      "Account #42 leaves the Hydrex Lock Maxi and USDC automations and joins Carbon Impact.",
+      "Account #7 leaves the USDC automation and joins Carbon Impact.",
     ],
   );
 });
@@ -196,7 +196,7 @@ test("leaving clears the conduit's approval", () => {
     CARBON_IMPACT,
   );
   assert.deepEqual(txs(steps), [approval(141n, false), approval(42n, false)]);
-  assert.equal(steps[1]!.says, "#42 leaves Carbon Impact.");
+  assert.equal(steps[1]!.says, "Account #42 leaves Carbon Impact.");
 });
 
 test("leaving another automation clears its approval, named by its address", () => {
@@ -213,7 +213,7 @@ test("leaving another automation clears its approval, named by its address", () 
     })),
     [
       {
-        says: "#141 leaves the USDC automation.",
+        says: "Account #141 leaves the USDC automation.",
         id: 141n,
         approve: false,
         conduit: USDC,
@@ -221,7 +221,7 @@ test("leaving another automation clears its approval, named by its address", () 
         automation: "USDC",
       },
       {
-        says: "#42 leaves the Hydrex Lock Maxi automation.",
+        says: "Account #42 leaves the Hydrex Lock Maxi automation.",
         id: 42n,
         approve: false,
         conduit: LOCK_MAXI,
@@ -246,12 +246,12 @@ test("AutoMaxi: in it, joining it, and moving between the two in one call, which
   });
   const [move] = join([account({ delegate: CONDUIT, delegateAtStart: CONDUIT, claimer: CONDUIT })], AUTOMAXI);
   assert.deepEqual(txs([move!]), [approval(141n, true, MAXI)]);
-  assert.equal(move!.says, "#141 leaves Carbon Impact and joins AutoMaxi.");
+  assert.equal(move!.says, "Account #141 leaves Carbon Impact and joins AutoMaxi.");
   assert.equal(move!.conduitName, "AutoMaxi");
   const [back] = join([account({ delegate: MAXI, claimer: MAXI })], CARBON_IMPACT);
-  assert.equal(back!.says, "#141 leaves AutoMaxi and joins Carbon Impact.");
+  assert.equal(back!.says, "Account #141 leaves AutoMaxi and joins Carbon Impact.");
   const [both] = join([account({ delegate: USDC, claimer: CONDUIT })], AUTOMAXI);
-  assert.equal(both!.says, "#141 leaves Carbon Impact and the USDC automation and joins AutoMaxi.");
+  assert.equal(both!.says, "Account #141 leaves Carbon Impact and the USDC automation and joins AutoMaxi.");
   assert.deepEqual(txs(leave([account({ delegate: MAXI, claimer: MAXI })], AUTOMAXI)), [approval(141n, false, MAXI)]);
 });
 
