@@ -133,7 +133,7 @@ test("each automation's page has the same parts, in the same order, and lists ev
   assert.doesNotMatch(footer, /version/i);
   assert.deepEqual(
     [...footer.matchAll(/<option value="([^"]+)"/g)].map(([, value]) => value),
-    ["USD", "EUR"],
+    ["USD", "EUR", "GBP", "CHF", "AUD", "CAD"],
   );
 });
 

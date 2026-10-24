@@ -1,4 +1,5 @@
 import type { Address, Hex } from "viem";
+import type { Fiat } from "./format.ts";
 
 export const CHAIN_ID = 8453;
 // Asked in this order. drpc serves old blocks for free; publicnode needs a paid token for them.
@@ -71,8 +72,15 @@ const anchor = (address: Address, decimals: number, feed: Address): Anchor => ({
   decimals,
   feed: { address: feed, decimals: 8 },
 });
-// EUR / USD, to show prices in euros: not an anchor, as no token is the euro itself.
-export const EUR_USD: Feed = { address: "0xc91D87E81faB8f93699ECf7Ee9B44D11e1D53F0F", decimals: 8 };
+// Each currency's price in dollars, to show prices in it: not anchors, as no token priced here is the currency itself.
+// Chainlink's on Base: EUR / USD, GBP / USD, CHF / USD, AUD / USD and CAD / USD.
+export const FIAT_FEEDS: Record<Fiat, Feed> = {
+  EUR: { address: "0xc91D87E81faB8f93699ECf7Ee9B44D11e1D53F0F", decimals: 8 },
+  GBP: { address: "0xCceA6576904C118037695eB71195a5425E69Fa15", decimals: 8 },
+  CHF: { address: "0x3A1d6444fb6a402470098E23DaD0B7E86E14252F", decimals: 8 },
+  AUD: { address: "0x46e51B8cA41d709928EdA9Ae43e42193E6CDf229", decimals: 8 },
+  CAD: { address: "0xA840145F87572E82519d578b1F36340368a25D5d", decimals: 8 },
+};
 export const ANCHORS: Anchor[] = [
   // USDC / USD
   anchor(USDC, 6, "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B"),

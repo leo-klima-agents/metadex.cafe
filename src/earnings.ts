@@ -274,5 +274,5 @@ export function valueOf({ rewards, prices }: Earnings) {
     if (fee) fees += value;
     else incentives += value;
   }
-  return { total: fees + incentives, fees, incentives, byPool, unit: prices.unit, eurUsd: prices.eurUsd };
+  return { total: fees + incentives, fees, incentives, byPool, unit: prices.unit, rates: prices.rates };
 }

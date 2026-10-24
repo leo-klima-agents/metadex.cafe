@@ -9,7 +9,7 @@ const rootOf = (name: string, held: Element) =>
   ({ querySelectorAll: (selector: string) => (selector === `.${name}` ? [held] : []) }) as unknown as ParentNode;
 
 test("money is written again in the currency picked, wherever it is, until plain text is written over it", () => {
-  const then = { unit: "USD", eurUsd: 1.25 } as const;
+  const then = { unit: "USD", rates: { EUR: 1.25 } } as const;
   const [direct, filled, overwritten] = [element(), element(), element()];
   live(direct, () => money(moneyAt(10, then)));
   fill(rootOf("worth", filled), { worth: () => `${money(moneyAt(250, then))} waiting` });

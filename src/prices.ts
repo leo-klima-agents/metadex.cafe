@@ -2,7 +2,7 @@ import { parseAbi, type Abi, type Address } from "viem";
 import { call, now, read, same, type Call } from "./chain.ts";
 import {
   ANCHORS,
-  EUR_USD,
+  FIAT_FEEDS,
   HYDREX_PRICING,
   SWAP_PRICING,
   USDC,
@@ -11,7 +11,7 @@ import {
   type ExchangeKind,
   type Feed,
 } from "./config.ts";
-import type { Basis, Unit } from "./format.ts";
+import type { Basis, Fiat, Rates, Unit } from "./format.ts";
 import { exchangeOf, pairKey, waysFor } from "./pools.ts";
 
 export type Token = { address: Address; decimals: number; symbol: string };
@@ -25,9 +25,9 @@ export type Prices = Basis & {
   standIns: Map<string, number>;
 };
 
-export const pricesIn = (unit: Unit, entries: [string, number][] = [], eurUsd?: number): Prices => ({
+export const pricesIn = (unit: Unit, entries: [string, number][] = [], rates: Rates = {}): Prices => ({
   unit,
-  eurUsd,
+  rates,
   of: new Map(entries),
   standIns: new Map(),
 });
@@ -347,9 +347,9 @@ async function measure(
 }
 
 // Prices per whole token at the flip. Anchors take their feed, in dollars; if none answers for the flip, the prices are
-// in USDC, at 1 USDC each. EUR / USD at the flip goes with dollar prices, to show euros. Then, each against the anchors
-// priced by then, first the anchors without a price, then the other tokens, take their deepest pool, the first in
-// `exchanges` order if two are as deep: its average over the window. For prices now, a pool whose history falls short
+// in USDC, at 1 USDC each. Each currency's rate at the flip goes with dollar prices, to show them in it. Then, each
+// against the anchors priced by then, first the anchors without a price, then the other tokens, take their deepest
+// pool, the first in `exchanges` order if two are as deep: its average over the window. For prices now, a pool whose history falls short
 // gives its price now. For a past flip, the next deepest pool is tried, until one has a history then; a token none of
 // whose pools has one has no price, so that every price is of the flip, and its price now only stands in to weigh it.
 // `amounts` is how much will be priced.
@@ -364,11 +364,22 @@ export async function pricesAt(
   exchanges.forEach(kindOf);
   const ago = Math.max(0, time - flip);
   // Now, the feeds' latest rounds: the visitor's clock may run behind the chain's.
-  const feeds = await feedsAt([...ANCHORS.map(({ feed }) => feed), EUR_USD], ago ? flip : Infinity, reader);
+  const fiat = Object.entries(FIAT_FEEDS) as [Fiat, Feed][];
+  const feeds = await feedsAt(
+    [...ANCHORS.map(({ feed }) => feed), ...fiat.map(([, feed]) => feed)],
+    ago ? flip : Infinity,
+    reader,
+  );
   const fed = ANCHORS.flatMap(({ address }, i): [string, number][] =>
     feeds[i] === undefined ? [] : [[key(address), feeds[i]]],
   );
-  const prices = fed.length ? pricesIn("USD", fed, feeds[ANCHORS.length]) : pricesIn("USDC", [[key(USDC), 1]]);
+  const rates: Rates = Object.fromEntries(
+    fiat.flatMap(([currency], i) => {
+      const rate = feeds[ANCHORS.length + i];
+      return rate === undefined ? [] : [[currency, rate]];
+    }),
+  );
+  const prices = fed.length ? pricesIn("USD", fed, rates) : pricesIn("USDC", [[key(USDC), 1]]);
   const unpriced = ANCHORS.filter(({ address }) => !prices.of.has(key(address)));
   await inPools(
     unpriced.map(({ address, decimals }) => ({ address, decimals, symbol: "" })),

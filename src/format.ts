@@ -46,30 +46,35 @@ export function compact(value: bigint): string {
   return `${threeDigits.format(rounded / scale)}${suffix}`;
 }
 
+// The currencies the visitor can pick, by the share of the world's currency trading, for the visit: dollars, or another
+// where the prices' time has its rate. Chainlink publishes each rate on Base.
+export const CURRENCIES = ["USD", "EUR", "GBP", "CHF", "AUD", "CAD"] as const;
+export type Currency = (typeof CURRENCIES)[number];
+export type Fiat = Exclude<Currency, "USD">;
+// What prices are in: dollars, or USDC when no dollar price could be found for the time.
+export type Unit = "USD" | "USDC";
+// Each currency's price in dollars at the prices' time, as Chainlink's GBP / USD gives it, if found: a sum in dollars is
+// divided by it to show it in that currency.
+export type Rates = Partial<Record<Fiat, number>>;
+// What prices are in, and the rates at their time.
+export type Basis = { unit: Unit; rates?: Rates | undefined };
+// A sum at some prices.
+export type Money = Basis & { value: number };
+export const moneyAt = (value: number, { unit, rates }: Basis): Money => ({ value, unit, rates });
+
+// Each currency's sign, as the page writes it: "A$" and "CA$" apart from the dollar's "$".
 const inCurrency = (currency: Currency, digits: number) =>
   new Intl.NumberFormat(LANG, {
     style: "currency",
     currency,
-    currencyDisplay: "narrowSymbol",
+    currencyDisplay: currency === "AUD" || currency === "CAD" ? "symbol" : "narrowSymbol",
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
-const formats = {
-  USD: [inCurrency("USD", 2), inCurrency("USD", 0)],
-  EUR: [inCurrency("EUR", 2), inCurrency("EUR", 0)],
-  USDC: [hundredths, whole],
-} as const;
-
-// What prices are in: dollars, or USDC when no dollar price could be found for the time.
-export type Unit = "USD" | "USDC";
-// What the visitor picked to see them in, for the visit: dollars, or euros where the prices' time has a rate.
-export type Currency = "USD" | "EUR";
-// What prices are in, and Chainlink's EUR / USD at their time, if found: the euro's price in dollars, which a sum in
-// dollars is divided by to show it in euros.
-export type Basis = { unit: Unit; eurUsd?: number | undefined };
-// A sum at some prices.
-export type Money = Basis & { value: number };
-export const moneyAt = (value: number, { unit, eurUsd }: Basis): Money => ({ value, unit, eurUsd });
+const formats = Object.fromEntries([
+  ...CURRENCIES.map((currency) => [currency, [inCurrency(currency, 2), inCurrency(currency, 0)]] as const),
+  ["USDC", [hundredths, whole]] as const,
+]) as Record<Currency | "USDC", readonly [Intl.NumberFormat, Intl.NumberFormat]>;
 
 let shownIn: Currency = "USD";
 const changes: (() => void)[] = [];
@@ -82,12 +87,12 @@ export function setCurrency(picked: Currency): void {
   changes.forEach((listener) => listener());
 }
 
-// Prices are approximate, so what they value is too: "≈ $692", "≈ €0.69", "< $0.01", or in USDC, "≈ 0.77 USDC". In
-// euros at the rate of the prices' own time; without one, in what the prices are in. The no-break spaces keep the sign
-// and the unit with the number.
-export function money({ value, unit, eurUsd }: Money): string {
-  const euros = shownIn === "EUR" && unit === "USD" && eurUsd !== undefined;
-  const [shown, amount] = euros ? (["EUR", value / eurUsd] as const) : ([unit, value] as const);
+// Prices are approximate, so what they value is too: "≈ $692", "≈ €0.69", "< £0.01", or in USDC, "≈ 0.77 USDC". In the
+// currency picked at the rate of the prices' own time; without one, in what the prices are in. The no-break spaces keep
+// the sign and the unit with the number.
+export function money({ value, unit, rates }: Money): string {
+  const rate = shownIn === "USD" || unit !== "USD" ? undefined : rates?.[shownIn];
+  const [shown, amount]: [Currency | Unit, number] = rate === undefined ? [unit, value] : [shownIn, value / rate];
   const [withCents, without] = formats[shown];
   const of = (formatted: string) => (shown === "USDC" ? `${formatted}\u00a0USDC` : formatted);
   if (amount === 0) return of(without.format(0));

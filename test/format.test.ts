@@ -6,6 +6,7 @@ import {
   bps,
   clean,
   compact,
+  CURRENCIES,
   count,
   currency,
   date,
@@ -24,6 +25,7 @@ import {
   walletLines,
   weekStart,
   when,
+  type Currency,
 } from "../src/format.ts";
 
 const FLIP = 1_792_627_200; // Thu 22 Oct 2026, 00:00 UTC
@@ -98,17 +100,25 @@ test("what prices value is approximate, in dollars or USDC, with no break after 
   assert.equal(usdc(0), "0\u00a0USDC");
 });
 
-test("in euros once picked, at the rate of the prices' own time; without one, as the prices are", () => {
-  const then = { unit: "USD", eurUsd: 1.25 } as const;
+test("in the currency picked, at its rate of the prices' own time; without one, as the prices are", () => {
+  const then = { unit: "USD", rates: { EUR: 1.25, GBP: 1.25, CHF: 1.25, AUD: 0.625, CAD: 0.625 } } as const;
+  assert.deepEqual(CURRENCIES, ["USD", "EUR", "GBP", "CHF", "AUD", "CAD"]);
   assert.equal(currency(), "USD");
   assert.equal(money(moneyAt(10, then)), "≈\u00a0$10.00");
-  setCurrency("EUR");
   try {
+    setCurrency("EUR");
     assert.equal(money(moneyAt(10, then)), "≈\u00a0€8.00");
     assert.equal(money(moneyAt(250, then)), "≈\u00a0€200");
     assert.equal(money(moneyAt(0.005, then)), "<\u00a0€0.01");
     assert.equal(money({ value: 10, unit: "USD" }), "≈\u00a0$10.00", "no rate for the time");
-    assert.equal(money({ value: 10, unit: "USDC", eurUsd: 1.25 }), "≈\u00a010.00\u00a0USDC", "no dollar prices");
+    assert.equal(money({ value: 10, unit: "USDC", rates: then.rates }), "≈\u00a010.00\u00a0USDC", "no dollar prices");
+    // Each sign tells its currency from the dollar's.
+    const shown = (picked: Currency) => (setCurrency(picked), money(moneyAt(10, then)));
+    assert.equal(shown("GBP"), "≈\u00a0£8.00");
+    assert.equal(shown("CHF"), "≈\u00a0CHF\u00a08.00");
+    assert.equal(shown("AUD"), "≈\u00a0A$16.00");
+    assert.equal(shown("CAD"), "≈\u00a0CA$16.00");
+    assert.equal(money({ value: 10, unit: "USD", rates: { EUR: 1.25 } }), "≈\u00a0$10.00", "no CAD rate for the time");
   } finally {
     setCurrency("USD");
   }

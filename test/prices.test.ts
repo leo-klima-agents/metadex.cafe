@@ -4,7 +4,7 @@ import { zeroAddress, type Address } from "viem";
 import { same, type Call } from "../src/chain.ts";
 import {
   ANCHORS,
-  EUR_USD,
+  FIAT_FEEDS,
   EXCHANGES,
   HYDREX_PRICING,
   SWAP_PRICING,
@@ -280,24 +280,28 @@ test("now, the feeds' latest rounds count, even one newer than the visitor's clo
   close(prices.of.get(TOKEN.address)!, 4 * USDC_USD);
 });
 
-test("EUR / USD goes with dollar prices, read with the anchors' feeds; prices in USDC have none", async () => {
+test("each currency's rate goes with dollar prices, read with the anchors' feeds; prices in USDC have none", async () => {
   const pools: Fake[] = [{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }];
-  // A reader that also answers EUR / USD: 1.12 dollars a euro.
-  const withEuro = (answers?: Map<Address, number>) => {
+  // A reader that also answers EUR / USD, at 1.12 dollars a euro, and GBP / USD, at 1.34; CHF / USD and the others fail.
+  const withRates = (answers?: Map<Address, number>) => {
     const { reader } = market(pools, answers);
     return async (calls: Call[]) => {
       const replies = await reader(calls);
       return calls.map(({ address }, i) =>
-        same(address, EUR_USD.address) ? [1n, 112_000_000n, 0n, BigInt(UPDATED), 1n] : replies[i],
+        same(address, FIAT_FEEDS.EUR.address)
+          ? [1n, 112_000_000n, 0n, BigInt(UPDATED), 1n]
+          : same(address, FIAT_FEEDS.GBP.address)
+            ? [1n, 134_000_000n, 0n, BigInt(UPDATED), 1n]
+            : replies[i],
       );
     };
   };
-  const inDollars = await pricesAt([TOKEN], new Map(), NOW, NOW, HYDREX_PRICING, withEuro());
+  const inDollars = await pricesAt([TOKEN], new Map(), NOW, NOW, HYDREX_PRICING, withRates());
   assert.equal(inDollars.unit, "USD");
-  close(inDollars.eurUsd!, 1.12);
-  const inUsdc = await pricesAt([TOKEN], new Map(), NOW, NOW, HYDREX_PRICING, withEuro(new Map()));
+  assert.deepEqual(inDollars.rates, { EUR: 1.12, GBP: 1.34 });
+  const inUsdc = await pricesAt([TOKEN], new Map(), NOW, NOW, HYDREX_PRICING, withRates(new Map()));
   assert.equal(inUsdc.unit, "USDC");
-  assert.equal(inUsdc.eurUsd, undefined);
+  assert.deepEqual(inUsdc.rates, {});
 });
 
 test("the deepest pool wins: of all four exchanges for the swap's page, of Hydrex's two for the Hydrex pages", async () => {

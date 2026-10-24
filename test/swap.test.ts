@@ -368,9 +368,9 @@ test("gas is valued at the prices it is compared with, in their unit, and not wi
   const eth = WETH.toLowerCase();
   const costs = { gasPrice: 10_000_000n, tip: undefined };
   // 200,000 gas at 0.01 gwei: 0.000002 ETH.
-  const inDollars = gasCost(200_000n, costs, pricesIn("USD", [[eth, 2_500]], 1.12))!;
+  const inDollars = gasCost(200_000n, costs, pricesIn("USD", [[eth, 2_500]], { EUR: 1.12 }))!;
   assert.ok(Math.abs(inDollars.value - 0.005) < 1e-12);
-  assert.deepEqual([inDollars.unit, inDollars.eurUsd], ["USD", 1.12]);
+  assert.deepEqual([inDollars.unit, inDollars.rates], ["USD", { EUR: 1.12 }]);
   assert.equal(gasCost(200_000n, costs, pricesIn("USDC", [[eth, 2_490]]))!.unit, "USDC");
   assert.equal(gasCost(200_000n, costs, pricesIn("USD")), undefined);
   assert.equal(ethCost(10n ** 18n, undefined), undefined);
