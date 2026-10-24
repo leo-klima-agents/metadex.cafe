@@ -103,9 +103,14 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.equal(await review(page).locator(".step-count code").innerText(), "USDC");
     assert.match(await bill.locator(".receipt-day").innerText(), /^Gas (≈|<)\s\$[\d.]+, paid in ETH$/);
     assert.equal(await bill.locator(".swap-lines li").count(), 3);
+    // "ZORA → WETH → USDC via Aerodrome, Uniswap": the tokens, then who runs the pools, each once.
     for (const route of await bill.locator(".line-route").allInnerTexts()) {
-      assert.match(route, /^(→ \S+ via [^→]+?)( → \S+ via [^→]+?)*$/, route);
-      assert.doesNotMatch(route, /0x|tick spacing/, route);
+      assert.match(
+        route,
+        /^\S+( → \S+){1,3} via (Aero|Aerodrome|Uniswap|Hydrex)(, (Aero|Aerodrome|Uniswap|Hydrex))*$/,
+        route,
+      );
+      assert.doesNotMatch(route, /0x|tick spacing|%/, route);
     }
     assert.equal(await bill.locator(".swap-slippage").innerText(), "Your slippage: 0.5%");
     await review(page).getByRole("button", { name: "Continue" }).click();

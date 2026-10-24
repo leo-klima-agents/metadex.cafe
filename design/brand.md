@@ -194,8 +194,9 @@ one on a phone.
 
 **A swap** is a bill before the wallet asks: the name, "Quote · swap into cbBTC", with a token's symbol in its own case
 among the capitals, and the gas under it, as it is paid apart, in ETH. Then a line per token, with what it fetches and
-its route by tokens and pools, "→ WETH via Hydrex Integral → USDC via Uniswap v3 0.05%", without addresses. Then what
-they fetch, the 1%, "Reaches you", and "At least", with the slippage that set it.
+its route by tokens, then who runs its pools, each once, "ZORA → WETH → USDC via Aerodrome, Uniswap", without addresses
+or fee tiers: the calls name each pool in full. Then what they fetch, the 1%, "Reaches you", and "At least", with the
+slippage that set it.
 
 **In a Safe,** it opens with "In a Safe · one transaction to sign", or "In a Safe · call 1 of 2", and adds the fields
 Safe{Wallet} shows: Data and, for a single call, Operation. Data is the selector, then each 32-byte word on two lines of

@@ -25,6 +25,7 @@ import {
   partOf,
   poolName,
   quoteAll,
+  venueOf,
   routeGas,
   split,
   swapCall,
@@ -33,6 +34,7 @@ import {
   swapperAbi,
 } from "../src/swap.ts";
 import { lookups, type Hop } from "../src/pools.ts";
+import { hopsWords } from "../src/swap-calls.ts";
 
 const [USDC, , , CBBTC] = SWAPPERS.map(({ token }) => token) as [Address, Address, Address, Address];
 const AVNT: Address = "0x696F9436B67233384889472Cd7cD58A6fB5DF4f1";
@@ -136,6 +138,25 @@ test("the page lists each of the swapper's twelve exchanges once, by its place i
   assert.equal(hopName(hop(10, USDC, 500)), "Uniswap v3 0.05%");
   assert.equal(hopName(hop(4, USDC, 0, 100)), "Aero Slipstream");
   assert.equal(hopName(hop(0)), "Hydrex Integral");
+});
+
+test("a bill's route: its tokens, then who runs its pools, each once, with Aero's and Aerodrome's apart", () => {
+  assert.deepEqual(
+    [...new Set(EXCHANGES.map((exchange) => venueOf(hop(exchange.id))))],
+    ["Aero", "Aerodrome", "Uniswap", "Hydrex"],
+  );
+  const tokens = new Map(
+    [
+      { address: AVNT, symbol: "AVNT", decimals: 18 },
+      { address: WETH, symbol: "WETH", decimals: 18 },
+      { address: USDC, symbol: "USDC", decimals: 6 },
+    ].map((token) => [token.address.toLowerCase(), token]),
+  );
+  const route = (...hops: Hop[]) => ({ token: AVNT, amount: 1n, minPaid: 1n, hops });
+  assert.equal(hopsWords(route(hop(6)), tokens), "AVNT → USDC via Aerodrome");
+  assert.equal(hopsWords(route(hop(6, WETH), hop(8)), tokens), "AVNT → WETH → USDC via Aerodrome");
+  assert.equal(hopsWords(route(hop(6, WETH), hop(10, USDC, 500)), tokens), "AVNT → WETH → USDC via Aerodrome, Uniswap");
+  assert.equal(hopsWords(route(hop(4, WETH), hop(6)), tokens), "AVNT → WETH → USDC via Aero, Aerodrome");
 });
 
 test("Aero's classic pools win a hop only by more than 1%, as their tax is not in the quote", () => {

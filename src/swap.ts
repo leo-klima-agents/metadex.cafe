@@ -80,6 +80,10 @@ export function hopName({ exchange, fee }: Hop): string {
   return kind === "v3" || kind === "v4" ? `${name} ${fee / 10_000}%` : name;
 }
 
+// Who runs a hop's exchange, as a bill names it: "Aero", "Aerodrome", "Uniswap", "Hydrex". The first word of the
+// exchange's name: Aero's own pools and Aerodrome's keep their names apart.
+export const venueOf = ({ exchange }: Hop): string => exchangeOf(exchange).name.split(" ")[0]!;
+
 // A hop's pool in full, as a call names it: "Uniswap v3 0.05%", "Aero Slipstream, tick spacing 100".
 export function poolName(hop: Hop): string {
   return exchangeOf(hop.exchange).kind === "slipstream"
