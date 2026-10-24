@@ -16,7 +16,7 @@ import {
   type Claim,
 } from "./claim.ts";
 import { clone, fill, live, show } from "./dom.ts";
-import { count, figure, list, money, moneyAt } from "./format.ts";
+import { between, count, figure, list, money, moneyAt, type Money } from "./format.ts";
 import type { Entry } from "./last-payout.ts";
 import { pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
 import { valueAt, weightAt, type Amount } from "./receipts.ts";
@@ -179,24 +179,24 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       return `Gas ${simulated ? of(totalGas) : "…"}${withSwap === undefined ? "" : `, ${of(withSwap)} with the swap`}`;
     });
   const drawPrices = () => {
-    // To the cent, so that the bill lines up at the point; the fee is taken away.
-    const worth =
-      (amounts: Amount[], taken = false) =>
-      () =>
-        prices
-          ? money(moneyAt((taken ? -1 : 1) * valueAt(amounts, tokens, prices), prices), { cents: true })
-          : settled
-            ? "Not read"
-            : "…";
-    live(earnedLine, worth(totals.map(({ token, earned }) => ({ token, amount: earned }))));
+    // To the cent, so that the bill lines up at the point; the fee as what lies between the two around it, as they show,
+    // so that the bill adds up as it reads.
+    const [earned, reaches] = [totals.map(({ token, earned }) => ({ token, amount: earned })), paid].map(
+      (amounts) => prices && moneyAt(valueAt(amounts, tokens, prices), prices),
+    );
+    const worth = (sum: () => Money) => () => (prices ? money(sum(), { cents: true }) : settled ? "Not read" : "…");
+    live(
+      earnedLine,
+      worth(() => earned!),
+    );
     live(
       feeLine,
-      worth(
-        totals.map(({ token, fee }) => ({ token, amount: fee })),
-        true,
-      ),
+      worth(() => between(earned!, reaches!)),
     );
-    live(paidLine, worth(paid));
+    live(
+      paidLine,
+      worth(() => reaches!),
+    );
     tokenLines(
       tokenList,
       more,

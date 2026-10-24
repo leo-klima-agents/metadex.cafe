@@ -3,7 +3,20 @@ import { now, same, type Receipt } from "./chain.ts";
 import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
 import { clone, fill, fillAddress, show, showWorth, showWorthIn } from "./dom.ts";
 import { tokensOf } from "./earnings.ts";
-import { bps, count, figure, fixed, fraction, list, money, moneyAt, short, type Money } from "./format.ts";
+import {
+  between,
+  bps,
+  count,
+  figure,
+  fixed,
+  fraction,
+  list,
+  money,
+  moneyAt,
+  rounded,
+  short,
+  type Money,
+} from "./format.ts";
 import { earningsOf, onEarnings } from "./last-epoch.ts";
 import { pricesIn, pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
 import type { Amount } from "./receipts.ts";
@@ -149,42 +162,39 @@ const outputValue = (amount: bigint, scanned: Scan): number | undefined => {
 };
 
 // How many decimal places the output's amounts take, all of them alike, so that they line up at the point: enough to
-// show each to the cent at the output's price, 2 for USDC, 6 for WETH; without a price, 6, or fewer if the token has
-// fewer.
-function placesOf(swapper: Swapper, prices: Prices | undefined): number {
-  const price = prices?.of.get(key(swapper.token));
-  const places = price ? Math.ceil(Math.log10(price) + 2 - 0.05) : 6;
+// show each to the cent at the output's price, 2 for USDC, 6 for WETH; without a price, the output's own.
+function placesOf(swapper: Swapper, price: number | undefined): number {
+  const places = price ? Math.ceil(Math.log10(price) + 2 - 0.05) : swapper.places;
   return Math.min(swapper.decimals, Math.max(2, places));
 }
 
-// An amount of the output, exactly, then what it is worth at the prices, if they price the output, to the cent: as a
-// quote, the worth under the amount in one element, or in an element of its own. A fee is taken away, so negative.
-function showOutput(
-  target: Element | [Element, Element],
-  amount: bigint,
-  swapper: Swapper,
-  prices: Prices | undefined,
-  taken = false,
-): void {
+// How the output's amounts show: exactly, to the places of all of them, with its symbol; and what each is worth at the
+// prices, if they price the output.
+function outputFigures(swapper: Swapper, prices: Prices | undefined) {
   const price = prices?.of.get(key(swapper.token));
-  const signed = taken ? -amount : amount;
-  const exact = `${fixed(signed, swapper.decimals, placesOf(swapper, prices))} ${swapper.symbol}`;
-  const worth =
-    price === undefined
-      ? undefined
-      : () => money(moneyAt(worthOf(signed, swapper.decimals, price), prices!), { cents: true });
-  if (Array.isArray(target)) showWorthIn(target[0], target[1], exact, worth);
-  else showWorth(target, exact, worth);
+  const places = placesOf(swapper, price);
+  return {
+    exact: (amount: bigint) => `${fixed(amount, swapper.decimals, places)} ${swapper.symbol}`,
+    worth: (amount: bigint): Money | undefined =>
+      price === undefined ? undefined : moneyAt(worthOf(amount, swapper.decimals, price), prices!),
+    // An amount as it shows, so that what lies between two can show too.
+    shown: (amount: bigint) => rounded(amount, swapper.decimals, places),
+  };
 }
 
-// Gas, as a quote: in the ETH that pays it, then what it is worth, if ETH has a price.
-function showGas(element: Element, wei: bigint, prices: Prices | undefined): void {
-  const cost = ethCost(wei, prices);
-  showWorth(element, `${figure(wei, 18)} ETH`, cost && (() => money(cost, { cents: true })));
+// A sum, to the cent, so that a column of them lines up at the point.
+const inCents = (sum: Money | undefined) => sum && (() => money(sum, { cents: true }));
+
+// An amount of the output, exactly, then what it is worth, in an element of its own.
+function showOutput(elements: [Element, Element], amount: bigint, swapper: Swapper, prices: Prices | undefined): void {
+  const { exact, worth } = outputFigures(swapper, prices);
+  showWorthIn(...elements, exact(amount), inCents(worth(amount)));
 }
 
-// A swap's figures, as the summary and the bill both show them: what it fetches, in the element `fetched` names, the 1%,
-// what reaches you, the least that may, and the gas; without the gas price, `noCosts`.
+// A swap's figures, as the summary and the bill both show them, each as a quote, what it is worth under it: what it
+// fetches, in the element `fetched` names, the 1%, what reaches you, the least that may, and the gas, in the ETH that pays
+// it; without the gas price, `noCosts`. The 1% shows as what lies between the two around it, as they show, so that the
+// bill adds up as it reads.
 function showBill(
   root: ParentNode,
   fetched: string,
@@ -195,12 +205,16 @@ function showBill(
   noCosts: string,
 ): void {
   const part = (name: string) => root.querySelector(`.${name}`)!;
-  showOutput(part(fetched), out, swapper, prices);
-  showOutput(part("swap-fee"), fee, swapper, prices, true);
-  showOutput(part("swap-paid"), out - fee, swapper, prices);
-  showOutput(part("swap-least"), least, swapper, prices);
-  if (found) showGas(part("swap-gas"), gas * found.gasPrice, prices);
-  else fill(root, { "swap-gas": noCosts });
+  const { exact, worth, shown } = outputFigures(swapper, prices);
+  const paid = out - fee;
+  const [outWorth, paidWorth] = [worth(out), worth(paid)];
+  showWorth(part(fetched), exact(out), inCents(outWorth));
+  showWorth(part("swap-fee"), exact(shown(paid) - shown(out)), inCents(outWorth && between(outWorth, paidWorth!)));
+  showWorth(part("swap-paid"), exact(paid), inCents(paidWorth));
+  showWorth(part("swap-least"), exact(least), inCents(worth(least)));
+  if (!found) return void fill(root, { "swap-gas": noCosts });
+  const wei = gas * found.gasPrice;
+  showWorth(part("swap-gas"), `${figure(wei, 18)} ETH`, inCents(ethCost(wei, prices)));
 }
 
 // Whether a row is worth its gas, and why not, in words.
@@ -700,9 +714,9 @@ export function swapReceipt(
   prices?: Prices,
 ): DocumentFragment {
   const { swapper } = plan;
-  // As many decimal places as the bill had, so that the receipt's figures line up at the point too.
-  const of = (amount: bigint) => `${fixed(amount, swapper.decimals, placesOf(swapper, prices))} ${swapper.symbol}`;
-  const { swapped, failed, paid, fee } = swappedIn(receipts, swapper, caller);
+  // As many decimal places as the bill had, so that the receipt's figures line up at the point too, and add up.
+  const { exact, shown } = outputFigures(swapper, prices);
+  const { swapped, failed, paid } = swappedIn(receipts, swapper, caller);
   const receipt = clone("swap-receipt");
   const fetched = swapped.reduce((sum, { amountOut }) => sum + amountOut, 0n);
   fill(receipt, {
@@ -714,9 +728,9 @@ export function swapReceipt(
         return described ? `${figure(amountIn, described.decimals)} ${described.symbol}` : `${amountIn} of ${token}`;
       }),
     ),
-    "swap-receipt-fetched": of(fetched),
-    "swap-receipt-fee": of(-fee),
-    "swap-receipt-paid": of(paid),
+    "swap-receipt-fetched": exact(fetched),
+    "swap-receipt-fee": exact(shown(paid) - shown(fetched)),
+    "swap-receipt-paid": exact(paid),
   });
   receipt.querySelector(".swap-receipt-skipped")!.replaceChildren(
     ...failed.map(({ token, reason }) => {
