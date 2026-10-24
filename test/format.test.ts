@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   WEEK,
   amount,
+  between,
   bps,
   clean,
   compact,
@@ -12,11 +13,13 @@ import {
   date,
   day,
   earningPower,
+  fixed,
   fraction,
   hexLines,
   listWith,
   money,
   moneyAt,
+  rounded,
   onCurrency,
   setCurrency,
   short,
@@ -100,6 +103,57 @@ test("what prices value is approximate, in dollars or USDC, with no break after 
   assert.equal(usdc(0), "0\u00a0USDC");
 });
 
+test("a sum taken away has its minus on the number, after the ≈; in a column, to the cent", () => {
+  const usd = (value: number, cents = false) => money({ value, unit: "USD" }, { cents });
+  assert.equal(usd(-123.4), "≈\u00a0−$123");
+  assert.equal(usd(-1.312), "≈\u00a0−$1.31");
+  assert.equal(usd(-0.001), ">\u00a0−$0.01");
+  assert.equal(usd(692.4, true), "≈\u00a0$692.40");
+  assert.equal(usd(-692.4, true), "≈\u00a0−$692.40");
+  assert.equal(usd(0, true), "$0.00");
+  assert.equal(money({ value: -0.77, unit: "USDC" }), "≈\u00a0−0.77\u00a0USDC");
+});
+
+test("token amounts to a set number of decimal places, so that a column lines up at the point", () => {
+  assert.equal(fixed(63_930_000n, 6, 2), "63.93");
+  assert.equal(fixed(639_300n, 6, 2), "0.64");
+  assert.equal(fixed(-639_300n, 6, 2), "−0.64");
+  assert.equal(fixed(1_000n, 6, 2), "<\u00a00.01");
+  assert.equal(fixed(-1_000n, 6, 2), ">\u00a0−0.01");
+  assert.equal(fixed(25_490_000_000_000_000n, 18, 6), "0.025490");
+  assert.equal(fixed(1_234_567_890n, 6, 2), "1,234.57");
+  assert.equal(fixed(0n, 6, 2), "0.00");
+});
+
+test("token amounts round half away from zero, and keep every digit", () => {
+  assert.equal(fixed(15_000n, 6, 2), "0.02");
+  assert.equal(fixed(-15_000n, 6, 2), "−0.02");
+  assert.equal(fixed(5_000n, 6, 2), "0.01");
+  assert.equal(fixed(4_999n, 6, 2), "<\u00a00.01");
+  assert.equal(fixed(123_456_789_012_345_678_901_234_567n, 18, 6), "123,456,789.012346");
+  assert.equal(fixed(5n, 0, 2), "5.00");
+  assert.equal(fixed(1_234_567n, 6, 0), "1");
+  assert.equal(rounded(1_015_000n, 6, 2), 1_020_000n);
+  assert.equal(rounded(-1_005_000n, 6, 2), -1_010_000n);
+  assert.equal(rounded(7n, 2, 4), 7n);
+});
+
+test("what lies between two sums, so that a column adds up as it reads", () => {
+  setCurrency("USD");
+  const [fetched, paid] = [moneyAt(1.006, { unit: "USD" }), moneyAt(0.994, { unit: "USD" })];
+  const fee = between(fetched, paid);
+  assert.equal(money(fetched, { cents: true }), "≈\u00a0$1.01");
+  assert.equal(money(paid, { cents: true }), "≈\u00a0$0.99");
+  assert.equal(money(fee, { cents: true }), "≈\u00a0−$0.02");
+  assert.equal(money(between(fetched, fetched), { cents: true }), "$0.00");
+  // In the currency picked, at its rate.
+  const rates = { EUR: 1.1 };
+  setCurrency("EUR");
+  const [a, b] = [moneyAt(1.1 * 1.006, { unit: "USD", rates }), moneyAt(1.1 * 0.994, { unit: "USD", rates })];
+  assert.equal(money(between(a, b), { cents: true }), "≈\u00a0−€0.02");
+  setCurrency("USD");
+});
+
 test("in the currency picked, at its rate of the prices' own time; without one, as the prices are", () => {
   const then = { unit: "USD", rates: { EUR: 1.25, GBP: 1.25, CHF: 1.25, AUD: 0.625, CAD: 0.625 } } as const;
   assert.deepEqual(CURRENCIES, ["USD", "EUR", "GBP", "CHF", "AUD", "CAD"]);
@@ -171,7 +225,7 @@ test("an address as hardware wallets show it: three lines of four columns, the 0
 test("amounts of a token, from its decimals", () => {
   assert.equal(amount(18_686_451_234_567_890_000_000n, 18), "18,686.45");
   assert.equal(amount(1_500_000n, 6), "1.50");
-  assert.equal(amount(1n, 18), "< 0.01");
+  assert.equal(amount(1n, 18), "<\u00a00.01");
   assert.equal(amount(0n, 18), "0");
 });
 

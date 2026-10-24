@@ -1419,17 +1419,80 @@ dialog .receipt {
 .swap-rows code a {
   color: var(--quiet);
 }
-.row-head {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0 var(--gap-l);
-  justify-self: stretch !important;
+/* A token to sell, and a token's line on the bill: the token and its amount, then why it is not ticked or its route; on
+   the right, what it fetches, then what that is worth, quieter, each column lined up at the point. Each is placed, so
+   that a screen reader reads what a token fetches with what that is worth, then its route. */
+.swap-rows {
+  container: swap-rows / inline-size;
+}
+.swap-lines {
+  container: swap-lines / inline-size;
+}
+.swap-rows .about,
+.swap-lines > li {
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--gap-l);
+}
+.swap-rows .about > :first-child,
+.swap-lines > li > :first-child {
+  grid-area: 1 / 1;
+}
+.swap-fetches,
+.line-fetches,
+.swap-worth,
+.line-worth {
+  grid-column: 2;
+  justify-self: end !important;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
 }
 .swap-fetches,
 .line-fetches {
-  font-family: var(--mono);
-  text-align: end;
+  grid-row: 1;
+}
+.swap-worth,
+.line-worth {
+  grid-row: 2;
+  color: var(--quiet);
+  font-size: var(--text-label);
+}
+.swap-route,
+.line-route {
+  grid-area: 2 / 1;
+}
+.swap-lookalike,
+.swap-check,
+.line-skip {
+  grid-column: 1 / -1;
+}
+/* Where two columns would squeeze the token's name, one: the token, what it fetches, what that is worth, then its
+   route. A row's card takes its tick and its padding from the width. */
+@container swap-rows (max-width: 20rem) {
+  .swap-rows .about {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .swap-rows .about > * {
+    grid-area: auto / 1 !important;
+  }
+  .swap-fetches,
+  .swap-worth {
+    justify-self: start !important;
+    text-align: start;
+  }
+}
+@container swap-lines (max-width: 16rem) {
+  .swap-lines > li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .swap-lines > li > * {
+    grid-area: auto / 1 !important;
+  }
+  .line-fetches,
+  .line-worth {
+    justify-self: start !important;
+    text-align: start;
+  }
 }
 /* What an exact amount is worth, quieter, under it, as each quote shows it. */
 .exact + .worth {

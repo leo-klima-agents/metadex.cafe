@@ -120,7 +120,8 @@ function showAmounts(element: Element, found: Amount[], tokens: Map<string, Toke
 
 function worth(found: Amount[], tokens: Map<string, Token>, prices: Prices | undefined): string | (() => string) {
   const total = prices ? valueAt(found, tokens, prices) : 0;
-  return total > 0 ? () => money(moneyAt(total, prices!)) : "";
+  // To the cent, so that a receipt's figures line up at the point.
+  return total > 0 ? () => money(moneyAt(total, prices!), { cents: true }) : "";
 }
 
 const kvcm = (found: Amount[]): bigint => found.find(({ token }) => same(token, KVCM))?.amount ?? 0n;

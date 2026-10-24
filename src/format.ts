@@ -26,11 +26,7 @@ const and = new Intl.ListFormat(LANG, { type: "conjunction" });
 export const units = (value: bigint): string => whole.format(value / 10n ** 18n);
 
 // Two decimals, so that the figures on a receipt line up: "18,686.45", "1.50", "< 0.01", "0".
-export function amount(value: bigint, decimals: number): string {
-  const number = Number(value) / 10 ** decimals;
-  if (number === 0) return "0";
-  return number < 0.005 ? "< 0.01" : hundredths.format(number);
-}
+export const amount = (value: bigint, decimals: number): string => (value === 0n ? "0" : fixed(value, decimals, 2));
 
 const SCALES: [number, string][] = [
   [1e9, "G"],
@@ -87,17 +83,59 @@ export function setCurrency(picked: Currency): void {
   changes.forEach((listener) => listener());
 }
 
-// Prices are approximate, so what they value is too: "≈ $692", "≈ €0.69", "< £0.01", or in USDC, "≈ 0.77 USDC". In the
-// currency picked at the rate of the prices' own time; without one, in what the prices are in. The no-break spaces keep
-// the sign and the unit with the number.
-export function money({ value, unit, rates }: Money): string {
+// What a sum shows in: the currency picked, at the rate of the prices' own time; without one, what the prices are in.
+function shownOf({ unit, rates }: Basis): [Currency | Unit, number] {
   const rate = shownIn === "USD" || unit !== "USD" ? undefined : rates?.[shownIn];
-  const [shown, amount]: [Currency | Unit, number] = rate === undefined ? [unit, value] : [shownIn, value / rate];
+  return rate === undefined ? [unit, 1] : [shownIn, rate];
+}
+
+// A sum as it shows to the cent, in what it shows in.
+function toCents(sum: Money): number {
+  const [, rate] = shownOf(sum);
+  return (Math.round((sum.value / rate) * 100) / 100) * rate;
+}
+
+// What lies between two sums as each shows to the cent, so that a column of them adds up as it reads: what is taken
+// from `from` to leave `to`, negative.
+export const between = (from: Money, to: Money): Money => ({ ...to, value: toCents(to) - toCents(from) });
+
+// Prices are approximate, so what they value is too: "≈ $692", "≈ −€0.69", "< £0.01", or in USDC, "≈ 0.77 USDC". In the
+// currency picked at the rate of the prices' own time; without one, in what the prices are in. With `cents`, as in a
+// column, always to the cent, so that the column lines up at the point: "≈ $692.40". The minus sign goes with the
+// number, and no-break spaces keep the sign and the unit with it.
+export function money(sum: Money, { cents = false }: { cents?: boolean } = {}): string {
+  const [shown, rate] = shownOf(sum);
+  const amount = sum.value / rate;
   const [withCents, without] = formats[shown];
   const of = (formatted: string) => (shown === "USDC" ? `${formatted}\u00a0USDC` : formatted);
-  if (amount === 0) return of(without.format(0));
-  if (amount > 0 && amount < 0.005) return `<\u00a0${of(withCents.format(0.01))}`;
-  return `≈\u00a0${of((Math.abs(amount) >= 100 ? without : withCents).format(amount))}`;
+  const [sign, magnitude] = amount < 0 ? ["−", -amount] : ["", amount];
+  if (amount === 0) return of((cents ? withCents : without).format(0));
+  if (magnitude < 0.005) return `${sign ? ">" : "<"}\u00a0${sign}${of(withCents.format(0.01))}`;
+  return `≈\u00a0${sign}${of((magnitude >= 100 && !cents ? without : withCents).format(magnitude))}`;
+}
+
+const POINT = hundredths.formatToParts(0.5).find(({ type }) => type === "decimal")!.value;
+
+// An amount of a token with `decimals`, rounded to `places`, half away from zero, still with `decimals`: as fixed() shows
+// it, so that what lies between two amounts as they show can be shown too.
+export function rounded(value: bigint, decimals: number, places: number): bigint {
+  if (places >= decimals) return value;
+  const unit = 10n ** BigInt(decimals - places);
+  const [sign, magnitude] = value < 0n ? [-1n, -value] : [1n, value];
+  return sign * ((magnitude + unit / 2n) / unit) * unit;
+}
+
+// An amount of a token to a set number of decimal places, so that a column of them lines up at the point: "63.93",
+// "−0.64", "< 0.01". Without passing through a float, so that it rounds as it should, and keeps every digit.
+export function fixed(value: bigint, decimals: number, places: number): string {
+  const [sign, magnitude] = value < 0n ? ["−", -value] : ["", value];
+  const scale = 10n ** BigInt(places);
+  const [over, under] = [10n ** BigInt(Math.max(0, decimals - places)), 10n ** BigInt(Math.max(0, places - decimals))];
+  const units = (rounded(magnitude, decimals, places) / over) * under;
+  const shown = (units: bigint) =>
+    `${whole.format(units / scale)}${places ? POINT + String(units % scale).padStart(places, "0") : ""}`;
+  if (magnitude > 0n && units === 0n) return `${sign ? ">" : "<"}\u00a0${sign}${shown(1n)}`;
+  return `${sign}${shown(units)}`;
 }
 
 // Hydrex shows Earning Power as 1.3 times the votes.

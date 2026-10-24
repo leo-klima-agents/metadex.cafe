@@ -60,6 +60,18 @@ export function showWorth(element: Element, exact: string, worth?: () => string)
   element.replaceChildren(amount, " ", quiet);
 }
 
+// An exact amount and what it is worth, if known, each in an element of its own: as in a bill's line, where what it is
+// worth takes the second row, under the amount.
+export function showWorthIn(exactElement: Element, worthElement: Element, exact: string, worth?: () => string): void {
+  writers.delete(exactElement);
+  exactElement.textContent = exact;
+  if (worth) live(worthElement, worth);
+  else {
+    writers.delete(worthElement);
+    worthElement.textContent = "";
+  }
+}
+
 // Each element of each class gets its text, or, for money, how to write it.
 export function fill(root: ParentNode, textByClass: Record<string, string | (() => string)>): void {
   for (const [name, text] of Object.entries(textByClass)) {

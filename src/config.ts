@@ -102,6 +102,8 @@ export type Swapper = {
   symbol: string;
   token: Address;
   decimals: number;
+  // The decimal places its amounts show to without its price: about a cent at its usual price.
+  places: number;
   address: Address;
 };
 export const SWAPPERS: Swapper[] = [
@@ -110,6 +112,7 @@ export const SWAPPERS: Swapper[] = [
     symbol: "USDC",
     token: USDC,
     decimals: 6,
+    places: 2,
     address: "0x31791f453d2100e728E012c9e189C0828adf4b6F",
   },
   {
@@ -117,6 +120,7 @@ export const SWAPPERS: Swapper[] = [
     symbol: "EURC",
     token: EURC,
     decimals: 6,
+    places: 2,
     address: "0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E",
   },
   {
@@ -124,6 +128,7 @@ export const SWAPPERS: Swapper[] = [
     symbol: "WETH",
     token: WETH,
     decimals: 18,
+    places: 6,
     address: "0xe5cbD828c2227E17f7FF8BD54C7A1e6012694Ff2",
   },
   {
@@ -131,6 +136,7 @@ export const SWAPPERS: Swapper[] = [
     symbol: "cbBTC",
     token: CBBTC,
     decimals: 8,
+    places: 7,
     address: "0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0",
   },
   {
@@ -138,6 +144,7 @@ export const SWAPPERS: Swapper[] = [
     symbol: "AERO",
     token: "0x3f5bF3EdAc59d650D8fDf9657a71F2f904A3a4Ee",
     decimals: 18,
+    places: 2,
     address: "0xdd575A498C625AF96ac89efE578Dc68f4c9aB963",
   },
   {
@@ -145,6 +152,7 @@ export const SWAPPERS: Swapper[] = [
     symbol: "HYDX",
     token: HYDX,
     decimals: 18,
+    places: 2,
     address: "0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC",
   },
 ];

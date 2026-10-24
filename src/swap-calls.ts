@@ -38,10 +38,11 @@ export function ethCost(wei: bigint, prices: Prices | undefined): Money | undefi
 export const gasCost = (gas: bigint, { gasPrice }: Costs, prices: Prices | undefined): Money | undefined =>
   ethCost(gas * gasPrice, prices);
 
-// What gas costs, in words: at the prices given, or else in the ETH that pays it.
+// What gas costs, in words: at the prices given, to the cent, as the swap's bill shows it, or else in the ETH that pays
+// it.
 export function gasWords(wei: bigint, prices: Prices | undefined): string {
   const cost = ethCost(wei, prices);
-  return cost ? money(cost) : `${figure(wei, 18)} ETH`;
+  return cost ? money(cost, { cents: true }) : `${figure(wei, 18)} ETH`;
 }
 
 const symbolOf = (tokens: Map<string, Token>, address: Address): string =>

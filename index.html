@@ -1778,12 +1778,13 @@
       <li>
         <label>
           <input type="checkbox" class="pick" />
+          <!-- The token and its amount, then why it is not ticked; on the right, its quote, then what that is worth. -->
           <span class="about">
-            <span class="row-head"
-              ><span
-                ><b><code class="swap-symbol" translate="no"></code></b> <span class="swap-amount"></span></span
-              ><span class="swap-fetches"></span
+            <span
+              ><b><code class="swap-symbol" translate="no"></code></b> <span class="swap-amount"></span
             ></span>
+            <span class="swap-fetches"></span>
+            <span class="swap-worth"></span>
             <span class="small swap-route"></span>
             <span class="swap-lookalike small" hidden
               ><span class="shape stopped" aria-hidden="true"></span>Not the usual
@@ -1837,13 +1838,15 @@
       </article>
       <p class="swap-simulated notice" hidden></p>
     </template>
+    <!-- A token's line on the bill: the token and its amount, then its route; on the right, what it fetches, then what
+         that is worth. -->
     <template id="swap-line">
       <li>
-        <span class="row-head"
-          ><span
-            ><b><code class="line-symbol" translate="no"></code></b> <span class="line-amount"></span></span
-          ><span class="line-fetches"></span
+        <span
+          ><b><code class="line-symbol" translate="no"></code></b> <span class="line-amount"></span
         ></span>
+        <span class="line-fetches"></span>
+        <span class="line-worth"></span>
         <span class="line-route"></span>
         <span class="line-skip" hidden
           ><span class="shape stopped" aria-hidden="true"></span><span class="line-skip-words"></span

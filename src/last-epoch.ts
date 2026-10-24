@@ -139,15 +139,18 @@ export function perThousandOf(automation: Automation): Money | null | undefined 
 const perThousand = (value: number, votes: bigint): number =>
   votes > 0n ? value / (Number(toEarningPower(votes)) / 1e21) : 0;
 
+// A table's figures to the cent, so that each column lines up at the point.
+const CENTS = { cents: true };
+
 function showColumn(table: HTMLElement, column: "ours" | "all", { votes, pools }: Earnings, value?: Value): void {
   const per = value && perThousand(value.total, votes);
   fill(table, {
     [`${column}.earning-power`]: compact(toEarningPower(votes)),
     [`${column}.pools`]: count(pools.length, "pool", "pools"),
-    [`${column}.earned`]: value ? () => money(moneyAt(value.total, value)) : "…",
-    [`${column}.fees`]: value ? () => money(moneyAt(value.fees, value)) : "…",
-    [`${column}.incentives`]: value ? () => money(moneyAt(value.incentives, value)) : "…",
-    [`${column}.per-power`]: per === undefined ? "…" : () => money(moneyAt(per, value!)),
+    [`${column}.earned`]: value ? () => money(moneyAt(value.total, value), CENTS) : "…",
+    [`${column}.fees`]: value ? () => money(moneyAt(value.fees, value), CENTS) : "…",
+    [`${column}.incentives`]: value ? () => money(moneyAt(value.incentives, value), CENTS) : "…",
+    [`${column}.per-power`]: per === undefined ? "…" : () => money(moneyAt(per, value!), CENTS),
   });
 }
 
@@ -156,7 +159,10 @@ function showPools(fold: HTMLElement, { pools, votes }: Earnings, value: Value):
     const row = clone("earned-pool");
     fillAddress(row, "pool", pool.address, pool.name);
     const earnedThere = value.byPool.get(pool.address.toLowerCase()) ?? 0;
-    fill(row, { share: fraction(Number(pool.votes) / Number(votes)), worth: () => money(moneyAt(earnedThere, value)) });
+    fill(row, {
+      share: fraction(Number(pool.votes) / Number(votes)),
+      worth: () => money(moneyAt(earnedThere, value), CENTS),
+    });
     return row;
   });
   fold.querySelector(".earned-pools tbody")!.replaceChildren(...rows);

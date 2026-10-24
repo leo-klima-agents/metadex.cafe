@@ -16,7 +16,7 @@ import {
   type Claim,
 } from "./claim.ts";
 import { clone, fill, live, show } from "./dom.ts";
-import { count, figure, list, money, moneyAt } from "./format.ts";
+import { between, count, figure, list, money, moneyAt, type Money } from "./format.ts";
 import type { Entry } from "./last-payout.ts";
 import { pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
 import { valueAt, weightAt, type Amount } from "./receipts.ts";
@@ -64,7 +64,7 @@ function claimReceipts(
     const value = prices ? valueAt(received, tokens, prices) : 0;
     fill(receipt, {
       "claim-receipt-id": `Account #${id}`,
-      "claim-receipt-worth": value > 0 ? () => money(moneyAt(value, prices!)) : "",
+      "claim-receipt-worth": value > 0 ? () => money(moneyAt(value, prices!), { cents: true }) : "",
       "claim-receipt-claimed": words(received),
       "claim-receipt-fee": words(fees, "−"),
       "claim-receipt-paid": words(paid),
@@ -92,7 +92,7 @@ function tokenLines(
     fill(item, {
       "claim-symbol": known?.symbol ?? token,
       "claim-amount": known ? figure(amount, known.decimals) : String(amount),
-      "claim-worth": worth > 0 ? () => money(moneyAt(worth, prices!)) : "",
+      "claim-worth": worth > 0 ? () => money(moneyAt(worth, prices!), { cents: true }) : "",
     });
     return item;
   };
@@ -179,12 +179,24 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       return `Gas ${simulated ? of(totalGas) : "…"}${withSwap === undefined ? "" : `, ${of(withSwap)} with the swap`}`;
     });
   const drawPrices = () => {
-    const worth = (amounts: Amount[]) => () =>
-      prices ? money(moneyAt(valueAt(amounts, tokens, prices), prices)) : settled ? "Not read" : "…";
-    const fees = worth(totals.map(({ token, fee }) => ({ token, amount: fee })));
-    live(earnedLine, worth(totals.map(({ token, earned }) => ({ token, amount: earned }))));
-    live(feeLine, () => `${prices ? "−" : ""}${fees()}`);
-    live(paidLine, worth(paid));
+    // To the cent, so that the bill lines up at the point; the fee as what lies between the two around it, as they show,
+    // so that the bill adds up as it reads.
+    const [earned, reaches] = [totals.map(({ token, earned }) => ({ token, amount: earned })), paid].map(
+      (amounts) => prices && moneyAt(valueAt(amounts, tokens, prices), prices),
+    );
+    const worth = (sum: () => Money) => () => (prices ? money(sum(), { cents: true }) : settled ? "Not read" : "…");
+    live(
+      earnedLine,
+      worth(() => earned!),
+    );
+    live(
+      feeLine,
+      worth(() => between(earned!, reaches!)),
+    );
+    live(
+      paidLine,
+      worth(() => reaches!),
+    );
     tokenLines(
       tokenList,
       more,
@@ -376,7 +388,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       atomic: true,
       outcomeOf: (receipts) => {
         const fragment = claimReceipts(receipts, owing, connection.address, tokens, current);
-        fragment.append(swapReceipt(receipts, swapPlan, tokens, connection.address));
+        fragment.append(swapReceipt(receipts, swapPlan, tokens, connection.address, current));
         return Promise.resolve(fragment);
       },
     });
