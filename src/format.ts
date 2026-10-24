@@ -87,17 +87,30 @@ export function setCurrency(picked: Currency): void {
   changes.forEach((listener) => listener());
 }
 
-// Prices are approximate, so what they value is too: "≈ $692", "≈ €0.69", "< £0.01", or in USDC, "≈ 0.77 USDC". In the
-// currency picked at the rate of the prices' own time; without one, in what the prices are in. The no-break spaces keep
-// the sign and the unit with the number.
-export function money({ value, unit, rates }: Money): string {
+// Prices are approximate, so what they value is too: "≈ $692", "≈ −€0.69", "< £0.01", or in USDC, "≈ 0.77 USDC". In the
+// currency picked at the rate of the prices' own time; without one, in what the prices are in. With `cents`, as in a
+// column, always to the cent, so that the column lines up at the point: "≈ $692.40". The minus sign goes with the
+// number, and no-break spaces keep the sign and the unit with it.
+export function money({ value, unit, rates }: Money, { cents = false }: { cents?: boolean } = {}): string {
   const rate = shownIn === "USD" || unit !== "USD" ? undefined : rates?.[shownIn];
   const [shown, amount]: [Currency | Unit, number] = rate === undefined ? [unit, value] : [shownIn, value / rate];
   const [withCents, without] = formats[shown];
   const of = (formatted: string) => (shown === "USDC" ? `${formatted}\u00a0USDC` : formatted);
-  if (amount === 0) return of(without.format(0));
-  if (amount > 0 && amount < 0.005) return `<\u00a0${of(withCents.format(0.01))}`;
-  return `≈\u00a0${of((Math.abs(amount) >= 100 ? without : withCents).format(amount))}`;
+  const [sign, magnitude] = amount < 0 ? ["−", -amount] : ["", amount];
+  if (amount === 0) return of((cents ? withCents : without).format(0));
+  if (magnitude < 0.005) return `${sign ? ">" : "<"}\u00a0${sign}${of(withCents.format(0.01))}`;
+  return `≈\u00a0${sign}${of((magnitude >= 100 && !cents ? without : withCents).format(magnitude))}`;
+}
+
+// An amount of a token to a set number of decimal places, so that a column of them lines up at the point: "63.93",
+// "−0.64", "< 0.01".
+export function fixed(value: bigint, decimals: number, places: number): string {
+  const format = new Intl.NumberFormat(LANG, { minimumFractionDigits: places, maximumFractionDigits: places });
+  const number = Number(value) / 10 ** decimals;
+  const [sign, magnitude] = number < 0 ? ["−", -number] : ["", number];
+  if (magnitude > 0 && magnitude < 0.5 * 10 ** -places)
+    return `${sign ? ">" : "<"} ${sign}${format.format(10 ** -places)}`;
+  return `${sign}${format.format(magnitude)}`;
 }
 
 // Hydrex shows Earning Power as 1.3 times the votes.

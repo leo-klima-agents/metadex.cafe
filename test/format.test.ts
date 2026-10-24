@@ -12,6 +12,7 @@ import {
   date,
   day,
   earningPower,
+  fixed,
   fraction,
   hexLines,
   listWith,
@@ -98,6 +99,28 @@ test("what prices value is approximate, in dollars or USDC, with no break after 
   assert.equal(usdc(0.7724), "≈\u00a00.77\u00a0USDC");
   assert.equal(usdc(0.001), "<\u00a00.01\u00a0USDC");
   assert.equal(usdc(0), "0\u00a0USDC");
+});
+
+test("a sum taken away has its minus on the number, after the ≈; in a column, to the cent", () => {
+  const usd = (value: number, cents = false) => money({ value, unit: "USD" }, { cents });
+  assert.equal(usd(-123.4), "≈\u00a0−$123");
+  assert.equal(usd(-1.312), "≈\u00a0−$1.31");
+  assert.equal(usd(-0.001), ">\u00a0−$0.01");
+  assert.equal(usd(692.4, true), "≈\u00a0$692.40");
+  assert.equal(usd(-692.4, true), "≈\u00a0−$692.40");
+  assert.equal(usd(0, true), "$0.00");
+  assert.equal(money({ value: -0.77, unit: "USDC" }), "≈\u00a0−0.77\u00a0USDC");
+});
+
+test("token amounts to a set number of decimal places, so that a column lines up at the point", () => {
+  assert.equal(fixed(63_930_000n, 6, 2), "63.93");
+  assert.equal(fixed(639_300n, 6, 2), "0.64");
+  assert.equal(fixed(-639_300n, 6, 2), "−0.64");
+  assert.equal(fixed(1_000n, 6, 2), "< 0.01");
+  assert.equal(fixed(-1_000n, 6, 2), "> −0.01");
+  assert.equal(fixed(25_490_000_000_000_000n, 18, 6), "0.025490");
+  assert.equal(fixed(1_234_567_890n, 6, 2), "1,234.57");
+  assert.equal(fixed(0n, 6, 2), "0.00");
 });
 
 test("in the currency picked, at its rate of the prices' own time; without one, as the prices are", () => {

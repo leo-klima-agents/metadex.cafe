@@ -64,7 +64,7 @@ function claimReceipts(
     const value = prices ? valueAt(received, tokens, prices) : 0;
     fill(receipt, {
       "claim-receipt-id": `Account #${id}`,
-      "claim-receipt-worth": value > 0 ? () => money(moneyAt(value, prices!)) : "",
+      "claim-receipt-worth": value > 0 ? () => money(moneyAt(value, prices!), { cents: true }) : "",
       "claim-receipt-claimed": words(received),
       "claim-receipt-fee": words(fees, "−"),
       "claim-receipt-paid": words(paid),
@@ -92,7 +92,7 @@ function tokenLines(
     fill(item, {
       "claim-symbol": known?.symbol ?? token,
       "claim-amount": known ? figure(amount, known.decimals) : String(amount),
-      "claim-worth": worth > 0 ? () => money(moneyAt(worth, prices!)) : "",
+      "claim-worth": worth > 0 ? () => money(moneyAt(worth, prices!), { cents: true }) : "",
     });
     return item;
   };
@@ -179,11 +179,23 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       return `Gas ${simulated ? of(totalGas) : "…"}${withSwap === undefined ? "" : `, ${of(withSwap)} with the swap`}`;
     });
   const drawPrices = () => {
-    const worth = (amounts: Amount[]) => () =>
-      prices ? money(moneyAt(valueAt(amounts, tokens, prices), prices)) : settled ? "Not read" : "…";
-    const fees = worth(totals.map(({ token, fee }) => ({ token, amount: fee })));
+    // To the cent, so that the bill lines up at the point; the fee is taken away.
+    const worth =
+      (amounts: Amount[], taken = false) =>
+      () =>
+        prices
+          ? money(moneyAt((taken ? -1 : 1) * valueAt(amounts, tokens, prices), prices), { cents: true })
+          : settled
+            ? "Not read"
+            : "…";
     live(earnedLine, worth(totals.map(({ token, earned }) => ({ token, amount: earned }))));
-    live(feeLine, () => `${prices ? "−" : ""}${fees()}`);
+    live(
+      feeLine,
+      worth(
+        totals.map(({ token, fee }) => ({ token, amount: fee })),
+        true,
+      ),
+    );
     live(paidLine, worth(paid));
     tokenLines(
       tokenList,
@@ -376,7 +388,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       atomic: true,
       outcomeOf: (receipts) => {
         const fragment = claimReceipts(receipts, owing, connection.address, tokens, current);
-        fragment.append(swapReceipt(receipts, swapPlan, tokens, connection.address));
+        fragment.append(swapReceipt(receipts, swapPlan, tokens, connection.address, current));
         return Promise.resolve(fragment);
       },
     });

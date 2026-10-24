@@ -88,7 +88,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     const worth = /^(≈|<)\s\$[\d,.]+$/;
     for (const [name, exact, inMoney] of [
       ["swap-quoted", /^[\d,.]+ USDC$/, worth],
-      ["swap-fee", /^− [\d,.]+ USDC$/, /^− (≈|<)\s\$[\d,.]+$/],
+      ["swap-fee", /^−[\d,.]+ USDC$/, /^(≈|>)\s−\$[\d,.]+$/],
       ["swap-paid", /^[\d,.]+ USDC$/, worth],
       ["swap-least", /^[\d,.]+ USDC$/, worth],
       ["swap-gas", /^[\d.]+ ETH$/, worth],
