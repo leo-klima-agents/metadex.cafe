@@ -350,7 +350,11 @@ describe("the page against a fork of Base: its views, and each account's payouts
     // On Fri 16 Oct, Carbon Impact owed it the epoch from Thu 1 Oct, and had paid nothing since Wed 23 Sep.
     assert.match(await standing.locator(".standing-late").innerText(), /^Late · paid up to Thu,? 17 Sept?$/);
     assert.equal(await standing.locator(".standing-paid").isVisible(), false);
-    assert.match(await standing.locator(".standing-waiting").innerText(), /^≈\s\$\d[\d,.]* waiting$/);
+    // What waits shows in tokens at once, then at prices now.
+    await standing
+      .locator(".standing-waiting")
+      .getByText(/^≈\s\$\d[\d,.]* waiting$/)
+      .waitFor();
     assert.equal(await standing.locator(".standing-outside").isVisible(), false);
     assert.equal(await position(page).locator(".position-underway").isVisible(), false);
     assert.equal(await receipt.count(), 1);

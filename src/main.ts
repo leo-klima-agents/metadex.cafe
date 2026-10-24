@@ -134,15 +134,25 @@ const accountName = (name: string): string =>
   !name ? "Hydrex account" : /^hydrex\b/i.test(name) ? name : `Hydrex ${name}`;
 const pageName = (name: string): string => name || "Account";
 
-// The App reads the wallet's payouts only to mark those paid late; an account's page draws its own.
-const appPayouts = payouts(undefined, (found, underWay) => {
-  late = new Set(found.entries.flatMap(({ standing, account }) => (standing?.late ? [account.id] : [])));
-  under = underWay;
-  appFound = found;
-  showUnderWay();
-  showAccounts(true);
-  showApp();
-});
+// The App reads the wallet's payouts to mark those paid late and those overdue; an account's page draws its own.
+const appPayouts = payouts(
+  undefined,
+  (found, underWay) => {
+    late = new Set(found.entries.flatMap(({ standing, account }) => (standing?.late ? [account.id] : [])));
+    under = underWay;
+    appFound = found;
+    showUnderWay();
+    showAccounts(true);
+    showApp();
+  },
+  undefined,
+  // An overdue payout says what waits in tokens, then at prices now, once read.
+  (found) => {
+    if (found !== appFound) return;
+    showApp();
+    showPosition();
+  },
+);
 
 // An account's payout through AutoMaxi is overdue when something waits for it and its keeper has not paid it: half a day
 // after the flip, the time a payout takes, for the epoch that just ended, or once it is late for the one before. Only

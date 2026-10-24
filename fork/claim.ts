@@ -41,6 +41,8 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
     const needs = app(page).locator("#needs");
     const line = needs.locator("li").filter({ hasText: "#82774: payout overdue" });
     await line.waitFor({ timeout: 600_000 });
+    // In tokens at once, then at prices now.
+    await line.filter({ hasText: /payout overdue, at least (≈|<)\s\$/ }).waitFor();
     assert.match(
       await line.innerText(),
       /^Hydrex account #82774: payout overdue, at least (≈|<)\s\$[\d,.]+ in \d+ tokens?/,

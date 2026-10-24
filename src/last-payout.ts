@@ -61,7 +61,8 @@ export type Entry = Part & {
   // epoch's flip is due to it.
   due: boolean;
 };
-// What waits for the accounts, at prices now, with the tokens' decimals; without them, it shows in tokens.
+// What waits for the accounts, at prices now, with the tokens' decimals; until they are read, or without them, it shows
+// in tokens.
 export type Waiting = { tokens: Map<string, Token>; prices: Prices };
 export type Found = { epochStart: number; entries: Entry[]; waiting?: Waiting };
 // A payout under way: the accounts it has reached since the flip, those still due, and when it first paid one.
@@ -80,6 +81,8 @@ type Drawn = {
 type Signal = { call: Call; paid: (answer: unknown) => boolean };
 // Each receipt drawn, by its owner and what it shows. Only those of the last draw are kept.
 const drawn = new Map<string, Drawn>();
+// Each line of what waits drawn, with its account's entry, to draw again once priced.
+const waitingLines = new WeakMap<Element, Entry>();
 
 // The automation an account is in or joining, or else the one it is leaving.
 const automationOf = ({ delegate, claimer, delegateAtStart }: Account): Automation | undefined =>
@@ -244,9 +247,9 @@ function waitingLine({ waiting, unknown }: Standing, priced: Waiting | undefined
 }
 
 // What waits for the accounts, at prices now. A pool must be deep enough for the most of a token that waits for one.
-async function waitingNow(standings: (Standing | undefined)[]): Promise<Waiting | undefined> {
+async function waitingNow(entries: Entry[]): Promise<Waiting | undefined> {
   const amounts = new Map<string, bigint>();
-  for (const { token, amount: value } of standings.flatMap((standing) => standing?.waiting ?? []))
+  for (const { token, amount: value } of entries.flatMap(({ standing }) => standing?.waiting ?? []))
     if (value > (amounts.get(token.toLowerCase()) ?? 0n)) amounts.set(token.toLowerCase(), value);
   if (!amounts.size) return undefined;
   const tokens = await tokensOf([...amounts.keys()] as Address[], readLater);
@@ -263,6 +266,7 @@ function standingItem(entry: Entry, epochStart: number, own: boolean, waiting?: 
     "standing-voter": voter.name,
     "standing-waiting": standing && earnings ? waitingLine(standing, waiting) : "",
   });
+  waitingLines.set(item.querySelector(".standing-waiting")!, entry);
   if (through) fillTime(item, "standing-through", through);
   fillTime(item, "late-from", epochStart - 2 * WEEK);
   fillTime(item, "late-to", epochStart - WEEK);
@@ -426,13 +430,6 @@ async function readPayouts(holdings: Holdings, members: Account[]): Promise<Foun
       }
     }),
   );
-  // What waits, at prices now, priced while the receipts are read.
-  const waiting = standings
-    .then(() => waitingNow(members.map(({ id }) => standingFor(id))))
-    .catch((error: unknown) => {
-      console.error(error);
-      return undefined;
-    });
   // Each automation's receipts, from the standings once read, where its reader needs them.
   const parts = new Map<bigint, Part>();
   await Promise.all(
@@ -447,7 +444,6 @@ async function readPayouts(holdings: Holdings, members: Account[]): Promise<Foun
     }),
   );
   await standings;
-  const priced = await waiting;
   const entries = members.map((account): Entry => {
     const automation = automationOf(account)!;
     const found = read.get(account.id);
@@ -466,7 +462,7 @@ async function readPayouts(holdings: Holdings, members: Account[]): Promise<Foun
   });
   if (entries.every(({ earnings, early }) => !earnings && !early))
     throw new Error("No automation's payouts could be read.");
-  return { epochStart, entries, ...(priced && { waiting: priced }) };
+  return { epochStart, entries };
 }
 
 export type Payouts = {
@@ -482,11 +478,13 @@ export type Payouts = {
 };
 
 // `section`, if any, shows the payouts and draws their receipts, in words to their owner when `ownedBy` says the
-// account's owner is the viewer; `found` hears of each read, even one of no accounts.
+// account's owner is the viewer; `found` hears of each read, even one of no accounts. Where what waits shows, in the
+// section or by `priced`, it is shown in tokens at once, then priced: `priced` hears once the read's `waiting` is set.
 export function payouts(
   section: HTMLElement | undefined,
   found: (found: Found, under: UnderWay | undefined) => void = () => {},
   ownedBy: (owner: Address) => boolean = () => true,
+  priced?: (found: Found) => void,
 ): Payouts {
   // The accounts given, and those whose payouts were read.
   let shown: Holdings | undefined;
@@ -500,6 +498,8 @@ export function payouts(
   let underUntil = Infinity;
   let checked = 0;
   let checking = false;
+  // The last read shown: prices read for an older one are dropped.
+  let latest: Found | undefined;
   const reset = (): void => void ([signals, missed, underUntil] = [[], false, Infinity]);
 
   const setState = (state: (typeof STATES)[number]): void => {
@@ -563,6 +563,23 @@ export function payouts(
     if (!current()) return;
     showing = owner;
     setState("found");
+    latest = read;
+    if (section || priced) void price(read, () => current() && latest === read);
+  }
+
+  // What waits, at prices now, drawn again once read. Without them, it stays in tokens.
+  async function price(read: Found, current: () => boolean): Promise<void> {
+    const waiting = await waitingNow(read.entries).catch((error: unknown) => {
+      console.error(error);
+      return undefined;
+    });
+    if (!waiting || !current()) return;
+    read.waiting = waiting;
+    for (const line of section?.querySelectorAll(".standing-waiting") ?? []) {
+      const entry = waitingLines.get(line);
+      if (entry?.standing && entry.earnings) line.textContent = waitingLine(entry.standing, waiting);
+    }
+    priced?.(read);
   }
 
   // Whether the payouts should be read again. A failed check is tried again at the next.
