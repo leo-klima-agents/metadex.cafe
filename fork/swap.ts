@@ -74,7 +74,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     const summary = swap.locator(".breakdown");
     await summary
       .locator(".swap-paid")
-      .getByText(/^≈ [\d,.]+ USDC$/)
+      .getByText(/^[\d,.]+ USDC$/)
       .waitFor();
     const labels = await summary.locator("dt").allInnerTexts();
     assert.deepEqual(
@@ -83,7 +83,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     );
     assert.match(labels[3]!, /^At least, with/);
     assert.equal(await summary.getByRole("combobox", { name: /At least, with/ }).inputValue(), "50");
-    assert.match(await summary.locator(".swap-quoted").innerText(), /^≈ [\d,.]+ USDC$/);
+    assert.match(await summary.locator(".swap-quoted").innerText(), /^[\d,.]+ USDC$/);
     assert.match(await summary.locator(".swap-fee").innerText(), /^− [\d,.]+ USDC$/);
     assert.match(await summary.locator(".swap-least").innerText(), /^[\d,.]+ USDC$/);
     await summary
@@ -178,7 +178,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     // Once every token's route is found, the quote, or why there is none.
     const into = review(page).locator(".claim-into");
     await into.getByText(/^[^…]/).waitFor({ timeout: 600_000 });
-    assert.match(await into.innerText(), /^≈ [\d,.]+ USDC, at least [\d,.]+, from /);
+    assert.match(await into.innerText(), /^[\d,.]+ USDC, at least [\d,.]+, from /);
     await shoot(page, "claim-into-390-light", review(page));
     await review(page).getByRole("button", { name: "Continue" }).click();
     // Its calls need more gas than one transaction may use, so the swap cannot join them: they go one at a time, even

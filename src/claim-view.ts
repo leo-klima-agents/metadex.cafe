@@ -295,7 +295,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     const least = kept + items.reduce((sum, { route }) => sum + route.minPaid, 0n);
     const swappedNames = items.map(({ token }) => token.symbol);
     into.textContent = items.length
-      ? `≈ ${figure(out, swapper.decimals)} ${swapper.symbol}, at least ${figure(least, swapper.decimals)}, from ${list(swappedNames)}${left.length ? `; ${count(left.length, "token", "tokens")} kept` : ""}`
+      ? `${figure(out, swapper.decimals)} ${swapper.symbol}, at least ${figure(least, swapper.decimals)}, from ${list(swappedNames)}${left.length ? `; ${count(left.length, "token", "tokens")} kept` : ""}`
       : `None worth swapping into ${swapper.symbol}`;
     const chosen = radios.find(({ checked }) => checked)?.value === "into";
     if (!items.length || !chosen) {

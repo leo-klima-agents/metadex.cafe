@@ -321,7 +321,7 @@ WHAT WAITS                                   in last epoch's pools
 
 RECEIVE THEM
   (•) As they are, in 9 tokens
-  ( ) Into [USDC ▾]: ≈ 1.69 USDC, at least 1.68. The USDC
+  ( ) Into [USDC ▾]: 1.69 USDC, at least 1.68. The USDC
       comes as it is; WETH and AVNT are swapped, less the swap's
       1% and the pools' fees. 6 tokens worth less than their gas
       stay as they are.
@@ -388,17 +388,17 @@ YOU RECEIVE   (•) USDC  ( ) EURC  ( ) WETH  ( ) cbBTC
               ( ) AERO  ( ) HYDX
 
 YOUR TOKENS                              11 of 19 ticked
- [x] WETH    0.0123     ≈ 30.10 USDC   Uniswap v3 · 0.05%
- [x] AVNT    41.2       ≈ 0.61 USDC    Hydrex → WETH → Uniswap
+ [x] WETH    0.0123     30.10 USDC   Uniswap v3 · 0.05%
+ [x] AVNT    41.2       0.61 USDC    Hydrex → WETH → Uniswap
  ...
- [ ] GOO     12.0       ≈ 0.004 USDC   worth less than its gas
+ [ ] GOO     12.0       0.004 USDC   worth less than its gas
  [ ] wtBABA  0.31       no pool the swapper can use
  [ ] SPAM…   1,000,000  no price, no pool   (not the token you
                                             may know: see address)
  + Add a token by its address
 
- Sells 11 tokens for ≈ 31.20 USDC, at least 31.04 USDC
- Swap's 1%: ≈ 0.31 · Gas ≈ $0.07 · 12 calls: 11 approvals, 1 swap
+ Sells 11 tokens for 31.20 USDC, at least 31.04 USDC
+ Swap's 1%: 0.31 · Gas ≈ $0.07 · 12 calls: 11 approvals, 1 swap
  Minimum: 0.5% under each quote  (change)
                                                      [Review]
 

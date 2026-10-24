@@ -177,7 +177,7 @@ function drawRow(row: Row, scanned: Scan): void {
   fill(node, {
     "swap-symbol": token.symbol,
     "swap-amount": figure(row.amount, token.decimals),
-    "swap-fetches": found ? ` ≈ ${figure(found.out, swapper.decimals)} ${swapper.symbol}` : "",
+    "swap-fetches": found ? `${figure(found.out, swapper.decimals)} ${swapper.symbol}` : "",
   });
   // Only why a token is not ticked, or that its route is being found: the route itself is in the review.
   const routeLine = node.querySelector(".swap-route")!;
@@ -246,9 +246,9 @@ function summarise(scanned: Scan, ticked: Row[]): void {
   const dollars = scanned.costs && gasUsd(gas, scanned.costs);
   const of = (amount: bigint) => `${figure(amount, swapper.decimals)} ${swapper.symbol}`;
   fill(breakdown, {
-    "swap-quoted": `≈ ${of(out)}`,
+    "swap-quoted": of(out),
     "swap-fee": `− ${of(fee)}`,
-    "swap-paid": `≈ ${of(out - fee)}`,
+    "swap-paid": of(out - fee),
     "swap-least": of(least),
     "swap-gas": dollars === undefined ? "…" : usd(dollars),
   });
@@ -571,7 +571,7 @@ export async function openSwapReview(
     fill(line, {
       "line-symbol": token.symbol,
       "line-amount": figure(route.amount, token.decimals),
-      "line-fetches": reason ? "skipped" : `≈ ${of(fetched)}`,
+      "line-fetches": reason ? "skipped" : of(fetched),
       "line-route": hopsWords(route, tokens),
     });
     show(".line-skip", !!reason, line);
@@ -585,9 +585,9 @@ export async function openSwapReview(
   const dollars = found ? gasUsd(gas, found) : undefined;
   fill(body, {
     "swap-output": swapper.symbol,
-    "swap-fetched": `≈ ${of(out)}`,
+    "swap-fetched": of(out),
     "swap-fee": `− ${of(fee)}`,
-    "swap-paid": `≈ ${of(out - fee)}`,
+    "swap-paid": of(out - fee),
     "swap-least": of(least),
     "swap-slippage": `${plan.yours ? "Your slippage" : "Slippage"}: ${bps(plan.margin)}`,
     "swap-gas": dollars === undefined ? `${gas.toLocaleString("en-GB")} gas` : usd(dollars),
