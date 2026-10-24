@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import { type Page } from "playwright-core";
+import { type Locator, type Page } from "playwright-core";
 import { encodeFunctionData } from "viem";
 import { AUTOMAXI, SWAPPERS, WETH } from "../src/config.ts";
 import {
@@ -80,10 +80,23 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.deepEqual([labels[0], labels[1], labels[2], labels[4]], ["Quote", "Fee 1%", "Reaches you", "Gas"]);
     assert.match(labels[3]!, /^At least, with/);
     assert.equal(await summary.getByRole("combobox", { name: /At least, with/ }).inputValue(), "50");
-    assert.match(await summary.locator(".swap-quoted").innerText(), /^[\d,.]+ USDC\n(≈|<)\s\$[\d,.]+$/);
-    assert.match(await summary.locator(".swap-fee").innerText(), /^− [\d,.]+ USDC\n− (≈|<)\s\$[\d,.]+$/);
-    assert.match(await summary.locator(".swap-least").innerText(), /^[\d,.]+ USDC\n(≈|<)\s\$[\d,.]+$/);
-    assert.match(await summary.locator(".swap-gas").innerText(), /^[\d.]+ ETH\n(≈|<)\s\$[\d.]+$/);
+    // Each figure exactly, then what it is worth.
+    const figure = async (root: Locator, name: string): Promise<[string, string]> => [
+      await root.locator(`.${name} .exact`).innerText(),
+      await root.locator(`.${name} .worth`).innerText(),
+    ];
+    const worth = /^(≈|<)\s\$[\d,.]+$/;
+    for (const [name, exact, inMoney] of [
+      ["swap-quoted", /^[\d,.]+ USDC$/, worth],
+      ["swap-fee", /^− [\d,.]+ USDC$/, /^− (≈|<)\s\$[\d,.]+$/],
+      ["swap-paid", /^[\d,.]+ USDC$/, worth],
+      ["swap-least", /^[\d,.]+ USDC$/, worth],
+      ["swap-gas", /^[\d.]+ ETH$/, worth],
+    ] as const) {
+      const [shown, value] = await figure(summary, name);
+      assert.match(shown, exact, name);
+      assert.match(value, inMoney, name);
+    }
     assert.match(await swap.locator(".swap-ticked").innerText(), /^· 3 of \d+$/);
     await shoot(page, "swap-390-light");
     await swap.getByRole("button", { name: "Review" }).click();
@@ -95,7 +108,10 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.equal(await bill.locator(".receipt-name").innerText(), "metaDEX Café");
     assert.equal(await bill.locator(".label code").innerText(), "USDC");
     assert.equal(await review(page).locator(".step-count code").innerText(), "USDC");
-    assert.match(await bill.locator(".receipt-day").innerText(), /^Gas [\d.]+ ETH\n(≈|<)\s\$[\d.]+$/);
+    assert.match(await bill.locator(".receipt-day").innerText(), /^Gas /);
+    const [gasShown, gasValue] = await figure(bill, "swap-gas");
+    assert.match(gasShown, /^[\d.]+ ETH$/);
+    assert.match(gasValue, worth);
     assert.equal(await bill.locator(".swap-lines li").count(), 3);
     // "ZORA → WETH → USDC via Aerodrome, Uniswap": the tokens, then who runs the pools, each once.
     for (const route of await bill.locator(".line-route").allInnerTexts()) {
