@@ -64,10 +64,12 @@ const formats = {
 export type Unit = "USD" | "USDC";
 // What the visitor picked to see them in, for the visit: dollars, or euros where the prices' time has a rate.
 export type Currency = "USD" | "EUR";
-// What prices are in, and the dollar's price in euros at their time, if found.
+// What prices are in, and Chainlink's EUR / USD at their time, if found: the euro's price in dollars, which a sum in
+// dollars is divided by to show it in euros.
 export type Basis = { unit: Unit; eurUsd?: number | undefined };
 // A sum at some prices.
 export type Money = Basis & { value: number };
+export const moneyAt = (value: number, { unit, eurUsd }: Basis): Money => ({ value, unit, eurUsd });
 
 let shownIn: Currency = "USD";
 const changes: (() => void)[] = [];
@@ -83,7 +85,7 @@ export function setCurrency(picked: Currency): void {
 // Prices are approximate, so what they value is too: "≈ $692", "≈ €0.69", "< $0.01", or in USDC, "≈ 0.77 USDC". In
 // euros at the rate of the prices' own time; without one, in what the prices are in. The no-break spaces keep the sign
 // and the unit with the number.
-export function money(value: number, { unit, eurUsd }: Basis = { unit: "USD" }): string {
+export function money({ value, unit, eurUsd }: Money): string {
   const euros = shownIn === "EUR" && unit === "USD" && eurUsd !== undefined;
   const [shown, amount] = euros ? (["EUR", value / eurUsd] as const) : ([unit, value] as const);
   const [withCents, without] = formats[shown];

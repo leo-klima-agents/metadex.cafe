@@ -3,7 +3,7 @@ import { now, same, type Receipt } from "./chain.ts";
 import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
 import { clone, fill, fillAddress, show } from "./dom.ts";
 import { tokensOf } from "./earnings.ts";
-import { bps, count, figure, fraction, list, money, onCurrency, short, type Money } from "./format.ts";
+import { bps, count, figure, fraction, list, money, moneyAt, onCurrency, short, type Money } from "./format.ts";
 import { earningsOf, onEarnings } from "./last-epoch.ts";
 import { pricesIn, pricesNow, usdOf, type Prices, type Token } from "./prices.ts";
 import type { Amount } from "./receipts.ts";
@@ -123,11 +123,7 @@ export function swapLine(): { count: number; worth: Money; reading: boolean } | 
   if (!scan) return undefined;
   const worth = scan.rows.filter((row) => row.found && !row.reason);
   const value = worth.reduce((sum, row) => sum + (row.worth ?? 0), 0);
-  return {
-    count: worth.length,
-    worth: { value, unit: scan.prices.unit, eurUsd: scan.prices.eurUsd },
-    reading: scan.reading,
-  };
+  return { count: worth.length, worth: moneyAt(value, scan.prices), reading: scan.reading };
 }
 
 export const allowancesLeft = (): Allowance[] | undefined => allowances;
@@ -168,7 +164,7 @@ function judge(row: Row, scanned: Scan): void {
     outputUsd(found.out, scanned) ??
     (row.price === undefined ? undefined : usdOf(row.amount, row.token.decimals, row.price));
   const gas = found.gas + (row.allowance < row.amount ? APPROVAL_GAS : 0n);
-  const cost = scanned.costs ? (gasCost(gas, scanned.costs) ?? 0) : 0;
+  const cost = scanned.costs ? (gasCost(gas, scanned.costs, scanned.prices)?.value ?? 0) : 0;
   row.reason = row.worth === undefined ? "no price" : row.worth < CLEARS * cost ? "below gas" : undefined;
 }
 
@@ -248,14 +244,14 @@ function summarise(scanned: Scan, ticked: Row[]): void {
   const approvals = ticked.filter((row) => row.allowance < row.amount).length;
   const swaps = split(ticked.map((row) => row.found!.route)).length;
   const gas = BigInt(approvals) * APPROVAL_GAS + swapGas(ticked.map((row) => row.found!.route));
-  const dollars = scanned.costs && gasCost(gas, scanned.costs);
+  const cost = scanned.costs && gasCost(gas, scanned.costs, scanned.prices);
   const of = (amount: bigint) => `${figure(amount, swapper.decimals)} ${swapper.symbol}`;
   fill(breakdown, {
     "swap-quoted": of(out),
     "swap-fee": `− ${of(fee)}`,
     "swap-paid": of(out - fee),
     "swap-least": of(least),
-    "swap-gas": dollars === undefined ? "…" : money(dollars, scanned.costs!),
+    "swap-gas": cost ? money(cost) : "…",
   });
   splitLine.hidden = swaps < 2;
   splitLine.textContent = `${swaps} swaps`;
@@ -348,8 +344,8 @@ async function startScan(owner: Address, swapper: Swapper): Promise<void> {
     );
     let next = 0;
     const gasValue = (gas: bigint) => {
-      const dollars = scanned.costs && gasCost(gas, scanned.costs);
-      return dollars === undefined ? 0n : (inOutput(dollars, scanned) ?? 0n);
+      const cost = scanned.costs && gasCost(gas, scanned.costs, scanned.prices);
+      return cost ? (inOutput(cost.value, scanned) ?? 0n) : 0n;
     };
     await Promise.all(
       Array.from({ length: WORKERS }, async () => {
@@ -512,7 +508,7 @@ async function reviewSwap(): Promise<void> {
   reviewFailed.hidden = true;
   reviewButton.textContent = "Simulating…";
   try {
-    const opened = await openSwapReview(plan, connection, scanned.tokens, scanned.costs);
+    const opened = await openSwapReview(plan, connection, scanned.tokens, scanned.costs, scanned.prices);
     if (opened) {
       reviewFailed.textContent = opened;
       reviewFailed.hidden = false;
@@ -523,12 +519,13 @@ async function reviewSwap(): Promise<void> {
   }
 }
 
-// Opens the swap's review, or says why not.
+// Opens the swap's review, or says why not. Gas is valued at the prices the swap was judged at.
 export async function openSwapReview(
   plan: Plan,
   connection: Connection,
   tokens: Map<string, Token>,
   found?: Costs,
+  prices?: Prices,
 ): Promise<string | undefined> {
   const { swapper } = plan;
   const { approvals, swaps, slips } = await planSteps(plan, connection, tokens);
@@ -587,7 +584,7 @@ export async function openSwapReview(
   const gas = simulated
     ? simulated.reduce((sum, { gas }) => sum + gas, 0n)
     : BigInt(approvals.length) * APPROVAL_GAS + swapGas(plan.items.map(({ route }) => route));
-  const dollars = found ? gasCost(gas, found) : undefined;
+  const cost = found && gasCost(gas, found, prices);
   fill(body, {
     "swap-output": swapper.symbol,
     "swap-fetched": of(out),
@@ -595,7 +592,7 @@ export async function openSwapReview(
     "swap-paid": of(out - fee),
     "swap-least": of(least),
     "swap-slippage": `${plan.yours ? "Your slippage" : "Slippage"}: ${bps(plan.margin)}`,
-    "swap-gas": dollars === undefined ? `${gas.toLocaleString("en-GB")} gas` : money(dollars, found!),
+    "swap-gas": cost ? money(cost) : `${gas.toLocaleString("en-GB")} gas`,
     "swap-simulated": "Not simulated: these are quotes.",
   });
   show(".swap-simulated", !simulated, body);

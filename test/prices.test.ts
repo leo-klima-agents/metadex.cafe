@@ -265,6 +265,21 @@ test("without any of Chainlink's prices, prices are in USDC, from the pools alon
   close(prices.get(TOKEN.address)!, 2.3);
 });
 
+test("now, the feeds' latest rounds count, even one newer than the visitor's clock", async () => {
+  // The first round of a new phase, updated a minute after NOW: a clock a minute behind the chain's.
+  const { reader } = market([{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }]);
+  const ahead = async (calls: Call[]) =>
+    (await reader(calls)).map((reply, i) =>
+      calls[i]!.functionName === "latestRoundData" && reply
+        ? [(3n << 64n) + 1n, (reply as bigint[])[1]!, 0n, BigInt(NOW + 60), (3n << 64n) + 1n]
+        : reply,
+    );
+  const prices = await pricesAt([TOKEN], new Map(), NOW, NOW, HYDREX_PRICING, ahead);
+  assert.equal(prices.unit, "USD");
+  close(prices.get(USDC.toLowerCase())!, USDC_USD);
+  close(prices.get(TOKEN.address)!, 4 * USDC_USD);
+});
+
 test("EUR / USD goes with dollar prices, read with the anchors' feeds; prices in USDC have none", async () => {
   const pools: Fake[] = [{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }];
   // A reader that also answers EUR / USD: 1.12 dollars a euro.

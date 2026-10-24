@@ -23,6 +23,7 @@ import {
   figure,
   list,
   money,
+  moneyAt,
   onCurrency,
   setCurrency,
   short,
@@ -74,8 +75,7 @@ import {
   perThousandOf,
   showAbsent,
 } from "./last-epoch.ts";
-import { UNDER_WAY, payouts, type Entry, type Found, type UnderWay } from "./last-payout.ts";
-import { dollars } from "./receipts.ts";
+import { UNDER_WAY, payouts, waitingWords, type Entry, type Found, type UnderWay } from "./last-payout.ts";
 import { closeReview, openReview, refreshReview, type Hooks } from "./review.ts";
 import { hrefOf } from "./routes.ts";
 import { openClaim } from "./claim-view.ts";
@@ -178,12 +178,9 @@ const overdue = (): Entry[] =>
 // What waits for an overdue account, in words, at prices now, or else in tokens: "≈ $1.84 in 9 tokens".
 function waitsLine({ standing }: Entry): string {
   const { waiting, unknown, late } = standing!;
-  const priced = appFound?.waiting;
-  const value = priced ? dollars(waiting, priced.tokens, priced.prices) : 0;
-  const n = new Set(waiting.map(({ token }) => token.toLowerCase())).size;
-  if (!n) return "from the epoch before last";
-  const tokens = count(n, "token", "tokens");
-  return `${unknown || late ? "at least " : ""}${value > 0 ? `${money(value, priced!.prices)} in ${tokens}` : tokens}`;
+  const { worth, tokens } = waitingWords(waiting, appFound?.waiting);
+  if (!tokens) return "from the epoch before last";
+  return `${unknown || late ? "at least " : ""}${worth ? `${worth} in ${tokens}` : tokens}`;
 }
 // An account's page that is not the wallet's tells a payout under way from its owner's other accounts, which it reads
 // once while the account awaits its payout.
@@ -305,7 +302,7 @@ function showRecords(): void {
           ? "No record yet"
           : paid === undefined
             ? "…"
-            : money(per.value * paid, per);
+            : money(moneyAt(per.value * paid, per));
     for (const place of placesOf(automation)) {
       fill(place, { record, "record-unit": per ? "per 1,000 Earning Power" : "" });
     }
@@ -476,7 +473,7 @@ function accountItem({ account, status }: Member, group: string, pickable: boole
   else item.querySelector(".status")!.replaceWith(statusLine(status, true));
   const earned = earnedByAccount(account.id);
   if (earned !== undefined) {
-    fill(item, { "earned-usd": money(earned.value, earned) });
+    fill(item, { "earned-usd": money(earned) });
     show(".earned", true, item);
   }
   show(".late", late.has(account.id), item);
@@ -673,12 +670,12 @@ function estimate(element: Element, accounts: Account[], automation: Automation,
             ? "No record yet"
             : per === undefined || paid === undefined
               ? noEstimate
-              : money(per.value * thousands * paid, per);
+              : money(moneyAt(per.value * thousands * paid, per));
       },
       () => (week.textContent = noEstimate),
     );
   gasCosts()(join(accounts, automation), owner).then(
-    (cost) => (gas.textContent = cost === undefined ? "Not read" : money(cost.value, cost)),
+    (cost) => (gas.textContent = cost === undefined ? "Not read" : money(cost)),
     (error) => {
       console.error(error);
       gas.textContent = "Not read";
@@ -835,7 +832,7 @@ function showApp(): void {
       line.reading && !line.count
         ? "…"
         : line.count
-          ? `${count(line.count, "token", "tokens")} · ${money(line.worth.value, line.worth)}${line.reading ? " · …" : ""}`
+          ? `${count(line.count, "token", "tokens")} · ${money(line.worth)}${line.reading ? " · …" : ""}`
           : "Nothing to swap";
   }
   void showAllows(holdings, left);
@@ -984,7 +981,7 @@ function showPosition(): void {
   });
   view.querySelector(".position-status")!.replaceChildren(statusLine(status, !theirs));
   const earned = earnedByAccount(account.id);
-  if (earned !== undefined) fill(view, { "position-earned": money(earned.value, earned) });
+  if (earned !== undefined) fill(view, { "position-earned": money(earned) });
   show(".position-earned-row", earned !== undefined, view);
   show(".position-owner-row", theirs, view);
   fillAddress(view, "position-owner", owner, short(owner));

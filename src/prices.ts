@@ -16,7 +16,7 @@ import { exchangeOf, pairKey, waysFor } from "./pools.ts";
 
 export type Token = { address: Address; decimals: number; symbol: string };
 // Prices per whole token, by lower-case address: in dollars, or in USDC when none of Chainlink's dollar prices for the
-// time could be found; with the dollar's price in euros then, if found.
+// time could be found; with Chainlink's EUR / USD then, the euro's price in dollars, if found.
 export type Prices = Map<string, number> & Basis;
 
 export const pricesIn = (unit: Unit, entries: [string, number][] = [], eurUsd?: number): Prices =>
@@ -329,13 +329,14 @@ export async function pricesAt(
   reader: typeof read = read,
 ): Promise<Prices> {
   exchanges.forEach(kindOf);
-  const feeds = await feedsAt([...ANCHORS.map(({ feed }) => feed), EUR_USD], flip, reader);
+  const ago = Math.max(0, time - flip);
+  // Now, the feeds' latest rounds: the visitor's clock may run behind the chain's.
+  const feeds = await feedsAt([...ANCHORS.map(({ feed }) => feed), EUR_USD], ago ? flip : Infinity, reader);
   const fed = ANCHORS.flatMap(({ address }, i): [string, number][] =>
     feeds[i] === undefined ? [] : [[key(address), feeds[i]]],
   );
   const prices = fed.length ? pricesIn("USD", fed, feeds[ANCHORS.length]) : pricesIn("USDC", [[key(USDC), 1]]);
   const unpriced = ANCHORS.filter(({ address }) => !prices.has(key(address)));
-  const ago = Math.max(0, time - flip);
   await inPools(
     unpriced.map(({ address, decimals }) => ({ address, decimals, symbol: "" })),
     prices,

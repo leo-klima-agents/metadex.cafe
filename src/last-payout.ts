@@ -4,7 +4,7 @@ import { lastClaimBlocks, readClaimsAt, totals, walkClaims, WALK_LIMIT, type Wal
 import { AUTOMATIONS, AUTOMAXI_FEE_BPS, KEEPER, KVCM, type Automation, type Kind } from "./config.ts";
 import { clone, fill, fillAddress, fillOwn, fillTime, show, showHex, txUrl } from "./dom.ts";
 import { rewardsFor, tokensOf, type Earnings } from "./earnings.ts";
-import { WEEK, amount, bps, count, listWith, money, onCurrency, short, utc, weekStart } from "./format.ts";
+import { WEEK, amount, bps, count, listWith, money, moneyAt, onCurrency, short, utc, weekStart } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { lastEarnings } from "./last-epoch.ts";
 import { pricesAtFlip, pricesNow, type Prices, type Token } from "./prices.ts";
@@ -61,9 +61,11 @@ export type Entry = Part & {
   // epoch's flip is due to it.
   due: boolean;
 };
-// What waits for the accounts, at prices now, with the tokens' decimals; until they are read, or without them, it shows
-// in tokens.
-export type Waiting = { tokens: Map<string, Token>; prices: Prices };
+// What waits for the accounts, at prices now, with the tokens' decimals, and when they were read; until they are read,
+// or without them, it shows in tokens.
+export type Waiting = { tokens: Map<string, Token>; prices: Prices; at: number };
+// Prices of what waits this recent are not read again for a new read of the same owner's payouts.
+const FRESH = 300_000;
 export type Found = { epochStart: number; entries: Entry[]; waiting?: Waiting };
 // A payout under way: the accounts it has reached since the flip, those still due, and when it first paid one.
 export type UnderWay = { paid: Entry[]; left: Entry[]; first: number };
@@ -124,7 +126,7 @@ function showAmounts(element: Element, found: Amount[], tokens: Map<string, Toke
 
 function worth(found: Amount[], tokens: Map<string, Token>, prices: Prices | undefined): string {
   const total = prices ? dollars(found, tokens, prices) : 0;
-  return total > 0 ? money(total, prices!) : "";
+  return total > 0 ? money(moneyAt(total, prices!)) : "";
 }
 
 const kvcm = (found: Amount[]): bigint => found.find(({ token }) => same(token, KVCM))?.amount ?? 0n;
@@ -241,11 +243,21 @@ function ownWords(element: Element, own: string, theirs: string): void {
   Object.assign((element as HTMLElement).dataset, { own, theirs });
 }
 
-// What waits to be claimed in last epoch's pools, as far as it could be read: at prices now, or else in tokens.
-function waitingLine({ waiting, unknown }: Standing, priced: Waiting | undefined): string {
+// What waits for an account, in words: its worth at prices now, if read and above nothing, as "≈ $1.84", and its
+// tokens, as "9 tokens", unless there are none.
+export function waitingWords(waiting: Amount[], priced: Waiting | undefined): { worth?: string; tokens?: string } {
   const value = priced ? dollars(waiting, priced.tokens, priced.prices) : 0;
   const n = new Set(waiting.map(({ token }) => token.toLowerCase())).size;
-  const what = value > 0 ? money(value, priced!.prices) : n ? count(n, "token", "tokens") : "";
+  return {
+    ...(value > 0 && { worth: money(moneyAt(value, priced!.prices)) }),
+    ...(n > 0 && { tokens: count(n, "token", "tokens") }),
+  };
+}
+
+// What waits to be claimed in last epoch's pools, as far as it could be read: at prices now, or else in tokens.
+function waitingLine({ waiting, unknown }: Standing, priced: Waiting | undefined): string {
+  const { worth, tokens } = waitingWords(waiting, priced);
+  const what = worth ?? tokens;
   if (unknown && what) return `At least ${what} waiting`;
   if (unknown) return "Waiting: not read";
   return what ? `${what} waiting` : "Nothing waiting";
@@ -266,7 +278,7 @@ async function waitingNow(entries: Entry[]): Promise<Waiting | undefined> {
     if (value > (amounts.get(token.toLowerCase()) ?? 0n)) amounts.set(token.toLowerCase(), value);
   if (!amounts.size) return undefined;
   const tokens = await tokensOf([...amounts.keys()] as Address[], readLater);
-  return { tokens, prices: await pricesNow([...tokens.values()], amounts, readLater) };
+  return { tokens, prices: await pricesNow([...tokens.values()], amounts, readLater), at: Date.now() };
 }
 
 function standingItem(entry: Entry, epochStart: number, own: boolean, waiting?: Waiting, receipt?: HTMLElement) {
@@ -553,6 +565,11 @@ export function payouts(
       return fail(error);
     }
     if (!current()) return;
+    // What waits keeps the prices last read for the same owner until new ones come, and is priced while the receipts
+    // are drawn.
+    if (showing === owner && latest?.waiting) read.waiting = latest.waiting;
+    latest = read;
+    if (section || priced) void price(read, () => current() && latest === read);
     const under = underWay(read);
     // An account is awaited while a payout is due to it, has not reached it, and has something to pay it. Its payout
     // claims one of the fewest of last epoch's rewards worth half of them, so their records show when it has come.
@@ -576,12 +593,16 @@ export function payouts(
     if (!current()) return;
     showing = owner;
     setState("found");
-    latest = read;
-    if (section || priced) void price(read, () => current() && latest === read);
   }
 
-  // What waits, at prices now, drawn again once read. Without them, it stays in tokens.
+  // What waits, at prices now, drawn again once read, unless the prices it kept are recent and price all its tokens.
+  // Without them, it stays as it was.
   async function price(read: Found, current: () => boolean): Promise<void> {
+    const kept = read.waiting;
+    const covered = read.entries.every(({ standing }) =>
+      (standing?.waiting ?? []).every(({ token }) => kept?.tokens.has(token.toLowerCase())),
+    );
+    if (kept && covered && Date.now() - kept.at < FRESH) return;
     const waiting = await waitingNow(read.entries).catch((error: unknown) => {
       console.error(error);
       return undefined;

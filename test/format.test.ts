@@ -15,6 +15,7 @@ import {
   hexLines,
   listWith,
   money,
+  moneyAt,
   onCurrency,
   setCurrency,
   short,
@@ -84,29 +85,30 @@ test("counts, with plurals", () => {
 });
 
 test("what prices value is approximate, in dollars or USDC, with no break after the sign or before the unit", () => {
-  assert.equal(money(692.85), "≈\u00a0$693");
-  assert.equal(money(0.7724), "≈\u00a0$0.77");
-  assert.equal(money(111_078.6), "≈\u00a0$111,079");
-  assert.equal(money(0.001), "<\u00a0$0.01");
-  assert.equal(money(0), "$0");
-  const usdc = { unit: "USDC" } as const;
-  assert.equal(money(692.85, usdc), "≈\u00a0693\u00a0USDC");
-  assert.equal(money(0.7724, usdc), "≈\u00a00.77\u00a0USDC");
-  assert.equal(money(0.001, usdc), "<\u00a00.01\u00a0USDC");
-  assert.equal(money(0, usdc), "0\u00a0USDC");
+  const usd = (value: number) => money({ value, unit: "USD" });
+  assert.equal(usd(692.85), "≈\u00a0$693");
+  assert.equal(usd(0.7724), "≈\u00a0$0.77");
+  assert.equal(usd(111_078.6), "≈\u00a0$111,079");
+  assert.equal(usd(0.001), "<\u00a0$0.01");
+  assert.equal(usd(0), "$0");
+  const usdc = (value: number) => money({ value, unit: "USDC" });
+  assert.equal(usdc(692.85), "≈\u00a0693\u00a0USDC");
+  assert.equal(usdc(0.7724), "≈\u00a00.77\u00a0USDC");
+  assert.equal(usdc(0.001), "<\u00a00.01\u00a0USDC");
+  assert.equal(usdc(0), "0\u00a0USDC");
 });
 
 test("in euros once picked, at the rate of the prices' own time; without one, as the prices are", () => {
   const then = { unit: "USD", eurUsd: 1.25 } as const;
   assert.equal(currency(), "USD");
-  assert.equal(money(10, then), "≈\u00a0$10.00");
+  assert.equal(money(moneyAt(10, then)), "≈\u00a0$10.00");
   setCurrency("EUR");
   try {
-    assert.equal(money(10, then), "≈\u00a0€8.00");
-    assert.equal(money(250, then), "≈\u00a0€200");
-    assert.equal(money(0.005, then), "<\u00a0€0.01");
-    assert.equal(money(10, { unit: "USD" }), "≈\u00a0$10.00", "no rate for the time");
-    assert.equal(money(10, { unit: "USDC", eurUsd: 1.25 }), "≈\u00a010.00\u00a0USDC", "no dollar prices");
+    assert.equal(money(moneyAt(10, then)), "≈\u00a0€8.00");
+    assert.equal(money(moneyAt(250, then)), "≈\u00a0€200");
+    assert.equal(money(moneyAt(0.005, then)), "<\u00a0€0.01");
+    assert.equal(money({ value: 10, unit: "USD" }), "≈\u00a0$10.00", "no rate for the time");
+    assert.equal(money({ value: 10, unit: "USDC", eurUsd: 1.25 }), "≈\u00a010.00\u00a0USDC", "no dollar prices");
   } finally {
     setCurrency("USD");
   }

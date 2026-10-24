@@ -16,7 +16,7 @@ import {
   type Claim,
 } from "./claim.ts";
 import { clone, fill, show } from "./dom.ts";
-import { count, figure, list, money } from "./format.ts";
+import { count, figure, list, money, moneyAt, type Money } from "./format.ts";
 import type { Entry } from "./last-payout.ts";
 import { pricesNow, usdOf, type Prices, type Token } from "./prices.ts";
 import { dollars, type Amount } from "./receipts.ts";
@@ -64,7 +64,7 @@ function claimReceipts(
     const value = prices ? dollars(received, tokens, prices) : 0;
     fill(receipt, {
       "claim-receipt-id": `Account #${id}`,
-      "claim-receipt-usd": value > 0 ? money(value, prices!) : "",
+      "claim-receipt-usd": value > 0 ? money(moneyAt(value, prices!)) : "",
       "claim-receipt-claimed": words(received),
       "claim-receipt-fee": words(fees, "−"),
       "claim-receipt-paid": words(paid),
@@ -77,7 +77,8 @@ function claimReceipts(
 
 // A list of tokens, the largest at the prices first, if read: the first three, then the rest folded.
 function tokenLines(
-  body: DocumentFragment,
+  list: Element,
+  more: HTMLDetailsElement,
   amounts: { token: Address; amount: bigint }[],
   tokens: Map<string, Token>,
   prices: Prices | undefined,
@@ -91,17 +92,16 @@ function tokenLines(
     fill(item, {
       "claim-symbol": known?.symbol ?? token,
       "claim-amount": known ? figure(amount, known.decimals) : String(amount),
-      "claim-usd": dollars > 0 ? money(dollars, prices!) : "",
+      "claim-usd": dollars > 0 ? money(moneyAt(dollars, prices!)) : "",
     });
     return item;
   };
-  body.querySelector(".claim-tokens")!.replaceChildren(...sorted.slice(0, 3).map(line));
+  list.replaceChildren(...sorted.slice(0, 3).map(line));
   const rest = sorted.slice(3);
-  const more = body.querySelector<HTMLDetailsElement>(".claim-more")!;
   more.hidden = !rest.length;
   const restValue = rest.reduce((sum, { token, amount }) => sum + value(token, amount), 0);
   fill(more, {
-    "claim-more-summary": `${count(rest.length, "more token", "more tokens")}${restValue > 0 ? `, ${money(restValue, prices!)}` : ""}`,
+    "claim-more-summary": `${count(rest.length, "more token", "more tokens")}${restValue > 0 ? `, ${money(moneyAt(restValue, prices!))}` : ""}`,
   });
   more.querySelector(".claim-rest")!.replaceChildren(...rest.map(line));
 }
@@ -132,18 +132,6 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   if (!owing.length) return nothing("Nothing to claim: the keeper may have just claimed it.");
   const totals = paidBy(owing.flatMap(({ owed }) => owed));
   const paid = totals.map(({ token, paid }) => ({ token, amount: paid }));
-  // What waits, and a swap of it, at prices now, as on the swap's page, read while the claim is simulated. Without them,
-  // the review shows tokens only, and swaps none.
-  const pricedNow = pricesNow(
-    [
-      ...paid.flatMap(({ token }) => tokens.get(key(token)) ?? []),
-      ...SWAPPERS.map(({ token, decimals, symbol }) => ({ address: token, decimals, symbol })),
-    ],
-    new Map(paid.map(({ token, amount }) => [key(token), amount])),
-  ).catch((error: unknown) => {
-    console.error(error);
-    return undefined;
-  });
   // Each account's claim, in calls that fit a transaction, or small ones for a Safe to pack together, the most valuable
   // at last epoch's prices first, so that stopping halfway still claims the most.
   const worth = ({ owed }: Claim) =>
@@ -158,10 +146,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     return parts.map((part) => ({ part, whole: parts.length === 1 }));
   });
   const claimSlips = calls.map(({ part, whole }) => claimSlip(part, tokens, whole));
-  const [simulated, prices] = await Promise.all([
-    simulate(connection.address, claimSlips).catch(() => undefined),
-    pricedNow,
-  ]);
+  const simulated = await simulate(connection.address, claimSlips).catch(() => undefined);
   if (simulated?.some(({ ok }) => !ok)) return nothing("Base refused the claim. The keeper may be claiming now.");
   if (simulated?.some(({ gas }) => gas > MAX_CLAIM_GAS)) return nothing("This claim needs more gas than Base allows.");
   // More gas together than one transaction may use: the calls go one at a time, and a Safe proposes them in as few
@@ -171,24 +156,56 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   const groups = claimTransactions(gas);
   const apart = groups.length > 1;
   const body = clone("claim-before");
-  const worthNow = (amounts: Amount[]) => (prices ? money(dollars(amounts, tokens, prices), prices) : "Not read");
-  fill(body, {
-    "claim-earned": worthNow(totals.map(({ token, earned }) => ({ token, amount: earned }))),
-    "claim-fee": prices ? `−${worthNow(totals.map(({ token, fee }) => ({ token, amount: fee })))}` : "Not read",
-    "claim-paid": worthNow(paid),
-    "claim-count": count(totals.length, "token", "tokens"),
-  });
-  tokenLines(
-    body,
-    totals.map(({ token, earned }) => ({ token, amount: earned })),
-    tokens,
-    prices,
+  fill(body, { "claim-count": count(totals.length, "token", "tokens") });
+  // What waits, and a swap of it, at prices now, as on the swap's page. The review opens at once, in tokens, and shows
+  // them in money once read; without them, it stays in tokens, and swaps none.
+  const [earnedLine, feeLine, paidLine, gasLine] = [".claim-earned", ".claim-fee", ".claim-paid", ".claim-gas"].map(
+    (name) => body.querySelector(name)!,
+  ) as [Element, Element, Element, Element];
+  const [tokenList, more] = [
+    body.querySelector(".claim-tokens")!,
+    body.querySelector<HTMLDetailsElement>(".claim-more")!,
+  ];
+  let prices: Prices | undefined;
+  let withSwap: Money | undefined;
+  const sayGas = () => {
+    const cost = simulated && found ? gasCost(totalGas, found, prices) : undefined;
+    gasLine.textContent = `Gas ${cost ? money(cost) : "…"}${withSwap ? `, ${money(withSwap)} with the swap` : ""}`;
+  };
+  const drawPrices = (read: boolean) => {
+    const worth = (amounts: Amount[]) =>
+      prices ? money(moneyAt(dollars(amounts, tokens, prices), prices)) : read ? "Not read" : "…";
+    earnedLine.textContent = worth(totals.map(({ token, earned }) => ({ token, amount: earned })));
+    feeLine.textContent = `${prices ? "−" : ""}${worth(totals.map(({ token, fee }) => ({ token, amount: fee })))}`;
+    paidLine.textContent = worth(paid);
+    tokenLines(
+      tokenList,
+      more,
+      totals.map(({ token, earned }) => ({ token, amount: earned })),
+      tokens,
+      prices,
+    );
+    sayGas();
+  };
+  drawPrices(false);
+  const priced = pricesNow(
+    [
+      ...paid.flatMap(({ token }) => tokens.get(key(token)) ?? []),
+      ...SWAPPERS.map(({ token, decimals, symbol }) => ({ address: token, decimals, symbol })),
+    ],
+    new Map(paid.map(({ token, amount }) => [key(token), amount])),
+  ).then(
+    (read) => {
+      prices = read;
+      drawPrices(true);
+      return read;
+    },
+    (error: unknown) => {
+      console.error(error);
+      drawPrices(true);
+      return undefined;
+    },
   );
-  const claimCost = simulated && found ? gasCost(totalGas, found) : undefined;
-  const gasLine = body.querySelector(".claim-gas")!;
-  const sayGas = (withSwap?: number) =>
-    (gasLine.textContent = `Gas ${claimCost === undefined ? "…" : money(claimCost, found!)}${withSwap === undefined ? "" : `, ${money(withSwap, found!)} with the swap`}`);
-  sayGas();
   // The outputs, in a list to pick from, once swaps are on.
   const select = body.querySelector<HTMLSelectElement>(".claim-output")!;
   select.replaceChildren(
@@ -211,8 +228,8 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
         connection.address,
       ).flatMap(({ paid }) => paid),
     );
-  const asTheyAre = (receipts: Receipt[]) => {
-    const fragment = claimReceipts(receipts, owing, connection.address, tokens, prices);
+  const asTheyAre = async (receipts: Receipt[]) => {
+    const fragment = claimReceipts(receipts, owing, connection.address, tokens, await priced);
     const next = clone("claim-next");
     next.querySelector(".claim-swap-next")!.remove();
     next.querySelector(".claim-swap-failed")!.remove();
@@ -221,7 +238,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     if (!came.length) these.remove();
     else these.addEventListener("click", () => prefill(came));
     fragment.append(next);
-    return Promise.resolve(fragment);
+    return fragment;
   };
   const opened = openReview({
     name,
@@ -244,23 +261,26 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     const id = ++planned;
     into.textContent = "…";
     const gasValue = () => 0n;
-    const routes = await Promise.all(
-      paid.map(async ({ token, amount }) =>
-        same(token, swapper.token)
-          ? undefined
-          : findRoute(token, amount, swapper, true, gasValue).catch(() => undefined),
+    const [routes, current] = await Promise.all([
+      Promise.all(
+        paid.map(async ({ token, amount }) =>
+          same(token, swapper.token)
+            ? undefined
+            : findRoute(token, amount, swapper, true, gasValue).catch(() => undefined),
+        ),
       ),
-    );
+      priced,
+    ]);
     if (id !== planned) return;
-    const outputPrice = prices?.get(key(swapper.token));
+    const outputPrice = current?.get(key(swapper.token));
     // Only tokens whose quote clears their gas twice over are swapped; the others stay as they are.
     const items: Plan["items"] = [];
     const left: string[] = [];
     paid.forEach(({ token, amount }, i) => {
       const route = routes[i];
       if (same(token, swapper.token)) return;
-      // In dollars now: what the quote fetches, or else the token itself.
-      const price = prices?.get(key(token));
+      // At prices now: what the quote fetches, or else the token itself.
+      const price = current?.get(key(token));
       const known = tokens.get(key(token));
       const worth = !route
         ? undefined
@@ -269,7 +289,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
           : price !== undefined && known
             ? usdOf(amount, known.decimals, price)
             : undefined;
-      const cost = found ? (gasCost(route ? route.gas + APPROVAL_GAS : 0n, found) ?? 0) : 0;
+      const cost = found ? (gasCost(route ? route.gas + APPROVAL_GAS : 0n, found, current)?.value ?? 0) : 0;
       if (!route || worth === undefined || worth < 2 * cost)
         return void left.push(tokens.get(key(token))?.symbol ?? token);
       items.push({
@@ -297,7 +317,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       // The claim first; its receipt then opens the swap's own review, for the amounts it brought.
       opened.replace(claimSlips, {
         outcomeOf: (receipts) => {
-          const fragment = claimReceipts(receipts, owing, connection.address, tokens, prices);
+          const fragment = claimReceipts(receipts, owing, connection.address, tokens, current);
           const next = clone("claim-next");
           next.querySelector(".claim-swap-these")!.remove();
           const button = next.querySelector<HTMLButtonElement>(".claim-swap-next")!;
@@ -317,7 +337,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
           if (!exact.items.length) button.remove();
           button.addEventListener("click", () => {
             refused.hidden = true;
-            void openSwapReview(exact, connection, tokens, found).then((reason) => {
+            void openSwapReview(exact, connection, tokens, found, current).then((reason) => {
               if (!reason) return;
               refused.textContent = reason;
               refused.hidden = false;
@@ -338,17 +358,18 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       into.textContent = "Base refused both together: they come as they are.";
       return opened.replace(claimSlips, { outcomeOf: asTheyAre });
     }
-    if (run && found)
-      sayGas(
-        gasCost(
-          run.reduce((sum, { gas }) => sum + gas, 0n),
-          found,
-        ),
+    if (run && found) {
+      withSwap = gasCost(
+        run.reduce((sum, { gas }) => sum + gas, 0n),
+        found,
+        current,
       );
+      sayGas();
+    }
     opened.replace(all, {
       atomic: true,
       outcomeOf: (receipts) => {
-        const fragment = claimReceipts(receipts, owing, connection.address, tokens, prices);
+        const fragment = claimReceipts(receipts, owing, connection.address, tokens, current);
         fragment.append(swapReceipt(receipts, swapPlan, tokens, connection.address));
         return Promise.resolve(fragment);
       },
