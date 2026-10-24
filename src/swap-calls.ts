@@ -1,37 +1,39 @@
 import type { Address } from "viem";
 import { read, rpc } from "./chain.ts";
-import { ANCHORS, WETH, type Swapper } from "./config.ts";
-import { figure, utc } from "./format.ts";
-import { feedAt, type Token } from "./prices.ts";
+import { WETH, type Swapper } from "./config.ts";
+import { figure, utc, type Unit } from "./format.ts";
+import { pricesNow, type Token } from "./prices.ts";
 import type { Field, Slip } from "./review.ts";
 import { MAX_TIP, approve, poolName, poolless, swapCall, venueOf, type Route } from "./swap.ts";
 
 // The calls of a swap, as the review shows them, and what gas costs.
 
 // `tip` is unknown when the RPC suggests none: the wallet then picks its own.
-export type Costs = { gasPrice: bigint; tip: bigint | undefined; ethUsd: number | undefined };
+export type Costs = { gasPrice: bigint; tip: bigint | undefined; ethPrice: number | undefined; unit: Unit };
 let costsRead: { at: number; costs: Promise<Costs> } | undefined;
 
-// The gas price, the tip the page asks for, and ETH's price, read at most once a minute.
+// The gas price, the tip the page asks for, and ETH's price now, as the page prices tokens now, read at most once a
+// minute.
 export function costs(): Promise<Costs> {
   if (costsRead && Date.now() - costsRead.at < 60_000) return costsRead.costs;
-  const { feed } = ANCHORS.find(({ address }) => address === WETH)!;
   const found = Promise.all([
     rpc<string>("eth_gasPrice", []),
     rpc<string>("eth_maxPriorityFeePerGas", []).catch(() => undefined),
-    feedAt(feed, Infinity, read).catch(() => undefined),
-  ]).then(([gasPrice, tip, ethUsd]) => {
+    pricesNow([], new Map(), read).catch(() => undefined),
+  ]).then(([gasPrice, tip, prices]) => {
     const suggested = tip === undefined ? undefined : BigInt(tip);
     const capped = suggested === undefined ? undefined : suggested < MAX_TIP ? suggested : MAX_TIP;
-    return { gasPrice: BigInt(gasPrice), tip: capped, ethUsd };
+    const ethPrice = prices?.get(WETH.toLowerCase());
+    return { gasPrice: BigInt(gasPrice), tip: capped, ethPrice, unit: prices?.unit ?? "USD" };
   });
   costsRead = { at: Date.now(), costs: found };
   found.catch(() => (costsRead = undefined));
   return found;
 }
 
-export const gasUsd = (gas: bigint, { gasPrice, ethUsd }: Costs): number | undefined =>
-  ethUsd === undefined ? undefined : (Number(gas * gasPrice) / 1e18) * ethUsd;
+// What gas costs, in the costs' unit.
+export const gasCost = (gas: bigint, { gasPrice, ethPrice }: Costs): number | undefined =>
+  ethPrice === undefined ? undefined : (Number(gas * gasPrice) / 1e18) * ethPrice;
 
 const symbolOf = (tokens: Map<string, Token>, address: Address): string =>
   tokens.get(address.toLowerCase())?.symbol ?? address;

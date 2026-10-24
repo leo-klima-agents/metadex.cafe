@@ -22,11 +22,11 @@ import {
   earningPower,
   figure,
   list,
+  money,
   short,
   toEarningPower,
   units,
   until,
-  usd,
   utc,
   weekStart,
   when,
@@ -162,14 +162,15 @@ const overdue = (): Entry[] =>
     return entry ? [entry] : [];
   });
 
-// What waits for an overdue account, in words: "≈ $1.84 waits in 9 tokens."
-function waitsLine({ standing, earnings }: Entry): string {
+// What waits for an overdue account, in words, at prices now, or else in tokens: "≈ $1.84 in 9 tokens".
+function waitsLine({ standing }: Entry): string {
   const { waiting, unknown, late } = standing!;
-  const tokens = new Map(earnings!.rewards.map(({ token }) => [token.address.toLowerCase(), token]));
-  const value = dollars(waiting, tokens, earnings!.prices);
+  const priced = appFound?.waiting;
+  const value = priced ? dollars(waiting, priced.tokens, priced.prices) : 0;
   const n = new Set(waiting.map(({ token }) => token.toLowerCase())).size;
   if (!n) return "from the epoch before last";
-  return `${unknown || late ? "at least " : ""}${usd(value)} in ${count(n, "token", "tokens")}`;
+  const tokens = count(n, "token", "tokens");
+  return `${unknown || late ? "at least " : ""}${value > 0 ? `${money(value, priced!.prices.unit)} in ${tokens}` : tokens}`;
 }
 // An account's page that is not the wallet's tells a payout under way from its owner's other accounts, which it reads
 // once while the account awaits its payout.
@@ -291,9 +292,9 @@ function showRecords(): void {
           ? "No record yet"
           : paid === undefined
             ? "…"
-            : usd(per * paid);
+            : money(per.value * paid, per.unit);
     for (const place of placesOf(automation)) {
-      fill(place, { record, "record-unit": typeof per === "number" ? "per 1,000 Earning Power" : "" });
+      fill(place, { record, "record-unit": per ? "per 1,000 Earning Power" : "" });
     }
   }
 }
@@ -462,7 +463,7 @@ function accountItem({ account, status }: Member, group: string, pickable: boole
   else item.querySelector(".status")!.replaceWith(statusLine(status, true));
   const earned = earnedByAccount(account.id);
   if (earned !== undefined) {
-    fill(item, { "earned-usd": usd(earned) });
+    fill(item, { "earned-usd": money(earned.value, earned.unit) });
     show(".earned", true, item);
   }
   show(".late", late.has(account.id), item);
@@ -659,12 +660,12 @@ function estimate(element: Element, accounts: Account[], automation: Automation,
             ? "No record yet"
             : per === undefined || paid === undefined
               ? noEstimate
-              : usd(per * thousands * paid);
+              : money(per.value * thousands * paid, per.unit);
       },
       () => (week.textContent = noEstimate),
     );
   gasCosts()(join(accounts, automation), owner).then(
-    (dollars) => (gas.textContent = dollars === undefined ? "Not read" : usd(dollars)),
+    (cost) => (gas.textContent = cost === undefined ? "Not read" : money(cost.value, cost.unit)),
     (error) => {
       console.error(error);
       gas.textContent = "Not read";
@@ -821,7 +822,7 @@ function showApp(): void {
       line.reading && !line.count
         ? "…"
         : line.count
-          ? `${count(line.count, "token", "tokens")} · ${usd(line.usd)}${line.reading ? " · …" : ""}`
+          ? `${count(line.count, "token", "tokens")} · ${money(line.worth.value, line.worth.unit)}${line.reading ? " · …" : ""}`
           : "Nothing to swap";
   }
   void showAllows(holdings, left);
@@ -970,7 +971,7 @@ function showPosition(): void {
   });
   view.querySelector(".position-status")!.replaceChildren(statusLine(status, !theirs));
   const earned = earnedByAccount(account.id);
-  if (earned !== undefined) fill(view, { "position-earned": usd(earned) });
+  if (earned !== undefined) fill(view, { "position-earned": money(earned.value, earned.unit) });
   show(".position-earned-row", earned !== undefined, view);
   show(".position-owner-row", theirs, view);
   fillAddress(view, "position-owner", owner, short(owner));

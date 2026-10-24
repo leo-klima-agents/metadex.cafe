@@ -16,7 +16,7 @@ import {
   type Automation,
   type Kind,
 } from "./config.ts";
-import { WEEK, clean, list, weekStart } from "./format.ts";
+import { WEEK, clean, list, weekStart, type Money } from "./format.ts";
 import conduits from "./hydrex-conduits.json" with { type: "json" };
 import { costs } from "./swap-calls.ts";
 import type { Slip } from "./review.ts";
@@ -516,11 +516,11 @@ export async function failedChecks(): Promise<Checks> {
   };
 }
 
-// What gas costs in dollars for some calls from `from`, at today's prices: each costs about what the first does, as they
-// differ only by account, plus the most Base charges to post it to Ethereum. Undefined if ETH has no price. The gas
-// price and ETH's price are the swap's, read at most once a minute; what posting costs for each size of call is read
-// once for all the calls priced.
-export type GasCost = (steps: Tx[], from: Address) => Promise<number | undefined>;
+// What gas costs for some calls from `from`, at today's prices: each costs about what the first does, as they differ
+// only by account, plus the most Base charges to post it to Ethereum. Undefined if ETH has no price. The gas price and
+// ETH's price are the swap's, read at most once a minute; what posting costs for each size of call is read once for
+// all the calls priced.
+export type GasCost = (steps: Tx[], from: Address) => Promise<Money | undefined>;
 
 export function gasCosts(): GasCost {
   const posting = new Map<bigint, Promise<bigint>>();
@@ -536,16 +536,16 @@ export function gasCosts(): GasCost {
   };
   return async (steps, from) => {
     const [first] = steps;
-    if (!first) return 0;
+    if (!first) return { value: 0, unit: "USD" };
     // The call's data, and about as much again for the transaction's other fields.
     const size = BigInt((first.data.length - 2) / 2 + 100);
-    const [{ gasPrice, ethUsd }, gas, l1] = await Promise.all([
+    const [{ gasPrice, ethPrice, unit }, gas, l1] = await Promise.all([
       costs(),
       rpc<Hex>("eth_estimateGas", [{ from, to: first.to, data: first.data }]),
       postingOf(size),
     ]);
-    if (ethUsd === undefined) return undefined;
+    if (ethPrice === undefined) return undefined;
     const wei = (BigInt(gas) * gasPrice + l1) * BigInt(steps.length);
-    return (Number(wei) / 1e18) * ethUsd;
+    return { value: (Number(wei) / 1e18) * ethPrice, unit };
   };
 }

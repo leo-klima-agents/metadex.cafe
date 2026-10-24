@@ -253,10 +253,13 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   that record, such as its owner on Hydrex. The page then says that the account was last claimed outside Carbon Impact,
   and shows no receipt.
 - What votes earned is for the last epoch only.
-- Prices are approximate. USDC, WETH, cbBTC and EURC take Chainlink's; other tokens, a half-hour average in their
-  deepest pool against one of those. Prices now, for swaps, come from Aero Basic Pools, Aerodrome Basic Pools, Hydrex
-  Classic Pools and Hydrex Integral, the first of two as deep; prices at an epoch's end, for what it earned and paid,
-  from Hydrex's pools only. A token without a deep enough pool has no price.
+- Prices are approximate. USDC, WETH, cbBTC and EURC take Chainlink's; other tokens, and one of those four whose feed
+  does not answer, a half-hour average in their deepest pool against one of those priced. Prices now, for swaps, gas and
+  what waits to be claimed, come from Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools and Hydrex Integral,
+  the first of two as deep; prices at an epoch's end, for what it earned and paid, from Hydrex's pools only, and only
+  from what they and Chainlink recorded then: a feed without a round of that time, or a pool without its history, gives
+  no price rather than today's. If none of Chainlink's feeds answers, the figures are in USDC instead of dollars, from
+  the pools alone. A token without a deep enough pool has no price.
 - Only the admin key, or a call from the owner's own address made elsewhere, can change a payout address.
 - The swap knows only the tokens on its list, Hydrex's reward tokens, those added by address, and those a wallet lists
   with ERC-7811's `wallet_getAssets`: no RPC lists a wallet's tokens. Routes pass through WETH, USDC, cbBTC and HYDX

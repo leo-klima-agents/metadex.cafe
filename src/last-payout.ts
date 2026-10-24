@@ -4,10 +4,10 @@ import { lastClaimBlocks, readClaimsAt, totals, walkClaims, WALK_LIMIT, type Wal
 import { AUTOMATIONS, AUTOMAXI_FEE_BPS, KEEPER, KVCM, type Automation, type Kind } from "./config.ts";
 import { clone, fill, fillAddress, fillOwn, fillTime, show, showHex, txUrl } from "./dom.ts";
 import { rewardsFor, tokensOf, type Earnings } from "./earnings.ts";
-import { WEEK, amount, bps, listWith, short, usd, utc, weekStart } from "./format.ts";
+import { WEEK, amount, bps, count, listWith, money, short, utc, weekStart } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { lastEarnings } from "./last-epoch.ts";
-import { pricesAtFlip, type Token } from "./prices.ts";
+import { pricesAtFlip, pricesNow, type Prices, type Token } from "./prices.ts";
 import { prefill } from "./swap-view.ts";
 import {
   SETTLED,
@@ -61,7 +61,9 @@ export type Entry = Part & {
   // epoch's flip is due to it.
   due: boolean;
 };
-export type Found = { epochStart: number; entries: Entry[] };
+// What waits for the accounts, at prices now, with the tokens' decimals; without them, it shows in tokens.
+export type Waiting = { tokens: Map<string, Token>; prices: Prices };
+export type Found = { epochStart: number; entries: Entry[]; waiting?: Waiting };
 // A payout under way: the accounts it has reached since the flip, those still due, and when it first paid one.
 export type UnderWay = { paid: Entry[]; left: Entry[]; first: number };
 // A receipt drawn, which is drawn again once prices are read.
@@ -70,7 +72,7 @@ type Drawn = {
   priced: boolean;
   flip: number;
   amounts: Amount[];
-  draw(prices?: Map<string, number>): void;
+  draw(prices?: Prices): void;
 };
 
 // What the five-minute check reads: one call for each account that a payout due since the flip has not reached yet,
@@ -112,9 +114,9 @@ function showAmounts(element: Element, found: Amount[], tokens: Map<string, Toke
   element.replaceChildren(sign, ...listWith<Node | string>(items));
 }
 
-function worth(found: Amount[], tokens: Map<string, Token>, prices: Map<string, number> | undefined): string {
+function worth(found: Amount[], tokens: Map<string, Token>, prices: Prices | undefined): string {
   const total = prices ? dollars(found, tokens, prices) : 0;
-  return total > 0 ? usd(total) : "";
+  return total > 0 ? money(total, prices!.unit) : "";
 }
 
 const kvcm = (found: Amount[]): bigint => found.find(({ token }) => same(token, KVCM))?.amount ?? 0n;
@@ -128,7 +130,7 @@ function fillReceipt(
   time: number,
   tokens: Map<string, Token>,
   own: boolean,
-  prices?: Map<string, number>,
+  prices?: Prices,
 ): void {
   // Rewards claimed as kVCM were not swapped. The shares are of all the kVCM: Carbon Impact retires up to its share,
   // and pays out the rest.
@@ -180,7 +182,7 @@ function fillClaims(
   times: Map<number, number>,
   tokens: Map<string, Token>,
   own: boolean,
-  prices?: Map<string, number>,
+  prices?: Prices,
 ): void {
   const { received, fees, paid } = totals(claims);
   const flip = weekStart(times.get(claims[0]!.block)!);
@@ -231,21 +233,27 @@ function ownWords(element: Element, own: string, theirs: string): void {
   Object.assign((element as HTMLElement).dataset, { own, theirs });
 }
 
-// Dollars at the prices of last epoch's rewards.
-function valueIn(earnings: Earnings): (found: Amount[]) => number {
-  const tokens = new Map(earnings.rewards.map(({ token }) => [token.address.toLowerCase(), token]));
-  return (found) => dollars(found, tokens, earnings.prices);
-}
-
-// What waits to be claimed in last epoch's pools, as far as it could be read.
-function waitingLine({ waiting, unknown }: Standing, earnings: Earnings): string {
-  const value = valueIn(earnings)(waiting);
-  if (unknown && value > 0) return `At least ${usd(value)} waiting`;
+// What waits to be claimed in last epoch's pools, as far as it could be read: at prices now, or else in tokens.
+function waitingLine({ waiting, unknown }: Standing, priced: Waiting | undefined): string {
+  const value = priced ? dollars(waiting, priced.tokens, priced.prices) : 0;
+  const n = new Set(waiting.map(({ token }) => token.toLowerCase())).size;
+  const what = value > 0 ? money(value, priced!.prices.unit) : n ? count(n, "token", "tokens") : "";
+  if (unknown && what) return `At least ${what} waiting`;
   if (unknown) return "Waiting: not read";
-  return value > 0 ? `${usd(value)} waiting` : "Nothing waiting";
+  return what ? `${what} waiting` : "Nothing waiting";
 }
 
-function standingItem(entry: Entry, epochStart: number, own: boolean, receipt?: HTMLElement) {
+// What waits for the accounts, at prices now. A pool must be deep enough for the most of a token that waits for one.
+async function waitingNow(standings: (Standing | undefined)[]): Promise<Waiting | undefined> {
+  const amounts = new Map<string, bigint>();
+  for (const { token, amount: value } of standings.flatMap((standing) => standing?.waiting ?? []))
+    if (value > (amounts.get(token.toLowerCase()) ?? 0n)) amounts.set(token.toLowerCase(), value);
+  if (!amounts.size) return undefined;
+  const tokens = await tokensOf([...amounts.keys()] as Address[], readLater);
+  return { tokens, prices: await pricesNow([...tokens.values()], amounts, readLater) };
+}
+
+function standingItem(entry: Entry, epochStart: number, own: boolean, waiting?: Waiting, receipt?: HTMLElement) {
   const { automation, voter, account, standing, earnings, early, note, time } = entry;
   const item = clone("standing");
   const through = standing?.through ?? 0;
@@ -253,7 +261,7 @@ function standingItem(entry: Entry, epochStart: number, own: boolean, receipt?: 
   fill(item, {
     "standing-automation": automation.name,
     "standing-voter": voter.name,
-    "standing-waiting": standing && earnings ? waitingLine(standing, earnings) : "",
+    "standing-waiting": standing && earnings ? waitingLine(standing, waiting) : "",
   });
   if (through) fillTime(item, "standing-through", through);
   fillTime(item, "late-from", epochStart - 2 * WEEK);
@@ -418,6 +426,13 @@ async function readPayouts(holdings: Holdings, members: Account[]): Promise<Foun
       }
     }),
   );
+  // What waits, at prices now, priced while the receipts are read.
+  const waiting = standings
+    .then(() => waitingNow(members.map(({ id }) => standingFor(id))))
+    .catch((error: unknown) => {
+      console.error(error);
+      return undefined;
+    });
   // Each automation's receipts, from the standings once read, where its reader needs them.
   const parts = new Map<bigint, Part>();
   await Promise.all(
@@ -432,6 +447,7 @@ async function readPayouts(holdings: Holdings, members: Account[]): Promise<Foun
     }),
   );
   await standings;
+  const priced = await waiting;
   const entries = members.map((account): Entry => {
     const automation = automationOf(account)!;
     const found = read.get(account.id);
@@ -450,7 +466,7 @@ async function readPayouts(holdings: Holdings, members: Account[]): Promise<Foun
   });
   if (entries.every(({ earnings, early }) => !earnings && !early))
     throw new Error("No automation's payouts could be read.");
-  return { epochStart, entries };
+  return { epochStart, entries, ...(priced && { waiting: priced }) };
 }
 
 export type Payouts = {
@@ -593,8 +609,8 @@ export function payouts(
   };
 }
 
-// Each standing, with the receipt of the account's last payout. Dollars need many more reads, so they come after, at
-// the prices of the flip before each payout, flip by flip at once. Without them, the receipts show tokens only.
+// Each standing, with the receipt of the account's last payout. Prices need many more reads, so they come after: those
+// of the flip before each payout, flip by flip at once. Without them, the receipts show tokens only.
 async function draw(
   section: HTMLElement,
   holdings: Holdings,
@@ -625,15 +641,14 @@ async function draw(
       key = `${owner} ${payout.id} ${payout.block}`;
       make = () => {
         const node = clone("receipt").firstElementChild as HTMLElement;
-        const draw = (prices?: Map<string, number>) =>
-          fillReceipt(node, payout, holdings.owner, time, tokens, own(), prices);
+        const draw = (prices?: Prices) => fillReceipt(node, payout, holdings.owner, time, tokens, own(), prices);
         return { node, priced: false, flip: weekStart(time), amounts: [...payout.earned, ...payout.paid], draw };
       };
     } else if (walk?.claims.length) {
       key = `${owner} ${automation.kind} ${account.id} ${walk.claims.map(({ tx }) => tx).join(" ")}`;
       make = () => {
         const node = clone("claims-receipt").firstElementChild as HTMLElement;
-        const draw = (prices?: Map<string, number>) =>
+        const draw = (prices?: Prices) =>
           fillClaims(node, account.id, holdings.owner, walk, times, tokens, own(), prices);
         const flip = weekStart(times.get(walk.claims[0]!.block)!);
         return { node, priced: false, flip, amounts: totals(walk.claims).received, draw };
@@ -651,7 +666,9 @@ async function draw(
   section
     .querySelector(".standings")!
     .replaceChildren(
-      ...found.entries.map((entry) => standingItem(entry, found.epochStart, own(), receipts.get(entry)?.node)),
+      ...found.entries.map((entry) =>
+        standingItem(entry, found.epochStart, own(), found.waiting, receipts.get(entry)?.node),
+      ),
     );
   const unpriced = [...new Set(receipts.values())].filter(({ priced }) => !priced);
   void Promise.all(

@@ -229,10 +229,11 @@ For the four kinds of product:
 | Manages a liquidity position                 | Of fees and emissions: [10%]           | [cap]           | [Operator]               | Each collection  | A swap a move | [Role, delay]            |
 
 **Money.** Earned, then taken, then what reached you, always in that order, with a bar split the same way. Dollars at
-the prices in the protocol's pools when the epoch ended, marked ≈, with the tokens beside them. Per position for the
-owner; per 1,000 units of voting power to compare products. A benchmark beside each figure (the average, doing it
-yourself, or holding the two tokens), whether the product is ahead or behind. For a small position, the gas of a change
-next to a week's earnings. An APR only with the epochs it covers, and a projection says it is one.
+the prices in the protocol's pools when the epoch ended, or, for what waits to be claimed, now, marked ≈, with the
+tokens beside them; in USDC where no dollar price can be found for the time. Per position for the owner; per 1,000 units
+of voting power to compare products. A benchmark beside each figure (the average, doing it yourself, or holding the two
+tokens), whether the product is ahead or behind. For a small position, the gas of a change next to a week's earnings. An
+APR only with the epochs it covers, and a projection says it is one.
 
 **Custody and leaving,** one line before anything else:
 

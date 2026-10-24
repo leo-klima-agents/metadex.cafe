@@ -4,14 +4,22 @@ import {
   ANCHORS,
   HYDREX_PRICING,
   SWAP_PRICING,
+  USDC,
   type Anchor,
   type Exchange,
   type ExchangeKind,
   type Feed,
 } from "./config.ts";
+import type { Unit } from "./format.ts";
 import { exchangeOf, pairKey, waysFor } from "./pools.ts";
 
 export type Token = { address: Address; decimals: number; symbol: string };
+// Prices per whole token, by lower-case address: in dollars, or in USDC when none of Chainlink's dollar prices for the
+// time could be found.
+export type Prices = Map<string, number> & { unit: Unit };
+
+export const pricesIn = (unit: Unit, entries: [string, number][] = []): Prices =>
+  Object.assign(new Map(entries), { unit });
 
 // Pools are averaged over the half hour before the flip, when rewards become final.
 export const WINDOW = 1800;
@@ -48,8 +56,8 @@ type Round = readonly [bigint, bigint, bigint, bigint, bigint];
 // Running sums of a pool's reserves: [timestamp, reserve0, reserve1].
 type Observation = readonly [bigint, bigint, bigint];
 type Pool = { address: Address; exchange: Exchange; stable: boolean; token: Token; anchor: Anchor };
-// A pool now: the token's price in dollars, its depth, and its reads past the reserves.
-type Measured = { pool: Pool; usd: number; depth: number; state: unknown[] };
+// A pool now: the token's price, its depth, both in the prices' unit, and its reads past the reserves.
+type Measured = { pool: Pool; spot: number; depth: number; state: unknown[] };
 
 const key = (address: string): string => address.toLowerCase();
 const whole = (amount: bigint, decimals: number): number => Number(amount) / 10 ** decimals;
@@ -121,8 +129,9 @@ export async function narrow(searches: Search[], reader: typeof read = read): Pr
   }
 }
 
-// Chainlink's prices at the flip, or today's if the round then cannot be found; Infinity is today. One read for the
-// latest rounds, then one search for the feeds updated since the flip. A feed that does not answer has no price.
+// Chainlink's prices at the flip; Infinity is now. One read for the latest rounds, then one search for the feeds updated
+// since the flip. A feed that does not answer has no price, nor one whose round then cannot be found, as when the feed
+// moved to a new aggregator since: a price from another time would pass for the flip's.
 export async function feedsAt(
   feeds: Feed[],
   flip: number,
@@ -150,14 +159,14 @@ export async function feedsAt(
   );
   return feeds.map(({ decimals }, i) => {
     const search = searches[i];
-    const before = search && !search.failed ? (search.seen.get(search.hi - 1) as Round | undefined) : undefined;
-    const round = before ?? latest[i];
+    const round = search
+      ? search.failed
+        ? undefined
+        : (search.seen.get(search.hi - 1) as Round | undefined)
+      : latest[i];
     return round && Number(round[1]) / 10 ** decimals;
   });
 }
-
-export const feedAt = async (feed: Feed, flip: number, reader: typeof read = read): Promise<number | undefined> =>
-  (await feedsAt([feed], flip, reader))[0];
 
 // Every kind of pool sorts its two tokens by address.
 const tokenFirst = ({ token, anchor }: Pool): boolean => key(token.address) < key(anchor.address);
@@ -296,18 +305,20 @@ async function measure(
     const [decimals0, decimals1] = decimalsOf(pool);
     const [reserve0, reserve1] = [whole(reserves[0]!, decimals0), whole(reserves[1]!, decimals1)];
     if (!(reserve0 > 0 && reserve1 > 0)) return [];
-    const anchorUsd = prices.get(key(pool.anchor.address))!;
-    const usd = inAnchor(pool, kind.spot(reserve0, reserve1, state, pool)) * anchorUsd;
+    const anchorPrice = prices.get(key(pool.anchor.address))!;
+    const spot = inAnchor(pool, kind.spot(reserve0, reserve1, state, pool)) * anchorPrice;
     const [tokenReserve, anchorReserve] = tokenFirst(pool) ? [reserve0, reserve1] : [reserve1, reserve0];
-    const depth = Math.min(tokenReserve * usd, anchorReserve * anchorUsd);
-    const value = whole(amounts.get(key(pool.token.address)) ?? 0n, pool.token.decimals) * usd;
-    return Number.isFinite(usd) && depth >= Math.max(FLOOR, DEPTH * value) ? [{ pool, usd, depth, state }] : [];
+    const depth = Math.min(tokenReserve * spot, anchorReserve * anchorPrice);
+    const value = whole(amounts.get(key(pool.token.address)) ?? 0n, pool.token.decimals) * spot;
+    return Number.isFinite(spot) && depth >= Math.max(FLOOR, DEPTH * value) ? [{ pool, spot, depth, state }] : [];
   });
 }
 
-// Dollars per whole token at the flip, by lower-case address. Anchors take their feed. Other tokens, and an anchor whose
-// feed fails, take the deepest pool against a priced anchor, the first in `exchanges` order if two are as deep: its
-// average over the window, or its price now if its history falls short. `amounts` is how much will be priced.
+// Prices per whole token at the flip, by lower-case address. Anchors take their feed, in dollars; if none answers for
+// the flip, the prices are in USDC, at 1 USDC each. Then, each against the anchors priced by then, first the anchors
+// without a price, then the other tokens, take the deepest pool, the first in `exchanges` order if two are as deep: its
+// average over the window. For prices now, a pool whose history falls short gives its price now; for a past flip, it
+// gives none, so that every price is of the flip. `amounts` is how much will be priced.
 export async function pricesAt(
   tokens: Token[],
   amounts: Map<string, bigint>,
@@ -315,28 +326,52 @@ export async function pricesAt(
   time: number,
   exchanges: Exchange[],
   reader: typeof read = read,
-): Promise<Map<string, number>> {
+): Promise<Prices> {
   exchanges.forEach(kindOf);
-  const prices = new Map<string, number>();
   const feeds = await feedsAt(
     ANCHORS.map(({ feed }) => feed),
     flip,
     reader,
   );
-  ANCHORS.forEach(({ address }, i) => {
-    const price = feeds[i];
-    if (price !== undefined) prices.set(key(address), price);
-  });
-  const anchors = ANCHORS.filter(({ address }) => prices.has(key(address)));
+  const fed = ANCHORS.flatMap(({ address }, i): [string, number][] =>
+    feeds[i] === undefined ? [] : [[key(address), feeds[i]]],
+  );
+  const prices = fed.length ? pricesIn("USD", fed) : pricesIn("USDC", [[key(USDC), 1]]);
+  const unpriced = ANCHORS.filter(({ address }) => !prices.has(key(address)));
+  const ago = Math.max(0, time - flip);
+  await inPools(
+    unpriced.map(({ address, decimals }) => ({ address, decimals, symbol: "" })),
+    prices,
+    amounts,
+    flip,
+    ago,
+    exchanges,
+    reader,
+  );
   const others = tokens.filter(({ address }) => !prices.has(key(address)));
-  const measured = await measure(await candidates(others, anchors, exchanges, reader), prices, amounts, reader);
+  await inPools(others, prices, amounts, flip, ago, exchanges, reader);
+  return prices;
+}
+
+// Prices the tokens in their deepest pools against the anchors priced, `ago` seconds after the flip.
+async function inPools(
+  tokens: Token[],
+  prices: Prices,
+  amounts: Map<string, bigint>,
+  flip: number,
+  ago: number,
+  exchanges: Exchange[],
+  reader: typeof read,
+): Promise<void> {
+  if (!tokens.length) return;
+  const anchors = ANCHORS.filter(({ address }) => prices.has(key(address)));
+  const measured = await measure(await candidates(tokens, anchors, exchanges, reader), prices, amounts, reader);
   const deepest = new Map<string, Measured>();
   for (const entry of measured) {
     const held = deepest.get(key(entry.pool.token.address));
     if (!held || entry.depth > held.depth) deepest.set(key(entry.pool.token.address), entry);
   }
   const chosen = [...deepest.values()];
-  const ago = Math.max(0, time - flip);
   const histories = chosen.map((entry) => kindOf(entry.pool.exchange).history(entry, flip, ago));
   const [replies] = await Promise.all([
     reader(histories.flatMap(({ calls }) => calls)),
@@ -346,14 +381,14 @@ export async function pricesAt(
     ),
   ]);
   let next = 0;
-  chosen.forEach(({ pool, usd }, i) => {
+  chosen.forEach(({ pool, spot }, i) => {
     const { calls, price } = histories[i]!;
     const price0 = price(replies.slice(next, (next += calls.length)));
-    // No history, or none above zero: the price now.
     const atFlip = price0 === undefined ? undefined : inAnchor(pool, price0) * prices.get(key(pool.anchor.address))!;
-    prices.set(key(pool.token.address), atFlip !== undefined && Number.isFinite(atFlip) && atFlip > 0 ? atFlip : usd);
+    // No history, or none above zero: the price now, if now is the time priced.
+    const found = atFlip !== undefined && Number.isFinite(atFlip) && atFlip > 0 ? atFlip : ago ? undefined : spot;
+    if (found !== undefined) prices.set(key(pool.token.address), found);
   });
-  return prices;
 }
 
 // Prices now, for the swap and anything else current: in SWAP_PRICING's pools.

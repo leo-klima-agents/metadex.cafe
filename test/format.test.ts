@@ -13,10 +13,10 @@ import {
   fraction,
   hexLines,
   listWith,
+  money,
   short,
   units,
   until,
-  usd,
   walletLines,
   weekStart,
   when,
@@ -80,12 +80,16 @@ test("counts, with plurals", () => {
   assert.equal(count(1234, "empty account", "empty accounts"), "1,234 empty accounts");
 });
 
-test("dollars are approximate, with no break after the sign", () => {
-  assert.equal(usd(692.85), "≈\u00a0$693");
-  assert.equal(usd(0.7724), "≈\u00a0$0.77");
-  assert.equal(usd(111_078.6), "≈\u00a0$111,079");
-  assert.equal(usd(0.001), "<\u00a0$0.01");
-  assert.equal(usd(0), "$0");
+test("what prices value is approximate, in dollars or USDC, with no break after the sign or before the unit", () => {
+  assert.equal(money(692.85), "≈\u00a0$693");
+  assert.equal(money(0.7724), "≈\u00a0$0.77");
+  assert.equal(money(111_078.6), "≈\u00a0$111,079");
+  assert.equal(money(0.001), "<\u00a0$0.01");
+  assert.equal(money(0), "$0");
+  assert.equal(money(692.85, "USDC"), "≈\u00a0693\u00a0USDC");
+  assert.equal(money(0.7724, "USDC"), "≈\u00a00.77\u00a0USDC");
+  assert.equal(money(0.001, "USDC"), "<\u00a00.01\u00a0USDC");
+  assert.equal(money(0, "USDC"), "0\u00a0USDC");
 });
 
 test("large numbers of votes, and shares", () => {

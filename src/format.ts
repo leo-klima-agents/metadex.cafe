@@ -56,12 +56,19 @@ const dollars = (digits: number) =>
   });
 const [cents, noCents] = [dollars(2), dollars(0)];
 
-// Prices are approximate, so dollars are too: "≈ $692", "≈ $0.77", "< $0.01". The no-break space keeps the sign with
-// the number.
-export function usd(value: number): string {
-  if (value === 0) return noCents.format(0);
-  if (value > 0 && value < 0.005) return `<\u00a0${cents.format(0.01)}`;
-  return `≈\u00a0${(Math.abs(value) >= 100 ? noCents : cents).format(value)}`;
+// What prices are in: dollars, or USDC when no dollar price could be found for the time.
+export type Unit = "USD" | "USDC";
+// A sum at some prices, in their unit.
+export type Money = { value: number; unit: Unit };
+
+// Prices are approximate, so what they value is too: "≈ $692", "≈ $0.77", "< $0.01", or in USDC, "≈ 0.77 USDC". The
+// no-break spaces keep the sign and the unit with the number.
+export function money(value: number, unit: Unit = "USD"): string {
+  const [withCents, without] = unit === "USD" ? [cents, noCents] : [hundredths, whole];
+  const of = (formatted: string) => (unit === "USD" ? formatted : `${formatted}\u00a0USDC`);
+  if (value === 0) return of(without.format(0));
+  if (value > 0 && value < 0.005) return `<\u00a0${of(withCents.format(0.01))}`;
+  return `≈\u00a0${of((Math.abs(value) >= 100 ? without : withCents).format(value))}`;
 }
 
 // Hydrex shows Earning Power as 1.3 times the votes.

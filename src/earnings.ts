@@ -2,7 +2,7 @@ import { parseAbi, type Address } from "viem";
 import { blockTime, call, read, readLater, required, same } from "./chain.ts";
 import { WEEK, clean } from "./format.ts";
 import { escrow, voter } from "./hydrex.ts";
-import { pricesAtFlip, usdOf, type Token } from "./prices.ts";
+import { pricesAtFlip, pricesIn, usdOf, type Prices, type Token } from "./prices.ts";
 
 // What votes earned in an epoch that has ended, from Hydrex's reward contracts. Each pool's gauge has two: one for the
 // pool's fees and one for incentives. They keep each epoch's votes and rewards, so an ended epoch's figures are final.
@@ -16,8 +16,8 @@ export type Earnings = {
   votes: bigint;
   pools: Pool[];
   rewards: Reward[];
-  // Dollars per whole token, by lower-case address.
-  prices: Map<string, number>;
+  // At the flip that ended it.
+  prices: Prices;
 };
 
 const rewardsAbi = parseAbi([
@@ -171,7 +171,7 @@ export async function readEarnings(automation: Address, known?: number): Promise
       escrow("getPastVotes", automation, start),
     ]),
   ) as bigint[];
-  if (!votes) return { start, votes: 0n, pools: [], rewards: [], prices: new Map() };
+  if (!votes) return { start, votes: 0n, pools: [], rewards: [], prices: pricesIn("USD") };
   const pools =
     Number(voted) >= start + WEEK
       ? await allPools()
@@ -262,17 +262,17 @@ export async function sharesOf(
   );
 }
 
-// Dollars earned, in all and by pool. A token without a price counts for nothing.
+// What was earned, in all and by pool, in the prices' unit. A token without a price counts for nothing.
 export function valueOf({ rewards, prices }: Earnings) {
   let [fees, incentives] = [0, 0];
   const byPool = new Map<string, number>();
   for (const { pool, token, amount, fee } of rewards) {
     const price = prices.get(token.address.toLowerCase());
     if (price === undefined) continue;
-    const usd = usdOf(amount, token.decimals, price);
-    byPool.set(pool.toLowerCase(), (byPool.get(pool.toLowerCase()) ?? 0) + usd);
-    if (fee) fees += usd;
-    else incentives += usd;
+    const value = usdOf(amount, token.decimals, price);
+    byPool.set(pool.toLowerCase(), (byPool.get(pool.toLowerCase()) ?? 0) + value);
+    if (fee) fees += value;
+    else incentives += value;
   }
-  return { usd: fees + incentives, fees, incentives, byPool };
+  return { total: fees + incentives, fees, incentives, byPool, unit: prices.unit };
 }

@@ -1,7 +1,7 @@
 import { AUTOMATIONS, byKind, type Automation, type Kind } from "./config.ts";
 import { clone, fill, fillAddress, isOpen, show } from "./dom.ts";
 import { readAllEarnings, readEarnings, sharesOf, valueOf, type Earnings } from "./earnings.ts";
-import { WEEK, compact, count, fraction, toEarningPower, usd } from "./format.ts";
+import { WEEK, compact, count, fraction, money, toEarningPower, type Money } from "./format.ts";
 import type { Holdings } from "./hydrex.ts";
 
 // What the automations' votes earned last epoch: each automation's line on the menu and on its page, each account's
@@ -115,12 +115,13 @@ export async function loadShares(holdings: Holdings, automations: Automation[]):
   return read.includes(true);
 }
 
-// What the account's votes earned in the epoch shown, in dollars, if it was in one of the automations then.
-export function earnedByAccount(id: bigint): number | undefined {
+// What the account's votes earned in the epoch shown, at its prices, if it was in one of the automations then.
+export function earnedByAccount(id: bigint): Money | undefined {
   for (const [kind, { start, of }] of shares) {
     const read = earned.get(kind);
     const part = of.get(id);
-    if (read && start === read.found.start && part !== undefined) return part * read.value.usd;
+    if (read && start === read.found.start && part !== undefined)
+      return { value: part * read.value.total, unit: read.value.unit };
   }
   return undefined;
 }
@@ -128,26 +129,26 @@ export function earnedByAccount(id: bigint): number | undefined {
 // An automation's figures shown, if read.
 export const earningsOf = (automation: Automation): Earnings | undefined => earned.get(automation.kind)?.found;
 
-// Last epoch's dollars per 1,000 Earning Power for an automation: undefined until read, and null if it had no votes
-// then, so no record yet.
-export function perThousandOf(automation: Automation): number | null | undefined {
+// What an automation earned last epoch per 1,000 Earning Power, at last epoch's prices: undefined until read, and null
+// if it had no votes then, so no record yet.
+export function perThousandOf(automation: Automation): Money | null | undefined {
   const read = earned.get(automation.kind);
   if (!read) return undefined;
-  return read.found.votes ? perThousand(read.value.usd, read.found.votes) : null;
+  return read.found.votes ? { value: perThousand(read.value.total, read.found.votes), unit: read.value.unit } : null;
 }
 
 const perThousand = (value: number, votes: bigint): number =>
   votes > 0n ? value / (Number(toEarningPower(votes)) / 1e21) : 0;
 
 function showColumn(table: HTMLElement, column: "ours" | "all", { votes, pools }: Earnings, value?: Value): void {
-  const per = value && perThousand(value.usd, votes);
+  const per = value && perThousand(value.total, votes);
   fill(table, {
     [`${column}.earning-power`]: compact(toEarningPower(votes)),
     [`${column}.pools`]: count(pools.length, "pool", "pools"),
-    [`${column}.earned`]: value ? usd(value.usd) : "…",
-    [`${column}.fees`]: value ? usd(value.fees) : "…",
-    [`${column}.incentives`]: value ? usd(value.incentives) : "…",
-    [`${column}.per-power`]: per === undefined ? "…" : usd(per),
+    [`${column}.earned`]: value ? money(value.total, value.unit) : "…",
+    [`${column}.fees`]: value ? money(value.fees, value.unit) : "…",
+    [`${column}.incentives`]: value ? money(value.incentives, value.unit) : "…",
+    [`${column}.per-power`]: per === undefined ? "…" : money(per, value!.unit),
   });
 }
 
@@ -156,7 +157,7 @@ function showPools(fold: HTMLElement, { pools, votes }: Earnings, value: Value):
     const row = clone("earned-pool");
     fillAddress(row, "pool", pool.address, pool.name);
     const earnedThere = value.byPool.get(pool.address.toLowerCase()) ?? 0;
-    fill(row, { share: fraction(Number(pool.votes) / Number(votes)), usd: usd(earnedThere) });
+    fill(row, { share: fraction(Number(pool.votes) / Number(votes)), usd: money(earnedThere, value.unit) });
     return row;
   });
   fold.querySelector(".earned-pools tbody")!.replaceChildren(...rows);
@@ -211,7 +212,7 @@ function compare(automation: Automation): void {
       const average = valueOf(all);
       showColumn(table, "ours", mine, ours);
       showColumn(table, "all", all, average);
-      const ratio = perThousand(ours.usd, mine.votes) / perThousand(average.usd, all.votes);
+      const ratio = perThousand(ours.total, mine.votes) / perThousand(average.total, all.votes);
       versus.textContent =
         Math.abs(ratio - 1) < 0.005
           ? "About Hydrex's average"

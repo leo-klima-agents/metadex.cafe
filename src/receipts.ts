@@ -254,7 +254,8 @@ export async function readEarned(
   return byAccount(values as (bigint | undefined)[], ids, pairs);
 }
 
-// Dollars at the given prices. A token without a price, or whose decimals are unknown, counts for nothing.
+// What the amounts are worth at the given prices, in their unit. A token without a price, or whose decimals are unknown,
+// counts for nothing.
 export function dollars(found: Amount[], tokens: Map<string, Token>, prices: Map<string, number>): number {
   return found.reduce((sum, { token, amount }) => {
     const [known, price] = [tokens.get(token.toLowerCase()), prices.get(token.toLowerCase())];

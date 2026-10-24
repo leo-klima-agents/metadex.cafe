@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Address } from "viem";
 import { earnedBy, valueOf, type Earnings } from "../src/earnings.ts";
-import type { Token } from "../src/prices.ts";
+import { pricesIn, type Token } from "../src/prices.ts";
 
 const USDC: Token = { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, symbol: "USDC" };
 const HYDX: Token = { address: "0x00000e7efa313F4E11Bfff432471eD9423AC6B30", decimals: 18, symbol: "HYDX" };
@@ -19,7 +19,7 @@ test("a voter's share of a reward contract's rewards rounds down, as the contrac
   assert.equal(earnedBy(0n, 5n, 5n), 0n);
 });
 
-test("what votes earned, in dollars: fees and incentives apart, and by pool; a token without a price counts for nothing", () => {
+test("what votes earned, in the prices' unit: fees and incentives apart, and by pool; a token without a price counts for nothing", () => {
   const earnings: Earnings = {
     start: 1_791_417_600,
     votes: 897_042n * 10n ** 18n,
@@ -33,7 +33,7 @@ test("what votes earned, in dollars: fees and incentives apart, and by pool; a t
       { pool: POOL, contract: FEES, token: HYDX, amount: 27n * 10n ** 18n, fee: true },
       { pool: OTHER, contract: INCENTIVES, token: WFRAX, amount: 10n ** 17n, fee: false },
     ],
-    prices: new Map([
+    prices: pricesIn("USD", [
       [USDC.address.toLowerCase(), 1],
       [HYDX.address.toLowerCase(), 0.025],
     ]),
@@ -41,7 +41,8 @@ test("what votes earned, in dollars: fees and incentives apart, and by pool; a t
   const value = valueOf(earnings);
   assert.ok(Math.abs(value.fees - (14.099868 + 0.675)) < 1e-9);
   assert.ok(Math.abs(value.incentives - 663.16829) < 1e-9);
-  assert.equal(value.usd, value.fees + value.incentives);
+  assert.equal(value.total, value.fees + value.incentives);
+  assert.equal(value.unit, "USD");
   assert.ok(Math.abs(value.byPool.get(POOL.toLowerCase())! - (14.099868 + 0.675)) < 1e-9);
   assert.ok(Math.abs(value.byPool.get(OTHER.toLowerCase())! - 663.16829) < 1e-9, "WFRAX adds nothing");
 });
