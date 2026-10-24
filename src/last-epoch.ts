@@ -1,7 +1,7 @@
 import { AUTOMATIONS, byKind, type Automation, type Kind } from "./config.ts";
 import { clone, fill, fillAddress, isOpen, show } from "./dom.ts";
 import { readAllEarnings, readEarnings, sharesOf, valueOf, type Earnings } from "./earnings.ts";
-import { WEEK, compact, count, fraction, money, toEarningPower, type Money } from "./format.ts";
+import { WEEK, compact, count, fraction, money, onCurrency, toEarningPower, type Money } from "./format.ts";
 import type { Holdings } from "./hydrex.ts";
 
 // What the automations' votes earned last epoch: each automation's line on the menu and on its page, each account's
@@ -121,7 +121,7 @@ export function earnedByAccount(id: bigint): Money | undefined {
     const read = earned.get(kind);
     const part = of.get(id);
     if (read && start === read.found.start && part !== undefined)
-      return { value: part * read.value.total, unit: read.value.unit };
+      return { value: part * read.value.total, unit: read.value.unit, eurUsd: read.value.eurUsd };
   }
   return undefined;
 }
@@ -134,7 +134,8 @@ export const earningsOf = (automation: Automation): Earnings | undefined => earn
 export function perThousandOf(automation: Automation): Money | null | undefined {
   const read = earned.get(automation.kind);
   if (!read) return undefined;
-  return read.found.votes ? { value: perThousand(read.value.total, read.found.votes), unit: read.value.unit } : null;
+  const { total, unit, eurUsd } = read.value;
+  return read.found.votes ? { value: perThousand(total, read.found.votes), unit, eurUsd } : null;
 }
 
 const perThousand = (value: number, votes: bigint): number =>
@@ -145,10 +146,10 @@ function showColumn(table: HTMLElement, column: "ours" | "all", { votes, pools }
   fill(table, {
     [`${column}.earning-power`]: compact(toEarningPower(votes)),
     [`${column}.pools`]: count(pools.length, "pool", "pools"),
-    [`${column}.earned`]: value ? money(value.total, value.unit) : "…",
-    [`${column}.fees`]: value ? money(value.fees, value.unit) : "…",
-    [`${column}.incentives`]: value ? money(value.incentives, value.unit) : "…",
-    [`${column}.per-power`]: per === undefined ? "…" : money(per, value!.unit),
+    [`${column}.earned`]: value ? money(value.total, value) : "…",
+    [`${column}.fees`]: value ? money(value.fees, value) : "…",
+    [`${column}.incentives`]: value ? money(value.incentives, value) : "…",
+    [`${column}.per-power`]: per === undefined ? "…" : money(per, value!),
   });
 }
 
@@ -157,7 +158,7 @@ function showPools(fold: HTMLElement, { pools, votes }: Earnings, value: Value):
     const row = clone("earned-pool");
     fillAddress(row, "pool", pool.address, pool.name);
     const earnedThere = value.byPool.get(pool.address.toLowerCase()) ?? 0;
-    fill(row, { share: fraction(Number(pool.votes) / Number(votes)), usd: money(earnedThere, value.unit) });
+    fill(row, { share: fraction(Number(pool.votes) / Number(votes)), usd: money(earnedThere, value) });
     return row;
   });
   fold.querySelector(".earned-pools tbody")!.replaceChildren(...rows);
@@ -244,6 +245,11 @@ onEarnings((kind, outcome) => {
 export function showAbsent(automation: Automation): void {
   part(foldOf(automation), "record-waiting").textContent = "Not on Base yet.";
 }
+
+// Another currency: each automation's figures again, and their comparison, from the reads made.
+onCurrency(() => {
+  for (const [kind, read] of earned) showEarnings(byKind(kind)!, read);
+});
 
 for (const automation of AUTOMATIONS) {
   const fold = foldOf(automation);

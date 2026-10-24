@@ -1,7 +1,7 @@
 import type { Address } from "viem";
 import { read, rpc } from "./chain.ts";
 import { WETH, type Swapper } from "./config.ts";
-import { figure, utc, type Unit } from "./format.ts";
+import { figure, utc, type Basis } from "./format.ts";
 import { pricesNow, type Token } from "./prices.ts";
 import type { Field, Slip } from "./review.ts";
 import { MAX_TIP, approve, poolName, poolless, swapCall, venueOf, type Route } from "./swap.ts";
@@ -9,7 +9,7 @@ import { MAX_TIP, approve, poolName, poolless, swapCall, venueOf, type Route } f
 // The calls of a swap, as the review shows them, and what gas costs.
 
 // `tip` is unknown when the RPC suggests none: the wallet then picks its own.
-export type Costs = { gasPrice: bigint; tip: bigint | undefined; ethPrice: number | undefined; unit: Unit };
+export type Costs = Basis & { gasPrice: bigint; tip: bigint | undefined; ethPrice: number | undefined };
 let costsRead: { at: number; costs: Promise<Costs> } | undefined;
 
 // The gas price, the tip the page asks for, and ETH's price now, as the page prices tokens now, read at most once a
@@ -24,7 +24,7 @@ export function costs(): Promise<Costs> {
     const suggested = tip === undefined ? undefined : BigInt(tip);
     const capped = suggested === undefined ? undefined : suggested < MAX_TIP ? suggested : MAX_TIP;
     const ethPrice = prices?.get(WETH.toLowerCase());
-    return { gasPrice: BigInt(gasPrice), tip: capped, ethPrice, unit: prices?.unit ?? "USD" };
+    return { gasPrice: BigInt(gasPrice), tip: capped, ethPrice, unit: prices?.unit ?? "USD", eurUsd: prices?.eurUsd };
   });
   costsRead = { at: Date.now(), costs: found };
   found.catch(() => (costsRead = undefined));

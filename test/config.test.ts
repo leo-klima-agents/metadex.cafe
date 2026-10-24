@@ -120,14 +120,21 @@ test("each automation's page has the same parts, in the same order, and lists ev
     const checks = [...page.matchAll(/data-check="([^"]+)"/g)].map(([, check]) => check);
     assert.deepEqual([...checks].sort(), [...failing[kind]!].sort(), kind);
   }
-  // About is its rows alone, with no popup, and the footer leads to it, without the version.
+  // About is its rows alone, with no popup, and the footer leads to it, without the version, beside the currency picked
+  // for the visit.
   const about = viewOf(html, 'data-view="about"');
   assert.doesNotMatch(about, /data-section=|popover/);
   assert.deepEqual(
     [...about.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
     ["Official address", "Cookies stored", "Version"],
   );
-  assert.equal(/<footer>([\s\S]*?)<\/footer>/.exec(html)?.[1]?.trim(), '<p><a href="#about">About</a></p>');
+  const footer = /<footer>([\s\S]*?)<\/footer>/.exec(html)?.[1] ?? "";
+  assert.match(footer, /<a href="#about">About<\/a>/);
+  assert.doesNotMatch(footer, /version/i);
+  assert.deepEqual(
+    [...footer.matchAll(/<option value="([^"]+)"/g)].map(([, value]) => value),
+    ["USD", "EUR"],
+  );
 });
 
 test("the page may reach its RPCs and nothing else, and the README lists them", () => {

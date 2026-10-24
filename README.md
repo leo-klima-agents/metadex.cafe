@@ -78,7 +78,8 @@ This README is for whoever runs the site. The design and the plan are in [design
 - Joining takes two steps: what it allows, with what a week at last epoch's rate would pay and the gas of the change,
   then the calls, each a bill in its own words, with its fields in full. About (`#about`) holds the page's own facts:
   its address, the cookies it stores, none, and its version. The footer leads to it, and stays at the foot of the
-  screen. [design/audit.md](design/audit.md) says why the page is laid out so.
+  screen. It also picks the currency the figures show in, US dollars or euros, for the visit: the page stores the choice
+  nowhere. [design/audit.md](design/audit.md) says why the page is laid out so.
 - Inside Safe{Wallet}, it proposes all the calls as one Safe transaction.
 
 Nobody controls the swappers either: their code fixes the fee, 1% of each route's output, the Safe it goes to, the
@@ -259,7 +260,8 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   the first of two as deep; prices at an epoch's end, for what it earned and paid, from Hydrex's pools only, and only
   from what they and Chainlink recorded then: a feed without a round of that time, or a pool without its history, gives
   no price rather than today's. If none of Chainlink's feeds answers, the figures are in USDC instead of dollars, from
-  the pools alone. A token without a deep enough pool has no price.
+  the pools alone. In euros, a figure in dollars is converted at Chainlink's EUR / USD of its own time, at the flip or
+  now; without a round of that time, it stays in dollars. A token without a deep enough pool has no price.
 - Only the admin key, or a call from the owner's own address made elsewhere, can change a payout address.
 - The swap knows only the tokens on its list, Hydrex's reward tokens, those added by address, and those a wallet lists
   with ERC-7811's `wallet_getAssets`: no RPC lists a wallet's tokens. Routes pass through WETH, USDC, cbBTC and HYDX

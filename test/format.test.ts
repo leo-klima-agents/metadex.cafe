@@ -7,6 +7,7 @@ import {
   clean,
   compact,
   count,
+  currency,
   date,
   day,
   earningPower,
@@ -14,6 +15,8 @@ import {
   hexLines,
   listWith,
   money,
+  onCurrency,
+  setCurrency,
   short,
   units,
   until,
@@ -86,10 +89,37 @@ test("what prices value is approximate, in dollars or USDC, with no break after 
   assert.equal(money(111_078.6), "≈\u00a0$111,079");
   assert.equal(money(0.001), "<\u00a0$0.01");
   assert.equal(money(0), "$0");
-  assert.equal(money(692.85, "USDC"), "≈\u00a0693\u00a0USDC");
-  assert.equal(money(0.7724, "USDC"), "≈\u00a00.77\u00a0USDC");
-  assert.equal(money(0.001, "USDC"), "<\u00a00.01\u00a0USDC");
-  assert.equal(money(0, "USDC"), "0\u00a0USDC");
+  const usdc = { unit: "USDC" } as const;
+  assert.equal(money(692.85, usdc), "≈\u00a0693\u00a0USDC");
+  assert.equal(money(0.7724, usdc), "≈\u00a00.77\u00a0USDC");
+  assert.equal(money(0.001, usdc), "<\u00a00.01\u00a0USDC");
+  assert.equal(money(0, usdc), "0\u00a0USDC");
+});
+
+test("in euros once picked, at the rate of the prices' own time; without one, as the prices are", () => {
+  const then = { unit: "USD", eurUsd: 1.25 } as const;
+  assert.equal(currency(), "USD");
+  assert.equal(money(10, then), "≈\u00a0$10.00");
+  setCurrency("EUR");
+  try {
+    assert.equal(money(10, then), "≈\u00a0€8.00");
+    assert.equal(money(250, then), "≈\u00a0€200");
+    assert.equal(money(0.005, then), "<\u00a0€0.01");
+    assert.equal(money(10, { unit: "USD" }), "≈\u00a0$10.00", "no rate for the time");
+    assert.equal(money(10, { unit: "USDC", eurUsd: 1.25 }), "≈\u00a010.00\u00a0USDC", "no dollar prices");
+  } finally {
+    setCurrency("USD");
+  }
+});
+
+test("a change of currency calls each listener once, and none when it stays", () => {
+  let calls = 0;
+  onCurrency(() => calls++);
+  setCurrency("USD");
+  assert.equal(calls, 0);
+  setCurrency("EUR");
+  setCurrency("USD");
+  assert.equal(calls, 2);
 });
 
 test("large numbers of votes, and shares", () => {

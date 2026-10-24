@@ -3,7 +3,7 @@ import { now, same, type Receipt } from "./chain.ts";
 import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
 import { clone, fill, fillAddress, show } from "./dom.ts";
 import { tokensOf } from "./earnings.ts";
-import { bps, count, figure, fraction, list, money, short, type Money } from "./format.ts";
+import { bps, count, figure, fraction, list, money, onCurrency, short, type Money } from "./format.ts";
 import { earningsOf, onEarnings } from "./last-epoch.ts";
 import { pricesIn, pricesNow, usdOf, type Prices, type Token } from "./prices.ts";
 import type { Amount } from "./receipts.ts";
@@ -123,7 +123,11 @@ export function swapLine(): { count: number; worth: Money; reading: boolean } | 
   if (!scan) return undefined;
   const worth = scan.rows.filter((row) => row.found && !row.reason);
   const value = worth.reduce((sum, row) => sum + (row.worth ?? 0), 0);
-  return { count: worth.length, worth: { value, unit: scan.prices.unit }, reading: scan.reading };
+  return {
+    count: worth.length,
+    worth: { value, unit: scan.prices.unit, eurUsd: scan.prices.eurUsd },
+    reading: scan.reading,
+  };
 }
 
 export const allowancesLeft = (): Allowance[] | undefined => allowances;
@@ -251,7 +255,7 @@ function summarise(scanned: Scan, ticked: Row[]): void {
     "swap-fee": `− ${of(fee)}`,
     "swap-paid": of(out - fee),
     "swap-least": of(least),
-    "swap-gas": dollars === undefined ? "…" : money(dollars, scanned.costs!.unit),
+    "swap-gas": dollars === undefined ? "…" : money(dollars, scanned.costs!),
   });
   splitLine.hidden = swaps < 2;
   splitLine.textContent = `${swaps} swaps`;
@@ -591,7 +595,7 @@ export async function openSwapReview(
     "swap-paid": of(out - fee),
     "swap-least": of(least),
     "swap-slippage": `${plan.yours ? "Your slippage" : "Slippage"}: ${bps(plan.margin)}`,
-    "swap-gas": dollars === undefined ? `${gas.toLocaleString("en-GB")} gas` : money(dollars, found!.unit),
+    "swap-gas": dollars === undefined ? `${gas.toLocaleString("en-GB")} gas` : money(dollars, found!),
     "swap-simulated": "Not simulated: these are quotes.",
   });
   show(".swap-simulated", !simulated, body);
@@ -717,6 +721,8 @@ async function checkBase(): Promise<void> {
 
 export function initSwap(given: SwapContext): void {
   context = given;
+  // Gas, in the currency picked.
+  onCurrency(drawAll);
   view.querySelector(".output-choices")!.replaceChildren(
     ...SWAPPERS.map((swapper) => {
       const choice = clone("output-choice");

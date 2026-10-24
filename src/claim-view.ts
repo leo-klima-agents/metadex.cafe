@@ -64,7 +64,7 @@ function claimReceipts(
     const value = prices ? dollars(received, tokens, prices) : 0;
     fill(receipt, {
       "claim-receipt-id": `Account #${id}`,
-      "claim-receipt-usd": value > 0 ? money(value, prices!.unit) : "",
+      "claim-receipt-usd": value > 0 ? money(value, prices!) : "",
       "claim-receipt-claimed": words(received),
       "claim-receipt-fee": words(fees, "−"),
       "claim-receipt-paid": words(paid),
@@ -91,7 +91,7 @@ function tokenLines(
     fill(item, {
       "claim-symbol": known?.symbol ?? token,
       "claim-amount": known ? figure(amount, known.decimals) : String(amount),
-      "claim-usd": dollars > 0 ? money(dollars, prices!.unit) : "",
+      "claim-usd": dollars > 0 ? money(dollars, prices!) : "",
     });
     return item;
   };
@@ -101,7 +101,7 @@ function tokenLines(
   more.hidden = !rest.length;
   const restValue = rest.reduce((sum, { token, amount }) => sum + value(token, amount), 0);
   fill(more, {
-    "claim-more-summary": `${count(rest.length, "more token", "more tokens")}${restValue > 0 ? `, ${money(restValue, prices!.unit)}` : ""}`,
+    "claim-more-summary": `${count(rest.length, "more token", "more tokens")}${restValue > 0 ? `, ${money(restValue, prices!)}` : ""}`,
   });
   more.querySelector(".claim-rest")!.replaceChildren(...rest.map(line));
 }
@@ -171,7 +171,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   const groups = claimTransactions(gas);
   const apart = groups.length > 1;
   const body = clone("claim-before");
-  const worthNow = (amounts: Amount[]) => (prices ? money(dollars(amounts, tokens, prices), prices.unit) : "Not read");
+  const worthNow = (amounts: Amount[]) => (prices ? money(dollars(amounts, tokens, prices), prices) : "Not read");
   fill(body, {
     "claim-earned": worthNow(totals.map(({ token, earned }) => ({ token, amount: earned }))),
     "claim-fee": prices ? `−${worthNow(totals.map(({ token, fee }) => ({ token, amount: fee })))}` : "Not read",
@@ -187,7 +187,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   const claimCost = simulated && found ? gasCost(totalGas, found) : undefined;
   const gasLine = body.querySelector(".claim-gas")!;
   const sayGas = (withSwap?: number) =>
-    (gasLine.textContent = `Gas ${claimCost === undefined ? "…" : money(claimCost, found!.unit)}${withSwap === undefined ? "" : `, ${money(withSwap, found!.unit)} with the swap`}`);
+    (gasLine.textContent = `Gas ${claimCost === undefined ? "…" : money(claimCost, found!)}${withSwap === undefined ? "" : `, ${money(withSwap, found!)} with the swap`}`);
   sayGas();
   // The outputs, in a list to pick from, once swaps are on.
   const select = body.querySelector<HTMLSelectElement>(".claim-output")!;

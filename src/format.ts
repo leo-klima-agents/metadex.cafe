@@ -46,29 +46,51 @@ export function compact(value: bigint): string {
   return `${threeDigits.format(rounded / scale)}${suffix}`;
 }
 
-const dollars = (digits: number) =>
+const inCurrency = (currency: Currency, digits: number) =>
   new Intl.NumberFormat(LANG, {
     style: "currency",
-    currency: "USD",
+    currency,
     currencyDisplay: "narrowSymbol",
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
-const [cents, noCents] = [dollars(2), dollars(0)];
+const formats = {
+  USD: [inCurrency("USD", 2), inCurrency("USD", 0)],
+  EUR: [inCurrency("EUR", 2), inCurrency("EUR", 0)],
+  USDC: [hundredths, whole],
+} as const;
 
 // What prices are in: dollars, or USDC when no dollar price could be found for the time.
 export type Unit = "USD" | "USDC";
-// A sum at some prices, in their unit.
-export type Money = { value: number; unit: Unit };
+// What the visitor picked to see them in, for the visit: dollars, or euros where the prices' time has a rate.
+export type Currency = "USD" | "EUR";
+// What prices are in, and the dollar's price in euros at their time, if found.
+export type Basis = { unit: Unit; eurUsd?: number | undefined };
+// A sum at some prices.
+export type Money = Basis & { value: number };
 
-// Prices are approximate, so what they value is too: "≈ $692", "≈ $0.77", "< $0.01", or in USDC, "≈ 0.77 USDC". The
-// no-break spaces keep the sign and the unit with the number.
-export function money(value: number, unit: Unit = "USD"): string {
-  const [withCents, without] = unit === "USD" ? [cents, noCents] : [hundredths, whole];
-  const of = (formatted: string) => (unit === "USD" ? formatted : `${formatted}\u00a0USDC`);
-  if (value === 0) return of(without.format(0));
-  if (value > 0 && value < 0.005) return `<\u00a0${of(withCents.format(0.01))}`;
-  return `≈\u00a0${of((Math.abs(value) >= 100 ? without : withCents).format(value))}`;
+let shownIn: Currency = "USD";
+const changes: (() => void)[] = [];
+export const currency = (): Currency => shownIn;
+// Called once the currency picked changes, to draw again what shows money.
+export const onCurrency = (listener: () => void): void => void changes.push(listener);
+export function setCurrency(picked: Currency): void {
+  if (picked === shownIn) return;
+  shownIn = picked;
+  changes.forEach((listener) => listener());
+}
+
+// Prices are approximate, so what they value is too: "≈ $692", "≈ €0.69", "< $0.01", or in USDC, "≈ 0.77 USDC". In
+// euros at the rate of the prices' own time; without one, in what the prices are in. The no-break spaces keep the sign
+// and the unit with the number.
+export function money(value: number, { unit, eurUsd }: Basis = { unit: "USD" }): string {
+  const euros = shownIn === "EUR" && unit === "USD" && eurUsd !== undefined;
+  const [shown, amount] = euros ? (["EUR", value / eurUsd] as const) : ([unit, value] as const);
+  const [withCents, without] = formats[shown];
+  const of = (formatted: string) => (shown === "USDC" ? `${formatted}\u00a0USDC` : formatted);
+  if (amount === 0) return of(without.format(0));
+  if (amount > 0 && amount < 0.005) return `<\u00a0${of(withCents.format(0.01))}`;
+  return `≈\u00a0${of((Math.abs(amount) >= 100 ? without : withCents).format(amount))}`;
 }
 
 // Hydrex shows Earning Power as 1.3 times the votes.

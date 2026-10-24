@@ -23,6 +23,8 @@ import {
   figure,
   list,
   money,
+  onCurrency,
+  setCurrency,
   short,
   toEarningPower,
   units,
@@ -30,6 +32,7 @@ import {
   utc,
   weekStart,
   when,
+  type Currency,
 } from "./format.ts";
 import {
   FROM_START,
@@ -180,7 +183,7 @@ function waitsLine({ standing }: Entry): string {
   const n = new Set(waiting.map(({ token }) => token.toLowerCase())).size;
   if (!n) return "from the epoch before last";
   const tokens = count(n, "token", "tokens");
-  return `${unknown || late ? "at least " : ""}${value > 0 ? `${money(value, priced!.prices.unit)} in ${tokens}` : tokens}`;
+  return `${unknown || late ? "at least " : ""}${value > 0 ? `${money(value, priced!.prices)} in ${tokens}` : tokens}`;
 }
 // An account's page that is not the wallet's tells a payout under way from its owner's other accounts, which it reads
 // once while the account awaits its payout.
@@ -302,7 +305,7 @@ function showRecords(): void {
           ? "No record yet"
           : paid === undefined
             ? "…"
-            : money(per.value * paid, per.unit);
+            : money(per.value * paid, per);
     for (const place of placesOf(automation)) {
       fill(place, { record, "record-unit": per ? "per 1,000 Earning Power" : "" });
     }
@@ -473,7 +476,7 @@ function accountItem({ account, status }: Member, group: string, pickable: boole
   else item.querySelector(".status")!.replaceWith(statusLine(status, true));
   const earned = earnedByAccount(account.id);
   if (earned !== undefined) {
-    fill(item, { "earned-usd": money(earned.value, earned.unit) });
+    fill(item, { "earned-usd": money(earned.value, earned) });
     show(".earned", true, item);
   }
   show(".late", late.has(account.id), item);
@@ -670,12 +673,12 @@ function estimate(element: Element, accounts: Account[], automation: Automation,
             ? "No record yet"
             : per === undefined || paid === undefined
               ? noEstimate
-              : money(per.value * thousands * paid, per.unit);
+              : money(per.value * thousands * paid, per);
       },
       () => (week.textContent = noEstimate),
     );
   gasCosts()(join(accounts, automation), owner).then(
-    (cost) => (gas.textContent = cost === undefined ? "Not read" : money(cost.value, cost.unit)),
+    (cost) => (gas.textContent = cost === undefined ? "Not read" : money(cost.value, cost)),
     (error) => {
       console.error(error);
       gas.textContent = "Not read";
@@ -832,7 +835,7 @@ function showApp(): void {
       line.reading && !line.count
         ? "…"
         : line.count
-          ? `${count(line.count, "token", "tokens")} · ${money(line.worth.value, line.worth.unit)}${line.reading ? " · …" : ""}`
+          ? `${count(line.count, "token", "tokens")} · ${money(line.worth.value, line.worth)}${line.reading ? " · …" : ""}`
           : "Nothing to swap";
   }
   void showAllows(holdings, left);
@@ -981,7 +984,7 @@ function showPosition(): void {
   });
   view.querySelector(".position-status")!.replaceChildren(statusLine(status, !theirs));
   const earned = earnedByAccount(account.id);
-  if (earned !== undefined) fill(view, { "position-earned": money(earned.value, earned.unit) });
+  if (earned !== undefined) fill(view, { "position-earned": money(earned.value, earned) });
   show(".position-earned-row", earned !== undefined, view);
   show(".position-owner-row", theirs, view);
   fillAddress(view, "position-owner", owner, short(owner));
@@ -1166,6 +1169,15 @@ connectButton.addEventListener("click", () => {
 for (const slot of document.querySelectorAll(".wallet-slot")) slot.append(clone("wallet-picker"));
 initSwap({ connection: () => connection, hooks });
 onSwapChange(showApp);
+// The footer's currency, for the visit: every figure in money is drawn again in it.
+const currencySelect = document.querySelector<HTMLSelectElement>("footer .currency")!;
+currencySelect.addEventListener("change", () => setCurrency(currencySelect.value as Currency));
+onCurrency(() => {
+  showRecords();
+  showAccounts(true);
+  showApp();
+  showPosition();
+});
 groupAllHex(document);
 // A reload keeps the hash, and so the view.
 document.querySelector("#error .again")!.addEventListener("click", () => location.reload());

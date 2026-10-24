@@ -71,6 +71,8 @@ const anchor = (address: Address, decimals: number, feed: Address): Anchor => ({
   decimals,
   feed: { address: feed, decimals: 8 },
 });
+// EUR / USD, to show prices in euros: not an anchor, as no token is the euro itself.
+export const EUR_USD: Feed = { address: "0xc91D87E81faB8f93699ECf7Ee9B44D11e1D53F0F", decimals: 8 };
 export const ANCHORS: Anchor[] = [
   // USDC / USD
   anchor(USDC, 6, "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B"),

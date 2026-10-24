@@ -303,6 +303,7 @@ footer {
 footer p {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
   gap: var(--gap-xs) var(--gap-l);
 }
@@ -1527,7 +1528,8 @@ select {
 .breakdown .sum dt {
   color: var(--ink);
 }
-.breakdown select {
+.breakdown select,
+footer select {
   min-block-size: 1.75rem;
   padding-inline: var(--gap-xs);
   font-size: var(--text-small);

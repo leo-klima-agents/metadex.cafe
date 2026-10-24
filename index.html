@@ -1408,7 +1408,17 @@
     </main>
 
     <footer>
-      <p><a href="#about">About</a></p>
+      <!-- The currency is for the visit: the page stores nothing. -->
+      <p>
+        <a href="#about">About</a>
+        <label
+          >Prices in
+          <select class="currency" autocomplete="off">
+            <option value="USD" selected>US dollars</option>
+            <option value="EUR">euros</option>
+          </select></label
+        >
+      </p>
     </footer>
 
     <dialog id="review" aria-labelledby="review-title">

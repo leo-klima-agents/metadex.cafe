@@ -539,13 +539,13 @@ export function gasCosts(): GasCost {
     if (!first) return { value: 0, unit: "USD" };
     // The call's data, and about as much again for the transaction's other fields.
     const size = BigInt((first.data.length - 2) / 2 + 100);
-    const [{ gasPrice, ethPrice, unit }, gas, l1] = await Promise.all([
+    const [{ gasPrice, ethPrice, unit, eurUsd }, gas, l1] = await Promise.all([
       costs(),
       rpc<Hex>("eth_estimateGas", [{ from, to: first.to, data: first.data }]),
       postingOf(size),
     ]);
     if (ethPrice === undefined) return undefined;
     const wei = (BigInt(gas) * gasPrice + l1) * BigInt(steps.length);
-    return { value: (Number(wei) / 1e18) * ethPrice, unit };
+    return { value: (Number(wei) / 1e18) * ethPrice, unit, eurUsd };
   };
 }

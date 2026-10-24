@@ -2,6 +2,7 @@ import { parseAbi, type Abi, type Address } from "viem";
 import { call, now, read, same, type Call } from "./chain.ts";
 import {
   ANCHORS,
+  EUR_USD,
   HYDREX_PRICING,
   SWAP_PRICING,
   USDC,
@@ -10,16 +11,16 @@ import {
   type ExchangeKind,
   type Feed,
 } from "./config.ts";
-import type { Unit } from "./format.ts";
+import type { Basis, Unit } from "./format.ts";
 import { exchangeOf, pairKey, waysFor } from "./pools.ts";
 
 export type Token = { address: Address; decimals: number; symbol: string };
 // Prices per whole token, by lower-case address: in dollars, or in USDC when none of Chainlink's dollar prices for the
-// time could be found.
-export type Prices = Map<string, number> & { unit: Unit };
+// time could be found; with the dollar's price in euros then, if found.
+export type Prices = Map<string, number> & Basis;
 
-export const pricesIn = (unit: Unit, entries: [string, number][] = []): Prices =>
-  Object.assign(new Map(entries), { unit });
+export const pricesIn = (unit: Unit, entries: [string, number][] = [], eurUsd?: number): Prices =>
+  Object.assign(new Map(entries), { unit, eurUsd });
 
 // Pools are averaged over the half hour before the flip, when rewards become final.
 export const WINDOW = 1800;
@@ -315,7 +316,7 @@ async function measure(
 }
 
 // Prices per whole token at the flip, by lower-case address. Anchors take their feed, in dollars; if none answers for
-// the flip, the prices are in USDC, at 1 USDC each. Then, each against the anchors priced by then, first the anchors
+// the flip, the prices are in USDC, at 1 USDC each. EUR / USD at the flip goes with dollar prices, to show euros. Then, each against the anchors priced by then, first the anchors
 // without a price, then the other tokens, take the deepest pool, the first in `exchanges` order if two are as deep: its
 // average over the window. For prices now, a pool whose history falls short gives its price now; for a past flip, it
 // gives none, so that every price is of the flip. `amounts` is how much will be priced.
@@ -328,15 +329,11 @@ export async function pricesAt(
   reader: typeof read = read,
 ): Promise<Prices> {
   exchanges.forEach(kindOf);
-  const feeds = await feedsAt(
-    ANCHORS.map(({ feed }) => feed),
-    flip,
-    reader,
-  );
+  const feeds = await feedsAt([...ANCHORS.map(({ feed }) => feed), EUR_USD], flip, reader);
   const fed = ANCHORS.flatMap(({ address }, i): [string, number][] =>
     feeds[i] === undefined ? [] : [[key(address), feeds[i]]],
   );
-  const prices = fed.length ? pricesIn("USD", fed) : pricesIn("USDC", [[key(USDC), 1]]);
+  const prices = fed.length ? pricesIn("USD", fed, feeds[ANCHORS.length]) : pricesIn("USDC", [[key(USDC), 1]]);
   const unpriced = ANCHORS.filter(({ address }) => !prices.has(key(address)));
   const ago = Math.max(0, time - flip);
   await inPools(

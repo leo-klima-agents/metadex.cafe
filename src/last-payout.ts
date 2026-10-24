@@ -4,7 +4,7 @@ import { lastClaimBlocks, readClaimsAt, totals, walkClaims, WALK_LIMIT, type Wal
 import { AUTOMATIONS, AUTOMAXI_FEE_BPS, KEEPER, KVCM, type Automation, type Kind } from "./config.ts";
 import { clone, fill, fillAddress, fillOwn, fillTime, show, showHex, txUrl } from "./dom.ts";
 import { rewardsFor, tokensOf, type Earnings } from "./earnings.ts";
-import { WEEK, amount, bps, count, listWith, money, short, utc, weekStart } from "./format.ts";
+import { WEEK, amount, bps, count, listWith, money, onCurrency, short, utc, weekStart } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { lastEarnings } from "./last-epoch.ts";
 import { pricesAtFlip, pricesNow, type Prices, type Token } from "./prices.ts";
@@ -67,10 +67,11 @@ export type Waiting = { tokens: Map<string, Token>; prices: Prices };
 export type Found = { epochStart: number; entries: Entry[]; waiting?: Waiting };
 // A payout under way: the accounts it has reached since the flip, those still due, and when it first paid one.
 export type UnderWay = { paid: Entry[]; left: Entry[]; first: number };
-// A receipt drawn, which is drawn again once prices are read.
+// A receipt drawn, which is drawn again once prices are read, and at them once another currency is picked.
 type Drawn = {
   node: HTMLElement;
   priced: boolean;
+  prices?: Prices;
   flip: number;
   amounts: Amount[];
   draw(prices?: Prices): void;
@@ -83,6 +84,10 @@ type Signal = { call: Call; paid: (answer: unknown) => boolean };
 const drawn = new Map<string, Drawn>();
 // Each line of what waits drawn, with its account's entry, to draw again once priced.
 const waitingLines = new WeakMap<Element, Entry>();
+
+onCurrency(() => {
+  for (const receipt of drawn.values()) if (receipt.prices) receipt.draw(receipt.prices);
+});
 
 // The automation an account is in or joining, or else the one it is leaving.
 const automationOf = ({ delegate, claimer, delegateAtStart }: Account): Automation | undefined =>
@@ -119,7 +124,7 @@ function showAmounts(element: Element, found: Amount[], tokens: Map<string, Toke
 
 function worth(found: Amount[], tokens: Map<string, Token>, prices: Prices | undefined): string {
   const total = prices ? dollars(found, tokens, prices) : 0;
-  return total > 0 ? money(total, prices!.unit) : "";
+  return total > 0 ? money(total, prices!) : "";
 }
 
 const kvcm = (found: Amount[]): bigint => found.find(({ token }) => same(token, KVCM))?.amount ?? 0n;
@@ -240,10 +245,18 @@ function ownWords(element: Element, own: string, theirs: string): void {
 function waitingLine({ waiting, unknown }: Standing, priced: Waiting | undefined): string {
   const value = priced ? dollars(waiting, priced.tokens, priced.prices) : 0;
   const n = new Set(waiting.map(({ token }) => token.toLowerCase())).size;
-  const what = value > 0 ? money(value, priced!.prices.unit) : n ? count(n, "token", "tokens") : "";
+  const what = value > 0 ? money(value, priced!.prices) : n ? count(n, "token", "tokens") : "";
   if (unknown && what) return `At least ${what} waiting`;
   if (unknown) return "Waiting: not read";
   return what ? `${what} waiting` : "Nothing waiting";
+}
+
+// The section's lines of what waits, at prices now.
+function drawWaiting(section: HTMLElement, waiting: Waiting): void {
+  for (const line of section.querySelectorAll(".standing-waiting")) {
+    const entry = waitingLines.get(line);
+    if (entry?.standing && entry.earnings) line.textContent = waitingLine(entry.standing, waiting);
+  }
 }
 
 // What waits for the accounts, at prices now. A pool must be deep enough for the most of a token that waits for one.
@@ -575,12 +588,13 @@ export function payouts(
     });
     if (!waiting || !current()) return;
     read.waiting = waiting;
-    for (const line of section?.querySelectorAll(".standing-waiting") ?? []) {
-      const entry = waitingLines.get(line);
-      if (entry?.standing && entry.earnings) line.textContent = waitingLine(entry.standing, waiting);
-    }
+    if (section) drawWaiting(section, waiting);
     priced?.(read);
   }
+
+  onCurrency(() => {
+    if (section && latest?.waiting) drawWaiting(section, latest.waiting);
+  });
 
   // Whether the payouts should be read again. A failed check is tried again at the next.
   async function moved(): Promise<boolean> {
@@ -601,7 +615,7 @@ export function payouts(
       void load(true);
     },
     forget() {
-      shown = readFor = showing = undefined;
+      shown = readFor = showing = latest = undefined;
       reset();
       // Another account's receipts never show under this one's heading.
       if (section) {
@@ -704,7 +718,7 @@ async function draw(
       if (!prices) return;
       for (const receipt of these) {
         receipt.draw(prices);
-        receipt.priced = true;
+        Object.assign(receipt, { priced: true, prices });
       }
     }),
   );
