@@ -1429,6 +1429,14 @@ dialog .receipt {
 .swap-fetches,
 .line-fetches {
   font-family: var(--mono);
+  text-align: end;
+}
+/* What an exact amount is worth, quieter, under it, as each quote shows it. */
+.exact + .worth {
+  display: block;
+  color: var(--quiet);
+  font-size: var(--text-label);
+  font-weight: 400;
 }
 /* The swap's bill: each token, then its route, quieter. */
 .swap-lines {
@@ -1505,7 +1513,7 @@ select {
 .breakdown > div {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 0 var(--gap-l);
 }

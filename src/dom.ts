@@ -42,6 +42,16 @@ onCurrency(() => {
   }
 });
 
+// An exact amount, then what it is worth, if known, quieter, under it: "0.01472 USDC", "≈ $0.01".
+export function showWorth(element: Element, exact: string, worth?: () => string): void {
+  writers.delete(element);
+  const amount = Object.assign(document.createElement("span"), { className: "exact", textContent: exact });
+  if (!worth) return void element.replaceChildren(amount);
+  const quiet = Object.assign(document.createElement("span"), { className: "worth" });
+  live(quiet, worth);
+  element.replaceChildren(amount, " ", quiet);
+}
+
 // Each element of each class gets its text, or, for money, how to write it.
 export function fill(root: ParentNode, textByClass: Record<string, string | (() => string)>): void {
   for (const [name, text] of Object.entries(textByClass)) {

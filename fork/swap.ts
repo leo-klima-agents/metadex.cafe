@@ -70,26 +70,20 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     );
     await tickOnly(page, ["WETH", "ZORA", "AVNT"]);
     // What they fetch, line by line: the quote, less the 1%, is what reaches you; the slippage picked sets the least
-    // that may; and gas is paid apart, in ETH.
+    // that may; and gas is paid apart, in ETH. Each in tokens, then what it is worth, quieter.
     const summary = swap.locator(".breakdown");
     await summary
-      .locator(".swap-paid")
+      .locator(".swap-paid .exact")
       .getByText(/^[\d,.]+ USDC$/)
       .waitFor();
     const labels = await summary.locator("dt").allInnerTexts();
-    assert.deepEqual(
-      [labels[0], labels[1], labels[2], labels[4]],
-      ["Quote", "Fee 1%", "Reaches you", "Gas, paid in ETH"],
-    );
+    assert.deepEqual([labels[0], labels[1], labels[2], labels[4]], ["Quote", "Fee 1%", "Reaches you", "Gas"]);
     assert.match(labels[3]!, /^At least, with/);
     assert.equal(await summary.getByRole("combobox", { name: /At least, with/ }).inputValue(), "50");
-    assert.match(await summary.locator(".swap-quoted").innerText(), /^[\d,.]+ USDC$/);
-    assert.match(await summary.locator(".swap-fee").innerText(), /^− [\d,.]+ USDC$/);
-    assert.match(await summary.locator(".swap-least").innerText(), /^[\d,.]+ USDC$/);
-    await summary
-      .locator(".swap-gas")
-      .getByText(/^(≈|<)\s\$/)
-      .waitFor();
+    assert.match(await summary.locator(".swap-quoted").innerText(), /^[\d,.]+ USDC\n(≈|<)\s\$[\d,.]+$/);
+    assert.match(await summary.locator(".swap-fee").innerText(), /^− [\d,.]+ USDC\n− (≈|<)\s\$[\d,.]+$/);
+    assert.match(await summary.locator(".swap-least").innerText(), /^[\d,.]+ USDC\n(≈|<)\s\$[\d,.]+$/);
+    assert.match(await summary.locator(".swap-gas").innerText(), /^[\d.]+ ETH\n(≈|<)\s\$[\d.]+$/);
     assert.match(await swap.locator(".swap-ticked").innerText(), /^· 3 of \d+$/);
     await shoot(page, "swap-390-light");
     await swap.getByRole("button", { name: "Review" }).click();
@@ -101,7 +95,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.equal(await bill.locator(".receipt-name").innerText(), "metaDEX Café");
     assert.equal(await bill.locator(".label code").innerText(), "USDC");
     assert.equal(await review(page).locator(".step-count code").innerText(), "USDC");
-    assert.match(await bill.locator(".receipt-day").innerText(), /^Gas (≈|<)\s\$[\d.]+, paid in ETH$/);
+    assert.match(await bill.locator(".receipt-day").innerText(), /^Gas [\d.]+ ETH\n(≈|<)\s\$[\d.]+$/);
     assert.equal(await bill.locator(".swap-lines li").count(), 3);
     // "ZORA → WETH → USDC via Aerodrome, Uniswap": the tokens, then who runs the pools, each once.
     for (const route of await bill.locator(".line-route").allInnerTexts()) {
