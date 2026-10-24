@@ -61,6 +61,7 @@ import {
   elsewhere,
   abi,
   anvil,
+  anvilMissing,
   balanceOf,
   included,
   mined,
@@ -1138,6 +1139,11 @@ if (import.meta.main) {
     if (!first) console.error(`No scenario is named ${name}.`);
     for (const { name, title } of SCENARIOS) console.log(`${name.padEnd(10)}${title}`);
     process.exit(first ? 0 : 1);
+  }
+  const missing = anvilMissing();
+  if (missing) {
+    console.error(missing);
+    process.exit(1);
   }
   console.log("The page opens beside the QA wallet. Close the QA wallet, or press Ctrl-C, to stop.");
   let session: Session | undefined;

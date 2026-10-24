@@ -2,7 +2,7 @@
 // parts. Each test file starts an anvil of its own, on its own port, so that node --test runs the files at once; each
 // test starts from the snapshot its file took.
 import assert from "node:assert/strict";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { afterEach, beforeEach } from "node:test";
@@ -684,6 +684,24 @@ export async function start(block: number, owners: Address[]): Promise<void> {
   browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 }
 
+// The anvil the forks run in: Foundry's, of the version CI installs, in .github/workflows/ci.yml.
+const ANVIL_VERSION = "1.8.6";
+const INSTALL_ANVIL =
+  `Install Foundry ${ANVIL_VERSION}, as CI does: curl -L https://foundry.paradigm.xyz | bash, ` +
+  `then, in a new shell, foundryup --install ${ANVIL_VERSION}. See https://getfoundry.sh/.`;
+
+// What stops the forks from running here, if anything: no anvil. Another version than CI's only gets a warning.
+export function anvilMissing(): string | undefined {
+  const found = spawnSync("anvil", ["--version"], { encoding: "utf8" });
+  if (found.error) return `anvil is not installed, or not on the PATH. ${INSTALL_ANVIL}`;
+  const version = /Version: (\S+)/.exec(found.stdout)?.[1];
+  if (version !== ANVIL_VERSION)
+    console.warn(
+      `anvil ${version ?? "of an unknown version"} is not ${ANVIL_VERSION}, which CI runs: ${INSTALL_ANVIL}`,
+    );
+  return undefined;
+}
+
 // Starts anvil on a fork of Base at `block`, through the cache at `cached`. Once `stopping` says so, as when the QA wallet
 // closes, it stops anvil rather than wait for it to listen.
 export async function startAnvil(block: number, cached: string, stopping = () => false): Promise<void> {
@@ -701,6 +719,9 @@ export async function startAnvil(block: number, cached: string, stopping = () =>
     ],
     { stdio: ["ignore", "ignore", process.env.ANVIL_LOG ? "inherit" : "ignore"] },
   ));
+  // One that cannot start, as when anvil is not installed, says so, rather than stop the process.
+  let failed: NodeJS.ErrnoException | undefined;
+  child.once("error", (error) => (failed = error));
   // anvil listens once it has read the fork's block, which a busy FORK_URL may take minutes to answer. Stopped by a
   // signal, as stopAnvil stops it, it has no exit code, only the signal.
   for (;;) {
@@ -708,6 +729,8 @@ export async function startAnvil(block: number, cached: string, stopping = () =>
       await anvil("eth_chainId");
       break;
     } catch {
+      if (failed?.code === "ENOENT") throw new Error(`anvil is not installed, or not on the PATH. ${INSTALL_ANVIL}`);
+      if (failed) throw new Error(`anvil did not start: ${failed.message}`);
       if (stopping()) await stopAnvil(false);
       if (child.exitCode !== null || child.signalCode !== null)
         throw new Error(`anvil stopped as it started, with ${child.exitCode ?? child.signalCode}.`);
