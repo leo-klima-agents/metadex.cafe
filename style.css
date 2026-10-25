@@ -351,6 +351,11 @@ section > * + *,
 }
 /* The pages of the wallet lead back to it in their title, before their own name, in the heading's face and quieter:
    "Your wallet › Hydrex". */
+/* The swap's Approvals button, shown once a wallet is connected, is taller than its heading's line: it reaches over the
+   space around it, so that the heading does not move when it shows. */
+.swap-approvals-open {
+  margin-block: -0.375rem;
+}
 .title-line:has(> .trail) {
   column-gap: 0.6rem;
 }
@@ -1120,14 +1125,6 @@ dialog {
 dialog::backdrop {
   background: rgb(0 0 0 / 0.5);
 }
-/* On a phone, the review takes nearly its width: room for a call's labels and, beside them, an address as the wallet
-   shows it. */
-@media (max-width: 30rem) {
-  dialog {
-    inline-size: min(36rem, 100% - 1rem);
-    padding-inline: 1rem;
-  }
-}
 dialog .step-count {
   margin-block-start: 1.25rem;
 }
@@ -1216,7 +1213,7 @@ dialog .receipt {
 }
 .fields > div {
   display: grid;
-  grid-template-columns: 6.5rem minmax(0, 1fr);
+  grid-template-columns: 6rem minmax(0, 1fr);
   column-gap: 0.625rem;
   align-items: baseline;
 }

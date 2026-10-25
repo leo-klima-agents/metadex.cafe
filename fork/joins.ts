@@ -101,7 +101,6 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await review(page).getByRole("button", { name: "Sign transaction 1 of 2" }).click();
     await review(page).getByText("Transaction 1 of 2 went through.").waitFor();
     await review(page).getByRole("button", { name: "Sign transaction 2 of 2" }).click();
-    await review(page).getByText("All 2 went through.").waitFor();
     await review(page).getByRole("heading", { name: "Done" }).waitFor();
     await review(page).getByText("Joined.").waitFor();
     await review(page).getByRole("button", { name: "Close" }).click();

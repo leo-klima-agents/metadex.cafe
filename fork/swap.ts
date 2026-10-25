@@ -146,7 +146,8 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await mined(SELLER, AVNT, encodeFunctionData({ abi: tokenAbi, functionName: "transfer", args: [STRANGER, avnt] }));
     const before = await balanceOf(INTO_USDC.token, SELLER);
     await review(page).getByRole("button", { name: "Sign 4 transactions" }).click();
-    await review(page).getByText("All 4 went through.").waitFor({ timeout: 120_000 });
+    await review(page).getByRole("heading", { name: "Done" }).waitFor({ timeout: 120_000 });
+    assert.doesNotMatch(await review(page).locator(".progress").innerText(), /went through/);
     assert.equal(sent.length, 4);
     const receipt = review(page).locator(".receipt");
     // When, the gas the wallet paid, then each token sold, what it fetched, and how that compares with the quote.
@@ -229,9 +230,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await review(page)
       .getByRole("button", { name: /^Sign \d+ transactions$/ })
       .click();
-    await review(page)
-      .getByText(/^All \d+ went through\./)
-      .waitFor({ timeout: 300_000 });
+    await review(page).getByRole("heading", { name: "Done" }).waitFor({ timeout: 300_000 });
     assert.equal(sent.length, claims.length + says.length);
     await review(page)
       .locator(".swap-receipt-paid")

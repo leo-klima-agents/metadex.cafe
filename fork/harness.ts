@@ -639,7 +639,9 @@ export async function confirm(page: Page): Promise<void> {
       .getByRole("button", { name: /^Sign (transaction|\d+ transactions)$/ })
       .click();
     await review(page)
-      .getByText(/^(It|All \d+) went through\./)
+      .getByRole("heading", { name: "Done" })
+      .or(review(page).getByText(/^(It|All \d+) went through\./))
+      .first()
       .waitFor({ timeout: 120_000 });
   } catch (error) {
     const shown = await review(page).locator(".progress").allTextContents();
@@ -660,7 +662,10 @@ export async function confirmEach(page: Page, from: Address): Promise<void> {
   await Promise.all(
     tos.map((to, i) => anvil("eth_call", [{ from, to, data: datas[i], gas: GAS }, "latest"]).catch(() => {})),
   );
-  const done = review(page).getByText(/^(It|All \d+) went through\./);
+  // The Done screen, or, without an outcome to show, the words in the foot.
+  const done = review(page)
+    .getByRole("heading", { name: "Done" })
+    .or(review(page).getByText(/^(It|All \d+) went through\./));
   const next = review(page)
     .getByRole("button", { name: /^Sign (transaction|\d+ transactions|transaction \d+ of \d+)$/ })
     .and(review(page).locator("button:enabled"));

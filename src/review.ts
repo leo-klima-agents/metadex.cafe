@@ -416,6 +416,8 @@ async function finish(state: Review): Promise<void> {
     : undefined;
   const shown = outcome ?? state.outcome;
   if (state !== current || !shown) return;
+  // The screen says it is done: the foot keeps only the transactions.
+  say(state, "", state.done);
   pageList.hidden = calls.hidden = stepCount.hidden = true;
   title.textContent = "Done";
   doneBox.replaceChildren(shown);
