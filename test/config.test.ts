@@ -251,7 +251,7 @@ test("each swapper has its output and a checksummed address, and the swap's page
     ["Meaning", "When unmet"],
   );
   assert.match(slippage, /How much less than quoted you accept/);
-  assert.match(slippage, /The input token stays in your wallet/);
+  assert.match(slippage, /The token isn't swapped/);
   // The swap's own summary sets the slippage on the line of the least that may reach you.
   assert.match(swap, /<label\s*>Minimum at\s*<select class="swap-margin">/);
   assert.ok(!swap.includes(AUTOMAXI_TREASURY) && !swap.includes("2-of-3"));
