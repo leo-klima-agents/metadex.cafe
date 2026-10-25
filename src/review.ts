@@ -442,7 +442,7 @@ async function sendNext(state: Review): Promise<void> {
   else if (!ok) say(state, `A transaction failed on Base.${wentThrough(state)}`, hashes);
   else if (state.finished) await finish(state);
   else {
-    let next = `Sign transaction ${done.length + 1} when you are ready; closing stops here.`;
+    let next = `Sign transaction ${done.length + 1} when you are ready.`;
     const fresh = await state.prepare?.(done.length).catch((error: unknown) => void console.error(error));
     if (fresh) {
       steps[done.length] = fresh.step;

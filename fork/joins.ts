@@ -173,7 +173,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await page.getByRole("button", { name: "Join Carbon Impact with 2 Hydrex accounts" }).click();
     await toWallet(page);
     await review(page).getByRole("button", { name: "Sign transaction 1 of 2" }).click();
-    await review(page).getByText("closing stops here").waitFor();
+    await review(page).getByText("Sign transaction 2 when you are ready.").waitFor();
     // The first page's link to what Carbon Impact can change, which its page no longer shows.
     const [tab] = await Promise.all([
       page.context().waitForEvent("page"),
