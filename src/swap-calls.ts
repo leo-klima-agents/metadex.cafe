@@ -73,7 +73,7 @@ export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Sli
   const words = `${figure(amount, token.decimals)} ${token.symbol}`;
   return {
     ...approve(token.address, swapper.address, amount),
-    title: amount ? "Approval" : "Approval reset",
+    title: amount ? "Token approval" : "Token approval reset",
     says: amount
       ? `Let the ${swapper.symbol} swapper take ${words} from you`
       : `Reset ${token.symbol}'s approval of the ${swapper.symbol} swapper to nothing`,
