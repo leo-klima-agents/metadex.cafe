@@ -695,9 +695,11 @@ export async function startAnvil(block: number, cached: string, stopping = () =>
     // anvil keeps no answers of its own, so that the cache sees each request. Its gas price is the block's base fee, as
     // on Base, where tips are next to nothing: anvil's own least tip, 1 gwei, would price gas 200 times higher. It waits
     // for the cache as long as the cache waits for FORK_URL, up to 5 minutes for an answer, rather than its own 45 s.
+    // It keeps the state of its last 100 blocks in memory, and none on disk: otherwise it writes the whole state of each
+    // older block to ~/.foundry/anvil/tmp, as the QA wallet mines one every 2 seconds, and leaves it there once stopped.
     [
       ...["--fork-url", CACHE_URL, "--fork-block-number", String(block), "--port", String(port), "--auto-impersonate"],
-      ...["--no-storage-caching", "--disable-min-priority-fee", "--timeout", "600000"],
+      ...["--no-storage-caching", "--disable-min-priority-fee", "--timeout", "600000", "--prune-history", "100"],
     ],
     { stdio: ["ignore", "ignore", process.env.ANVIL_LOG ? "inherit" : "ignore"] },
   ));
