@@ -291,8 +291,9 @@ function drawAll(): void {
   // A token to add by its address is offered only when the page found none to sell.
   show(".swap-none, .add-token", !scanned.reading && !scanned.failed && !scanned.rows.length, view);
   const total = scanned.rows.length;
-  status.hidden = !scanned.reading;
-  status.textContent = !total ? "Loading…" : `Routes: ${scanned.done} of ${total}`;
+  // Only until the wallet's tokens show: then each row says that its route is being found, and nothing moves once all
+  // are.
+  status.hidden = !scanned.reading || total > 0;
   const ticked = scanned.rows.filter((row) => row.ticked && row.found);
   fill(view, { "swap-ticked": total ? `· ${ticked.length} of ${total}` : "" });
   summarise(scanned, ticked);

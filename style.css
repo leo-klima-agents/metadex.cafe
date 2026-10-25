@@ -1616,7 +1616,7 @@ select {
   text-align: end;
 }
 .breakdown .sum {
-  margin-block: var(--gap-xs);
+  margin: var(--gap-xs) 0.125rem;
   padding-block: var(--gap-xs);
   border-block: 1px solid var(--line);
   font-size: 1rem;
@@ -1634,6 +1634,14 @@ footer select {
   min-block-size: 1.75rem;
   padding-inline: var(--gap-xs);
   font-size: var(--text-small);
+}
+/* The slippage, among the words of its line: its focus ring, drawn at its edge, stays clear of them, and of the lines
+   above and below. */
+.breakdown select {
+  margin: var(--gap-xs) 0.125rem;
+}
+.breakdown select:focus-visible {
+  outline-offset: 0;
 }
 .swap-bar {
   display: flex;
