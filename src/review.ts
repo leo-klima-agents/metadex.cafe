@@ -304,7 +304,8 @@ function howText(state: Review): string {
     return n === 1 ? "One Safe transaction" : `One Safe transaction, ${n} calls`;
   }
   if (state.batch) return `All ${n} in one prompt${atomic(state) ? ", all or nothing" : ""}`;
-  return n === 1 ? "" : "One prompt each";
+  // One prompt each, as the button counts them, goes without saying.
+  return "";
 }
 
 export function refreshReview(): void {

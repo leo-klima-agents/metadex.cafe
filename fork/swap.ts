@@ -198,7 +198,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     // from a wallet that sends several in one prompt, and the swap follows, of what they brought.
     const claims = await review(page).locator(".says").allTextContents();
     assert.ok(claims.length > 1 && claims.every((each) => /^Claims account #82774's rewards from /.test(each)));
-    assert.equal(await review(page).locator(".how").textContent(), "One prompt each");
+    assert.equal(await review(page).locator(".how").textContent(), "");
     const before = await balanceOf(INTO_USDC.token, PAYEE);
     await confirmEach(page, PAYEE);
     await review(page).getByRole("button", { name: "Review the swap into USDC" }).click();
