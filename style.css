@@ -518,6 +518,20 @@ button img {
 .notice .shape {
   margin-inline-end: var(--gap-s);
 }
+/* A notice with an action, such as Try again: the words first, the action at the end of their line, or at the end of
+   the next when the words leave it no room. Every one alike, whatever failed. */
+.notice:has(> :is(button, .button, .buttons)) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-s) var(--gap-l);
+}
+.notice:has(> :is(button, .button, .buttons)) > * {
+  margin-block-start: 0;
+}
+.notice > :is(button, .button, .buttons) {
+  margin-inline-start: auto;
+}
 .checks .check-failed {
   color: var(--danger);
 }

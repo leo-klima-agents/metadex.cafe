@@ -1061,7 +1061,7 @@ function showConnection(): void {
     const { wallet, address, chainId } = connection;
     fill(document, { "wallet-short": short(address) });
     if (chainId === CHAIN_ID) show(".switch-failed", false);
-    show(".to-switch", !wallet.propose);
+    show(".to-switch, .wrong-chain .switch", !wallet.propose);
     show(".safe-elsewhere", !!wallet.propose);
   }
   refreshReview();

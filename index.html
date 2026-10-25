@@ -42,7 +42,7 @@
     <main>
       <noscript><p class="notice">This page needs JavaScript.</p></noscript>
       <p id="error" class="notice" role="alert" hidden>
-        <strong>Reading Base failed.</strong> <button type="button" class="again secondary compact">Try again</button>
+        <span>Reading Base failed.</span> <button type="button" class="again secondary compact">Try again</button>
       </p>
 
       <!-- One view for each kind of page. The route in the hash picks the one shown: see src/views.ts. The pages of the
@@ -62,12 +62,9 @@
         </div>
         <div class="wallet-slot"></div>
         <p class="wrong-chain notice" role="alert" hidden>
-          <span class="to-switch">
-            Wrong network.
-            <button type="button" class="switch compact">Switch to Base</button>
-            <span class="switch-failed" hidden>Switch in your wallet.</span>
-          </span>
+          <span class="to-switch">Wrong network.<span class="switch-failed" hidden> Switch in your wallet.</span></span>
           <span class="safe-elsewhere" hidden>This Safe isn't on Base.</span>
+          <button type="button" class="switch secondary compact">Switch to Base</button>
         </p>
         <section id="needs" class="needs" aria-labelledby="needs-title" hidden>
           <h2 id="needs-title">Needs you <span class="count"></span></h2>
@@ -129,12 +126,9 @@
           <a href="#hydrex/automaxi/check">Why</a>
         </p>
         <p class="wrong-chain notice" role="alert" hidden>
-          <span class="to-switch">
-            Wrong network.
-            <button type="button" class="switch compact">Switch to Base</button>
-            <span class="switch-failed" hidden>Switch in your wallet.</span>
-          </span>
+          <span class="to-switch">Wrong network.<span class="switch-failed" hidden> Switch in your wallet.</span></span>
           <span class="safe-elsewhere" hidden>This Safe isn't on Base.</span>
+          <button type="button" class="switch secondary compact">Switch to Base</button>
         </p>
         <p id="underway" class="notice" hidden>Payout under way.</p>
 
@@ -476,7 +470,7 @@
             </div>
             <p class="all-status small" role="status" hidden>Loading all of Hydrex…</p>
             <p class="all-failed notice" role="alert" hidden>
-              Reading all of Hydrex failed.
+              <span>Reading all of Hydrex failed.</span>
               <button type="button" class="compare-again secondary compact">Try again</button>
             </p>
             <p class="versus" hidden></p>
@@ -885,7 +879,7 @@
             </div>
             <p class="all-status small" role="status" hidden>Loading all of Hydrex…</p>
             <p class="all-failed notice" role="alert" hidden>
-              Reading all of Hydrex failed.
+              <span>Reading all of Hydrex failed.</span>
               <button type="button" class="compare-again secondary compact">Try again</button>
             </p>
             <p class="versus" hidden></p>
@@ -1060,7 +1054,7 @@
         </div>
         <p class="position-reading small" role="status">Loading…</p>
         <p class="position-failed notice" role="alert" hidden>
-          Reading the Hydrex account failed.
+          <span>Reading the Hydrex account failed.</span>
           <button type="button" class="position-again secondary compact">Try again</button>
         </p>
         <p class="position-none small" hidden>No such Hydrex account.</p>
@@ -1120,7 +1114,7 @@
             </div>
             <p class="receipts-reading small" role="status">Loading…</p>
             <p class="receipts-failed notice" hidden>
-              Reading the payouts failed.
+              <span>Reading the payouts failed.</span>
               <button type="button" class="receipts-again secondary compact">Try again</button>
             </p>
             <div class="receipts-found standings" hidden></div>
@@ -1158,12 +1152,9 @@
           <span class="shape failed" aria-hidden="true"></span>Swaps are off.
         </p>
         <p class="wrong-chain notice" role="alert" hidden>
-          <span class="to-switch">
-            Wrong network.
-            <button type="button" class="switch compact">Switch to Base</button>
-            <span class="switch-failed" hidden>Switch in your wallet.</span>
-          </span>
+          <span class="to-switch">Wrong network.<span class="switch-failed" hidden> Switch in your wallet.</span></span>
           <span class="safe-elsewhere" hidden>This Safe isn't on Base.</span>
+          <button type="button" class="switch secondary compact">Switch to Base</button>
         </p>
         <div class="swap-form">
           <p class="swap-unchecked small" role="status">Loading…</p>
@@ -1181,7 +1172,7 @@
             <p class="no-wallet-yet small">No wallet connected.</p>
             <p class="swap-status small" role="status" hidden>Loading…</p>
             <p class="swap-failed notice" role="alert" hidden>
-              Reading your tokens failed.
+              <span>Reading your tokens failed.</span>
               <button type="button" class="swap-again secondary compact">Try again</button>
             </p>
             <p class="swap-none small" hidden>No tokens to sell.</p>
@@ -1215,7 +1206,7 @@
                 <dd class="swap-quoted"></dd>
               </div>
               <div>
-                <dt>−1% swap fee</dt>
+                <dt>Swap fee (1%)</dt>
                 <dd class="swap-fee"></dd>
               </div>
               <div>
@@ -1225,19 +1216,20 @@
               <div class="sum">
                 <dt>
                   <label
-                    >Minimum accepted with a slippage of
+                    >Minimum at
                     <select class="swap-margin">
                       <option value="10">0.1%</option>
                       <option value="50" selected>0.5%</option>
                       <option value="100">1%</option>
                       <option value="300">3%</option>
-                    </select></label
+                    </select>
+                    slippage</label
                   >
                 </dt>
                 <dd class="swap-least"></dd>
               </div>
               <div>
-                <dt>Gas</dt>
+                <dt>Estimated gas</dt>
                 <dd class="swap-gas"></dd>
               </div>
             </dl>
@@ -1811,7 +1803,7 @@
       <article class="slip receipt">
         <p class="receipt-name">metaDEX Café</p>
         <p class="label">Quote · swap into <code class="swap-output" translate="no"></code></p>
-        <p class="receipt-day">Gas <span class="swap-gas"></span></p>
+        <p class="receipt-day">Estimated gas <span class="swap-gas"></span></p>
         <ul class="swap-lines"></ul>
         <dl class="lines">
           <div>

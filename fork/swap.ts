@@ -77,12 +77,12 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       .getByText(/^[\d,.]+ USDC$/)
       .waitFor();
     const labels = await summary.locator("dt").allInnerTexts();
-    assert.deepEqual([labels[0], labels[1], labels[2], labels[4]], ["Quote", "−1% swap fee", "Reaches you", "Gas"]);
-    assert.match(labels[3]!, /^Minimum accepted with a slippage of/);
-    assert.equal(
-      await summary.getByRole("combobox", { name: /Minimum accepted with a slippage of/ }).inputValue(),
-      "50",
+    assert.deepEqual(
+      [labels[0], labels[1], labels[2], labels[4]],
+      ["Quote", "Swap fee (1%)", "Reaches you", "Estimated gas"],
     );
+    assert.match(labels[3]!, /^Minimum at/);
+    assert.equal(await summary.getByRole("combobox", { name: /Minimum at/ }).inputValue(), "50");
     // Each figure exactly, then what it is worth.
     const figure = async (root: Locator, name: string): Promise<[string, string]> => [
       await root.locator(`.${name} .exact`).innerText(),
@@ -111,7 +111,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.equal(await bill.locator(".receipt-name").innerText(), "metaDEX Café");
     assert.equal(await bill.locator(".label code").innerText(), "USDC");
     assert.equal(await review(page).locator(".step-count code").innerText(), "USDC");
-    assert.match(await bill.locator(".receipt-day").innerText(), /^Gas /);
+    assert.match(await bill.locator(".receipt-day").innerText(), /^Estimated gas /);
     const [gasShown, gasValue] = await figure(bill, "swap-gas");
     assert.match(gasShown, /^[\d.]+ ETH$/);
     assert.match(gasValue, worth);
