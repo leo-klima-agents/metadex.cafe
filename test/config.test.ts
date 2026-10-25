@@ -253,7 +253,7 @@ test("each swapper has its output and a checksummed address, and the swap's page
   assert.match(slippage, /How much less than quoted you accept/);
   assert.match(slippage, /The input token stays in your wallet/);
   // The swap's own summary sets the slippage on the line of the least that may reach you.
-  assert.match(swap, /<label\s*>At least, with\s*<select class="swap-margin">/);
+  assert.match(swap, /<label\s*>Minimum accepted with a slippage of\s*<select class="swap-margin">/);
   assert.ok(!swap.includes(AUTOMAXI_TREASURY) && !swap.includes("2-of-3"));
   // The swappers are immutable: the page checks only that its RPCs serve Base, and says nothing of it.
   assert.doesNotMatch(swap, /data-check=|>Checks<\/h4>|serves Base/);
