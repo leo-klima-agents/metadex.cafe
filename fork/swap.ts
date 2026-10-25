@@ -79,7 +79,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     const labels = await summary.locator("dt").allInnerTexts();
     assert.deepEqual(
       [labels[0], labels[1], labels[2], labels[4]],
-      ["Quote", "Swap fee (1%)", "Fetched", "Estimated gas"],
+      ["Quote", "Swap fee (1%)", "Reaches you", "Estimated gas"],
     );
     assert.match(labels[3]!, /^Minimum at/);
     assert.equal(await summary.getByRole("combobox", { name: /Minimum at/ }).inputValue(), "50");

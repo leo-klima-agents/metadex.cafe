@@ -568,7 +568,7 @@ async function reviewSwap(): Promise<void> {
   };
   reviewButton.disabled = true;
   reviewFailed.hidden = true;
-  reviewButton.textContent = "Simulating…";
+  reviewButton.textContent = "Checking…";
   try {
     const opened = await openSwapReview(plan, connection, scanned.tokens, scanned.costs, scanned.prices);
     if (opened) {

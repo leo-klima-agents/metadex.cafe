@@ -1157,7 +1157,10 @@ dialog .foot {
     position: static;
   }
 }
-/* A transaction's hash, short, stays on one line. */
+/* The transactions, on a line of their own; a transaction's hash, short, stays on one line. */
+.progress .hashes {
+  display: block;
+}
 .progress a {
   white-space: nowrap;
 }

@@ -202,7 +202,7 @@ receipt takes the review's screen, under "Done".
 **A swap** is a bill before the wallet asks: the name, "Quote · swap into cbBTC", with a token's symbol in its own case
 among the capitals, and the gas under it, as it is paid apart, in ETH. Then a line per token, with what it fetches and
 its route by tokens, then who runs its pools, each once, "ZORA → WETH → USDC via Aerodrome, Uniswap", without addresses
-or fee tiers. Then the quote, "Swap fee", "Fetched", and, as its total, "Minimum at 0.5% slippage", which names the
+or fee tiers. Then the quote, "Swap fee", "Reaches you", and, as its total, "Minimum at 0.5% slippage", which names the
 slippage that set it. Its receipt, once all went through, is the same bill: when, and the gas it cost when the wallet
 paid it, then each token sold with what it fetched and how that compares with what the bill showed, "+0.2% vs quote" or
 "As quoted", then what they fetched, the swap fee, and "Paid to you". It gives no price per token, which the page shows

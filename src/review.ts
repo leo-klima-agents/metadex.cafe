@@ -335,19 +335,22 @@ export function refreshReview(): void {
 
 export const closeReview = (): void => dialog.close();
 
-// The review may have closed, or another opened, by the time the wallet answers. Of several transactions, those sent
-// until the last are so far.
+// The review may have closed, or another opened, by the time the wallet answers. The transactions follow on a line of
+// their own; of several, those until the last are so far.
 function say(state: Review, message: string, hashes: Hex[] = []): void {
   if (state !== current) return;
   progress.replaceChildren(message);
+  if (!hashes.length) return;
   const heading =
     state.steps.length > 1 && !state.finished
-      ? " Transactions so far: "
+      ? "Transactions so far: "
       : hashes.length === 1
-        ? " Transaction: "
-        : " Transactions: ";
-  hashes.forEach((hash, i) => progress.append(i ? ", " : heading, txLink(hash)));
-  if (hashes.length) progress.append(".");
+        ? "Transaction: "
+        : "Transactions: ";
+  const line = Object.assign(document.createElement("span"), { className: "hashes" });
+  hashes.forEach((hash, i) => line.append(i ? ", " : heading, txLink(hash)));
+  line.append(".");
+  progress.append(line);
 }
 
 const wentThrough = ({ done, steps, batch, proposed, groups }: Review): string =>
