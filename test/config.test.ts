@@ -248,7 +248,7 @@ test("each swapper has its output and a checksummed address, and the swap's page
   const slippage = /<h4 class="label">Slippage<\/h4>\s*<dl class="rows">[\s\S]*?<\/dl>/.exec(swap)?.[0] ?? "";
   assert.deepEqual(
     [...slippage.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
-    ["What it is", "When unmet"],
+    ["Meaning", "When unmet"],
   );
   assert.match(slippage, /How much less than quoted you accept/);
   assert.match(slippage, /The input token stays in your wallet/);

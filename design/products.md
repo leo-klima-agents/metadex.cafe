@@ -411,8 +411,8 @@ YOUR TOKENS                              11 of 19 ticked
 - **The output first,** as Binance does: the routes, the quotes and the minimums all depend on it. USDC by default.
   [Default output] The output itself is not on the list: the swapper never sells it, and it needs no swap.
 - **The tokens:** every token the page knows that the wallet holds, by value. The page knows Hydrex's reward tokens, the
-  six outputs, and a short list of Base's common tokens built into the page. [Token list] "Add a token by its address"
-  covers the rest; ERC-7811 adds the wallet's own list where the wallet offers it.
+  six outputs, and a short list of Base's common tokens built into the page. [Token list] When the wallet holds none of
+  them, "Add a token by its address" covers the rest; ERC-7811 adds the wallet's own list where the wallet offers it.
 - **Ticked by default** only when the page found a route and the quote clears its gas twice over. Every unticked row
   says why, in words: worth less than its gas, no pool the swapper can use, no price. "Ticked" is never a nudge: the
   owner can tick anything with a route.

@@ -272,7 +272,7 @@ function drawRow(row: Row, scanned: Scan): void {
 function drawAll(): void {
   const signedIn = !!context.connection();
   // Without a wallet, the outputs show, and the tokens' list says that no wallet is connected.
-  show(".swap-approvals-open, .add-token", signedIn, view);
+  show(".swap-approvals-open", signedIn, view);
   const swapper = swapperShown();
   for (const input of view.querySelectorAll<HTMLInputElement>('input[name="output"]')) {
     input.checked = swapperOf(input.value) === swapper;
@@ -283,13 +283,14 @@ function drawAll(): void {
   show(".swap-unchecked", base === undefined, view);
   if (!scan || !signedIn) {
     status.hidden = summary.hidden = true;
-    show(".swap-failed, .swap-none", false, view);
+    show(".swap-failed, .swap-none, .add-token", false, view);
     return void fill(view, { "swap-ticked": "" });
   }
   summary.hidden = false;
   const scanned = scan;
   show(".swap-failed", scanned.failed, view);
-  show(".swap-none", !scanned.reading && !scanned.failed && !scanned.rows.length, view);
+  // A token to add by its address is offered only when the page found none to sell.
+  show(".swap-none, .add-token", !scanned.reading && !scanned.failed && !scanned.rows.length, view);
   const total = scanned.rows.length;
   status.hidden = !scanned.reading;
   status.textContent = !total ? "Loading…" : `Routes: ${scanned.done} of ${total}`;

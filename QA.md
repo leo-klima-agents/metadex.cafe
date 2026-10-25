@@ -157,17 +157,17 @@ the wallet's own failures. Start the scenario again to try a flow from its start
 
 ### The swap: `swap`
 
-| Flow                                          | Sign as       | What to do                                                                                                                                                               |
-| --------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Swap into USDC                                | `0x0000…FFEE` | WETH, ZORA and AVNT, each with what it fetches. The quote, the 1%, what reaches you, the least, the gas. Review, Continue, Sign 4 transactions.                          |
-| All or nothing, one by one, or one per prompt | `0x0000…FFEE` | Calls, then reload. All or nothing: All 4 in one prompt, all or nothing. One by one: All 4 in one prompt. One per prompt: a prompt each, the swap quoted again last.     |
-| A token skipped, and its approval reset       | `0x0000…FFEE` | Calls: several, all or nothing; reload. Review, Continue; then send all of AVNT away, and Sign 4 transactions: 2 tokens sold, AVNT kept. Reset its approval.             |
-| A quote far under the page's price            | `0x0000…FFEE` | Tick Swap quotes come in a tenth under price, reload: each row says Quote 10% under price.                                                                               |
-| A token with a listed token's symbol          | `0x0000…FFEE` | Give it a token of symbol `USDC`; then add it on the page by the address the QA wallet names, or tick Lists those tokens and reload: USDC, no route, Not the usual USDC. |
-| Another output                                | `0x0000…FFEE` | `#swap/weth`, or pick it on the page.                                                                                                                                    |
-| The approvals given to the swappers           | `0x0000…FFEE` | After a swap, the swap's Approvals, and the App's.                                                                                                                       |
-| Many tokens                                   | `0xd9e9…50aF` | Carbon Impact's treasury, a Safe: as a wallet, or in Safe{Wallet}.                                                                                                       |
-| Swaps are off                                 | any           | Tick Base's RPCs serve another chain, reload: Swaps are off, without naming the check.                                                                                   |
+| Flow                                          | Sign as       | What to do                                                                                                                                                           |
+| --------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Swap into USDC                                | `0x0000…FFEE` | WETH, ZORA and AVNT, each with what it fetches. The quote, the 1%, what reaches you, the least, the gas. Review, Continue, Sign 4 transactions.                      |
+| All or nothing, one by one, or one per prompt | `0x0000…FFEE` | Calls, then reload. All or nothing: All 4 in one prompt, all or nothing. One by one: All 4 in one prompt. One per prompt: a prompt each, the swap quoted again last. |
+| A token skipped, and its approval reset       | `0x0000…FFEE` | Calls: several, all or nothing; reload. Review, Continue; then send all of AVNT away, and Sign 4 transactions: 2 tokens sold, AVNT kept. Reset its approval.         |
+| A quote far under the page's price            | `0x0000…FFEE` | Tick Swap quotes come in a tenth under price, reload: each row says Quote 10% under price.                                                                           |
+| A token with a listed token's symbol          | `0x0000…FFEE` | Give it a token of symbol `USDC`; then tick Lists those tokens and reload: USDC, no route, Not the usual USDC.                                                       |
+| Another output                                | `0x0000…FFEE` | `#swap/weth`, or pick it on the page.                                                                                                                                |
+| The approvals given to the swappers           | `0x0000…FFEE` | After a swap, the swap's Approvals, and the App's.                                                                                                                   |
+| Many tokens                                   | `0xd9e9…50aF` | Carbon Impact's treasury, a Safe: as a wallet, or in Safe{Wallet}.                                                                                                   |
+| Swaps are off                                 | any           | Tick Base's RPCs serve another chain, reload: Swaps are off, without naming the check.                                                                               |
 
 ### Claiming: `claim`
 
