@@ -125,13 +125,13 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       );
       assert.doesNotMatch(route, /0x|tick spacing|%/, route);
     }
-    assert.equal(await bill.locator(".swap-slippage").innerText(), "At your 0.5% slippage");
+    assert.equal(await bill.locator(".swap-slippage").innerText(), "Minimum at 0.5% slippage");
     await review(page).getByRole("button", { name: "Continue" }).click();
     await review(page).getByText("One prompt, 4 calls, all or nothing").waitFor();
     const says = await review(page).locator(".says").allTextContents();
     assert.equal(says.length, 4);
-    assert.match(says[0]!, /^Lets the USDC swapper take [\d,.]+ \S+ from you\.$/);
-    assert.match(says[3]!, /^Sells 3 tokens for at least [\d,.]+ USDC, less any token skipped\.$/);
+    assert.match(says[0]!, /^Let the USDC swapper take [\d,.]+ \S+ from you$/);
+    assert.match(says[3]!, /^Sell 3 tokens for at least [\d,.]+ USDC$/);
     assert.deepEqual(await review(page).locator(".function").allTextContents(), [
       "approve",
       "approve",
@@ -161,7 +161,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await skipped.getByRole("button", { name: "Reset its approval" }).click();
     await review(page).getByRole("heading", { name: "Reset an approval" }).waitFor();
     assert.deepEqual(await review(page).locator(".says").allTextContents(), [
-      "Resets AVNT's approval of the USDC swapper to nothing.",
+      "Reset AVNT's approval of the USDC swapper to nothing",
     ]);
     await confirm(page);
     assert.equal(await readOn<bigint>(AVNT, tokenAbi, "allowance", [SELLER, INTO_USDC.address]), 0n);
@@ -209,13 +209,13 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       .waitFor();
     // The approvals, then the swap: in several calls, as here, when one would need more gas than a swap may use.
     const says = await review(page).locator(".says").allTextContents();
-    const sells = says.findIndex((each) => /^Sells /.test(each));
+    const sells = says.findIndex((each) => /^Sell /.test(each));
     assert.ok(sells > 0, JSON.stringify(says));
     assert.ok(
       says.every((each, i) =>
         i < sells
-          ? /^Lets the USDC swapper take /.test(each)
-          : /^Sells \d+ tokens? for at least [\d,.]+ USDC, less any token skipped\.$/.test(each),
+          ? /^Let the USDC swapper take /.test(each)
+          : /^Sell \d+ tokens? for at least [\d,.]+ USDC$/.test(each),
       ),
       JSON.stringify(says),
     );

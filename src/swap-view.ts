@@ -524,12 +524,11 @@ export async function resetReview(these: Allowance[]): Promise<void> {
 
 // The review of a swap: the routes, each with its minimum, and the approvals it needs, run through Base first. `approve`
 // is what to approve, when not the route's amount, as for a swap of a whole balance after a claim. `margin` is the
-// slippage that set the minimums, which `yours` says the owner picked.
+// slippage that set the minimums.
 export type Plan = {
   swapper: Swapper;
   items: { token: Token; route: Route; out: bigint; allowance: bigint; approve?: bigint }[];
   margin: bigint;
-  yours?: boolean;
 };
 
 export async function planSteps(
@@ -560,7 +559,6 @@ async function reviewSwap(): Promise<void> {
   const plan: Plan = {
     swapper,
     margin: margin(),
-    yours: true,
     items: ticked.map((row) => ({
       token: row.token,
       route: { ...row.found!.route, amount: row.amount, minPaid: minimumOf(row.found!.out, margin()) },
@@ -662,7 +660,7 @@ export async function openSwapReview(
   );
   fill(body, {
     "swap-output": swapper.symbol,
-    "swap-slippage": `At ${plan.yours ? "your " : ""}${bps(plan.margin)} slippage`,
+    "swap-slippage": `Minimum at ${bps(plan.margin)} slippage`,
     "swap-simulated": "Not simulated: these are quotes.",
   });
   show(".swap-simulated", !simulated, body);

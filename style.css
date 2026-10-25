@@ -1189,10 +1189,11 @@ dialog .receipt {
 .steps > .slip + .slip {
   margin-block-start: var(--gap-l);
 }
-/* The call the Confirm button sends next, when it sends them one at a time. */
+/* The call the Confirm button sends next, when it sends them one at a time. Its second line is inside its edge, so
+   that the review's foot, which is as wide as the calls, hides all of it. */
 .steps > .next-call {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
   scroll-margin-block-start: var(--gap-l);
 }
 .fields {

@@ -55,12 +55,15 @@ export function hopsWords(route: Route, tokens: Map<string, Token>): string {
   return `${path.join(" → ")} via ${[...new Set(route.hops.map(venueOf))].join(", ")}`;
 }
 
-// A route in words: "41.2 AVNT, AVNT → WETH → USDC via Hydrex, Uniswap, at least 0.60 USDC". A swap of a whole
-// balance, as after a claim, says so instead of an amount.
+// A route in words, from what it sells, through the tokens between, to the least it fetches, then who runs its pools:
+// "41.2 AVNT → WETH → at least 0.60 USDC via Hydrex, Uniswap". A swap of a whole balance, as after a claim, says so
+// instead of an amount.
 export function routeWords(route: Route, tokens: Map<string, Token>, output: Swapper, amountWords?: string): string {
   const token = tokens.get(route.token.toLowerCase());
   const amount = amountWords ?? (token ? `${figure(route.amount, token.decimals)} ${token.symbol}` : `${route.amount}`);
-  return `${amount}, ${hopsWords(route, tokens)}, at least ${figure(route.minPaid, output.decimals)} ${output.symbol}`;
+  const between = route.hops.slice(0, -1).map(({ tokenOut }) => symbolOf(tokens, tokenOut));
+  const least = `at least ${figure(route.minPaid, output.decimals)} ${output.symbol}`;
+  return `${[amount, ...between, least].join(" → ")} via ${[...new Set(route.hops.map(venueOf))].join(", ")}`;
 }
 
 export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Slip {
@@ -68,8 +71,8 @@ export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Sli
   return {
     ...approve(token.address, swapper.address, amount),
     says: amount
-      ? `Lets the ${swapper.symbol} swapper take ${words} from you.`
-      : `Resets ${token.symbol}'s approval of the ${swapper.symbol} swapper to nothing.`,
+      ? `Let the ${swapper.symbol} swapper take ${words} from you`
+      : `Reset ${token.symbol}'s approval of the ${swapper.symbol} swapper to nothing`,
     on: `The ${token.symbol} token contract`,
     call: "approve",
     fields: [
@@ -95,7 +98,7 @@ export function swapSlip(
   return {
     ...swapCall(swapper, routes, deadline),
     ...(tip !== undefined && { tip }),
-    says: `Sells ${n === 1 ? "1 token" : `${n} tokens`} for at least ${figure(least, swapper.decimals)} ${swapper.symbol}, less any token skipped.`,
+    says: `Sell ${n === 1 ? "1 token" : `${n} tokens`} for at least ${figure(least, swapper.decimals)} ${swapper.symbol}`,
     on: `The ${swapper.symbol} swapper`,
     call: "swap",
     fields: [
@@ -107,7 +110,7 @@ export function swapSlip(
             route,
             tokens,
             swapper,
-            whole ? `All your ${symbolOf(tokens, route.token)}, up to what this approves` : undefined,
+            whole ? `All your ${symbolOf(tokens, route.token)} (up to what this approves)` : undefined,
           ),
         ],
       })),
