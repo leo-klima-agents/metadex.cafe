@@ -248,12 +248,12 @@ test("each swapper has its output and a checksummed address, and the swap's page
   const slippage = /<h4 class="label">Slippage<\/h4>\s*<dl class="rows">[\s\S]*?<\/dl>/.exec(swap)?.[0] ?? "";
   assert.deepEqual(
     [...slippage.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
-    ["What it is", "When unmet"],
+    ["Meaning", "When unmet"],
   );
   assert.match(slippage, /How much less than quoted you accept/);
-  assert.match(slippage, /The input token stays in your wallet/);
+  assert.match(slippage, /The token isn't swapped/);
   // The swap's own summary sets the slippage on the line of the least that may reach you.
-  assert.match(swap, /<label\s*>At least, with\s*<select class="swap-margin">/);
+  assert.match(swap, /<label\s*>Minimum at\s*<select class="swap-margin">/);
   assert.ok(!swap.includes(AUTOMAXI_TREASURY) && !swap.includes("2-of-3"));
   // The swappers are immutable: the page checks only that its RPCs serve Base, and says nothing of it.
   assert.doesNotMatch(swap, /data-check=|>Checks<\/h4>|serves Base/);
@@ -279,10 +279,15 @@ test("the header holds the logo and the name, and a button to connect a wallet; 
   ]) {
     assert.equal(trail(view), '<a href="#app">Your wallet</a><a href="#hydrex">Hydrex</a>');
   }
-  // Only the App and the header's popup hold the wallet buttons.
-  assert.equal(html.match(/<div class="wallet-slot"><\/div>/g)?.length, 2);
-  assert.ok(viewOf(html, 'data-view="app"').includes('<div class="wallet-slot"></div>'));
+  // The header's popup holds the wallet buttons, as do the App, under its products, and the lists of what a wallet holds:
+  // its Hydrex accounts, and the tokens to sell.
+  assert.equal(html.match(/<div class="wallet-slot"><\/div>/g)?.length, 4);
+  const app = viewOf(html, 'data-view="app"');
+  assert.ok(app.indexOf('<div class="wallet-slot"></div>') > app.indexOf('id="products"'));
   assert.ok(header.includes('<div class="wallet-slot"></div>'));
+  assert.match(viewOf(html, 'data-view="hydrex"'), /id="yours-title"[\s\S]*?<div class="wallet-slot"><\/div>/);
+  assert.match(viewOf(html, 'data-view="swap"'), /id="swap-tokens-title"[\s\S]*?<div class="wallet-slot"><\/div>/);
+  assert.ok(!html.includes("No wallet connected."));
 });
 
 test("on Hydrex's page, the automations come before the Hydrex accounts, whose groups are a level below", () => {

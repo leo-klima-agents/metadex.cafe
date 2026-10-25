@@ -70,26 +70,11 @@ export function candidatePaths(token: Address, output: Address, hydrex = false):
 
 // Aero's classic pools add an MEV tax above a tip of 1 gwei, which a quote does not see.
 export const taxed = ({ exchange }: Hop): boolean => exchangeOf(exchange).kind === "solidly";
-// Uniswap v4's pools live in its PoolManager, and have no address of their own.
-export const poolless = ({ exchange }: Hop): boolean => exchangeOf(exchange).kind === "v4";
 export const MAX_TIP = 1_000_000_000n;
-
-// A hop's pool by its exchange, and its fee where the exchange has tiers: "Uniswap v3 0.05%", "Aero Slipstream".
-export function hopName({ exchange, fee }: Hop): string {
-  const { name, kind } = exchangeOf(exchange);
-  return kind === "v3" || kind === "v4" ? `${name} ${fee / 10_000}%` : name;
-}
 
 // Who runs a hop's exchange, as a bill names it: "Aero", "Aerodrome", "Uniswap", "Hydrex". The first word of the
 // exchange's name: Aero's own pools and Aerodrome's keep their names apart.
 export const venueOf = ({ exchange }: Hop): string => exchangeOf(exchange).name.split(" ")[0]!;
-
-// A hop's pool in full, as a call names it: "Uniswap v3 0.05%", "Aero Slipstream, tick spacing 100".
-export function poolName(hop: Hop): string {
-  return exchangeOf(hop.exchange).kind === "slipstream"
-    ? `${hopName(hop)}, tick spacing ${hop.tickSpacing}`
-    : hopName(hop);
-}
 
 // The best of a hop's pools by what each pays, unless it is one of Aero's classic pools, which wins only by more than
 // 1%: its MEV tax can take up to 10% that a quote does not see.

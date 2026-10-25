@@ -262,7 +262,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   };
   const opened = openReview({
     name,
-    pages: [{ title: "What waits", body }, { title: "What your wallet will ask" }],
+    pages: [{ title: "What waits", body }, {}],
     steps: claimSlips,
     checkHref,
     connection,

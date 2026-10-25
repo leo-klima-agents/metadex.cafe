@@ -120,7 +120,7 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
     const [, safeTxs = "", calls = ""] = /^(\d+) Safe transactions, (\d+) calls$/.exec(how) ?? [];
     assert.ok(Number(safeTxs) > 1 && Number(calls) > Number(safeTxs), how);
     const counts = await dialog.locator(".count").allTextContents();
-    assert.equal(counts[0], `Safe 1 of ${safeTxs} · Call 1 of ${calls}`);
+    assert.equal(counts[0], `Safe 1 of ${safeTxs} · Call 1 of ${calls} · Claim`);
     assert.equal(counts.at(-1), `Safe ${safeTxs} of ${safeTxs} · Call ${calls} of ${calls}`);
     await shoot(page, "safe-claim-1440-light");
     await dialog.getByRole("button", { name: "Propose in Safe{Wallet}" }).click();

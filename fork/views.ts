@@ -80,7 +80,10 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await page.title(), "Your wallet · metaDEX Café");
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Your wallet");
     // The App lists the products: the Hydrex automations, and the swap.
-    assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), ["Hydrex automations", "Swap tokens"]);
+    assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), [
+      "Hydrex automations",
+      "Swap many tokens",
+    ]);
     assert.equal(await page.locator("header .to-app").getAttribute("aria-current"), "page");
     await app(page).getByRole("button", { name: "Test Wallet" }).waitFor();
     await shoot(page, "app-390-light");
@@ -474,7 +477,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await page.locator("#accounts").isVisible(), false);
     // The header's button, which would connect the one wallet at once, says so in its popup.
     await page.goto(`${SITE}/#hydrex`);
-    await hydrex(page).getByText("No wallet connected.").waitFor();
+    await hydrex(page).locator(".wallets").getByText("Connect a wallet").waitFor();
     await connectButton(page).click();
     const pop = page.locator("#connect:popover-open");
     await pop.getByText("No wallet found.").waitFor();

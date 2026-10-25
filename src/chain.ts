@@ -252,3 +252,18 @@ export async function waitForReceipt(hash: Hex): Promise<Receipt | undefined> {
   }
   return undefined;
 }
+
+// What the transactions cost in ETH, Base's L1 fee included, if `from` sent and paid for each of them: undefined when
+// one cannot be read, or another sent it, as the bundler of a smart account's batch, or a sponsor.
+export async function gasPaid(hashes: Hex[], from: Address): Promise<bigint | undefined> {
+  type Paid = { from: Address; gasUsed: Hex; effectiveGasPrice?: Hex; l1Fee?: Hex };
+  const found = await Promise.all(
+    [...new Set(hashes)].map((hash) => rpc<Paid | null>("eth_getTransactionReceipt", [hash]).catch(() => null)),
+  );
+  let wei = 0n;
+  for (const receipt of found) {
+    if (!receipt?.effectiveGasPrice || !same(receipt.from, from)) return undefined;
+    wei += BigInt(receipt.gasUsed) * BigInt(receipt.effectiveGasPrice) + BigInt(receipt.l1Fee ?? 0);
+  }
+  return found.length ? wei : undefined;
+}

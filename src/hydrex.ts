@@ -379,6 +379,7 @@ function approval({ id }: Account, approve: boolean, says: string, target: Targe
     approve,
     conduit: target.address,
     conduitName,
+    title: approve ? `Join ${target.name}` : `Leave ${other ? `the ${target.name} automation` : target.name}`,
     says: `Account #${id} ${says}`,
     on: "Hydrex's VotingEscrow",
     call: "setConduitApproval",
@@ -392,7 +393,6 @@ function approval({ id }: Account, approve: boolean, says: string, target: Targe
       { label: "Account", name: "account", code: String(id) },
       { label: "Approve", name: "approve", code: String(approve) },
     ],
-    note: `The selector, then each 32-byte word on two lines: the conduit, ${id} as ${id.toString(16)}, and ${approve} as ${Number(approve)}.`,
     ...(other && { automation: target.name }),
   };
 }

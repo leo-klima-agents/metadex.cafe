@@ -59,8 +59,8 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await toWallet(page);
     await anvil("evm_setAutomine", [false]);
     try {
-      await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
-      await review(page).getByText("Waiting for Base to include it").waitFor();
+      await review(page).getByRole("button", { name: "Sign transaction" }).click();
+      await review(page).getByText("Waiting for it to go through").waitFor();
       await review(page).getByRole("button", { name: "Close" }).click();
       await account(page, 141).getByText("You vote with it").waitFor();
       // Mine only after the page has polled again: it polls every two seconds.
@@ -88,12 +88,8 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     const call = dialog.locator(".slip").first();
     assert.equal(await call.locator(".conduit").innerText(), CONDUIT, "co-signers see the address, not only its name");
     assert.equal(await call.locator(".conduit-name").innerText(), "Carbon Impact");
-    assert.equal(await call.locator(".call").innerText(), "100 bytes:");
-    assert.equal(await call.locator(".count").textContent(), "Safe · Call 1 of 2");
-    assert.equal(
-      await call.locator(".slip-note").innerText(),
-      "The selector, then each 32-byte word on two lines: the conduit, 53350 as d066, and false as 0.",
-    );
+    assert.equal(await call.locator(".call").innerText(), "100 bytes");
+    assert.equal(await call.locator(".count").textContent(), "Safe · Call 1 of 2 · Leave Carbon Impact");
     assert.equal(await dialog.locator(".operation").first().isVisible(), false, "Safe{Wallet} sets the operation");
     await shoot(page, "safe-calls-1440-light");
     await dialog.getByRole("button", { name: "Propose in Safe{Wallet}" }).click();

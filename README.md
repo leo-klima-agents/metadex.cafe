@@ -49,13 +49,14 @@ This README is for whoever runs the site. The design and the plan are in [design
   prompt per call; the swap is then quoted again before the wallet asks for it, and never with a lower minimum.
 - The header holds the logo and the name, which lead Home, and on every view a button that connects a wallet: at once
   when the browser has one, from a list when it has several. Once one is connected, the wallet's chip, which leads to
-  the App, takes its place. Only the App lists the wallets in the page too.
+  the App, takes its place. The App, under its products, and the lists of a wallet's Hydrex accounts and tokens to sell
+  list the wallets in the page too.
 - Home is a heading and the button to the App (`#app`). A wallet connected on Home or About leads on to the App; the
   name in the header still leads Home afterwards. The App, "Your wallet", starts with what needs you across the
-  products, each with one action: a Hydrex account in a stopped automation, an overdue payout, approvals left to the
-  swappers. Then the products, each with what you hold in it: the Hydrex automations (`#hydrex`) and the swap (`#swap`).
-  Its Approvals button lists every approval this wallet gave the café's contracts, with the call that undoes it. The
-  pages under it name the way back in their title, as "Your wallet › Hydrex"; Home and About do not.
+  products, each with one action: a Hydrex account in a stopped automation, an overdue payout, token approvals to the
+  swappers that haven't been used. Then the products, each with what you hold in it: the Hydrex automations (`#hydrex`)
+  and the swap (`#swap`). Its Approvals button lists every approval this wallet gave the café's contracts, with the call
+  that undoes it. The pages under it name the way back in their title, as "Your wallet › Hydrex"; Home and About do not.
 - The page always says "Hydrex account", as "account" alone means an address in crypto: "8 Hydrex accounts", "Hydrex
   Main Protocol Account #26432".
 - Details open from a round info button beside what they explain, as a popup: on a phone, a sheet from the foot of the

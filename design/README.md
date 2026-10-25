@@ -26,9 +26,9 @@ technical parts open from an info button, as popups.
   accounts, in groups a level below: those that need their owner, those in each automation, the others, and a fold for
   those with nothing to vote with. Each row leads to the account's page. The menu used to come last, under the groups,
   as cards like the accounts': with many accounts, it was easy to miss.
-- **The swap** (`#swap`, `#swap/weth`), "Your wallet › Swap tokens": the output, the wallet's tokens, what the ticked
-  ones fetch line by line, from the quote down to the least that may reach you, with the slippage picked on that line,
-  and popups: its costs, what the slippage is, and the six swappers' contracts; approvals you gave the swappers.
+- **The swap** (`#swap`, `#swap/weth`), "Your wallet › Swap many tokens": the output, the wallet's tokens, what the
+  ticked ones fetch line by line, from the quote down to the least that may reach you, with the slippage picked on that
+  line, and popups: its costs, what the slippage is, and the six swappers' contracts; approvals you gave the swappers.
 - **An automation's page** (`#hydrex/carbon-impact`, `#hydrex/automaxi`): its status, its key figures, and your accounts
   in it and Join. Info buttons beside them open fee facts, against all of Hydrex, joining and leaving, one of its own,
   and Check it, with who controls what.
@@ -175,8 +175,8 @@ review gives what a week at last epoch's rate would pay the accounts picked, nex
 dialog that did both, is gone.
 
 **The join review.** Today's three steps. "What changes" adds the fee facts and an estimate for the accounts picked,
-marked "not a promise". "What your wallet will ask" sends one request for several accounts where the wallet can batch.
-"Done" offers a calendar file for payday, made on the device.
+marked "not a promise". "Transactions" sends one request for several accounts where the wallet can batch. "Done" offers
+a calendar file for payday, made on the device.
 
 **An automation's page,** one template for all: status; what it does; four key facts (takes, pays you, costs you,
 leaving) and Join; your accounts in it; fee facts; money per 1,000 units of voting power; its record against the

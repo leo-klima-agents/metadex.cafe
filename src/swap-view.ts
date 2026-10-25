@@ -1,12 +1,11 @@
 import type { Address } from "viem";
-import { now, same, type Receipt } from "./chain.ts";
+import { gasPaid, now, same, type Receipt } from "./chain.ts";
 import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
 import { clone, fill, fillAddress, show, showWorth, showWorthIn } from "./dom.ts";
 import { tokensOf } from "./earnings.ts";
 import {
   between,
   bps,
-  count,
   figure,
   fixed,
   fraction,
@@ -15,6 +14,7 @@ import {
   moneyAt,
   rounded,
   short,
+  utc,
   type Money,
 } from "./format.ts";
 import { earningsOf, onEarnings } from "./last-epoch.ts";
@@ -271,8 +271,8 @@ function drawRow(row: Row, scanned: Scan): void {
 
 function drawAll(): void {
   const signedIn = !!context.connection();
-  // Without a wallet, the outputs show, and the tokens' list says that no wallet is connected.
-  show(".swap-approvals-open, .add-token", signedIn, view);
+  // Without a wallet, the outputs show, and the tokens' list offers the wallets to connect.
+  show(".swap-approvals-open", signedIn, view);
   const swapper = swapperShown();
   for (const input of view.querySelectorAll<HTMLInputElement>('input[name="output"]')) {
     input.checked = swapperOf(input.value) === swapper;
@@ -280,19 +280,20 @@ function drawAll(): void {
     show(".output-off", input.disabled, input.closest("label")!);
   }
   show(".swap-off", base === false, view);
-  show(".swap-unchecked", base === undefined, view);
   if (!scan || !signedIn) {
     status.hidden = summary.hidden = true;
-    show(".swap-failed, .swap-none", false, view);
+    show(".swap-failed, .swap-none, .add-token", false, view);
     return void fill(view, { "swap-ticked": "" });
   }
   summary.hidden = false;
   const scanned = scan;
   show(".swap-failed", scanned.failed, view);
-  show(".swap-none", !scanned.reading && !scanned.failed && !scanned.rows.length, view);
+  // A token to add by its address is offered only when the page found none to sell.
+  show(".swap-none, .add-token", !scanned.reading && !scanned.failed && !scanned.rows.length, view);
   const total = scanned.rows.length;
-  status.hidden = !scanned.reading;
-  status.textContent = !total ? "Loading…" : `Routes: ${scanned.done} of ${total}`;
+  // Only until the wallet's tokens show: then each row says that its route is being found, and nothing moves once all
+  // are.
+  status.hidden = !scanned.reading || total > 0;
   const ticked = scanned.rows.filter((row) => row.ticked && row.found);
   fill(view, { "swap-ticked": total ? `· ${ticked.length} of ${total}` : "" });
   summarise(scanned, ticked);
@@ -306,6 +307,8 @@ function summarise(scanned: Scan, ticked: Row[]): void {
   const breakdown = view.querySelector<HTMLElement>(".breakdown")!;
   const splitLine = view.querySelector<HTMLElement>(".swap-split")!;
   reviewButton.disabled = !ticked.length || swapsOff();
+  // Until the page has read that its RPCs serve Base, which is soon, the button waits, and says why.
+  show(".swap-checking", !!ticked.length && base === undefined, view);
   sells.hidden = ticked.length > 0;
   breakdown.hidden = !ticked.length;
   if (!ticked.length) return void (splitLine.hidden = true);
@@ -524,12 +527,11 @@ export async function resetReview(these: Allowance[]): Promise<void> {
 
 // The review of a swap: the routes, each with its minimum, and the approvals it needs, run through Base first. `approve`
 // is what to approve, when not the route's amount, as for a swap of a whole balance after a claim. `margin` is the
-// slippage that set the minimums, which `yours` says the owner picked.
+// slippage that set the minimums.
 export type Plan = {
   swapper: Swapper;
   items: { token: Token; route: Route; out: bigint; allowance: bigint; approve?: bigint }[];
   margin: bigint;
-  yours?: boolean;
 };
 
 export async function planSteps(
@@ -560,7 +562,6 @@ async function reviewSwap(): Promise<void> {
   const plan: Plan = {
     swapper,
     margin: margin(),
-    yours: true,
     items: ticked.map((row) => ({
       token: row.token,
       route: { ...row.found!.route, amount: row.amount, minPaid: minimumOf(row.found!.out, margin()) },
@@ -570,7 +571,7 @@ async function reviewSwap(): Promise<void> {
   };
   reviewButton.disabled = true;
   reviewFailed.hidden = true;
-  reviewButton.textContent = "Simulating…";
+  reviewButton.textContent = "Checking…";
   try {
     const opened = await openSwapReview(plan, connection, scanned.tokens, scanned.costs, scanned.prices);
     if (opened) {
@@ -622,6 +623,13 @@ export async function openSwapReview(
       );
     });
   });
+  // What the bill shows each token fetches, for the receipt to compare with.
+  const quoted = new Map(
+    plan.items.flatMap(({ route }) => {
+      const { out, reason } = outcome.get(route)!;
+      return reason ? [] : [[key(route.token), out] as const];
+    }),
+  );
   // A bill: each token, what it fetches and its route by its tokens and pools, then what they all fetch, the 1%, what
   // reaches you, and the least that may, which the slippage sets. Gas heads it, as it is paid apart, in ETH. Each sum in
   // tokens, then what it is worth.
@@ -662,11 +670,11 @@ export async function openSwapReview(
   );
   fill(body, {
     "swap-output": swapper.symbol,
-    "swap-slippage": `${plan.yours ? "Your slippage" : "Slippage"}: ${bps(plan.margin)}`,
+    "swap-slippage": `Minimum at ${bps(plan.margin)} slippage`,
     "swap-simulated": "Not simulated: these are quotes.",
   });
   show(".swap-simulated", !simulated, body);
-  const pages: ReviewPage[] = [{ title: "What you swap", body }, { title: "What your wallet will ask" }];
+  const pages: ReviewPage[] = [{ title: "Quote", body }, {}];
   openReview({
     name: ["Swap into ", { code: swapper.symbol }],
     pages,
@@ -699,40 +707,75 @@ export async function openSwapReview(
         }),
       };
     },
-    outcomeOf: async (receipts) => swapReceipt(receipts, plan, tokens, connection.address, prices),
+    outcomeOf: async (receipts) =>
+      swapReceipt(receipts, plan, tokens, connection.address, prices, {
+        quoted,
+        gas: await gasPaid(
+          receipts.map(({ transactionHash }) => transactionHash),
+          connection.address,
+        ),
+      }),
   });
   return undefined;
 }
 
-// The swap's receipt, from its events: each token in, what it fetched, the 1%, and what reached you. A token that was
-// skipped stays in the wallet with its approval, which it offers to reset.
+// The swap's receipt, from its events: when, and the gas it cost, when `gas` is known; each token sold, what it
+// fetched, and how that compares with what `quoted` says the review showed; then what they fetched, the 1%, and what
+// reached you, each with what it is worth. A token that was skipped stays in the wallet with its approval, which it
+// offers to reset.
 export function swapReceipt(
   receipts: Receipt[],
   plan: Plan,
   tokens: Map<string, Token>,
   caller: Address,
   prices?: Prices,
+  { quoted, gas }: { quoted?: Map<string, bigint>; gas?: bigint | undefined } = {},
 ): DocumentFragment {
   const { swapper } = plan;
   // As many decimal places as the bill had, so that the receipt's figures line up at the point too, and add up.
-  const { exact, shown } = outputFigures(swapper, prices);
+  const { exact, worth, shown } = outputFigures(swapper, prices);
   const { swapped, failed, paid } = swappedIn(receipts, swapper, caller);
   const receipt = clone("swap-receipt");
+  const part = (name: string) => receipt.querySelector(`.${name}`)!;
   const fetched = swapped.reduce((sum, { amountOut }) => sum + amountOut, 0n);
-  fill(receipt, {
-    "swap-receipt-output": swapper.symbol,
-    "swap-receipt-sold": count(swapped.length, "token", "tokens"),
-    "swap-receipt-tokens": list(
-      swapped.map(({ token, amountIn }) => {
-        const described = tokens.get(key(token));
-        return described ? `${figure(amountIn, described.decimals)} ${described.symbol}` : `${amountIn} of ${token}`;
-      }),
-    ),
-    "swap-receipt-fetched": exact(fetched),
-    "swap-receipt-fee": exact(shown(paid) - shown(fetched)),
-    "swap-receipt-paid": exact(paid),
-  });
-  receipt.querySelector(".swap-receipt-skipped")!.replaceChildren(
+  const time = now();
+  fill(receipt, { "swap-receipt-output": swapper.symbol, "swap-receipt-time": utc(time) });
+  part("swap-receipt-time").setAttribute("datetime", new Date(time * 1000).toISOString());
+  if (gas !== undefined) {
+    showWorth(part("swap-receipt-gas"), `${figure(gas, 18)} ETH`, inCents(ethCost(gas, prices)));
+    show(".swap-receipt-gas-line", true, receipt);
+  }
+  part("swap-lines").replaceChildren(
+    ...swapped.map(({ token, amountIn, amountOut }) => {
+      const line = clone("swap-line");
+      const described = tokens.get(key(token));
+      // A whole balance, as after a claim, may not be what was quoted: it compares only when it is.
+      const item = plan.items.find((each) => same(each.token.address, token));
+      const quote = quoted?.get(key(token));
+      const compares = quote && item?.route.amount === amountIn;
+      fill(line, {
+        "line-symbol": described?.symbol ?? token,
+        "line-amount": described ? figure(amountIn, described.decimals) : String(amountIn),
+        "line-route": compares ? versusQuote(amountOut, quote) : "",
+      });
+      showOutput(
+        [line.querySelector(".line-fetches")!, line.querySelector(".line-worth")!],
+        amountOut,
+        swapper,
+        prices,
+      );
+      return line;
+    }),
+  );
+  const [outWorth, paidWorth] = [worth(fetched), worth(paid)];
+  showWorth(part("swap-receipt-fetched"), exact(fetched), inCents(outWorth));
+  showWorth(
+    part("swap-receipt-fee"),
+    exact(shown(paid) - shown(fetched)),
+    inCents(outWorth && between(outWorth, paidWorth!)),
+  );
+  showWorth(part("swap-receipt-paid"), exact(paid), inCents(paidWorth));
+  part("swap-receipt-skipped").replaceChildren(
     ...failed.map(({ token, reason }) => {
       const item = clone("swap-skipped");
       fill(item, {
@@ -746,6 +789,13 @@ export function swapReceipt(
     }),
   );
   return receipt;
+}
+
+// How what a token fetched compares with what the review showed, to a tenth of a percent: "+0.2% vs quote", or "As
+// quoted" within that.
+function versusQuote(out: bigint, quote: bigint): string {
+  const tenths = Number(((out - quote) * 1000n) / quote);
+  return tenths ? `${tenths > 0 ? "+" : "−"}${(Math.abs(tenths) / 10).toFixed(1)}% vs quote` : "As quoted";
 }
 
 // Hydrex's reward tokens, from what the automations' votes earned last epoch. Whether some are new to the page.

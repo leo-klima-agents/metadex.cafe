@@ -52,8 +52,8 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     const { page, sent, asked, origins, violations } = await open({ owner: ELSEWHERE }, { url: `${SITE}/#hydrex` });
     await hydrex(page).locator("time.impact-voted").getByText(/Wed/).waitFor();
     assert.deepEqual(asked, [], "the page asks a wallet nothing until it is picked");
-    // The one wallet in the browser connects from the header's button at once: the page has no list of wallets.
-    assert.equal(await hydrex(page).getByRole("button", { name: "Test Wallet" }).count(), 0);
+    // The one wallet in the browser connects from the header's button at once; the Hydrex accounts list it too.
+    await hydrex(page).locator(".wallets").getByRole("button", { name: "Test Wallet" }).waitFor();
     await connectButton(page).click();
     await chip(page, ELSEWHERE).waitFor();
     await account(page, 2439)
@@ -77,8 +77,8 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
       .waitFor({ timeout: 120_000 });
     await shoot(page, "join-1-1440-light");
     await review(page).getByRole("button", { name: "Continue" }).click();
-    await review(page).getByRole("heading", { name: "What your wallet will ask" }).waitFor();
-    await review(page).locator(".how").getByText("2 transactions", { exact: true }).waitFor();
+    await review(page).getByRole("heading", { name: "Transactions", exact: true }).waitFor();
+    assert.equal(await review(page).locator(".how").textContent(), "");
     assert.deepEqual(await review(page).locator(".says").allTextContents(), [
       "Account #2439 leaves the USDC automation and joins Carbon Impact.",
       "Account #2435 leaves the Hydrex Lock Maxi automation and joins Carbon Impact.",
@@ -95,13 +95,13 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     // Shown in groups of four, an address still reads and copies as one.
     assert.equal(await review(page).locator(".conduit").first().innerText(), CONDUIT);
     assert.equal(await review(page).locator(".to").first().innerText(), VOTING_ESCROW);
-    assert.equal(await review(page).locator(".count").first().textContent(), "Call 1 of 2");
+    assert.equal(await review(page).locator(".count").first().textContent(), "Transaction 1 of 2 · Join Carbon Impact");
     assert.equal(await review(page).locator(".data").first().isVisible(), false, "the wallet shows the call's fields");
     await shoot(page, "join-2-1440-light");
-    await review(page).getByRole("button", { name: "Confirm transaction 1 of 2" }).click();
-    await review(page).getByText("Transaction 1 of 2 is included.").waitFor();
-    await review(page).getByRole("button", { name: "Confirm transaction 2 of 2" }).click();
-    await review(page).getByText("Done.").waitFor();
+    await review(page).getByRole("button", { name: "Sign transaction 1 of 2" }).click();
+    await review(page).getByText("Transaction 1 of 2 went through.").waitFor();
+    await review(page).getByRole("button", { name: "Sign transaction 2 of 2" }).click();
+    await review(page).getByRole("heading", { name: "Done" }).waitFor();
     await review(page).getByText("Joined.").waitFor();
     await review(page).getByRole("button", { name: "Close" }).click();
     assert.equal(sent.length, 2);
@@ -171,14 +171,15 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await pick(page, 2435, 2439);
     await page.getByRole("button", { name: "Join Carbon Impact with 2 Hydrex accounts" }).click();
     await toWallet(page);
-    await review(page).getByRole("button", { name: "Confirm transaction 1 of 2" }).click();
-    await review(page).getByText("closing stops here").waitFor();
+    await review(page).getByRole("button", { name: "Sign transaction 1 of 2" }).click();
+    await review(page).getByText("Sign transaction 2 when you are ready.").waitFor();
+    // The first page's link to what Carbon Impact can change, which its page no longer shows.
     const [tab] = await Promise.all([
       page.context().waitForEvent("page"),
-      review(page).getByRole("link", { name: "How to check" }).first().click(),
+      review(page).locator('a[href="#hydrex/carbon-impact/control"]').dispatchEvent("click"),
     ]);
-    await tab.waitForURL(`${SITE}/#hydrex/carbon-impact/check`);
-    await review(page).getByRole("button", { name: "Confirm transaction 2 of 2" }).waitFor();
+    await tab.waitForURL(`${SITE}/#hydrex/carbon-impact/control`);
+    await review(page).getByRole("button", { name: "Sign transaction 2 of 2" }).waitFor();
     await review(page).getByRole("button", { name: "Close" }).click();
     await account(page, 2439).getByText("Joining Carbon Impact:").waitFor();
     await account(page, 2435)
@@ -226,7 +227,11 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["The USDC automation"]);
     assert.equal(await review(page).locator(".conduit").innerText(), USDC);
     assert.equal(await review(page).locator(".approve").innerText(), "false");
-    assert.equal(await review(page).locator(".count").textContent(), "Call", "one call has no count");
+    assert.equal(
+      await review(page).locator(".count").textContent(),
+      "Transaction · Leave the USDC automation",
+      "one transaction has no count",
+    );
     await shoot(page, "release-390-light");
     await confirm(page);
     assert.equal(sent.length, 1);
@@ -246,7 +251,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await joinOwn.click();
     await toWallet(page);
     await review(page).getByRole("button", { name: "Switch to Base" }).click();
-    await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
+    await review(page).getByRole("button", { name: "Sign transaction" }).click();
     await review(page).getByText("You said no in your wallet.").waitFor();
     assert.equal(sent.length, 1);
     await expectApprovals([141n], NEWCOMER, zeroAddress);
@@ -259,7 +264,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     wallet.decline = false;
     await joinOwn.click();
     await toWallet(page);
-    await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
+    await review(page).getByRole("button", { name: "Sign transaction" }).click();
     await review(page).getByText("A transaction failed on Base.").waitFor();
     assert.equal(await review(page).locator(".confirm").isVisible(), false);
     assert.equal(sent.length, 2);
@@ -271,7 +276,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     const { page, sent } = await connected({ owner: NEWCOMER, sending });
     await group(page, "other").getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
     await toWallet(page);
-    await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
+    await review(page).getByRole("button", { name: "Sign transaction" }).click();
     await review(page).getByText("Waiting for your wallet…").waitFor();
     await review(page).getByRole("button", { name: "Back" }).click();
     assert.equal(await review(page).isVisible(), false);

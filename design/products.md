@@ -411,8 +411,8 @@ YOUR TOKENS                              11 of 19 ticked
 - **The output first,** as Binance does: the routes, the quotes and the minimums all depend on it. USDC by default.
   [Default output] The output itself is not on the list: the swapper never sells it, and it needs no swap.
 - **The tokens:** every token the page knows that the wallet holds, by value. The page knows Hydrex's reward tokens, the
-  six outputs, and a short list of Base's common tokens built into the page. [Token list] "Add a token by its address"
-  covers the rest; ERC-7811 adds the wallet's own list where the wallet offers it.
+  six outputs, and a short list of Base's common tokens built into the page. [Token list] When the wallet holds none of
+  them, "Add a token by its address" covers the rest; ERC-7811 adds the wallet's own list where the wallet offers it.
 - **Ticked by default** only when the page found a route and the quote clears its gas twice over. Every unticked row
   says why, in words: worth less than its gas, no pool the swapper can use, no price. "Ticked" is never a nudge: the
   owner can tick anything with a route.
@@ -433,14 +433,13 @@ YOUR TOKENS                              11 of 19 ticked
 
 Two steps, as every review:
 
-1. **What you swap:** each token, its amount, its route, what it fetches and at least; the swap's 1%; the gas. A line on
-   what a quote cannot see: the MEV tax on Aero's classic pools above a 1 gwei tip, and fees that Hydrex's and Aero's
-   admins can change. Before this step shows, the page runs the approvals and the swap through `eth_simulateV1`, so the
-   figures are the swap's own, not only the quotes'.
-2. **What your wallet will ask:** each approval as a slip (`approve`, the swapper's address, the exact amount), then the
-   swap: the swapper's address, each route in words ("41.2 AVNT, Hydrex Algebra pool `0x…` to WETH, Uniswap v3 0.05%
-   pool `0x…` to USDC, at least 0.60 USDC"), the deadline, and skip-failed. From a Safe, the calldata word by word, as
-   today.
+1. **Quote:** each token, its amount, its route, what it fetches and at least; the swap's 1%; the gas. A line on what a
+   quote cannot see: the MEV tax on Aero's classic pools above a 1 gwei tip, and fees that Hydrex's and Aero's admins
+   can change. Before this step shows, the page runs the approvals and the swap through `eth_simulateV1`, so the figures
+   are the swap's own, not only the quotes'.
+2. **Transactions:** each approval as a slip (`approve`, the swapper's address, the exact amount), then the swap: the
+   swapper's address, each route in words ("41.2 AVNT, Hydrex Algebra pool `0x…` to WETH, Uniswap v3 0.05% pool `0x…` to
+   USDC, at least 0.60 USDC"), the deadline, and skip-failed. From a Safe, the calldata word by word, as today.
 
 - **Without batching,** the approvals come one prompt each, then the page quotes again before it asks for the swap.
   Approvals take minutes; a quote should not. A minimum never goes below what the review showed: if a fresh quote falls

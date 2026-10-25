@@ -708,7 +708,7 @@ function review(accounts: Account[], action: Action, automation?: Automation): v
     // Which automation each account leaves, if any, its call says on the next page.
     const before = prepare(`${prefix}join-before`);
     estimate(before.querySelector(".estimate")!, accounts, automation, owner);
-    const pages = [{ title: "Before you join", body: before }, { title: "What your wallet will ask" }];
+    const pages = [{ title: "Before you join", body: before }, {}];
     const steps = join(accounts, automation);
     const done = prepare(`${prefix}join-done`);
     return void openReview({
@@ -789,7 +789,7 @@ function showApp(): void {
   const left = connection ? allowancesLeft() : undefined;
   if (left?.length) {
     items.push(
-      need("idle", `${count(left.length, "approval", "approvals")} left to the swappers`, {
+      need("idle", `${count(left.length, "token approval hasn't", "token approvals haven't")} been used`, {
         label: "Reset",
         // The approvals left when clicked, which a later read may have changed.
         button: () => void resetReview(allowancesLeft() ?? []),
@@ -1042,8 +1042,9 @@ onRoute((next) => {
   void loadPosition();
 });
 
-// The header: a button to connect a wallet, or the wallet's chip, which leads to the App. Only the App and the header's
-// popup hold the wallet buttons; elsewhere, a line says that no wallet is connected.
+// The header: a button to connect a wallet, or the wallet's chip, which leads to the App. The header's popup holds the
+// wallet buttons, as do the App, under its products, and the lists of what a wallet holds: its Hydrex accounts, and the
+// tokens it can sell.
 const connectButton = document.querySelector<HTMLButtonElement>("header.site .connect")!;
 const connectPop = document.getElementById("connect")!;
 // Older browsers refuse to show a popup already shown, or to hide one already hidden.
@@ -1052,7 +1053,7 @@ const showConnectPop = (shown: boolean): void => {
 };
 
 function showConnection(): void {
-  show(".wallet-slot, header.site .connect, .no-wallet-yet", !connection);
+  show(".wallet-slot, header.site .connect", !connection);
   show("header.site .to-app", !!connection);
   if (connection) showConnectPop(false);
   show("#epoch", !!connection);
@@ -1061,7 +1062,7 @@ function showConnection(): void {
     const { wallet, address, chainId } = connection;
     fill(document, { "wallet-short": short(address) });
     if (chainId === CHAIN_ID) show(".switch-failed", false);
-    show(".to-switch", !wallet.propose);
+    show(".to-switch, .wrong-chain .switch", !wallet.propose);
     show(".safe-elsewhere", !!wallet.propose);
   }
   refreshReview();

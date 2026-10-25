@@ -17,32 +17,33 @@ import {
   type Wallet,
 } from "./wallet.ts";
 
-// A field of a call as the wallet shows it: an address, a number or a list of them, in the mono face, or words, which
-// may hold addresses. `description` says what the field holds, above it, such as the contract an address is; a list's
-// items can each have a tag above them too, such as a token's symbol. `name` is the class of its value, and of its
-// description with "-name" after it.
+// A field of a call as the wallet shows it: an address, a number or a list of them, in the mono face, or words.
+// `description` says what the field holds, above it, such as the contract an address is; a list's items can each have a
+// tag above them too, such as a token's symbol. `name` is the class of its value, and of its description with "-name"
+// after it.
 export type Field = {
   label: string;
   name?: string;
   code?: string | string[];
   tags?: string[];
-  words?: (string | { code: string })[];
+  words?: string;
   description?: string;
 };
-// A call: the page's own words, the contract it goes to, and its fields. `note` says how its calldata reads, for
-// co-signers.
-export type Slip = Tx & { says: string; on: string; call: string; fields: Field[]; note?: string };
+// A call: what it is, as "Token approval" or "Swap into USDC", the page's own words, the contract it goes to, and its
+// fields.
+export type Slip = Tx & { title: string; says: string; on: string; call: string; fields: Field[] };
 
 export type Hooks = { closed(submitted: boolean): void; switched(): void };
-// The last page also shows the calls and the Confirm button.
-export type ReviewPage = { title: string; body?: DocumentFragment };
+// The last page also shows the calls and the Sign button. A page without a title is the calls': "Transactions", or
+// "Transaction" for one.
+export type ReviewPage = { title?: string; body?: DocumentFragment };
 
 export type ReviewOptions = {
   // Above each page's title, in capitals, but for the code in it, such as a token's symbol: "Swap into cbBTC".
   name: string | (string | { code: string })[];
   pages: ReviewPage[];
   steps: Slip[];
-  // Where the product's page explains the calls, for the slips and the co-signers.
+  // Where the product's page explains the calls, for the co-signers.
   checkHref: string;
   connection: Connection;
   hooks: Hooks;
@@ -62,7 +63,7 @@ export type ReviewOptions = {
 };
 
 type Review = ReviewOptions & {
-  titles: string[];
+  titles: (string | undefined)[];
   page: number;
   // How the wallet sends them, once known: one prompt for all the calls, or one each.
   capabilities?: Capabilities;
@@ -74,6 +75,8 @@ type Review = ReviewOptions & {
   sending: boolean;
   submitted: boolean;
   finished: boolean;
+  // The call the Sign button sends next, as its slip is marked, once scrolled to.
+  shown: number;
 };
 
 const dialog = document.getElementById("review") as HTMLDialogElement;
@@ -111,7 +114,7 @@ function codeOf(text: string, name?: string): HTMLElement {
   return code;
 }
 
-// An address within words, such as a pool's in a route, keeps to the text's lines.
+// Code within words, such as a token's symbol in the review's name, keeps to the text's lines.
 function inlineCode(text: string): HTMLElement {
   const code = newCode();
   if (ADDRESS.test(text) || HASH.test(text)) showHex(code, text);
@@ -149,43 +152,43 @@ function fieldOf({ label, name, code, tags, words, description }: Field): Docume
     if (name) value.classList.add(name);
     value.append(code.length ? listOf(code, tags) : "None");
   } else if (code !== undefined) value.append(codeOf(code, name));
-  if (words) {
-    const span = document.createElement("span");
-    span.className = `words${name ? ` ${name}` : ""}`;
-    span.append(...words.map((word) => (typeof word === "string" ? word : inlineCode(word.code))));
-    value.append(span);
-  }
+  if (words)
+    value.append(
+      Object.assign(document.createElement("span"), {
+        className: `words${name ? ` ${name}` : ""}`,
+        textContent: words,
+      }),
+    );
   return row;
 }
 
 // Calls in several groups, each a transaction of its own.
 const apart = ({ groups }: Pick<Review, "groups">): boolean => (groups?.length ?? 1) > 1;
 
-// A call as the wallet will show it, as a bill, its fields in full. In a Safe, the Safe transaction's fields and calldata
-// follow, for co-signers to compare with Safe{Wallet}; `safe` names the Safe transaction it is in, and `alone` whether it
-// is its only call.
-function slip(step: Slip, i: number, n: number, safe: string | undefined, alone: boolean, checkHref: string) {
+// A call as the wallet will show it, as a bill, with the addresses the wallet shows. In a Safe, the Safe transaction's
+// fields and calldata follow, for co-signers to compare with Safe{Wallet}; `safe` names the Safe transaction it is in,
+// and `alone` whether it is its only call.
+function slip(step: Slip, i: number, n: number, safe: string | undefined, alone: boolean) {
   const item = clone("step");
-  const which = n > 1 ? `Call ${i + 1} of ${n}` : "Call";
+  // In a Safe, the calls are in its transactions; otherwise each is a transaction of its own.
+  const which = `${safe ? "Call" : "Transaction"}${n > 1 ? ` ${i + 1} of ${n}` : ""}`;
   fill(item, {
-    count: safe ? `${safe} · ${which}` : which,
+    count: `${safe ? `${safe} · ` : ""}${which} · ${step.title}`,
     says: step.says,
     on: step.on,
     function: step.call,
-    call: `${(step.data.length - 2) / 2} bytes:`,
-    "slip-note": step.note ?? "The selector, then each 32-byte word on two lines.",
+    call: `${(step.data.length - 2) / 2} bytes`,
   });
   showWalletAddress(item.querySelector(".to")!, step.to);
   showHex(item.querySelector(".data")!, step.data);
   item.querySelector(".value-row")!.before(...step.fields.map(fieldOf));
-  item.querySelector(".check-calls")!.setAttribute("href", checkHref);
-  show(".raw, .slip-note", !!safe, item);
+  show(".raw", !!safe, item);
   show(".operation", !!safe && alone, item);
   return item;
 }
 
 function drawSlips(state: Review): void {
-  const { steps, connection, checkHref } = state;
+  const { steps, connection } = state;
   const groups = state.groups ?? [steps.length];
   // The Safe transaction each call is in.
   const group = groups.flatMap((size, g) => Array.from({ length: size }, () => g));
@@ -193,9 +196,25 @@ function drawSlips(state: Review): void {
     ...steps.map((step, i) => {
       const g = group[i] ?? 0;
       const safe = connection.wallet.propose && (apart(state) ? `Safe ${g + 1} of ${groups.length}` : "Safe");
-      return slip(step, i, steps.length, safe || undefined, groups[g] === 1, checkHref);
+      return slip(step, i, steps.length, safe || undefined, groups[g] === 1);
     }),
   );
+  markNext(state);
+}
+
+// Which call the Sign button sends next, when it sends them one at a time: its slip is marked, and scrolled to once
+// the one before is included.
+function markNext(state: Review): void {
+  const { steps, done, batch, finished, connection } = state;
+  const next = connection.wallet.propose || batch || finished || steps.length < 2 ? undefined : done.length;
+  [...stepList.children].forEach((item, i) => {
+    item.classList.toggle("next-call", i === next);
+    if (i === next) item.setAttribute("aria-current", "step");
+    else item.removeAttribute("aria-current");
+  });
+  if (next === undefined || next === state.shown) return;
+  state.shown = next;
+  if (next && !calls.hidden) stepList.children[next]?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 // The review shown, while nothing is sent yet, can take other calls, as when its owner picks another way to be paid.
@@ -218,6 +237,7 @@ export function openReview(options: ReviewOptions): Opened {
     sending: false,
     submitted: false,
     finished: false,
+    shown: 0,
   };
   current = state;
   pageList.replaceChildren(
@@ -230,6 +250,7 @@ export function openReview(options: ReviewOptions): Opened {
   callsTitle.hidden = !options.pages.at(-1)?.body;
   doneBox.replaceChildren();
   doneBox.hidden = true;
+  pageList.hidden = false;
   drawSlips(state);
   progress.replaceChildren();
   showPage(0);
@@ -256,7 +277,7 @@ function showPage(page: number): void {
   if (!current) return;
   const { name, titles } = current;
   current.page = page;
-  title.textContent = titles[page]!;
+  title.textContent = titles[page] ?? callsName(current);
   const words = typeof name === "string" ? [name] : name;
   stepCount.replaceChildren(
     ...words.map((word) => (typeof word === "string" ? word : inlineCode(word.code))),
@@ -270,6 +291,8 @@ function showPage(page: number): void {
   if (dialog.open) title.focus();
 }
 
+const callsName = ({ steps }: Review): string => (steps.length === 1 ? "Transaction" : "Transactions");
+
 const atomic = (state: Review): boolean => !!state.atomic && !!state.capabilities?.atomic;
 
 function howText(state: Review): string {
@@ -278,8 +301,9 @@ function howText(state: Review): string {
     if (apart(state)) return `${count(state.groups!.length, "Safe transaction", "Safe transactions")}, ${n} calls`;
     return n === 1 ? "One Safe transaction" : `One Safe transaction, ${n} calls`;
   }
-  if (state.batch) return `One prompt, ${n} calls${atomic(state) ? ", all or nothing" : ""}`;
-  return n === 1 ? "" : count(n, "transaction", "transactions");
+  if (state.batch) return `All ${n} in one prompt${atomic(state) ? ", all or nothing" : ""}`;
+  // One prompt each, as the button counts them, goes without saying.
+  return "";
 }
 
 export function refreshReview(): void {
@@ -289,29 +313,42 @@ export function refreshReview(): void {
   const safe = !!connection.wallet.propose;
   const wrongChain = connection.chainId !== CHAIN_ID;
   how.textContent = howText(current);
+  callsTitle.textContent = callsName(current);
+  if (!titles[page] && !pageList.hidden) title.textContent = callsName(current);
   confirm.textContent = safe
     ? "Propose in Safe{Wallet}"
     : wrongChain
       ? "Switch to Base"
-      : steps.length === 1 || batch
-        ? "Confirm in your wallet"
-        : `Confirm transaction ${done.length + 1} of ${steps.length}`;
+      : steps.length === 1
+        ? "Sign transaction"
+        : batch
+          ? `Sign ${steps.length} transactions`
+          : `Sign transaction ${done.length + 1} of ${steps.length}`;
   confirm.disabled = sending || (safe && wrongChain);
   confirm.hidden = !last || finished || !steps.length;
   next.hidden = last;
   back.textContent = submitted ? "Close" : "Back";
+  markNext(current);
 }
 
 export const closeReview = (): void => dialog.close();
 
-// The review may have closed, or another opened, by the time the wallet answers.
+// The review may have closed, or another opened, by the time the wallet answers. The transactions follow on a line of
+// their own; of several, those until the last are so far.
 function say(state: Review, message: string, hashes: Hex[] = []): void {
   if (state !== current) return;
   progress.replaceChildren(message);
-  hashes.forEach((hash, i) => {
-    progress.append(i ? ", " : hashes.length === 1 ? " Transaction: " : " Transactions: ", txLink(hash));
-  });
-  if (hashes.length) progress.append(".");
+  if (!hashes.length) return;
+  const heading =
+    state.steps.length > 1 && !state.finished
+      ? "Transactions so far: "
+      : hashes.length === 1
+        ? "Transaction: "
+        : "Transactions: ";
+  const line = Object.assign(document.createElement("span"), { className: "hashes" });
+  hashes.forEach((hash, i) => line.append(i ? ", " : heading, txLink(hash)));
+  line.append(".");
+  progress.append(line);
 }
 
 const wentThrough = ({ done, steps, batch, proposed, groups }: Review): string =>
@@ -368,17 +405,24 @@ async function proposeAll(state: Review, propose: NonNullable<Wallet["propose"]>
   doneBox.hidden = false;
 }
 
-// Once every transaction is included: the outcome, from the receipts where the review reads them.
+// Once every transaction is included: the outcome, from the receipts where the review reads them, on a screen of its
+// own in place of the pages and the calls. What was sent stays in the foot.
 async function finish(state: Review): Promise<void> {
-  say(state, "Done.", state.done);
+  const n = state.steps.length;
+  say(state, n === 1 ? "It went through." : `All ${n} went through.`, state.done);
   const outcome = state.receipts.length
     ? await state.outcomeOf?.(state.receipts).catch((error: unknown) => void console.error(error))
     : undefined;
   const shown = outcome ?? state.outcome;
-  if (state === current && shown) {
-    doneBox.replaceChildren(shown);
-    doneBox.hidden = false;
-  }
+  if (state !== current || !shown) return;
+  // The screen says it is done: the foot keeps only the transactions.
+  say(state, "", state.done);
+  pageList.hidden = calls.hidden = stepCount.hidden = true;
+  title.textContent = "Done";
+  doneBox.replaceChildren(shown);
+  doneBox.hidden = false;
+  dialog.scrollTop = 0;
+  title.focus();
 }
 
 async function sendNext(state: Review): Promise<void> {
@@ -387,10 +431,11 @@ async function sendNext(state: Review): Promise<void> {
   say(state, "Waiting for your wallet…", done);
   const hash = await sending;
   const hashes = [...done, hash];
-  const which = steps.length === 1 ? "Sent" : `Transaction ${hashes.length} of ${steps.length} sent`;
+  const which = `Transaction${steps.length === 1 ? "" : ` ${hashes.length} of ${steps.length}`} signed`;
   state.submitted = true;
   refreshReview();
-  say(state, `${which}. Waiting for Base to include it…`, hashes);
+  // Only the transactions that went through are linked: one waiting to, once it does, or once it failed.
+  say(state, `${which}. Waiting for it to go through…`, done);
   const receipt = await waitForReceipt(hash);
   const ok = receipt && receipt.status === "0x1";
   if (receipt && ok) {
@@ -398,18 +443,18 @@ async function sendNext(state: Review): Promise<void> {
     state.receipts.push(receipt);
   }
   state.finished = !ok || done.length === steps.length;
-  if (!receipt) say(state, "Sent. Reload once Base includes it.", hashes);
+  if (!receipt) say(state, `${which}. Reload the page in a minute to see if it went through.`, done);
   else if (!ok) say(state, `A transaction failed on Base.${wentThrough(state)}`, hashes);
   else if (state.finished) await finish(state);
   else {
-    let next = `Confirm transaction ${done.length + 1} when you are ready; closing stops here.`;
+    let next = `Sign transaction ${done.length + 1} when you are ready.`;
     const fresh = await state.prepare?.(done.length).catch((error: unknown) => void console.error(error));
     if (fresh) {
       steps[done.length] = fresh.step;
       if (state === current) drawSlips(state);
       if (fresh.changed) next = `${fresh.changed} ${next}`;
     }
-    say(state, `Transaction ${done.length} of ${steps.length} is included. ${next}`, done);
+    say(state, `Transaction ${done.length} of ${steps.length} went through. ${next}`, done);
   }
 }
 
@@ -435,15 +480,15 @@ async function sendBatch(state: Review): Promise<void> {
     // The calls then go one by one, from the next click.
     state.batch = false;
     refreshReview();
-    return say(state, "Your wallet can't send these in one prompt: confirm them one by one.");
+    return say(state, "Your wallet can't sign these in one prompt: sign them one by one.");
   }
   state.submitted = true;
   refreshReview();
-  say(state, "Sent in one prompt. Waiting for Base to include it…");
+  say(state, "Transactions signed. Waiting for them to go through…");
   const status = await waitForCalls(state.connection, id);
   state.finished = true;
   const hashes = status?.receipts.map(({ transactionHash }) => transactionHash) ?? [];
-  if (!status) return say(state, "Sent. Reload once Base includes it.");
+  if (!status) return say(state, "Transactions signed. Reload the page in a minute to see if they went through.");
   if (status.state === "failed")
     return say(state, "The calls failed on Base, or your wallet did not send them.", hashes);
   state.done = hashes;

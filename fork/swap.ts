@@ -43,7 +43,8 @@ async function tickOnly(page: Page, symbols: string[]): Promise<void> {
   try {
     for (const symbol of symbols)
       await swap.getByRole("checkbox", { name: `Sell ${symbol}` }).waitFor({ timeout: 120_000 });
-    await swap.locator(".swap-status").waitFor({ state: "hidden", timeout: 120_000 });
+    // Each row says "…" until its route is found.
+    await swap.locator(".swap-route").filter({ hasText: /^…$/ }).first().waitFor({ state: "hidden", timeout: 120_000 });
   } catch (error) {
     throw new Error(`The swap's page shows: ${await swap.locator(".swap-tokens").innerText()}`, { cause: error });
   }
@@ -62,7 +63,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await fund([WETH, ZORA, AVNT]);
     const { page, sent, violations } = await connected({ owner: SELLER, batch: true }, { url: `${SITE}/#swap` });
     const swap = swapView(page);
-    await swap.getByRole("heading", { name: "Swap tokens", level: 1 }).waitFor();
+    await swap.getByRole("heading", { name: "Swap many tokens", level: 1 }).waitFor();
     assert.equal(
       await swap.getByRole("radio", { name: "USDC" }).isChecked(),
       true,
@@ -77,9 +78,12 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       .getByText(/^[\d,.]+ USDC$/)
       .waitFor();
     const labels = await summary.locator("dt").allInnerTexts();
-    assert.deepEqual([labels[0], labels[1], labels[2], labels[4]], ["Quote", "Fee 1%", "Reaches you", "Gas"]);
-    assert.match(labels[3]!, /^At least, with/);
-    assert.equal(await summary.getByRole("combobox", { name: /At least, with/ }).inputValue(), "50");
+    assert.deepEqual(
+      [labels[0], labels[1], labels[2], labels[4]],
+      ["Quote", "Swap fee (1%)", "Reaches you", "Estimated gas"],
+    );
+    assert.match(labels[3]!, /^Minimum at/);
+    assert.equal(await summary.getByRole("combobox", { name: /Minimum at/ }).inputValue(), "50");
     // Each figure exactly, then what it is worth.
     const figure = async (root: Locator, name: string): Promise<[string, string]> => [
       await root.locator(`.${name} .exact`).innerText(),
@@ -100,7 +104,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.match(await swap.locator(".swap-ticked").innerText(), /^· 3 of \d+$/);
     await shoot(page, "swap-390-light");
     await swap.getByRole("button", { name: "Review" }).click();
-    await review(page).getByRole("heading", { name: "What you swap" }).waitFor({ timeout: 300_000 });
+    await review(page).getByRole("heading", { name: "Quote", exact: true }).waitFor({ timeout: 300_000 });
     assert.equal(await review(page).locator(".swap-simulated").isVisible(), false, "run through Base");
     // A bill: each token with its route by tokens and pools, no addresses, under the gas; then the least, which the
     // slippage set.
@@ -108,7 +112,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.equal(await bill.locator(".receipt-name").innerText(), "metaDEX Café");
     assert.equal(await bill.locator(".label code").innerText(), "USDC");
     assert.equal(await review(page).locator(".step-count code").innerText(), "USDC");
-    assert.match(await bill.locator(".receipt-day").innerText(), /^Gas /);
+    assert.match(await bill.locator(".receipt-day").innerText(), /^Estimated gas /);
     const [gasShown, gasValue] = await figure(bill, "swap-gas");
     assert.match(gasShown, /^[\d.]+ ETH$/);
     assert.match(gasValue, worth);
@@ -122,13 +126,13 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       );
       assert.doesNotMatch(route, /0x|tick spacing|%/, route);
     }
-    assert.equal(await bill.locator(".swap-slippage").innerText(), "Your slippage: 0.5%");
+    assert.equal(await bill.locator(".swap-slippage").innerText(), "Minimum at 0.5% slippage");
     await review(page).getByRole("button", { name: "Continue" }).click();
-    await review(page).getByText("One prompt, 4 calls, all or nothing").waitFor();
+    await review(page).getByText("All 4 in one prompt, all or nothing").waitFor();
     const says = await review(page).locator(".says").allTextContents();
     assert.equal(says.length, 4);
-    assert.match(says[0]!, /^Lets the USDC swapper take [\d,.]+ \S+ from you\.$/);
-    assert.match(says[3]!, /^Sells 3 tokens for at least [\d,.]+ USDC, less any token skipped\.$/);
+    assert.match(says[0]!, /^Let the USDC swapper take [\d,.]+ \S+ from you$/);
+    assert.match(says[3]!, /^Sell 3 tokens for at least [\d,.]+ USDC$/);
     assert.deepEqual(await review(page).locator(".function").allTextContents(), [
       "approve",
       "approve",
@@ -141,12 +145,19 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.ok(avnt > 0n);
     await mined(SELLER, AVNT, encodeFunctionData({ abi: tokenAbi, functionName: "transfer", args: [STRANGER, avnt] }));
     const before = await balanceOf(INTO_USDC.token, SELLER);
-    await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
-    await review(page).getByText("Done.").waitFor({ timeout: 120_000 });
+    await review(page).getByRole("button", { name: "Sign 4 transactions" }).click();
+    await review(page).getByRole("heading", { name: "Done" }).waitFor({ timeout: 120_000 });
+    assert.doesNotMatch(await review(page).locator(".progress").innerText(), /went through/);
     assert.equal(sent.length, 4);
     const receipt = review(page).locator(".receipt");
-    assert.equal(await receipt.locator(".swap-receipt-sold").innerText(), "2 tokens");
-    const paid = await receipt.locator(".swap-receipt-paid").innerText();
+    // When, the gas the wallet paid, then each token sold, what it fetched, and how that compares with the quote.
+    assert.match(await receipt.locator(".swap-receipt-time").innerText(), / UTC$/);
+    assert.match(await receipt.locator(".swap-receipt-gas .exact").innerText(), /^[\d.]+ ETH$/);
+    const lines = receipt.locator(".swap-lines li");
+    assert.equal(await lines.count(), 2);
+    for (const compared of await lines.locator(".line-route").allInnerTexts())
+      assert.match(compared, /^(As quoted|[+−][\d.]+% vs quote)$/);
+    const paid = await receipt.locator(".swap-receipt-paid .exact").innerText();
     assert.match(paid, /^[\d,.]+ USDC$/);
     assert.ok((await balanceOf(INTO_USDC.token, SELLER)) > before);
     assert.equal(await balanceOf(WETH, SELLER), 0n);
@@ -158,7 +169,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await skipped.getByRole("button", { name: "Reset its approval" }).click();
     await review(page).getByRole("heading", { name: "Reset an approval" }).waitFor();
     assert.deepEqual(await review(page).locator(".says").allTextContents(), [
-      "Resets AVNT's approval of the USDC swapper to nothing.",
+      "Reset AVNT's approval of the USDC swapper",
     ]);
     await confirm(page);
     assert.equal(await readOn<bigint>(AVNT, tokenAbi, "allowance", [SELLER, INTO_USDC.address]), 0n);
@@ -195,29 +206,31 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     // from a wallet that sends several in one prompt, and the swap follows, of what they brought.
     const claims = await review(page).locator(".says").allTextContents();
     assert.ok(claims.length > 1 && claims.every((each) => /^Claims account #82774's rewards from /.test(each)));
-    assert.equal(await review(page).locator(".how").textContent(), `${claims.length} transactions`);
+    assert.equal(await review(page).locator(".how").textContent(), "");
     const before = await balanceOf(INTO_USDC.token, PAYEE);
     await confirmEach(page, PAYEE);
     await review(page).getByRole("button", { name: "Review the swap into USDC" }).click();
-    await review(page).getByRole("heading", { name: "What you swap" }).waitFor({ timeout: 300_000 });
+    await review(page).getByRole("heading", { name: "Quote", exact: true }).waitFor({ timeout: 300_000 });
     await review(page).getByRole("button", { name: "Continue" }).click();
     await review(page)
-      .getByText(/^One prompt, \d+ calls, all or nothing$/)
+      .getByText(/^All \d+ in one prompt, all or nothing$/)
       .waitFor();
     // The approvals, then the swap: in several calls, as here, when one would need more gas than a swap may use.
     const says = await review(page).locator(".says").allTextContents();
-    const sells = says.findIndex((each) => /^Sells /.test(each));
+    const sells = says.findIndex((each) => /^Sell /.test(each));
     assert.ok(sells > 0, JSON.stringify(says));
     assert.ok(
       says.every((each, i) =>
         i < sells
-          ? /^Lets the USDC swapper take /.test(each)
-          : /^Sells \d+ tokens? for at least [\d,.]+ USDC, less any token skipped\.$/.test(each),
+          ? /^Let the USDC swapper take /.test(each)
+          : /^Sell \d+ tokens? for at least [\d,.]+ USDC$/.test(each),
       ),
       JSON.stringify(says),
     );
-    await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
-    await review(page).getByText("Done.").waitFor({ timeout: 300_000 });
+    await review(page)
+      .getByRole("button", { name: /^Sign \d+ transactions$/ })
+      .click();
+    await review(page).getByRole("heading", { name: "Done" }).waitFor({ timeout: 300_000 });
     assert.equal(sent.length, claims.length + says.length);
     await review(page)
       .locator(".swap-receipt-paid")

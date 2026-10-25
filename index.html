@@ -42,7 +42,7 @@
     <main>
       <noscript><p class="notice">This page needs JavaScript.</p></noscript>
       <p id="error" class="notice" role="alert" hidden>
-        <strong>Reading Base failed.</strong> <button type="button" class="again secondary compact">Try again</button>
+        <span>Reading Base failed.</span> <button type="button" class="again secondary compact">Try again</button>
       </p>
 
       <!-- One view for each kind of page. The route in the hash picks the one shown: see src/views.ts. The pages of the
@@ -60,14 +60,10 @@
             Approvals
           </button>
         </div>
-        <div class="wallet-slot"></div>
         <p class="wrong-chain notice" role="alert" hidden>
-          <span class="to-switch">
-            Wrong network.
-            <button type="button" class="switch compact">Switch to Base</button>
-            <span class="switch-failed" hidden>Switch in your wallet.</span>
-          </span>
+          <span class="to-switch">Wrong network.<span class="switch-failed" hidden> Switch in your wallet.</span></span>
           <span class="safe-elsewhere" hidden>This Safe isn't on Base.</span>
+          <button type="button" class="switch secondary compact">Switch to Base</button>
         </p>
         <section id="needs" class="needs" aria-labelledby="needs-title" hidden>
           <h2 id="needs-title">Needs you <span class="count"></span></h2>
@@ -80,11 +76,13 @@
               <p class="small yours hydrex-yours" hidden></p>
             </li>
             <li class="choice" data-choice="swap">
-              <h3><a href="#swap">Swap tokens</a></h3>
+              <h3><a href="#swap">Swap many tokens</a></h3>
               <p class="small yours swap-yours" hidden></p>
             </li>
           </ul>
         </section>
+        <!-- Under the products, until a wallet is connected. -->
+        <div class="wallet-slot"></div>
 
         <div
           class="pop allows"
@@ -129,12 +127,9 @@
           <a href="#hydrex/automaxi/check">Why</a>
         </p>
         <p class="wrong-chain notice" role="alert" hidden>
-          <span class="to-switch">
-            Wrong network.
-            <button type="button" class="switch compact">Switch to Base</button>
-            <span class="switch-failed" hidden>Switch in your wallet.</span>
-          </span>
+          <span class="to-switch">Wrong network.<span class="switch-failed" hidden> Switch in your wallet.</span></span>
           <span class="safe-elsewhere" hidden>This Safe isn't on Base.</span>
+          <button type="button" class="switch secondary compact">Switch to Base</button>
         </p>
         <p id="underway" class="notice" hidden>Payout under way.</p>
 
@@ -228,7 +223,7 @@
             <h2 id="yours-title">Your Hydrex accounts</h2>
             <p id="epoch" class="epoch" hidden>Next epoch <span class="countdown">soon</span></p>
           </div>
-          <p class="no-wallet-yet small">No wallet connected.</p>
+          <div class="wallet-slot"></div>
           <p class="accounts-reading small" role="status" hidden>Loading…</p>
           <p id="none" class="small" hidden>
             No Hydrex accounts.
@@ -476,7 +471,7 @@
             </div>
             <p class="all-status small" role="status" hidden>Loading all of Hydrex…</p>
             <p class="all-failed notice" role="alert" hidden>
-              Reading all of Hydrex failed.
+              <span>Reading all of Hydrex failed.</span>
               <button type="button" class="compare-again secondary compact">Try again</button>
             </p>
             <p class="versus" hidden></p>
@@ -885,7 +880,7 @@
             </div>
             <p class="all-status small" role="status" hidden>Loading all of Hydrex…</p>
             <p class="all-failed notice" role="alert" hidden>
-              Reading all of Hydrex failed.
+              <span>Reading all of Hydrex failed.</span>
               <button type="button" class="compare-again secondary compact">Try again</button>
             </p>
             <p class="versus" hidden></p>
@@ -1060,7 +1055,7 @@
         </div>
         <p class="position-reading small" role="status">Loading…</p>
         <p class="position-failed notice" role="alert" hidden>
-          Reading the Hydrex account failed.
+          <span>Reading the Hydrex account failed.</span>
           <button type="button" class="position-again secondary compact">Try again</button>
         </p>
         <p class="position-none small" hidden>No such Hydrex account.</p>
@@ -1120,7 +1115,7 @@
             </div>
             <p class="receipts-reading small" role="status">Loading…</p>
             <p class="receipts-failed notice" hidden>
-              Reading the payouts failed.
+              <span>Reading the payouts failed.</span>
               <button type="button" class="receipts-again secondary compact">Try again</button>
             </p>
             <div class="receipts-found standings" hidden></div>
@@ -1149,7 +1144,7 @@
       <div class="view swap" data-view="swap" data-title="Swap · metaDEX Café" hidden>
         <div class="title-line">
           <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your wallet</a></nav>
-          <h1 tabindex="-1">Swap tokens</h1>
+          <h1 tabindex="-1">Swap many tokens</h1>
           <button type="button" class="info" popovertarget="swap-info" aria-label="Costs and contracts">
             <span aria-hidden="true">i</span>
           </button>
@@ -1158,17 +1153,13 @@
           <span class="shape failed" aria-hidden="true"></span>Swaps are off.
         </p>
         <p class="wrong-chain notice" role="alert" hidden>
-          <span class="to-switch">
-            Wrong network.
-            <button type="button" class="switch compact">Switch to Base</button>
-            <span class="switch-failed" hidden>Switch in your wallet.</span>
-          </span>
+          <span class="to-switch">Wrong network.<span class="switch-failed" hidden> Switch in your wallet.</span></span>
           <span class="safe-elsewhere" hidden>This Safe isn't on Base.</span>
+          <button type="button" class="switch secondary compact">Switch to Base</button>
         </p>
         <div class="swap-form">
-          <p class="swap-unchecked small" role="status">Loading…</p>
           <fieldset class="outputs">
-            <legend class="label">Receive</legend>
+            <legend><h2>Receive</h2></legend>
             <p class="output-choices"></p>
           </fieldset>
           <section class="swap-tokens" aria-labelledby="swap-tokens-title">
@@ -1178,10 +1169,10 @@
                 Approvals
               </button>
             </div>
-            <p class="no-wallet-yet small">No wallet connected.</p>
+            <div class="wallet-slot"></div>
             <p class="swap-status small" role="status" hidden>Loading…</p>
             <p class="swap-failed notice" role="alert" hidden>
-              Reading your tokens failed.
+              <span>Reading your tokens failed.</span>
               <button type="button" class="swap-again secondary compact">Try again</button>
             </p>
             <p class="swap-none small" hidden>No tokens to sell.</p>
@@ -1215,17 +1206,17 @@
                 <dd class="swap-quoted"></dd>
               </div>
               <div>
-                <dt>Fee 1%</dt>
+                <dt>Swap fee (1%)</dt>
                 <dd class="swap-fee"></dd>
               </div>
-              <div class="sum">
+              <div>
                 <dt>Reaches you</dt>
                 <dd class="swap-paid"></dd>
               </div>
-              <div>
+              <div class="sum">
                 <dt>
                   <label
-                    >At least, with
+                    >Minimum at
                     <select class="swap-margin">
                       <option value="10">0.1%</option>
                       <option value="50" selected>0.5%</option>
@@ -1238,11 +1229,12 @@
                 <dd class="swap-least"></dd>
               </div>
               <div>
-                <dt>Gas</dt>
+                <dt>Estimated gas</dt>
                 <dd class="swap-gas"></dd>
               </div>
             </dl>
             <p class="swap-bar">
+              <span class="small swap-checking" role="status" hidden>Checking Base…</span>
               <span class="small swap-split" hidden></span>
               <button type="button" class="swap-review" disabled>Review</button>
             </p>
@@ -1267,15 +1259,15 @@
           <dl class="fee-facts">
             <div>
               <dt>Swap fee</dt>
-              <dd>1%, taken from the swap's output token</dd>
+              <dd>1%</dd>
             </div>
             <div>
               <dt>Pool fees</dt>
-              <dd>Each pool's own, part of the quote</dd>
+              <dd>Part of the quote</dd>
             </div>
             <div>
               <dt>Price impact</dt>
-              <dd>Grows with the amount, part of the quote</dd>
+              <dd>Part of the quote</dd>
             </div>
             <div>
               <dt>Gas</dt>
@@ -1285,12 +1277,12 @@
           <h4 class="label">Slippage</h4>
           <dl class="rows">
             <div>
-              <dt>What it is</dt>
+              <dt>Meaning</dt>
               <dd>How much less than quoted you accept</dd>
             </div>
             <div>
               <dt>When unmet</dt>
-              <dd>The input token stays in your wallet</dd>
+              <dd>The token isn't swapped</dd>
             </div>
           </dl>
           <div data-section="check">
@@ -1300,8 +1292,10 @@
                 <dt>USDC swapper</dt>
                 <dd>
                   <code translate="no"
-                    ><a href="https://basescan.org/address/0x31791f453d2100e728E012c9e189C0828adf4b6F#code"
-                      >0x31791f453d2100e728E012c9e189C0828adf4b6F</a
+                    ><a
+                      href="https://basescan.org/address/0x31791f453d2100e728E012c9e189C0828adf4b6F#code"
+                      title="0x31791f453d2100e728E012c9e189C0828adf4b6F"
+                      >0x3179…4b6F</a
                     ></code
                   >
                 </dd>
@@ -1310,8 +1304,10 @@
                 <dt>EURC swapper</dt>
                 <dd>
                   <code translate="no"
-                    ><a href="https://basescan.org/address/0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E#code"
-                      >0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E</a
+                    ><a
+                      href="https://basescan.org/address/0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E#code"
+                      title="0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E"
+                      >0x2cd8…450E</a
                     ></code
                   >
                 </dd>
@@ -1320,8 +1316,10 @@
                 <dt>WETH swapper</dt>
                 <dd>
                   <code translate="no"
-                    ><a href="https://basescan.org/address/0xe5cbD828c2227E17f7FF8BD54C7A1e6012694Ff2#code"
-                      >0xe5cbD828c2227E17f7FF8BD54C7A1e6012694Ff2</a
+                    ><a
+                      href="https://basescan.org/address/0xe5cbD828c2227E17f7FF8BD54C7A1e6012694Ff2#code"
+                      title="0xe5cbD828c2227E17f7FF8BD54C7A1e6012694Ff2"
+                      >0xe5cb…4Ff2</a
                     ></code
                   >
                 </dd>
@@ -1330,8 +1328,10 @@
                 <dt>cbBTC swapper</dt>
                 <dd>
                   <code translate="no"
-                    ><a href="https://basescan.org/address/0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0#code"
-                      >0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0</a
+                    ><a
+                      href="https://basescan.org/address/0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0#code"
+                      title="0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0"
+                      >0x5480…A7d0</a
                     ></code
                   >
                 </dd>
@@ -1340,8 +1340,10 @@
                 <dt>AERO swapper</dt>
                 <dd>
                   <code translate="no"
-                    ><a href="https://basescan.org/address/0xdd575A498C625AF96ac89efE578Dc68f4c9aB963#code"
-                      >0xdd575A498C625AF96ac89efE578Dc68f4c9aB963</a
+                    ><a
+                      href="https://basescan.org/address/0xdd575A498C625AF96ac89efE578Dc68f4c9aB963#code"
+                      title="0xdd575A498C625AF96ac89efE578Dc68f4c9aB963"
+                      >0xdd57…B963</a
                     ></code
                   >
                 </dd>
@@ -1350,8 +1352,10 @@
                 <dt>HYDX swapper</dt>
                 <dd>
                   <code translate="no"
-                    ><a href="https://basescan.org/address/0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC#code"
-                      >0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC</a
+                    ><a
+                      href="https://basescan.org/address/0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC#code"
+                      title="0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC"
+                      >0xC629…c8bC</a
                     ></code
                   >
                 </dd>
@@ -1430,7 +1434,7 @@
       <h2 id="review-title" tabindex="-1" autofocus></h2>
       <div class="pages"></div>
       <div class="calls">
-        <h3>What your wallet will ask</h3>
+        <h3>Transactions</h3>
         <p class="how small"></p>
         <ol class="steps"></ol>
       </div>
@@ -1439,7 +1443,7 @@
         <p class="progress" role="status"></p>
         <p class="buttons">
           <button type="button" class="next">Continue</button>
-          <button type="button" class="confirm" disabled>Confirm in your wallet</button>
+          <button type="button" class="confirm" disabled>Sign transaction</button>
           <button type="button" class="back secondary">Back</button>
         </p>
       </div>
@@ -1516,10 +1520,6 @@
             <dd><code translate="no">0</code> · call</dd>
           </div>
         </dl>
-        <div class="slip-foot">
-          <p class="slip-note" hidden></p>
-          <p class="check"><a class="check-calls">How to check</a> <span class="label">On Base</span></p>
-        </div>
       </li>
     </template>
     <template id="field">
@@ -1807,32 +1807,32 @@
       </li>
     </template>
     <!-- The swap before the wallet asks, as a bill: each token and its route, then what they fetch, the 1%, what
-         reaches you, and the least that may, which the slippage sets. Gas is paid apart, in ETH, so it heads the bill. -->
+         reaches you, and, as its total, the least that may, which the slippage sets. Gas is paid apart, in ETH, so it
+         heads the bill. -->
     <template id="swap-before">
       <article class="slip receipt">
         <p class="receipt-name">metaDEX Café</p>
         <p class="label">Quote · swap into <code class="swap-output" translate="no"></code></p>
-        <p class="receipt-day">Gas <span class="swap-gas"></span></p>
+        <p class="receipt-day">Estimated gas <span class="swap-gas"></span></p>
         <ul class="swap-lines"></ul>
         <dl class="lines">
           <div>
-            <dt>Fetched</dt>
+            <dt>Quote</dt>
             <dd class="value swap-fetched"></dd>
           </div>
           <div>
-            <dt>Fee 1%</dt>
+            <dt>Swap fee</dt>
             <dd class="value swap-fee"></dd>
           </div>
-        </dl>
-        <dl class="total">
           <div>
             <dt>Reaches you</dt>
             <dd class="value swap-paid"></dd>
           </div>
-          <div class="least">
-            <dt>At least</dt>
+        </dl>
+        <dl class="total">
+          <div>
+            <dt class="swap-slippage"></dt>
             <dd class="value swap-least"></dd>
-            <dd class="detail swap-slippage"></dd>
           </div>
         </dl>
       </article>
@@ -1853,22 +1853,23 @@
         ></span>
       </li>
     </template>
+    <!-- The swap once it went through, as a bill like the one before it: when, and the gas it cost, if the wallet paid
+         it; each token sold, what it fetched, and how that compares with the quote; then what they fetched, the 1%, and
+         what reached you. The tokens it skipped follow, each with its approval to reset. -->
     <template id="swap-receipt">
       <article class="slip receipt">
         <p class="receipt-name">metaDEX Café</p>
         <p class="label">Receipt · swap into <code class="swap-receipt-output" translate="no"></code></p>
+        <p class="receipt-day"><time class="swap-receipt-time"></time></p>
+        <p class="receipt-day swap-receipt-gas-line" hidden>Gas <span class="swap-receipt-gas"></span></p>
+        <ul class="swap-lines"></ul>
         <dl class="lines">
-          <div>
-            <dt>Sold</dt>
-            <dd class="value swap-receipt-sold"></dd>
-            <dd class="detail swap-receipt-tokens"></dd>
-          </div>
           <div>
             <dt>Fetched</dt>
             <dd class="value swap-receipt-fetched"></dd>
           </div>
           <div>
-            <dt>Fee 1%</dt>
+            <dt>Swap fee</dt>
             <dd class="value swap-receipt-fee"></dd>
           </div>
         </dl>
