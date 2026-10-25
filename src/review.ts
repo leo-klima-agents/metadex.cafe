@@ -431,7 +431,8 @@ async function sendNext(state: Review): Promise<void> {
   const which = `Transaction${steps.length === 1 ? "" : ` ${hashes.length} of ${steps.length}`} signed`;
   state.submitted = true;
   refreshReview();
-  say(state, `${which}. Waiting for it to go through…`, hashes);
+  // Only the transactions that went through are linked: one waiting to, once it does, or once it failed.
+  say(state, `${which}. Waiting for it to go through…`, done);
   const receipt = await waitForReceipt(hash);
   const ok = receipt && receipt.status === "0x1";
   if (receipt && ok) {
@@ -439,7 +440,7 @@ async function sendNext(state: Review): Promise<void> {
     state.receipts.push(receipt);
   }
   state.finished = !ok || done.length === steps.length;
-  if (!receipt) say(state, `${which}. Reload the page in a minute to see if it went through.`, hashes);
+  if (!receipt) say(state, `${which}. Reload the page in a minute to see if it went through.`, done);
   else if (!ok) say(state, `A transaction failed on Base.${wentThrough(state)}`, hashes);
   else if (state.finished) await finish(state);
   else {
