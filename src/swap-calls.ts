@@ -73,6 +73,7 @@ export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Sli
   const words = `${figure(amount, token.decimals)} ${token.symbol}`;
   return {
     ...approve(token.address, swapper.address, amount),
+    title: amount ? "Approval" : "Approval reset",
     says: amount
       ? `Let the ${swapper.symbol} swapper take ${words} from you`
       : `Reset ${token.symbol}'s approval of the ${swapper.symbol} swapper to nothing`,
@@ -101,6 +102,7 @@ export function swapSlip(
   return {
     ...swapCall(swapper, routes, deadline),
     ...(tip !== undefined && { tip }),
+    title: `Swap into ${swapper.symbol}`,
     says: `Sell ${n === 1 ? "1 token" : `${n} tokens`} for at least ${figure(least, swapper.decimals)} ${swapper.symbol}`,
     on: `The ${swapper.symbol} swapper`,
     call: "swap",

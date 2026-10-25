@@ -708,7 +708,7 @@ function review(accounts: Account[], action: Action, automation?: Automation): v
     // Which automation each account leaves, if any, its call says on the next page.
     const before = prepare(`${prefix}join-before`);
     estimate(before.querySelector(".estimate")!, accounts, automation, owner);
-    const pages = [{ title: "Before you join", body: before }, { title: "Transactions to confirm" }];
+    const pages = [{ title: "Before you join", body: before }, {}];
     const steps = join(accounts, automation);
     const done = prepare(`${prefix}join-done`);
     return void openReview({

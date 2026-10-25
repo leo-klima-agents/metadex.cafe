@@ -127,7 +127,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     }
     assert.equal(await bill.locator(".swap-slippage").innerText(), "Minimum at 0.5% slippage");
     await review(page).getByRole("button", { name: "Continue" }).click();
-    await review(page).getByText("One prompt, 4 calls, all or nothing").waitFor();
+    await review(page).getByText("All 4 in one prompt, all or nothing").waitFor();
     const says = await review(page).locator(".says").allTextContents();
     assert.equal(says.length, 4);
     assert.match(says[0]!, /^Let the USDC swapper take [\d,.]+ \S+ from you$/);
@@ -144,8 +144,8 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.ok(avnt > 0n);
     await mined(SELLER, AVNT, encodeFunctionData({ abi: tokenAbi, functionName: "transfer", args: [STRANGER, avnt] }));
     const before = await balanceOf(INTO_USDC.token, SELLER);
-    await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
-    await review(page).getByText("Done.").waitFor({ timeout: 120_000 });
+    await review(page).getByRole("button", { name: "Execute 4 transactions" }).click();
+    await review(page).getByText("All 4 went through.").waitFor({ timeout: 120_000 });
     assert.equal(sent.length, 4);
     const receipt = review(page).locator(".receipt");
     assert.equal(await receipt.locator(".swap-receipt-sold").innerText(), "2 tokens");
@@ -198,14 +198,14 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     // from a wallet that sends several in one prompt, and the swap follows, of what they brought.
     const claims = await review(page).locator(".says").allTextContents();
     assert.ok(claims.length > 1 && claims.every((each) => /^Claims account #82774's rewards from /.test(each)));
-    assert.equal(await review(page).locator(".how").textContent(), `${claims.length} transactions`);
+    assert.equal(await review(page).locator(".how").textContent(), "One prompt each");
     const before = await balanceOf(INTO_USDC.token, PAYEE);
     await confirmEach(page, PAYEE);
     await review(page).getByRole("button", { name: "Review the swap into USDC" }).click();
     await review(page).getByRole("heading", { name: "What you swap" }).waitFor({ timeout: 300_000 });
     await review(page).getByRole("button", { name: "Continue" }).click();
     await review(page)
-      .getByText(/^One prompt, \d+ calls, all or nothing$/)
+      .getByText(/^All \d+ in one prompt, all or nothing$/)
       .waitFor();
     // The approvals, then the swap: in several calls, as here, when one would need more gas than a swap may use.
     const says = await review(page).locator(".says").allTextContents();
@@ -219,8 +219,12 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       ),
       JSON.stringify(says),
     );
-    await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
-    await review(page).getByText("Done.").waitFor({ timeout: 300_000 });
+    await review(page)
+      .getByRole("button", { name: /^Execute \d+ transactions$/ })
+      .click();
+    await review(page)
+      .getByText(/^All \d+ went through\./)
+      .waitFor({ timeout: 300_000 });
     assert.equal(sent.length, claims.length + says.length);
     await review(page)
       .locator(".swap-receipt-paid")

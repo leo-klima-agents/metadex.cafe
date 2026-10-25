@@ -664,7 +664,7 @@ export async function openSwapReview(
     "swap-simulated": "Not simulated: these are quotes.",
   });
   show(".swap-simulated", !simulated, body);
-  const pages: ReviewPage[] = [{ title: "What you swap", body }, { title: "Transactions to confirm" }];
+  const pages: ReviewPage[] = [{ title: "What you swap", body }, {}];
   openReview({
     name: ["Swap into ", { code: swapper.symbol }],
     pages,

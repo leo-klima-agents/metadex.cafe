@@ -609,7 +609,7 @@ export const chip = (page: Page, owner: Address) => page.locator("header").getBy
 export async function toWallet(page: Page): Promise<void> {
   await review(page).getByRole("heading", { name: "Before you join" }).waitFor();
   await review(page).getByRole("button", { name: "Continue" }).click();
-  await review(page).getByRole("heading", { name: "Transactions to confirm" }).waitFor();
+  await review(page).getByRole("heading", { name: "Transactions" }).waitFor();
 }
 
 // Waits until the page names the next epoch's start, as it does in each automation's popup on joining.
@@ -635,8 +635,12 @@ export async function shoot(page: Page, name: string, part?: Locator): Promise<v
 // Waits for the review's one prompt to be included, for two minutes at most, as mined() does.
 export async function confirm(page: Page): Promise<void> {
   try {
-    await review(page).getByRole("button", { name: "Confirm in your wallet" }).click();
-    await review(page).getByText("Done.").waitFor({ timeout: 120_000 });
+    await review(page)
+      .getByRole("button", { name: /^Execute (transaction|\d+ transactions)$/ })
+      .click();
+    await review(page)
+      .getByText(/^(It|All \d+) went through\./)
+      .waitFor({ timeout: 120_000 });
   } catch (error) {
     const shown = await review(page).locator(".progress").allTextContents();
     throw new Error(`The review shows: ${JSON.stringify(shown)}`, { cause: error });
@@ -656,9 +660,9 @@ export async function confirmEach(page: Page, from: Address): Promise<void> {
   await Promise.all(
     tos.map((to, i) => anvil("eth_call", [{ from, to, data: datas[i], gas: GAS }, "latest"]).catch(() => {})),
   );
-  const done = review(page).getByText("Done.");
+  const done = review(page).getByText(/^(It|All \d+) went through\./);
   const next = review(page)
-    .getByRole("button", { name: /^Confirm (in your wallet|transaction \d+ of \d+)$/ })
+    .getByRole("button", { name: /^Execute (transaction|\d+ transactions|transaction \d+ of \d+)$/ })
     .and(review(page).locator("button:enabled"));
   for (let confirmed = 0; ; confirmed++) {
     try {

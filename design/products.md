@@ -437,10 +437,9 @@ Two steps, as every review:
    what a quote cannot see: the MEV tax on Aero's classic pools above a 1 gwei tip, and fees that Hydrex's and Aero's
    admins can change. Before this step shows, the page runs the approvals and the swap through `eth_simulateV1`, so the
    figures are the swap's own, not only the quotes'.
-2. **Transactions to confirm:** each approval as a slip (`approve`, the swapper's address, the exact amount), then the
-   swap: the swapper's address, each route in words ("41.2 AVNT, Hydrex Algebra pool `0x…` to WETH, Uniswap v3 0.05%
-   pool `0x…` to USDC, at least 0.60 USDC"), the deadline, and skip-failed. From a Safe, the calldata word by word, as
-   today.
+2. **Transactions:** each approval as a slip (`approve`, the swapper's address, the exact amount), then the swap: the
+   swapper's address, each route in words ("41.2 AVNT, Hydrex Algebra pool `0x…` to WETH, Uniswap v3 0.05% pool `0x…` to
+   USDC, at least 0.60 USDC"), the deadline, and skip-failed. From a Safe, the calldata word by word, as today.
 
 - **Without batching,** the approvals come one prompt each, then the page quotes again before it asks for the swap.
   Approvals take minutes; a quote should not. A minimum never goes below what the review showed: if a fresh quote falls
