@@ -1042,8 +1042,9 @@ onRoute((next) => {
   void loadPosition();
 });
 
-// The header: a button to connect a wallet, or the wallet's chip, which leads to the App. Only the App and the header's
-// popup hold the wallet buttons; elsewhere, a line says that no wallet is connected.
+// The header: a button to connect a wallet, or the wallet's chip, which leads to the App. The header's popup holds the
+// wallet buttons, as do the App, under its products, and the lists of what a wallet holds: its Hydrex accounts, and the
+// tokens it can sell.
 const connectButton = document.querySelector<HTMLButtonElement>("header.site .connect")!;
 const connectPop = document.getElementById("connect")!;
 // Older browsers refuse to show a popup already shown, or to hide one already hidden.
@@ -1052,7 +1053,7 @@ const showConnectPop = (shown: boolean): void => {
 };
 
 function showConnection(): void {
-  show(".wallet-slot, header.site .connect, .no-wallet-yet", !connection);
+  show(".wallet-slot, header.site .connect", !connection);
   show("header.site .to-app", !!connection);
   if (connection) showConnectPop(false);
   show("#epoch", !!connection);

@@ -279,10 +279,15 @@ test("the header holds the logo and the name, and a button to connect a wallet; 
   ]) {
     assert.equal(trail(view), '<a href="#app">Your wallet</a><a href="#hydrex">Hydrex</a>');
   }
-  // Only the App and the header's popup hold the wallet buttons.
-  assert.equal(html.match(/<div class="wallet-slot"><\/div>/g)?.length, 2);
-  assert.ok(viewOf(html, 'data-view="app"').includes('<div class="wallet-slot"></div>'));
+  // The header's popup holds the wallet buttons, as do the App, under its products, and the lists of what a wallet holds:
+  // its Hydrex accounts, and the tokens to sell.
+  assert.equal(html.match(/<div class="wallet-slot"><\/div>/g)?.length, 4);
+  const app = viewOf(html, 'data-view="app"');
+  assert.ok(app.indexOf('<div class="wallet-slot"></div>') > app.indexOf('id="products"'));
   assert.ok(header.includes('<div class="wallet-slot"></div>'));
+  assert.match(viewOf(html, 'data-view="hydrex"'), /id="yours-title"[\s\S]*?<div class="wallet-slot"><\/div>/);
+  assert.match(viewOf(html, 'data-view="swap"'), /id="swap-tokens-title"[\s\S]*?<div class="wallet-slot"><\/div>/);
+  assert.ok(!html.includes("No wallet connected."));
 });
 
 test("on Hydrex's page, the automations come before the Hydrex accounts, whose groups are a level below", () => {

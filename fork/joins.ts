@@ -52,8 +52,8 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     const { page, sent, asked, origins, violations } = await open({ owner: ELSEWHERE }, { url: `${SITE}/#hydrex` });
     await hydrex(page).locator("time.impact-voted").getByText(/Wed/).waitFor();
     assert.deepEqual(asked, [], "the page asks a wallet nothing until it is picked");
-    // The one wallet in the browser connects from the header's button at once: the page has no list of wallets.
-    assert.equal(await hydrex(page).getByRole("button", { name: "Test Wallet" }).count(), 0);
+    // The one wallet in the browser connects from the header's button at once; the Hydrex accounts list it too.
+    await hydrex(page).locator(".wallets").getByRole("button", { name: "Test Wallet" }).waitFor();
     await connectButton(page).click();
     await chip(page, ELSEWHERE).waitFor();
     await account(page, 2439)

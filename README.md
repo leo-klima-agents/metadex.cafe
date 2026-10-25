@@ -49,7 +49,8 @@ This README is for whoever runs the site. The design and the plan are in [design
   prompt per call; the swap is then quoted again before the wallet asks for it, and never with a lower minimum.
 - The header holds the logo and the name, which lead Home, and on every view a button that connects a wallet: at once
   when the browser has one, from a list when it has several. Once one is connected, the wallet's chip, which leads to
-  the App, takes its place. Only the App lists the wallets in the page too.
+  the App, takes its place. The App, under its products, and the lists of a wallet's Hydrex accounts and tokens to sell
+  list the wallets in the page too.
 - Home is a heading and the button to the App (`#app`). A wallet connected on Home or About leads on to the App; the
   name in the header still leads Home afterwards. The App, "Your wallet", starts with what needs you across the
   products, each with one action: a Hydrex account in a stopped automation, an overdue payout, token approvals to the

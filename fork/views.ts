@@ -474,7 +474,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await page.locator("#accounts").isVisible(), false);
     // The header's button, which would connect the one wallet at once, says so in its popup.
     await page.goto(`${SITE}/#hydrex`);
-    await hydrex(page).getByText("No wallet connected.").waitFor();
+    await hydrex(page).locator(".wallets").getByText("Connect a wallet").waitFor();
     await connectButton(page).click();
     const pop = page.locator("#connect:popover-open");
     await pop.getByText("No wallet found.").waitFor();

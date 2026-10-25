@@ -60,7 +60,6 @@
             Approvals
           </button>
         </div>
-        <div class="wallet-slot"></div>
         <p class="wrong-chain notice" role="alert" hidden>
           <span class="to-switch">Wrong network.<span class="switch-failed" hidden> Switch in your wallet.</span></span>
           <span class="safe-elsewhere" hidden>This Safe isn't on Base.</span>
@@ -82,6 +81,8 @@
             </li>
           </ul>
         </section>
+        <!-- Under the products, until a wallet is connected. -->
+        <div class="wallet-slot"></div>
 
         <div
           class="pop allows"
@@ -222,7 +223,7 @@
             <h2 id="yours-title">Your Hydrex accounts</h2>
             <p id="epoch" class="epoch" hidden>Next epoch <span class="countdown">soon</span></p>
           </div>
-          <p class="no-wallet-yet small">No wallet connected.</p>
+          <div class="wallet-slot"></div>
           <p class="accounts-reading small" role="status" hidden>Loading…</p>
           <p id="none" class="small" hidden>
             No Hydrex accounts.
@@ -1169,7 +1170,7 @@
                 Approvals
               </button>
             </div>
-            <p class="no-wallet-yet small">No wallet connected.</p>
+            <div class="wallet-slot"></div>
             <p class="swap-status small" role="status" hidden>Loading…</p>
             <p class="swap-failed notice" role="alert" hidden>
               <span>Reading your tokens failed.</span>

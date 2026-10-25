@@ -271,7 +271,7 @@ function drawRow(row: Row, scanned: Scan): void {
 
 function drawAll(): void {
   const signedIn = !!context.connection();
-  // Without a wallet, the outputs show, and the tokens' list says that no wallet is connected.
+  // Without a wallet, the outputs show, and the tokens' list offers the wallets to connect.
   show(".swap-approvals-open", signedIn, view);
   const swapper = swapperShown();
   for (const input of view.querySelectorAll<HTMLInputElement>('input[name="output"]')) {
