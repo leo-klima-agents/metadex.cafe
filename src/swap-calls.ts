@@ -65,7 +65,7 @@ export function routeWords(route: Route, tokens: Map<string, Token>, output: Swa
   const amount =
     amountWords ?? whole(token ? `${figure(route.amount, token.decimals)} ${token.symbol}` : `${route.amount}`);
   const between = route.hops.slice(0, -1).map(({ tokenOut }) => symbolOf(tokens, tokenOut));
-  const least = whole(`at least ${figure(route.minPaid, output.decimals)} ${output.symbol}`);
+  const least = whole(`${figure(route.minPaid, output.decimals)}+ ${output.symbol}`);
   return [[amount, ...between, least].join(" → "), `via ${[...new Set(route.hops.map(venueOf))].join(", ")}`];
 }
 

@@ -192,17 +192,17 @@ contract's name above it; Call; Conduit, with its name above it; Account; Approv
 above its value, as a token's symbol goes above its address. A list of addresses, such as a claim's reward contracts and
 tokens, takes as many columns as fit: two in the review on a desktop, one on a phone. A swap's call shows only the
 addresses the wallet shows, the contract and the spender; its routes read from what they sell to the least they fetch,
-then who runs their pools: "2,974 ZORA → WETH → at least 19.84 USDC via Aerodrome", which wraps before "via", and after
-an arrow rather than within an amount. Its words, as an approval's, say what to do: "Sell 3 tokens for at least 84.11
-USDC". The button says what it sends, the same way for one transaction, several in one prompt, or one at a time: "Sign
-transaction", "Sign 4 transactions", "Sign transaction 3 of 4", under "Transactions to sign". When they go one at a
-time, the one it sends next is outlined, and the review scrolls to it once the one before went through. Once all went
-through, the receipt takes the review's screen, under "Done".
+then who runs their pools: "2,974 ZORA → WETH → 19.84+ USDC via Aerodrome", which wraps before "via", and after an arrow
+rather than within an amount. Its words, as an approval's, say what to do: "Sell 3 tokens for at least 84.11 USDC". The
+button says what it sends, the same way for one transaction, several in one prompt, or one at a time: "Sign
+transaction", "Sign 4 transactions", "Sign transaction 3 of 4", under "Transactions". When they go one at a time, the
+one it sends next is outlined, and the review scrolls to it once the one before went through. Once all went through, the
+receipt takes the review's screen, under "Done".
 
 **A swap** is a bill before the wallet asks: the name, "Quote · swap into cbBTC", with a token's symbol in its own case
 among the capitals, and the gas under it, as it is paid apart, in ETH. Then a line per token, with what it fetches and
 its route by tokens, then who runs its pools, each once, "ZORA → WETH → USDC via Aerodrome, Uniswap", without addresses
-or fee tiers. Then the quote, "Swap fee", "Reaches you", and, as its total, "Minimum at 0.5% slippage", which names the
+or fee tiers. Then the quote, "Swap fee", "Fetched", and, as its total, "Minimum at 0.5% slippage", which names the
 slippage that set it. Its receipt, once all went through, is the same bill: when, and the gas it cost when the wallet
 paid it, then each token sold with what it fetched and how that compares with what the bill showed, "+0.2% vs quote" or
 "As quoted", then what they fetched, the swap fee, and "Paid to you". It gives no price per token, which the page shows

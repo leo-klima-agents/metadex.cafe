@@ -77,7 +77,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
       .waitFor({ timeout: 120_000 });
     await shoot(page, "join-1-1440-light");
     await review(page).getByRole("button", { name: "Continue" }).click();
-    await review(page).getByRole("heading", { name: "Transactions to sign" }).waitFor();
+    await review(page).getByRole("heading", { name: "Transactions", exact: true }).waitFor();
     assert.equal(await review(page).locator(".how").textContent(), "");
     assert.deepEqual(await review(page).locator(".says").allTextContents(), [
       "Account #2439 leaves the USDC automation and joins Carbon Impact.",

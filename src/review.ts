@@ -34,8 +34,8 @@ export type Field = {
 export type Slip = Tx & { title: string; says: string; on: string; call: string; fields: Field[]; note?: string };
 
 export type Hooks = { closed(submitted: boolean): void; switched(): void };
-// The last page also shows the calls and the Sign button. A page without a title is the calls': "Transactions to sign",
-// or "Transaction to sign" for one.
+// The last page also shows the calls and the Sign button. A page without a title is the calls': "Transactions", or
+// "Transaction" for one.
 export type ReviewPage = { title?: string; body?: DocumentFragment };
 
 export type ReviewOptions = {
@@ -293,7 +293,7 @@ function showPage(page: number): void {
   if (dialog.open) title.focus();
 }
 
-const callsName = ({ steps }: Review): string => (steps.length === 1 ? "Transaction to sign" : "Transactions to sign");
+const callsName = ({ steps }: Review): string => (steps.length === 1 ? "Transaction" : "Transactions");
 
 const atomic = (state: Review): boolean => !!state.atomic && !!state.capabilities?.atomic;
 

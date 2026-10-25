@@ -79,7 +79,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     const labels = await summary.locator("dt").allInnerTexts();
     assert.deepEqual(
       [labels[0], labels[1], labels[2], labels[4]],
-      ["Quote", "Swap fee (1%)", "Reaches you", "Estimated gas"],
+      ["Quote", "Swap fee (1%)", "Fetched", "Estimated gas"],
     );
     assert.match(labels[3]!, /^Minimum at/);
     assert.equal(await summary.getByRole("combobox", { name: /Minimum at/ }).inputValue(), "50");
@@ -103,7 +103,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.match(await swap.locator(".swap-ticked").innerText(), /^· 3 of \d+$/);
     await shoot(page, "swap-390-light");
     await swap.getByRole("button", { name: "Review" }).click();
-    await review(page).getByRole("heading", { name: "What you swap" }).waitFor({ timeout: 300_000 });
+    await review(page).getByRole("heading", { name: "Quote", exact: true }).waitFor({ timeout: 300_000 });
     assert.equal(await review(page).locator(".swap-simulated").isVisible(), false, "run through Base");
     // A bill: each token with its route by tokens and pools, no addresses, under the gas; then the least, which the
     // slippage set.
@@ -208,7 +208,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     const before = await balanceOf(INTO_USDC.token, PAYEE);
     await confirmEach(page, PAYEE);
     await review(page).getByRole("button", { name: "Review the swap into USDC" }).click();
-    await review(page).getByRole("heading", { name: "What you swap" }).waitFor({ timeout: 300_000 });
+    await review(page).getByRole("heading", { name: "Quote", exact: true }).waitFor({ timeout: 300_000 });
     await review(page).getByRole("button", { name: "Continue" }).click();
     await review(page)
       .getByText(/^All \d+ in one prompt, all or nothing$/)
