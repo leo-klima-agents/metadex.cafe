@@ -203,7 +203,10 @@ through, the receipt takes the review's screen, under "Done".
 among the capitals, and the gas under it, as it is paid apart, in ETH. Then a line per token, with what it fetches and
 its route by tokens, then who runs its pools, each once, "ZORA → WETH → USDC via Aerodrome, Uniswap", without addresses
 or fee tiers. Then the quote, "Swap fee", "Reaches you", and, as its total, "Minimum at 0.5% slippage", which names the
-slippage that set it.
+slippage that set it. Its receipt, once all went through, is the same bill: when, and the gas it cost when the wallet
+paid it, then each token sold with what it fetched and how that compares with what the bill showed, "+0.2% vs quote" or
+"As quoted", then what they fetched, the swap fee, and "Paid to you". It gives no price per token, which the page shows
+nowhere before.
 
 **In a Safe,** it opens with "In a Safe · one transaction to sign", or "In a Safe · call 1 of 2", and adds the fields
 Safe{Wallet} shows: Data and, for a single call, Operation. Data is the selector, then each 32-byte word on two lines of
