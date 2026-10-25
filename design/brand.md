@@ -192,8 +192,9 @@ Approve; Value. What a field holds always goes above its value, as a token's sym
 addresses, such as a claim's reward contracts and tokens, takes as many columns as fit: two in the review on a desktop,
 one on a phone. A swap's call shows only the addresses the wallet shows, the contract and the spender; its routes read
 from what they sell to the least they fetch, then who runs their pools: "2,974 ZORA → WETH → at least 19.84 USDC via
-Aerodrome". Its words, as an approval's, say what to do: "Sell 3 tokens for at least 84.11 USDC". When the calls go one
-at a time, the one that Confirm sends next is outlined, and the review scrolls to it once the one before is included.
+Aerodrome", which wraps before "via", and after an arrow rather than within an amount. Its words, as an approval's, say
+what to do: "Sell 3 tokens for at least 84.11 USDC". When the calls go one at a time, the one that Confirm sends next is
+outlined, and the review scrolls to it once the one before is included.
 
 **A swap** is a bill before the wallet asks: the name, "Quote · swap into cbBTC", with a token's symbol in its own case
 among the capitals, and the gas under it, as it is paid apart, in ETH. Then a line per token, with what it fetches and

@@ -56,14 +56,17 @@ export function hopsWords(route: Route, tokens: Map<string, Token>): string {
 }
 
 // A route in words, from what it sells, through the tokens between, to the least it fetches, then who runs its pools:
-// "41.2 AVNT → WETH → at least 0.60 USDC via Hydrex, Uniswap". A swap of a whole balance, as after a claim, says so
-// instead of an amount.
-export function routeWords(route: Route, tokens: Map<string, Token>, output: Swapper, amountWords?: string): string {
+// "41.2 AVNT → WETH → at least 0.60 USDC", "via Hydrex, Uniswap", in two parts, so that a line breaks before "via". A
+// swap of a whole balance, as after a claim, says so instead of an amount.
+export function routeWords(route: Route, tokens: Map<string, Token>, output: Swapper, amountWords?: string): string[] {
+  // An amount, and the least, keep to one line: the route breaks after an arrow.
+  const whole = (words: string) => words.replaceAll(" ", "\u00a0");
   const token = tokens.get(route.token.toLowerCase());
-  const amount = amountWords ?? (token ? `${figure(route.amount, token.decimals)} ${token.symbol}` : `${route.amount}`);
+  const amount =
+    amountWords ?? whole(token ? `${figure(route.amount, token.decimals)} ${token.symbol}` : `${route.amount}`);
   const between = route.hops.slice(0, -1).map(({ tokenOut }) => symbolOf(tokens, tokenOut));
-  const least = `at least ${figure(route.minPaid, output.decimals)} ${output.symbol}`;
-  return `${[amount, ...between, least].join(" → ")} via ${[...new Set(route.hops.map(venueOf))].join(", ")}`;
+  const least = whole(`at least ${figure(route.minPaid, output.decimals)} ${output.symbol}`);
+  return [[amount, ...between, least].join(" → "), `via ${[...new Set(route.hops.map(venueOf))].join(", ")}`];
 }
 
 export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Slip {
@@ -105,14 +108,12 @@ export function swapSlip(
       ...routes.map((route, i) => ({
         label: n === 1 ? "Route" : `Route ${i + 1}`,
         name: "route",
-        words: [
-          routeWords(
-            route,
-            tokens,
-            swapper,
-            whole ? `All your ${symbolOf(tokens, route.token)} (up to what this approves)` : undefined,
-          ),
-        ],
+        words: routeWords(
+          route,
+          tokens,
+          swapper,
+          whole ? `All your ${symbolOf(tokens, route.token)} (up to what this approves)` : undefined,
+        ),
       })),
       { label: "Deadline", name: "deadline", code: String(deadline), description: utc(Number(deadline)) },
       {

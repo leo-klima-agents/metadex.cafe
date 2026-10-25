@@ -77,7 +77,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
       .waitFor({ timeout: 120_000 });
     await shoot(page, "join-1-1440-light");
     await review(page).getByRole("button", { name: "Continue" }).click();
-    await review(page).getByRole("heading", { name: "What your wallet will ask" }).waitFor();
+    await review(page).getByRole("heading", { name: "Transactions to confirm" }).waitFor();
     await review(page).locator(".how").getByText("2 transactions", { exact: true }).waitFor();
     assert.deepEqual(await review(page).locator(".says").allTextContents(), [
       "Account #2439 leaves the USDC automation and joins Carbon Impact.",
@@ -99,7 +99,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     assert.equal(await review(page).locator(".data").first().isVisible(), false, "the wallet shows the call's fields");
     await shoot(page, "join-2-1440-light");
     await review(page).getByRole("button", { name: "Confirm transaction 1 of 2" }).click();
-    await review(page).getByText("Transaction 1 of 2 is included.").waitFor();
+    await review(page).getByText("Transaction 1 of 2 went through.").waitFor();
     await review(page).getByRole("button", { name: "Confirm transaction 2 of 2" }).click();
     await review(page).getByText("Done.").waitFor();
     await review(page).getByText("Joined.").waitFor();

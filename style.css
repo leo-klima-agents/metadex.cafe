@@ -1237,9 +1237,13 @@ dialog .receipt {
   color: var(--quiet);
   font-family: var(--sans);
 }
-/* A route, in words, around the addresses of its pools. */
+/* A route, in words. */
 .fields .words {
   font-family: var(--sans);
+}
+/* A line breaks between its parts before it breaks within one: a route, then who runs its pools. */
+.fields .words > span {
+  display: inline-block;
 }
 /* Eight groups a line, so that each 32-byte word of calldata takes two lines. */
 .fields .bytes {

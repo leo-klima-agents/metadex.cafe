@@ -609,7 +609,7 @@ export const chip = (page: Page, owner: Address) => page.locator("header").getBy
 export async function toWallet(page: Page): Promise<void> {
   await review(page).getByRole("heading", { name: "Before you join" }).waitFor();
   await review(page).getByRole("button", { name: "Continue" }).click();
-  await review(page).getByRole("heading", { name: "What your wallet will ask" }).waitFor();
+  await review(page).getByRole("heading", { name: "Transactions to confirm" }).waitFor();
 }
 
 // Waits until the page names the next epoch's start, as it does in each automation's popup on joining.

@@ -17,16 +17,16 @@ import {
   type Wallet,
 } from "./wallet.ts";
 
-// A field of a call as the wallet shows it: an address, a number or a list of them, in the mono face, or words, which
-// may hold addresses. `description` says what the field holds, above it, such as the contract an address is; a list's
-// items can each have a tag above them too, such as a token's symbol. `name` is the class of its value, and of its
-// description with "-name" after it.
+// A field of a call as the wallet shows it: an address, a number or a list of them, in the mono face, or words, in parts
+// that a line breaks between before it breaks within one. `description` says what the field holds, above it, such as
+// the contract an address is; a list's items can each have a tag above them too, such as a token's symbol. `name` is
+// the class of its value, and of its description with "-name" after it.
 export type Field = {
   label: string;
   name?: string;
   code?: string | string[];
   tags?: string[];
-  words?: (string | { code: string })[];
+  words?: string[];
   description?: string;
 };
 // A call: the page's own words, the contract it goes to, and its fields. `note` says how its calldata reads, for
@@ -113,7 +113,7 @@ function codeOf(text: string, name?: string): HTMLElement {
   return code;
 }
 
-// An address within words, such as a pool's in a route, keeps to the text's lines.
+// Code within words, such as a token's symbol in the review's name, keeps to the text's lines.
 function inlineCode(text: string): HTMLElement {
   const code = newCode();
   if (ADDRESS.test(text) || HASH.test(text)) showHex(code, text);
@@ -154,7 +154,9 @@ function fieldOf({ label, name, code, tags, words, description }: Field): Docume
   if (words) {
     const span = document.createElement("span");
     span.className = `words${name ? ` ${name}` : ""}`;
-    span.append(...words.map((word) => (typeof word === "string" ? word : inlineCode(word.code))));
+    words.forEach((word, i) =>
+      span.append(...(i ? [" "] : []), Object.assign(document.createElement("span"), { textContent: word })),
+    );
     value.append(span);
   }
   return row;
@@ -414,7 +416,7 @@ async function sendNext(state: Review): Promise<void> {
   const which = steps.length === 1 ? "Sent" : `Transaction ${hashes.length} of ${steps.length} sent`;
   state.submitted = true;
   refreshReview();
-  say(state, `${which}. Waiting for Base to include it…`, hashes);
+  say(state, `${which}. Waiting for it to go through…`, hashes);
   const receipt = await waitForReceipt(hash);
   const ok = receipt && receipt.status === "0x1";
   if (receipt && ok) {
@@ -422,7 +424,7 @@ async function sendNext(state: Review): Promise<void> {
     state.receipts.push(receipt);
   }
   state.finished = !ok || done.length === steps.length;
-  if (!receipt) say(state, "Sent. Reload once Base includes it.", hashes);
+  if (!receipt) say(state, "Sent. Reload the page in a minute to see if it went through.", hashes);
   else if (!ok) say(state, `A transaction failed on Base.${wentThrough(state)}`, hashes);
   else if (state.finished) await finish(state);
   else {
@@ -433,7 +435,7 @@ async function sendNext(state: Review): Promise<void> {
       if (state === current) drawSlips(state);
       if (fresh.changed) next = `${fresh.changed} ${next}`;
     }
-    say(state, `Transaction ${done.length} of ${steps.length} is included. ${next}`, done);
+    say(state, `Transaction ${done.length} of ${steps.length} went through. ${next}`, done);
   }
 }
 
@@ -463,11 +465,11 @@ async function sendBatch(state: Review): Promise<void> {
   }
   state.submitted = true;
   refreshReview();
-  say(state, "Sent in one prompt. Waiting for Base to include it…");
+  say(state, "Sent in one prompt. Waiting for it to go through…");
   const status = await waitForCalls(state.connection, id);
   state.finished = true;
   const hashes = status?.receipts.map(({ transactionHash }) => transactionHash) ?? [];
-  if (!status) return say(state, "Sent. Reload once Base includes it.");
+  if (!status) return say(state, "Sent. Reload the page in a minute to see if it went through.");
   if (status.state === "failed")
     return say(state, "The calls failed on Base, or your wallet did not send them.", hashes);
   state.done = hashes;
