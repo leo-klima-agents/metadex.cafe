@@ -194,10 +194,10 @@ tokens, takes as many columns as fit: two in the review on a desktop, one on a p
 addresses the wallet shows, the contract and the spender; its routes read from what they sell to the least they fetch,
 then who runs their pools: "2,974 ZORA → WETH → at least 19.84 USDC via Aerodrome", which wraps before "via", and after
 an arrow rather than within an amount. Its words, as an approval's, say what to do: "Sell 3 tokens for at least 84.11
-USDC". The button says what it sends, the same way for one transaction, several in one prompt, or one at a time:
-"Approve transaction", "Approve 4 transactions", "Approve transaction 3 of 4", under "Transactions to approve". When
-they go one at a time, the one it sends next is outlined, and the review scrolls to it once the one before went through.
-Once all went through, the receipt takes the review's screen, under "Done".
+USDC". The button says what it sends, the same way for one transaction, several in one prompt, or one at a time: "Sign
+transaction", "Sign 4 transactions", "Sign transaction 3 of 4", under "Transactions to sign". When they go one at a
+time, the one it sends next is outlined, and the review scrolls to it once the one before went through. Once all went
+through, the receipt takes the review's screen, under "Done".
 
 **A swap** is a bill before the wallet asks: the name, "Quote · swap into cbBTC", with a token's symbol in its own case
 among the capitals, and the gas under it, as it is paid apart, in ETH. Then a line per token, with what it fetches and

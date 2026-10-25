@@ -144,7 +144,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.ok(avnt > 0n);
     await mined(SELLER, AVNT, encodeFunctionData({ abi: tokenAbi, functionName: "transfer", args: [STRANGER, avnt] }));
     const before = await balanceOf(INTO_USDC.token, SELLER);
-    await review(page).getByRole("button", { name: "Approve 4 transactions" }).click();
+    await review(page).getByRole("button", { name: "Sign 4 transactions" }).click();
     await review(page).getByText("All 4 went through.").waitFor({ timeout: 120_000 });
     assert.equal(sent.length, 4);
     const receipt = review(page).locator(".receipt");
@@ -220,7 +220,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       JSON.stringify(says),
     );
     await review(page)
-      .getByRole("button", { name: /^Approve \d+ transactions$/ })
+      .getByRole("button", { name: /^Sign \d+ transactions$/ })
       .click();
     await review(page)
       .getByText(/^All \d+ went through\./)

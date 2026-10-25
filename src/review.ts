@@ -34,8 +34,8 @@ export type Field = {
 export type Slip = Tx & { title: string; says: string; on: string; call: string; fields: Field[]; note?: string };
 
 export type Hooks = { closed(submitted: boolean): void; switched(): void };
-// The last page also shows the calls and the Approve button. A page without a title is the calls': "Transactions to
-// approve", or "Transaction to approve" for one.
+// The last page also shows the calls and the Sign button. A page without a title is the calls': "Transactions to sign",
+// or "Transaction to sign" for one.
 export type ReviewPage = { title?: string; body?: DocumentFragment };
 
 export type ReviewOptions = {
@@ -75,7 +75,7 @@ type Review = ReviewOptions & {
   sending: boolean;
   submitted: boolean;
   finished: boolean;
-  // The call the Approve button sends next, as its slip is marked, once scrolled to.
+  // The call the Sign button sends next, as its slip is marked, once scrolled to.
   shown: number;
 };
 
@@ -204,7 +204,7 @@ function drawSlips(state: Review): void {
   markNext(state);
 }
 
-// Which call the Approve button sends next, when it sends them one at a time: its slip is marked, and scrolled to once
+// Which call the Sign button sends next, when it sends them one at a time: its slip is marked, and scrolled to once
 // the one before is included.
 function markNext(state: Review): void {
   const { steps, done, batch, finished, connection } = state;
@@ -293,8 +293,7 @@ function showPage(page: number): void {
   if (dialog.open) title.focus();
 }
 
-const callsName = ({ steps }: Review): string =>
-  steps.length === 1 ? "Transaction to approve" : "Transactions to approve";
+const callsName = ({ steps }: Review): string => (steps.length === 1 ? "Transaction to sign" : "Transactions to sign");
 
 const atomic = (state: Review): boolean => !!state.atomic && !!state.capabilities?.atomic;
 
@@ -322,10 +321,10 @@ export function refreshReview(): void {
     : wrongChain
       ? "Switch to Base"
       : steps.length === 1
-        ? "Approve transaction"
+        ? "Sign transaction"
         : batch
-          ? `Approve ${steps.length} transactions`
-          : `Approve transaction ${done.length + 1} of ${steps.length}`;
+          ? `Sign ${steps.length} transactions`
+          : `Sign transaction ${done.length + 1} of ${steps.length}`;
   confirm.disabled = sending || (safe && wrongChain);
   confirm.hidden = !last || finished || !steps.length;
   next.hidden = last;
@@ -428,7 +427,7 @@ async function sendNext(state: Review): Promise<void> {
   say(state, "Waiting for your wallet…", done);
   const hash = await sending;
   const hashes = [...done, hash];
-  const which = steps.length === 1 ? "Approved" : `Transaction ${hashes.length} of ${steps.length} approved`;
+  const which = `Transaction${steps.length === 1 ? "" : ` ${hashes.length} of ${steps.length}`} signed`;
   state.submitted = true;
   refreshReview();
   say(state, `${which}. Waiting for it to go through…`, hashes);
@@ -439,11 +438,11 @@ async function sendNext(state: Review): Promise<void> {
     state.receipts.push(receipt);
   }
   state.finished = !ok || done.length === steps.length;
-  if (!receipt) say(state, "Approved. Reload the page in a minute to see if it went through.", hashes);
+  if (!receipt) say(state, `${which}. Reload the page in a minute to see if it went through.`, hashes);
   else if (!ok) say(state, `A transaction failed on Base.${wentThrough(state)}`, hashes);
   else if (state.finished) await finish(state);
   else {
-    let next = `Approve transaction ${done.length + 1} when you are ready; closing stops here.`;
+    let next = `Sign transaction ${done.length + 1} when you are ready; closing stops here.`;
     const fresh = await state.prepare?.(done.length).catch((error: unknown) => void console.error(error));
     if (fresh) {
       steps[done.length] = fresh.step;
@@ -476,15 +475,15 @@ async function sendBatch(state: Review): Promise<void> {
     // The calls then go one by one, from the next click.
     state.batch = false;
     refreshReview();
-    return say(state, "Your wallet can't approve these in one prompt: approve them one by one.");
+    return say(state, "Your wallet can't sign these in one prompt: sign them one by one.");
   }
   state.submitted = true;
   refreshReview();
-  say(state, "Approved in one prompt. Waiting for them to go through…");
+  say(state, "Transactions signed. Waiting for them to go through…");
   const status = await waitForCalls(state.connection, id);
   state.finished = true;
   const hashes = status?.receipts.map(({ transactionHash }) => transactionHash) ?? [];
-  if (!status) return say(state, "Approved. Reload the page in a minute to see if it went through.");
+  if (!status) return say(state, "Transactions signed. Reload the page in a minute to see if they went through.");
   if (status.state === "failed")
     return say(state, "The calls failed on Base, or your wallet did not send them.", hashes);
   state.done = hashes;

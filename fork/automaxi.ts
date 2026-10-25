@@ -59,7 +59,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await toWallet(page);
     await anvil("evm_setAutomine", [false]);
     try {
-      await review(page).getByRole("button", { name: "Approve transaction" }).click();
+      await review(page).getByRole("button", { name: "Sign transaction" }).click();
       await review(page).getByText("Waiting for it to go through").waitFor();
       await review(page).getByRole("button", { name: "Close" }).click();
       await account(page, 141).getByText("You vote with it").waitFor();
