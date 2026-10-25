@@ -789,7 +789,7 @@ function showApp(): void {
   const left = connection ? allowancesLeft() : undefined;
   if (left?.length) {
     items.push(
-      need("idle", `${count(left.length, "approval", "approvals")} left to the swappers`, {
+      need("idle", `${count(left.length, "token approval hasn't", "token approvals haven't")} been used`, {
         label: "Reset",
         // The approvals left when clicked, which a later read may have changed.
         button: () => void resetReview(allowancesLeft() ?? []),
