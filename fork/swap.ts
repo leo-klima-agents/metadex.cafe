@@ -161,7 +161,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await skipped.getByRole("button", { name: "Reset its approval" }).click();
     await review(page).getByRole("heading", { name: "Reset an approval" }).waitFor();
     assert.deepEqual(await review(page).locator(".says").allTextContents(), [
-      "Reset AVNT's approval of the USDC swapper to nothing",
+      "Reset AVNT's approval of the USDC swapper",
     ]);
     await confirm(page);
     assert.equal(await readOn<bigint>(AVNT, tokenAbi, "allowance", [SELLER, INTO_USDC.address]), 0n);

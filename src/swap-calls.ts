@@ -76,7 +76,7 @@ export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Sli
     title: amount ? "Token approval" : "Token approval reset",
     says: amount
       ? `Let the ${swapper.symbol} swapper take ${words} from you`
-      : `Reset ${token.symbol}'s approval of the ${swapper.symbol} swapper to nothing`,
+      : `Reset ${token.symbol}'s approval of the ${swapper.symbol} swapper`,
     on: `The ${token.symbol} token contract`,
     call: "approve",
     fields: [
