@@ -44,11 +44,7 @@ async function tickOnly(page: Page, symbols: string[]): Promise<void> {
     for (const symbol of symbols)
       await swap.getByRole("checkbox", { name: `Sell ${symbol}` }).waitFor({ timeout: 120_000 });
     // Each row says "…" until its route is found.
-    await swap
-      .locator(".swap-route")
-      .filter({ hasText: /^…$/ })
-      .first()
-      .waitFor({ state: "hidden", timeout: 120_000 });
+    await swap.locator(".swap-route").filter({ hasText: /^…$/ }).first().waitFor({ state: "hidden", timeout: 120_000 });
   } catch (error) {
     throw new Error(`The swap's page shows: ${await swap.locator(".swap-tokens").innerText()}`, { cause: error });
   }
