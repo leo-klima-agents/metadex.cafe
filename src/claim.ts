@@ -140,7 +140,6 @@ export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true
       },
       { label: "Tokens", name: "tokens", code: claimed, tags: symbols },
     ],
-    note: "The selector, then each 32-byte word on two lines: the account, where each list starts, then each list, its length first.",
   };
 }
 

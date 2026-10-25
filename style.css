@@ -1205,6 +1205,7 @@ dialog .receipt {
   scroll-margin-block-start: var(--gap-l);
 }
 .fields {
+  container: fields / inline-size;
   display: grid;
   gap: var(--gap-s);
   margin-block-start: var(--gap);
@@ -1240,8 +1241,7 @@ dialog .receipt {
   display: block;
 }
 .fields .description,
-.fields .call,
-.slip-note {
+.fields .call {
   color: var(--quiet);
   font-family: var(--sans);
 }
@@ -1250,8 +1250,14 @@ dialog .receipt {
   font-family: var(--sans);
 }
 /* Eight groups a line, so that each 32-byte word of calldata takes two lines. */
+/* Beside its label where it fits, as on a desktop; on a phone, under it, across the call. */
 .fields .bytes {
   grid-column: 1 / -1;
+}
+@container fields (min-width: 28rem) {
+  .fields .bytes {
+    grid-column: 2;
+  }
 }
 .fields .data {
   display: block;
@@ -1262,15 +1268,10 @@ dialog .receipt {
   background: var(--tint);
   line-height: 1.55;
 }
-.slip-foot,
 .receipt-foot {
   margin-block-start: var(--gap);
   padding-block-start: 0.625rem;
   border-block-start: 2px dashed var(--ink);
-}
-.slip-note {
-  margin-block-end: var(--gap-s);
-  font-size: var(--text-small);
 }
 .receipt-foot {
   display: flex;

@@ -84,7 +84,6 @@ export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Sli
       { label: "Spender", name: "spender", code: swapper.address, description: `The ${swapper.symbol} swapper` },
       { label: "Amount", name: "amount", code: String(amount), description: amount ? words : "Nothing" },
     ],
-    note: `The selector, then each 32-byte word on two lines: the swapper, and ${amount} as ${amount.toString(16)}.`,
   };
 }
 
@@ -126,6 +125,5 @@ export function swapSlip(
         description: "A route under its minimum is skipped.",
       },
     ],
-    note: "The selector, then each 32-byte word on two lines: where the routes start, the deadline, true as 1, then each route.",
   };
 }

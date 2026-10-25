@@ -30,8 +30,8 @@ export type Field = {
   description?: string;
 };
 // A call: what it is, as "Token approval" or "Swap into USDC", the page's own words, the contract it goes to, and its
-// fields. `note` says how its calldata reads, for co-signers.
-export type Slip = Tx & { title: string; says: string; on: string; call: string; fields: Field[]; note?: string };
+// fields.
+export type Slip = Tx & { title: string; says: string; on: string; call: string; fields: Field[] };
 
 export type Hooks = { closed(submitted: boolean): void; switched(): void };
 // The last page also shows the calls and the Sign button. A page without a title is the calls': "Transactions", or
@@ -177,13 +177,12 @@ function slip(step: Slip, i: number, n: number, safe: string | undefined, alone:
     says: step.says,
     on: step.on,
     function: step.call,
-    call: `${(step.data.length - 2) / 2} bytes:`,
-    "slip-note": step.note ?? "The selector, then each 32-byte word on two lines.",
+    call: `${(step.data.length - 2) / 2} bytes`,
   });
   showWalletAddress(item.querySelector(".to")!, step.to);
   showHex(item.querySelector(".data")!, step.data);
   item.querySelector(".value-row")!.before(...step.fields.map(fieldOf));
-  show(".raw, .slip-foot", !!safe, item);
+  show(".raw", !!safe, item);
   show(".operation", !!safe && alone, item);
   return item;
 }
