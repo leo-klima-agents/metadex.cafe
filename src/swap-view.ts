@@ -280,7 +280,6 @@ function drawAll(): void {
     show(".output-off", input.disabled, input.closest("label")!);
   }
   show(".swap-off", base === false, view);
-  show(".swap-unchecked", base === undefined, view);
   if (!scan || !signedIn) {
     status.hidden = summary.hidden = true;
     show(".swap-failed, .swap-none, .add-token", false, view);
@@ -307,6 +306,8 @@ function summarise(scanned: Scan, ticked: Row[]): void {
   const breakdown = view.querySelector<HTMLElement>(".breakdown")!;
   const splitLine = view.querySelector<HTMLElement>(".swap-split")!;
   reviewButton.disabled = !ticked.length || swapsOff();
+  // Until the page has read that its RPCs serve Base, which is soon, the button waits, and says why.
+  show(".swap-checking", !!ticked.length && base === undefined, view);
   sells.hidden = ticked.length > 0;
   breakdown.hidden = !ticked.length;
   if (!ticked.length) return void (splitLine.hidden = true);
