@@ -44,6 +44,10 @@
   --radius: 12px;
   /* Controls inside a line, such as an input or a select, and calldata: a smaller radius. */
   --radius-s: 8px;
+  /* Popups and the review, over the page: a larger radius. */
+  --radius-l: 16px;
+  /* The padding inside a panel: a popup, the review, a slip or a receipt. */
+  --inset: 1.25rem;
   /* One size for each kind of text. */
   --text-label: 0.8125rem;
   --text-small: 0.875rem;
@@ -915,9 +919,9 @@ details[open] > summary.info {
   box-sizing: border-box;
   inline-size: min(34rem, 100% - 2rem);
   max-block-size: min(42rem, 100% - 4rem);
-  padding: 0 1.25rem 1.25rem;
+  padding: 0 var(--inset) var(--inset);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-l);
   background: var(--paper);
   color: var(--ink);
   box-shadow: 0 1rem 3rem rgb(0 0 0 / 0.25);
@@ -951,8 +955,8 @@ details[open] > summary.info {
   align-items: center;
   justify-content: space-between;
   gap: var(--gap);
-  margin-inline: -1.25rem;
-  padding: var(--gap) var(--gap-s) var(--gap) 1.25rem;
+  margin-inline: calc(-1 * var(--inset));
+  padding: var(--gap) var(--gap-s) var(--gap) var(--inset);
   border-block-end: 1px solid var(--line);
   background: var(--paper);
 }
@@ -1002,7 +1006,7 @@ details[open] > summary.info {
     inline-size: 100%;
     max-block-size: 85vh;
     border-block-end: 0;
-    border-radius: 16px 16px 0 0;
+    border-radius: var(--radius-l) var(--radius-l) 0 0;
   }
   .pop:popover-open {
     margin: auto 0 0;
@@ -1090,34 +1094,15 @@ details[open] > summary:not(.info)::before {
   text-align: end;
 }
 
-.timeline {
-  padding-inline-start: 1.25rem;
-  border-inline-start: 2px solid var(--line);
-  list-style: none;
-}
-.timeline li {
-  position: relative;
-}
-.timeline li::before {
-  content: "";
-  position: absolute;
-  inset-inline-start: calc(-1.25rem - 6px);
-  inset-block-start: 0.45em;
-  inline-size: 10px;
-  block-size: 10px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
 /* The review: one step at a time, its buttons always in reach. */
 dialog {
   box-sizing: border-box;
   inline-size: min(36rem, 100% - 2rem);
   max-inline-size: none;
   padding-block: 0;
-  padding-inline: 1.25rem;
+  padding-inline: var(--inset);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-l);
   background: var(--paper);
   color: var(--ink);
   box-shadow: 0 1rem 3rem rgb(0 0 0 / 0.25);
@@ -1126,10 +1111,10 @@ dialog::backdrop {
   background: rgb(0 0 0 / 0.5);
 }
 dialog .step-count {
-  margin-block-start: 1.25rem;
+  margin-block-start: var(--inset);
 }
 #review-title {
-  margin-block: 1.25rem var(--gap-l);
+  margin-block: var(--inset) var(--gap-l);
 }
 dialog .step-count:not([hidden]) + h2 {
   margin-block-start: var(--gap-xs);
@@ -1153,7 +1138,7 @@ dialog .foot {
   display: grid;
   gap: var(--gap-s);
   margin-block-start: var(--gap-l);
-  padding-block: var(--gap) 1.25rem;
+  padding-block: var(--gap) var(--inset);
   border-block-start: 1px solid var(--line);
   background: var(--paper);
 }
@@ -1172,7 +1157,7 @@ dialog .foot {
 
 /* Slips and receipts: the structure of a till receipt, in the mono face. */
 .slip {
-  padding: 1.25rem var(--gap-l);
+  padding: var(--inset) var(--gap-l);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--card);
@@ -1280,7 +1265,7 @@ dialog .receipt {
 }
 .receipt {
   max-inline-size: 28rem;
-  padding-inline: 1.25rem;
+  padding-inline: var(--inset);
   font-size: var(--text-small);
 }
 .receipt-name {
@@ -1456,37 +1441,40 @@ dialog .receipt {
 }
 .swap-rows .about,
 .swap-lines > li {
+  grid-template-areas:
+    "name fetches"
+    "route worth";
   grid-template-columns: minmax(0, 1fr) auto;
   column-gap: var(--gap-l);
 }
 .swap-rows .about > :first-child,
 .swap-lines > li > :first-child {
-  grid-area: 1 / 1;
+  grid-area: name;
+}
+.swap-fetches,
+.line-fetches {
+  grid-area: fetches;
+}
+.swap-worth,
+.line-worth {
+  grid-area: worth;
+  color: var(--quiet);
+  font-size: var(--text-label);
 }
 .swap-fetches,
 .line-fetches,
 .swap-worth,
 .line-worth {
-  grid-column: 2;
-  justify-self: end !important;
+  justify-self: end;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   text-align: end;
 }
-.swap-fetches,
-.line-fetches {
-  grid-row: 1;
-}
-.swap-worth,
-.line-worth {
-  grid-row: 2;
-  color: var(--quiet);
-  font-size: var(--text-label);
-}
 .swap-route,
 .line-route {
-  grid-area: 2 / 1;
+  grid-area: route;
 }
+/* A note, such as why a token was skipped, takes a row of its own under the rest: two could show at once. */
 .swap-lookalike,
 .swap-check,
 .line-skip {
@@ -1496,27 +1484,27 @@ dialog .receipt {
    route. A row's card takes its tick and its padding from the width. */
 @container swap-rows (max-width: 20rem) {
   .swap-rows .about {
+    grid-template-areas: "name" "fetches" "worth" "route";
     grid-template-columns: minmax(0, 1fr);
   }
-  .swap-rows .about > * {
-    grid-area: auto / 1 !important;
+  /* A token whose route is found says nothing under it: no row for it. */
+  .swap-rows .about:has(> .swap-route:empty) {
+    grid-template-areas: "name" "fetches" "worth";
   }
   .swap-fetches,
   .swap-worth {
-    justify-self: start !important;
+    justify-self: start;
     text-align: start;
   }
 }
 @container swap-lines (max-width: 16rem) {
   .swap-lines > li {
+    grid-template-areas: "name" "fetches" "worth" "route";
     grid-template-columns: minmax(0, 1fr);
-  }
-  .swap-lines > li > * {
-    grid-area: auto / 1 !important;
   }
   .line-fetches,
   .line-worth {
-    justify-self: start !important;
+    justify-self: start;
     text-align: start;
   }
 }
