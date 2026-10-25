@@ -1205,7 +1205,6 @@ dialog .receipt {
   scroll-margin-block-start: var(--gap-l);
 }
 .fields {
-  container: fields / inline-size;
   display: grid;
   gap: var(--gap-s);
   margin-block-start: var(--gap);
@@ -1249,15 +1248,10 @@ dialog .receipt {
 .fields .words {
   font-family: var(--sans);
 }
-/* Eight groups a line, so that each 32-byte word of calldata takes two lines. */
-/* Beside its label where it fits, as on a desktop; on a phone, under it, across the call. */
+/* The calldata, beside its label: eight groups a line where they fit, so that each 32-byte word takes two lines, as on
+   a desktop, and four on a phone, as wide as an address. */
 .fields .bytes {
-  grid-column: 1 / -1;
-}
-@container fields (min-width: 28rem) {
-  .fields .bytes {
-    grid-column: 2;
-  }
+  grid-column: 2;
 }
 .fields .data {
   display: block;
