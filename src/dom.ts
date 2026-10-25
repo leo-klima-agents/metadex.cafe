@@ -115,13 +115,14 @@ export function showHex(element: Element, hex: string): void {
   element.replaceChildren(fragment);
 }
 
-// Lines of groups, a span each; CSS starts a line at each "line" span. With `breaks`, a line may also wrap between
-// groups.
+// Lines of groups, a span each; CSS starts a line at each "line" span. With `breaks`, a line wraps only after every
+// fourth group, so that calldata, a 32-byte word a line, shows 32 hex digits a line where they fit, as on a desktop, and
+// 16 where they do not.
 function linesOf(lines: string[][], breaks: boolean): DocumentFragment {
   const fragment = document.createDocumentFragment();
   lines.forEach((line, i) =>
     line.forEach((text, j) => {
-      if (breaks && (i || j)) fragment.append(document.createElement("wbr"));
+      if (breaks && j && j % 4 === 0) fragment.append(document.createElement("wbr"));
       const span = Object.assign(document.createElement("span"), { textContent: text });
       if (i && !j) span.className = "line";
       fragment.append(span);
