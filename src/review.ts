@@ -29,8 +29,8 @@ export type Field = {
   words?: string[];
   description?: string;
 };
-// A call: what it is, as "Token approval" or "Swap into USDC", the page's own words, the contract it goes to, and its fields.
-// `note` says how its calldata reads, for co-signers.
+// A call: what it is, as "Token approval" or "Swap into USDC", the page's own words, the contract it goes to, and its
+// fields. `note` says how its calldata reads, for co-signers.
 export type Slip = Tx & { title: string; says: string; on: string; call: string; fields: Field[]; note?: string };
 
 export type Hooks = { closed(submitted: boolean): void; switched(): void };
