@@ -17,16 +17,16 @@ import {
   type Wallet,
 } from "./wallet.ts";
 
-// A field of a call as the wallet shows it: an address, a number or a list of them, in the mono face, or words, in parts
-// that a line breaks between before it breaks within one. `description` says what the field holds, above it, such as
-// the contract an address is; a list's items can each have a tag above them too, such as a token's symbol. `name` is
-// the class of its value, and of its description with "-name" after it.
+// A field of a call as the wallet shows it: an address, a number or a list of them, in the mono face, or words.
+// `description` says what the field holds, above it, such as the contract an address is; a list's items can each have a
+// tag above them too, such as a token's symbol. `name` is the class of its value, and of its description with "-name"
+// after it.
 export type Field = {
   label: string;
   name?: string;
   code?: string | string[];
   tags?: string[];
-  words?: string[];
+  words?: string;
   description?: string;
 };
 // A call: what it is, as "Token approval" or "Swap into USDC", the page's own words, the contract it goes to, and its
@@ -152,14 +152,13 @@ function fieldOf({ label, name, code, tags, words, description }: Field): Docume
     if (name) value.classList.add(name);
     value.append(code.length ? listOf(code, tags) : "None");
   } else if (code !== undefined) value.append(codeOf(code, name));
-  if (words) {
-    const span = document.createElement("span");
-    span.className = `words${name ? ` ${name}` : ""}`;
-    words.forEach((word, i) =>
-      span.append(...(i ? [" "] : []), Object.assign(document.createElement("span"), { textContent: word })),
+  if (words)
+    value.append(
+      Object.assign(document.createElement("span"), {
+        className: `words${name ? ` ${name}` : ""}`,
+        textContent: words,
+      }),
     );
-    value.append(span);
-  }
   return row;
 }
 

@@ -56,17 +56,18 @@ export function hopsWords(route: Route, tokens: Map<string, Token>): string {
 }
 
 // A route in words, from what it sells, through the tokens between, to the least it fetches, then who runs its pools:
-// "41.2 AVNT → WETH → at least 0.60 USDC", "via Hydrex, Uniswap", in two parts, so that a line breaks before "via". A
-// swap of a whole balance, as after a claim, says so instead of an amount.
-export function routeWords(route: Route, tokens: Map<string, Token>, output: Swapper, amountWords?: string): string[] {
-  // An amount, and the least, keep to one line: the route breaks after an arrow.
+// "41.2 AVNT → WETH → 0.60+ USDC via Hydrex, Uniswap". A line breaks only after an arrow, or before "via", or after a
+// comma between the pools: an amount, the least, and "via" with the first pool's name keep together. A swap of a whole
+// balance, as after a claim, says so instead of an amount.
+export function routeWords(route: Route, tokens: Map<string, Token>, output: Swapper, amountWords?: string): string {
   const whole = (words: string) => words.replaceAll(" ", "\u00a0");
   const token = tokens.get(route.token.toLowerCase());
   const amount =
     amountWords ?? whole(token ? `${figure(route.amount, token.decimals)} ${token.symbol}` : `${route.amount}`);
   const between = route.hops.slice(0, -1).map(({ tokenOut }) => symbolOf(tokens, tokenOut));
   const least = whole(`${figure(route.minPaid, output.decimals)}+ ${output.symbol}`);
-  return [[amount, ...between, least].join(" → "), `via ${[...new Set(route.hops.map(venueOf))].join(", ")}`];
+  const pools = [...new Set(route.hops.map(venueOf))].join(", ");
+  return `${[amount, ...between, least].join("\u00a0→ ")} via\u00a0${pools}`;
 }
 
 export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Slip {

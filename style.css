@@ -1120,6 +1120,14 @@ dialog {
 dialog::backdrop {
   background: rgb(0 0 0 / 0.5);
 }
+/* On a phone, the review takes nearly its width: room for a call's labels and, beside them, an address as the wallet
+   shows it. */
+@media (max-width: 30rem) {
+  dialog {
+    inline-size: min(36rem, 100% - 1rem);
+    padding-inline: 1rem;
+  }
+}
 dialog .step-count {
   margin-block-start: 1.25rem;
 }
@@ -1208,7 +1216,7 @@ dialog .receipt {
 }
 .fields > div {
   display: grid;
-  grid-template-columns: 6rem minmax(0, 1fr);
+  grid-template-columns: 6.5rem minmax(0, 1fr);
   column-gap: 0.625rem;
   align-items: baseline;
 }
@@ -1243,10 +1251,6 @@ dialog .receipt {
 /* A route, in words. */
 .fields .words {
   font-family: var(--sans);
-}
-/* A line breaks between its parts before it breaks within one: a route, then who runs its pools. */
-.fields .words > span {
-  display: inline-block;
 }
 /* Eight groups a line, so that each 32-byte word of calldata takes two lines. */
 .fields .bytes {
