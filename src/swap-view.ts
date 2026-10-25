@@ -1,12 +1,11 @@
 import type { Address } from "viem";
-import { now, same, type Receipt } from "./chain.ts";
+import { gasPaid, now, same, type Receipt } from "./chain.ts";
 import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
 import { clone, fill, fillAddress, show, showWorth, showWorthIn } from "./dom.ts";
 import { tokensOf } from "./earnings.ts";
 import {
   between,
   bps,
-  count,
   figure,
   fixed,
   fraction,
@@ -15,6 +14,7 @@ import {
   moneyAt,
   rounded,
   short,
+  utc,
   type Money,
 } from "./format.ts";
 import { earningsOf, onEarnings } from "./last-epoch.ts";
@@ -620,6 +620,13 @@ export async function openSwapReview(
       );
     });
   });
+  // What the bill shows each token fetches, for the receipt to compare with.
+  const quoted = new Map(
+    plan.items.flatMap(({ route }) => {
+      const { out, reason } = outcome.get(route)!;
+      return reason ? [] : [[key(route.token), out] as const];
+    }),
+  );
   // A bill: each token, what it fetches and its route by its tokens and pools, then what they all fetch, the 1%, what
   // reaches you, and the least that may, which the slippage sets. Gas heads it, as it is paid apart, in ETH. Each sum in
   // tokens, then what it is worth.
@@ -697,40 +704,75 @@ export async function openSwapReview(
         }),
       };
     },
-    outcomeOf: async (receipts) => swapReceipt(receipts, plan, tokens, connection.address, prices),
+    outcomeOf: async (receipts) =>
+      swapReceipt(receipts, plan, tokens, connection.address, prices, {
+        quoted,
+        gas: await gasPaid(
+          receipts.map(({ transactionHash }) => transactionHash),
+          connection.address,
+        ),
+      }),
   });
   return undefined;
 }
 
-// The swap's receipt, from its events: each token in, what it fetched, the 1%, and what reached you. A token that was
-// skipped stays in the wallet with its approval, which it offers to reset.
+// The swap's receipt, from its events: when, and the gas it cost, when `gas` is known; each token sold, what it
+// fetched, and how that compares with what `quoted` says the review showed; then what they fetched, the 1%, and what
+// reached you, each with what it is worth. A token that was skipped stays in the wallet with its approval, which it
+// offers to reset.
 export function swapReceipt(
   receipts: Receipt[],
   plan: Plan,
   tokens: Map<string, Token>,
   caller: Address,
   prices?: Prices,
+  { quoted, gas }: { quoted?: Map<string, bigint>; gas?: bigint | undefined } = {},
 ): DocumentFragment {
   const { swapper } = plan;
   // As many decimal places as the bill had, so that the receipt's figures line up at the point too, and add up.
-  const { exact, shown } = outputFigures(swapper, prices);
+  const { exact, worth, shown } = outputFigures(swapper, prices);
   const { swapped, failed, paid } = swappedIn(receipts, swapper, caller);
   const receipt = clone("swap-receipt");
+  const part = (name: string) => receipt.querySelector(`.${name}`)!;
   const fetched = swapped.reduce((sum, { amountOut }) => sum + amountOut, 0n);
-  fill(receipt, {
-    "swap-receipt-output": swapper.symbol,
-    "swap-receipt-sold": count(swapped.length, "token", "tokens"),
-    "swap-receipt-tokens": list(
-      swapped.map(({ token, amountIn }) => {
-        const described = tokens.get(key(token));
-        return described ? `${figure(amountIn, described.decimals)} ${described.symbol}` : `${amountIn} of ${token}`;
-      }),
-    ),
-    "swap-receipt-fetched": exact(fetched),
-    "swap-receipt-fee": exact(shown(paid) - shown(fetched)),
-    "swap-receipt-paid": exact(paid),
-  });
-  receipt.querySelector(".swap-receipt-skipped")!.replaceChildren(
+  const time = now();
+  fill(receipt, { "swap-receipt-output": swapper.symbol, "swap-receipt-time": utc(time) });
+  part("swap-receipt-time").setAttribute("datetime", new Date(time * 1000).toISOString());
+  if (gas !== undefined) {
+    showWorth(part("swap-receipt-gas"), `${figure(gas, 18)} ETH`, inCents(ethCost(gas, prices)));
+    show(".swap-receipt-gas-line", true, receipt);
+  }
+  part("swap-lines").replaceChildren(
+    ...swapped.map(({ token, amountIn, amountOut }) => {
+      const line = clone("swap-line");
+      const described = tokens.get(key(token));
+      // A whole balance, as after a claim, may not be what was quoted: it compares only when it is.
+      const item = plan.items.find((each) => same(each.token.address, token));
+      const quote = quoted?.get(key(token));
+      const compares = quote && item?.route.amount === amountIn;
+      fill(line, {
+        "line-symbol": described?.symbol ?? token,
+        "line-amount": described ? figure(amountIn, described.decimals) : String(amountIn),
+        "line-route": compares ? versusQuote(amountOut, quote) : "",
+      });
+      showOutput(
+        [line.querySelector(".line-fetches")!, line.querySelector(".line-worth")!],
+        amountOut,
+        swapper,
+        prices,
+      );
+      return line;
+    }),
+  );
+  const [outWorth, paidWorth] = [worth(fetched), worth(paid)];
+  showWorth(part("swap-receipt-fetched"), exact(fetched), inCents(outWorth));
+  showWorth(
+    part("swap-receipt-fee"),
+    exact(shown(paid) - shown(fetched)),
+    inCents(outWorth && between(outWorth, paidWorth!)),
+  );
+  showWorth(part("swap-receipt-paid"), exact(paid), inCents(paidWorth));
+  part("swap-receipt-skipped").replaceChildren(
     ...failed.map(({ token, reason }) => {
       const item = clone("swap-skipped");
       fill(item, {
@@ -744,6 +786,13 @@ export function swapReceipt(
     }),
   );
   return receipt;
+}
+
+// How what a token fetched compares with what the review showed, to a tenth of a percent: "+0.2% vs quote", or "As
+// quoted" within that.
+function versusQuote(out: bigint, quote: bigint): string {
+  const tenths = Number(((out - quote) * 1000n) / quote);
+  return tenths ? `${tenths > 0 ? "+" : "−"}${(Math.abs(tenths) / 10).toFixed(1)}% vs quote` : "As quoted";
 }
 
 // Hydrex's reward tokens, from what the automations' votes earned last epoch. Whether some are new to the page.

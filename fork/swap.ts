@@ -148,8 +148,14 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await review(page).getByText("All 4 went through.").waitFor({ timeout: 120_000 });
     assert.equal(sent.length, 4);
     const receipt = review(page).locator(".receipt");
-    assert.equal(await receipt.locator(".swap-receipt-sold").innerText(), "2 tokens");
-    const paid = await receipt.locator(".swap-receipt-paid").innerText();
+    // When, the gas the wallet paid, then each token sold, what it fetched, and how that compares with the quote.
+    assert.match(await receipt.locator(".swap-receipt-time").innerText(), / UTC$/);
+    assert.match(await receipt.locator(".swap-receipt-gas .exact").innerText(), /^[\d.]+ ETH$/);
+    const lines = receipt.locator(".swap-lines li");
+    assert.equal(await lines.count(), 2);
+    for (const compared of await lines.locator(".line-route").allInnerTexts())
+      assert.match(compared, /^(As quoted|[+−][\d.]+% vs quote)$/);
+    const paid = await receipt.locator(".swap-receipt-paid .exact").innerText();
     assert.match(paid, /^[\d,.]+ USDC$/);
     assert.ok((await balanceOf(INTO_USDC.token, SELLER)) > before);
     assert.equal(await balanceOf(WETH, SELLER), 0n);

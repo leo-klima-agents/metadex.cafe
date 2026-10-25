@@ -1843,16 +1843,17 @@
         ></span>
       </li>
     </template>
+    <!-- The swap once it went through, as a bill like the one before it: when, and the gas it cost, if the wallet paid
+         it; each token sold, what it fetched, and how that compares with the quote; then what they fetched, the 1%, and
+         what reached you. The tokens it skipped follow, each with its approval to reset. -->
     <template id="swap-receipt">
       <article class="slip receipt">
         <p class="receipt-name">metaDEX Café</p>
         <p class="label">Receipt · swap into <code class="swap-receipt-output" translate="no"></code></p>
+        <p class="receipt-day"><time class="swap-receipt-time"></time></p>
+        <p class="receipt-day swap-receipt-gas-line" hidden>Gas <span class="swap-receipt-gas"></span></p>
+        <ul class="swap-lines"></ul>
         <dl class="lines">
-          <div>
-            <dt>Sold</dt>
-            <dd class="value swap-receipt-sold"></dd>
-            <dd class="detail swap-receipt-tokens"></dd>
-          </div>
           <div>
             <dt>Fetched</dt>
             <dd class="value swap-receipt-fetched"></dd>
