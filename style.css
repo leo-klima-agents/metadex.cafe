@@ -1567,7 +1567,7 @@ select {
   background: var(--paper);
 }
 /* What the ticked tokens fetch, line by line, down to what reaches you; then the least, which the slippage picked sets,
-   and the gas, paid apart. */
+   as the sum, and the gas, paid apart. */
 .breakdown {
   display: grid;
   gap: 0.125rem;
@@ -1598,6 +1598,10 @@ select {
 }
 .breakdown .sum dt {
   color: var(--ink);
+}
+/* The least, with the slippage picked in its label, is the sum: its label stays small, to keep to one line on a phone. */
+.breakdown .sum label {
+  font-size: var(--text-small);
 }
 .breakdown select,
 footer select {

@@ -77,9 +77,12 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       .getByText(/^[\d,.]+ USDC$/)
       .waitFor();
     const labels = await summary.locator("dt").allInnerTexts();
-    assert.deepEqual([labels[0], labels[1], labels[2], labels[4]], ["Quote", "Fee 1%", "Reaches you", "Gas"]);
-    assert.match(labels[3]!, /^At least, with/);
-    assert.equal(await summary.getByRole("combobox", { name: /At least, with/ }).inputValue(), "50");
+    assert.deepEqual([labels[0], labels[1], labels[2], labels[4]], ["Quote", "−1% swap fee", "Reaches you", "Gas"]);
+    assert.match(labels[3]!, /^Minimum accepted with a slippage of/);
+    assert.equal(
+      await summary.getByRole("combobox", { name: /Minimum accepted with a slippage of/ }).inputValue(),
+      "50",
+    );
     // Each figure exactly, then what it is worth.
     const figure = async (root: Locator, name: string): Promise<[string, string]> => [
       await root.locator(`.${name} .exact`).innerText(),
