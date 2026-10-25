@@ -1157,6 +1157,10 @@ dialog .foot {
     position: static;
   }
 }
+/* A transaction's hash, short, stays on one line. */
+.progress a {
+  white-space: nowrap;
+}
 
 /* Slips and receipts: the structure of a till receipt, in the mono face. */
 .slip {
@@ -1184,6 +1188,12 @@ dialog .receipt {
 }
 .steps > .slip + .slip {
   margin-block-start: var(--gap-l);
+}
+/* The call the Confirm button sends next, when it sends them one at a time. */
+.steps > .next-call {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  scroll-margin-block-start: var(--gap-l);
 }
 .fields {
   display: grid;
@@ -1253,7 +1263,6 @@ dialog .receipt {
   margin-block-end: var(--gap-s);
   font-size: var(--text-small);
 }
-.slip-foot .check,
 .receipt-foot {
   display: flex;
   flex-wrap: wrap;
@@ -1261,7 +1270,6 @@ dialog .receipt {
   align-items: baseline;
   gap: var(--gap-xs) var(--gap);
 }
-.slip-foot a,
 .receipt-foot a {
   font-family: var(--sans);
   font-size: var(--text-small);
@@ -1536,9 +1544,6 @@ dialog .receipt {
 }
 .total > div + div {
   margin-block-start: var(--gap-xs);
-}
-.total .least :is(dt, .value) {
-  font-size: var(--text-small);
 }
 .swap-tokens > .add-token {
   margin-block-start: var(--gap-l);

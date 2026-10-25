@@ -125,7 +125,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       );
       assert.doesNotMatch(route, /0x|tick spacing|%/, route);
     }
-    assert.equal(await bill.locator(".swap-slippage").innerText(), "Your slippage: 0.5%");
+    assert.equal(await bill.locator(".swap-slippage").innerText(), "At your 0.5% slippage");
     await review(page).getByRole("button", { name: "Continue" }).click();
     await review(page).getByText("One prompt, 4 calls, all or nothing").waitFor();
     const says = await review(page).locator(".says").allTextContents();

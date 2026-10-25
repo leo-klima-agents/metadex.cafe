@@ -173,11 +173,12 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await toWallet(page);
     await review(page).getByRole("button", { name: "Confirm transaction 1 of 2" }).click();
     await review(page).getByText("closing stops here").waitFor();
+    // The first page's link to what Carbon Impact can change, which its page no longer shows.
     const [tab] = await Promise.all([
       page.context().waitForEvent("page"),
-      review(page).getByRole("link", { name: "How to check" }).first().click(),
+      review(page).locator('a[href="#hydrex/carbon-impact/control"]').dispatchEvent("click"),
     ]);
-    await tab.waitForURL(`${SITE}/#hydrex/carbon-impact/check`);
+    await tab.waitForURL(`${SITE}/#hydrex/carbon-impact/control`);
     await review(page).getByRole("button", { name: "Confirm transaction 2 of 2" }).waitFor();
     await review(page).getByRole("button", { name: "Close" }).click();
     await account(page, 2439).getByText("Joining Carbon Impact:").waitFor();

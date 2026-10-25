@@ -1,5 +1,5 @@
 import type { Address, Hex } from "viem";
-import { day, hexLines, onCurrency, walletLines } from "./format.ts";
+import { day, hexLines, onCurrency, short, walletLines } from "./format.ts";
 
 const BASESCAN = "https://basescan.org";
 
@@ -173,6 +173,6 @@ export function fillOwn(root: ParentNode, own: boolean): void {
 export function txLink(hash: Hex): HTMLAnchorElement {
   const link = document.createElement("a");
   link.href = txUrl(hash);
-  link.textContent = `${hash.slice(0, 10)}…`;
+  link.textContent = short(hash);
   return link;
 }

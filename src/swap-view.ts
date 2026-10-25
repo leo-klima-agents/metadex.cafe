@@ -662,7 +662,7 @@ export async function openSwapReview(
   );
   fill(body, {
     "swap-output": swapper.symbol,
-    "swap-slippage": `${plan.yours ? "Your slippage" : "Slippage"}: ${bps(plan.margin)}`,
+    "swap-slippage": `At ${plan.yours ? "your " : ""}${bps(plan.margin)} slippage`,
     "swap-simulated": "Not simulated: these are quotes.",
   });
   show(".swap-simulated", !simulated, body);

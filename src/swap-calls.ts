@@ -3,8 +3,8 @@ import { rpc } from "./chain.ts";
 import { WETH, type Swapper } from "./config.ts";
 import { figure, money, moneyAt, utc, type Money } from "./format.ts";
 import type { Prices, Token } from "./prices.ts";
-import type { Field, Slip } from "./review.ts";
-import { MAX_TIP, approve, poolName, poolless, swapCall, venueOf, type Route } from "./swap.ts";
+import type { Slip } from "./review.ts";
+import { MAX_TIP, approve, swapCall, venueOf, type Route } from "./swap.ts";
 
 // The calls of a swap, as the review shows them, and what gas costs.
 
@@ -48,38 +48,19 @@ export function gasWords(wei: bigint, prices: Prices | undefined): string {
 const symbolOf = (tokens: Map<string, Token>, address: Address): string =>
   tokens.get(address.toLowerCase())?.symbol ?? address;
 
-// A route's hops in words, around the addresses of their pools: "Hydrex Integral 0x… to WETH, Uniswap v3 0.05%
-// 0x… to USDC". Uniswap v4's pools have no address of their own.
-export function pathWords(route: Route, tokens: Map<string, Token>): NonNullable<Field["words"]> {
-  return route.hops.flatMap((hop, i) => [
-    `${i ? ", " : ""}${poolName(hop)} `,
-    ...(poolless(hop) ? ["pool"] : [{ code: hop.pool }]),
-    ` to ${symbolOf(tokens, hop.tokenOut)}`,
-  ]);
-}
-
-// A route as a bill shows it: its tokens, then who runs its pools, each once, without addresses or fee tiers:
-// "ZORA → WETH → USDC via Aerodrome, Uniswap". The calls name each pool in full.
+// A route as the page shows it: its tokens, then who runs its pools, each once, without addresses or fee tiers:
+// "ZORA → WETH → USDC via Aerodrome, Uniswap". The wallet shows none of the pools' addresses, so neither does the page.
 export function hopsWords(route: Route, tokens: Map<string, Token>): string {
   const path = [route.token, ...route.hops.map(({ tokenOut }) => tokenOut)].map((token) => symbolOf(tokens, token));
   return `${path.join(" → ")} via ${[...new Set(route.hops.map(venueOf))].join(", ")}`;
 }
 
-// A route in words: "41.2 AVNT, Hydrex Integral 0x… to WETH, Uniswap v3 0.05% 0x… to USDC, at least 0.60 USDC". A
-// swap of a whole balance, as after a claim, says so instead of an amount.
-export function routeWords(
-  route: Route,
-  tokens: Map<string, Token>,
-  output: Swapper,
-  amountWords?: string,
-): NonNullable<Field["words"]> {
+// A route in words: "41.2 AVNT, AVNT → WETH → USDC via Hydrex, Uniswap, at least 0.60 USDC". A swap of a whole
+// balance, as after a claim, says so instead of an amount.
+export function routeWords(route: Route, tokens: Map<string, Token>, output: Swapper, amountWords?: string): string {
   const token = tokens.get(route.token.toLowerCase());
   const amount = amountWords ?? (token ? `${figure(route.amount, token.decimals)} ${token.symbol}` : `${route.amount}`);
-  return [
-    `${amount}, `,
-    ...pathWords(route, tokens),
-    `, at least ${figure(route.minPaid, output.decimals)} ${output.symbol}`,
-  ];
+  return `${amount}, ${hopsWords(route, tokens)}, at least ${figure(route.minPaid, output.decimals)} ${output.symbol}`;
 }
 
 export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Slip {
@@ -89,7 +70,7 @@ export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Sli
     says: amount
       ? `Lets the ${swapper.symbol} swapper take ${words} from you.`
       : `Resets ${token.symbol}'s approval of the ${swapper.symbol} swapper to nothing.`,
-    on: `The ${token.symbol} token`,
+    on: `The ${token.symbol} token contract`,
     call: "approve",
     fields: [
       { label: "Spender", name: "spender", code: swapper.address, description: `The ${swapper.symbol} swapper` },
@@ -121,19 +102,21 @@ export function swapSlip(
       ...routes.map((route, i) => ({
         label: n === 1 ? "Route" : `Route ${i + 1}`,
         name: "route",
-        words: routeWords(
-          route,
-          tokens,
-          swapper,
-          whole ? `All your ${symbolOf(tokens, route.token)}, up to what this approves` : undefined,
-        ),
+        words: [
+          routeWords(
+            route,
+            tokens,
+            swapper,
+            whole ? `All your ${symbolOf(tokens, route.token)}, up to what this approves` : undefined,
+          ),
+        ],
       })),
       { label: "Deadline", name: "deadline", code: String(deadline), description: utc(Number(deadline)) },
       {
         label: "Skip failed",
         name: "skip",
         code: "true",
-        description: "A route under its minimum is skipped, and its token stays in your wallet.",
+        description: "A route under its minimum is skipped.",
       },
     ],
     note: "The selector, then each 32-byte word on two lines: where the routes start, the deadline, true as 1, then each route.",

@@ -42,7 +42,7 @@ export type ReviewOptions = {
   name: string | (string | { code: string })[];
   pages: ReviewPage[];
   steps: Slip[];
-  // Where the product's page explains the calls, for the slips and the co-signers.
+  // Where the product's page explains the calls, for the co-signers.
   checkHref: string;
   connection: Connection;
   hooks: Hooks;
@@ -74,6 +74,8 @@ type Review = ReviewOptions & {
   sending: boolean;
   submitted: boolean;
   finished: boolean;
+  // The call the Confirm button sends next, as its slip is marked, once scrolled to.
+  shown: number;
 };
 
 const dialog = document.getElementById("review") as HTMLDialogElement;
@@ -161,10 +163,10 @@ function fieldOf({ label, name, code, tags, words, description }: Field): Docume
 // Calls in several groups, each a transaction of its own.
 const apart = ({ groups }: Pick<Review, "groups">): boolean => (groups?.length ?? 1) > 1;
 
-// A call as the wallet will show it, as a bill, its fields in full. In a Safe, the Safe transaction's fields and calldata
-// follow, for co-signers to compare with Safe{Wallet}; `safe` names the Safe transaction it is in, and `alone` whether it
-// is its only call.
-function slip(step: Slip, i: number, n: number, safe: string | undefined, alone: boolean, checkHref: string) {
+// A call as the wallet will show it, as a bill, with the addresses the wallet shows. In a Safe, the Safe transaction's
+// fields and calldata follow, for co-signers to compare with Safe{Wallet}; `safe` names the Safe transaction it is in,
+// and `alone` whether it is its only call.
+function slip(step: Slip, i: number, n: number, safe: string | undefined, alone: boolean) {
   const item = clone("step");
   const which = n > 1 ? `Call ${i + 1} of ${n}` : "Call";
   fill(item, {
@@ -178,14 +180,13 @@ function slip(step: Slip, i: number, n: number, safe: string | undefined, alone:
   showWalletAddress(item.querySelector(".to")!, step.to);
   showHex(item.querySelector(".data")!, step.data);
   item.querySelector(".value-row")!.before(...step.fields.map(fieldOf));
-  item.querySelector(".check-calls")!.setAttribute("href", checkHref);
-  show(".raw, .slip-note", !!safe, item);
+  show(".raw, .slip-foot", !!safe, item);
   show(".operation", !!safe && alone, item);
   return item;
 }
 
 function drawSlips(state: Review): void {
-  const { steps, connection, checkHref } = state;
+  const { steps, connection } = state;
   const groups = state.groups ?? [steps.length];
   // The Safe transaction each call is in.
   const group = groups.flatMap((size, g) => Array.from({ length: size }, () => g));
@@ -193,9 +194,25 @@ function drawSlips(state: Review): void {
     ...steps.map((step, i) => {
       const g = group[i] ?? 0;
       const safe = connection.wallet.propose && (apart(state) ? `Safe ${g + 1} of ${groups.length}` : "Safe");
-      return slip(step, i, steps.length, safe || undefined, groups[g] === 1, checkHref);
+      return slip(step, i, steps.length, safe || undefined, groups[g] === 1);
     }),
   );
+  markNext(state);
+}
+
+// Which call the Confirm button sends next, when it sends them one at a time: its slip is marked, and scrolled to once
+// the one before is included.
+function markNext(state: Review): void {
+  const { steps, done, batch, finished, connection } = state;
+  const next = connection.wallet.propose || batch || finished || steps.length < 2 ? undefined : done.length;
+  [...stepList.children].forEach((item, i) => {
+    item.classList.toggle("next-call", i === next);
+    if (i === next) item.setAttribute("aria-current", "step");
+    else item.removeAttribute("aria-current");
+  });
+  if (next === undefined || next === state.shown) return;
+  state.shown = next;
+  if (next && !calls.hidden) stepList.children[next]?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 // The review shown, while nothing is sent yet, can take other calls, as when its owner picks another way to be paid.
@@ -218,6 +235,7 @@ export function openReview(options: ReviewOptions): Opened {
     sending: false,
     submitted: false,
     finished: false,
+    shown: 0,
   };
   current = state;
   pageList.replaceChildren(
@@ -300,17 +318,23 @@ export function refreshReview(): void {
   confirm.hidden = !last || finished || !steps.length;
   next.hidden = last;
   back.textContent = submitted ? "Close" : "Back";
+  markNext(current);
 }
 
 export const closeReview = (): void => dialog.close();
 
-// The review may have closed, or another opened, by the time the wallet answers.
+// The review may have closed, or another opened, by the time the wallet answers. Of several transactions, those sent
+// until the last are so far.
 function say(state: Review, message: string, hashes: Hex[] = []): void {
   if (state !== current) return;
   progress.replaceChildren(message);
-  hashes.forEach((hash, i) => {
-    progress.append(i ? ", " : hashes.length === 1 ? " Transaction: " : " Transactions: ", txLink(hash));
-  });
+  const heading =
+    state.steps.length > 1 && !state.finished
+      ? " Transactions so far: "
+      : hashes.length === 1
+        ? " Transaction: "
+        : " Transactions: ";
+  hashes.forEach((hash, i) => progress.append(i ? ", " : heading, txLink(hash)));
   if (hashes.length) progress.append(".");
 }
 

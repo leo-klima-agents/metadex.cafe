@@ -1507,9 +1507,8 @@
             <dd><code translate="no">0</code> · call</dd>
           </div>
         </dl>
-        <div class="slip-foot">
-          <p class="slip-note" hidden></p>
-          <p class="check"><a class="check-calls">How to check</a> <span class="label">On Base</span></p>
+        <div class="slip-foot" hidden>
+          <p class="slip-note"></p>
         </div>
       </li>
     </template>
@@ -1798,7 +1797,8 @@
       </li>
     </template>
     <!-- The swap before the wallet asks, as a bill: each token and its route, then what they fetch, the 1%, what
-         reaches you, and the least that may, which the slippage sets. Gas is paid apart, in ETH, so it heads the bill. -->
+         reaches you, and, as its total, the least that may, which the slippage sets. Gas is paid apart, in ETH, so it
+         heads the bill. -->
     <template id="swap-before">
       <article class="slip receipt">
         <p class="receipt-name">metaDEX Café</p>
@@ -1807,21 +1807,21 @@
         <ul class="swap-lines"></ul>
         <dl class="lines">
           <div>
-            <dt>Fetched</dt>
+            <dt>Quote</dt>
             <dd class="value swap-fetched"></dd>
           </div>
           <div>
-            <dt>Fee 1%</dt>
+            <dt>Swap fee (1%)</dt>
             <dd class="value swap-fee"></dd>
           </div>
-        </dl>
-        <dl class="total">
           <div>
             <dt>Reaches you</dt>
             <dd class="value swap-paid"></dd>
           </div>
-          <div class="least">
-            <dt>At least</dt>
+        </dl>
+        <dl class="total">
+          <div>
+            <dt>Minimum</dt>
             <dd class="value swap-least"></dd>
             <dd class="detail swap-slippage"></dd>
           </div>
@@ -1859,7 +1859,7 @@
             <dd class="value swap-receipt-fetched"></dd>
           </div>
           <div>
-            <dt>Fee 1%</dt>
+            <dt>Swap fee (1%)</dt>
             <dd class="value swap-receipt-fee"></dd>
           </div>
         </dl>

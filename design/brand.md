@@ -190,13 +190,15 @@ went badly too.
 full, with nothing to open: To, with the contract's name above it; Call; Conduit, with its name above it; Account;
 Approve; Value. What a field holds always goes above its value, as a token's symbol goes above its address. A list of
 addresses, such as a claim's reward contracts and tokens, takes as many columns as fit: two in the review on a desktop,
-one on a phone.
+one on a phone. A swap's call shows only the addresses the wallet shows, the contract and the spender; its routes read
+as on the bill. When the calls go one at a time, the one that Confirm sends next is outlined, and the review scrolls to
+it once the one before is included.
 
 **A swap** is a bill before the wallet asks: the name, "Quote · swap into cbBTC", with a token's symbol in its own case
 among the capitals, and the gas under it, as it is paid apart, in ETH. Then a line per token, with what it fetches and
 its route by tokens, then who runs its pools, each once, "ZORA → WETH → USDC via Aerodrome, Uniswap", without addresses
-or fee tiers: the calls name each pool in full. Then what they fetch, the 1%, "Reaches you", and "At least", with the
-slippage that set it.
+or fee tiers. Then the quote, "Swap fee (1%)", "Reaches you", and, as its total, "Minimum", with the slippage that set
+it.
 
 **In a Safe,** it opens with "In a Safe · one transaction to sign", or "In a Safe · call 1 of 2", and adds the fields
 Safe{Wallet} shows: Data and, for a single call, Operation. Data is the selector, then each 32-byte word on two lines of
