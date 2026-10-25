@@ -609,7 +609,7 @@ export const chip = (page: Page, owner: Address) => page.locator("header").getBy
 export async function toWallet(page: Page): Promise<void> {
   await review(page).getByRole("heading", { name: "Before you join" }).waitFor();
   await review(page).getByRole("button", { name: "Continue" }).click();
-  await review(page).getByRole("heading", { name: "Transactions" }).waitFor();
+  await review(page).getByRole("heading", { name: "Transactions to approve" }).waitFor();
 }
 
 // Waits until the page names the next epoch's start, as it does in each automation's popup on joining.
@@ -636,7 +636,7 @@ export async function shoot(page: Page, name: string, part?: Locator): Promise<v
 export async function confirm(page: Page): Promise<void> {
   try {
     await review(page)
-      .getByRole("button", { name: /^Execute (transaction|\d+ transactions)$/ })
+      .getByRole("button", { name: /^Approve (transaction|\d+ transactions)$/ })
       .click();
     await review(page)
       .getByText(/^(It|All \d+) went through\./)
@@ -662,7 +662,7 @@ export async function confirmEach(page: Page, from: Address): Promise<void> {
   );
   const done = review(page).getByText(/^(It|All \d+) went through\./);
   const next = review(page)
-    .getByRole("button", { name: /^Execute (transaction|\d+ transactions|transaction \d+ of \d+)$/ })
+    .getByRole("button", { name: /^Approve (transaction|\d+ transactions|transaction \d+ of \d+)$/ })
     .and(review(page).locator("button:enabled"));
   for (let confirmed = 0; ; confirmed++) {
     try {

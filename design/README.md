@@ -175,8 +175,8 @@ review gives what a week at last epoch's rate would pay the accounts picked, nex
 dialog that did both, is gone.
 
 **The join review.** Today's three steps. "What changes" adds the fee facts and an estimate for the accounts picked,
-marked "not a promise". "Transactions" sends one request for several accounts where the wallet can batch. "Done" offers
-a calendar file for payday, made on the device.
+marked "not a promise". "Transactions to approve" sends one request for several accounts where the wallet can batch.
+"Done" offers a calendar file for payday, made on the device.
 
 **An automation's page,** one template for all: status; what it does; four key facts (takes, pays you, costs you,
 leaving) and Join; your accounts in it; fee facts; money per 1,000 units of voting power; its record against the
