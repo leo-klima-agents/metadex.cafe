@@ -37,3 +37,21 @@ test("money is written again from what it shows, once that changes", () => {
   rewrite();
   assert.equal(shown.textContent, "≈\u00a0$2.00");
 });
+
+test("an element switched between money and plain text is written once a rewrite, however often it switched", () => {
+  let writes = 0;
+  const counted = {
+    set textContent(_: string) {
+      writes++;
+    },
+  } as unknown as Element;
+  const root = rootOf("line", counted);
+  for (let i = 0; i < 3; i++) {
+    fill(root, { line: () => "≈ $1.00" });
+    fill(root, { line: "…" });
+  }
+  fill(root, { line: () => "≈ $1.00" });
+  writes = 0;
+  rewrite();
+  assert.equal(writes, 1);
+});
