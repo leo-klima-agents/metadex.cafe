@@ -4,6 +4,7 @@ import {
   decodeFunctionData,
   encodeAbiParameters,
   encodeEventTopics,
+  encodeErrorResult,
   encodeFunctionResult,
   parseAbi,
   toFunctionSelector,
@@ -24,7 +25,9 @@ import {
   partOf,
   quoteAll,
   venueOf,
+  refusedTransfer,
   routeGas,
+  routeResults,
   runInOrder,
   split,
   swapCall,
@@ -434,4 +437,54 @@ test("a swap in parts sells each token once, in as many routes as it has parts",
     slip.fields.filter(({ name }) => name === "route").map(({ label }) => label),
     ["Route 1", "Route 2"],
   );
+});
+
+test("a run's results come back to their routes only if Base answered for every call and ran those before the swaps", () => {
+  const route = (amount: bigint) => ({ token: AVNT, amount, minPaid: 0n, hops: [hop(10)] });
+  const [a, b, c] = [route(1n), route(2n), route(3n)];
+  const swapped = (...amounts: bigint[]) => ({
+    ok: true,
+    gas: 1n,
+    returnData: encodeFunctionResult({
+      abi: swapperAbi,
+      functionName: "swap",
+      result: [
+        amounts.map((amount) => ({ done: true, amountIn: amount, amountOut: 2n * amount, reason: "0x" as Hex })),
+        0n,
+        0n,
+      ],
+    }),
+  });
+  const approved = { ok: true, gas: 1n, returnData: "0x" as Hex };
+  const found = routeResults([approved, swapped(1n, 2n), swapped(3n)], 1, [[a, b], [c]])!;
+  assert.deepEqual(
+    [a, b, c].map((each) => found.get(each)?.amountOut),
+    [2n, 4n, 6n],
+  );
+  // A reply short of a call, or a refused approval: nothing.
+  assert.equal(routeResults([approved, swapped(1n, 2n)], 1, [[a, b], [c]]), undefined);
+  assert.equal(routeResults([], 1, [[a, b], [c]]), undefined);
+  assert.equal(routeResults([{ ...approved, ok: false }, swapped(1n, 2n), swapped(3n)], 1, [[a, b], [c]]), undefined);
+  // A swap Base refused, or whose reply is not the swap's: no result for its routes, and the others' still.
+  const refused = routeResults([approved, { ...approved, ok: false }, { ...approved, returnData: "0x1234" }], 1, [
+    [a, b],
+    [c],
+  ])!;
+  assert.deepEqual(
+    [a, b, c].map((each) => refused.get(each)),
+    [undefined, undefined, undefined],
+  );
+  const one = routeResults([approved, swapped(1n, 2n), { ...approved, ok: false }], 1, [[a, b], [c]])!;
+  assert.deepEqual(
+    [a, b, c].map((each) => one.get(each)?.amountOut),
+    [2n, 4n, undefined],
+  );
+});
+
+test("a route whose token refused the transfer is told from one that fetched too little", () => {
+  const error = (name: "TokenCallFailed" | "TooLittle", args: unknown[]) =>
+    encodeErrorResult({ abi: swapperAbi, errorName: name, args } as never);
+  assert.equal(refusedTransfer(error("TokenCallFailed", [AVNT])), true);
+  assert.equal(refusedTransfer(error("TooLittle", [0n, 1n, 2n])), false);
+  assert.equal(refusedTransfer("0x"), false);
 });

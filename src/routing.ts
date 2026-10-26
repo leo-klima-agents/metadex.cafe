@@ -49,6 +49,9 @@ const LADDER = [
 const key = (address: string): string => address.toLowerCase();
 const poolKey = (way: Way): string =>
   `${way.exchange} ${key(way.pool)} ${way.fee} ${way.tickSpacing} ${pairKey(way.tokenIn, way.tokenOut)}`;
+// The pools of a sale's own route, each hop from what the one before paid.
+const ownKeys = ({ token, found }: Sale): string[] =>
+  found.route.hops.map((hop, h) => poolKey({ ...hop, tokenIn: h ? found.route.hops[h - 1]!.tokenOut : token }));
 
 // What a pool pays, between the amounts it was read at, in proportion; past the last, at half its last rate, up to the
 // least amount it refused, if any. Aero's classic pools pay 1% less, as their tax is not in the quote. All in numbers:
@@ -256,14 +259,7 @@ export async function routeTogether(
 
   // The pools kept for each pair: the best for an eighth of what may reach them, and those of the sales' own routes. Each
   // is read at more amounts, halving from all of it.
-  const ownPools = new Set(
-    heavy.flatMap(({ sale }) =>
-      sale.found.route.hops.map((hop, h) => {
-        const tokenIn = h ? sale.found.route.hops[h - 1]!.tokenOut : sale.token;
-        return poolKey({ ...hop, tokenIn });
-      }),
-    ),
-  );
+  const ownPools = new Set(heavy.flatMap(({ sale }) => ownKeys(sale)));
   const kept = new Map<string, Way[]>();
   for (const [a, b] of pairs) {
     const range = reach.get(pairKey(a, b));
@@ -302,9 +298,7 @@ export async function routeTogether(
         routes.push({ pools: ways.map(poolKey), hops, gas: Number(routeGas({ hops })) });
       }
     }
-    const mine = sale.found.route.hops.map((hop, h) =>
-      poolKey({ ...hop, tokenIn: h ? sale.found.route.hops[h - 1]!.tokenOut : sale.token }),
-    );
+    const mine = ownKeys(sale);
     const own: Candidate = { pools: mine, hops: sale.found.route.hops, gas: Number(sale.found.gas) };
     const others = routes.filter(({ pools }) => pools.join() !== mine.join());
     // The best alone, if there are too many.

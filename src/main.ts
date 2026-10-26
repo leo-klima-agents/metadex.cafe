@@ -119,6 +119,8 @@ let clicks = 0;
 let late = new Set<bigint>();
 let under: UnderWay | undefined;
 let appFound: Found | undefined;
+// How many times the payouts were read: an overdue line is of one read, and drawn again with the next.
+let appReads = 0;
 // The account whose page is shown: the wallet's own, or one read by its number; `tried`, when its last read began.
 type Viewing = {
   id: bigint;
@@ -145,6 +147,7 @@ const appPayouts = payouts(
     late = new Set(found.entries.flatMap(({ standing, account }) => (standing?.late ? [account.id] : [])));
     under = underWay;
     appFound = found;
+    appReads++;
     showUnderWay();
     showAccounts(true);
     showApp();
@@ -780,7 +783,7 @@ function showApp(): void {
           label: "Claim now",
           button: (event) => claim([entry.account], showApp, event.currentTarget as HTMLButtonElement),
         }),
-        `overdue ${entry.account.id}`,
+        `overdue ${entry.account.id} ${appReads}`,
       );
     }
   }

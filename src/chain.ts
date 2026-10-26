@@ -85,9 +85,12 @@ function refused(url: string, kind: Kind): void {
   learnt.set(`${url} ${kind}`, Math.max(1, limitOf(url, kind) / 2));
 }
 
+// A request for logs counts against both limits, and so gives back to both.
 function answered(url: string, kind: Kind): void {
-  const limit = limitOf(url, kind);
-  if (limit < most(kind)) learnt.set(`${url} ${kind}`, Math.min(most(kind), limit + REGAIN));
+  for (const each of kind === "logs" ? (["all", "logs"] as const) : (["all"] as const)) {
+    const limit = limitOf(url, each);
+    if (limit < most(each)) learnt.set(`${url} ${each}`, Math.min(most(each), limit + REGAIN));
+  }
 }
 
 // How many requests a second the RPCs allow between them now, as far as the page has learnt, leaving out those resting:

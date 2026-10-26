@@ -225,3 +225,13 @@ test("an RPC that refused is asked half as often from then on, and regains its r
   assert.ok(rate() > 15 + 25 + 25);
   assert.ok(rate() <= 3 * 25);
 });
+
+test("an answer to a request for logs gives back to an RPC's limit of all requests too", async () => {
+  answering({ [first]: [{ status: 429 }, result("0x1")], [second]: [result("0x2")], [third]: [result("0x3")] });
+  await rpc("eth_chainId", []);
+  await new Promise((done) => original.setTimeout(done, 1_050));
+  assert.equal(rate(), 12 + 25 + 25);
+  // Logs go to the first RPC first, while it has room for them.
+  await Promise.all(Array.from({ length: 4 }, () => rpc("eth_getLogs", [])));
+  assert.equal(rate(), 13 + 25 + 25);
+});

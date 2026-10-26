@@ -22,7 +22,7 @@ import { pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
 import { valueAt, weightAt, type Amount } from "./receipts.ts";
 import { openReview, type Hooks } from "./review.ts";
 import { hrefOf } from "./routes.ts";
-import { APPROVAL_GAS, MIDDLES, findRoute, minimumOf, paidOf, partOf, simulate, swapReturns } from "./swap.ts";
+import { APPROVAL_GAS, MIDDLES, findRoute, minimumOf, paidOf, partOf, routeResults, simulate } from "./swap.ts";
 import { costs, gasCost, gasWords } from "./swap-calls.ts";
 import { openSwapReview, planSteps, prefill, swapReceipt, swapsOff, type Plan } from "./swap-view.ts";
 import { describe } from "./tokens.ts";
@@ -388,14 +388,9 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     if (id !== planned) return;
     const trial = await simulate(connection.address, [...claimSlips, ...tried.slips]).catch(() => undefined);
     if (id !== planned) return;
-    if (trial?.every(({ ok }) => ok)) {
-      const firstSwap = claimSlips.length + tried.approvals.length;
-      const results = new Map(
-        tried.swaps.flatMap((group, g) => {
-          const found = swapReturns(trial[firstSwap + g]!.returnData).results;
-          return group.map((route, i) => [route, found[i]] as const);
-        }),
-      );
+    // Only once Base answered for every call and ran them all: otherwise the check below says whether both go together.
+    const results = routeResults(trial, claimSlips.length + tried.approvals.length, tried.swaps);
+    if (results && trial!.every(({ ok }) => ok)) {
       const going = zeroed.flatMap((item) => {
         const result = results.get(item.route);
         if (result?.done && result.amountOut > 0n)

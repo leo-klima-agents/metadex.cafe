@@ -116,7 +116,9 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     const [gasShown, gasValue] = await figure(bill, "swap-gas");
     assert.match(gasShown, /^[\d.]+ ETH$/);
     assert.match(gasValue, worth);
-    assert.equal(await bill.locator(".swap-lines li").count(), 3);
+    // A line a token, or a line each for a token sold in parts.
+    const sold = await bill.locator(".swap-lines .line-symbol").allInnerTexts();
+    assert.deepEqual([...new Set(sold)].sort(), ["AVNT", "WETH", "ZORA"]);
     // "ZORA → WETH → USDC via Aerodrome, Uniswap": the tokens, then who runs the pools, each once.
     for (const route of await bill.locator(".line-route").allInnerTexts()) {
       assert.match(

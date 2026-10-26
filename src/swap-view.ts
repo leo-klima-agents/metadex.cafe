@@ -32,13 +32,15 @@ import {
   paidOf,
   quoteAll,
   reasonOf,
+  refusedTransfer,
+  routeResults,
   runInOrder,
   simulate,
+  soldOf,
   split,
   onBase,
   swapCall,
   swapGas,
-  swapReturns,
   swappedIn,
   type Found,
   type Result,
@@ -130,6 +132,8 @@ type Together = { key: string; parts: Map<string, Part[]>; gas: bigint | undefin
 let together: Together | undefined;
 let routing: { key: string; done: Promise<void> } | undefined;
 let routeLater: ReturnType<typeof setTimeout> | undefined;
+// While Review checks the swap, its button waits, whatever is drawn meanwhile.
+let reviewing = false;
 // Ticking several tokens in a row starts one search, once they settle.
 const SETTLE = 400;
 
@@ -195,11 +199,13 @@ function partsOf(row: Row, found: Together | undefined): Part[] {
   );
 }
 
-// What a row fetches: as found together, while it is ticked and they are; or else its own quote.
+// What a row fetches: as found together, while it is ticked and they are; or else its own quote. Undefined without a
+// route, or if Base found none of its parts would go through.
 function fetchesOf(row: Row, scanned: Scan): bigint | undefined {
   if (!row.found) return undefined;
-  const found = row.ticked ? togetherFor(scanned) : undefined;
-  return partsOf(row, found).reduce((sum, { out }) => sum + (out ?? 0n), 0n);
+  const parts = partsOf(row, row.ticked ? togetherFor(scanned) : undefined);
+  if (parts.every(({ out }) => out === undefined)) return undefined;
+  return parts.reduce((sum, { out }) => sum + (out ?? 0n), 0n);
 }
 
 const outputValue = (amount: bigint, scanned: Scan): number | undefined => {
@@ -298,21 +304,19 @@ function drawRow(row: Row, scanned: Scan): void {
   const fetches = fetchesOf(row, scanned);
   if (fetches !== undefined) showOutput(quote, fetches, swapper, scanned.prices);
   else showWorthIn(...quote, "");
-  // Only why a token is not ticked, or that its route is being found: the route itself is in the review.
+  // Only why a token is not ticked, or that its route is being found, or that Base would skip it among the others: the
+  // route itself is in the review.
   const routeLine = node.querySelector(".swap-route")!;
-  routeLine.textContent = found === undefined && !row.failed ? "…" : (row.reason ?? "");
+  const skipped = !!found && fetches === undefined;
+  routeLine.textContent =
+    found === undefined && !row.failed ? "…" : (row.reason ?? (skipped ? "Base would skip it" : ""));
   show(".swap-lookalike", !!row.like, node);
   if (row.like) fill(node, { "swap-like": row.like.symbol });
   // A quote far under the page's own price says so, with both.
-  const page = row.price === undefined ? undefined : worthOf(row.amount, token.decimals, row.price);
-  const quoted = fetches === undefined ? undefined : outputValue(fetches, scanned);
-  const under = !row.reason && page !== undefined && quoted !== undefined && quoted < page * (1 - CHECK);
-  show(".swap-check", under, node);
-  if (under) {
-    fill(node, {
-      "swap-check-words": `Quote ${fraction(1 - quoted! / page!)} under price`,
-    });
-  }
+  const under =
+    row.reason || fetches === undefined ? undefined : underPrice(token, row.amount, fetches, swapper, scanned.prices);
+  show(".swap-check", under !== undefined, node);
+  if (under !== undefined) fill(node, { "swap-check-words": `Quote ${fraction(under)} under price` });
   fillAddress(node, "swap-address", token.address, short(token.address));
 }
 
@@ -354,7 +358,7 @@ function summarise(scanned: Scan, ticked: Row[]): void {
   const sells = view.querySelector<HTMLElement>(".swap-sells")!;
   const breakdown = view.querySelector<HTMLElement>(".breakdown")!;
   const splitLine = view.querySelector<HTMLElement>(".swap-split")!;
-  reviewButton.disabled = !ticked.length || swapsOff();
+  reviewButton.disabled = !ticked.length || swapsOff() || reviewing;
   // Until the page has read that its RPCs serve Base, which is soon, the button waits, and says why.
   show(".swap-checking", !!ticked.length && base === undefined, view);
   sells.hidden = ticked.length > 0;
@@ -397,7 +401,9 @@ function routeTicked(scanned: Scan): Promise<void> {
   clearTimeout(routeLater);
   const { swapper, owner } = scanned;
   const gasValue = gasValueIn(scanned);
-  const done = (async () => {
+  const allowance = (token: Address) => ticked.find((row) => same(row.token.address, token))?.allowance ?? 0n;
+  const runOf = (plan: Route[][]) => runInOrder(owner, swapper, plan.flat(), allowance);
+  const find = async (): Promise<Omit<Together, "key">> => {
     const sales: Sale[] = ticked.map((row) => ({
       token: row.token.address,
       amount: row.amount,
@@ -405,13 +411,16 @@ function routeTicked(scanned: Scan): Promise<void> {
       hydrex: isHydrex(row.token.address),
     }));
     const own = ticked.map((row) => partsOf(row, undefined).map(({ route }) => route));
-    const parted = await routeTogether(sales, swapper, gasValue).catch((error: unknown) => {
-      console.error(error);
-      return undefined;
-    });
-    const allowance = (token: Address) => ticked.find((row) => same(row.token.address, token))?.allowance ?? 0n;
+    // The tokens' own routes run through Base while the router looks for others.
+    const [ownRun, parted] = await Promise.all([
+      runOf(own),
+      routeTogether(sales, swapper, gasValue).catch((error: unknown) => {
+        console.error(error);
+        return undefined;
+      }),
+    ]);
     const plans = parted ? [own, parted] : [own];
-    const runs = await Promise.all(plans.map((plan) => runInOrder(owner, swapper, plan.flat(), allowance)));
+    const runs = [ownRun, parted && (await runOf(parted))];
     const net = runs.map((run) =>
       run
         ? run.results.reduce((sum, result) => sum + (result?.done ? result.amountOut : 0n), 0n) - gasValue(run.gas)
@@ -432,8 +441,16 @@ function routeTicked(scanned: Scan): Promise<void> {
         }),
       ]),
     );
+    return { parts, gas: run?.gas };
+  };
+  const done = (async () => {
+    // Should finding them fail, each token's own route and quote, rather than the search again at each drawing.
+    const found = await find().catch((error: unknown) => {
+      console.error(error);
+      return { parts: new Map(ticked.map((row) => [key(row.token.address), partsOf(row, undefined)])), gas: undefined };
+    });
     if (routing?.key !== id || scan !== scanned) return;
-    together = { key: id, parts, gas: run?.gas };
+    together = { key: id, ...found };
     routing = undefined;
     scanned.rows.forEach((row) => drawRow(row, scanned));
     drawAll();
@@ -663,15 +680,9 @@ export async function planSteps(
   const found = await costs().catch(() => undefined);
   const deadline = BigInt(now() + (safe ? 86_400 : 1_800));
   // One approval a token, for all its parts.
-  const needs = new Map<string, { token: Token; amount: bigint; allowance: bigint; approve?: bigint | undefined }>();
-  for (const { token, route, allowance, approve } of plan.items) {
-    const need = needs.get(key(token.address));
-    if (need) need.amount += route.amount;
-    else needs.set(key(token.address), { token, amount: route.amount, allowance, approve });
-  }
-  const approvals = [...needs.values()]
-    .filter(({ amount, allowance, approve }) => approve !== undefined || allowance < amount)
-    .map(({ token, amount, approve }) => approveSlip(token, plan.swapper, approve ?? amount));
+  const approvals = soldOf(plan.items)
+    .filter(({ total, allowance, approve }) => approve !== undefined || allowance < total)
+    .map(({ token, total, approve }) => approveSlip(token, plan.swapper, approve ?? total));
   const swaps = split(plan.items.map(({ route }) => route));
   const tip = safe ? undefined : found?.tip;
   const slips = [...approvals, ...swaps.map((group) => swapSlip(plan.swapper, group, deadline, tokens, tip, whole))];
@@ -683,8 +694,8 @@ async function reviewSwap(): Promise<void> {
   const scanned = scan;
   if (!connection || !scanned) return;
   const { swapper } = scanned;
-  if (!tickedOf(scanned).length || swapsOff()) return;
-  reviewButton.disabled = true;
+  if (!tickedOf(scanned).length || swapsOff() || reviewing) return;
+  reviewing = reviewButton.disabled = true;
   reviewFailed.hidden = true;
   reviewButton.textContent = "Checking…";
   try {
@@ -710,7 +721,12 @@ async function reviewSwap(): Promise<void> {
       reviewFailed.textContent = opened;
       reviewFailed.hidden = false;
     }
+  } catch (error) {
+    console.error(error);
+    reviewFailed.textContent = "Checking the swap failed. Nothing was sent.";
+    reviewFailed.hidden = false;
   } finally {
+    reviewing = false;
     reviewButton.textContent = "Review";
     drawAll();
   }
@@ -741,25 +757,17 @@ export async function openSwapReview(
       return `Base refused “${tried.slips[failed]!.says}” Nothing was sent.`;
     if (failed >= 0) return "Base refused the swap: the quotes may have moved. Nothing was sent.";
   }
-  // What each route fetches, as Base found it, or as planned; and why one would not go through.
-  const outcome = new Map<Route, { out: bigint; reason?: string }>();
-  tried.swaps.forEach((group, g) => {
-    const run = simulated?.[tried.approvals.length + g];
-    const results = run ? swapReturns(run.returnData).results : undefined;
-    group.forEach((route, i) => {
-      const result = results?.[i];
-      outcome.set(
-        route,
-        !result
-          ? { out: zeroed.find((item) => item.route === route)!.out }
-          : result.done && result.amountOut > 0n
-            ? { out: result.amountOut }
-            : { out: 0n, reason: result.done ? "a pool gave nothing for it" : reasonOf(result.reason) },
-      );
-    });
-  });
+  // What each route fetches, as Base found it, or as planned without its answer for every call; and why one would not
+  // go through.
+  const results = routeResults(simulated, tried.approvals.length, tried.swaps);
+  if (!results) simulated = undefined;
   const items = plan.items.map((item, i) => {
-    const { out, reason } = outcome.get(zeroed[i]!.route)!;
+    const result = results?.get(zeroed[i]!.route);
+    const { out, reason }: { out: bigint; reason?: string } = !result
+      ? { out: item.out }
+      : result.done && result.amountOut > 0n
+        ? { out: result.amountOut }
+        : { out: 0n, reason: result.done ? "a pool gave nothing for it" : reasonOf(result.reason) };
     const minPaid = simulated ? minimumOf(out, plan.margin) : item.route.minPaid;
     return { item: { ...item, out, route: { ...item.route, minPaid } }, reason };
   });
@@ -870,8 +878,8 @@ export async function openSwapReview(
   return undefined;
 }
 
-// What each route of a swap fetches now, in order, as Base runs it alone, its approvals given: or else, as when an RPC has
-// not seen those approvals yet, as quoted, each as if first.
+// What each route of a swap fetches now, in order, as Base runs it alone, its approvals given: or else as quoted, each as
+// if first, when Base cannot say, or a token refused the transfer, as when an RPC has not seen its approval yet.
 async function freshResults(
   from: Address,
   swapper: Swapper,
@@ -880,8 +888,9 @@ async function freshResults(
 ): Promise<(Result | undefined)[]> {
   const zeroed = group.map((route) => ({ ...route, minPaid: 0n }));
   const [run] = await simulate(from, [swapCall(swapper, zeroed, deadline)]).catch(() => []);
-  const results = run?.ok ? swapReturns(run.returnData).results : [];
-  if (results.length === group.length && results.every(({ done }) => done)) return results;
+  const results = routeResults(run ? [run] : undefined, 0, [zeroed]);
+  const found = zeroed.map((route) => results?.get(route));
+  if (results && found.every((result) => result && (result.done || !refusedTransfer(result.reason)))) return found;
   return quoteAll(zeroed.map((route) => ({ swapper, route })));
 }
 
