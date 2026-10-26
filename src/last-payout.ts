@@ -568,9 +568,13 @@ export function payouts(
       return fail(error);
     }
     if (!current()) return;
-    // What waits keeps the prices last read for the same owner until new ones come, and is priced while the receipts
-    // are drawn.
-    if (showing === owner && latest?.waiting) read.waiting = latest.waiting;
+    // What waits keeps the prices last read for the same owner until new ones come, if they cover each of its tokens,
+    // and is priced while the receipts are drawn. Prices of other tokens would show a part of it as all of it.
+    const before = showing === owner ? latest?.waiting : undefined;
+    const covered = read.entries.every(({ standing }) =>
+      (standing?.waiting ?? []).every(({ token }) => before?.tokens.has(token.toLowerCase())),
+    );
+    if (before && covered) read.waiting = before;
     latest = read;
     if (section || priced) void price(read, () => current() && latest === read);
     const under = underWay(read);
