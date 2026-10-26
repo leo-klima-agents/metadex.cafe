@@ -146,8 +146,8 @@ and works in one colour.
   "Connect a wallet", or the wallet's chip once connected, which leads to the App. The chip is outlined, so that the
   page's own main action stays the one filled button in view. On the App itself, the chip reads as where you are.
 - **Every page below the App leads one level back,** above its title, small and quiet: "‹ Hydrex" from an automation or
-  an account, and "‹ Your wallet" from Hydrex and the swap once a wallet is connected. Wallets' browsers and
-  Safe{Wallet}'s frame have no address bar. Home and About are the page's own, and have none.
+  an account, and "‹ Your wallet" from Hydrex and the swap. Wallets' browsers and Safe{Wallet}'s frame have no address
+  bar. Home and About are the page's own, and have none.
 - **A view repeats only its own main action,** as a button, such as "Open the app" on Home. It never offers a second way
   to a page the header already leads to.
 - **Within a view, a link leads to a section and says what it holds,** such as "What it means" or "More on leaving",

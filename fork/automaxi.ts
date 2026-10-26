@@ -83,7 +83,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await frame.locator("header").getByText(short(LEAVER)).waitFor();
     assert.equal(await frame.getByRole("heading", { name: "Your wallet", level: 1, exact: true }).isVisible(), true);
     assert.equal(await frame.getByRole("heading", { name: "Vote, claim and swap on Base" }).isVisible(), false);
-    await frame.getByRole("link", { name: "Hydrex automations" }).click();
+    await frame.getByRole("link", { name: "Hydrex", exact: true }).click();
     await frame.getByRole("checkbox", { name: "Pick Hydrex account #53350" }).check();
     await frame.getByRole("checkbox", { name: "Pick Hydrex account #82206" }).check();
     await frame

@@ -80,10 +80,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await page.title(), "Your wallet · metaDEX Café");
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Your wallet");
     // The App lists the products: the Hydrex automations, and the swap.
-    assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), [
-      "Hydrex automations",
-      "Swap many tokens",
-    ]);
+    assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), ["Hydrex", "Swap many tokens"]);
     assert.equal(await page.locator("header .to-app").getAttribute("aria-current"), "page");
     await app(page).getByRole("button", { name: "Test Wallet" }).waitFor();
     await shoot(page, "app-390-light");

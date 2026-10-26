@@ -62,7 +62,7 @@ This README is for whoever runs the site. The design and the plan are in [design
   epoch, an overdue payout, token approvals to the swappers that haven't been used. Then the products, each with what
   you hold in it: the Hydrex automations (`#hydrex`) and the swap (`#swap`). Its Approvals button lists every approval
   this wallet gave the café's contracts, with the call that undoes it. The pages under it lead one level back, above
-  their title: "‹ Hydrex", or "‹ Your wallet" once a wallet is connected; Home and About do not.
+  their title: "‹ Your wallet" from Hydrex and the swap, "‹ Hydrex" from the pages below; Home and About do not.
 - The page always says "Hydrex account", as "account" alone means an address in crypto: "8 Hydrex accounts", "Hydrex
   Main Protocol Account #26432".
 - Details open from a round info button beside what they explain, as a popup: on a phone, a sheet from the foot of the

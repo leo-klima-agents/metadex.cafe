@@ -251,7 +251,7 @@ NEEDS YOU · 2
 ○ 2 approvals left from a swap that failed.       [Reset]
 
 THE MENU
-Hydrex automations                                         →
+Hydrex                                                     →
   Automations that vote with your Hydrex accounts.
   Yours: 5 accounts, 2 in Carbon Impact, 1 in AutoMaxi
 Swap many tokens into one                                  →

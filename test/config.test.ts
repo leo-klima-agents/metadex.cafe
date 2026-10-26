@@ -266,15 +266,15 @@ test("the header holds the logo and the name, and a button to connect a wallet; 
   assert.match(header, /<button type="button" class="connect">Connect a wallet<\/button>/);
   // The wallet's chip is outlined, so that it does not read as the page's main action.
   assert.match(header, /<a class="to-app button secondary wallet-state" href="#app" hidden/);
-  // Home and About are the page's own; the App is "Your wallet". Hydrex and the swap lead back to it once a wallet is
-  // connected, and the pages within Hydrex lead back to Hydrex.
+  // Home and About are the page's own; the App is "Your wallet". Hydrex and the swap lead back to it, with or without a
+  // wallet, and the pages within Hydrex lead back to Hydrex.
   const trail = (view: string) => /<nav class="trail[^"]*" aria-label="Back"[^>]*>(.*?)<\/nav>/.exec(view)?.[1];
   for (const name of ["home", "about"]) assert.equal(trail(viewOf(html, `data-view="${name}"`)), undefined, name);
   assert.match(viewOf(html, 'data-view="app"'), /<h1 tabindex="-1">Your wallet<\/h1>/);
   for (const name of ["hydrex", "swap"]) {
     const view = viewOf(html, `data-view="${name}"`);
-    assert.match(view, /<nav class="trail trail-wallet" aria-label="Back" hidden>/, name);
     assert.equal(trail(view), '<a href="#app">Your wallet</a>', name);
+    assert.match(view, /<nav class="trail" aria-label="Back">/, `${name}'s way back always shows`);
   }
   for (const view of [
     productOf(html, "carbon-impact"),

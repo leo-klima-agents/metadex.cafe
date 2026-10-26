@@ -46,7 +46,7 @@
       </p>
 
       <!-- One view for each kind of page. The route in the hash picks the one shown: see src/views.ts. The pages below
-           the App lead one level back, above their title: "‹ Hydrex", or "‹ Your wallet" once one is connected. Details
+           the App lead one level back, above their title: "‹ Your wallet" from Hydrex and the swap, "‹ Hydrex" below. Details
            open from an info button, as a popup at the foot of each view. -->
       <div class="view home" data-view="home" data-title="metaDEX Café">
         <h1 tabindex="-1">Vote, claim and swap on Base</h1>
@@ -72,7 +72,7 @@
         <section id="products" aria-label="Products">
           <ul class="menu">
             <li class="choice" data-choice="hydrex">
-              <h3><a href="#hydrex">Hydrex automations</a></h3>
+              <h3><a href="#hydrex">Hydrex</a></h3>
               <p class="small yours hydrex-yours" hidden></p>
             </li>
             <li class="choice" data-choice="swap">
@@ -115,7 +115,7 @@
 
       <div class="view" data-view="hydrex" data-title="Hydrex · metaDEX Café" hidden>
         <div class="title-line">
-          <nav class="trail trail-wallet" aria-label="Back" hidden><a href="#app">Your wallet</a></nav>
+          <nav class="trail" aria-label="Back"><a href="#app">Your wallet</a></nav>
           <h1 tabindex="-1">Hydrex</h1>
         </div>
         <p class="notice checks-failed" data-kind="carbon-impact" role="alert" hidden>
@@ -1222,7 +1222,7 @@
 
       <div class="view swap" data-view="swap" data-title="Swap · metaDEX Café" hidden>
         <div class="title-line">
-          <nav class="trail trail-wallet" aria-label="Back" hidden><a href="#app">Your wallet</a></nav>
+          <nav class="trail" aria-label="Back"><a href="#app">Your wallet</a></nav>
           <h1 tabindex="-1">Swap many tokens</h1>
           <button type="button" class="info" popovertarget="swap-info" aria-label="Costs and contracts">
             <span aria-hidden="true">i</span>
