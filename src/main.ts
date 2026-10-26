@@ -386,6 +386,7 @@ function catchUp(): void {
   if (ready && page.holdings && epoch > page.holdings.epochStart && !ownHoldings(page.id)) void loadPosition();
   if (!carbonImpact || epoch > carbonImpact.epochStart) readCarbonImpactAgain().catch(console.error);
   if (earningsDue(epoch, present())) loadAllEarnings();
+  readAverage();
   if (!autoMaxiFreshness || epoch > autoMaxiFreshness.epochStart) readAutoMaxi();
   appPayouts.check();
   if (page) positionPayouts.check();

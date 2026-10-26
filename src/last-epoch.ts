@@ -42,7 +42,7 @@ type Stake = { delegate: Address; power: bigint };
 let stakes: { start: number; of: Map<bigint, Stake | undefined>; asked: Set<bigint> } | undefined;
 const voters = new Map<string, { start: number; read?: Read; reading?: Promise<void> | undefined }>();
 // All of Hydrex, for the average beside each choice: its value per 1,000 Earning Power, once read.
-type Average = { start: number; per?: Money; failed?: boolean };
+type Average = { start: number; per?: Money; failed?: number };
 let average: Average | undefined;
 
 // Each automation's popup "Against all of Hydrex", on its page.
@@ -212,10 +212,11 @@ function earnedThroughHolder(id: bigint): Money | undefined {
 }
 
 // Hydrex's average, per 1,000 Earning Power, in the epoch the automations' figures are of: read once, after the page's
-// own reads. Resolves to true once newly read.
+// own reads, and five minutes after a read that failed. Resolves to true once newly read, or failed.
 export async function loadAverage(): Promise<boolean> {
   const start = shownStart();
-  if (!start || (average?.start === start && !average.failed)) return false;
+  const retry = !!average?.failed && Date.now() - average.failed >= 300_000;
+  if (!start || (average?.start === start && !retry)) return false;
   const mine: Average = { start };
   average = mine;
   try {
@@ -226,7 +227,7 @@ export async function loadAverage(): Promise<boolean> {
     return true;
   } catch (error) {
     console.error(error);
-    if (average === mine) mine.failed = true;
+    if (average === mine) mine.failed = Date.now();
     return true;
   }
 }
