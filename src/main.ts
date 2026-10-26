@@ -288,8 +288,8 @@ function tick(): void {
   fill(document, { countdown: `in ${until(end - time)}` });
 }
 
-// Each automation's figure for last epoch, on the menu and on its page: what reached the owner for each 1,000 Earning
-// Power. What the votes earned before the automation's cut is in its fold, against all of Hydrex.
+// Each automation's figures for last epoch, on the menu and on its page, for each 1,000 Earning Power: what its votes
+// earned, beside Hydrex's average, then what reached the owner after its cut.
 function showRecords(): void {
   for (const automation of AUTOMATIONS) {
     const per = perThousandOf(automation);
@@ -301,13 +301,12 @@ function showRecords(): void {
           : "…"
         : per === null
           ? "No record yet"
-          : paid === undefined
-            ? "…"
-            : () => money(moneyAt(per.value * paid, per));
+          : () => money(per);
+    const toYou = per && paid !== undefined ? () => `${money(moneyAt(per.value * paid, per))} to you` : per ? "…" : "";
     for (const place of placesOf(automation)) {
       // The menu says once that its figures are per 1,000 Earning Power.
-      const unit = place.classList.contains("choice") ? "to you" : "to you, per 1,000 Earning Power";
-      fill(place, { record, "record-unit": per ? unit : "" });
+      const unit = place.classList.contains("choice") ? "earned" : "earned, per 1,000 Earning Power";
+      fill(place, { record, "record-unit": per ? unit : "", "record-paid": toYou });
     }
   }
   // Beside them, what voting yourself paid: Hydrex's average, and the wallet's own votes, when it held votes then.

@@ -68,13 +68,13 @@ This README is for whoever runs the site. The design and the plan are in [design
 - Details open from a round info button beside what they explain, as a popup: on a phone, a sheet from the foot of the
   screen. A popup has an address of its own, such as `#hydrex/carbon-impact/check`.
 - `#hydrex` starts with the automations, in one box, a row each: each automation, and voting yourself, with what each
-  takes, what it pays in and what it paid last epoch per 1,000 Earning Power: what reached the owner for each
-  automation, and for voting yourself Hydrex's average and, with a wallet, what the wallet's own votes earned. Then the
-  wallet's Hydrex accounts, in groups a level below: those that need their owner (in an automation that stopped, or
-  voted with by an owner who has not voted since before last epoch, as Hydrex counts a vote only in the epoch it is
-  cast), those in each automation, and the others. Each account shows what its votes earned last epoch, in an automation
-  or through whoever voted with it. Needs you starts with its accounts ticked; each group with boxes has one that ticks
-  them all, and says how many are ticked and their Earning Power.
+  takes, what it pays in and what its votes earned last epoch per 1,000 Earning Power, and for each automation what
+  reached the owner after its cut; for voting yourself Hydrex's average and, with a wallet, what the wallet's own votes
+  earned. Then the wallet's Hydrex accounts, in groups a level below: those that need their owner (in an automation that
+  stopped, or voted with by an owner who has not voted since before last epoch, as Hydrex counts a vote only in the
+  epoch it is cast), those in each automation, and the others. Each account shows what its votes earned last epoch, in
+  an automation or through whoever voted with it. Needs you starts with its accounts ticked; each group with boxes has
+  one that ticks them all, and says how many are ticked and their Earning Power.
 - `#swap` takes the output from its address, `#swap/weth`, USDC by default, then lists the wallet's tokens, each with
   what it fetches, ticked when the quote is worth twice its gas. What the ticked ones fetch shows line by line: the
   quote, the 1%, what reaches you, the least that may, on the line where the slippage is picked, and the gas, paid apart
