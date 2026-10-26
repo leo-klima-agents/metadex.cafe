@@ -857,6 +857,10 @@ details.nothing > .accounts {
 .facts.tiles dd {
   font-size: 1.125rem;
 }
+/* "≈ $0.48 / 1k Earning Power, last epoch": the unit stays whole, beside the figure or under it. */
+.facts.tiles dd > .small {
+  white-space: nowrap;
+}
 /* The review's figures, two by two. */
 .facts.tiles.estimate {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1756,6 +1760,7 @@ footer select {
   }
   .facts.tiles dd.sub {
     grid-column: 1 / -1;
+    font-size: var(--text-small);
   }
   .facts.tiles .through {
     justify-content: flex-end;
