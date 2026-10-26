@@ -794,7 +794,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     note(`#${id}'s owner claimed ${claimed.length} of its rewards on Hydrex`);
   }
 
-  // Carbon Impact pays an owner's accounts where the owner says, or the admin key: setMyPayoutRecipient.
+  // Carbon Impact pays an owner's accounts where the owner says, or Hydrex: setMyPayoutRecipient.
   async function payTo(to: string): Promise<void> {
     const recipient = /^(its )?owner$|^$/i.test(to)
       ? wallet.owner

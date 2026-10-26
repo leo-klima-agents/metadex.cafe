@@ -164,7 +164,10 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await review(page).getByRole("heading", { name: "Before you join" }).waitFor();
     await review(page).getByRole("link", { name: "Can change" }).click();
     assert.equal(await review(page).isVisible(), false);
-    await page.locator('.pop:popover-open [data-section="control"]').getByText("The admin key").waitFor();
+    await page
+      .locator('.pop:popover-open [data-section="control"]')
+      .getByText("Can change the share retired")
+      .waitFor();
     assert.equal(await page.title(), "Carbon Impact · metaDEX Café");
     assert.equal(new URL(page.url()).hash, "#hydrex/carbon-impact/control");
     assert.equal(await appTitle(page).isVisible(), false);

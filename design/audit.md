@@ -71,10 +71,9 @@ Settled by the owner on 20 Oct 2026:
 
 - **Carbon Impact is Hydrex's automation,** even though Hydrex no longer sends its votes: a keeper does. The page says
   "Hydrex's automation" wherever it says whose it is, never "Klima's".
-- **The café is anonymous for now.** The page names no operator, nobody behind Carbon Impact's keeper or admin key, and
-  links to no repository of the café's: neither this one nor AutoMaxi's. This repository is public, but nothing on the
-  page leads to it. Hydrex's own repository stays linked as Carbon Impact's source, and the commit leaves the footer.
-  See rule 10.
+- **The café is anonymous for now.** The page names no operator, nobody behind Carbon Impact's keeper, and links to no
+  repository of the café's: neither this one nor AutoMaxi's. This repository is public, but nothing on the page leads to
+  it. Hydrex's own repository stays linked as Carbon Impact's source, and the commit leaves the footer. See rule 10.
 - **AutoMaxi's source is verified, with an exact match, on Basescan and on Sourcify.** The page links to it there, not
   to its repository. Its verified files name no author and no repository: checked on 20 Oct 2026.
 - **No legal pages for now:** no terms, and no page on privacy.
@@ -247,8 +246,8 @@ Then folds, closed, each with a summary of one line:
    in one sentence: "Join on Wednesday at 23:00 UTC, and the votes move an hour later; join on Thursday at 10:00 UTC,
    and almost a week later."
 9. **Who controls what** (`control`): for Carbon Impact, that it is Hydrex's, and that a keeper, not Hydrex, now sends
-   its votes and payouts, without naming who runs the keeper; the admin key's powers, without naming its holder; what
-   nobody can do; and how a change would show. For AutoMaxi, that nobody does, and what Hydrex and the owner of its
+   its votes and payouts, without naming who runs the keeper; Hydrex's powers over its settings, as Hydrex holds them;
+   what nobody can do; and how a change would show. For AutoMaxi, that nobody does, and what Hydrex and the owner of its
    reward contracts can do.
 10. **A fold of the product's own:** for Carbon Impact, "The carbon credits" (`carbon`): kVCM, retiring, where to see
     each retirement, and whose name is on them. For AutoMaxi, "How it picks its votes" (`votes`): the $1 threshold,
@@ -309,7 +308,7 @@ Joining takes two steps instead of three:
      estimate, not a promise." These figures are Choose's;
    - the timeline, with its dates: now, the next epoch, after each epoch;
    - one line on what it takes and who can change it. Carbon Impact: "It retires 33.33% of the rewards, and takes a fee
-     of 0%. One admin key can raise them to 100% and 1%, and change the payout tokens, the swap routers and your payout
+     of 0%. Hydrex can raise them to 100% and 1%, and change the payout tokens, the swap routers and your payout
      address." AutoMaxi: "It takes 1% of each claim. Nobody can change that.";
    - the notes on accounts in a stopped or a running automation, as today.
 
@@ -358,11 +357,12 @@ review, then the wallet. What is lost: the weekly estimate for the accounts tick
    them. No glossary.
 9. **Heights on a phone,** 390 × 844: Home in one screen; the App, with a wallet, shows its first account in the first
    screen; a product's page in two screens with its folds closed; a position's in two, with its receipt.
-10. **Anonymous.** No operator named, and nobody behind Carbon Impact's keeper or admin key. No link to this repository
-    or to AutoMaxi's, `github.com/ldeso/hydrex-conduit`, and no commit hash, which could be searched for. AutoMaxi's
-    source is linked where it is verified, on Basescan and Sourcify. Hydrex's own repository stays linked as Carbon
-    Impact's source: it is Hydrex's, and says nothing of who runs the café. Links that a visitor follows need no change
-    to the Content Security Policy, which governs only what the page itself fetches.
+10. **Anonymous.** No operator named, and nobody behind Carbon Impact's keeper; Hydrex is named as the one who controls
+    its settings. No link to this repository or to AutoMaxi's, `github.com/ldeso/hydrex-conduit`, and no commit hash,
+    which could be searched for. AutoMaxi's source is linked where it is verified, on Basescan and Sourcify. Hydrex's
+    own repository stays linked as Carbon Impact's source: it is Hydrex's, and says nothing of who runs the café. Links
+    that a visitor follows need no change to the Content Security Policy, which governs only what the page itself
+    fetches.
 
 ## Everything, item by item
 

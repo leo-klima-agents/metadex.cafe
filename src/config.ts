@@ -17,8 +17,8 @@ export type Automation = {
   // What joining approves: 3 sends the account's claims to the automation, 5 delegates its votes.
   actions: number[];
 };
-// Hydrex's automation, whose votes and payouts a keeper now sends. One admin key controls its settings, which the
-// page reads from Base.
+// Hydrex's automation, whose votes and payouts a keeper now sends. Hydrex controls its settings, which the page reads
+// from Base.
 export const CARBON_IMPACT: Automation = {
   kind: "carbon-impact",
   name: "Carbon Impact",

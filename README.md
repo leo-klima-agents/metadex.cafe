@@ -104,10 +104,10 @@ Nobody controls the swappers either: their code fixes the fee, 1% of each route'
 output and the twelve factories. As nothing about them can change, the page does not check them: it offers swaps once it
 has read that its RPCs serve Base, and says nothing of it.
 
-One admin key controls Carbon Impact. It can change the share retired (up to 100%), the fee (up to 1%), the payout
-tokens, the swap routers, any owner's payout address, and who claims and votes for it. The page always shows the
-settings as they are on Base. Nobody controls AutoMaxi: its code fixes its fee, 1% of each claim, and the 2-of-3 Safe it
-goes to. A change means a new deployment, and owners joining again.
+Hydrex controls Carbon Impact. It can change the share retired (up to 100%), the fee (up to 1%), the payout tokens, the
+swap routers, any owner's payout address, and who claims and votes for it. The page always shows the settings as they
+are on Base. Nobody controls AutoMaxi: its code fixes its fee, 1% of each claim, and the 2-of-3 Safe it goes to. A
+change means a new deployment, and owners joining again.
 
 ## Network access
 
@@ -289,7 +289,7 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   currency, a figure in dollars is converted at Chainlink's rate on Base of its own time, such as GBP / USD, at the flip
   or now; without a round of that time, it stays in dollars. Gas without ETH's price shows in ETH. A token without a
   deep enough pool has no price.
-- Only the admin key, or a call from the owner's own address made elsewhere, can change a payout address.
+- Only Hydrex, or a call from the owner's own address made elsewhere, can change a payout address.
 - The swap knows only the tokens on its list, Hydrex's reward tokens, those added by address, and those a wallet lists
   with ERC-7811's `wallet_getAssets`: no RPC lists a wallet's tokens. Routes pass through WETH, USDC, cbBTC and HYDX
   only. A token's own route takes, at each hop, the best pool for what the hop before paid, which is not always the best

@@ -27,7 +27,8 @@ layout of slips and receipts. `style.css` and `index.html` follow these rules. S
   decides what they pay for ([Aaker](https://www.gsb.stanford.edu/news/research/aaker_warm.html)).
 - No puns where money moves: no brewing, roasting or fresh cups of yield, and nothing "on the house" that is not free.
 - Independent, and says so: not Dromos's, not Hydrex's. Anonymous for now: the page names no operator, nobody behind
-  Carbon Impact's keeper or admin key, and links to no repository of the café's.
+  Carbon Impact's keeper, and links to no repository of the café's. Hydrex controls Carbon Impact's settings, and the
+  page says so.
 - Say "Aero", not "Aerodrome", from 22 Oct 2026, and "Coinbase Wallet", its name again since 10 Sep 2026. Aerodrome's
   pools and its AERO keep their name where the swap names an exchange or a token.
 - "Small balances", not "dust", in the page's words: plain, and no pun.

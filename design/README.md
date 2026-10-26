@@ -98,8 +98,8 @@ wallet's browser, so every export also offers a copy.
 4. **"I want out."** What happens now and at the flip, and leaving works even if a check fails.
 5. **"My co-signers need to agree."** A link that opens the page on exactly what the Safe transaction does.
 6. **"It left its range."** A liquidity position shows its range, the price, its moves and their cost.
-7. **"Something changed."** When an admin key changes a share, a fee or a payout address, every position in that
-   automation says so, with the old value, the new one and the transaction.
+7. **"Something changed."** When Hydrex changes a share, a fee or a payout address, every position in that automation
+   says so, with the old value, the new one and the transaction.
 8. **"My lock is ending."** The position says when, and links to the protocol to extend it.
 9. **"My automation is ending."** The date, what to do before it, and where to go after.
 10. **"I was paid in 28 tokens."** The receipt offers to swap them into one, and says which are worth it.
@@ -181,7 +181,7 @@ a calendar file for payday, made on the device.
 **An automation's page,** one template for all: status; what it does; four key facts (takes, pays you, costs you,
 leaving) and Join; your accounts in it; fee facts; money per 1,000 units of voting power; its record against the
 average; how it voted; what joining allows, and custody; if you join now; who controls what; what the page checks.
-Carbon Impact's admin key and keeper go under "who controls what", with the holder named once known.
+Hydrex, which controls Carbon Impact's settings, and its keeper go under "who controls what".
 
 **An Aero relay's page,** the same template, with what changes: custody moves into the relay, you hold two tokens,
 deposits and withdrawals wait in queues, and Aero takes a fee in and out. Until its first allocation it shows "no record
@@ -222,7 +222,7 @@ For the four kinds of product:
 
 | Kind                                         | Taken                                  | Most            | Goes to                  | When             | Other costs   | Who can change it        |
 | -------------------------------------------- | -------------------------------------- | --------------- | ------------------------ | ---------------- | ------------- | ------------------------ |
-| Votes for you, retires a share               | Of the rewards: 33.33% retired, 0% fee | 100%, 1%        | Carbon credits; treasury | Each payout      | Swaps         | One admin key            |
+| Votes for you, retires a share               | Of the rewards: 33.33% retired, 0% fee | 100%, 1%        | Carbon credits; treasury | Each payout      | Swaps         | Hydrex                   |
 | Votes for you, pays you as earned (AutoMaxi) | Of each claim: 1%                      | 1%, in its code | A 2-of-3 Safe            | Each claim       | None          | Nobody: a new deployment |
 | Swaps many tokens into one                   | Of what each token fetches: 1%         | 1%, in its code | The same 2-of-3 Safe     | Each swap        | Pools, gas    | Nobody: a new deployment |
 | Pools your stake in a relay                  | Of the deposit, then of the rewards    | [cap]           | Aero; [operator]         | Each compounding | Swaps         | [Role, delay]            |
@@ -294,9 +294,9 @@ taken, and how do you leave.
 
 ## Open questions
 
-- **Fees and caps** for each new product, who holds each admin key, and any delay before a change applies. Carbon
-  Impact's single admin key can raise the share retired to 100%, which would likely rate Stage 0 on DeFiScan's scale.
-  Naming its holder, signers and threshold, as Convex does, costs nothing.
+- **Fees and caps** for each new product, who controls each, and any delay before a change applies. Hydrex can raise
+  Carbon Impact's share retired to 100%, which would likely rate Stage 0 on DeFiScan's scale. Naming Hydrex's signers
+  and threshold, as Convex does, costs nothing.
 - **Autopilot:** its fee is not published. What a café relay offers against it (a payout token, retirement, receipts)
   decides whether there should be one.
 - **Alerts:** whether to run anything that can send, and who would run it.
@@ -370,8 +370,8 @@ products should sit in the norm, and say how they compare.
 
 Worth copying: one plain sentence per strategy; "no automation" next to the products; states that say when, such as
 "earning from next epoch"; ticked consent to side effects that cannot be undone; a payout ledger per account; when it
-last ran; fees net and split by component; one fee table with the cap; saying when it will not run; admin powers in a
-list that leads with what fails; a benchmark; a way out without the front end. To avoid: fees that disagree between
+last ran; fees net and split by component; one fee table with the cap; saying when it will not run; controllers' powers
+in a list that leads with what fails; a benchmark; a way out without the front end. To avoid: fees that disagree between
 pages; one APR for every product; risk scores that reassure more than they inform; approvals that linger with no way to
 revoke them in the app; silent sunsets.
 
