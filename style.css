@@ -1636,10 +1636,6 @@ footer select {
   justify-content: space-between;
   gap: var(--gap-s) var(--gap-l);
 }
-/* The button keeps to the right whether or not a status shows beside it, as it comes and goes. */
-.swap-review {
-  margin-inline-start: auto;
-}
 .claim-tokens,
 .claim-rest,
 .swap-receipt-skipped {
