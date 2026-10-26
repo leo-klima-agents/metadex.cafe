@@ -86,7 +86,8 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
       await review(page).locator(".to").allTextContents(),
       says.map(() => AUTOMAXI.address),
     );
-    assert.equal(await review(page).locator(".how").textContent(), `${says.length} transactions`);
+    // One prompt each goes without saying.
+    assert.equal(await review(page).locator(".how").textContent(), "");
     await confirmEach(page, PAYEE);
     const receipt = review(page).locator(".receipt");
     assert.equal(await receipt.locator(".claim-receipt-id").textContent(), "Account #82774");
@@ -121,7 +122,7 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
     assert.ok(Number(safeTxs) > 1 && Number(calls) > Number(safeTxs), how);
     const counts = await dialog.locator(".count").allTextContents();
     assert.equal(counts[0], `Safe 1 of ${safeTxs} · Call 1 of ${calls} · Claim`);
-    assert.equal(counts.at(-1), `Safe ${safeTxs} of ${safeTxs} · Call ${calls} of ${calls}`);
+    assert.equal(counts.at(-1), `Safe ${safeTxs} of ${safeTxs} · Call ${calls} of ${calls} · Claim`);
     await shoot(page, "safe-claim-1440-light");
     await dialog.getByRole("button", { name: "Propose in Safe{Wallet}" }).click();
     await dialog.getByText(`Proposed ${safeTxs} Safe transactions. Sign them in Safe{Wallet}.`).waitFor();
