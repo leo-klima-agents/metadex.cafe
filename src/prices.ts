@@ -436,10 +436,42 @@ async function inPools(
     else ranked.set(token, [entry]);
   }
   for (const pools of ranked.values()) pools.sort((a, b) => b.depth - a.depth);
-  // Now, the deepest pool's history, or its price now. Then, every pool's history in one read: the deepest that has one
-  // prices the token, and without any, the deepest's price now stands in to weigh it.
-  const chosen = [...ranked.values()].flatMap((pools) => (ago ? pools : pools.slice(0, 1)));
-  const histories = chosen.map((entry) => kindOf(entry.pool.exchange).history(entry, flip, ago));
+  // Now, the deepest pool's price now. At a flip, the deepest pool's history; then, only for a token whose deepest pool
+  // has none, every other pool's history, in one more read: the deepest that has one prices the token, and without any,
+  // the deepest's price now stands in to weigh it.
+  const found = await atFlipIn(
+    [...ranked.values()].map((pools) => pools[0]!),
+    prices,
+    flip,
+    ago,
+    reader,
+  );
+  if (ago) {
+    const rest = [...ranked.values()]
+      .filter((pools) => found.get(pools[0]!) === undefined)
+      .flatMap((pools) => pools.slice(1));
+    for (const [entry, price] of await atFlipIn(rest, prices, flip, ago, reader)) found.set(entry, price);
+  }
+  for (const [token, pools] of ranked) {
+    const price = pools.map((entry) => found.get(entry)).find((each) => each !== undefined);
+    if (price !== undefined) prices.of.set(token, price);
+    else if (!ago) prices.of.set(token, pools[0]!.spot);
+    else prices.standIns.set(token, pools[0]!.spot);
+  }
+  for (const token of prices.of.keys()) prices.standIns.delete(token);
+}
+
+// Each pool's price at the flip, from its history, in one read: undefined where it has none.
+async function atFlipIn(
+  entries: Measured[],
+  prices: Prices,
+  flip: number,
+  ago: number,
+  reader: typeof read,
+): Promise<Map<Measured, number | undefined>> {
+  const found = new Map<Measured, number | undefined>();
+  if (!entries.length) return found;
+  const histories = entries.map((entry) => kindOf(entry.pool.exchange).history(entry, flip, ago));
   const [replies] = await Promise.all([
     reader(histories.flatMap(({ calls }) => calls)),
     narrow(
@@ -448,21 +480,14 @@ async function inPools(
     ),
   ]);
   let next = 0;
-  const found = new Map<Measured, number | undefined>();
-  chosen.forEach((entry, i) => {
+  entries.forEach((entry, i) => {
     const { calls, price } = histories[i]!;
     const price0 = price(replies.slice(next, (next += calls.length)));
     const atFlip =
       price0 === undefined ? undefined : inAnchor(entry.pool, price0) * prices.of.get(key(entry.pool.anchor.address))!;
     found.set(entry, atFlip !== undefined && Number.isFinite(atFlip) && atFlip > 0 ? atFlip : undefined);
   });
-  for (const [token, pools] of ranked) {
-    const price = pools.map((entry) => found.get(entry)).find((each) => each !== undefined);
-    if (price !== undefined) prices.of.set(token, price);
-    else if (!ago) prices.of.set(token, pools[0]!.spot);
-    else prices.standIns.set(token, pools[0]!.spot);
-  }
-  for (const token of prices.of.keys()) prices.standIns.delete(token);
+  return found;
 }
 
 // Prices now, for the swap and anything else current: in SWAP_PRICING's pools.
