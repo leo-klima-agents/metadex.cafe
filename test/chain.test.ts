@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
-import { resetRateLimits, rpc } from "../src/chain.ts";
+import { rate, resetRateLimits, rpc } from "../src/chain.ts";
 import { RPCS } from "../src/config.ts";
 
 type Answer = { status?: number; body?: unknown; fail?: Error };
@@ -201,4 +201,27 @@ test("a request waiting for room gives its turn to others", async () => {
   assert.ok(performance.now() - before < 200, "the page's read did not wait for the six");
   await Promise.all(waiting);
   assert.equal(asked.length, 22);
+});
+
+test("an RPC that refused is asked half as often from then on, and regains its rate as it answers", async () => {
+  assert.equal(rate(), 3 * 25);
+  const asked = answering({
+    [first]: [{ status: 429 }, result("0x1")],
+    [second]: [result("0x2")],
+    [third]: [result("0x3")],
+  });
+  assert.equal(await rpc("eth_chainId", []), "0x2");
+  assert.equal(rate(), 2 * 25, "the first rests, and counts for nothing meanwhile");
+  await new Promise((done) => original.setTimeout(done, 1_050));
+  assert.equal(rate(), 12 + 25 + 25);
+  // Its window holds 12 a second now, and a little more as it answers: the rest go to the next RPC.
+  asked.length = 0;
+  await Promise.all(Array.from({ length: 20 }, () => rpc("eth_chainId", [])));
+  const toFirst = asked.filter(({ url }) => url === first).length;
+  assert.ok(toFirst >= 12 && toFirst < 20, `${toFirst}`);
+  assert.equal(rate(), Math.floor(12.5 + toFirst / 4) + 25 + 25);
+  await new Promise((done) => original.setTimeout(done, 1_050));
+  await Promise.all(Array.from({ length: 60 }, () => rpc("eth_chainId", [])));
+  assert.ok(rate() > 15 + 25 + 25);
+  assert.ok(rate() <= 3 * 25);
 });

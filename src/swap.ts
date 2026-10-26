@@ -7,7 +7,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { call, read, rpc, same, type Call, type Receipt } from "./chain.ts";
+import { call, now, read, rpc, same, type Call, type Receipt } from "./chain.ts";
 import { CBBTC, CHAIN_ID, HYDX, SWAPPERS, SWAP_FEE_BPS, USDC, WETH, type Swapper } from "./config.ts";
 import { exchangeOf, pairKey, waysFor, type Hop, type Way } from "./pools.ts";
 import type { Tx } from "./wallet.ts";
@@ -141,6 +141,7 @@ const quoteCall = (swapper: Swapper, routes: Route[]): Call =>
 // nothing; a read that fails throws, so that a token whose routes could not be read is not taken for one without any.
 const ROUTES_PER_QUOTE = 6;
 const QUOTES_PER_READ = 3;
+export const QUOTES_PER_REQUEST = ROUTES_PER_QUOTE * QUOTES_PER_READ;
 
 export async function quoteAll(items: { swapper: Swapper; route: Route }[]): Promise<(Result | undefined)[]> {
   const calls: { call: Call; at: number[] }[] = [];
@@ -172,7 +173,8 @@ export async function quoteAll(items: { swapper: Swapper; route: Route }[]): Pro
   return results;
 }
 
-const swapperFor = (token: Address): Swapper | undefined => SWAPPERS.find((swapper) => same(swapper.token, token));
+export const swapperFor = (token: Address): Swapper | undefined =>
+  SWAPPERS.find((swapper) => same(swapper.token, token));
 
 // A token's best route to the output, net of the gas each costs in the output, `gasValue` of gas. Each hop takes the
 // best of its pools for what the hop before paid; then each route of several hops is quoted whole, as its hops' pools
@@ -246,7 +248,7 @@ export async function findRoute(
   return chosen && { route: chosen.route, out: chosen.out, gas: chosen.gas };
 }
 
-const hopOf = ({ exchange, pool, tokenOut, fee, tickSpacing }: Hop): Hop => ({
+export const hopOf = ({ exchange, pool, tokenOut, fee, tickSpacing }: Hop): Hop => ({
   exchange,
   pool,
   tokenOut,
@@ -285,6 +287,41 @@ export async function simulate(from: Address, txs: Tx[]): Promise<Simulated> {
     returnData,
     gas: BigInt(gasUsed),
   }));
+}
+
+// What each route fetches when Base runs them now, in their order, after the approvals they need, each with no minimum:
+// so a route's pools are as those before it left them. `gas` is that of all the calls. Undefined when Base cannot say,
+// or refuses an approval; a route whose swap Base refuses has no result.
+export type InOrder = { results: (Result | undefined)[]; gas: bigint };
+
+export async function runInOrder(
+  from: Address,
+  swapper: Swapper,
+  routes: Route[],
+  allowance: (token: Address) => bigint,
+): Promise<InOrder | undefined> {
+  const needs = new Map<string, { token: Address; amount: bigint }>();
+  for (const { token, amount } of routes) {
+    const need = needs.get(token.toLowerCase()) ?? { token, amount: 0n };
+    need.amount += amount;
+    needs.set(token.toLowerCase(), need);
+  }
+  const approvals = [...needs.values()]
+    .filter(({ token, amount }) => allowance(token) < amount)
+    .map(({ token, amount }) => approve(token, swapper.address, amount));
+  const groups = split(routes.map((route) => ({ ...route, minPaid: 0n })));
+  const deadline = BigInt(now() + 1_800);
+  const txs = [...approvals, ...groups.map((group) => swapCall(swapper, group, deadline))];
+  const run = await simulate(from, txs).catch(() => undefined);
+  const first = approvals.length;
+  if (!run || run.length !== txs.length || run.slice(0, first).some(({ ok }) => !ok)) return undefined;
+  const results = groups.flatMap((group, g) => {
+    const { ok, returnData } = run[first + g]!;
+    if (!ok) return group.map(() => undefined);
+    const { results: found } = swapReturns(returnData);
+    return group.map((_, i) => found[i]);
+  });
+  return { results, gas: run.reduce((sum, { gas }) => sum + gas, 0n) };
 }
 
 export function swapReturns(returnData: Hex): { results: Result[]; paid: bigint; fee: bigint } {

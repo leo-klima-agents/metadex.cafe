@@ -41,12 +41,18 @@ This README is for whoever runs the site. The design and the plan are in [design
   picks, through pools of Hydrex, Aero, Aerodrome and Uniswap that it checks against each exchange's factory, and sends
   1% of each route's output to the same 2-of-3 Safe as AutoMaxi's fee. The page finds the wallet's tokens among those it
   knows (`src/base-tokens.json`, the six outputs, Hydrex's reward tokens, and any added by address), finds each route
-  from the twelve factories, quotes it with the swapper's own `quote`, sets each minimum 0.5% under its quote, and runs
-  the approvals and the swap through `eth_simulateV1` before the wallet asks. Each approval is exact. A route below its
-  minimum is skipped, and its token stays in the wallet, with its approval, which the page offers to reset.
+  from the twelve factories and quotes it with the swapper's own `quote`. A quote prices a route as if it sold alone, so
+  the ticked tokens are then routed together (`src/routing.ts`): those that move their pools may go in parts, up to
+  three routes each, through other pools, by a model of each pool read at a few amounts. The page runs the approvals and
+  the routes through `eth_simulateV1`, in order, with no minimum: each route fetches what the pools those before it
+  moved pay, whichever of its own routes and those found together fetches more, net of gas. Each minimum is 0.5% under
+  what Base found, and a route that would not go through even so is left out of the swap. Each approval is exact, one a
+  token for all its parts. A route that falls below its minimum by the time it runs is skipped, and its token stays in
+  the wallet, with its approval, which the page offers to reset.
 - **Batching:** where the wallet answers EIP-5792's `wallet_getCapabilities`, the page sends all the calls of a review
   in one prompt with `wallet_sendCalls`, all or nothing where it can. From a Safe, one Safe transaction. Otherwise one
-  prompt per call; the swap is then quoted again before the wallet asks for it, and never with a lower minimum.
+  prompt per call; the swap is then run through Base again before the wallet asks for it, and never with a lower
+  minimum.
 - The header holds the logo and the name, which lead Home, and on every view a button that connects a wallet: at once
   when the browser has one, from a list when it has several. Once one is connected, the wallet's chip, which leads to
   the App, takes its place. The App, under its products, and the lists of a wallet's Hydrex accounts and tokens to sell
@@ -67,9 +73,11 @@ This README is for whoever runs the site. The design and the plan are in [design
 - `#swap` takes the output from its address, `#swap/weth`, USDC by default, then lists the wallet's tokens, each with
   what it fetches, ticked when the quote is worth twice its gas. What the ticked ones fetch shows line by line: the
   quote, the 1%, what reaches you, the least that may, on the line where the slippage is picked, and the gas, paid apart
-  in ETH. Its popups: its costs, what the slippage is, and the six swappers' contracts, such as `#swap/weth/check`; and
-  the approvals given to the swappers. Its review shows the swap as a bill: each token with its route by tokens and
-  pools, under the gas, then the least, with the slippage that set it.
+  in ETH. Until the ticked tokens are routed together and run through Base, each is its own quote, and the bar says so;
+  then each ticked row shows what it fetches among the others. Its popups: its costs, what the slippage is, and the six
+  swappers' contracts, such as `#swap/weth/check`; and the approvals given to the swappers. Its review shows the swap as
+  a bill: each token, or each part of one, with its route by tokens and pools, under the gas, then the least, with the
+  slippage that set it.
 - Each automation has a page, `#hydrex/carbon-impact` and `#hydrex/automaxi`: its key figures (what it takes, what it
   pays in, what it paid last epoch, and what it retired or who controls it), and a way to join. Everything else is in
   popups: its six fee facts, how it did against all of Hydrex, joining and leaving, who controls what, and Check it.
@@ -229,9 +237,12 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   something waiting is overdue: its page, the AutoMaxi group and the App's Needs you offer to claim it. If the keeper's
   claim lands first, the page's claim receives nothing, and its receipt says so; it still costs its gas.
 - **A token the swap skipped.** Its route would have fetched less than its minimum, or its token refused the transfer.
-  It stays in the wallet with its approval; the receipt, Needs you and the swap's Approvals offer to reset it.
-- **A quote far under the page's own price.** The row says so, with both figures: the swapper's sources ask holders to
-  check quotes through Hydrex's Algebra and Aero's Slipstream pools against another price.
+  It stays in the wallet with its approval; the receipt, Needs you and the swap's Approvals offer to reset it. A route
+  that Base finds would not go through even with no minimum is left out before the wallet asks, and the bill says why.
+- **A quote far under the page's own price.** The row says so, with both figures, and so does the bill's line: the
+  swapper's sources ask holders to check quotes through Hydrex's Algebra and Aero's Slipstream pools against another
+  price. Tokens whose routes meet in a thin pool, as several into HYDX through USDC, fetch less together than each
+  alone: the later ones show it.
 - **Paid, or claimed in part.** An epoch counts as paid once claims since it ended took more than half of what its
   rewards were worth, at last epoch's prices. A claim of a few small rewards, such as anyone may make through AutoMaxi,
   does not count, and tokens a payout leaves out, such as those that cannot be swapped, do not keep it from counting.
@@ -270,8 +281,14 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 - Only the admin key, or a call from the owner's own address made elsewhere, can change a payout address.
 - The swap knows only the tokens on its list, Hydrex's reward tokens, those added by address, and those a wallet lists
   with ERC-7811's `wallet_getAssets`: no RPC lists a wallet's tokens. Routes pass through WETH, USDC, cbBTC and HYDX
-  only, and each hop takes the best pool for what the hop before paid, which is not always the best route as a whole.
-  Aero's classic pools win a hop only by more than 1%: above a tip of 1 gwei, they add a tax that a quote does not see.
+  only. A token's own route takes, at each hop, the best pool for what the hop before paid, which is not always the best
+  route as a whole; routed together, the tokens that move their pools try every path through the best pools of each hop,
+  in tenths. Aero's classic pools win a hop only by more than 1%, and pay 1% less in the model: above a tip of 1 gwei,
+  they add a tax that a quote does not see.
+- How much the page reads to route tokens together depends on what the RPCs allow: as many requests as they allow in a
+  second, by what the page has learnt of their limits. Each RPC is asked up to 25 times a second at first, half as often
+  once it says it is over its limit, and a little more again with each answer. With less, the router reads fewer pools
+  and fewer amounts of each, or leaves each token its own route; Base's run in order still sets the minimums.
 - Swaps never take or give native ETH: WETH is not ETH.
 
 ## Development
@@ -319,6 +336,7 @@ the pinned Actions and npm packages every week.
 | `src/main.ts`                                           | Startup, the wallet connection, the App, the accounts, and an account's page.                                                                                                                             |
 | `src/pools.ts`                                          | Each exchange's pools of two tokens, for routes and prices.                                                                                                                                               |
 | `src/swap.ts`, `src/swap-calls.ts`, `src/swap-view.ts`  | The swap: routes, quotes, minimums and simulation; its calls; and its page.                                                                                                                               |
+| `src/routing.ts`                                        | Routes for the ticked tokens together, in parts, from a model of each pool, within what the RPCs allow.                                                                                                   |
 | `src/tokens.ts`, `src/base-tokens.json`                 | The tokens the page knows, and their balances and approvals.                                                                                                                                              |
 | `src/claim.ts`, `src/claim-view.ts`                     | Claiming through AutoMaxi: the calls from what `earned` found, and the review.                                                                                                                            |
 | `src/review.ts`                                         | The review that shows each call before the wallet asks.                                                                                                                                                   |

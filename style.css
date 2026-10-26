@@ -1477,7 +1477,8 @@ dialog .receipt {
 /* A note, such as why a token was skipped, takes a row of its own under the rest: two could show at once. */
 .swap-lookalike,
 .swap-check,
-.line-skip {
+.line-skip,
+.line-check {
   grid-column: 1 / -1;
 }
 /* Where two columns would squeeze the token's name, one: the token, what it fetches, what that is worth, then its
@@ -1529,7 +1530,8 @@ dialog .receipt {
   margin: 0;
 }
 .line-route,
-.line-skip {
+.line-skip,
+.line-check {
   color: var(--quiet);
   font-family: var(--sans);
   font-size: var(--text-label);
