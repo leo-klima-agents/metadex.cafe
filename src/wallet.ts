@@ -60,15 +60,17 @@ export const SAFE_ORIGIN = "https://app.safe.global";
 export const SAFE_DOMAIN = new RegExp(`^${SAFE_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
 
 // The origin of the page that frames this one, when the browser says. An opaque origin, "null", as a sandboxed frame or
-// one framed without a referrer has, says nothing: the SDK's handshake decides then.
-export function parentOrigin(ancestor: string | undefined, referrer: string): string | undefined {
+// one framed without a referrer has, says nothing: the SDK's handshake decides then. Nor does a referrer of the page's
+// own origin, `own`, where the browser does not list the frame's ancestors: the frame navigated within itself.
+export function parentOrigin(ancestor: string | undefined, referrer: string, own?: string): string | undefined {
   const origin = ancestor ?? (referrer ? new URL(referrer).origin : "");
+  if (ancestor === undefined && origin === own) return undefined;
   return origin && origin !== "null" ? origin : undefined;
 }
 
 export async function safeWallet(): Promise<Wallet | undefined> {
   if (window.parent === window) return undefined;
-  const parent = parentOrigin(location.ancestorOrigins?.[0], document.referrer);
+  const parent = parentOrigin(location.ancestorOrigins?.[0], document.referrer, location.origin);
   if (parent && parent !== SAFE_ORIGIN) return undefined;
   const sdk = new SafeAppsSDK({ allowedDomains: [SAFE_DOMAIN] });
   const timeout = new Promise<undefined>((resolve) => setTimeout(resolve, parent ? 10_000 : 1_000));
