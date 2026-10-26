@@ -16,8 +16,9 @@ Implemented in version 0.6.0, with each open decision as recommended below.
 ## In short
 
 - **A level for the products.** Home speaks for the whole café. The App (`#app`) becomes the level that lists the
-  products, after what needs you across all of them: the Hydrex automations as one entry, and the swap. Today's App, the
-  wallet's Hydrex accounts and who votes for them, moves one level down to `#hydrex`. A new `#swap` sits beside it.
+  products, after what needs you across all of them: Hydrex as one entry, for its automations, and the swap. Today's
+  App, the wallet's Hydrex accounts and who votes for them, moves one level down to `#hydrex`. A new `#swap` sits beside
+  it.
 - **Claiming is a fallback, not a product.** AutoMaxi's keeper claims for every member right after each epoch ends, so a
   Claim button shows only when an account's payout is overdue: on its page, in the AutoMaxi group, and in the App's
   Needs you.
@@ -251,7 +252,7 @@ NEEDS YOU · 2
 ○ 2 approvals left from a swap that failed.       [Reset]
 
 THE MENU
-Hydrex automations                                         →
+Hydrex                                                     →
   Automations that vote with your Hydrex accounts.
   Yours: 5 accounts, 2 in Carbon Impact, 1 in AutoMaxi
 Swap many tokens into one                                  →
@@ -264,8 +265,8 @@ Swap many tokens into one                                  →
 - **Needs you gathers from every product,** each with one action: an account in a stopped automation, an overdue payout,
   approvals left over. It shows nothing when nothing needs you; a payout that is merely waiting for Thursday does not
   count, so that the group keeps its weight.
-- **The menu** has one entry per kind of product, the Hydrex automations together and the swap, each with one line of
-  what it does, what it takes, and once connected, what you hold in it. Claiming is not on it: it is an action on
+- **The menu** has one entry per kind of product, Hydrex, for its automations together, and the swap, each with one line
+  of what it does, what it takes, and once connected, what you hold in it. Claiming is not on it: it is an action on
   accounts in AutoMaxi.
 - **Reads:** the App reads only what its lines need: the accounts and their groups, which it reads today, and the
   balances of known tokens with their quotes for the swap line. The swap line can come last, marked "…", as the earnings

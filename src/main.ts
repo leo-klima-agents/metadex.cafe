@@ -1194,8 +1194,6 @@ const showConnectPop = (shown: boolean): void => {
 
 function showConnection(): void {
   show(".wallet-slot, header.site .connect", !connection);
-  // "‹ Your wallet" leads back only once there is one.
-  show(".trail-wallet", !!connection);
   show("header.site .to-app", !!connection);
   if (connection) showConnectPop(false);
   show("#epoch", !!connection);
