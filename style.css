@@ -317,11 +317,10 @@ footer p {
 .mine > * + *,
 #accounts > * + *,
 .swap-form > * + *,
-.position-found > * + *,
-div[data-needs] > * + * {
+.position-found > * + * {
   margin-block-start: var(--gap-l);
 }
-.view > :is(section, #accounts, .mine, .swap-form, div[data-needs]),
+.view > :is(section, #accounts, .mine, .swap-form),
 .mine > section,
 #accounts > :is(section, details),
 .swap-form > .swap-tokens,
@@ -331,9 +330,8 @@ div[data-needs] > * + * {
 main > .notice {
   margin-block-end: var(--gap-l);
 }
-.view > .title-line + :is(.state-line, .automaxi-absent),
+.view > .title-line + .state-line,
 .view > .title-line ~ .position-found,
-.view > .automaxi-absent + .state-line,
 .view > .state-line + .notice,
 .view > .lead + .custody {
   margin-block-start: var(--gap-s);

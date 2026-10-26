@@ -1,4 +1,4 @@
-import { encodeFunctionData, keccak256, parseAbi, zeroAddress, type Address, type Hex } from "viem";
+import { encodeFunctionData, parseAbi, zeroAddress, type Address, type Hex } from "viem";
 import { blockTime, call, codeHash, implementation, read, required, rpc, same, type Call } from "./chain.ts";
 import {
   ACCOUNT_NAMES,
@@ -302,8 +302,8 @@ const held = (account: Account, { address }: Automation) => ({
 export const automationName = (address: Address): string | undefined =>
   others.find((other) => same(other.address, address))?.name;
 
-const pageAutomation = (address: Address, automations: Automation[]): Automation | undefined =>
-  automations.find((automation) => same(address, automation.address));
+const pageAutomation = (address: Address): Automation | undefined =>
+  AUTOMATIONS.find((automation) => same(address, automation.address));
 
 // Hydrex counts a vote only in the epoch it is cast. An automation that has not voted since the previous epoch began
 // earns its accounts nothing. One that has never voted may be new.
@@ -312,19 +312,10 @@ export const hasStopped = (voted: number, epochStart: number): boolean => voted 
 const hasVoted = (voted: number, epochStart: number): boolean => voted >= epochStart - WEEK;
 
 // Hydrex counts votes for whoever held them when the epoch started, so joins and leaves count from the next epoch.
-// `automations` are the page's own that are on Base.
-export function statusOf(
-  account: Account,
-  owner: Address,
-  now: number,
-  epochStart: number,
-  automations: Automation[] = AUTOMATIONS,
-): Status {
+export function statusOf(account: Account, owner: Address, now: number, epochStart: number): Status {
   if (account.amount === 0n) return { kind: "empty" };
   if (ended(account, now)) return { kind: "ended" };
-  const [votes, claims, atStart] = [account.delegate, account.claimer, account.delegateAtStart].map((address) =>
-    pageAutomation(address, automations),
-  );
+  const [votes, claims, atStart] = [account.delegate, account.claimer, account.delegateAtStart].map(pageAutomation);
   if (votes && votes === claims) {
     return votes === atStart
       ? { kind: "in", automation: votes }
@@ -357,7 +348,7 @@ export function canLeave(account: Account, automation: Automation): boolean {
 
 export const canLeaveOther = (account: Account): boolean => automationName(account.delegate) !== undefined;
 
-export function groupOf(account: Account, status: Status, automations: Automation[] = AUTOMATIONS): Group {
+export function groupOf(account: Account, status: Status): Group {
   switch (status.kind) {
     case "stopped":
     case "partly":
@@ -369,7 +360,7 @@ export function groupOf(account: Account, status: Status, automations: Automatio
     // An automation may still hold the approvals of an account it can no longer vote with.
     case "ended":
     case "empty": {
-      const holder = automations.find((automation) => canLeave(account, automation));
+      const holder = AUTOMATIONS.find((automation) => canLeave(account, automation));
       return holder ? `in:${holder.kind}` : "closed";
     }
     default:
@@ -446,12 +437,7 @@ export async function readFreshness({ address }: Automation): Promise<Freshness>
   return { epochStart: epochAt(time), voted: Number(voted) };
 }
 
-// The hash of no code at all.
-const NO_CODE = keccak256("0x");
-
 export type Checks = {
-  // The page's automations with code on Base. Until AutoMaxi has some, the page leaves it out.
-  present: Automation[];
   // The checks that fail for each automation, each named by the id of its message on the page. A check of Base or of
   // Hydrex fails for all of them.
   failed: Map<Kind, string[]>;
@@ -462,11 +448,9 @@ const points = (escrowAddress: unknown, voterOf: unknown) =>
 
 // Each automation's own checks: what its code must hash to and what joining it must approve, which every automation
 // has, then the reads of its own and what they must answer. Each check is named by the id of its message on the page.
-// Carbon Impact is on Base from the start; AutoMaxi only once there is code at its address.
 type Own = {
   calls: Call[];
   checks(answers: unknown[], code: boolean, approvals: boolean): Record<string, boolean>;
-  always: boolean;
 };
 const own: Record<Kind, Own> = {
   "carbon-impact": {
@@ -477,7 +461,6 @@ const own: Record<Kind, Own> = {
       token: !same(String(payoutToken), KVCM),
       approvals: !approvals,
     }),
-    always: true,
   },
   automaxi: {
     calls: [autoMaxi("veToken"), autoMaxi("voter")],
@@ -486,12 +469,8 @@ const own: Record<Kind, Own> = {
       "automaxi-contracts": !points(veToken, voterOf),
       "automaxi-approvals": !approvals,
     }),
-    always: false,
   },
 };
-
-// The automations on Base before the checks have run.
-export const FROM_START: Automation[] = AUTOMATIONS.filter(({ kind }) => own[kind].always);
 
 export async function failedChecks(): Promise<Checks> {
   const reads = AUTOMATIONS.map(({ kind, address }) => [
@@ -518,16 +497,9 @@ export async function failedChecks(): Promise<Checks> {
     const [actions, active] = (config ?? [[], false]) as [number[], boolean];
     const approvals = active && actions.join() === automation.actions.join();
     const checks = own[automation.kind].checks(mine, hashes[i] === automation.codeHash, approvals);
-    return {
-      automation,
-      failed: [...all, ...failing(checks)],
-      on: own[automation.kind].always || hashes[i] !== NO_CODE,
-    };
+    return { automation, failed: [...all, ...failing(checks)] };
   });
-  return {
-    present: found.flatMap(({ automation, on }) => (on ? [automation] : [])),
-    failed: new Map(found.map(({ automation, failed }) => [automation.kind, failed])),
-  };
+  return { failed: new Map(found.map(({ automation, failed }) => [automation.kind, failed])) };
 }
 
 // What gas costs for some calls from `from`, in wei, with today's prices to show it at: each costs about what the first

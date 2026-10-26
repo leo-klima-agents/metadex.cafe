@@ -70,8 +70,7 @@ not have those yet: reload the page, and it shows the change.
   fork unasked, so a new epoch shows Carbon Impact as stopped.
 - **Failures:** Base's RPCs fail, or serve another chain; Hydrex's Voter cannot be read; tokens' symbols cannot be read,
   each such read failing on its own, as a token's would; Carbon Impact's figures cannot be read, while AutoMaxi's can,
-  or the other way round; AutoMaxi is not on Base yet, as before its deployment, which shows once the page is reloaded;
-  or the swappers' quotes come in a tenth under what their pools give.
+  or the other way round; or the swappers' quotes come in a tenth under what their pools give.
 - **Checks that fail:** each of the page's checks, by the id the README's table gives it, fails on its own. A code check
   fails as the contract's code changes; the others, as the fork answers that one read otherwise. The page checks
   contracts as it opens, then every hour: reload it after a change.
@@ -131,7 +130,6 @@ the wallet's own failures. Start the scenario again to try a flow from its start
 | Not paid yet                                                  | `0x0208…4C95` | Join Carbon Impact with #141; Next epoch; Hydrex moves on; Carbon Impact's keeper votes; Someone adds incentives; Next epoch; Hydrex moves on: `#hydrex/141`, Not paid yet. |
 | Payouts that cannot be read                                   | `0x6092…6c93` | Tick Carbon Impact's figures cannot be read, open `#hydrex/82774`: Reading the payouts failed. Untick, then Try again.                                                      |
 | Tokens whose symbol cannot be read                            | `0x6092…6c93` | Tick Tokens' symbols cannot be read, reload `#hydrex/82774`: its receipt earned 8.56 ? and 89.04 ?, and paid its owner 727.11 ?.                                            |
-| AutoMaxi before it is on Base                                 | any           | Tick AutoMaxi is not on Base yet, reload: the page leaves AutoMaxi out; `#hydrex/automaxi/check` says it is not on Base yet.                                                |
 | An account's page, anyone's                                   | any           | `#hydrex/9540`, `#hydrex/14485`; `#hydrex/999999999` has no such account.                                                                                                   |
 | Inside Safe{Wallet}                                           | `0x2573…0b16` | Open the page in Safe{Wallet}. Tick #53350 and #82206, Leave with 2 Hydrex accounts: one Safe transaction, 2 calls, then Proposed.                                          |
 | A Safe that is not on Base                                    | `0x2573…0b16` | Network: Ethereum, then open the page in Safe{Wallet}: This Safe isn't on Base.                                                                                             |

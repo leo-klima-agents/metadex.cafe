@@ -168,7 +168,7 @@
                 </div>
               </dl>
             </li>
-            <li class="choice" data-choice="automaxi" data-needs="automaxi" hidden>
+            <li class="choice" data-choice="automaxi">
               <div class="choice-head">
                 <h3><a href="#hydrex/automaxi">AutoMaxi</a></h3>
                 <p class="small state">
@@ -737,7 +737,6 @@
           <nav class="trail" aria-label="Back"><a href="#hydrex">Hydrex</a></nav>
           <h1 tabindex="-1">AutoMaxi</h1>
         </div>
-        <p class="automaxi-absent notice" hidden>Not on Base yet.</p>
         <div class="state-line">
           <p class="state">
             <span class="state-normal"
@@ -801,38 +800,36 @@
             <dd>Nobody</dd>
           </div>
         </dl>
-        <div data-needs="automaxi" hidden>
-          <div class="wallet-slot"></div>
-          <p class="accounts-reading small" role="status" hidden>Loading…</p>
-          <div class="mine" hidden>
-            <p class="mine-none small" hidden>No Hydrex account can join.</p>
-            <section class="group" data-group="in:automaxi" aria-labelledby="mine-automaxi" hidden>
-              <div class="group-head">
-                <h2 id="mine-automaxi">Your Hydrex accounts</h2>
-                <button type="button" class="info" popovertarget="am-joining" aria-label="Joining and leaving">
-                  <span aria-hidden="true">i</span>
-                </button>
-              </div>
-              <ul class="accounts"></ul>
-              <p class="buttons">
-                <button type="button" data-action="claim">Claim</button>
-              </p>
-            </section>
-            <section class="group" data-group="can:automaxi" aria-labelledby="can-automaxi" hidden>
-              <div class="group-head">
-                <h2 id="can-automaxi">Can join</h2>
-                <button type="button" class="info" popovertarget="am-joining" aria-label="Joining and leaving">
-                  <span aria-hidden="true">i</span>
-                </button>
-                <p class="picked small" hidden></p>
-                <label class="pick-all small" hidden><input type="checkbox" /> All</label>
-              </div>
-              <ul class="accounts"></ul>
-              <p class="buttons">
-                <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
-              </p>
-            </section>
-          </div>
+        <div class="wallet-slot"></div>
+        <p class="accounts-reading small" role="status" hidden>Loading…</p>
+        <div class="mine" hidden>
+          <p class="mine-none small" hidden>No Hydrex account can join.</p>
+          <section class="group" data-group="in:automaxi" aria-labelledby="mine-automaxi" hidden>
+            <div class="group-head">
+              <h2 id="mine-automaxi">Your Hydrex accounts</h2>
+              <button type="button" class="info" popovertarget="am-joining" aria-label="Joining and leaving">
+                <span aria-hidden="true">i</span>
+              </button>
+            </div>
+            <ul class="accounts"></ul>
+            <p class="buttons">
+              <button type="button" data-action="claim">Claim</button>
+            </p>
+          </section>
+          <section class="group" data-group="can:automaxi" aria-labelledby="can-automaxi" hidden>
+            <div class="group-head">
+              <h2 id="can-automaxi">Can join</h2>
+              <button type="button" class="info" popovertarget="am-joining" aria-label="Joining and leaving">
+                <span aria-hidden="true">i</span>
+              </button>
+              <p class="picked small" hidden></p>
+              <label class="pick-all small" hidden><input type="checkbox" /> All</label>
+            </div>
+            <ul class="accounts"></ul>
+            <p class="buttons">
+              <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
+            </p>
+          </section>
         </div>
 
         <div class="pop" id="am-fees" popover role="dialog" aria-labelledby="am-fees-title" data-section="fees">

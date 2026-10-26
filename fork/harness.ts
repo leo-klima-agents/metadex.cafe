@@ -231,9 +231,11 @@ export const approveConduit = (owner: Address, conduit: Address, id: bigint, app
     encodeFunctionData({ abi, functionName: "setConduitApproval", args: [conduit, id, approve] }),
   );
 
-// AutoMaxi's constructor needs fresh Chainlink prices and Base's sequencer up. anvil's clock runs on from the fork's,
-// so it deploys a minute after BLOCK.
+// AutoMaxi on a fork of a block before its deployment, on Tue 20 Oct 2026, as the page takes it to be on Base; nothing
+// on a fork that has it already. Its constructor needs fresh Chainlink prices and Base's sequencer up. anvil's clock
+// runs on from the fork's, so it deploys a minute after BLOCK.
 export async function deployAutoMaxi(): Promise<void> {
+  if ((await anvil<Hex>("eth_getCode", [AUTOMAXI.address, "latest"])) !== "0x") return;
   const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", [toHex(BLOCK), false]);
   await anvil("evm_setNextBlockTimestamp", [Number(timestamp) + 60]);
   await anvil("anvil_setBalance", [KEEPER, toHex(FOR_GAS)]);
@@ -748,10 +750,11 @@ export async function startAnvil(block: number, cached: string, stopping = () =>
   for (const token of NATIVE) await anvil("anvil_setCode", [token, "0x"]);
 }
 
-// Starts a fork at BLOCK, for the owners there, and reads what the page reads first.
+// Starts a fork at BLOCK, for the owners there, with AutoMaxi on it, and reads what the page reads first.
 export async function startAtBlock(): Promise<void> {
   const owners = [MEMBER, NEWCOMER, ELSEWHERE, LEAVER, ENDED];
   await start(BLOCK, owners);
+  await deployAutoMaxi();
   await warmAtBlock(owners);
 }
 

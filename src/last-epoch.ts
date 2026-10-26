@@ -357,11 +357,6 @@ onEarnings((kind, outcome) => {
   }
 });
 
-// An automation not on Base has no figures to read.
-export function showAbsent(automation: Automation): void {
-  part(foldOf(automation), "record-waiting").textContent = "Not on Base yet.";
-}
-
 for (const automation of AUTOMATIONS) {
   const fold = foldOf(automation);
   fold.addEventListener("toggle", () => isOpen(fold) && compare(automation));

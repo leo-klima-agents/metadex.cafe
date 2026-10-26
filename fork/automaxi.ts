@@ -21,7 +21,6 @@ import {
   warm,
   approveConduit,
   autoMaxiReceipts,
-  deployAutoMaxi,
   settle,
   claimOne,
   expectApprovals,
@@ -131,8 +130,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await account(page, 141).waitFor();
   });
 
-  test("once AutoMaxi is on Base: join it, move between the two automations, and leave it", async () => {
-    await deployAutoMaxi();
+  test("join AutoMaxi, move between the two automations, and leave it", async () => {
     // The pages read these at the latest block, which anvil reads from FORK_URL a slot at a time.
     await warm(() =>
       Promise.all([
@@ -241,7 +239,6 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
   });
 
   test("the menu in the App, a page for each automation, and joining from it", async () => {
-    await deployAutoMaxi();
     await warm(() => Promise.all([readEarnings(CONDUIT), readEarnings(AUTOMAXI.address), readAccounts(NEWCOMER)]));
     const { page, violations } = await connected({ owner: NEWCOMER }, { width: 390, height: 844 });
     await account(page, 141).getByText(UNVOTED).waitFor();
@@ -265,7 +262,6 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     const maxi = product(page, "automaxi");
     await maxi.getByRole("heading", { name: "AutoMaxi", level: 1 }).waitFor();
     assert.equal(await page.title(), "AutoMaxi · metaDEX Café");
-    assert.equal(await maxi.locator(".automaxi-absent").isVisible(), false);
     assert.equal(await maxi.locator(".record").innerText(), "No record yet");
     assert.equal(await maxi.locator(".record-unit").innerText(), "");
     await shoot(page, "automaxi-390-light");

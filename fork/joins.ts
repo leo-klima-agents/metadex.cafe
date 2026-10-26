@@ -160,8 +160,6 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await appTitle(page).waitFor();
     assert.equal(await homeTitle(page).isVisible(), false);
     await toHydrex(page);
-    assert.equal(await page.getByRole("button", { name: /AutoMaxi/ }).count(), 0, "AutoMaxi is not on Base yet");
-    assert.equal(await page.locator('[data-needs="automaxi"]:not([hidden])').count(), 0);
     await only(page, "needs", 141);
     await group(page, "needs").getByRole("button", { name: "Join Carbon Impact with 1 Hydrex account" }).click();
     await toWallet(page);
@@ -171,13 +169,11 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     assert.equal(sent.length, 1);
     await expectApprovals([141n], CONDUIT, CONDUIT);
     await account(page, 141).getByText("Joining Carbon Impact:").waitFor();
-    // AutoMaxi's page, before it is on Base, says so, and marks none of its checks failed.
+    // AutoMaxi's page, before it ever voted, has no record, and marks none of its checks failed.
     await page.goto(`${SITE}/#hydrex/automaxi/check`);
     const maxi = product(page, "automaxi");
-    await maxi.locator(".automaxi-absent").waitFor();
+    await maxi.locator(".record").getByText("No record yet").waitFor();
     assert.equal(await maxi.locator(".check-failed").count(), 0);
-    assert.equal(await maxi.locator(".record").innerText(), "No record yet");
-    assert.equal(await maxi.locator('[data-section="record"] .record-waiting').textContent(), "Not on Base yet.");
   });
 
   test("closing between transactions stops there; a link then opens in a new tab", async () => {

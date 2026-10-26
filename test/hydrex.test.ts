@@ -11,7 +11,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { AUTOMAXI, CARBON_IMPACT, VOTING_ESCROW, type Automation } from "../src/config.ts";
+import { AUTOMAXI, CARBON_IMPACT, VOTING_ESCROW } from "../src/config.ts";
 import { WEEK } from "../src/format.ts";
 import {
   canJoin,
@@ -53,8 +53,7 @@ const account = (changes: Partial<Account> = {}): Account => ({
   claimer: zeroAddress,
   ...changes,
 });
-const statusWith = (changes: Partial<Account>, automations?: Automation[]) =>
-  statusOf(account(changes), OWNER, NOW, START, automations);
+const statusWith = (changes: Partial<Account>) => statusOf(account(changes), OWNER, NOW, START);
 const groupWith = (changes: Partial<Account>) => groupOf(account(changes), statusWith(changes));
 const inCarbonImpact = { automation: CARBON_IMPACT };
 
@@ -259,12 +258,6 @@ test("AutoMaxi: in it, joining it, and moving between the two in one call, which
   const [both] = join([account({ delegate: USDC, claimer: CONDUIT })], AUTOMAXI);
   assert.equal(both!.says, "Account #141 leaves Carbon Impact and the USDC automation and joins AutoMaxi.");
   assert.deepEqual(txs(leave([account({ delegate: MAXI, claimer: MAXI })], AUTOMAXI)), [approval(141n, false, MAXI)]);
-});
-
-test("until AutoMaxi is on Base, the page leaves it out", () => {
-  const changes = { delegate: MAXI, delegateAtStart: MAXI, claimer: MAXI };
-  assert.deepEqual(statusWith(changes, [CARBON_IMPACT]), { kind: "delegated", to: MAXI });
-  assert.equal(groupOf(account(changes), statusWith(changes, [CARBON_IMPACT]), [CARBON_IMPACT]), "other");
 });
 
 test("an account whose ownerOf fails is asked again on its own before it is taken for gone", async () => {

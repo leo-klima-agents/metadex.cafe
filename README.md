@@ -24,7 +24,6 @@ This README is for whoever runs the site. The design and the plan are in [design
 - **Before anyone can join, the page checks** the chain, each automation's code, Carbon Impact's settings, and the code
   of Hydrex's VotingEscrow against `src/config.ts`. If a check fails, joining that automation is turned off, and the
   page marks the check on that automation's page, under Check it. Leaving always works. The checks run again every hour.
-  Until there is code at AutoMaxi's address, the page leaves AutoMaxi out.
 - **Claiming** is `claim(tokenId, feeAddresses, bribeAddresses, tokens)` on AutoMaxi, which anyone can call for any
   account in it, and which pays the owner, less 1%. AutoMaxi's keeper claims for every member right after each epoch, so
   the page offers it only for the wallet's own accounts, once a payout is overdue: half a day after the flip with

@@ -78,7 +78,7 @@ export const SCENARIOS: Scenario[] = [
     block: BLOCK,
     hash: "#hydrex",
     owners: ACCOUNTS,
-    // AutoMaxi was deployed four days after BLOCK, as the browser tests deploy it: QA's Failures take it away again.
+    // AutoMaxi was deployed four days after BLOCK: the fork deploys it, as the browser tests do.
     async setup(owners) {
       await deployAutoMaxi();
       await warmAtBlock(owners);

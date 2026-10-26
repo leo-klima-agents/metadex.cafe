@@ -35,7 +35,6 @@ import {
   type Currency,
 } from "./format.ts";
 import {
-  FROM_START,
   LockType,
   automationName,
   canJoin,
@@ -75,7 +74,6 @@ import {
   loadVoterShares,
   onEarnings,
   perThousandOf,
-  showAbsent,
   voterPerThousand,
 } from "./last-epoch.ts";
 import { UNDER_WAY, payouts, type Entry, type Found, type UnderWay } from "./last-payout.ts";
@@ -221,9 +219,6 @@ const positionPayouts = payouts(
   viewerOwns,
 );
 
-// The page's automations on Base. They decide what the page offers to join; an account's status is read against all.
-const present = (): Automation[] => checks?.present ?? FROM_START;
-
 // What differs between the page's automations, kind by kind.
 type Traits = {
   // The start of its review's template ids. Carbon Impact's were the page's first, and have none.
@@ -300,10 +295,8 @@ function showRecords(): void {
   for (const automation of AUTOMATIONS) {
     const per = perThousandOf(automation);
     const paid = traits[automation.kind].paid();
-    const absent = !!checks && !present().includes(automation);
-    const record = absent
-      ? "No record yet"
-      : per === undefined
+    const record =
+      per === undefined
         ? earningsFailed(automation)
           ? "Not read yet"
           : "…"
@@ -336,15 +329,10 @@ const readAverage = (): void => {
 };
 onRoute(readAverage);
 
-// AutoMaxi's row on the menu, its page and its group, once it is on Base.
+// AutoMaxi's state, on the menu and its page.
 let autoMaxiFreshness: Freshness | undefined;
 
 function showAutoMaxi(): void {
-  const on = present().includes(AUTOMAXI);
-  show('[data-needs="automaxi"]', on);
-  show(".automaxi-absent", !!checks && !on);
-  if (checks && !on) showAbsent(AUTOMAXI);
-  if (!on) return;
   const fresh = autoMaxiFreshness;
   const stopped = !!fresh && hasStopped(fresh.voted, fresh.epochStart);
   const state = !fresh ? "…" : !fresh.voted ? "Not voted yet" : stopped ? "Stopped" : "Running";
@@ -361,7 +349,6 @@ function showAutoMaxi(): void {
 let autoMaxiRead: Promise<void> | undefined;
 
 function readAutoMaxi(): void {
-  if (!present().includes(AUTOMAXI)) return;
   autoMaxiRead ??= readFreshness(AUTOMAXI)
     .then((found) => {
       autoMaxiFreshness = found;
@@ -385,7 +372,7 @@ function catchUp(): void {
   const ready = !!page && (!page.failed || Date.now() - page.tried >= 300_000);
   if (ready && page.holdings && epoch > page.holdings.epochStart && !ownHoldings(page.id)) void loadPosition();
   if (!carbonImpact || epoch > carbonImpact.epochStart) readCarbonImpactAgain().catch(console.error);
-  if (earningsDue(epoch, present())) loadAllEarnings();
+  if (earningsDue(epoch, AUTOMATIONS)) loadAllEarnings();
   readAverage();
   if (!autoMaxiFreshness || epoch > autoMaxiFreshness.epochStart) readAutoMaxi();
   appPayouts.check();
@@ -394,7 +381,7 @@ function catchUp(): void {
 }
 
 // Each read of figures, whoever started it, shows on the menu, on the automations' pages and in the accounts' shares.
-const loadAllEarnings = (): void => void loadEarnings(present()).catch(console.error);
+const loadAllEarnings = (): void => void loadEarnings(AUTOMATIONS).catch(console.error);
 onEarnings(() => {
   void showShares();
   readAverage();
@@ -406,7 +393,7 @@ onEarnings(() => {
 // automation or through whoever voted with it, mostly its owner. Then the wallet's own votes beside Hydrex's average.
 async function showShares(): Promise<void> {
   const read = [shown, onPage()?.holdings].flatMap((holdings) =>
-    holdings ? [loadShares(holdings, present()), loadVoterShares(holdings)] : [],
+    holdings ? [loadShares(holdings, AUTOMATIONS), loadVoterShares(holdings)] : [],
   );
   if (!(await Promise.all(read)).includes(true)) return;
   showAccounts(true);
@@ -417,11 +404,9 @@ async function showShares(): Promise<void> {
 // Each automation whose checks failed: joining it is off, its rows and pages say so, and its page marks the checks.
 async function showChecks(): Promise<void> {
   const found = await failedChecks();
-  const more = found.present.filter((automation) => !present().includes(automation));
   checks = found;
   for (const automation of AUTOMATIONS) {
-    // An automation not on Base has no checks to fail.
-    const failing = found.present.includes(automation) ? found.failed.get(automation.kind)! : [];
+    const failing = found.failed.get(automation.kind)!;
     const off = failing.length > 0;
     show(`.checks-failed[data-kind="${automation.kind}"]`, off);
     for (const place of placesOf(automation)) {
@@ -430,9 +415,6 @@ async function showChecks(): Promise<void> {
       for (const item of place.querySelectorAll<HTMLElement>("[data-check]")) markCheck(item, failing);
     }
   }
-  // An automation newly on Base needs its figures.
-  if (more.length) loadAllEarnings();
-  if (more.includes(AUTOMAXI)) readAutoMaxi();
   showAutoMaxi();
   showRecords();
   // A read of the accounts that is under way shows the result when it ends.
@@ -449,9 +431,9 @@ function markCheck(item: HTMLElement, failing: string[]): void {
 const automationOf = (button: HTMLButtonElement): Automation | undefined =>
   button.dataset.automation ? byKind(button.dataset.automation) : undefined;
 
-// Joining an automation needs it on Base and its checks passed. Leaving always works.
+// Joining an automation needs its checks passed. Leaving always works.
 function joinable(account: Account, automation: Automation | undefined): boolean {
-  if (!automation || !checks?.present.includes(automation) || checks.failed.get(automation.kind)!.length) return false;
+  if (!automation || !checks || checks.failed.get(automation.kind)!.length) return false;
   return canJoin(account, automation, now());
 }
 const leavable = (account: Account): boolean => AUTOMATIONS.some((automation) => canLeave(account, automation));
@@ -587,7 +569,7 @@ function showAccounts(keepTicked = false): void {
   // then, its notices say why none can.
   for (const mine of document.querySelectorAll<HTMLElement>(".mine")) {
     const automation = byKind(mine.closest<HTMLElement>(".view")!.dataset.kind!)!;
-    const open = !!checks?.present.includes(automation) && !checks.failed.get(automation.kind)!.length;
+    const open = !!checks && !checks.failed.get(automation.kind)!.length;
     show(".mine-none", open && !mine.querySelector(".group:not([hidden])"), mine);
   }
 }
@@ -1089,7 +1071,7 @@ const changeGas = new Map<bigint, Promise<() => string>>();
 
 function showChangeGas(account: Account | undefined, status: Status | undefined): void {
   const line = actions.querySelector<HTMLElement>(".position-gas")!;
-  const automation = account && present().find((each) => joinable(account, each));
+  const automation = account && AUTOMATIONS.find((each) => joinable(account, each));
   line.hidden = !connection || !automation || !status || !["stopped", "unvoted"].includes(status.kind);
   if (line.hidden || !account || !automation || !connection) return;
   const from = connection.address;
