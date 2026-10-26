@@ -71,7 +71,6 @@ import {
   loadEarnings,
   loadAverage,
   loadShares,
-  loadVoterShares,
   onEarnings,
   perThousandOf,
   voterPerThousand,
@@ -327,7 +326,10 @@ const showsAverage = (): boolean => ["hydrex", "product"].includes(route().view)
 const readAverage = (): void => {
   if (showsAverage()) void loadAverage().then((changed) => changed && showRecords());
 };
-onRoute(readAverage);
+onRoute(() => {
+  readAverage();
+  void showShares();
+});
 
 // AutoMaxi's state, on the menu and its page.
 let autoMaxiFreshness: Freshness | undefined;
@@ -391,10 +393,13 @@ onEarnings(() => {
 
 // What each account's votes earned last epoch: the wallet's, and that of the account whose page is shown, in an
 // automation or through whoever voted with it, mostly its owner. Then the wallet's own votes beside Hydrex's average.
+// Only the pages that show them read them: a holder that voted this epoch takes thousands of reads.
+function showsShares(): boolean {
+  return ["hydrex", "product", "position"].includes(route().view);
+}
 async function showShares(): Promise<void> {
-  const read = [shown, onPage()?.holdings].flatMap((holdings) =>
-    holdings ? [loadShares(holdings, AUTOMATIONS), loadVoterShares(holdings)] : [],
-  );
+  if (!showsShares()) return;
+  const read = [shown, onPage()?.holdings].flatMap((holdings) => (holdings ? [loadShares(holdings)] : []));
   if (!(await Promise.all(read)).includes(true)) return;
   showAccounts(true);
   showPosition();
@@ -631,7 +636,9 @@ function updateButtons(): void {
       button.textContent =
         able.length > 1 && n ? `${verb} with ${count(n, "Hydrex account", "Hydrex accounts")}` : verb;
     }
-    show(".buttons", able.length > 0, section);
+    // Needs you's link to vote on Hydrex shows even when none of its accounts can join or leave, as before the checks.
+    const vote = section.querySelector<HTMLElement>(".vote-on-hydrex");
+    show(".buttons", able.length > 0 || (!!vote && !vote.hidden), section);
     // With boxes to tick: one that ticks them all, and what is ticked.
     const all = section.querySelector<HTMLLabelElement>(".pick-all");
     const tickedAll = all?.querySelector("input");
@@ -814,18 +821,21 @@ function showApp(): void {
   const holdings = connection ? shown : undefined;
   if (holdings) {
     const { owner, accounts, epochStart } = holdings;
+    // Accounts their owner votes with, who did not vote last epoch, in one line: they share one remedy.
+    let unvoted = 0;
     for (const account of accounts) {
       const status = statusOf(account, owner, now(), epochStart);
       const change = { link: hrefOf({ view: "position", id: account.id }), label: "Change" };
       const named = `Hydrex account #${account.id}`;
-      if (status.kind === "stopped")
-        add(need("stopped", `${named} earns nothing: ${status.name} stopped since ${day(status.voted)}`, change));
+      if (status.kind === "stopped") {
+        const since = inYear(status.voted)(status.voted);
+        add(need("stopped", `${named} earns nothing: ${status.name} stopped since ${since}`, change));
+      }
       if (status.kind === "partly") add(need("stopped", `${named} is partly in ${status.automation.name}`, change));
+      if (status.kind === "unvoted") unvoted++;
     }
-    // Accounts their owner votes with, who did not vote last epoch, in one line: they share one remedy.
-    const unvoted = accounts.filter((account) => statusOf(account, owner, now(), epochStart).kind === "unvoted");
-    if (unvoted.length) {
-      const which = count(unvoted.length, "Hydrex account", "Hydrex accounts");
+    if (unvoted) {
+      const which = count(unvoted, "Hydrex account", "Hydrex accounts");
       add(need("stopped", `${which} didn't vote last epoch`, { link: hrefOf({ view: "hydrex" }), label: "Change" }));
     }
     for (const entry of overdue()) {
@@ -1065,9 +1075,9 @@ function showPosition(): void {
 // What the wallet can do with its own account, on its page. A join from one of the page's automations is a move.
 const actions = positionView.querySelector<HTMLElement>(".position-actions")!;
 
-// The gas of a change for an account that earns nothing, read once for each: what moving it would cost, without
-// projecting what it would earn.
-const changeGas = new Map<bigint, Promise<() => string>>();
+// The gas of a change for an account that earns nothing: what moving it would cost, without projecting what it would
+// earn. Read again after a minute, as the gas price is, or for another automation or wallet.
+const changeGas = new Map<string, { at: number; words: Promise<() => string> }>();
 
 function showChangeGas(account: Account | undefined, status: Status | undefined): void {
   const line = actions.querySelector<HTMLElement>(".position-gas")!;
@@ -1075,19 +1085,21 @@ function showChangeGas(account: Account | undefined, status: Status | undefined)
   line.hidden = !connection || !automation || !status || !["stopped", "unvoted"].includes(status.kind);
   if (line.hidden || !account || !automation || !connection) return;
   const from = connection.address;
-  let words = changeGas.get(account.id);
-  if (!words) {
-    words = gasCosts()(join([account], automation), from).then(
+  const key = `${account.id} ${automation.kind} ${from}`;
+  let found = changeGas.get(key);
+  if (!found || Date.now() - found.at >= 60_000) {
+    const words = gasCosts()(join([account], automation), from).then(
       ({ wei, prices }) =>
         () =>
           gasWords(wei, prices),
     );
-    changeGas.set(account.id, words);
+    changeGas.set(key, (found = { at: Date.now(), words }));
     words.catch((error) => {
       console.error(error);
-      changeGas.delete(account.id);
+      changeGas.delete(key);
     });
   }
+  const { words } = found;
   const id = account.id;
   words.then(
     (text) => onPage()?.id === id && live(line.querySelector(".change-gas")!, text),

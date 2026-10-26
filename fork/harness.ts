@@ -44,6 +44,7 @@ import {
   swapperOf,
 } from "../src/config.ts";
 import {
+  holdersOf,
   readAllEarnings,
   readEarnings,
   readVoterEarnings,
@@ -759,8 +760,9 @@ export async function startAtBlock(): Promise<void> {
 }
 
 // What Hydrex's page reads beside the accounts: all of Hydrex last epoch, for its average, and what the votes of each
-// owner's accounts earned through whoever held them, mostly the owner. Inside warm(), as each of these is thousands of
-// reads of state that anvil fetches from FORK_URL a slot at a time, longer than the page waits for an answer.
+// owner's accounts earned through whoever held them, chosen as the page chooses them. Inside warm(), as each of these is
+// thousands of reads of state that anvil fetches from FORK_URL a slot at a time, longer than the page waits for an
+// answer.
 async function votesOf(owners: Address[]): Promise<void> {
   const { start } = (await readEarnings(CONDUIT))!;
   const stakes = await Promise.all(
@@ -772,14 +774,8 @@ async function votesOf(owners: Address[]): Promise<void> {
       );
     }),
   );
-  const holders = new Set(
-    stakes.flatMap((found) =>
-      [...found.values()]
-        .filter(({ delegate }) => !AUTOMATIONS.some(({ address }) => same(address, delegate)))
-        .map(({ delegate }) => getAddress(delegate)),
-    ),
-  );
-  await Promise.all([readAllEarnings(start), ...[...holders].map((holder) => readVoterEarnings(holder, start))]);
+  const holders = holdersOf(stakes.flatMap((found) => [...found.values()]));
+  await Promise.all([readAllEarnings(start), ...holders.map((holder) => readVoterEarnings(holder, start))]);
 }
 
 // Reads with no time limit what the page reads first at BLOCK, which a first run fetches from FORK_URL for minutes:

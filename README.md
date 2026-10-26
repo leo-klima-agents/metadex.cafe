@@ -273,8 +273,9 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   that record, such as its owner on Hydrex. The page then says that the account was last claimed outside Carbon Impact,
   and shows no receipt.
 - What votes earned is for the last epoch only. Hydrex's average needs every pool's reward contracts, thousands of reads
-  made once a session, after the page's own, and only on `#hydrex` and the automations' pages. What a wallet's own votes
-  earned is read the same way when its owner voted during this epoch, as Hydrex's Voter then holds only the new votes.
+  made once a session, after the page's own, and only on `#hydrex` and the automations' pages. What the votes of
+  accounts in no automation earned is read only there and on an account's page, through whoever held them: as many reads
+  when that holder voted during this epoch, as Hydrex's Voter then holds only the new votes.
 - Prices are approximate. USDC, WETH, cbBTC and EURC take Chainlink's; other tokens, and one of those four whose feed
   does not answer, a half-hour average in their deepest pool against one of those priced. Prices now, for swaps, gas and
   what waits to be claimed, come from Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools and Hydrex Integral,

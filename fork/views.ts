@@ -3,7 +3,7 @@ import { after, before, describe, test } from "node:test";
 import { toFunctionSelector } from "viem";
 import { blockTime, read } from "../src/chain.ts";
 import { KVCM, VOTER } from "../src/config.ts";
-import { readEarnings, rewardsFor, sharesOf, tokensOf } from "../src/earnings.ts";
+import { readEarnings, rewardsFor, stakesOf, tokensOf } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
 import {
@@ -214,12 +214,12 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.deepEqual(violations, []);
   });
 
-  test("what the votes earned last epoch: on the menu, for a member's account, and all of Hydrex once its popup opens", async () => {
+  test("what the votes earned last epoch: on the menu, for a member's account, and when all of Hydrex cannot be read", async () => {
     await warm(async () => {
       const found = (await readEarnings(CONDUIT))!;
-      await sharesOf([9540n, 14485n], found.start, found.votes, CONDUIT);
+      await stakesOf([9540n, 14485n], found.start);
     });
-    // All of Hydrex takes too many reads for the fork to answer in time, so they are refused, and noted.
+    // All of Hydrex, for its average and the record's popup, is refused, and noted: the rest of the page still shows.
     const everyPool = toFunctionSelector("function totalWeightAt(uint256)").slice(2);
     let compared = false;
     const refuse = (body: string) => {
@@ -232,23 +232,24 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await account(page, 9540)
       .getByText(/≈\s\$6\.1\d last epoch/)
       .waitFor({ timeout: 120_000 });
-    assert.equal(await account(page, 14485).locator(".earned").isVisible(), false, "its own account voted itself");
+    assert.equal(await account(page, 14485).locator(".earned").isVisible(), false, "its owner did not vote");
     await shoot(page, "member-earned-390-light");
     // What reached the owner for each 1,000 Earning Power: what the votes earned is in the record's popup.
     const menu = hydrex(page).locator('.choice[data-choice="carbon-impact"]');
     assert.match(await menu.locator(".record").innerText(), /^≈\s\$0\.\d\d$/);
-    assert.equal(await menu.locator(".record-unit").innerText(), "per 1,000 Earning Power");
+    assert.equal(await menu.locator(".record-unit").innerText(), "to you");
+    // Beside it, Hydrex's average, which could not be read here.
+    await hydrex(page).locator('[data-choice="self"] .average').getByText("Not read", { exact: true }).waitFor();
+    assert.equal(compared, true);
     await page.goto(`${SITE}/#hydrex/carbon-impact`);
     const impact = product(page, "carbon-impact");
     assert.match(await impact.locator(".record").innerText(), /^≈\s\$0\.\d\d$/);
-    assert.equal(compared, false, "all of Hydrex waits until its popup opens");
     await page.goto(`${SITE}/#hydrex/carbon-impact/record`);
     const table = impact.locator(".earnings");
     assert.equal(await table.locator(".ours.earning-power").innerText(), "1.17M");
     assert.equal(await table.locator(".ours.pools").innerText(), "27 pools");
     assert.match(await table.locator(".ours.per-power").innerText(), /^≈\s\$0\.5\d$/);
     await impact.locator(".all-failed").getByText("Reading all of Hydrex failed.").waitFor();
-    assert.equal(compared, true);
     assert.equal(await page.locator("#error").isVisible(), false, "the rest of the page is as it was");
     await impact.locator(".earned-pools tr").filter({ hasText: "AVNT / USDC" }).waitFor();
     await shoot(page, "record-390-light");

@@ -3,13 +3,14 @@ import { clone, fill, fillAddress, isOpen, show } from "./dom.ts";
 import type { Address } from "viem";
 import { same } from "./chain.ts";
 import {
+  holdersOf,
   readAllEarnings,
   readEarnings,
   readVoterEarnings,
-  sharesOf,
   stakesOf,
   valueOf,
   type Earnings,
+  type Stake,
 } from "./earnings.ts";
 import { WEEK, compact, count, fraction, money, moneyAt, toEarningPower, type Money } from "./format.ts";
 import type { Holdings } from "./hydrex.ts";
@@ -32,13 +33,9 @@ const listeners: ((kind: Kind, outcome: Outcome) => void)[] = [];
 // All of Hydrex, for each epoch, read once for every automation's fold; and the epoch each fold compares.
 const allOf = new Map<number, Promise<Earnings>>();
 const compared = new Map<Kind, number>();
-// Each account's share of each automation's votes in the epoch from `start`, by account number, whoever holds it:
-// undefined for an account not in it. `asked` holds the accounts whose shares are read or being read.
-type Shares = { start: number; of: Map<bigint, number | undefined>; asked: Set<bigint> };
-const shares = new Map<Kind, Shares>();
-// The accounts in none of the page's automations count for whoever held their votes when the epoch began: mostly their
-// owner. Each account's holder and votes then, and what each holder's votes earned, for the epoch from `start`.
-type Stake = { delegate: Address; power: bigint };
+// An account's votes count for whoever held them when the epoch began: an automation, or mostly its owner. Each
+// account's holder and votes then, by account number, whoever holds it now; `asked` holds the accounts read or being
+// read. Then what each holder that is none of the page's automations earned, for the epoch from `start`.
 let stakes: { start: number; of: Map<bigint, Stake | undefined>; asked: Set<bigint> } | undefined;
 const voters = new Map<string, { start: number; read?: Read; reading?: Promise<void> | undefined }>();
 // All of Hydrex, for the average beside each choice: its value per 1,000 Earning Power, once read.
@@ -108,48 +105,14 @@ export async function lastEarnings(automation: Automation, start = 0): Promise<E
   return found;
 }
 
-// Resolves to true once some of the accounts' shares of each automation's votes in the epoch shown are newly read.
-// A share is read once: overlapping calls read each account only once.
-export async function loadShares(holdings: Holdings, automations: Automation[]): Promise<boolean> {
-  const ids = holdings.accounts.filter(({ amount }) => amount > 0n).map(({ id }) => id);
-  const read = await Promise.all(
-    automations.map(async ({ kind, address }) => {
-      const found = earned.get(kind)?.found;
-      if (!found || !found.votes) return false;
-      if (shares.get(kind)?.start !== found.start)
-        shares.set(kind, { start: found.start, of: new Map(), asked: new Set() });
-      const known = shares.get(kind)!;
-      const missing = ids.filter((id) => !known.asked.has(id));
-      if (!missing.length) return false;
-      for (const id of missing) known.asked.add(id);
-      const of = await sharesOf(missing, found.start, found.votes, address).catch((error) => void console.error(error));
-      // A failed read is tried again at the next call.
-      if (!of) for (const id of missing) known.asked.delete(id);
-      if (!of || shares.get(kind) !== known) return false;
-      for (const id of missing) known.of.set(id, of.get(id));
-      return true;
-    }),
-  );
-  return read.includes(true);
-}
-
-// What the account's votes earned in the epoch shown, at its prices, if it was in one of the automations then.
-export function earnedByAccount(id: bigint): Money | undefined {
-  for (const [kind, { start, of }] of shares) {
-    const read = earned.get(kind);
-    const part = of.get(id);
-    if (read && start === read.found.start && part !== undefined) return moneyAt(part * read.value.total, read.value);
-  }
-  return earnedThroughHolder(id);
-}
-
 // The epoch the automations' figures are of, once one is read.
 const shownStart = (): number | undefined =>
   Math.max(0, ...[...earned.values()].map(({ found }) => found.start)) || undefined;
 
-// Resolves to true once what each account's holder earned is newly read, for accounts in none of the page's
-// automations. Each account's holder is read once an epoch, and each holder's earnings once.
-export async function loadVoterShares(holdings: Holdings): Promise<boolean> {
+// Resolves to true once what the accounts' votes earned in the epoch shown is newly read: each account's holder and
+// votes, read once an epoch, then what each holder that is none of the page's automations earned, read once. Calls that
+// overlap read each account and each holder only once; a read that failed is tried again at the next call.
+export async function loadShares(holdings: Holdings): Promise<boolean> {
   const start = shownStart();
   if (!start) return false;
   if (stakes?.start !== start) stakes = { start, of: new Map(), asked: new Set() };
@@ -167,24 +130,20 @@ export async function loadVoterShares(holdings: Holdings): Promise<boolean> {
     for (const id of missing) known.of.set(id, found.get(id));
     changed = true;
   }
-  const holders = new Set(
-    [...known.of.values()].flatMap((stake) =>
-      stake && !AUTOMATIONS.some(({ address }) => same(address, stake.delegate)) ? [stake.delegate.toLowerCase()] : [],
-    ),
-  );
-  const reads = [...holders].map((holder) => {
-    let voter = voters.get(holder);
-    if (voter?.start !== start) voters.set(holder, (voter = { start }));
+  const reads = holdersOf(known.of.values()).map((holder) => {
+    const key = holder.toLowerCase();
+    let voter = voters.get(key);
+    if (voter?.start !== start) voters.set(key, (voter = { start }));
     if (voter.read) return Promise.resolve(false);
     const entry = voter;
-    entry.reading ??= readVoterEarnings(holder as Address, start).then(
+    entry.reading ??= readVoterEarnings(holder, start).then(
       (found) => void (entry.read = { found, value: valueOf(found) }),
       (error) => {
         console.error(error);
         entry.reading = undefined;
       },
     );
-    return entry.reading.then(() => voters.get(holder) === entry && !!entry.read);
+    return entry.reading.then(() => voters.get(key) === entry && !!entry.read);
   });
   return (await Promise.all(reads)).includes(true) || changed;
 }
@@ -202,12 +161,15 @@ export function voterPerThousand(holder: Address): Money | null | undefined {
   return read.found.pools.length ? moneyAt(perThousand(read.value.total, read.found.votes), read.value) : null;
 }
 
-// What an account in none of the page's automations earned in the epoch shown, through whoever held its votes, if it
-// voted then.
-function earnedThroughHolder(id: bigint): Money | undefined {
-  const stake = stakes?.of.get(id);
-  const read = stake && voterOf(stake.delegate);
-  if (!stake || !read || !read.found.votes || !read.found.pools.length) return undefined;
+// What the account's votes earned in the epoch shown, at its prices: its part of its automation's, or of whoever else
+// held its votes, if they voted then.
+export function earnedByAccount(id: bigint): Money | undefined {
+  const stake: Stake | undefined = stakes?.of.get(id);
+  if (!stake) return undefined;
+  const automation = AUTOMATIONS.find(({ address }) => same(address, stake.delegate));
+  const read = automation ? earned.get(automation.kind) : voterOf(stake.delegate);
+  if (!read || read.found.start !== stakes!.start || !read.found.votes) return undefined;
+  if (!automation && !read.found.pools.length) return undefined;
   return moneyAt((Number(stake.power) / Number(read.found.votes)) * read.value.total, read.value);
 }
 
