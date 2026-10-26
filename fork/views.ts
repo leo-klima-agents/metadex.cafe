@@ -241,9 +241,11 @@ describe("the page against a fork of Base: its views, and each account's payouts
     const menu = hydrex(page).locator('.choice[data-choice="carbon-impact"]');
     assert.match(await menu.locator(".record").innerText(), /^≈\s\$0\.\d\d$/);
     assert.equal(await menu.locator(".record-unit").innerText(), "/ 1k Earning Power");
+    assert.equal(await menu.locator(".yours-count").innerText(), "Yours: 1 Hydrex account");
     // Beside it, Hydrex's average, which could not be read here.
     await hydrex(page).locator("#vote-yourself .average").getByText("Not read", { exact: true }).waitFor();
     assert.equal(compared, true);
+    assert.equal(await menu.locator(".record-versus").isVisible(), false, "nothing to compare with");
     await page.goto(`${SITE}/#hydrex/carbon-impact`);
     const impact = product(page, "carbon-impact");
     assert.match(await impact.locator(".record").innerText(), /^≈\s\$0\.\d\d$/);

@@ -255,6 +255,12 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
       .getByText(/^≈\s\$0\.\d\d$/)
       .waitFor({ timeout: 120_000 });
     assert.equal(await menu.locator('[data-choice="automaxi"] .record').innerText(), "No record yet");
+    // Carbon Impact against the average, in words; none of the wallet's accounts is in it.
+    await menu
+      .locator('[data-choice="carbon-impact"] .record-versus')
+      .getByText(/^(\d[\d.]*% (above|below) the average|About the average)$/)
+      .waitFor({ timeout: 300_000 });
+    assert.equal(await menu.locator('[data-choice="carbon-impact"] .yours-count').isVisible(), false);
     // Voting yourself: Hydrex's average, and the wallet's own votes, which did not vote last epoch.
     const self = hydrex(page).locator("#vote-yourself");
     await self

@@ -602,6 +602,13 @@ button img {
   display: grid;
   gap: 0.125rem;
 }
+/* "≈ $0.55 / 1k Earning Power", then how it compares with Hydrex's average, under it. */
+.choice .record-versus {
+  display: block;
+}
+.yours-count {
+  color: var(--quiet);
+}
 .choice > .facts {
   margin-block-start: var(--gap-s);
 }

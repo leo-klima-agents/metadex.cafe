@@ -74,7 +74,9 @@ import {
   loadShares,
   onEarnings,
   perThousandOf,
+  automationVersus,
   ownPerThousand,
+  ownVersus,
 } from "./last-epoch.ts";
 import { UNDER_WAY, payouts, type Entry, type Found, type UnderWay } from "./last-payout.ts";
 import { waitingWords } from "./receipts.ts";
@@ -304,6 +306,12 @@ function showRecords(): void {
           ? "No record yet"
           : () => money(per);
     const toYou = per && paid !== undefined ? () => `${money(moneyAt(per.value * paid, per))} to you` : per ? "…" : "";
+    // On the menu, how it compares with the average, as voting yourself does; what it takes is on the same row.
+    const versus = automationVersus(automation);
+    for (const row of document.querySelectorAll<HTMLElement>(`.choice[data-choice="${automation.kind}"]`)) {
+      show(".record-versus", versus !== undefined, row);
+      if (versus !== undefined) fill(row, { "record-versus": versusWords(versus) });
+    }
     for (const place of placesOf(automation)) {
       // The menu compares what the votes earned, and leaves what reached the owner to the automation's page.
       const menu = place.classList.contains("choice");
@@ -329,18 +337,16 @@ function showRecords(): void {
             : () => money(yours),
   });
   show(".yours-unit", known);
-  // In words and ink, not colour: "44% below the average".
-  const ratio = known && average ? yours.value / average.value : undefined;
-  show(".yours-versus", ratio !== undefined && Number.isFinite(ratio));
-  if (ratio !== undefined) {
-    fill(document, {
-      "yours-versus":
-        Math.abs(ratio - 1) < 0.005
-          ? "About the average"
-          : `${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "above" : "below"} the average`,
-    });
-  }
+  const ratio = holdings && known ? ownVersus(holdings) : undefined;
+  show(".yours-versus", ratio !== undefined);
+  if (ratio !== undefined) fill(document, { "yours-versus": versusWords(ratio) });
 }
+
+// How some votes compare with Hydrex's average, in words and ink, not colour: "44.7% below the average".
+const versusWords = (ratio: number): string =>
+  Math.abs(ratio - 1) < 0.005
+    ? "About the average"
+    : `${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "above" : "below"} the average`;
 
 // All of Hydrex is thousands of reads: only the pages that show its average read it.
 const showsAverage = (): boolean => ["hydrex", "product"].includes(route().view);
@@ -588,6 +594,18 @@ function showAccounts(keepTicked = false): void {
     section.hidden = !these.length;
   }
   updateButtons();
+  // On the menu, how many of the wallet's accounts each automation holds, as the App counts them.
+  for (const automation of AUTOMATIONS) {
+    const n = members.filter(
+      ({ status }) => (status.kind === "in" || status.kind === "joined") && status.automation === automation,
+    ).length;
+    for (const line of document.querySelectorAll<HTMLElement>(
+      `.choice[data-choice="${automation.kind}"] .yours-count`,
+    )) {
+      line.hidden = !n;
+      line.textContent = `Yours: ${count(n, "Hydrex account", "Hydrex accounts")}`;
+    }
+  }
   const full = accounts.filter(({ amount }) => amount > 0n);
   show("#none", !full.length);
   show("#accounts, .mine");
@@ -611,7 +629,7 @@ async function loadAccounts(quietly = false): Promise<void> {
     appPayouts.forget();
     closeReview();
     show(".accounts-reading");
-    show("#accounts, #none, .mine, #underway", false);
+    show("#accounts, #none, .mine, #underway, .yours-count", false);
     // An account's page drops the actions of the wallet's accounts read before.
     showPosition();
   }
@@ -1246,10 +1264,11 @@ function letGo(): void {
   appPayouts.forget();
   closeReview();
   showConnection();
-  show(".accounts-reading, #accounts, #none, .mine, #underway", false);
+  show(".accounts-reading, #accounts, #none, .mine, #underway, .yours-count", false);
   showPosition();
   walletChanged();
   showApp();
+  showRecords();
 }
 
 // Connects a wallet picked from a list, or from the header's button. What goes wrong shows where the wallets are listed:

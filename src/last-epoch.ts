@@ -39,7 +39,7 @@ const compared = new Map<Kind, number>();
 let stakes: { start: number; of: Map<bigint, Stake | undefined>; asked: Set<bigint> } | undefined;
 const voters = new Map<string, { start: number; read?: Read; reading?: Promise<void> | undefined }>();
 // All of Hydrex, for the average beside each choice: its value per 1,000 Earning Power, once read.
-type Average = { start: number; per?: Money; failed?: number };
+type Average = { start: number; all?: Earnings; per?: Money; failed?: number };
 let average: Average | undefined;
 
 // Each automation's popup "Against all of Hydrex", on its page.
@@ -165,6 +165,12 @@ export function ownPerThousand({ owner, accounts }: Holdings): Money | "none" | 
   return read.found.pools.length ? moneyAt(perThousand(read.value.total, read.found.votes), read.value) : "unvoted";
 }
 
+// An owner's own votes against the average, when they voted with them.
+export function ownVersus(holdings: Holdings): number | undefined {
+  if (typeof ownPerThousand(holdings) !== "object") return undefined;
+  return versusAverage(voterOf(holdings.owner)?.found);
+}
+
 // What the account's votes earned in the epoch shown, at its prices: its part of its automation's, or of whoever else
 // held its votes, if they voted then.
 export function earnedByAccount(id: bigint): Money | undefined {
@@ -189,6 +195,7 @@ export async function loadAverage(): Promise<boolean> {
     const all = await readAll(start);
     if (average !== mine) return false;
     const value = valueOf(all);
+    mine.all = all;
     mine.per = moneyAt(perThousand(value.total, all.votes), value);
     return true;
   } catch (error) {
@@ -201,6 +208,23 @@ export async function loadAverage(): Promise<boolean> {
 // Hydrex's average: undefined until read, and null if it could not be.
 export const averagePerThousand = (): Money | null | undefined =>
   average?.start !== shownStart() ? undefined : average?.failed ? null : average?.per;
+
+// What some votes earned per 1,000 Earning Power against Hydrex's average, as a ratio: both at the average's prices,
+// so that they compare fairly, as the popup "Against all of Hydrex" does. Undefined until both are read.
+function versusAverage(found: Earnings | undefined): number | undefined {
+  const all = average?.start === found?.start ? average?.all : undefined;
+  if (!found || !all || !found.votes) return undefined;
+  const ratio =
+    perThousand(valueOf({ ...found, prices: all.prices }).total, found.votes) /
+    perThousand(valueOf(all).total, all.votes);
+  return Number.isFinite(ratio) ? ratio : undefined;
+}
+
+// An automation's votes against the average, once it has a record.
+export const automationVersus = ({ kind }: Automation): number | undefined => {
+  const found = earned.get(kind)?.found;
+  return found?.pools.length ? versusAverage(found) : undefined;
+};
 
 // An automation's figures shown, if read.
 export const earningsOf = (automation: Automation): Earnings | undefined => earned.get(automation.kind)?.found;
