@@ -246,6 +246,20 @@ export async function readAllEarnings(start: number): Promise<Earnings> {
   return priced(start, Number(now), votes!, voted, found, tokens, readLater);
 }
 
+// Who held each account's votes when the epoch from `start` began, and how many: an account counts for whoever held them.
+export async function stakesOf(
+  ids: bigint[],
+  start: number,
+): Promise<Map<bigint, { delegate: Address; power: bigint }>> {
+  const found = await read(ids.flatMap((id) => [escrow("delegates", id, start), escrow("balanceOfNFTAt", id, start)]));
+  return new Map(
+    ids.flatMap((id, i) => {
+      const [delegate, power] = found.slice(2 * i, 2 * i + 2) as [Address | undefined, bigint | undefined];
+      return delegate && power ? [[id, { delegate, power }]] : [];
+    }),
+  );
+}
+
 // Each account's share of an automation's votes in the epoch from `start`: its votes then, if it was in the automation.
 export async function sharesOf(
   ids: bigint[],
@@ -253,13 +267,40 @@ export async function sharesOf(
   votes: bigint,
   automation: Address,
 ): Promise<Map<bigint, number>> {
-  const found = await read(ids.flatMap((id) => [escrow("delegates", id, start), escrow("balanceOfNFTAt", id, start)]));
+  const stakes = await stakesOf(ids, start);
   return new Map(
-    ids.flatMap((id, i) => {
-      const [delegate, power] = found.slice(2 * i, 2 * i + 2) as [Address | undefined, bigint | undefined];
-      return delegate && power && votes > 0n && same(delegate, automation) ? [[id, Number(power) / Number(votes)]] : [];
-    }),
+    [...stakes].flatMap(([id, { delegate, power }]) =>
+      votes > 0n && same(delegate, automation) ? [[id, Number(power) / Number(votes)]] : [],
+    ),
   );
+}
+
+// What one voter's votes earned in the epoch from `start`, such as an owner who votes with their accounts themselves:
+// no pools if it did not vote then. Its pools go unnamed, and its reads wait for the page's own.
+export async function readVoterEarnings(holder: Address, start: number): Promise<Earnings> {
+  const [now, voted, length, votes] = required(
+    await readLater([
+      blockTime,
+      voter("lastVoted", holder),
+      voter("poolVoteLength", holder),
+      escrow("getPastVotes", holder, start),
+    ]),
+  ) as bigint[];
+  // Hydrex counts a vote only in the epoch it is cast: a voter that last voted before this one earned nothing in it.
+  if (!votes || Number(voted) < start) return { start, votes: votes!, pools: [], rewards: [], prices: pricesIn("USD") };
+  const pools =
+    Number(voted) >= start + WEEK
+      ? await allPools(readLater)
+      : (required(
+          await readLater(Array.from({ length: Number(length) }, (_, i) => voter("poolVote", holder, BigInt(i)))),
+        ) as Address[]);
+  const found = await rewardsOf(await bribesOf(pools, readLater), start, holder, readLater);
+  const tokens = await tokensOf(
+    found.rewards.map(({ token }) => token),
+    readLater,
+  );
+  const used = [...found.votes].map(([address, poolVotes]) => ({ address, name: "", votes: poolVotes }));
+  return priced(start, Number(now), votes!, used, found, tokens, readLater);
 }
 
 // What was earned, in all and by pool, in the prices' unit. A token without a price counts for nothing.

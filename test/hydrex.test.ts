@@ -49,6 +49,7 @@ const account = (changes: Partial<Account> = {}): Account => ({
   delegate: OWNER,
   delegateAtStart: OWNER,
   delegateVoted: 0,
+  ownerVoted: NOW,
   claimer: zeroAddress,
   ...changes,
 });
@@ -89,6 +90,11 @@ test("votes without claims, or claims without votes, is only partly in", () => {
 test("other delegates: the owner, nobody, another automation on Hydrex's list, any other address", () => {
   assert.deepEqual(statusWith({}), { kind: "self" });
   assert.deepEqual(statusWith({ delegate: zeroAddress }), { kind: "self" });
+  // An owner who voted last epoch, or since, still votes; one who last voted before, or never, needs to.
+  assert.deepEqual(statusWith({ ownerVoted: START - WEEK }), { kind: "self" });
+  assert.deepEqual(statusWith({ ownerVoted: START - WEEK - 1 }), { kind: "unvoted", voted: START - WEEK - 1 });
+  assert.deepEqual(statusWith({ ownerVoted: 0 }), { kind: "unvoted", voted: 0 }, "never voted");
+  assert.equal(groupWith({ ownerVoted: 0 }), "needs");
   assert.deepEqual(statusWith({ delegate: USDC.toLowerCase() as Address }), { kind: "other", name: "USDC" });
   assert.deepEqual(statusWith({ delegate: STRANGER }), { kind: "delegated", to: STRANGER });
 });

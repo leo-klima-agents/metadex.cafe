@@ -1,6 +1,16 @@
 import { AUTOMATIONS, byKind, type Automation, type Kind } from "./config.ts";
 import { clone, fill, fillAddress, isOpen, show } from "./dom.ts";
-import { readAllEarnings, readEarnings, sharesOf, valueOf, type Earnings } from "./earnings.ts";
+import type { Address } from "viem";
+import { same } from "./chain.ts";
+import {
+  readAllEarnings,
+  readEarnings,
+  readVoterEarnings,
+  sharesOf,
+  stakesOf,
+  valueOf,
+  type Earnings,
+} from "./earnings.ts";
 import { WEEK, compact, count, fraction, money, moneyAt, toEarningPower, type Money } from "./format.ts";
 import type { Holdings } from "./hydrex.ts";
 
@@ -26,6 +36,14 @@ const compared = new Map<Kind, number>();
 // undefined for an account not in it. `asked` holds the accounts whose shares are read or being read.
 type Shares = { start: number; of: Map<bigint, number | undefined>; asked: Set<bigint> };
 const shares = new Map<Kind, Shares>();
+// The accounts in none of the page's automations count for whoever held their votes when the epoch began: mostly their
+// owner. Each account's holder and votes then, and what each holder's votes earned, for the epoch from `start`.
+type Stake = { delegate: Address; power: bigint };
+let stakes: { start: number; of: Map<bigint, Stake | undefined>; asked: Set<bigint> } | undefined;
+const voters = new Map<string, { start: number; read?: Read; reading?: Promise<void> | undefined }>();
+// All of Hydrex, for the average beside each choice: its value per 1,000 Earning Power, once read.
+type Average = { start: number; per?: Money; failed?: boolean };
+let average: Average | undefined;
 
 // Each automation's popup "Against all of Hydrex", on its page.
 const foldOf = ({ kind }: Automation): HTMLElement =>
@@ -122,8 +140,100 @@ export function earnedByAccount(id: bigint): Money | undefined {
     const part = of.get(id);
     if (read && start === read.found.start && part !== undefined) return moneyAt(part * read.value.total, read.value);
   }
-  return undefined;
+  return earnedThroughHolder(id);
 }
+
+// The epoch the automations' figures are of, once one is read.
+const shownStart = (): number | undefined =>
+  Math.max(0, ...[...earned.values()].map(({ found }) => found.start)) || undefined;
+
+// Resolves to true once what each account's holder earned is newly read, for accounts in none of the page's
+// automations. Each account's holder is read once an epoch, and each holder's earnings once.
+export async function loadVoterShares(holdings: Holdings): Promise<boolean> {
+  const start = shownStart();
+  if (!start) return false;
+  if (stakes?.start !== start) stakes = { start, of: new Map(), asked: new Set() };
+  const known = stakes;
+  const missing = holdings.accounts
+    .filter(({ amount }) => amount > 0n)
+    .map(({ id }) => id)
+    .filter((id) => !known.asked.has(id));
+  let changed = false;
+  if (missing.length) {
+    for (const id of missing) known.asked.add(id);
+    const found = await stakesOf(missing, start).catch((error) => void console.error(error));
+    if (!found) for (const id of missing) known.asked.delete(id);
+    if (!found || stakes !== known) return false;
+    for (const id of missing) known.of.set(id, found.get(id));
+    changed = true;
+  }
+  const holders = new Set(
+    [...known.of.values()].flatMap((stake) =>
+      stake && !AUTOMATIONS.some(({ address }) => same(address, stake.delegate)) ? [stake.delegate.toLowerCase()] : [],
+    ),
+  );
+  const reads = [...holders].map((holder) => {
+    let voter = voters.get(holder);
+    if (voter?.start !== start) voters.set(holder, (voter = { start }));
+    if (voter.read) return Promise.resolve(false);
+    const entry = voter;
+    entry.reading ??= readVoterEarnings(holder as Address, start).then(
+      (found) => void (entry.read = { found, value: valueOf(found) }),
+      (error) => {
+        console.error(error);
+        entry.reading = undefined;
+      },
+    );
+    return entry.reading.then(() => voters.get(holder) === entry && !!entry.read);
+  });
+  return (await Promise.all(reads)).includes(true) || changed;
+}
+
+const voterOf = (holder: Address): Read | undefined => {
+  const voter = voters.get(holder.toLowerCase());
+  return voter && voter.start === stakes?.start ? voter.read : undefined;
+};
+
+// What a holder's votes earned in the epoch shown per 1,000 Earning Power: undefined until read, or if it held no votes
+// then, and null if it did not vote.
+export function voterPerThousand(holder: Address): Money | null | undefined {
+  const read = voterOf(holder);
+  if (!read || !read.found.votes) return undefined;
+  return read.found.pools.length ? moneyAt(perThousand(read.value.total, read.found.votes), read.value) : null;
+}
+
+// What an account in none of the page's automations earned in the epoch shown, through whoever held its votes, if it
+// voted then.
+function earnedThroughHolder(id: bigint): Money | undefined {
+  const stake = stakes?.of.get(id);
+  const read = stake && voterOf(stake.delegate);
+  if (!stake || !read || !read.found.votes || !read.found.pools.length) return undefined;
+  return moneyAt((Number(stake.power) / Number(read.found.votes)) * read.value.total, read.value);
+}
+
+// Hydrex's average, per 1,000 Earning Power, in the epoch the automations' figures are of: read once, after the page's
+// own reads. Resolves to true once newly read.
+export async function loadAverage(): Promise<boolean> {
+  const start = shownStart();
+  if (!start || (average?.start === start && !average.failed)) return false;
+  const mine: Average = { start };
+  average = mine;
+  try {
+    const all = await readAll(start);
+    if (average !== mine) return false;
+    const value = valueOf(all);
+    mine.per = moneyAt(perThousand(value.total, all.votes), value);
+    return true;
+  } catch (error) {
+    console.error(error);
+    if (average === mine) mine.failed = true;
+    return true;
+  }
+}
+
+// Hydrex's average: undefined until read, and null if it could not be.
+export const averagePerThousand = (): Money | null | undefined =>
+  average?.start !== shownStart() ? undefined : average?.failed ? null : average?.per;
 
 // An automation's figures shown, if read.
 export const earningsOf = (automation: Automation): Earnings | undefined => earned.get(automation.kind)?.found;
@@ -218,10 +328,11 @@ function compare(automation: Automation): void {
       showColumn(table, "ours", mine, ours);
       showColumn(table, "all", all, average);
       const ratio = perThousand(ours.total, mine.votes) / perThousand(average.total, all.votes);
+      // Before what it takes: the menu and its key figure give what reached the owner.
       versus.textContent =
         Math.abs(ratio - 1) < 0.005
-          ? "About Hydrex's average"
-          : `${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "above" : "below"} Hydrex's average`;
+          ? `${name}'s votes earned about Hydrex's average, before what it takes`
+          : `${name}'s votes earned ${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "more" : "less"} than Hydrex's average, before what it takes`;
       status.hidden = true;
       versus.hidden = !Number.isFinite(ratio);
     },

@@ -71,7 +71,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await connectButton(page).waitFor();
     assert.equal(await page.locator("header .to-app").isVisible(), false);
     assert.equal(await page.locator("header.site > .name img").getAttribute("src"), "icon.svg");
-    assert.equal(await page.getByRole("navigation", { name: "Breadcrumb" }).count(), 0, "Home is the page's own");
+    assert.equal(await page.getByRole("navigation", { name: "Back" }).count(), 0, "Home is the page's own");
     assert.equal(await page.evaluate(() => document.documentElement.scrollHeight), 844, "Home fits one screen");
     await shoot(page, "home-390-light");
     await home.getByRole("link", { name: "Open app" }).click();
@@ -96,7 +96,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await page.locator("footer").getByRole("link", { name: "About" }).click();
     await page.getByRole("heading", { name: "About", level: 1 }).waitFor();
     assert.equal(await page.title(), "About · metaDEX Café");
-    assert.equal(await page.getByRole("navigation", { name: "Breadcrumb" }).count(), 0, "About is the page's own");
+    assert.equal(await page.getByRole("navigation", { name: "Back" }).count(), 0, "About is the page's own");
     assert.deepEqual(await page.locator('.view[data-view="about"] > .rows dt').allInnerTexts(), [
       "Official address",
       "Cookies stored",
@@ -182,19 +182,16 @@ describe("the page against a fork of Base: its views, and each account's payouts
       .getByText(/Earns nothing\s+since\s+Thu,? 10 Sept?\./)
       .waitFor();
     await position(page).getByRole("button", { name: "Join Carbon Impact", exact: true }).waitFor();
-    await position(page).getByRole("button", { name: "Leave", exact: true }).waitFor();
+    await position(page).getByRole("button", { name: "Vote yourself", exact: true }).waitFor();
     assert.equal(await position(page).locator(".position-owner-row").isVisible(), false, "its own account");
     await shoot(page, "stopped-account-390-light");
-    // Its title leads back: "Your wallet › Hydrex › Account #2439".
-    const trail = position(page).getByRole("navigation", { name: "Breadcrumb" });
-    assert.deepEqual(await trail.getByRole("link").allInnerTexts(), ["Your wallet", "Hydrex"]);
-    await trail.getByRole("link", { name: "Hydrex" }).click();
+    // It leads back to Hydrex, above its title.
+    const back = position(page).getByRole("navigation", { name: "Back" });
+    assert.deepEqual(await back.getByRole("link").allInnerTexts(), ["Hydrex"]);
+    await back.getByRole("link", { name: "Hydrex" }).click();
     await hydrexTitle(page).waitFor();
     // Hydrex's page leads back to the wallet, the App.
-    await hydrex(page)
-      .getByRole("navigation", { name: "Breadcrumb" })
-      .getByRole("link", { name: "Your wallet" })
-      .click();
+    await hydrex(page).getByRole("navigation", { name: "Back" }).getByRole("link", { name: "Your wallet" }).click();
     await appTitle(page).waitFor();
     assert.equal(new URL(page.url()).hash, "#app");
     assert.equal(await page.title(), "Your wallet · metaDEX Café");

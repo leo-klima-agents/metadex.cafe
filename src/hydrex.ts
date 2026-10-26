@@ -128,6 +128,8 @@ export type Account = {
   delegateAtStart: Address;
   // When the automation that holds its votes last voted, or 0.
   delegateVoted: number;
+  // When its owner last voted, or 0: an account they vote with themselves earns only in an epoch they voted in.
+  ownerVoted: number;
   claimer: Address;
 };
 
@@ -148,6 +150,8 @@ export type Status =
   | { kind: "other"; name: string }
   | { kind: "left-other"; name: string; date: number }
   | { kind: "stopped"; name: string; voted: number; since: number }
+  // Its owner votes with it, but has not voted since before last epoch, or ever: 0.
+  | { kind: "unvoted"; voted: number }
   | { kind: "delegated"; to: Address };
 
 // The App's groups: accounts that need their owner, those in each of the page's automations or joining it, the others,
@@ -214,12 +218,14 @@ const withContext = (calls: Call[]): Promise<unknown[]> =>
 
 // The accounts, and the replies to the `more` calls, which share their read.
 async function accountsOf(
+  owner: Address,
   ids: bigint[],
   epochStart: number,
   lastVoted: Map<string, number>,
   more: Call[] = [],
 ): Promise<{ accounts: Account[]; more: unknown[] }> {
   const details = await read([
+    voter("lastVoted", owner),
     ...ids.flatMap((id) => [
       escrow("lockDetails", id),
       escrow("balanceOfNFT", id),
@@ -230,6 +236,8 @@ async function accountsOf(
     call(ACCOUNT_NAMES, accountNamesAbi, "getBulkNames", ids),
     ...more,
   ]);
+  // If the Voter cannot be read, the owner is just not known to have stopped voting.
+  const ownerVoted = Number((details.shift() as bigint | undefined) ?? BigInt(epochStart));
   const names = (details[5 * ids.length] as readonly string[] | undefined) ?? [];
   const accounts = ids.map((id, i): Account => {
     const [{ amount, endTime, lockType }, votes, delegate, delegateAtStart, claimer] = required(
@@ -245,6 +253,7 @@ async function accountsOf(
       delegate,
       delegateAtStart,
       delegateVoted: lastVoted.get(delegate.toLowerCase()) ?? 0,
+      ownerVoted,
       claimer,
     };
   });
@@ -260,7 +269,7 @@ export async function readAccounts(owner: Address): Promise<Holdings> {
   const epochStart = epochAt(time);
   const indexes = Array.from({ length: Number(count) }, (_, i) => BigInt(i));
   const ids = required(await read(indexes.map((i) => escrow("tokenOfOwnerByIndex", owner, i)))) as bigint[];
-  const { accounts } = await accountsOf(ids, epochStart, othersVoted(voted));
+  const { accounts } = await accountsOf(owner, ids, epochStart, othersVoted(voted));
   accounts.sort((a, b) => (a.votes === b.votes ? Number(a.id - b.id) : a.votes > b.votes ? -1 : 1));
   return { owner, accounts, payout: payout as Address | undefined, time: Number(time), epochStart };
 }
@@ -277,7 +286,7 @@ export async function readAccount(id: bigint): Promise<Holdings | undefined> {
   const {
     accounts,
     more: [payout],
-  } = await accountsOf([id], epochStart, othersVoted(voted), [
+  } = await accountsOf(owner as Address, [id], epochStart, othersVoted(voted), [
     carbonImpact("getEffectiveRecipientForOwner", owner as Address),
   ]);
   return { owner: owner as Address, accounts, payout: payout as Address | undefined, time: Number(time), epochStart };
@@ -299,6 +308,8 @@ const pageAutomation = (address: Address, automations: Automation[]): Automation
 // Hydrex counts a vote only in the epoch it is cast. An automation that has not voted since the previous epoch began
 // earns its accounts nothing. One that has never voted may be new.
 export const hasStopped = (voted: number, epochStart: number): boolean => voted > 0 && voted < epochStart - WEEK;
+// An owner who votes with their accounts themselves: whether they voted last epoch or since. Never is not.
+const hasVoted = (voted: number, epochStart: number): boolean => voted >= epochStart - WEEK;
 
 // Hydrex counts votes for whoever held them when the epoch started, so joins and leaves count from the next epoch.
 // `automations` are the page's own that are on Base.
@@ -323,7 +334,8 @@ export function statusOf(
   if (atStart) return { kind: "left", automation: atStart, date: epochStart + WEEK };
   if (same(account.delegate, owner) || same(account.delegate, zeroAddress)) {
     const before = automationName(account.delegateAtStart);
-    return before ? { kind: "left-other", name: before, date: epochStart + WEEK } : { kind: "self" };
+    if (before) return { kind: "left-other", name: before, date: epochStart + WEEK };
+    return hasVoted(account.ownerVoted, epochStart) ? { kind: "self" } : { kind: "unvoted", voted: account.ownerVoted };
   }
   const name = automationName(account.delegate);
   if (!name) return { kind: "delegated", to: account.delegate };
@@ -349,6 +361,7 @@ export function groupOf(account: Account, status: Status, automations: Automatio
   switch (status.kind) {
     case "stopped":
     case "partly":
+    case "unvoted":
       return "needs";
     case "in":
     case "joined":

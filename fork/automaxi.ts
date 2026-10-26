@@ -30,8 +30,10 @@ import {
   connected,
   app,
   hydrex,
+  hydrexTitle,
   account,
   group,
+  only,
   product,
   position,
   review,
@@ -46,6 +48,7 @@ import {
   stop,
   hooks,
   startAtBlock,
+  UNVOTED,
 } from "./harness.ts";
 
 describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", { timeout: 1_800_000 }, () => {
@@ -55,14 +58,16 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
 
   test("closing the review before Base includes the transaction still updates the account", async () => {
     const { page } = await connected({ owner: NEWCOMER });
-    await group(page, "other").getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
+    await account(page, 141).getByText(UNVOTED).waitFor();
+    await only(page, "needs", 141);
+    await group(page, "needs").getByRole("button", { name: "Join Carbon Impact with 1 Hydrex account" }).click();
     await toWallet(page);
     await anvil("evm_setAutomine", [false]);
     try {
       await review(page).getByRole("button", { name: "Sign transaction" }).click();
       await review(page).getByText("Waiting for it to go through").waitFor();
       await review(page).getByRole("button", { name: "Close" }).click();
-      await account(page, 141).getByText("You vote with it").waitFor();
+      await account(page, 141).getByText(UNVOTED).waitFor();
       // Mine only after the page has polled again: it polls every two seconds.
       await page.waitForTimeout(5_000);
       await anvil("evm_mine");
@@ -138,7 +143,9 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
       ]),
     );
     const { page, sent } = await connected({ owner: NEWCOMER });
-    await group(page, "other").getByRole("button", { name: "Join AutoMaxi", exact: true }).click();
+    await account(page, 141).getByText(UNVOTED).waitFor();
+    await only(page, "needs", 141);
+    await group(page, "needs").getByRole("button", { name: "Join AutoMaxi with 1 Hydrex account" }).click();
     await review(page).getByText("Join AutoMaxi · 1 of 2").waitFor();
     await review(page)
       .getByText("Anyone can then claim the rewards this Hydrex account has not claimed yet, less 1%.")
@@ -191,7 +198,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await review(page).locator(".pages").getByText("Claims stop").waitFor();
     await confirm(page);
     await expectApprovals([141n], NEWCOMER, zeroAddress);
-    await account(page, 141).getByText("You vote with it").waitFor();
+    await account(page, 141).getByText(UNVOTED).waitFor();
     assert.deepEqual([...sent, ...member.sent].length, 4);
   });
 
@@ -237,7 +244,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await deployAutoMaxi();
     await warm(() => Promise.all([readEarnings(CONDUIT), readEarnings(AUTOMAXI.address), readAccounts(NEWCOMER)]));
     const { page, violations } = await connected({ owner: NEWCOMER }, { width: 390, height: 844 });
-    await account(page, 141).getByText("You vote with it").waitFor();
+    await account(page, 141).getByText(UNVOTED).waitFor();
     const menu = hydrex(page).locator("#menu");
     assert.deepEqual(await menu.locator("h3").allInnerTexts(), ["Carbon Impact", "AutoMaxi", "Vote yourself"]);
     await menu.locator(".automaxi-state").getByText("Not voted yet").waitFor();
@@ -246,7 +253,13 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
       .getByText(/^≈\s\$0\.\d\d$/)
       .waitFor({ timeout: 120_000 });
     assert.equal(await menu.locator('[data-choice="automaxi"] .record').innerText(), "No record yet");
-    assert.equal(await menu.locator('[data-choice="self"] dd').last().innerText(), "Varies");
+    // Voting yourself: Hydrex's average, and the wallet's own votes, which did not vote last epoch.
+    const self = menu.locator('[data-choice="self"]');
+    await self
+      .locator(".average")
+      .getByText(/^≈\s\$0\.\d\d$/)
+      .waitFor({ timeout: 300_000 });
+    await self.locator(".yours-average").getByText("You didn't vote", { exact: true }).waitFor({ timeout: 120_000 });
     await shoot(page, "menu-390-light", menu);
     await menu.getByRole("link", { name: "AutoMaxi" }).click();
     const maxi = product(page, "automaxi");
@@ -262,10 +275,20 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await maxi.getByRole("button", { name: "Join AutoMaxi with 1 Hydrex account" }).click();
     await review(page).getByText("Join AutoMaxi · 1 of 2").waitFor();
     await page.keyboard.press("Escape");
-    // Its title leads back to Hydrex, and to the wallet.
-    const trail = maxi.getByRole("navigation", { name: "Breadcrumb" });
-    assert.deepEqual(await trail.getByRole("link").allInnerTexts(), ["Your wallet", "Hydrex"]);
-    await trail.getByRole("link", { name: "Your wallet" }).click();
+    // It says what it does, beside Hydrex's average, and leads back to Hydrex, which leads back to the wallet.
+    await maxi
+      .locator(".lead")
+      .getByText(/most rewards/)
+      .waitFor();
+    await maxi
+      .locator(".facts .average")
+      .getByText(/^≈\s\$0\.\d\d$/)
+      .waitFor();
+    const back = maxi.getByRole("navigation", { name: "Back" });
+    assert.deepEqual(await back.getByRole("link").allInnerTexts(), ["Hydrex"]);
+    await back.getByRole("link", { name: "Hydrex" }).click();
+    await hydrexTitle(page).waitFor();
+    await hydrex(page).getByRole("navigation", { name: "Back" }).getByRole("link", { name: "Your wallet" }).click();
     await appTitle(page).waitFor();
 
     await page.goto(`${SITE}/#hydrex/carbon-impact`);
@@ -296,8 +319,15 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     // An account's page: the wallet's own has its actions; another's names its owner.
     await page.goto(`${SITE}/#hydrex/141`);
     await position(page).getByRole("heading", { name: "Account #141", level: 1 }).waitFor();
-    await position(page).getByText("You vote with it").waitFor();
+    await position(page).getByText(UNVOTED).waitFor();
     await position(page).getByRole("button", { name: "Join AutoMaxi", exact: true }).waitFor();
+    await position(page)
+      .getByRole("link", { name: /Vote on Hydrex/ })
+      .waitFor();
+    await position(page)
+      .locator(".position-gas")
+      .getByText(/^A change costs (≈|<)\s\$[\d.]+ in gas\.$/)
+      .waitFor({ timeout: 60_000 });
     await page.goto(`${SITE}/#hydrex/9540`);
     await position(page).locator(".position-owner-row").getByText(short(MEMBER)).waitFor({ timeout: 60_000 });
     assert.equal(

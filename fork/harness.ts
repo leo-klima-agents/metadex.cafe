@@ -627,6 +627,16 @@ export async function pick(page: Page, ...ids: number[]): Promise<void> {
   for (const id of ids) await page.getByRole("checkbox", { name: `Pick Hydrex account #${id}` }).check();
 }
 
+// Ticks these accounts of a group, and only these: what needs you starts ticked.
+export async function only(page: Page, key: string, ...ids: number[]): Promise<void> {
+  for (const box of await group(page, key).locator(".pick:not([hidden])").all()) {
+    await box.setChecked(ids.includes(Number(await box.getAttribute("value"))));
+  }
+}
+
+// An account its owner votes with, who has not voted since before last epoch.
+export const UNVOTED = /Not voted since/;
+
 export async function shoot(page: Page, name: string, part?: Locator): Promise<void> {
   if (!SCREENSHOTS) return;
   mkdirSync(SCREENSHOTS, { recursive: true });

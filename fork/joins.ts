@@ -24,6 +24,7 @@ import {
   hydrex,
   account,
   group,
+  only,
   product,
   review,
   homeTitle,
@@ -39,6 +40,7 @@ import {
   stop,
   hooks,
   startAtBlock,
+  UNVOTED,
 } from "./harness.ts";
 
 describe("the page against a fork of Base: joining and leaving, and what can fail", { timeout: 1_800_000 }, () => {
@@ -61,6 +63,13 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
       .waitFor();
     const needs = group(page, "needs");
     await needs.getByRole("heading", { name: "Needs you · 2" }).waitFor();
+    // What needs you starts ticked, with what it adds up to.
+    assert.equal(await page.getByRole("checkbox", { name: "Pick Hydrex account #2439" }).isChecked(), true);
+    await needs
+      .locator(".picked")
+      .getByText(/^2 of 2 · [\d,]+ Earning Power$/)
+      .waitFor();
+    await needs.getByRole("checkbox", { name: "All" }).uncheck();
     assert.equal(await needs.getByRole("button", { name: "Join Carbon Impact" }).isDisabled(), true);
     await pick(page, 2435, 2439);
     await shoot(page, "picked-1440-light");
@@ -125,7 +134,8 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
 
   test("join with an account of its own; the header shows the wallet on every view", async () => {
     const { page, sent } = await connected({ owner: NEWCOMER });
-    await account(page, 141).getByText("You vote with it").waitFor();
+    // Its owner last voted before last epoch: it earns nothing, and needs them.
+    await group(page, "needs").locator("li").filter({ hasText: "#141" }).getByText(UNVOTED).waitFor();
     await account(page, 42877)
       .getByText(/In Liquid Hydrex\s+· stopped since\s+Wed,? 9 Sept?/)
       .waitFor();
@@ -133,7 +143,10 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await nothing.locator("summary").click();
     await nothing.locator("li").getByText("Empty", { exact: true }).first().waitFor();
     assert.equal(await nothing.locator(".pick").first().isVisible(), false, "an empty account has no box");
-    assert.equal(await account(page, 141).locator(".pick").isVisible(), false, "a group of one has no box");
+    assert.equal(await account(page, 141).locator(".pick").isChecked(), true, "what needs you starts ticked");
+    await group(page, "needs")
+      .getByRole("link", { name: /Vote on Hydrex/ })
+      .waitFor();
     // With a wallet connected, the name in the header still leads Home, which stays apart from the App; the wallet's
     // chip leads to the App.
     await page.getByRole("link", { name: "metaDEX Café" }).click();
@@ -149,7 +162,8 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await toHydrex(page);
     assert.equal(await page.getByRole("button", { name: /AutoMaxi/ }).count(), 0, "AutoMaxi is not on Base yet");
     assert.equal(await page.locator('[data-needs="automaxi"]:not([hidden])').count(), 0);
-    await group(page, "other").getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
+    await only(page, "needs", 141);
+    await group(page, "needs").getByRole("button", { name: "Join Carbon Impact with 1 Hydrex account" }).click();
     await toWallet(page);
     assert.equal(await review(page).locator(".how").isVisible(), false, "one transaction needs no line");
     assert.deepEqual(await review(page).locator(".says").allTextContents(), ["Account #141 joins Carbon Impact."]);
@@ -193,7 +207,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     const { page, sent } = await connected({ owner: MEMBER }, { width: 390, height: 844, dark: true });
     await group(page, "in:carbon-impact").getByText("#9540").waitFor();
     assert.equal(await account(page, 9540).locator(".status-line").count(), 0, "its group says it is in");
-    await account(page, 14485).getByText("You vote with it").waitFor();
+    await account(page, 14485).getByText(UNVOTED).waitFor();
     await shoot(page, "member-390-dark");
     await group(page, "in:carbon-impact").getByRole("button", { name: "Leave" }).click();
     await review(page).getByRole("heading", { name: "Leave Carbon Impact" }).waitFor();
@@ -217,8 +231,8 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
       .getByText(/In USDC\s+· stopped/)
       .waitFor();
     await shoot(page, "stopped-390-light");
-    await pick(page, 2439);
-    await group(page, "needs").getByRole("button", { name: "Leave with 1 Hydrex account" }).click();
+    await only(page, "needs", 2439);
+    await group(page, "needs").getByRole("button", { name: "Vote yourself with 1 Hydrex account" }).click();
     await review(page).getByRole("heading", { name: "Leave USDC" }).waitFor();
     await review(page).locator(".pages").getByText("Claims stop").waitFor();
     assert.deepEqual(await review(page).locator(".says").allTextContents(), [
@@ -247,7 +261,9 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
   test("the wrong network, a refusal in the wallet, and a transaction that fails", async () => {
     const { page, wallet, sent } = await connected({ owner: NEWCOMER, chainId: 1, decline: true });
     await hydrex(page).getByText("Wrong network.").waitFor();
-    const joinOwn = group(page, "other").getByRole("button", { name: "Join Carbon Impact", exact: true });
+    await account(page, 141).getByText(UNVOTED).waitFor();
+    await only(page, "needs", 141);
+    const joinOwn = group(page, "needs").getByRole("button", { name: "Join Carbon Impact with 1 Hydrex account" });
     await joinOwn.click();
     await toWallet(page);
     await review(page).getByRole("button", { name: "Switch to Base" }).click();
@@ -274,7 +290,9 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     let answer = () => {};
     const sending = new Promise<void>((resolve) => (answer = resolve));
     const { page, sent } = await connected({ owner: NEWCOMER, sending });
-    await group(page, "other").getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
+    await account(page, 141).getByText(UNVOTED).waitFor();
+    await only(page, "needs", 141);
+    await group(page, "needs").getByRole("button", { name: "Join Carbon Impact with 1 Hydrex account" }).click();
     await toWallet(page);
     await review(page).getByRole("button", { name: "Sign transaction" }).click();
     await review(page).getByText("Waiting for your wallet…").waitFor();
