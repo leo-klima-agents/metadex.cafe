@@ -73,7 +73,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     assert.equal(await needs.getByRole("button", { name: "Join Carbon Impact" }).isDisabled(), true);
     await pick(page, 2435, 2439);
     await shoot(page, "picked-1440-light");
-    await needs.getByRole("button", { name: "Join Carbon Impact with 2 Hydrex accounts" }).click();
+    await needs.getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
     await review(page).getByText("Join Carbon Impact · 1 of 2").waitFor();
     assert.match(await review(page).locator(".pages").innerText(), /Votes from\s+Thu,? 22 Oct,? 00:00 UTC/i);
     await review(page)
@@ -161,7 +161,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     assert.equal(await homeTitle(page).isVisible(), false);
     await toHydrex(page);
     await only(page, "needs", 141);
-    await group(page, "needs").getByRole("button", { name: "Join Carbon Impact with 1 Hydrex account" }).click();
+    await group(page, "needs").getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
     await toWallet(page);
     assert.equal(await review(page).locator(".how").isVisible(), false, "one transaction needs no line");
     assert.deepEqual(await review(page).locator(".says").allTextContents(), ["Account #141 joins Carbon Impact."]);
@@ -179,7 +179,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
   test("closing between transactions stops there; a link then opens in a new tab", async () => {
     const { page, sent } = await connected({ owner: ELSEWHERE });
     await pick(page, 2435, 2439);
-    await page.getByRole("button", { name: "Join Carbon Impact with 2 Hydrex accounts" }).click();
+    await group(page, "needs").getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
     await toWallet(page);
     await review(page).getByRole("button", { name: "Sign transaction 1 of 2" }).click();
     await review(page).getByText("Sign transaction 2 when you are ready.").waitFor();
@@ -228,7 +228,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
       .waitFor();
     await shoot(page, "stopped-390-light");
     await only(page, "needs", 2439);
-    await group(page, "needs").getByRole("button", { name: "Vote yourself with 1 Hydrex account" }).click();
+    await group(page, "needs").getByRole("button", { name: "Vote yourself", exact: true }).click();
     await review(page).getByRole("heading", { name: "Leave USDC" }).waitFor();
     await review(page).locator(".pages").getByText("Claims stop").waitFor();
     assert.deepEqual(await review(page).locator(".says").allTextContents(), [
@@ -259,7 +259,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await hydrex(page).getByText("Wrong network.").waitFor();
     await account(page, 141).getByText(UNVOTED).waitFor();
     await only(page, "needs", 141);
-    const joinOwn = group(page, "needs").getByRole("button", { name: "Join Carbon Impact with 1 Hydrex account" });
+    const joinOwn = group(page, "needs").getByRole("button", { name: "Join Carbon Impact", exact: true });
     await joinOwn.click();
     await toWallet(page);
     await review(page).getByRole("button", { name: "Switch to Base" }).click();
@@ -288,7 +288,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     const { page, sent } = await connected({ owner: NEWCOMER, sending });
     await account(page, 141).getByText(UNVOTED).waitFor();
     await only(page, "needs", 141);
-    await group(page, "needs").getByRole("button", { name: "Join Carbon Impact with 1 Hydrex account" }).click();
+    await group(page, "needs").getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
     await toWallet(page);
     await review(page).getByRole("button", { name: "Sign transaction" }).click();
     await review(page).getByText("Waiting for your wallet…").waitFor();

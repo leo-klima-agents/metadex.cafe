@@ -160,7 +160,7 @@
                   <dd>kVCM</dd>
                 </div>
                 <div>
-                  <dt>Earned last epoch</dt>
+                  <dt>Last epoch</dt>
                   <dd><span class="record">…</span> <span class="record-unit small"></span></dd>
                 </div>
               </dl>
@@ -189,7 +189,7 @@
                   <dd>Tokens earned</dd>
                 </div>
                 <div>
-                  <dt>Earned last epoch</dt>
+                  <dt>Last epoch</dt>
                   <dd><span class="record">…</span> <span class="record-unit small"></span></dd>
                 </div>
               </dl>
@@ -197,33 +197,29 @@
           </ul>
         </section>
 
-        <!-- Voting yourself, apart from the automations, as it is none: on Hydrex's own app, beside what votes earned on
-             average, and the wallet's own. -->
+        <!-- Voting yourself, apart from the automations, as it is none: what votes earned on Hydrex last epoch, on
+             average and, with a wallet, by its own votes, set beside each other as the automations' figures are. -->
         <section id="vote-yourself" aria-labelledby="vote-yourself-title">
           <h2 id="vote-yourself-title">Vote yourself</h2>
-          <div class="self">
-            <dl class="facts">
-              <div>
-                <dt>Takes</dt>
-                <dd>Nothing</dd>
-              </div>
-              <div>
-                <dt>Pays in</dt>
-                <dd>Tokens earned</dd>
-              </div>
-              <div>
-                <dt>Earned last epoch</dt>
-                <dd>
-                  <span class="average">…</span> <span class="small">/ 1k Earning Power</span
-                  ><span class="average-of small">Hydrex average</span
-                  ><span class="yours-line small" hidden><span class="yours-average"></span></span>
-                </dd>
-              </div>
-            </dl>
+          <p class="note small">On Hydrex's app, each week. It takes nothing, and pays in the tokens earned.</p>
+          <dl class="facts tiles">
+            <div>
+              <dt>Hydrex average</dt>
+              <dd class="average">…</dd>
+              <dd class="sub">/ 1k Earning Power, last epoch</dd>
+            </div>
+            <div class="yours" hidden>
+              <dt>Your votes</dt>
+              <dd class="yours-average">…</dd>
+              <dd class="sub yours-unit" hidden>/ 1k Earning Power, last epoch</dd>
+              <dd class="sub yours-versus" hidden></dd>
+            </div>
+          </dl>
+          <p class="buttons">
             <a class="button secondary" href="https://www.hydrex.fi/" target="_blank" rel="noopener"
               >Vote on Hydrex <span aria-hidden="true">↗</span></a
             >
-          </div>
+          </p>
         </section>
 
         <!-- Then the wallet's Hydrex accounts, in groups a level below: those that need their owner, those in each

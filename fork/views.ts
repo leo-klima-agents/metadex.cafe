@@ -160,7 +160,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
   test("a link in the review opens its section, Back keeps the ticks, and an account's page says what stopped", async () => {
     const { page, violations } = await connected({ owner: ELSEWHERE }, { width: 390, height: 844 });
     await pick(page, 2435, 2439);
-    await page.getByRole("button", { name: "Join Carbon Impact with 2 Hydrex accounts" }).click();
+    await group(page, "needs").getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
     await review(page).getByRole("heading", { name: "Before you join" }).waitFor();
     await review(page).getByRole("link", { name: "Can change" }).click();
     assert.equal(await review(page).isVisible(), false);
@@ -171,7 +171,10 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await page.goBack();
     await hydrexTitle(page).waitFor();
     assert.equal(await page.getByRole("checkbox", { name: "Pick Hydrex account #2439" }).isChecked(), true);
-    await page.getByRole("button", { name: "Join Carbon Impact with 2 Hydrex accounts" }).waitFor();
+    await group(page, "needs")
+      .locator(".picked")
+      .getByText(/^2 of 2 · /)
+      .waitFor();
     await account(page, 2439).getByRole("link", { name: "Hydrex account #2439" }).click();
     await position(page).getByRole("heading", { name: "Account #2439", level: 1 }).waitFor();
     assert.equal(new URL(page.url()).hash, "#hydrex/2439");

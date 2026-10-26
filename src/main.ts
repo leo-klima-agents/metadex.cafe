@@ -21,6 +21,7 @@ import {
   day,
   earningPower,
   figure,
+  fraction,
   list,
   money,
   moneyAt,
@@ -73,7 +74,7 @@ import {
   loadShares,
   onEarnings,
   perThousandOf,
-  voterPerThousand,
+  ownPerThousand,
 } from "./last-epoch.ts";
 import { UNDER_WAY, payouts, type Entry, type Found, type UnderWay } from "./last-payout.ts";
 import { waitingWords } from "./receipts.ts";
@@ -310,14 +311,34 @@ function showRecords(): void {
       fill(place, { record, "record-unit": per ? unit : "", ...(!menu && { "record-paid": toYou }) });
     }
   }
-  // Beside them, what voting yourself paid: Hydrex's average, and the wallet's own votes, when it held votes then.
+  // Beside them, what voting yourself earned: Hydrex's average, and, with a wallet, its own votes, and how they compare.
   const average = averagePerThousand();
   fill(document, { average: average === undefined ? "…" : average === null ? "Not read" : () => money(average) });
-  const owner = connection ? shown?.owner : undefined;
-  const yours = owner ? voterPerThousand(owner) : undefined;
-  show(".yours-line", yours !== undefined);
-  if (yours !== undefined) {
-    fill(document, { "yours-average": yours === null ? "You didn't vote" : () => `Yours: ${money(yours)}` });
+  const holdings = connection ? shown : undefined;
+  const yours = holdings && ownPerThousand(holdings);
+  show("#vote-yourself .yours", !!holdings);
+  const known = typeof yours === "object";
+  fill(document, {
+    "yours-average":
+      yours === undefined
+        ? "…"
+        : yours === "none"
+          ? "No votes of your own"
+          : yours === "unvoted"
+            ? "Didn't vote"
+            : () => money(yours),
+  });
+  show(".yours-unit", known);
+  // In words and ink, not colour: "44% below the average".
+  const ratio = known && average ? yours.value / average.value : undefined;
+  show(".yours-versus", ratio !== undefined && Number.isFinite(ratio));
+  if (ratio !== undefined) {
+    fill(document, {
+      "yours-versus":
+        Math.abs(ratio - 1) < 0.005
+          ? "About the average"
+          : `${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "above" : "below"} the average`,
+    });
   }
 }
 
@@ -630,11 +651,10 @@ function updateButtons(): void {
     for (const button of buttons(section)) {
       const allowed = allows(button);
       const verb = (button.dataset.verb ??= button.textContent?.trim() ?? "");
-      const n = accounts.filter(allowed).length;
       button.hidden = !able.some(allowed);
-      button.disabled = !n;
-      button.textContent =
-        able.length > 1 && n ? `${verb} with ${count(n, "Hydrex account", "Hydrex accounts")}` : verb;
+      // How many are ticked is said once, beside the box that ticks them all.
+      button.disabled = !accounts.some(allowed);
+      button.textContent = verb;
     }
     // Needs you's link to vote on Hydrex shows even when none of its accounts can join or leave, as before the checks.
     const vote = section.querySelector<HTMLElement>(".vote-on-hydrex");

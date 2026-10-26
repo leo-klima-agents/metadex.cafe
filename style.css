@@ -340,7 +340,8 @@ main > .notice {
 .lead {
   max-inline-size: 60ch;
 }
-.custody {
+.custody,
+.note {
   color: var(--quiet);
 }
 .custody > .info {
@@ -605,27 +606,6 @@ button img {
   margin-block-start: var(--gap-s);
 }
 /* "≈ $0.37", then what it is per, under it. */
-/* Voting yourself, apart from the automations: its figures, in the automations' columns, so that they compare, then its
-   one action, Hydrex's app. */
-.self {
-  display: grid;
-  justify-items: start;
-  gap: var(--gap);
-  padding: var(--gap) 3rem var(--gap) var(--gap-l);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-}
-.self > .facts {
-  justify-self: stretch;
-}
-.self .facts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--gap-s) var(--gap-l);
-}
-.self :is(.average-of, .yours-line) {
-  display: block;
-}
 /* A card that leads somewhere is a link as large as the card, with a chevron at its end, or an arrow when it leaves the
    page. What else it holds, such as an account's box, stays above the link. */
 .choice:has(h3 a),
@@ -1724,22 +1704,19 @@ footer select {
   header.site :is(.button, .connect) {
     padding-inline: 0.875rem;
   }
-  /* An automation's figures, and voting yourself's, a row each: the label, then the figure at the end. */
-  .self {
-    padding-inline-end: var(--gap-l);
-  }
-  :is(.menu.table, .self) .facts {
+  /* An automation's figures, a row each: the label, then the figure at the end. */
+  .menu.table .facts {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--gap-xs);
   }
-  :is(.menu.table, .self) .facts > div {
+  .menu.table .facts > div {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
     justify-content: space-between;
     gap: 0 var(--gap-l);
   }
-  :is(.menu.table, .self) .facts dd {
+  .menu.table .facts dd {
     margin-inline-start: auto;
     text-align: end;
   }

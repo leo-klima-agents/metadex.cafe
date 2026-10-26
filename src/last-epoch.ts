@@ -1,6 +1,6 @@
 import { AUTOMATIONS, byKind, type Automation, type Kind } from "./config.ts";
 import { clone, fill, fillAddress, isOpen, show } from "./dom.ts";
-import type { Address } from "viem";
+import { zeroAddress, type Address } from "viem";
 import { same } from "./chain.ts";
 import {
   holdersOf,
@@ -153,12 +153,16 @@ const voterOf = (holder: Address): Read | undefined => {
   return voter && voter.start === stakes?.start ? voter.read : undefined;
 };
 
-// What a holder's votes earned in the epoch shown per 1,000 Earning Power: undefined until read, or if it held no votes
-// then, and null if it did not vote.
-export function voterPerThousand(holder: Address): Money | null | undefined {
-  const read = voterOf(holder);
-  if (!read || !read.found.votes) return undefined;
-  return read.found.pools.length ? moneyAt(perThousand(read.value.total, read.found.votes), read.value) : null;
+// What an owner's own votes earned in the epoch shown per 1,000 Earning Power: undefined until read; "none" if none of
+// their accounts' votes were theirs when it began, as when all were in automations; "unvoted" if they did not vote.
+export function ownPerThousand({ owner, accounts }: Holdings): Money | "none" | "unvoted" | undefined {
+  const ids = accounts.filter(({ amount }) => amount > 0n).map(({ id }) => id);
+  if (!stakes || stakes.start !== shownStart() || ids.some((id) => !stakes!.of.has(id))) return undefined;
+  if (!ids.some((id) => same(stakes!.of.get(id)?.delegate ?? zeroAddress, owner))) return "none";
+  const read = voterOf(owner);
+  if (!read) return undefined;
+  if (!read.found.votes) return "none";
+  return read.found.pools.length ? moneyAt(perThousand(read.value.total, read.found.votes), read.value) : "unvoted";
 }
 
 // What the account's votes earned in the epoch shown, at its prices: its part of its automation's, or of whoever else

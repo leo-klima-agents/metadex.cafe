@@ -59,7 +59,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     const { page } = await connected({ owner: NEWCOMER });
     await account(page, 141).getByText(UNVOTED).waitFor();
     await only(page, "needs", 141);
-    await group(page, "needs").getByRole("button", { name: "Join Carbon Impact with 1 Hydrex account" }).click();
+    await group(page, "needs").getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
     await toWallet(page);
     await anvil("evm_setAutomine", [false]);
     try {
@@ -86,7 +86,14 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await frame.getByRole("link", { name: "Hydrex automations" }).click();
     await frame.getByRole("checkbox", { name: "Pick Hydrex account #53350" }).check();
     await frame.getByRole("checkbox", { name: "Pick Hydrex account #82206" }).check();
-    await frame.getByRole("button", { name: "Leave with 2 Hydrex accounts" }).click();
+    await frame
+      .locator('.group[data-group="in:carbon-impact"] .picked')
+      .getByText(/^2 of 2 · /)
+      .waitFor();
+    await frame
+      .locator('.group[data-group="in:carbon-impact"]')
+      .getByRole("button", { name: "Leave", exact: true })
+      .click();
     await dialog.getByText(/^One Safe transaction, 2 calls$/).waitFor();
     // Co-signers compare each call's fields and calldata, shown in full, with Safe{Wallet}'s.
     const call = dialog.locator(".slip").first();
@@ -143,7 +150,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     const { page, sent } = await connected({ owner: NEWCOMER });
     await account(page, 141).getByText(UNVOTED).waitFor();
     await only(page, "needs", 141);
-    await group(page, "needs").getByRole("button", { name: "Join AutoMaxi with 1 Hydrex account" }).click();
+    await group(page, "needs").getByRole("button", { name: "Join AutoMaxi", exact: true }).click();
     await review(page).getByText("Join AutoMaxi · 1 of 2").waitFor();
     await review(page)
       .getByText("Anyone can then claim the rewards this Hydrex account has not claimed yet, less 1%.")
@@ -170,9 +177,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     const own = member.page;
     await group(own, "in:carbon-impact").getByText("#53350").waitFor();
     await pick(own, 53350);
-    await group(own, "in:carbon-impact")
-      .getByRole("button", { name: "Move to AutoMaxi with 1 Hydrex account" })
-      .click();
+    await group(own, "in:carbon-impact").getByRole("button", { name: "Move to AutoMaxi", exact: true }).click();
     await toWallet(own);
     assert.deepEqual(await review(own).locator(".says").allTextContents(), [
       "Account #53350 leaves Carbon Impact and joins AutoMaxi.",
@@ -256,7 +261,8 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
       .locator(".average")
       .getByText(/^≈\s\$0\.\d\d$/)
       .waitFor({ timeout: 300_000 });
-    await self.locator(".yours-average").getByText("You didn't vote", { exact: true }).waitFor({ timeout: 120_000 });
+    await self.locator(".yours-average").getByText("Didn't vote", { exact: true }).waitFor({ timeout: 120_000 });
+    assert.equal(await self.locator(".yours-versus").isVisible(), false, "no figure to compare");
     await shoot(page, "menu-390-light", menu);
     await menu.getByRole("link", { name: "AutoMaxi" }).click();
     const maxi = product(page, "automaxi");
@@ -268,7 +274,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     // #141 and #42877 can join it, so its button waits for a tick.
     assert.equal(await maxi.getByRole("button", { name: "Join AutoMaxi", exact: true }).isDisabled(), true);
     await pick(page, 141);
-    await maxi.getByRole("button", { name: "Join AutoMaxi with 1 Hydrex account" }).click();
+    await maxi.getByRole("button", { name: "Join AutoMaxi", exact: true }).click();
     await review(page).getByText("Join AutoMaxi · 1 of 2").waitFor();
     await page.keyboard.press("Escape");
     // It says what it does, beside Hydrex's average, and leads back to Hydrex, which leads back to the wallet.
