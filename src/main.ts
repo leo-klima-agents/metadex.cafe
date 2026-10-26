@@ -109,7 +109,7 @@ let connection: Connection | undefined;
 let shown: Holdings | undefined;
 let carbonImpact: CarbonImpact | undefined;
 let carbonImpactRead: Promise<void> | undefined;
-// Until the checks have run, joining is off, and only the automations on Base from the start are shown.
+// Until the checks have run, joining is off.
 let checks: Checks | undefined;
 let reads = 0;
 let reading = false;

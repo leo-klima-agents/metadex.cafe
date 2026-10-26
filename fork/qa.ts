@@ -400,14 +400,9 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
 
   // What changed code, by address, to put back.
   const codes = new Map<Address, Hex>();
-  const present = async (address: Address, name: string): Promise<Hex> => {
-    const found = await anvil<Hex>("eth_getCode", [address, "latest"]);
-    if (found === "0x") throw new Error(`${name} is not on Base in this scenario.`);
-    return found;
-  };
-  const code = (address: Address, name: string, change: (code: Hex) => Hex) => ({
+  const code = (address: Address, change: (code: Hex) => Hex) => ({
     async on() {
-      const was = await present(address, name);
+      const was = await anvil<Hex>("eth_getCode", [address, "latest"]);
       codes.set(address, was);
       await anvil("anvil_setCode", [address, change(was)]);
     },
@@ -449,20 +444,10 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       result: encodeFunctionResult({ abi: multicall3Abi, functionName: "aggregate3", result }),
     });
   }
-  // Only once `about`, the contract the read is about, is on Base.
-  const answered = (
-    target: Address,
-    functionName: string,
-    args: unknown[],
-    change: (data: Hex) => Hex,
-    [about, name]: [Address, string],
-  ) => {
+  const answered = (target: Address, functionName: string, args: unknown[], change: (data: Hex) => Hex) => {
     const key = callKey(target, encodeFunctionData({ abi: QA_ABI, functionName, args } as never));
     return {
-      async on() {
-        await present(about, name);
-        answers.set(key, change);
-      },
+      on: async () => void answers.set(key, change),
       off: async () => void answers.delete(key),
     };
   };
@@ -564,58 +549,52 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       on: async () => void (rpc.answer = elsewhere),
       off: async () => void (rpc.answer = undefined),
     },
-    "voter-gone": { group: "base", label: "Hydrex's Voter cannot be read", ...code(VOTER, "The Voter", () => "0x") },
+    "voter-gone": { group: "base", label: "Hydrex's Voter cannot be read", ...code(VOTER, () => "0x") },
     // As the README's table names them, by the ids of their messages on the page.
     code: {
       group: "check",
       label: "code: Carbon Impact's code",
-      ...code(CARBON_IMPACT.address, "Carbon Impact", longer),
+      ...code(CARBON_IMPACT.address, longer),
     },
     contracts: {
       group: "check",
       label: "contracts: Carbon Impact's VotingEscrow",
-      ...answered(CARBON_IMPACT.address, "veToken", [], another, [CARBON_IMPACT.address, "Carbon Impact"]),
+      ...answered(CARBON_IMPACT.address, "veToken", [], another),
     },
     token: {
       group: "check",
       label: "token: Carbon Impact's payout token",
-      ...answered(CARBON_IMPACT.address, "kvcm", [], another, [CARBON_IMPACT.address, "Carbon Impact"]),
+      ...answered(CARBON_IMPACT.address, "kvcm", [], another),
     },
     approvals: {
       group: "check",
       label: "approvals: what joining Carbon Impact approves",
-      ...answered(VOTING_ESCROW, "getConduitApprovalConfig", [CARBON_IMPACT.address], inactive, [
-        CARBON_IMPACT.address,
-        "Carbon Impact",
-      ]),
+      ...answered(VOTING_ESCROW, "getConduitApprovalConfig", [CARBON_IMPACT.address], inactive),
     },
     "automaxi-code": {
       group: "check",
       label: "automaxi-code: AutoMaxi's code",
-      ...code(AUTOMAXI.address, "AutoMaxi", longer),
+      ...code(AUTOMAXI.address, longer),
     },
     "automaxi-contracts": {
       group: "check",
       label: "automaxi-contracts: AutoMaxi's VotingEscrow",
-      ...answered(AUTOMAXI.address, "veToken", [], another, [AUTOMAXI.address, "AutoMaxi"]),
+      ...answered(AUTOMAXI.address, "veToken", [], another),
     },
     "automaxi-approvals": {
       group: "check",
       label: "automaxi-approvals: what joining AutoMaxi approves",
-      ...answered(VOTING_ESCROW, "getConduitApprovalConfig", [AUTOMAXI.address], inactive, [
-        AUTOMAXI.address,
-        "AutoMaxi",
-      ]),
+      ...answered(VOTING_ESCROW, "getConduitApprovalConfig", [AUTOMAXI.address], inactive),
     },
     upgrade: {
       group: "check",
       label: "upgrade: the VotingEscrow's code",
-      ...code(VOTING_ESCROW_IMPLEMENTATION, "The VotingEscrow", longer),
+      ...code(VOTING_ESCROW_IMPLEMENTATION, longer),
     },
     logic: {
       group: "check",
       label: "logic: the VotingEscrow's approval logic",
-      ...code(APPROVAL_LOGIC, "The approval logic", longer),
+      ...code(APPROVAL_LOGIC, longer),
     },
     "others-vote": {
       group: "hydrex",

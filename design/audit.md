@@ -457,7 +457,7 @@ by their id or class in `index.html` at commit `682c47e`.
 
 | Item                                         | Decision | Where it goes, and why                                                                    |
 | -------------------------------------------- | -------- | ----------------------------------------------------------------------------------------- |
-| `.automaxi-absent`                           | Keep     |                                                                                           |
+| `.automaxi-absent`                           | Cut      | AutoMaxi is on Base since Tue 20 Oct: the page always shows it.                           |
 | `h1`, `.states`, `.lead`                     | Keep     |                                                                                           |
 | `.key-facts`                                 | Cut      | As Carbon Impact's.                                                                       |
 | `.automaxi-join`                             | Rewrite  | A product, 4.                                                                             |
