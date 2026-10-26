@@ -16,6 +16,7 @@ import {
   ZORA,
   approveConduit,
   autoMaxiReceipts,
+  deployAutoMaxi,
   fund,
   settle,
   warm,
@@ -72,15 +73,20 @@ const PAYOUTS: { hash: Hex; does: string }[] = [
 export const SCENARIOS: Scenario[] = [
   {
     name: "hydrex",
-    title: "Fri 16 Oct 2026: Carbon Impact, the automations that stopped in September, and accounts in or out of them",
+    title:
+      "Fri 16 Oct 2026, with AutoMaxi on Base: Carbon Impact, AutoMaxi, the automations that stopped in September, and accounts in or out of them",
     block: BLOCK,
     hash: "#hydrex",
     owners: ACCOUNTS,
-    setup: warmAtBlock,
+    // AutoMaxi was deployed four days after BLOCK, as the browser tests deploy it: QA's Failures take it away again.
+    async setup(owners) {
+      await deployAutoMaxi();
+      await warmAtBlock(owners);
+    },
   },
   {
     name: "automaxi",
-    title: "As hydrex, once AutoMaxi is on Base, with #82774 in it, claimed by its keeper and by a stranger",
+    title: "As hydrex, with #82774 in AutoMaxi, claimed by its keeper and by a stranger",
     block: BLOCK,
     hash: "#hydrex/automaxi",
     owners: [

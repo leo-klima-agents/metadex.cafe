@@ -552,6 +552,12 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       label: "AutoMaxi's figures cannot be read",
       ...figuresOf(AUTOMAXI.address),
     },
+    // As before its deployment, on Thu 20 Oct: the page leaves it out once reloaded.
+    "automaxi-absent": {
+      group: "base",
+      label: "AutoMaxi is not on Base yet",
+      ...code(AUTOMAXI.address, "AutoMaxi", () => "0x"),
+    },
     "quotes-under": {
       group: "base",
       label: "Swap quotes come in a tenth under price",

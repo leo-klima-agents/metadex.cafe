@@ -479,12 +479,16 @@ function accountKind({ lockType, end }: Account): string {
   return end ? `Flex, ${end > now() ? "ends" : "ended"} ${date(end)}` : "Flex";
 }
 
+// A day of this year, or a date with its year: an owner may not have voted for longer than a year.
+const inYear = (time: number): ((time: number) => string) =>
+  new Date(time * 1000).getUTCFullYear() === new Date(now() * 1000).getUTCFullYear() ? day : date;
+
 // An account's status, in one line, in words to its owner when `own`, and about its owner otherwise.
 function statusLine(status: Status, own: boolean): DocumentFragment {
   const line = clone(status.kind);
   fillOwn(line, own);
   if ("date" in status) fillTime(line, "date", status.date);
-  if ("voted" in status && status.voted) fillTime(line, "voted", status.voted);
+  if ("voted" in status && status.voted) fillTime(line, "voted", status.voted, inYear(status.voted));
   if (status.kind === "unvoted") {
     show(".unvoted-since", status.voted > 0, line);
     show(".unvoted-never", !status.voted, line);

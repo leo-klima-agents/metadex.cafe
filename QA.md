@@ -70,7 +70,8 @@ not have those yet: reload the page, and it shows the change.
   fork unasked, so a new epoch shows Carbon Impact as stopped.
 - **Failures:** Base's RPCs fail, or serve another chain; Hydrex's Voter cannot be read; tokens' symbols cannot be read,
   each such read failing on its own, as a token's would; Carbon Impact's figures cannot be read, while AutoMaxi's can,
-  or the other way round; or the swappers' quotes come in a tenth under what their pools give.
+  or the other way round; AutoMaxi is not on Base yet, as before its deployment, which shows once the page is reloaded;
+  or the swappers' quotes come in a tenth under what their pools give.
 - **Checks that fail:** each of the page's checks, by the id the README's table gives it, fails on its own. A code check
   fails as the contract's code changes; the others, as the fork answers that one read otherwise. The page checks
   contracts as it opens, then every hour: reload it after a change.
@@ -84,8 +85,8 @@ Each starts from the state of some of the browser tests, or, for `payout`, of Ba
 
 | Scenario   | Base on              | Signs as, first            | What it is for                                                                   |
 | ---------- | -------------------- | -------------------------- | -------------------------------------------------------------------------------- |
-| `hydrex`   | Fri 16 Oct, 19:02    | `0x0208…4C95`, #141        | Joining and leaving, the automations that stopped, receipts, and what can fail.  |
-| `automaxi` | Fri 16 Oct, 19:03    | `0x0208…4C95`, #141        | AutoMaxi on Base: joining it, moving between the two, its receipts.              |
+| `hydrex`   | Fri 16 Oct, 19:03    | `0x0208…4C95`, #141        | Both automations: joining and leaving, those that stopped, and what can fail.    |
+| `automaxi` | Fri 16 Oct, 19:03    | `0x0208…4C95`, #141        | As `hydrex`, with AutoMaxi's receipts for #82774.                                |
 | `swap`     | Wed 21 Oct, 15:42    | `0x0000…FFEE`, WETH ZORA … | The swap, from a wallet that holds three tokens, or Carbon Impact's treasury.    |
 | `claim`    | Wed 21 Oct, 15:42    | `0x6092…6c93`, #82774      | An overdue payout in AutoMaxi: claim it as it is, swapped, or from a Safe.       |
 | `payout`   | Thu 22 Oct, 00:00:26 | `0x6092…6c93`, #82774      | Carbon Impact's payouts after a flip, sent by its keeper one by one, as on Base. |
@@ -112,24 +113,25 @@ the wallet's own failures. Start the scenario again to try a flow from its start
 
 | Flow                                                          | Sign as       | What to do                                                                                                                                                                  |
 | ------------------------------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Join with an account of its own                               | `0x0208…4C95` | Join Carbon Impact beside #141, Continue, Sign transaction. #141 then says Joining Carbon Impact, votes from Thu 22 Oct.                                                    |
-| Join from automations that stopped, one transaction at a time | `0x6970…a655` | Needs you: tick #2435 and #2439, Join Carbon Impact with 2 Hydrex accounts. Two transactions.                                                                               |
+| Join with an account of its own                               | `0x0208…4C95` | Needs you: untick #42877, Join Carbon Impact with 1 Hydrex account, Continue, Sign transaction. #141 then says Joining Carbon Impact, votes from Thu 22 Oct.                |
+| An account whose owner did not vote                           | `0x0208…4C95` | #141: Not voted since 4 Oct 2025, in Needs you, with Vote on Hydrex. The App's Needs you counts it; `#hydrex/141` gives the gas of a change.                                |
+| Join from automations that stopped, one transaction at a time | `0x6970…a655` | Needs you starts with #2435 and #2439 ticked: Join Carbon Impact with 2 Hydrex accounts. Two transactions. All unticks and ticks them both.                                 |
 | The same, in one prompt                                       | `0x6970…a655` | Calls: several in one prompt, all or nothing. Reload, then as above: One prompt, 2 calls.                                                                                   |
 | Closing between transactions                                  | `0x6970…a655` | As above, confirm the first, then Close: #2439 joins, #2435 stays.                                                                                                          |
 | Leave                                                         | `0x388b…7b40` | Leave beside #9540.                                                                                                                                                         |
-| Leave an automation that stopped, to vote yourself            | `0x6970…a655` | Tick #2439, Leave with 1 Hydrex account.                                                                                                                                    |
+| Leave an automation that stopped, to vote yourself            | `0x6970…a655` | Untick #2435, Vote yourself with 1 Hydrex account.                                                                                                                          |
 | A lock that ended                                             | `0x2518…e84d` | #123351 under the closed group: Lock ended, nothing to tick.                                                                                                                |
 | Votes delegated to an address                                 | `0x0208…4C95` | Account #141, delegate its votes to `0x000000000000000000000000000000000000dEaD`, reload: Delegated to 0x0000…dEaD. Delegate them to `owner` to undo.                       |
 | Partly in an automation                                       | `0x0208…4C95` | Account #141, delegate its votes to `Carbon Impact`, reload: Partly in Carbon Impact, which the App's Needs you lists.                                                      |
 | In another automation that still votes                        | `0x6970…a655` | Tick Hydrex's other automations vote again, reload: #2439 is In USDC, and not stopped.                                                                                      |
-| What votes earned last epoch                                  | `0x388b…7b40` | #9540: about $6 last epoch. `#hydrex/carbon-impact/record`: all of Hydrex takes thousands of reads, which the fork may not answer in time.                                  |
+| What votes earned last epoch                                  | `0x388b…7b40` | #9540: about $6 last epoch. Vote yourself: Hydrex's average, and You didn't vote; each automation's page, the average beside its own. `#hydrex/carbon-impact/record`.       |
 | A late payout, and its last receipt                           | `0x6092…6c93` | #82774: Payout late. Its page, `#hydrex/82774`, shows the receipt of the payout of Wed 23 Sep. 93 accounts: the first time, reading takes a while.                          |
 | Payouts not final yet, then final                             | `0x388b…7b40` | Next epoch, then `#hydrex/9540`: Not final yet. Hydrex moves on, reload: Late, with its receipt.                                                                            |
 | Nothing to pay                                                | `0x388b…7b40` | As above, then Next epoch and Hydrex moves on again: Carbon Impact earned nothing in either epoch on the fork, and `#hydrex/9540` says Nothing to pay.                      |
 | Not paid yet                                                  | `0x0208…4C95` | Join Carbon Impact with #141; Next epoch; Hydrex moves on; Carbon Impact's keeper votes; Someone adds incentives; Next epoch; Hydrex moves on: `#hydrex/141`, Not paid yet. |
 | Payouts that cannot be read                                   | `0x6092…6c93` | Tick Carbon Impact's figures cannot be read, open `#hydrex/82774`: Reading the payouts failed. Untick, then Try again.                                                      |
 | Tokens whose symbol cannot be read                            | `0x6092…6c93` | Tick Tokens' symbols cannot be read, reload `#hydrex/82774`: its receipt earned 8.56 ? and 89.04 ?, and paid its owner 727.11 ?.                                            |
-| AutoMaxi before it is on Base                                 | any           | The page leaves AutoMaxi out; `#hydrex/automaxi/check` says it is not on Base yet.                                                                                          |
+| AutoMaxi before it is on Base                                 | any           | Tick AutoMaxi is not on Base yet, reload: the page leaves AutoMaxi out; `#hydrex/automaxi/check` says it is not on Base yet.                                                |
 | An account's page, anyone's                                   | any           | `#hydrex/9540`, `#hydrex/14485`; `#hydrex/999999999` has no such account.                                                                                                   |
 | Inside Safe{Wallet}                                           | `0x2573…0b16` | Open the page in Safe{Wallet}. Tick #53350 and #82206, Leave with 2 Hydrex accounts: one Safe transaction, 2 calls, then Proposed.                                          |
 | A Safe that is not on Base                                    | `0x2573…0b16` | Network: Ethereum, then open the page in Safe{Wallet}: This Safe isn't on Base.                                                                                             |
@@ -143,15 +145,15 @@ the wallet's own failures. Start the scenario again to try a flow from its start
 | The Voter cannot be read                                      | `0x6970…a655` | Tick Hydrex's Voter cannot be read, reload: the accounts still show.                                                                                                        |
 | A new epoch                                                   | `0x0208…4C95` | Join with #141, then Next epoch: the page moves on to the next one, and #141 is in Carbon Impact. Nobody votes on the fork: Carbon Impact reads as stopped.                 |
 
-### AutoMaxi: `automaxi`
+### AutoMaxi: `hydrex`, and `automaxi` for its receipts
 
 | Flow                                    | Sign as       | What to do                                                                                                                                                                            |
 | --------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | The menu, and AutoMaxi's page           | `0x0208…4C95` | `#hydrex`: Carbon Impact, AutoMaxi and Vote yourself. AutoMaxi has no record yet. Its page: `#hydrex/automaxi`.                                                                       |
-| Join AutoMaxi                           | `0x0208…4C95` | Join AutoMaxi beside #141.                                                                                                                                                            |
+| Join AutoMaxi                           | `0x0208…4C95` | Needs you: untick #42877, Join AutoMaxi with 1 Hydrex account.                                                                                                                        |
 | Move between the two automations        | `0x2573…0b16` | Tick #53350, Move to AutoMaxi; then Move to Carbon Impact.                                                                                                                            |
 | Leave AutoMaxi                          | `0x0208…4C95` | Once #141 is in, Leave: claims stop.                                                                                                                                                  |
-| Its receipts: its keeper and a stranger | `0x6092…6c93` | `#hydrex/82774`: Receipt · #82774 · AutoMaxi, claimed by `0x0000…dEaD` and by AutoMaxi, less 1%.                                                                                      |
+| Its receipts: its keeper and a stranger | `0x6092…6c93` | In `automaxi`, `#hydrex/82774`: Receipt · #82774 · AutoMaxi, claimed by `0x0000…dEaD` and by AutoMaxi, less 1%.                                                                       |
 | One automation's payouts that fail      | `0x0208…4C95` | #141 joins AutoMaxi, #42877 Carbon Impact; twice, Next epoch and Hydrex moves on; tick AutoMaxi's figures cannot be read: `#hydrex/141` cannot read its payouts, `#hydrex/42877` can. |
 | A check of AutoMaxi's that fails        | any           | Tick automaxi-code, automaxi-contracts or automaxi-approvals, reload: `#hydrex/automaxi/check` marks it alone.                                                                        |
 
