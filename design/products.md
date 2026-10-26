@@ -424,8 +424,11 @@ YOUR TOKENS                              11 of 19 ticked
   name becomes a link.
 - **The summary** gives the money as on every page: fetched, the swap's 1%, gas, and the number of calls the wallet will
   see.
-- **The minimum** is 0.5% under each quote by default, one setting for the whole swap. With `skipFailed`, a token that
-  falls short stays in the wallet: the review says so. [Minimum]
+- **The minimum** is 0.5% by default, one setting for the whole swap, under what each route fetches when Base runs them
+  all in order: a quote prices each as if it sold alone, and routes that meet in a pool fetch less together. With
+  `skipFailed`, a token that falls short by the time the swap runs stays in the wallet: the review says so. [Minimum]
+- **Routed together:** the ticked tokens that move their pools are routed together, in parts through other pools where
+  that fetches more, net of gas, as Base runs both. The page reads only as much as its RPCs allow.
 - **More than one transaction:** when the routes need more than about 15 million gas, the page splits them, and says
   "This takes 2 swaps".
 
@@ -435,15 +438,16 @@ Two steps, as every review:
 
 1. **Quote:** each token, its amount, its route, what it fetches and at least; the swap's 1%; the gas. A line on what a
    quote cannot see: the MEV tax on Aero's classic pools above a 1 gwei tip, and fees that Hydrex's and Aero's admins
-   can change. Before this step shows, the page runs the approvals and the swap through `eth_simulateV1`, so the figures
-   are the swap's own, not only the quotes'.
+   can change. Before this step shows, the page runs the approvals and the swap through `eth_simulateV1` with no
+   minimum, so the figures are the swap's own, not only the quotes', and sets each minimum from them. A route that would
+   not go through even so is left out, and its line says why.
 2. **Transactions:** each approval as a slip (`approve`, the swapper's address, the exact amount), then the swap: the
    swapper's address, each route in words ("41.2 AVNT, Hydrex Algebra pool `0x…` to WETH, Uniswap v3 0.05% pool `0x…` to
    USDC, at least 0.60 USDC"), the deadline, and skip-failed. From a Safe, the calldata word by word, as today.
 
-- **Without batching,** the approvals come one prompt each, then the page quotes again before it asks for the swap.
-  Approvals take minutes; a quote should not. A minimum never goes below what the review showed: if a fresh quote falls
-  under it, the page shows the new figures and asks again, rather than lowering the minimum.
+- **Without batching,** the approvals come one prompt each, then the page runs the swap through Base again before it
+  asks for it. Approvals take minutes; a quote should not. A minimum never goes below what the review showed: if a fresh
+  quote falls under it, the page shows the new figures and asks again, rather than lowering the minimum.
 - **The priority fee:** the page asks for a tip of at most 1 gwei where the wallet lets the page set it, and says why.
   [Aero's classic pools]
 - **Done:** a receipt from the `RouteSwapped`, `RouteFailed` and `Swapped` events: each token in, the output, the 1%,

@@ -22,7 +22,7 @@ import { pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
 import { valueAt, weightAt, type Amount } from "./receipts.ts";
 import { openReview, type Hooks } from "./review.ts";
 import { hrefOf } from "./routes.ts";
-import { APPROVAL_GAS, MIDDLES, findRoute, minimumOf, paidOf, partOf, simulate } from "./swap.ts";
+import { APPROVAL_GAS, MIDDLES, findRoute, minimumOf, paidOf, partOf, routeResults, simulate } from "./swap.ts";
 import { costs, gasCost, gasWords } from "./swap-calls.ts";
 import { openSwapReview, planSteps, prefill, swapReceipt, swapsOff, type Plan } from "./swap-view.ts";
 import { describe } from "./tokens.ts";
@@ -330,12 +330,15 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       });
     });
     const kept = paid.find(({ token }) => same(token, swapper.token))?.amount ?? 0n;
-    const out = kept + items.reduce((sum, { out }) => sum + paidOf(out), 0n);
-    const least = kept + items.reduce((sum, { route }) => sum + route.minPaid, 0n);
-    const swappedNames = items.map(({ token }) => token.symbol);
-    into.textContent = items.length
-      ? `${figure(out, swapper.decimals)} ${swapper.symbol}, at least ${figure(least, swapper.decimals)}, from ${list(swappedNames)}${left.length ? `; ${count(left.length, "token", "tokens")} kept` : ""}`
-      : `None worth swapping into ${swapper.symbol}`;
+    const sayInto = (these: Plan["items"]) => {
+      const out = kept + these.reduce((sum, { out }) => sum + paidOf(out), 0n);
+      const least = kept + these.reduce((sum, { route }) => sum + route.minPaid, 0n);
+      const swappedNames = these.map(({ token }) => token.symbol);
+      into.textContent = these.length
+        ? `${figure(out, swapper.decimals)} ${swapper.symbol}, at least ${figure(least, swapper.decimals)}, from ${list(swappedNames)}${left.length ? `; ${count(left.length, "token", "tokens")} kept` : ""}`
+        : `None worth swapping into ${swapper.symbol}`;
+    };
+    sayInto(items);
     const chosen = radios.find(({ checked }) => checked)?.value === "into";
     if (!items.length || !chosen) {
       if (chosen) opened.replace(claimSlips, { outcomeOf: asTheyAre });
@@ -377,6 +380,29 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
         },
       });
       return;
+    }
+    // Run through Base first with no minimums, after the claims: each route then fetches what the pools those before it
+    // moved pay, which sets its minimum. A token whose route would not go through even so is kept.
+    const zeroed = swapPlan.items.map((item) => ({ ...item, route: { ...item.route, minPaid: 0n } }));
+    const tried = await planSteps({ ...swapPlan, items: zeroed }, connection, tokens, true);
+    if (id !== planned) return;
+    const trial = await simulate(connection.address, [...claimSlips, ...tried.slips]).catch(() => undefined);
+    if (id !== planned) return;
+    // Only once Base answered for every call and ran them all: otherwise the check below says whether both go together.
+    const results = routeResults(trial, claimSlips.length + tried.approvals.length, tried.swaps);
+    if (results && trial!.every(({ ok }) => ok)) {
+      const going = zeroed.flatMap((item) => {
+        const result = results.get(item.route);
+        if (result?.done && result.amountOut > 0n)
+          return [
+            { ...item, out: result.amountOut, route: { ...item.route, minPaid: minimumOf(result.amountOut, MARGIN) } },
+          ];
+        left.push(item.token.symbol);
+        return [];
+      });
+      swapPlan.items = going;
+      sayInto(going);
+      if (!going.length) return opened.replace(claimSlips, { outcomeOf: asTheyAre });
     }
     const { slips } = await planSteps(swapPlan, connection, tokens, true);
     if (id !== planned) return;

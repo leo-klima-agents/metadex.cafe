@@ -98,12 +98,14 @@ export function swapSlip(
   whole = false,
 ): Slip {
   const least = routes.reduce((sum, { minPaid }) => sum + minPaid, 0n);
+  // A token in parts is sold once: each part is a route.
+  const sold = new Set(routes.map(({ token }) => token.toLowerCase())).size;
   const n = routes.length;
   return {
     ...swapCall(swapper, routes, deadline),
     ...(tip !== undefined && { tip }),
     title: `Swap into ${swapper.symbol}`,
-    says: `Sell ${n === 1 ? "1 token" : `${n} tokens`} for at least ${figure(least, swapper.decimals)} ${swapper.symbol}`,
+    says: `Sell ${sold === 1 ? "1 token" : `${sold} tokens`} for at least ${figure(least, swapper.decimals)} ${swapper.symbol}`,
     on: `The ${swapper.symbol} swapper`,
     call: "swap",
     fields: [

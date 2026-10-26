@@ -50,9 +50,12 @@ export const now = (): number => Math.floor(Date.now() / 1000) + drift;
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-// mainnet.base.org allows 25 requests a second, 5 of them for logs. The other RPCs get the same limits.
+// mainnet.base.org allows 25 requests a second, 5 of them for logs. The other RPCs get the same limits at first. One
+// that says it is over its limit gets half as many a second from then on, and a quarter of one more back for each
+// request it answers, up to those: so the page learns how much each allows, and work in the background can plan for it.
 const PER_SECOND = 25;
 const LOGS_PER_SECOND = 5;
+const REGAIN = 0.25;
 // An RPC that says it is over its limit is left alone for this long.
 const REST = 1_000;
 const MAX_IN_FLIGHT = 6;
@@ -60,17 +63,44 @@ const MAX_IN_FLIGHT = 6;
 type Kind = "all" | "logs";
 const started = new Map<string, number[]>();
 const restingUntil = new Map<string, number>();
+const learnt = new Map<string, number>();
+const most = (kind: Kind): number => (kind === "logs" ? LOGS_PER_SECOND : PER_SECOND);
+const limitOf = (url: string, kind: Kind): number => learnt.get(`${url} ${kind}`) ?? most(kind);
 
 function freeAt(url: string, kind: Kind, time: number): number {
-  const limits: [string, number][] = [[`${url} all`, PER_SECOND]];
-  if (kind === "logs") limits.push([`${url} logs`, LOGS_PER_SECOND]);
+  const limits: [string, number][] = [[`${url} all`, limitOf(url, "all")]];
+  if (kind === "logs") limits.push([`${url} logs`, limitOf(url, "logs")]);
   let at = Math.max(time, restingUntil.get(`${url} all`) ?? 0, restingUntil.get(`${url} ${kind}`) ?? 0);
   for (const [key, limit] of limits) {
+    const whole = Math.max(1, Math.floor(limit));
     const lastSecond = (started.get(key) ?? []).filter((start) => start > time - 1_000);
     started.set(key, lastSecond);
-    if (lastSecond.length >= limit) at = Math.max(at, lastSecond[lastSecond.length - limit]! + 1_000);
+    if (lastSecond.length >= whole) at = Math.max(at, lastSecond[lastSecond.length - whole]! + 1_000);
   }
   return at;
+}
+
+function refused(url: string, kind: Kind): void {
+  restingUntil.set(`${url} ${kind}`, performance.now() + REST);
+  learnt.set(`${url} ${kind}`, Math.max(1, limitOf(url, kind) / 2));
+}
+
+// A request for logs counts against both limits, and so gives back to both.
+function answered(url: string, kind: Kind): void {
+  for (const each of kind === "logs" ? (["all", "logs"] as const) : (["all"] as const)) {
+    const limit = limitOf(url, each);
+    if (limit < most(each)) learnt.set(`${url} ${each}`, Math.min(most(each), limit + REGAIN));
+  }
+}
+
+// How many requests a second the RPCs allow between them now, as far as the page has learnt, leaving out those resting:
+// what work in the background may plan for.
+export function rate(): number {
+  const time = performance.now();
+  return RPCS.reduce(
+    (sum, url) => sum + ((restingUntil.get(`${url} all`) ?? 0) > time ? 0 : Math.floor(limitOf(url, "all"))),
+    0,
+  );
 }
 
 function recordStart(url: string, kind: Kind, time: number): void {
@@ -82,6 +112,7 @@ function recordStart(url: string, kind: Kind, time: number): void {
 export function resetRateLimits(): void {
   started.clear();
   restingUntil.clear();
+  learnt.clear();
 }
 
 let running = 0;
@@ -162,11 +193,12 @@ async function askEach(
       const [url] = left.splice(i, 1) as [string];
       recordStart(url, kind, time);
       const outcome = await askOne(url, body, accept);
+      if (outcome.answered) answered(url, kind);
       if (outcome.answered && doubt?.(outcome.result)) doubted ??= { result: outcome.result };
       else if (outcome.answered) return outcome;
       else if (outcome.busy) {
         busy.push(url);
-        restingUntil.set(`${url} ${kind}`, performance.now() + REST);
+        refused(url, kind);
       }
     }
   } finally {

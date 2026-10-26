@@ -1,4 +1,4 @@
-import type { Address } from "viem";
+import { maxUint256, type Address } from "viem";
 import { gasPaid, includedAt, now, same, type Receipt } from "./chain.ts";
 import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
 import { clone, fill, fillAddress, show, showWorth, showWorthIn } from "./dom.ts";
@@ -21,6 +21,7 @@ import { earningsOf, onEarnings } from "./last-epoch.ts";
 import { pricesIn, pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
 import type { Amount } from "./receipts.ts";
 import { openReview, type Hooks, type ReviewPage, type Slip } from "./review.ts";
+import { routeTogether, type Sale } from "./routing.ts";
 import { hrefOf, type Route as PageRoute } from "./routes.ts";
 import {
   APPROVAL_GAS,
@@ -31,13 +32,18 @@ import {
   paidOf,
   quoteAll,
   reasonOf,
+  refusedTransfer,
+  routeResults,
+  runInOrder,
   simulate,
+  soldOf,
   split,
   onBase,
+  swapCall,
   swapGas,
-  swapReturns,
   swappedIn,
   type Found,
+  type Result,
   type Route,
 } from "./swap.ts";
 import { approveSlip, costs, ethCost, gasCost, hopsWords, swapSlip, type Costs } from "./swap-calls.ts";
@@ -118,6 +124,19 @@ let rescan = false;
 let allowances: Allowance[] | undefined;
 const listeners: (() => void)[] = [];
 
+// The ticked tokens' routes, found together, for the tokens and amounts `key` names: each token's parts, and what each
+// fetches when Base runs them all in order, after the approvals they need; undefined for a part that would not go
+// through. Without Base's answer, they are the tokens' own routes and quotes. And the routes being found.
+type Part = { route: Route; out: bigint | undefined };
+type Together = { key: string; parts: Map<string, Part[]>; gas: bigint | undefined };
+let together: Together | undefined;
+let routing: { key: string; done: Promise<void> } | undefined;
+let routeLater: ReturnType<typeof setTimeout> | undefined;
+// While Review checks the swap, its button waits, whatever is drawn meanwhile.
+let reviewing = false;
+// Ticking several tokens in a row starts one search, once they settle.
+const SETTLE = 400;
+
 const key = (address: string): string => address.toLowerCase();
 const margin = (): bigint => BigInt(marginSelect.value);
 const swapperShown = (): Swapper => {
@@ -154,6 +173,39 @@ function inOutput(value: number, scanned: Scan): bigint | undefined {
   const price = scanned.prices.of.get(key(scanned.swapper.token));
   if (!price) return undefined;
   return BigInt(Math.floor((value / price) * 10 ** scanned.swapper.decimals));
+}
+
+// What `gas` costs in the output, at the scan's prices: nothing without them.
+const gasValueIn = (scanned: Scan) => (gas: bigint) => {
+  const cost = scanned.costs && gasCost(gas, scanned.costs, scanned.prices);
+  return cost ? (inOutput(cost.value, scanned) ?? 0n) : 0n;
+};
+
+const tickedOf = (scanned: Scan): Row[] => scanned.rows.filter((row) => row.ticked && row.found);
+const tickedKey = (scanned: Scan, ticked: Row[]): string =>
+  `${scanned.id} ${ticked.map((row) => `${key(row.token.address)}:${row.amount}`).join(" ")}`;
+
+// The ticked tokens' routes found together, if found for these tokens and amounts.
+function togetherFor(scanned: Scan, ticked = tickedOf(scanned)): Together | undefined {
+  return together?.key === tickedKey(scanned, ticked) ? together : undefined;
+}
+
+// A ticked row's parts, as found together, or else its own route and quote.
+function partsOf(row: Row, found: Together | undefined): Part[] {
+  return (
+    found?.parts.get(key(row.token.address)) ?? [
+      { route: { ...row.found!.route, amount: row.amount, minPaid: 0n }, out: row.found!.out },
+    ]
+  );
+}
+
+// What a row fetches: as found together, while it is ticked and they are; or else its own quote. Undefined without a
+// route, or if Base found none of its parts would go through.
+function fetchesOf(row: Row, scanned: Scan): bigint | undefined {
+  if (!row.found) return undefined;
+  const parts = partsOf(row, row.ticked ? togetherFor(scanned) : undefined);
+  if (parts.every(({ out }) => out === undefined)) return undefined;
+  return parts.reduce((sum, { out }) => sum + (out ?? 0n), 0n);
 }
 
 const outputValue = (amount: bigint, scanned: Scan): number | undefined => {
@@ -249,23 +301,22 @@ function drawRow(row: Row, scanned: Scan): void {
     "swap-amount": figure(row.amount, token.decimals),
   });
   const quote = [node.querySelector(".swap-fetches")!, node.querySelector(".swap-worth")!] as [Element, Element];
-  if (found) showOutput(quote, found.out, swapper, scanned.prices);
+  const fetches = fetchesOf(row, scanned);
+  if (fetches !== undefined) showOutput(quote, fetches, swapper, scanned.prices);
   else showWorthIn(...quote, "");
-  // Only why a token is not ticked, or that its route is being found: the route itself is in the review.
+  // Only why a token is not ticked, or that its route is being found, or that Base would skip it among the others: the
+  // route itself is in the review.
   const routeLine = node.querySelector(".swap-route")!;
-  routeLine.textContent = found === undefined && !row.failed ? "…" : (row.reason ?? "");
+  const skipped = !!found && fetches === undefined;
+  routeLine.textContent =
+    found === undefined && !row.failed ? "…" : (row.reason ?? (skipped ? "Base would skip it" : ""));
   show(".swap-lookalike", !!row.like, node);
   if (row.like) fill(node, { "swap-like": row.like.symbol });
   // A quote far under the page's own price says so, with both.
-  const page = row.price === undefined ? undefined : worthOf(row.amount, token.decimals, row.price);
-  const quoted = found ? outputValue(found.out, scanned) : undefined;
-  const under = !row.reason && page !== undefined && quoted !== undefined && quoted < page * (1 - CHECK);
-  show(".swap-check", under, node);
-  if (under) {
-    fill(node, {
-      "swap-check-words": `Quote ${fraction(1 - quoted! / page!)} under price`,
-    });
-  }
+  const under =
+    row.reason || fetches === undefined ? undefined : underPrice(token, row.amount, fetches, swapper, scanned.prices);
+  show(".swap-check", under !== undefined, node);
+  if (under !== undefined) fill(node, { "swap-check-words": `Quote ${fraction(under)} under price` });
   fillAddress(node, "swap-address", token.address, short(token.address));
 }
 
@@ -300,28 +351,115 @@ function drawAll(): void {
 }
 
 // What the ticked tokens fetch together, row by row: the quote, less the 1%, is what reaches you, and the slippage picked
-// sets the least that may. Gas is paid apart, in ETH. Each in tokens, then what it is worth.
+// sets the least that may. Gas is paid apart, in ETH. Each in tokens, then what it is worth. Until their routes are
+// found together, and run through Base in order, each token's own quote, which the bar says.
 function summarise(scanned: Scan, ticked: Row[]): void {
   const { swapper } = scanned;
   const sells = view.querySelector<HTMLElement>(".swap-sells")!;
   const breakdown = view.querySelector<HTMLElement>(".breakdown")!;
   const splitLine = view.querySelector<HTMLElement>(".swap-split")!;
-  reviewButton.disabled = !ticked.length || swapsOff();
+  reviewButton.disabled = !ticked.length || swapsOff() || reviewing;
   // Until the page has read that its RPCs serve Base, which is soon, the button waits, and says why.
   show(".swap-checking", !!ticked.length && base === undefined, view);
   sells.hidden = ticked.length > 0;
   breakdown.hidden = !ticked.length;
+  const found = togetherFor(scanned, ticked);
+  const waits = !!ticked.length && !found && !scanned.reading && !swapsOff();
+  show(".swap-routing", waits, view);
   if (!ticked.length) return void (splitLine.hidden = true);
-  const out = ticked.reduce((sum, row) => sum + row.found!.out, 0n);
-  const least = ticked.reduce((sum, row) => sum + minimumOf(row.found!.out, margin()), 0n);
-  const fee = ticked.reduce((sum, row) => sum + feeOf(row.found!.out), 0n);
+  if (waits) routeSoon(scanned);
+  const parts = ticked.flatMap((row) => partsOf(row, found));
+  const going = parts.flatMap(({ out }) => (out === undefined ? [] : [out]));
+  const out = going.reduce((sum, each) => sum + each, 0n);
+  const least = going.reduce((sum, each) => sum + minimumOf(each, margin()), 0n);
+  const fee = going.reduce((sum, each) => sum + feeOf(each), 0n);
+  const routes = parts.map(({ route }) => route);
   const approvals = ticked.filter((row) => row.allowance < row.amount).length;
-  const swaps = split(ticked.map((row) => row.found!.route)).length;
-  const gas = BigInt(approvals) * APPROVAL_GAS + swapGas(ticked.map((row) => row.found!.route));
-  const { costs: found, prices } = scanned;
-  showBill(breakdown, "swap-quoted", { out, fee, least, gas }, swapper, prices, found, "…");
+  const swaps = split(routes).length;
+  const gas = found?.gas ?? BigInt(approvals) * APPROVAL_GAS + swapGas(routes);
+  const { costs, prices } = scanned;
+  showBill(breakdown, "swap-quoted", { out, fee, least, gas }, swapper, prices, costs, "…");
   splitLine.hidden = swaps < 2;
   splitLine.textContent = `${swaps} swaps`;
+}
+
+// Finds the ticked tokens' routes together, once the ticks settle.
+function routeSoon(scanned: Scan): void {
+  if (routing?.key === tickedKey(scanned, tickedOf(scanned))) return;
+  clearTimeout(routeLater);
+  routeLater = setTimeout(() => void routeTicked(scanned), SETTLE);
+}
+
+// The ticked tokens' routes, together: each token's own, or in parts through other pools if the router finds that
+// better, whichever fetches more, net of gas, when Base runs them in order. A search for other tokens or amounts, or
+// another scan, takes over.
+function routeTicked(scanned: Scan): Promise<void> {
+  const ticked = tickedOf(scanned);
+  const id = tickedKey(scanned, ticked);
+  if (!ticked.length || togetherFor(scanned, ticked)) return Promise.resolve();
+  if (routing?.key === id) return routing.done;
+  clearTimeout(routeLater);
+  const { swapper, owner } = scanned;
+  const gasValue = gasValueIn(scanned);
+  const allowance = (token: Address) => ticked.find((row) => same(row.token.address, token))?.allowance ?? 0n;
+  const runOf = (plan: Route[][]) => runInOrder(owner, swapper, plan.flat(), allowance);
+  const find = async (): Promise<Omit<Together, "key">> => {
+    const sales: Sale[] = ticked.map((row) => ({
+      token: row.token.address,
+      amount: row.amount,
+      found: row.found!,
+      hydrex: isHydrex(row.token.address),
+    }));
+    const own = ticked.map((row) => partsOf(row, undefined).map(({ route }) => route));
+    // The tokens' own routes run through Base while the router looks for others.
+    const [ownRun, parted] = await Promise.all([
+      runOf(own),
+      routeTogether(sales, swapper, gasValue).catch((error: unknown) => {
+        console.error(error);
+        return undefined;
+      }),
+    ]);
+    const plans = parted ? [own, parted] : [own];
+    const runs = [ownRun, parted && (await runOf(parted))];
+    const net = runs.map((run) =>
+      run
+        ? run.results.reduce((sum, result) => sum + (result?.done ? result.amountOut : 0n), 0n) - gasValue(run.gas)
+        : undefined,
+    );
+    const chosen = net[1] !== undefined && (net[0] === undefined || net[1] > net[0]) ? 1 : 0;
+    const run = runs[chosen];
+    const results = run?.results ?? [];
+    let next = 0;
+    const parts = new Map(
+      ticked.map((row, i) => [
+        key(row.token.address),
+        plans[chosen]![i]!.map((route): Part => {
+          const result = results[next++];
+          // Without Base's answer, the token's own quote.
+          const out = run ? (result?.done ? result.amountOut : undefined) : row.found!.out;
+          return { route, out };
+        }),
+      ]),
+    );
+    return { parts, gas: run?.gas };
+  };
+  const done = (async () => {
+    // Should finding them fail, each token's own route and quote, rather than the search again at each drawing.
+    const found = await find().catch((error: unknown) => {
+      console.error(error);
+      return { parts: new Map(ticked.map((row) => [key(row.token.address), partsOf(row, undefined)])), gas: undefined };
+    });
+    if (routing?.key !== id || scan !== scanned) return;
+    together = { key: id, ...found };
+    routing = undefined;
+    scanned.rows.forEach((row) => drawRow(row, scanned));
+    drawAll();
+  })();
+  routing = { key: id, done };
+  done.catch(console.error).finally(() => {
+    if (routing?.key === id) routing = undefined;
+  });
+  return done;
 }
 
 function rowNode(): HTMLElement {
@@ -331,6 +469,7 @@ function rowNode(): HTMLElement {
     if (!target) return;
     target.ticked = (event.target as HTMLInputElement).checked;
     target.touched = true;
+    scan!.rows.forEach((row) => drawRow(row, scan!));
     drawAll();
   });
   return node;
@@ -410,10 +549,7 @@ async function startScan(owner: Address, swapper: Swapper): Promise<void> {
       (a, b) => Number(prefilled?.has(key(b.token.address)) ?? 0) - Number(prefilled?.has(key(a.token.address)) ?? 0),
     );
     let next = 0;
-    const gasValue = (gas: bigint) => {
-      const cost = scanned.costs && gasCost(gas, scanned.costs, scanned.prices);
-      return cost ? (inOutput(cost.value, scanned) ?? 0n) : 0n;
-    };
+    const gasValue = gasValueIn(scanned);
     await Promise.all(
       Array.from({ length: WORKERS }, async () => {
         while (next < queue.length && current()) {
@@ -525,9 +661,9 @@ export async function resetReview(these: Allowance[]): Promise<void> {
   });
 }
 
-// The review of a swap: the routes, each with its minimum, and the approvals it needs, run through Base first. `approve`
-// is what to approve, when not the route's amount, as for a swap of a whole balance after a claim. `margin` is the
-// slippage that set the minimums.
+// The review of a swap: the routes, each with its minimum, and the approvals it needs, run through Base first. A token may
+// go in parts, each a route of its own. `approve` is what to approve of its token, when not what its routes sell, as for
+// a swap of a whole balance after a claim. `margin` is the slippage that sets the minimums.
 export type Plan = {
   swapper: Swapper;
   items: { token: Token; route: Route; out: bigint; allowance: bigint; approve?: bigint }[];
@@ -543,9 +679,10 @@ export async function planSteps(
   const safe = !!connection.wallet.propose;
   const found = await costs().catch(() => undefined);
   const deadline = BigInt(now() + (safe ? 86_400 : 1_800));
-  const approvals = plan.items
-    .filter(({ route, allowance, approve }) => approve !== undefined || allowance < route.amount)
-    .map(({ token, route, approve }) => approveSlip(token, plan.swapper, approve ?? route.amount));
+  // One approval a token, for all its parts.
+  const approvals = soldOf(plan.items)
+    .filter(({ total, allowance, approve }) => approve !== undefined || allowance < total)
+    .map(({ token, total, approve }) => approveSlip(token, plan.swapper, approve ?? total));
   const swaps = split(plan.items.map(({ route }) => route));
   const tip = safe ? undefined : found?.tip;
   const slips = [...approvals, ...swaps.map((group) => swapSlip(plan.swapper, group, deadline, tokens, tip, whole))];
@@ -557,34 +694,49 @@ async function reviewSwap(): Promise<void> {
   const scanned = scan;
   if (!connection || !scanned) return;
   const { swapper } = scanned;
-  const ticked = scanned.rows.filter((row) => row.ticked && row.found);
-  if (!ticked.length || swapsOff()) return;
-  const plan: Plan = {
-    swapper,
-    margin: margin(),
-    items: ticked.map((row) => ({
-      token: row.token,
-      route: { ...row.found!.route, amount: row.amount, minPaid: minimumOf(row.found!.out, margin()) },
-      out: row.found!.out,
-      allowance: row.allowance,
-    })),
-  };
-  reviewButton.disabled = true;
+  if (!tickedOf(scanned).length || swapsOff() || reviewing) return;
+  reviewing = reviewButton.disabled = true;
   reviewFailed.hidden = true;
   reviewButton.textContent = "Checking…";
   try {
+    // The routes found together, once found.
+    await routeTicked(scanned);
+    const ticked = tickedOf(scanned);
+    const found = togetherFor(scanned, ticked);
+    const plan: Plan = {
+      swapper,
+      margin: margin(),
+      // A part Base found would not go through has its share of the token's own quote, should Base not answer now.
+      items: ticked.flatMap((row) =>
+        partsOf(row, found).map(({ route, out = (row.found!.out * route.amount) / row.amount }) => ({
+          token: row.token,
+          route: { ...route, minPaid: minimumOf(out, margin()) },
+          out,
+          allowance: row.allowance,
+        })),
+      ),
+    };
     const opened = await openSwapReview(plan, connection, scanned.tokens, scanned.costs, scanned.prices);
     if (opened) {
       reviewFailed.textContent = opened;
       reviewFailed.hidden = false;
     }
+  } catch (error) {
+    console.error(error);
+    reviewFailed.textContent = "Checking the swap failed. Nothing was sent.";
+    reviewFailed.hidden = false;
   } finally {
+    reviewing = false;
     reviewButton.textContent = "Review";
     drawAll();
   }
 }
 
 // Opens the swap's review, or says why not. Gas is valued at the prices the swap was judged at.
+//
+// The routes run through Base first, in order and with no minimum: each fetches what the pools those before it moved
+// pay, and its minimum is that, less the slippage. A route that would not go through even so is left out of the swap,
+// and the bill says why. Without Base's answer, the minimums are the plan's own.
 export async function openSwapReview(
   plan: Plan,
   connection: Connection,
@@ -593,53 +745,55 @@ export async function openSwapReview(
   prices?: Prices,
 ): Promise<string | undefined> {
   const { swapper } = plan;
-  const { approvals, swaps, slips } = await planSteps(plan, connection, tokens);
-  const steps = slips;
-  const simulated = await simulate(connection.address, steps).catch((error: unknown) => {
+  const zeroed = plan.items.map((item) => ({ ...item, route: { ...item.route, minPaid: 0n } }));
+  const tried = await planSteps({ ...plan, items: zeroed }, connection, tokens);
+  let simulated = await simulate(connection.address, tried.slips).catch((error: unknown) => {
     console.error(error);
     return undefined;
   });
-  const firstSwap = approvals.length;
   if (simulated) {
     const failed = simulated.findIndex(({ ok }) => !ok);
-    if (failed >= 0 && failed < firstSwap) return `Base refused “${steps[failed]!.says}” Nothing was sent.`;
+    if (failed >= 0 && failed < tried.approvals.length)
+      return `Base refused “${tried.slips[failed]!.says}” Nothing was sent.`;
     if (failed >= 0) return "Base refused the swap: the quotes may have moved. Nothing was sent.";
   }
-  // What each route fetches, as the simulation found it, or as quoted.
-  const outcome = new Map<Route, { out: bigint; reason?: string }>();
-  swaps.forEach((group, g) => {
-    const run = simulated?.[firstSwap + g];
-    const results = run ? swapReturns(run.returnData).results : undefined;
-    group.forEach((route, i) => {
-      const result = results?.[i];
-      const item = plan.items.find((each) => each.route === route)!;
-      outcome.set(
-        route,
-        result
-          ? result.done
-            ? { out: result.amountOut }
-            : { out: 0n, reason: reasonOf(result.reason) }
-          : { out: item.out },
-      );
-    });
+  // What each route fetches, as Base found it, or as planned without its answer for every call; and why one would not
+  // go through.
+  const results = routeResults(simulated, tried.approvals.length, tried.swaps);
+  if (!results) simulated = undefined;
+  const items = plan.items.map((item, i) => {
+    const result = results?.get(zeroed[i]!.route);
+    const { out, reason }: { out: bigint; reason?: string } = !result
+      ? { out: item.out }
+      : result.done && result.amountOut > 0n
+        ? { out: result.amountOut }
+        : { out: 0n, reason: result.done ? "a pool gave nothing for it" : reasonOf(result.reason) };
+    const minPaid = simulated ? minimumOf(out, plan.margin) : item.route.minPaid;
+    return { item: { ...item, out, route: { ...item.route, minPaid } }, reason };
   });
+  const going = items.flatMap(({ item, reason }) => (reason ? [] : [item]));
+  if (!going.length) return "Base would skip every token: none can be swapped now. Nothing was sent.";
+  const { approvals, swaps, slips } = await planSteps({ ...plan, items: going }, connection, tokens);
+  const steps = slips;
+  // Its gas, without the routes left out, once run again.
+  if (simulated && going.length < items.length) {
+    const again = await simulate(connection.address, steps).catch(() => undefined);
+    simulated = again?.every(({ ok }) => ok) ? again : simulated;
+  }
+  const firstSwap = approvals.length;
   // What the bill shows each token fetches, for the receipt to compare with.
-  const quoted = new Map(
-    plan.items.flatMap(({ route }) => {
-      const { out, reason } = outcome.get(route)!;
-      return reason ? [] : [[key(route.token), out] as const];
-    }),
-  );
-  // A bill: each token, what it fetches and its route by its tokens and pools, then what they all fetch, the 1%, what
-  // reaches you, and the least that may, which the slippage sets. Gas heads it, as it is paid apart, in ETH. Each sum in
-  // tokens, then what it is worth.
+  const quoted = new Map<string, bigint>();
+  for (const { token, out } of going) quoted.set(key(token.address), (quoted.get(key(token.address)) ?? 0n) + out);
+  // A bill: each token, or each part of one, what it fetches and its route by its tokens and pools, then what they all
+  // fetch, the 1%, what reaches you, and the least that may, which the slippage sets. Gas heads it, as it is paid apart,
+  // in ETH. Each sum in tokens, then what it is worth.
   const body = clone("swap-before");
   const lines = body.querySelector(".swap-lines")!;
   let out = 0n;
   let least = 0n;
-  for (const { token, route } of plan.items) {
+  for (const { item, reason } of items) {
+    const { token, route, out: fetched } = item;
     const line = clone("swap-line");
-    const { out: fetched, reason } = outcome.get(route)!;
     out += fetched;
     if (!reason) least += route.minPaid;
     fill(line, {
@@ -652,12 +806,16 @@ export async function openSwapReview(
     if (!reason) showOutput(fetches, fetched, swapper, prices);
     show(".line-skip", !!reason, line);
     if (reason) fill(line, { "line-skip-words": `Skipped: ${reason}` });
+    // What it fetches far under the page's own price says so, as on the swap's page.
+    const under = reason ? undefined : underPrice(token, route.amount, fetched, swapper, prices);
+    show(".line-check", under !== undefined, line);
+    if (under !== undefined) fill(line, { "line-check-words": `${fraction(under)} under price` });
     lines.append(line);
   }
   const fee = feeOf(out);
   const gas = simulated
     ? simulated.reduce((sum, { gas }) => sum + gas, 0n)
-    : BigInt(approvals.length) * APPROVAL_GAS + swapGas(plan.items.map(({ route }) => route));
+    : BigInt(approvals.length) * APPROVAL_GAS + swapGas(going.map(({ route }) => route));
 
   showBill(
     body,
@@ -695,9 +853,9 @@ export async function openSwapReview(
       const g = i - firstSwap;
       const group = swaps[g];
       if (!group) return undefined;
-      const fresh = await quoteAll(group.map((route) => ({ swapper, route: { ...route, minPaid: 0n } })));
-      const under = group.filter((route, j) => !fresh[j]?.done || paidOf(fresh[j]!.amountOut) < route.minPaid);
       const deadline = BigInt(now() + 1_800);
+      const fresh = await freshResults(connection.address, swapper, group, deadline);
+      const under = group.filter((route, j) => !fresh[j]?.done || paidOf(fresh[j]!.amountOut) < route.minPaid);
       const step = swapSlip(swapper, group, deadline, tokens, found?.tip);
       const names = under.map((route) => tokens.get(key(route.token))?.symbol ?? route.token);
       return {
@@ -710,10 +868,45 @@ export async function openSwapReview(
     outcomeOf: async (receipts) => {
       const hashes = receipts.map(({ transactionHash }) => transactionHash);
       const [gas, time] = await Promise.all([gasPaid(hashes, connection.address), includedAt(receipts)]);
-      return swapReceipt(receipts, plan, tokens, connection.address, prices, { quoted, gas, time });
+      return swapReceipt(receipts, { ...plan, items: going }, tokens, connection.address, prices, {
+        quoted,
+        gas,
+        time,
+      });
     },
   });
   return undefined;
+}
+
+// What each route of a swap fetches now, in order, as Base runs it alone, its approvals given: or else as quoted, each as
+// if first, when Base cannot say, or a token refused the transfer, as when an RPC has not seen its approval yet.
+async function freshResults(
+  from: Address,
+  swapper: Swapper,
+  group: Route[],
+  deadline: bigint,
+): Promise<(Result | undefined)[]> {
+  const zeroed = group.map((route) => ({ ...route, minPaid: 0n }));
+  const [run] = await simulate(from, [swapCall(swapper, zeroed, deadline)]).catch(() => []);
+  const results = routeResults(run ? [run] : undefined, 0, [zeroed]);
+  const found = zeroed.map((route) => results?.get(route));
+  if (results && found.every((result) => result && (result.done || !refusedTransfer(result.reason)))) return found;
+  return quoteAll(zeroed.map((route) => ({ swapper, route })));
+}
+
+// How far under the page's own price a token's amount fetches, if more than CHECK and both have prices; not for a whole
+// balance, whose amount is not known yet.
+function underPrice(
+  token: Token,
+  amount: bigint,
+  out: bigint,
+  swapper: Swapper,
+  prices: Prices | undefined,
+): number | undefined {
+  const [price, outputPrice] = [prices?.of.get(key(token.address)), prices?.of.get(key(swapper.token))];
+  if (price === undefined || outputPrice === undefined || amount === maxUint256) return undefined;
+  const [sold, fetched] = [worthOf(amount, token.decimals, price), worthOf(out, swapper.decimals, outputPrice)];
+  return sold > 0 && fetched < sold * (1 - CHECK) ? 1 - fetched / sold : undefined;
 }
 
 // The swap's receipt, from its events: when Base included it, at `time`, or else now, and the gas it cost, when `gas` is
@@ -746,14 +939,25 @@ export function swapReceipt(
     showWorth(part("swap-receipt-gas"), `${figure(gas, 18)} ETH`, inCents(ethCost(gas, prices)));
     show(".swap-receipt-gas-line", true, receipt);
   }
+  // Each token once, its parts added up.
+  const sold = new Map<string, { token: Address; amountIn: bigint; amountOut: bigint }>();
+  for (const { token, amountIn, amountOut } of swapped) {
+    const each = sold.get(key(token)) ?? { token, amountIn: 0n, amountOut: 0n };
+    each.amountIn += amountIn;
+    each.amountOut += amountOut;
+    sold.set(key(token), each);
+  }
   part("swap-lines").replaceChildren(
-    ...swapped.map(({ token, amountIn, amountOut }) => {
+    ...[...sold.values()].map(({ token, amountIn, amountOut }) => {
       const line = clone("swap-line");
       const described = tokens.get(key(token));
-      // A whole balance, as after a claim, may not be what was quoted: it compares only when it is.
-      const item = plan.items.find((each) => same(each.token.address, token));
+      // A whole balance, as after a claim, or a token some of whose parts were skipped, may not be what was quoted: it
+      // compares only when it is.
+      const planned = plan.items
+        .filter((each) => same(each.token.address, token))
+        .reduce((sum, { route }) => sum + route.amount, 0n);
       const quote = quoted?.get(key(token));
-      const compares = quote && item?.route.amount === amountIn;
+      const compares = quote && planned === amountIn;
       fill(line, {
         "line-symbol": described?.symbol ?? token,
         "line-amount": described ? figure(amountIn, described.decimals) : String(amountIn),
@@ -777,7 +981,7 @@ export function swapReceipt(
   );
   showWorth(part("swap-receipt-paid"), exact(paid), inCents(paidWorth));
   part("swap-receipt-skipped").replaceChildren(
-    ...failed.map(({ token, reason }) => {
+    ...[...new Map(failed.map((each) => [key(each.token), each])).values()].map(({ token, reason }) => {
       const item = clone("swap-skipped");
       fill(item, {
         "skipped-symbol": tokens.get(key(token))?.symbol ?? token,
