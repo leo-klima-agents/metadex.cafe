@@ -150,12 +150,9 @@ const appPayouts = payouts(
     showApp();
   },
   undefined,
-  // An overdue payout says what waits in tokens, then at prices now, once read.
-  (found) => {
-    if (found !== appFound) return;
-    showApp();
-    showPosition();
-  },
+  // An overdue payout says what waits in tokens, then at prices now, once read: rewrite() writes its lines again, in the
+  // App and on the account's page, with nothing to draw anew.
+  () => {},
 );
 
 // An account's payout through AutoMaxi is overdue when something waits for it and its keeper has not paid it: half a day
@@ -762,6 +759,9 @@ let allowsShown: string | undefined;
 
 function showApp(): void {
   const items: DocumentFragment[] = [];
+  // What each line is keyed on: its words, or, for a line whose words change as prices come, what it is of.
+  const keys: string[] = [];
+  const add = (item: DocumentFragment, key = item.textContent ?? ""): void => void (items.push(item), keys.push(key));
   const holdings = connection ? shown : undefined;
   if (holdings) {
     const { owner, accounts, epochStart } = holdings;
@@ -770,25 +770,23 @@ function showApp(): void {
       const change = { link: hrefOf({ view: "position", id: account.id }), label: "Change" };
       const named = `Hydrex account #${account.id}`;
       if (status.kind === "stopped")
-        items.push(
-          need("stopped", `${named} earns nothing: ${status.name} stopped since ${day(status.voted)}`, change),
-        );
-      if (status.kind === "partly")
-        items.push(need("stopped", `${named} is partly in ${status.automation.name}`, change));
+        add(need("stopped", `${named} earns nothing: ${status.name} stopped since ${day(status.voted)}`, change));
+      if (status.kind === "partly") add(need("stopped", `${named} is partly in ${status.automation.name}`, change));
     }
     for (const entry of overdue()) {
       const waits = waitsLine(entry);
-      items.push(
+      add(
         need("stopped", () => `Hydrex account #${entry.account.id}: payout overdue, ${waits()}`, {
           label: "Claim now",
           button: (event) => claim([entry.account], showApp, event.currentTarget as HTMLButtonElement),
         }),
+        `overdue ${entry.account.id}`,
       );
     }
   }
   const left = connection ? allowancesLeft() : undefined;
   if (left?.length) {
-    items.push(
+    add(
       need("idle", `${count(left.length, "token approval hasn't", "token approvals haven't")} been used`, {
         label: "Reset",
         // The approvals left when clicked, which a later read may have changed.
@@ -799,10 +797,7 @@ function showApp(): void {
   // Drawn again only when its lines change, so that a button keeps its focus between ticks.
   const needs = document.getElementById("needs")!;
   // Keyed on what each line acts on, not only its words.
-  const drawnNeeds = [
-    ...items.map((item) => item.textContent),
-    ...(left ?? []).map(({ token, spender }) => `${token} ${spender}`),
-  ].join("\n");
+  const drawnNeeds = [...keys, ...(left ?? []).map(({ token, spender }) => `${token} ${spender}`)].join("\n");
   if (drawnNeeds !== needsShown) {
     needsShown = drawnNeeds;
     needs.hidden = !items.length;
@@ -1068,13 +1063,14 @@ function showConnection(): void {
   refreshReview();
 }
 
-// Home and About are the page's own; a wallet connected there leads on to the App.
+// Home and About are the page's own; a wallet picked there leads on to the App.
 const leadsToApp = (): boolean => ["home", "about"].includes(route().view);
 
-// A wallet connected from Home or About leads on to the App, unless its owner went to another page meanwhile.
-async function connectTo(wallet: Wallet): Promise<void> {
+// A wallet connected from Home or About leads on to the App, unless its owner went to another page meanwhile. The Safe
+// the page finds itself in, which nobody `picked`, leaves its reader where they are.
+async function connectTo(wallet: Wallet, picked = true): Promise<void> {
   const attempt = ++attempts;
-  const fromOwn = leadsToApp();
+  const fromOwn = picked && leadsToApp();
   const connected = await connect(wallet);
   if (!connected || attempt <= ignoredUpTo) return;
   ignoredUpTo = attempt;
@@ -1207,7 +1203,7 @@ findWallets((found) => {
   for (const place of document.querySelectorAll(".wallet-buttons")) place.replaceChildren(...found.map(walletButton));
 });
 safeWallet()
-  .then((wallet) => wallet && connectTo(wallet))
+  .then((wallet) => wallet && connectTo(wallet, false))
   .catch(console.error);
 readCarbonImpactAgain().catch(failed);
 showChecks().catch(failed);
