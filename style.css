@@ -333,7 +333,8 @@ main > .notice {
 .view > .title-line + .state-line,
 .view > .title-line ~ .position-found,
 .view > .state-line + .notice,
-.view > .lead + .custody {
+.view > .lead + .custody,
+.view > .title-line + .note {
   margin-block-start: var(--gap-s);
 }
 /* What a product does, in one sentence, then that the account stays in the wallet. */
