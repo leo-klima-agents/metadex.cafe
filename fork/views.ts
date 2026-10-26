@@ -53,6 +53,7 @@ import {
   stop,
   hooks,
   startAtBlock,
+  UNVOTED,
 } from "./harness.ts";
 
 describe("the page against a fork of Base: its views, and each account's payouts", { timeout: 1_800_000 }, () => {
@@ -417,9 +418,10 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.match(await own.locator(".standing-late").innerText(), /^Late · paid up to Thu,? 27 Aug$/);
     assert.match((await own.locator("time.receipt-time").textContent()) ?? "", /^Thu,? 27 Aug,? 01:47 UTC$/);
     await position(member.page).locator(".position-owner-row").getByText(short(MEMBER)).waitFor();
-    // Without the owner's wallet, its page speaks of its owner.
+    // Without the owner's wallet, its page names its owner, who has not voted since before last epoch.
     await member.page.goto(`${SITE}/#hydrex/14485`);
-    await position(member.page).getByText("Its owner votes with it").waitFor({ timeout: 60_000 });
+    await position(member.page).getByText(UNVOTED).waitFor({ timeout: 60_000 });
+    await position(member.page).locator(".position-owner-row").getByText(short(MEMBER)).waitFor();
     assert.equal(await position(member.page).locator(".position-payouts").isVisible(), false, "not in an automation");
     assert.deepEqual([...violations, ...member.violations], []);
   });
@@ -432,12 +434,12 @@ describe("the page against a fork of Base: its views, and each account's payouts
     const actions = position(page).locator(".position-actions");
     await actions.getByRole("button", { name: "Join Carbon Impact", exact: true }).waitFor();
     await page.evaluate((other) => (window as any).testWalletEmit("accountsChanged", [other]), MEMBER);
-    await position(page).getByText("Its owner votes with it").waitFor();
+    await position(page).getByText(UNVOTED).waitFor();
     await position(page).locator(".position-owner-row").getByText(short(NEWCOMER)).waitFor();
     assert.equal(await actions.isVisible(), false);
     await page.evaluate(() => (window as any).testWalletEmit("accountsChanged", []));
     await connectButton(page).waitFor();
-    assert.equal(await position(page).getByText("Its owner votes with it").isVisible(), true);
+    assert.equal(await position(page).getByText(UNVOTED).isVisible(), true);
     assert.equal(await actions.isVisible(), false);
     await page.goto(`${SITE}/#app`);
     await app(page).getByText("Connect a wallet").waitFor();
