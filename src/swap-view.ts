@@ -1,5 +1,5 @@
 import type { Address } from "viem";
-import { gasPaid, now, same, type Receipt } from "./chain.ts";
+import { gasPaid, includedAt, now, same, type Receipt } from "./chain.ts";
 import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
 import { clone, fill, fillAddress, show, showWorth, showWorthIn } from "./dom.ts";
 import { tokensOf } from "./earnings.ts";
@@ -707,19 +707,17 @@ export async function openSwapReview(
         }),
       };
     },
-    outcomeOf: async (receipts) =>
-      swapReceipt(receipts, plan, tokens, connection.address, prices, {
-        quoted,
-        gas: await gasPaid(
-          receipts.map(({ transactionHash }) => transactionHash),
-          connection.address,
-        ),
-      }),
+    outcomeOf: async (receipts) => {
+      const hashes = receipts.map(({ transactionHash }) => transactionHash);
+      const [gas, time] = await Promise.all([gasPaid(hashes, connection.address), includedAt(receipts)]);
+      return swapReceipt(receipts, plan, tokens, connection.address, prices, { quoted, gas, time });
+    },
   });
   return undefined;
 }
 
-// The swap's receipt, from its events: when, and the gas it cost, when `gas` is known; each token sold, what it
+// The swap's receipt, from its events: when Base included it, at `time`, or else now, and the gas it cost, when `gas` is
+// known; each token sold, what it
 // fetched, and how that compares with what `quoted` says the review showed; then what they fetched, the 1%, and what
 // reached you, each with what it is worth. A token that was skipped stays in the wallet with its approval, which it
 // offers to reset.
@@ -729,7 +727,11 @@ export function swapReceipt(
   tokens: Map<string, Token>,
   caller: Address,
   prices?: Prices,
-  { quoted, gas }: { quoted?: Map<string, bigint>; gas?: bigint | undefined } = {},
+  {
+    quoted,
+    gas,
+    time = now(),
+  }: { quoted?: Map<string, bigint>; gas?: bigint | undefined; time?: number | undefined } = {},
 ): DocumentFragment {
   const { swapper } = plan;
   // As many decimal places as the bill had, so that the receipt's figures line up at the point too, and add up.
@@ -738,7 +740,6 @@ export function swapReceipt(
   const receipt = clone("swap-receipt");
   const part = (name: string) => receipt.querySelector(`.${name}`)!;
   const fetched = swapped.reduce((sum, { amountOut }) => sum + amountOut, 0n);
-  const time = now();
   fill(receipt, { "swap-receipt-output": swapper.symbol, "swap-receipt-time": utc(time) });
   part("swap-receipt-time").setAttribute("datetime", new Date(time * 1000).toISOString());
   if (gas !== undefined) {

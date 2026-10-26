@@ -236,8 +236,13 @@ export const codeHash = async (address: Address): Promise<Hex> =>
 export const implementation = async (proxy: Address): Promise<Address> =>
   `0x${(await rpc<Hex>("eth_getStorageAt", [proxy, EIP1967_IMPLEMENTATION_SLOT, "latest"])).slice(-40)}`;
 
-// A transaction's receipt: whether it succeeded, and its logs.
-export type Receipt = { transactionHash: Hex; status: Hex; logs: { address: Address; data: Hex; topics: Hex[] }[] };
+// A transaction's receipt: whether it succeeded, its logs, and the block that included it.
+export type Receipt = {
+  transactionHash: Hex;
+  status: Hex;
+  logs: { address: Address; data: Hex; topics: Hex[] }[];
+  blockNumber?: Hex;
+};
 
 // The transaction's receipt, or undefined if Base has not included it within ten minutes.
 export async function waitForReceipt(hash: Hex): Promise<Receipt | undefined> {
@@ -251,6 +256,14 @@ export async function waitForReceipt(hash: Hex): Promise<Receipt | undefined> {
     await sleep(2_000);
   }
   return undefined;
+}
+
+// When Base included the last of the transactions: its block's time, or undefined if it cannot be read.
+export async function includedAt(receipts: Receipt[]): Promise<number | undefined> {
+  const block = receipts.at(-1)?.blockNumber;
+  if (!block) return undefined;
+  const found = await rpc<{ timestamp: Hex } | null>("eth_getBlockByNumber", [block, false]).catch(() => null);
+  return found?.timestamp ? Number(found.timestamp) : undefined;
 }
 
 // What the transactions cost in ETH, Base's L1 fee included, if `from` sent and paid for each of them: undefined when
