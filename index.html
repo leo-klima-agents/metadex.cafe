@@ -135,10 +135,7 @@
 
         <!-- The automations come first, in one box, a row each, however many Hydrex accounts follow. -->
         <section id="menu" aria-labelledby="menu-title">
-          <div class="group-head">
-            <h2 id="menu-title">Automations</h2>
-            <p class="epoch">Last epoch, per 1,000 Earning Power</p>
-          </div>
+          <h2 id="menu-title">Automations</h2>
           <ul class="menu table">
             <li class="choice" data-choice="carbon-impact">
               <div class="choice-head">
@@ -163,11 +160,8 @@
                   <dd>kVCM</dd>
                 </div>
                 <div>
-                  <dt>Last epoch</dt>
-                  <dd>
-                    <span class="record">…</span> <span class="record-unit small"></span
-                    ><span class="record-paid small"></span>
-                  </dd>
+                  <dt>Earned last epoch</dt>
+                  <dd><span class="record">…</span> <span class="record-unit small"></span></dd>
                 </div>
               </dl>
             </li>
@@ -195,37 +189,41 @@
                   <dd>Tokens earned</dd>
                 </div>
                 <div>
-                  <dt>Last epoch</dt>
-                  <dd>
-                    <span class="record">…</span> <span class="record-unit small"></span
-                    ><span class="record-paid small"></span>
-                  </dd>
-                </div>
-              </dl>
-            </li>
-            <li class="choice" data-choice="self">
-              <div class="choice-head">
-                <h3><a href="https://www.hydrex.fi/" target="_blank" rel="noopener">Vote yourself</a></h3>
-              </div>
-              <dl class="facts">
-                <div>
-                  <dt>Takes</dt>
-                  <dd>Nothing</dd>
-                </div>
-                <div>
-                  <dt>Pays in</dt>
-                  <dd>Tokens earned</dd>
-                </div>
-                <div>
-                  <dt>Last epoch</dt>
-                  <dd>
-                    <span class="average">…</span> <span class="record-unit small">Hydrex average</span
-                    ><span class="yours-line small" hidden><span class="yours-average"></span></span>
-                  </dd>
+                  <dt>Earned last epoch</dt>
+                  <dd><span class="record">…</span> <span class="record-unit small"></span></dd>
                 </div>
               </dl>
             </li>
           </ul>
+        </section>
+
+        <!-- Voting yourself, apart from the automations, as it is none: on Hydrex's own app, beside what votes earned on
+             average, and the wallet's own. -->
+        <section id="vote-yourself" aria-labelledby="vote-yourself-title">
+          <h2 id="vote-yourself-title">Vote yourself</h2>
+          <div class="self">
+            <dl class="facts">
+              <div>
+                <dt>Takes</dt>
+                <dd>Nothing</dd>
+              </div>
+              <div>
+                <dt>Pays in</dt>
+                <dd>Tokens earned</dd>
+              </div>
+              <div>
+                <dt>Earned last epoch</dt>
+                <dd>
+                  <span class="average">…</span> <span class="small">/ 1k Earning Power</span
+                  ><span class="average-of small">Hydrex average</span
+                  ><span class="yours-line small" hidden><span class="yours-average"></span></span>
+                </dd>
+              </div>
+            </dl>
+            <a class="button secondary" href="https://www.hydrex.fi/" target="_blank" rel="noopener"
+              >Vote on Hydrex <span aria-hidden="true">↗</span></a
+            >
+          </div>
         </section>
 
         <!-- Then the wallet's Hydrex accounts, in groups a level below: those that need their owner, those in each

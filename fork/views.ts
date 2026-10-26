@@ -234,13 +234,12 @@ describe("the page against a fork of Base: its views, and each account's payouts
       .waitFor({ timeout: 120_000 });
     assert.equal(await account(page, 14485).locator(".earned").isVisible(), false, "its owner did not vote");
     await shoot(page, "member-earned-390-light");
-    // What the votes earned for each 1,000 Earning Power, then what reached the owner after the share retired.
+    // What the votes earned for each 1,000 Earning Power: what reached the owner is on the automation's page.
     const menu = hydrex(page).locator('.choice[data-choice="carbon-impact"]');
     assert.match(await menu.locator(".record").innerText(), /^≈\s\$0\.\d\d$/);
-    assert.equal(await menu.locator(".record-unit").innerText(), "earned");
-    assert.match(await menu.locator(".record-paid").innerText(), /^≈\s\$0\.\d\d to you$/);
+    assert.equal(await menu.locator(".record-unit").innerText(), "/ 1k Earning Power");
     // Beside it, Hydrex's average, which could not be read here.
-    await hydrex(page).locator('[data-choice="self"] .average').getByText("Not read", { exact: true }).waitFor();
+    await hydrex(page).locator("#vote-yourself .average").getByText("Not read", { exact: true }).waitFor();
     assert.equal(compared, true);
     await page.goto(`${SITE}/#hydrex/carbon-impact`);
     const impact = product(page, "carbon-impact");

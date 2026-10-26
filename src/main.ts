@@ -304,9 +304,10 @@ function showRecords(): void {
           : () => money(per);
     const toYou = per && paid !== undefined ? () => `${money(moneyAt(per.value * paid, per))} to you` : per ? "…" : "";
     for (const place of placesOf(automation)) {
-      // The menu says once that its figures are per 1,000 Earning Power.
-      const unit = place.classList.contains("choice") ? "earned" : "earned, per 1,000 Earning Power";
-      fill(place, { record, "record-unit": per ? unit : "", "record-paid": toYou });
+      // The menu compares what the votes earned, and leaves what reached the owner to the automation's page.
+      const menu = place.classList.contains("choice");
+      const unit = menu ? "/ 1k Earning Power" : "earned, per 1,000 Earning Power";
+      fill(place, { record, "record-unit": per ? unit : "", ...(!menu && { "record-paid": toYou }) });
     }
   }
   // Beside them, what voting yourself paid: Hydrex's average, and the wallet's own votes, when it held votes then.
@@ -316,7 +317,7 @@ function showRecords(): void {
   const yours = owner ? voterPerThousand(owner) : undefined;
   show(".yours-line", yours !== undefined);
   if (yours !== undefined) {
-    fill(document, { "yours-average": yours === null ? "You didn't vote" : () => `${money(yours)} yours` });
+    fill(document, { "yours-average": yours === null ? "You didn't vote" : () => `Yours: ${money(yours)}` });
   }
 }
 

@@ -243,7 +243,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     const { page, violations } = await connected({ owner: NEWCOMER }, { width: 390, height: 844 });
     await account(page, 141).getByText(UNVOTED).waitFor();
     const menu = hydrex(page).locator("#menu");
-    assert.deepEqual(await menu.locator("h3").allInnerTexts(), ["Carbon Impact", "AutoMaxi", "Vote yourself"]);
+    assert.deepEqual(await menu.locator("h3").allInnerTexts(), ["Carbon Impact", "AutoMaxi"]);
     await menu.locator(".automaxi-state").getByText("Not voted yet").waitFor();
     await menu
       .locator('[data-choice="carbon-impact"] .record')
@@ -251,7 +251,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
       .waitFor({ timeout: 120_000 });
     assert.equal(await menu.locator('[data-choice="automaxi"] .record').innerText(), "No record yet");
     // Voting yourself: Hydrex's average, and the wallet's own votes, which did not vote last epoch.
-    const self = menu.locator('[data-choice="self"]');
+    const self = hydrex(page).locator("#vote-yourself");
     await self
       .locator(".average")
       .getByText(/^≈\s\$0\.\d\d$/)

@@ -296,7 +296,7 @@ test("the header holds the logo and the name, and a button to connect a wallet; 
   assert.ok(!html.includes("No wallet connected."));
 });
 
-test("on Hydrex's page, the automations come before the Hydrex accounts, whose groups are a level below", () => {
+test("on Hydrex's page, the automations, then voting yourself apart, come before the Hydrex accounts, whose groups are a level below", () => {
   const hydrex = viewOf(read("index.html"), 'data-view="hydrex"');
   const headings = [...hydrex.matchAll(/<(h[1-3])[^>]*>([\s\S]*?)<\/\1>/g)].map(
     ([, level, inner]) => `${level} ${inner!.replace(/<[^>]+>/g, "").trim()}`,
@@ -306,7 +306,7 @@ test("on Hydrex's page, the automations come before the Hydrex accounts, whose g
     "h2 Automations",
     "h3 Carbon Impact",
     "h3 AutoMaxi",
-    "h3 Vote yourself",
+    "h2 Vote yourself",
     "h2 Your Hydrex accounts",
     "h3 Needs you",
     "h3 In Carbon Impact",
