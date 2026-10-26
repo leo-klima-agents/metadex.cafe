@@ -437,10 +437,10 @@ YOUR TOKENS                              11 of 19 ticked
 Two steps, as every review:
 
 1. **Quote:** each token, its amount, its route, what it fetches and at least; the swap's 1%; the gas. A line on what a
-   quote cannot see: the MEV tax on Aero's classic pools above a 1 gwei tip, and fees that Hydrex's and Aero's admins
-   can change. Before this step shows, the page runs the approvals and the swap through `eth_simulateV1` with no
-   minimum, so the figures are the swap's own, not only the quotes', and sets each minimum from them. A route that would
-   not go through even so is left out, and its line says why.
+   quote cannot see: the MEV tax on Aero's classic pools above a 1 gwei tip, and fees that Hydrex and Aero can change.
+   Before this step shows, the page runs the approvals and the swap through `eth_simulateV1` with no minimum, so the
+   figures are the swap's own, not only the quotes', and sets each minimum from them. A route that would not go through
+   even so is left out, and its line says why.
 2. **Transactions:** each approval as a slip (`approve`, the swapper's address, the exact amount), then the swap: the
    swapper's address, each route in words ("41.2 AVNT, Hydrex Algebra pool `0x…` to WETH, Uniswap v3 0.05% pool `0x…` to
    USDC, at least 0.60 USDC"), the deadline, and skip-failed. From a Safe, the calldata word by word, as today.
@@ -490,9 +490,9 @@ finding routes for many tokens strains the free RPCs' limits, the page finds the
   | Other costs            | The pools' own fees, the price moved by the swap, and gas                               |
   | Who can change it      | Nobody: a new fee means a new deployment                                                |
 
-- **Who controls what:** nobody controls the swappers. Each exchange's admins can change their pools' fees, pause pools,
-  or upgrade code that runs in the swap, which can worsen a price down to the minimum, but none can take the tokens. One
-  line per exchange, from the swapper's own table.
+- **Who controls what:** nobody controls the swappers. Each exchange can change its pools' fees, pause pools, or upgrade
+  code that runs in the swap, which can worsen a price down to the minimum, but none can take the tokens. One line per
+  exchange, from the swapper's own table.
 - **Approvals you gave the swappers,** as above.
 - **Check it:** the six swappers; the twelve factories, which the page checks against `exchanges()`; what the page
   checks (code, `outputToken`, `TREASURY`, `FEE_BPS`, the factories); how routes are found; how a quote can differ from

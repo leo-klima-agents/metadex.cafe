@@ -24,7 +24,6 @@ This README is for whoever runs the site. The design and the plan are in [design
 - **Before anyone can join, the page checks** the chain, each automation's code, Carbon Impact's settings, and the code
   of Hydrex's VotingEscrow against `src/config.ts`. If a check fails, joining that automation is turned off, and the
   page marks the check on that automation's page, under Check it. Leaving always works. The checks run again every hour.
-  Until there is code at AutoMaxi's address, the page leaves AutoMaxi out.
 - **Claiming** is `claim(tokenId, feeAddresses, bribeAddresses, tokens)` on AutoMaxi, which anyone can call for any
   account in it, and which pays the owner, less 1%. AutoMaxi's keeper claims for every member right after each epoch, so
   the page offers it only for the wallet's own accounts, once a payout is overdue: half a day after the flip with
@@ -59,17 +58,25 @@ This README is for whoever runs the site. The design and the plan are in [design
   list the wallets in the page too.
 - Home is a heading and the button to the App (`#app`). A wallet connected on Home or About leads on to the App; the
   name in the header still leads Home afterwards. The App, "Your wallet", starts with what needs you across the
-  products, each with one action: a Hydrex account in a stopped automation, an overdue payout, token approvals to the
-  swappers that haven't been used. Then the products, each with what you hold in it: the Hydrex automations (`#hydrex`)
-  and the swap (`#swap`). Its Approvals button lists every approval this wallet gave the café's contracts, with the call
-  that undoes it. The pages under it name the way back in their title, as "Your wallet › Hydrex"; Home and About do not.
+  products, each with one action: a Hydrex account in a stopped automation, accounts whose owner did not vote last
+  epoch, an overdue payout, token approvals to the swappers that haven't been used. Then the products, each with what
+  you hold in it: the Hydrex automations (`#hydrex`) and the swap (`#swap`). Its Approvals button lists every approval
+  this wallet gave the café's contracts, with the call that undoes it. The pages under it lead one level back, above
+  their title: "‹ Hydrex", or "‹ Your wallet" once a wallet is connected; Home and About do not.
 - The page always says "Hydrex account", as "account" alone means an address in crypto: "8 Hydrex accounts", "Hydrex
   Main Protocol Account #26432".
 - Details open from a round info button beside what they explain, as a popup: on a phone, a sheet from the foot of the
   screen. A popup has an address of its own, such as `#hydrex/carbon-impact/check`.
-- `#hydrex` starts with the automations, in one box, a row each: each automation, and voting yourself, with what each
-  takes, what it pays in and what it paid last epoch. Then the wallet's Hydrex accounts, in groups a level below: those
-  that need their owner, those in each automation, and the others.
+- `#hydrex` starts with the automations, in one box, a row each, with what each takes, what it pays in, what its votes
+  earned last epoch per 1,000 Earning Power and how that compares with Hydrex's average, both at the average's prices,
+  and, with a wallet, how many of its Hydrex accounts are in it. Then, apart, as it is no automation, voting yourself:
+  what votes earned on Hydrex last epoch per 1,000 Earning Power, on average and, with a wallet, by the wallet's own
+  votes, with how the two compare, and a link to vote on Hydrex. Then the wallet's Hydrex accounts, in groups a level
+  below: those that need their owner (in an automation that stopped, or voted with by an owner who has not voted since
+  before last epoch, as Hydrex counts a vote only in the epoch it is cast), those in each automation, and the others.
+  Each account shows what its votes earned last epoch, in an automation or through whoever voted with it. Needs you
+  starts with its accounts ticked; each group with boxes has one that ticks them all, and says how many are ticked and
+  their Earning Power.
 - `#swap` takes the output from its address, `#swap/weth`, USDC by default, then lists the wallet's tokens, each with
   what it fetches, ticked when the quote is worth twice its gas. What the ticked ones fetch shows line by line: the
   quote, the 1%, what reaches you, the least that may, on the line where the slippage is picked, and the gas, paid apart
@@ -78,12 +85,13 @@ This README is for whoever runs the site. The design and the plan are in [design
   swappers' contracts, such as `#swap/weth/check`; and the approvals given to the swappers. Its review shows the swap as
   a bill: each token, or each part of one, with its route by tokens and pools, under the gas, then the least, with the
   slippage that set it.
-- Each automation has a page, `#hydrex/carbon-impact` and `#hydrex/automaxi`: its key figures (what it takes, what it
-  pays in, what it paid last epoch, and what it retired or who controls it), and a way to join. Everything else is in
+- Each automation has a page, `#hydrex/carbon-impact` and `#hydrex/automaxi`: what it does in one sentence, that the
+  account stays in the wallet, its key figures (what it takes, what it pays in, what it paid last epoch beside Hydrex's
+  average, and what it retired or who controls it), and a way to join, or the wallet buttons. Everything else is in
   popups: its six fee facts, how it did against all of Hydrex, joining and leaving, who controls what, and Check it.
 - Each account has a page, `#hydrex/` and its number, which anyone can open: its status, what its votes earned, what its
-  owner can do with it, and, in an automation, up to when it has been paid, what waits to be claimed, and the receipt of
-  its last payout. The App marks the accounts paid late.
+  owner can do with it, with the gas of a change when it earns nothing, and, in an automation, up to when it has been
+  paid, what waits to be claimed, and the receipt of its last payout. The App marks the accounts paid late.
 - Joining takes two steps: what it allows, with what a week at last epoch's rate would pay and the gas of the change,
   then the calls, each a bill in its own words, with its fields in full. About (`#about`) holds the page's own facts:
   its address, the cookies it stores, none, and its version. The footer leads to it, and stays at the foot of the
@@ -96,10 +104,10 @@ Nobody controls the swappers either: their code fixes the fee, 1% of each route'
 output and the twelve factories. As nothing about them can change, the page does not check them: it offers swaps once it
 has read that its RPCs serve Base, and says nothing of it.
 
-One admin key controls Carbon Impact. It can change the share retired (up to 100%), the fee (up to 1%), the payout
-tokens, the swap routers, any owner's payout address, and who claims and votes for it. The page always shows the
-settings as they are on Base. Nobody controls AutoMaxi: its code fixes its fee, 1% of each claim, and the 2-of-3 Safe it
-goes to. A change means a new deployment, and owners joining again.
+Hydrex controls Carbon Impact. It can change the share retired (up to 100%), the fee (up to 1%), the payout tokens, the
+swap routers, any owner's payout address, and who claims and votes for it. The page always shows the settings as they
+are on Base. Nobody controls AutoMaxi: its code fixes its fee, 1% of each claim, and the 2-of-3 Safe it goes to. A
+change means a new deployment, and owners joining again.
 
 ## Network access
 
@@ -266,7 +274,10 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   through the record of the reward worth the most that the payout claimed. Anyone allowed to claim for the account moves
   that record, such as its owner on Hydrex. The page then says that the account was last claimed outside Carbon Impact,
   and shows no receipt.
-- What votes earned is for the last epoch only.
+- What votes earned is for the last epoch only. Hydrex's average needs every pool's reward contracts, thousands of reads
+  made once a session, after the page's own, and only on `#hydrex` and the automations' pages. What the votes of
+  accounts in no automation earned is read only there and on an account's page, through whoever held them: as many reads
+  when that holder voted during this epoch, as Hydrex's Voter then holds only the new votes.
 - Prices are approximate. USDC, WETH, cbBTC and EURC take Chainlink's; other tokens, and one of those four whose feed
   does not answer, a half-hour average in their deepest pool against one of those priced. Prices now, for swaps, gas and
   what waits to be claimed, come from Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools and Hydrex Integral,
@@ -278,7 +289,7 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   currency, a figure in dollars is converted at Chainlink's rate on Base of its own time, such as GBP / USD, at the flip
   or now; without a round of that time, it stays in dollars. Gas without ETH's price shows in ETH. A token without a
   deep enough pool has no price.
-- Only the admin key, or a call from the owner's own address made elsewhere, can change a payout address.
+- Only Hydrex, or a call from the owner's own address made elsewhere, can change a payout address.
 - The swap knows only the tokens on its list, Hydrex's reward tokens, those added by address, and those a wallet lists
   with ERC-7811's `wallet_getAssets`: no RPC lists a wallet's tokens. Routes pass through WETH, USDC, cbBTC and HYDX
   only. A token's own route takes, at each hop, the best pool for what the hop before paid, which is not always the best

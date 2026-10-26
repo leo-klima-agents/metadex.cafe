@@ -259,38 +259,44 @@ test("each swapper has its output and a checksummed address, and the swap's page
   assert.doesNotMatch(swap, /data-check=|>Checks<\/h4>|serves Base/);
 });
 
-test("the header holds the logo and the name, and a button to connect a wallet; the wallet's pages lead back to it", () => {
+test("the header holds the logo and the name, and a button to connect a wallet; the pages below the App lead back one level", () => {
   const html = read("index.html");
   const header = /<header class="site">[\s\S]*?<\/header>/.exec(html)?.[0] ?? "";
   assert.match(header, /<a class="name" href="#"><img src="icon\.svg" alt="" [^>]*\/> metaDEX Café<\/a>/);
   assert.match(header, /<button type="button" class="connect">Connect a wallet<\/button>/);
-  assert.match(header, /<a class="to-app button wallet-state" href="#app" hidden/);
-  // Home and About are the page's own; the App is "Your wallet", and every other view names the way back to it first.
-  const trail = (view: string) => /<nav class="trail" aria-label="Breadcrumb">(.*?)<\/nav>/.exec(view)?.[1];
+  // The wallet's chip is outlined, so that it does not read as the page's main action.
+  assert.match(header, /<a class="to-app button secondary wallet-state" href="#app" hidden/);
+  // Home and About are the page's own; the App is "Your wallet". Hydrex and the swap lead back to it once a wallet is
+  // connected, and the pages within Hydrex lead back to Hydrex.
+  const trail = (view: string) => /<nav class="trail[^"]*" aria-label="Back"[^>]*>(.*?)<\/nav>/.exec(view)?.[1];
   for (const name of ["home", "about"]) assert.equal(trail(viewOf(html, `data-view="${name}"`)), undefined, name);
   assert.match(viewOf(html, 'data-view="app"'), /<h1 tabindex="-1">Your wallet<\/h1>/);
   for (const name of ["hydrex", "swap"]) {
-    assert.equal(trail(viewOf(html, `data-view="${name}"`)), '<a href="#app">Your wallet</a>', name);
+    const view = viewOf(html, `data-view="${name}"`);
+    assert.match(view, /<nav class="trail trail-wallet" aria-label="Back" hidden>/, name);
+    assert.equal(trail(view), '<a href="#app">Your wallet</a>', name);
   }
   for (const view of [
     productOf(html, "carbon-impact"),
     productOf(html, "automaxi"),
     viewOf(html, 'data-view="position"'),
   ]) {
-    assert.equal(trail(view), '<a href="#app">Your wallet</a><a href="#hydrex">Hydrex</a>');
+    assert.equal(trail(view), '<a href="#hydrex">Hydrex</a>');
   }
-  // The header's popup holds the wallet buttons, as do the App, under its products, and the lists of what a wallet holds:
-  // its Hydrex accounts, and the tokens to sell.
-  assert.equal(html.match(/<div class="wallet-slot"><\/div>/g)?.length, 4);
+  // The header's popup holds the wallet buttons, as do the App, under its products, the lists of what a wallet holds
+  // (its Hydrex accounts, and the tokens to sell) and each automation's page, where its accounts would be.
+  assert.equal(html.match(/<div class="wallet-slot"><\/div>/g)?.length, 6);
   const app = viewOf(html, 'data-view="app"');
   assert.ok(app.indexOf('<div class="wallet-slot"></div>') > app.indexOf('id="products"'));
   assert.ok(header.includes('<div class="wallet-slot"></div>'));
   assert.match(viewOf(html, 'data-view="hydrex"'), /id="yours-title"[\s\S]*?<div class="wallet-slot"><\/div>/);
   assert.match(viewOf(html, 'data-view="swap"'), /id="swap-tokens-title"[\s\S]*?<div class="wallet-slot"><\/div>/);
+  for (const kind of ["carbon-impact", "automaxi"])
+    assert.match(productOf(html, kind), /<div class="wallet-slot"><\/div>/);
   assert.ok(!html.includes("No wallet connected."));
 });
 
-test("on Hydrex's page, the automations come before the Hydrex accounts, whose groups are a level below", () => {
+test("on Hydrex's page, the automations, then voting yourself apart, come before the Hydrex accounts, whose groups are a level below", () => {
   const hydrex = viewOf(read("index.html"), 'data-view="hydrex"');
   const headings = [...hydrex.matchAll(/<(h[1-3])[^>]*>([\s\S]*?)<\/\1>/g)].map(
     ([, level, inner]) => `${level} ${inner!.replace(/<[^>]+>/g, "").trim()}`,
@@ -300,7 +306,7 @@ test("on Hydrex's page, the automations come before the Hydrex accounts, whose g
     "h2 Automations",
     "h3 Carbon Impact",
     "h3 AutoMaxi",
-    "h3 Vote yourself",
+    "h2 Vote yourself",
     "h2 Your Hydrex accounts",
     "h3 Needs you",
     "h3 In Carbon Impact",
@@ -312,5 +318,20 @@ test("on Hydrex's page, the automations come before the Hydrex accounts, whose g
 test("AutoMaxi's page no longer says that owners can claim on Hydrex without its fee, but still does for leaving", () => {
   const joining = /data-section="joining"[\s\S]*?<\/dl>/.exec(productOf(read("index.html"), "automaxi"))?.[0] ?? "";
   assert.doesNotMatch(joining, /claim on Hydrex yourself/);
-  assert.match(joining, /what\s+nobody\s+has\s+claimed\s+through\s+it\s+is\s+yours\s+to\s+claim\s+on\s+Hydrex/);
+  assert.match(joining, /rewards\s+not\s+claimed\s+yet\s+stay\s+yours,\s+to\s+claim\s+on\s+Hydrex/);
+});
+
+test("each automation's page says what it does, and that the account stays in the wallet, before its figures", () => {
+  const html = read("index.html");
+  for (const { kind } of AUTOMATIONS) {
+    const page = productOf(html, kind);
+    const [lead, custody, figures] = ['class="lead"', 'class="custody small"', 'class="facts tiles"'].map((part) =>
+      page.indexOf(part),
+    ) as [number, number, number];
+    assert.ok(lead > 0 && lead < custody && custody < figures, kind);
+    assert.match(page.slice(custody, figures), /Your Hydrex account stays in your wallet/);
+    assert.match(page.slice(custody, figures), /popovertarget="\w+-joining"/, `${kind}'s custody line opens joining`);
+  }
+  // Hydrex's word, not the market's.
+  assert.doesNotMatch(html, /\bbribes?\b/i);
 });

@@ -1,4 +1,4 @@
-import { encodeFunctionData, keccak256, parseAbi, zeroAddress, type Address, type Hex } from "viem";
+import { encodeFunctionData, parseAbi, zeroAddress, type Address, type Hex } from "viem";
 import { blockTime, call, codeHash, implementation, read, required, rpc, same, type Call } from "./chain.ts";
 import {
   ACCOUNT_NAMES,
@@ -128,6 +128,8 @@ export type Account = {
   delegateAtStart: Address;
   // When the automation that holds its votes last voted, or 0.
   delegateVoted: number;
+  // When its owner last voted, or 0: an account they vote with themselves earns only in an epoch they voted in.
+  ownerVoted: number;
   claimer: Address;
 };
 
@@ -148,6 +150,8 @@ export type Status =
   | { kind: "other"; name: string }
   | { kind: "left-other"; name: string; date: number }
   | { kind: "stopped"; name: string; voted: number; since: number }
+  // Its owner votes with it, but has not voted since before last epoch, or ever: 0.
+  | { kind: "unvoted"; voted: number }
   | { kind: "delegated"; to: Address };
 
 // The App's groups: accounts that need their owner, those in each of the page's automations or joining it, the others,
@@ -214,12 +218,14 @@ const withContext = (calls: Call[]): Promise<unknown[]> =>
 
 // The accounts, and the replies to the `more` calls, which share their read.
 async function accountsOf(
+  owner: Address,
   ids: bigint[],
   epochStart: number,
   lastVoted: Map<string, number>,
   more: Call[] = [],
 ): Promise<{ accounts: Account[]; more: unknown[] }> {
   const details = await read([
+    voter("lastVoted", owner),
     ...ids.flatMap((id) => [
       escrow("lockDetails", id),
       escrow("balanceOfNFT", id),
@@ -230,6 +236,8 @@ async function accountsOf(
     call(ACCOUNT_NAMES, accountNamesAbi, "getBulkNames", ids),
     ...more,
   ]);
+  // If the Voter cannot be read, the owner is just not known to have stopped voting.
+  const ownerVoted = Number((details.shift() as bigint | undefined) ?? BigInt(epochStart));
   const names = (details[5 * ids.length] as readonly string[] | undefined) ?? [];
   const accounts = ids.map((id, i): Account => {
     const [{ amount, endTime, lockType }, votes, delegate, delegateAtStart, claimer] = required(
@@ -245,6 +253,7 @@ async function accountsOf(
       delegate,
       delegateAtStart,
       delegateVoted: lastVoted.get(delegate.toLowerCase()) ?? 0,
+      ownerVoted,
       claimer,
     };
   });
@@ -260,7 +269,7 @@ export async function readAccounts(owner: Address): Promise<Holdings> {
   const epochStart = epochAt(time);
   const indexes = Array.from({ length: Number(count) }, (_, i) => BigInt(i));
   const ids = required(await read(indexes.map((i) => escrow("tokenOfOwnerByIndex", owner, i)))) as bigint[];
-  const { accounts } = await accountsOf(ids, epochStart, othersVoted(voted));
+  const { accounts } = await accountsOf(owner, ids, epochStart, othersVoted(voted));
   accounts.sort((a, b) => (a.votes === b.votes ? Number(a.id - b.id) : a.votes > b.votes ? -1 : 1));
   return { owner, accounts, payout: payout as Address | undefined, time: Number(time), epochStart };
 }
@@ -277,7 +286,7 @@ export async function readAccount(id: bigint): Promise<Holdings | undefined> {
   const {
     accounts,
     more: [payout],
-  } = await accountsOf([id], epochStart, othersVoted(voted), [
+  } = await accountsOf(owner as Address, [id], epochStart, othersVoted(voted), [
     carbonImpact("getEffectiveRecipientForOwner", owner as Address),
   ]);
   return { owner: owner as Address, accounts, payout: payout as Address | undefined, time: Number(time), epochStart };
@@ -293,27 +302,20 @@ const held = (account: Account, { address }: Automation) => ({
 export const automationName = (address: Address): string | undefined =>
   others.find((other) => same(other.address, address))?.name;
 
-const pageAutomation = (address: Address, automations: Automation[]): Automation | undefined =>
-  automations.find((automation) => same(address, automation.address));
+const pageAutomation = (address: Address): Automation | undefined =>
+  AUTOMATIONS.find((automation) => same(address, automation.address));
 
 // Hydrex counts a vote only in the epoch it is cast. An automation that has not voted since the previous epoch began
 // earns its accounts nothing. One that has never voted may be new.
 export const hasStopped = (voted: number, epochStart: number): boolean => voted > 0 && voted < epochStart - WEEK;
+// An owner who votes with their accounts themselves: whether they voted last epoch or since. Never is not.
+const hasVoted = (voted: number, epochStart: number): boolean => voted >= epochStart - WEEK;
 
 // Hydrex counts votes for whoever held them when the epoch started, so joins and leaves count from the next epoch.
-// `automations` are the page's own that are on Base.
-export function statusOf(
-  account: Account,
-  owner: Address,
-  now: number,
-  epochStart: number,
-  automations: Automation[] = AUTOMATIONS,
-): Status {
+export function statusOf(account: Account, owner: Address, now: number, epochStart: number): Status {
   if (account.amount === 0n) return { kind: "empty" };
   if (ended(account, now)) return { kind: "ended" };
-  const [votes, claims, atStart] = [account.delegate, account.claimer, account.delegateAtStart].map((address) =>
-    pageAutomation(address, automations),
-  );
+  const [votes, claims, atStart] = [account.delegate, account.claimer, account.delegateAtStart].map(pageAutomation);
   if (votes && votes === claims) {
     return votes === atStart
       ? { kind: "in", automation: votes }
@@ -323,7 +325,8 @@ export function statusOf(
   if (atStart) return { kind: "left", automation: atStart, date: epochStart + WEEK };
   if (same(account.delegate, owner) || same(account.delegate, zeroAddress)) {
     const before = automationName(account.delegateAtStart);
-    return before ? { kind: "left-other", name: before, date: epochStart + WEEK } : { kind: "self" };
+    if (before) return { kind: "left-other", name: before, date: epochStart + WEEK };
+    return hasVoted(account.ownerVoted, epochStart) ? { kind: "self" } : { kind: "unvoted", voted: account.ownerVoted };
   }
   const name = automationName(account.delegate);
   if (!name) return { kind: "delegated", to: account.delegate };
@@ -345,10 +348,11 @@ export function canLeave(account: Account, automation: Automation): boolean {
 
 export const canLeaveOther = (account: Account): boolean => automationName(account.delegate) !== undefined;
 
-export function groupOf(account: Account, status: Status, automations: Automation[] = AUTOMATIONS): Group {
+export function groupOf(account: Account, status: Status): Group {
   switch (status.kind) {
     case "stopped":
     case "partly":
+    case "unvoted":
       return "needs";
     case "in":
     case "joined":
@@ -356,7 +360,7 @@ export function groupOf(account: Account, status: Status, automations: Automatio
     // An automation may still hold the approvals of an account it can no longer vote with.
     case "ended":
     case "empty": {
-      const holder = automations.find((automation) => canLeave(account, automation));
+      const holder = AUTOMATIONS.find((automation) => canLeave(account, automation));
       return holder ? `in:${holder.kind}` : "closed";
     }
     default:
@@ -433,12 +437,7 @@ export async function readFreshness({ address }: Automation): Promise<Freshness>
   return { epochStart: epochAt(time), voted: Number(voted) };
 }
 
-// The hash of no code at all.
-const NO_CODE = keccak256("0x");
-
 export type Checks = {
-  // The page's automations with code on Base. Until AutoMaxi has some, the page leaves it out.
-  present: Automation[];
   // The checks that fail for each automation, each named by the id of its message on the page. A check of Base or of
   // Hydrex fails for all of them.
   failed: Map<Kind, string[]>;
@@ -449,11 +448,9 @@ const points = (escrowAddress: unknown, voterOf: unknown) =>
 
 // Each automation's own checks: what its code must hash to and what joining it must approve, which every automation
 // has, then the reads of its own and what they must answer. Each check is named by the id of its message on the page.
-// Carbon Impact is on Base from the start; AutoMaxi only once there is code at its address.
 type Own = {
   calls: Call[];
   checks(answers: unknown[], code: boolean, approvals: boolean): Record<string, boolean>;
-  always: boolean;
 };
 const own: Record<Kind, Own> = {
   "carbon-impact": {
@@ -464,7 +461,6 @@ const own: Record<Kind, Own> = {
       token: !same(String(payoutToken), KVCM),
       approvals: !approvals,
     }),
-    always: true,
   },
   automaxi: {
     calls: [autoMaxi("veToken"), autoMaxi("voter")],
@@ -473,12 +469,8 @@ const own: Record<Kind, Own> = {
       "automaxi-contracts": !points(veToken, voterOf),
       "automaxi-approvals": !approvals,
     }),
-    always: false,
   },
 };
-
-// The automations on Base before the checks have run.
-export const FROM_START: Automation[] = AUTOMATIONS.filter(({ kind }) => own[kind].always);
 
 export async function failedChecks(): Promise<Checks> {
   const reads = AUTOMATIONS.map(({ kind, address }) => [
@@ -505,16 +497,9 @@ export async function failedChecks(): Promise<Checks> {
     const [actions, active] = (config ?? [[], false]) as [number[], boolean];
     const approvals = active && actions.join() === automation.actions.join();
     const checks = own[automation.kind].checks(mine, hashes[i] === automation.codeHash, approvals);
-    return {
-      automation,
-      failed: [...all, ...failing(checks)],
-      on: own[automation.kind].always || hashes[i] !== NO_CODE,
-    };
+    return { automation, failed: [...all, ...failing(checks)] };
   });
-  return {
-    present: found.flatMap(({ automation, on }) => (on ? [automation] : [])),
-    failed: new Map(found.map(({ automation, failed }) => [automation.kind, failed])),
-  };
+  return { failed: new Map(found.map(({ automation, failed }) => [automation.kind, failed])) };
 }
 
 // What gas costs for some calls from `from`, in wei, with today's prices to show it at: each costs about what the first

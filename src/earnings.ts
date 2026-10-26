@@ -1,5 +1,6 @@
-import { parseAbi, type Address } from "viem";
+import { getAddress, parseAbi, type Address } from "viem";
 import { blockTime, call, read, readLater, required, same } from "./chain.ts";
+import { AUTOMATIONS } from "./config.ts";
 import { WEEK, clean } from "./format.ts";
 import { escrow, voter } from "./hydrex.ts";
 import { pricesAtFlip, pricesIn, worthOf, type Prices, type Token } from "./prices.ts";
@@ -158,49 +159,67 @@ async function priced(
 }
 
 // What an automation's votes earned in the last epoch that has ended, or undefined if that is still the epoch `known`.
-// Hydrex's Voter keeps only each voter's latest votes. Between its vote just before an epoch ends and the flip, those
-// are already the next epoch's, so the pools are then found from every pool's reward contracts instead. An automation
-// that had no votes when the epoch started has no record for it: no pools, and no rewards.
 export async function readEarnings(automation: Address, known?: number): Promise<Earnings | undefined> {
-  const { start, now } = await lastEpoch();
+  const { start } = await lastEpoch();
   if (start === known) return undefined;
-  const [voted, length, votes] = required(
-    await read([
-      voter("lastVoted", automation),
-      voter("poolVoteLength", automation),
-      escrow("getPastVotes", automation, start),
+  return votesEarned(automation, start, read, true);
+}
+
+// What one voter's votes earned in the epoch from `start`, such as an owner who votes with their accounts themselves,
+// after the page's own reads; its pools go unnamed.
+export const readVoterEarnings = (holder: Address, start: number): Promise<Earnings> =>
+  votesEarned(holder, start, readLater, false);
+
+// What a voter's votes earned in the epoch from `start`: an automation's, or an owner's. Its rewards go to the votes
+// standing when it starts, which a vote in the epoch before may have cast. A voter that has not voted since the epoch
+// before began, as an automation that stopped (hasStopped), or that had no votes when it started, earned nothing in it:
+// no pools, and no rewards. Hydrex's Voter keeps only each voter's latest votes. Between its vote just before an
+// epoch ends and the flip, those are already the next epoch's, so the pools are then found from every pool's reward
+// contracts instead. `named` names each pool by its tokens, as an automation's page lists them.
+async function votesEarned(holder: Address, start: number, reader: typeof read, named: boolean): Promise<Earnings> {
+  const [now, voted, length, votes] = required(
+    await reader([
+      blockTime,
+      voter("lastVoted", holder),
+      voter("poolVoteLength", holder),
+      escrow("getPastVotes", holder, start),
     ]),
   ) as bigint[];
-  if (!votes) return { start, votes: 0n, pools: [], rewards: [], prices: pricesIn("USD") };
+  if (!votes || Number(voted) < start - WEEK)
+    return { start, votes: votes!, pools: [], rewards: [], prices: pricesIn("USD") };
   const pools =
     Number(voted) >= start + WEEK
-      ? await allPools()
+      ? await allPools(reader)
       : (required(
-          await read(Array.from({ length: Number(length) }, (_, i) => voter("poolVote", automation, BigInt(i)))),
+          await reader(Array.from({ length: Number(length) }, (_, i) => voter("poolVote", holder, BigInt(i)))),
         ) as Address[]);
-  const found = await rewardsOf(await bribesOf(pools), start, automation);
+  const found = await rewardsOf(await bribesOf(pools, reader), start, holder, reader);
   const used = [...found.votes];
-  const parts = await read(
-    used.flatMap(([pool]) => ["token0", "token1", "symbol"].map((name) => call(pool, poolAbi, name))),
-  );
+  const parts = named
+    ? await reader(used.flatMap(([pool]) => ["token0", "token1", "symbol"].map((name) => call(pool, poolAbi, name))))
+    : [];
   const pairs = used.map(
     (_, i) => parts.slice(3 * i, 3 * i + 3) as [Address | undefined, Address | undefined, string | undefined],
   );
-  const tokens = await tokensOf([
-    ...found.rewards.map(({ token }) => token),
-    ...pairs.flatMap(([token0, token1]) => (token0 && token1 ? [token0, token1] : [])),
-  ]);
+  const tokens = await tokensOf(
+    [
+      ...found.rewards.map(({ token }) => token),
+      ...pairs.flatMap(([token0, token1]) => (token0 && token1 ? [token0, token1] : [])),
+    ],
+    reader,
+  );
   const symbol = (address: Address) => tokens.get(address.toLowerCase())?.symbol ?? "?";
   // A pool is named by its two tokens. A classic pair goes by its own symbol; a vault by both.
-  const named = used.map(([address, poolVotes], i): Pool => {
+  const poolsOf = used.map(([address, poolVotes], i): Pool => {
+    if (!named) return { address, name: "", votes: poolVotes };
     const [token0, token1, own = ""] = pairs[i]!;
     const kind = clean(own);
     const pair = token0 && token1 ? `${symbol(token0)} / ${symbol(token1)}` : "";
     const name = /^[sv]AMM-/.test(kind) ? kind : pair && kind ? `${pair} (${kind})` : pair || kind || address;
     return { address, name, votes: poolVotes };
   });
-  named.sort((a, b) => (a.votes === b.votes ? 0 : a.votes > b.votes ? -1 : 1));
-  return priced(start, now, votes!, named, found, tokens);
+  poolsOf.sort((a, b) => (a.votes === b.votes ? 0 : a.votes > b.votes ? -1 : 1));
+  return priced(start, Number(now), votes!, poolsOf, found, tokens, reader);
 }
 
 // What an automation's votes earned in the epoch from `start`, reward by reward, unpriced. By then, Hydrex's Voter holds
@@ -246,21 +265,27 @@ export async function readAllEarnings(start: number): Promise<Earnings> {
   return priced(start, Number(now), votes!, voted, found, tokens, readLater);
 }
 
-// Each account's share of an automation's votes in the epoch from `start`: its votes then, if it was in the automation.
-export async function sharesOf(
-  ids: bigint[],
-  start: number,
-  votes: bigint,
-  automation: Address,
-): Promise<Map<bigint, number>> {
+// Who held each account's votes when the epoch from `start` began, and how many: an account counts for whoever held them.
+export type Stake = { delegate: Address; power: bigint };
+export async function stakesOf(ids: bigint[], start: number): Promise<Map<bigint, Stake>> {
   const found = await read(ids.flatMap((id) => [escrow("delegates", id, start), escrow("balanceOfNFTAt", id, start)]));
   return new Map(
     ids.flatMap((id, i) => {
       const [delegate, power] = found.slice(2 * i, 2 * i + 2) as [Address | undefined, bigint | undefined];
-      return delegate && power && votes > 0n && same(delegate, automation) ? [[id, Number(power) / Number(votes)]] : [];
+      return delegate && power ? [[id, { delegate, power }]] : [];
     }),
   );
 }
+
+// Whose votes earned what the accounts' did, for those in none of the page's automations: whoever held their votes,
+// mostly their owner. Each once.
+export const holdersOf = (stakes: Iterable<Stake | undefined>): Address[] => [
+  ...new Set(
+    [...stakes].flatMap((stake) =>
+      stake && !AUTOMATIONS.some(({ address }) => same(address, stake.delegate)) ? [getAddress(stake.delegate)] : [],
+    ),
+  ),
+];
 
 // What was earned, in all and by pool, in the prices' unit. A token without a price counts for nothing.
 export function valueOf({ rewards, prices }: Earnings) {

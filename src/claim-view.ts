@@ -134,7 +134,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     fragment.append(body);
     openReview({ name, pages: [{ title: name, body: fragment }], steps: [], checkHref, connection, hooks });
   };
-  if (!owing.length) return nothing("Nothing to claim: the keeper may have just claimed it.");
+  if (!owing.length) return nothing("Nothing to claim: the keeper may have just claimed it for you.");
   const totals = paidBy(owing.flatMap(({ owed }) => owed));
   const paid = totals.map(({ token, paid }) => ({ token, amount: paid }));
   // Each account's claim, in calls that fit a transaction, or small ones for a Safe to pack together, the most valuable

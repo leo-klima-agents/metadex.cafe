@@ -22,7 +22,7 @@
       <a class="name" href="#"><img src="icon.svg" alt="" width="28" height="28" /> metaDEX Café</a>
       <nav aria-label="Site">
         <button type="button" class="connect">Connect a wallet</button>
-        <a class="to-app button wallet-state" href="#app" hidden
+        <a class="to-app button secondary wallet-state" href="#app" hidden
           ><span class="visually-hidden">Your wallet, connected as </span
           ><span class="wallet-short" translate="no"></span
         ></a>
@@ -45,9 +45,9 @@
         <span>Reading Base failed.</span> <button type="button" class="again secondary compact">Try again</button>
       </p>
 
-      <!-- One view for each kind of page. The route in the hash picks the one shown: see src/views.ts. The pages of the
-           wallet name the way back to it above their own, as "Your wallet › Hydrex". Details open from an info button,
-           as a popup at the foot of each view. -->
+      <!-- One view for each kind of page. The route in the hash picks the one shown: see src/views.ts. The pages below
+           the App lead one level back, above their title: "‹ Hydrex", or "‹ Your wallet" once one is connected. Details
+           open from an info button, as a popup at the foot of each view. -->
       <div class="view home" data-view="home" data-title="metaDEX Café">
         <h1 tabindex="-1">Vote, claim and swap on Base</h1>
         <p class="buttons"><a class="button" href="#app">Open app</a></p>
@@ -115,7 +115,7 @@
 
       <div class="view" data-view="hydrex" data-title="Hydrex · metaDEX Café" hidden>
         <div class="title-line">
-          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your wallet</a></nav>
+          <nav class="trail trail-wallet" aria-label="Back" hidden><a href="#app">Your wallet</a></nav>
           <h1 tabindex="-1">Hydrex</h1>
         </div>
         <p class="notice checks-failed" data-kind="carbon-impact" role="alert" hidden>
@@ -136,6 +136,7 @@
         <!-- The automations come first, in one box, a row each, however many Hydrex accounts follow. -->
         <section id="menu" aria-labelledby="menu-title">
           <h2 id="menu-title">Automations</h2>
+          <p class="note small">They vote with your Hydrex accounts each week. Your accounts stay in your wallet.</p>
           <ul class="menu table">
             <li class="choice" data-choice="carbon-impact">
               <div class="choice-head">
@@ -150,6 +151,7 @@
                   >
                 </p>
               </div>
+              <p class="small yours-count" hidden></p>
               <dl class="facts">
                 <div>
                   <dt>Takes</dt>
@@ -161,11 +163,14 @@
                 </div>
                 <div>
                   <dt>Last epoch</dt>
-                  <dd><span class="record">…</span> <span class="record-unit small"></span></dd>
+                  <dd>
+                    <span class="record">…</span> <span class="record-unit small"></span
+                    ><span class="record-versus small" hidden></span>
+                  </dd>
                 </div>
               </dl>
             </li>
-            <li class="choice" data-choice="automaxi" data-needs="automaxi" hidden>
+            <li class="choice" data-choice="automaxi">
               <div class="choice-head">
                 <h3><a href="#hydrex/automaxi">AutoMaxi</a></h3>
                 <p class="small state">
@@ -179,10 +184,11 @@
                   >
                 </p>
               </div>
+              <p class="small yours-count" hidden></p>
               <dl class="facts">
                 <div>
                   <dt>Takes</dt>
-                  <dd>1%</dd>
+                  <dd>1% fee</dd>
                 </div>
                 <div>
                   <dt>Pays in</dt>
@@ -190,39 +196,50 @@
                 </div>
                 <div>
                   <dt>Last epoch</dt>
-                  <dd><span class="record">…</span> <span class="record-unit small"></span></dd>
-                </div>
-              </dl>
-            </li>
-            <li class="choice" data-choice="self">
-              <div class="choice-head">
-                <h3><a href="https://www.hydrex.fi/" target="_blank" rel="noopener">Vote yourself</a></h3>
-              </div>
-              <dl class="facts">
-                <div>
-                  <dt>Takes</dt>
-                  <dd>Nothing</dd>
-                </div>
-                <div>
-                  <dt>Pays in</dt>
-                  <dd>Tokens earned</dd>
-                </div>
-                <div>
-                  <dt>Last epoch</dt>
-                  <dd>Varies</dd>
+                  <dd>
+                    <span class="record">…</span> <span class="record-unit small"></span
+                    ><span class="record-versus small" hidden></span>
+                  </dd>
                 </div>
               </dl>
             </li>
           </ul>
         </section>
 
+        <!-- Voting yourself, apart from the automations, as it is none: what votes earned on Hydrex last epoch, on
+             average and, with a wallet, by its own votes, set beside each other as the automations' figures are. -->
+        <section id="vote-yourself" aria-labelledby="vote-yourself-title">
+          <h2 id="vote-yourself-title">Vote yourself</h2>
+          <p class="note small">On Hydrex's app, each week. No fee, and pays in the tokens earned.</p>
+          <dl class="facts tiles">
+            <div>
+              <dt>Hydrex average</dt>
+              <dd><span class="average">…</span> <span class="small">/ 1k Earning Power, last epoch</span></dd>
+            </div>
+            <div class="yours" hidden>
+              <dt>Your votes</dt>
+              <dd>
+                <span class="yours-average">…</span>
+                <span class="small yours-unit" hidden>/ 1k Earning Power, last epoch</span>
+              </dd>
+              <dd class="sub yours-versus" hidden></dd>
+            </div>
+          </dl>
+          <p class="buttons">
+            <a class="button secondary" href="https://www.hydrex.fi/" target="_blank" rel="noopener"
+              >Vote on Hydrex <span aria-hidden="true">↗</span></a
+            >
+          </p>
+        </section>
+
         <!-- Then the wallet's Hydrex accounts, in groups a level below: those that need their owner, those in each
              automation, the others, and a fold for those with nothing to vote with. -->
         <section id="yours" aria-labelledby="yours-title">
-          <div class="group-head">
-            <h2 id="yours-title">Your Hydrex accounts</h2>
-            <p id="epoch" class="epoch" hidden>Next epoch <span class="countdown">soon</span></p>
-          </div>
+          <h2 id="yours-title">Your Hydrex accounts</h2>
+          <p id="epoch" class="epoch" hidden>
+            A change made now moves the votes from <time class="epoch-end">Thursday, 00:00 UTC</time>,
+            <span class="countdown">soon</span>.
+          </p>
           <div class="wallet-slot"></div>
           <p class="accounts-reading small" role="status" hidden>Loading…</p>
           <p id="none" class="small" hidden>
@@ -233,16 +250,32 @@
           </p>
           <div id="accounts" hidden>
             <section class="group" data-group="needs" aria-labelledby="group-needs" hidden>
-              <h3 id="group-needs">Needs you <span class="count"></span></h3>
+              <div class="group-head">
+                <h3 id="group-needs">Needs you <span class="count"></span></h3>
+                <p class="picked small" hidden></p>
+                <label class="pick-all small" hidden><input type="checkbox" /> All</label>
+              </div>
               <ul class="accounts"></ul>
               <p class="buttons">
                 <button type="button" data-action="join" data-automation="carbon-impact">Join Carbon Impact</button>
                 <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
-                <button type="button" data-action="self" class="secondary">Leave</button>
+                <button type="button" data-action="self" class="secondary">Vote yourself</button>
+                <a
+                  class="button secondary vote-on-hydrex"
+                  href="https://www.hydrex.fi/"
+                  target="_blank"
+                  rel="noopener"
+                  hidden
+                  >Vote on Hydrex <span aria-hidden="true">↗</span></a
+                >
               </p>
             </section>
             <section class="group" data-group="in:carbon-impact" aria-labelledby="group-carbon-impact" hidden>
-              <h3 id="group-carbon-impact">In Carbon Impact <span class="count"></span></h3>
+              <div class="group-head">
+                <h3 id="group-carbon-impact">In Carbon Impact <span class="count"></span></h3>
+                <p class="picked small" hidden></p>
+                <label class="pick-all small" hidden><input type="checkbox" /> All</label>
+              </div>
               <ul class="accounts"></ul>
               <p class="buttons">
                 <button type="button" data-action="join" data-automation="automaxi" class="secondary">
@@ -252,7 +285,11 @@
               </p>
             </section>
             <section class="group" data-group="in:automaxi" aria-labelledby="group-automaxi" hidden>
-              <h3 id="group-automaxi">In AutoMaxi <span class="count"></span></h3>
+              <div class="group-head">
+                <h3 id="group-automaxi">In AutoMaxi <span class="count"></span></h3>
+                <p class="picked small" hidden></p>
+                <label class="pick-all small" hidden><input type="checkbox" /> All</label>
+              </div>
               <ul class="accounts"></ul>
               <p class="buttons">
                 <button type="button" data-action="claim">Claim</button>
@@ -263,12 +300,16 @@
               </p>
             </section>
             <section class="group" data-group="other" aria-labelledby="group-other" hidden>
-              <h3 id="group-other">Other Hydrex accounts <span class="count"></span></h3>
+              <div class="group-head">
+                <h3 id="group-other">Other Hydrex accounts <span class="count"></span></h3>
+                <p class="picked small" hidden></p>
+                <label class="pick-all small" hidden><input type="checkbox" /> All</label>
+              </div>
               <ul class="accounts"></ul>
               <p class="buttons">
                 <button type="button" data-action="join" data-automation="carbon-impact">Join Carbon Impact</button>
                 <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
-                <button type="button" data-action="self" class="secondary">Leave</button>
+                <button type="button" data-action="self" class="secondary">Vote yourself</button>
               </p>
             </section>
             <details class="group nothing" data-group="closed" hidden>
@@ -287,7 +328,7 @@
         hidden
       >
         <div class="title-line">
-          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your wallet</a><a href="#hydrex">Hydrex</a></nav>
+          <nav class="trail" aria-label="Back"><a href="#hydrex">Hydrex</a></nav>
           <h1 tabindex="-1">Carbon Impact</h1>
         </div>
         <div class="state-line">
@@ -303,6 +344,16 @@
             <span aria-hidden="true">i</span>
           </button>
         </div>
+        <p class="lead">
+          Votes with your Hydrex accounts, retires a share of their rewards as carbon credits, and pays you the rest in
+          kVCM.
+        </p>
+        <p class="custody small">
+          Your Hydrex account stays in your wallet. Leave with one call, at any time.
+          <button type="button" class="info" popovertarget="ci-joining" aria-label="Joining and leaving">
+            <span aria-hidden="true">i</span>
+          </button>
+        </p>
         <p class="notice checks-failed" data-kind="carbon-impact" role="alert" hidden>
           <span class="shape failed" aria-hidden="true"></span>Joining Carbon Impact is off.
           <a href="#hydrex/carbon-impact/check">Why</a>
@@ -331,6 +382,8 @@
             </dt>
             <dd class="record">…</dd>
             <dd class="sub record-unit"></dd>
+            <dd class="sub record-paid"></dd>
+            <dd class="sub">Hydrex average <span class="average">…</span></dd>
           </div>
           <div>
             <dt>
@@ -343,6 +396,7 @@
             <dd class="sub through"><img src="klima-protocol.svg" alt="" width="24" height="24" /> Klima Protocol</dd>
           </div>
         </dl>
+        <div class="wallet-slot"></div>
         <p class="accounts-reading small" role="status" hidden>Loading…</p>
         <div class="mine" hidden>
           <p class="mine-none small" hidden>No Hydrex account can join.</p>
@@ -361,6 +415,8 @@
               <button type="button" class="info" popovertarget="ci-joining" aria-label="Joining and leaving">
                 <span aria-hidden="true">i</span>
               </button>
+              <p class="picked small" hidden></p>
+              <label class="pick-all small" hidden><input type="checkbox" /> All</label>
             </div>
             <ul class="accounts"></ul>
             <p class="buttons">
@@ -405,7 +461,7 @@
             </div>
             <div>
               <dt>Who can change it</dt>
-              <dd>One admin key, any time</dd>
+              <dd>Hydrex, any time</dd>
             </div>
           </dl>
         </div>
@@ -426,6 +482,7 @@
           <p class="record-waiting small">Loading…</p>
           <p class="record-none small" hidden>No record yet.</p>
           <div class="record-found" hidden>
+            <p class="versus" hidden></p>
             <div class="scroll">
               <table class="earnings">
                 <thead>
@@ -474,7 +531,6 @@
               <span>Reading all of Hydrex failed.</span>
               <button type="button" class="compare-again secondary compact">Try again</button>
             </p>
-            <p class="versus" hidden></p>
             <div class="scroll">
               <table class="earned-pools">
                 <thead>
@@ -513,7 +569,7 @@
           <dl class="rows">
             <div>
               <dt>Claims</dt>
-              <dd>Move at once, unclaimed rewards included</dd>
+              <dd>Made for you from now, rewards not claimed yet included</dd>
             </div>
             <div>
               <dt>Votes</dt>
@@ -602,7 +658,7 @@
                 <dd>Hydrex; a keeper votes and pays out</dd>
               </div>
               <div>
-                <dt>The admin key</dt>
+                <dt>Hydrex</dt>
                 <dd>
                   Can change the share retired, the fee, payout tokens and addresses, the swap routers, the credits, and
                   who votes; and withdraw its tokens
@@ -689,10 +745,9 @@
 
       <div class="view product" data-view="product" data-kind="automaxi" data-title="AutoMaxi · metaDEX Café" hidden>
         <div class="title-line">
-          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your wallet</a><a href="#hydrex">Hydrex</a></nav>
+          <nav class="trail" aria-label="Back"><a href="#hydrex">Hydrex</a></nav>
           <h1 tabindex="-1">AutoMaxi</h1>
         </div>
-        <p class="automaxi-absent notice" hidden>Not on Base yet.</p>
         <div class="state-line">
           <p class="state">
             <span class="state-normal"
@@ -707,6 +762,16 @@
             <span aria-hidden="true">i</span>
           </button>
         </div>
+        <p class="lead">
+          Votes with your Hydrex accounts for the pools it expects to earn the most rewards, and pays you what they
+          earn, in the tokens earned.
+        </p>
+        <p class="custody small">
+          Your Hydrex account stays in your wallet. Leave with one call, at any time.
+          <button type="button" class="info" popovertarget="am-joining" aria-label="Joining and leaving">
+            <span aria-hidden="true">i</span>
+          </button>
+        </p>
         <p class="notice checks-failed" data-kind="automaxi" role="alert" hidden>
           <span class="shape failed" aria-hidden="true"></span>Joining AutoMaxi is off.
           <a href="#hydrex/automaxi/check">Why</a>
@@ -719,7 +784,7 @@
                 <span aria-hidden="true">i</span>
               </button>
             </dt>
-            <dd>1%</dd>
+            <dd>1% fee</dd>
           </div>
           <div>
             <dt>Pays in</dt>
@@ -734,6 +799,8 @@
             </dt>
             <dd class="record">…</dd>
             <dd class="sub record-unit"></dd>
+            <dd class="sub record-paid"></dd>
+            <dd class="sub">Hydrex average <span class="average">…</span></dd>
           </div>
           <div>
             <dt>
@@ -745,35 +812,38 @@
             <dd>Nobody</dd>
           </div>
         </dl>
-        <div data-needs="automaxi" hidden>
-          <p class="accounts-reading small" role="status" hidden>Loading…</p>
-          <div class="mine" hidden>
-            <p class="mine-none small" hidden>No Hydrex account can join.</p>
-            <section class="group" data-group="in:automaxi" aria-labelledby="mine-automaxi" hidden>
-              <div class="group-head">
-                <h2 id="mine-automaxi">Your Hydrex accounts</h2>
-                <button type="button" class="info" popovertarget="am-joining" aria-label="Joining and leaving">
-                  <span aria-hidden="true">i</span>
-                </button>
-              </div>
-              <ul class="accounts"></ul>
-              <p class="buttons">
-                <button type="button" data-action="claim">Claim</button>
-              </p>
-            </section>
-            <section class="group" data-group="can:automaxi" aria-labelledby="can-automaxi" hidden>
-              <div class="group-head">
-                <h2 id="can-automaxi">Can join</h2>
-                <button type="button" class="info" popovertarget="am-joining" aria-label="Joining and leaving">
-                  <span aria-hidden="true">i</span>
-                </button>
-              </div>
-              <ul class="accounts"></ul>
-              <p class="buttons">
-                <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
-              </p>
-            </section>
-          </div>
+        <div class="wallet-slot"></div>
+        <p class="accounts-reading small" role="status" hidden>Loading…</p>
+        <div class="mine" hidden>
+          <p class="mine-none small" hidden>No Hydrex account can join.</p>
+          <section class="group" data-group="in:automaxi" aria-labelledby="mine-automaxi" hidden>
+            <div class="group-head">
+              <h2 id="mine-automaxi">Your Hydrex accounts</h2>
+              <button type="button" class="info" popovertarget="am-joining" aria-label="Joining and leaving">
+                <span aria-hidden="true">i</span>
+              </button>
+              <p class="picked small" hidden></p>
+              <label class="pick-all small" hidden><input type="checkbox" /> All</label>
+            </div>
+            <ul class="accounts"></ul>
+            <p class="buttons">
+              <button type="button" data-action="claim">Claim</button>
+            </p>
+          </section>
+          <section class="group" data-group="can:automaxi" aria-labelledby="can-automaxi" hidden>
+            <div class="group-head">
+              <h2 id="can-automaxi">Can join</h2>
+              <button type="button" class="info" popovertarget="am-joining" aria-label="Joining and leaving">
+                <span aria-hidden="true">i</span>
+              </button>
+              <p class="picked small" hidden></p>
+              <label class="pick-all small" hidden><input type="checkbox" /> All</label>
+            </div>
+            <ul class="accounts"></ul>
+            <p class="buttons">
+              <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
+            </p>
+          </section>
         </div>
 
         <div class="pop" id="am-fees" popover role="dialog" aria-labelledby="am-fees-title" data-section="fees">
@@ -835,6 +905,7 @@
           <p class="record-waiting small">Loading…</p>
           <p class="record-none small" hidden>No record yet.</p>
           <div class="record-found" hidden>
+            <p class="versus" hidden></p>
             <div class="scroll">
               <table class="earnings">
                 <thead>
@@ -883,7 +954,6 @@
               <span>Reading all of Hydrex failed.</span>
               <button type="button" class="compare-again secondary compact">Try again</button>
             </p>
-            <p class="versus" hidden></p>
             <div class="scroll">
               <table class="earned-pools">
                 <thead>
@@ -902,7 +972,7 @@
             <dl class="rows">
               <div>
                 <dt>Picks</dt>
-                <dd>Any proposal that earns at least $1 more in bribes</dd>
+                <dd>Any proposal that earns at least $1 more in rewards</dd>
               </div>
               <div>
                 <dt>Prices</dt>
@@ -935,7 +1005,7 @@
           <dl class="rows">
             <div>
               <dt>Claims</dt>
-              <dd>Move at once, unclaimed rewards included; anyone can trigger them</dd>
+              <dd>Made for you from now, rewards not claimed yet included; each pays you, whoever sends it</dd>
             </div>
             <div>
               <dt>Votes</dt>
@@ -947,7 +1017,7 @@
             </div>
             <div>
               <dt>Leaving</dt>
-              <dd>Any time: what nobody has claimed through it is yours to claim on Hydrex</dd>
+              <dd>Any time: rewards not claimed yet stay yours, to claim on Hydrex</dd>
             </div>
           </dl>
         </div>
@@ -1048,7 +1118,7 @@
 
       <div class="view" data-view="position" data-title="Account · metaDEX Café" hidden>
         <div class="title-line">
-          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your wallet</a><a href="#hydrex">Hydrex</a></nav>
+          <nav class="trail" aria-label="Back"><a href="#hydrex">Hydrex</a></nav>
           <h1 tabindex="-1">
             <bdi class="position-name" translate="no">Account</bdi> <span class="position-id"></span>
           </h1>
@@ -1099,7 +1169,16 @@
               <button type="button" data-action="join" data-automation="carbon-impact">Join Carbon Impact</button>
               <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
               <button type="button" data-action="self" class="secondary">Leave</button>
+              <a
+                class="button secondary vote-on-hydrex"
+                href="https://www.hydrex.fi/"
+                target="_blank"
+                rel="noopener"
+                hidden
+                >Vote on Hydrex <span aria-hidden="true">↗</span></a
+              >
             </p>
+            <p class="position-gas small" hidden>A change costs <span class="change-gas">…</span> in gas.</p>
           </section>
           <section class="position-payouts" aria-labelledby="position-payouts-title" hidden>
             <div class="group-head">
@@ -1143,7 +1222,7 @@
 
       <div class="view swap" data-view="swap" data-title="Swap · metaDEX Café" hidden>
         <div class="title-line">
-          <nav class="trail" aria-label="Breadcrumb"><a href="#app">Your wallet</a></nav>
+          <nav class="trail trail-wallet" aria-label="Back" hidden><a href="#app">Your wallet</a></nav>
           <h1 tabindex="-1">Swap many tokens</h1>
           <button type="button" class="info" popovertarget="swap-info" aria-label="Costs and contracts">
             <span aria-hidden="true">i</span>
@@ -1535,9 +1614,8 @@
       <div class="callout">
         <p>
           <strong
-            >It also claims the rewards
-            <span data-one="this Hydrex account has" data-many="these Hydrex accounts have"></span> not claimed
-            yet.</strong
+            >Rewards <span data-one="this Hydrex account has" data-many="these Hydrex accounts have"></span> not claimed
+            yet go to you with its next payout, in kVCM, after the share retired.</strong
           >
         </p>
         <p class="buttons">
@@ -1573,9 +1651,8 @@
       <div class="callout">
         <p>
           <strong
-            >Anyone can then claim the rewards
-            <span data-one="this Hydrex account has" data-many="these Hydrex accounts have"></span> not claimed yet,
-            less 1%.</strong
+            >Rewards <span data-one="this Hydrex account has" data-many="these Hydrex accounts have"></span> not claimed
+            yet go to you through it too, less 1%.</strong
           >
         </p>
         <p class="buttons">
@@ -1599,7 +1676,7 @@
         </div>
         <div>
           <dt>Takes</dt>
-          <dd>1%</dd>
+          <dd>1% fee</dd>
           <dd class="sub"><a href="#hydrex/automaxi/control">Fixed</a></dd>
         </div>
       </dl>
@@ -2031,6 +2108,14 @@
       ><span class="shape idle" aria-hidden="true"></span
       ><strong data-own="You vote with it" data-theirs="Its owner votes with it"></strong
     ></template>
+    <!-- Its owner votes with it, and did not vote last epoch: it earned nothing. -->
+    <template id="unvoted">
+      <span class="shape stopped" aria-hidden="true"></span
+      ><strong
+        >Not voted <span class="unvoted-since">since <time class="voted"></time></span
+        ><span class="unvoted-never" hidden>yet</span></strong
+      ></template
+    >
     <template id="ended">
       <span class="shape idle" aria-hidden="true"></span><strong>Lock ended</strong>
       <span data-own-only

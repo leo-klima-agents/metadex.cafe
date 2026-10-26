@@ -21,6 +21,7 @@ import {
   day,
   earningPower,
   figure,
+  fraction,
   list,
   money,
   moneyAt,
@@ -35,7 +36,6 @@ import {
   type Currency,
 } from "./format.ts";
 import {
-  FROM_START,
   LockType,
   automationName,
   canJoin,
@@ -64,15 +64,19 @@ import {
   type Step,
 } from "./hydrex.ts";
 import {
+  averagePerThousand,
   earnedByAccount,
   earningsDue,
   earningsFailed,
   lastEarnings,
   loadEarnings,
+  loadAverage,
   loadShares,
   onEarnings,
   perThousandOf,
-  showAbsent,
+  automationVersus,
+  ownPerThousand,
+  ownVersus,
 } from "./last-epoch.ts";
 import { UNDER_WAY, payouts, type Entry, type Found, type UnderWay } from "./last-payout.ts";
 import { waitingWords } from "./receipts.ts";
@@ -107,7 +111,7 @@ let connection: Connection | undefined;
 let shown: Holdings | undefined;
 let carbonImpact: CarbonImpact | undefined;
 let carbonImpactRead: Promise<void> | undefined;
-// Until the checks have run, joining is off, and only the automations on Base from the start are shown.
+// Until the checks have run, joining is off.
 let checks: Checks | undefined;
 let reads = 0;
 let reading = false;
@@ -217,9 +221,6 @@ const positionPayouts = payouts(
   viewerOwns,
 );
 
-// The page's automations on Base. They decide what the page offers to join; an account's status is read against all.
-const present = (): Automation[] => checks?.present ?? FROM_START;
-
 // What differs between the page's automations, kind by kind.
 type Traits = {
   // The start of its review's template ids. Carbon Impact's were the page's first, and have none.
@@ -290,39 +291,77 @@ function tick(): void {
   fill(document, { countdown: `in ${until(end - time)}` });
 }
 
-// Each automation's figure for last epoch, on the menu and on its page: what reached the owner for each 1,000 Earning
-// Power. What the votes earned before the automation's cut is in its fold, against all of Hydrex.
+// Each automation's figures for last epoch, on the menu and on its page, for each 1,000 Earning Power: what its votes
+// earned, beside Hydrex's average, then what reached the owner after its cut.
 function showRecords(): void {
   for (const automation of AUTOMATIONS) {
     const per = perThousandOf(automation);
     const paid = traits[automation.kind].paid();
-    const absent = !!checks && !present().includes(automation);
-    const record = absent
-      ? "No record yet"
-      : per === undefined
+    const record =
+      per === undefined
         ? earningsFailed(automation)
           ? "Not read yet"
           : "…"
         : per === null
           ? "No record yet"
-          : paid === undefined
-            ? "…"
-            : () => money(moneyAt(per.value * paid, per));
+          : () => money(per);
+    const toYou = per && paid !== undefined ? () => `${money(moneyAt(per.value * paid, per))} to you` : per ? "…" : "";
+    // On the menu, how it compares with the average, as voting yourself does; what it takes is on the same row.
+    const versus = automationVersus(automation);
+    for (const row of document.querySelectorAll<HTMLElement>(`.choice[data-choice="${automation.kind}"]`)) {
+      show(".record-versus", versus !== undefined, row);
+      if (versus !== undefined) fill(row, { "record-versus": versusWords(versus) });
+    }
     for (const place of placesOf(automation)) {
-      fill(place, { record, "record-unit": per ? "per 1,000 Earning Power" : "" });
+      // The menu compares what the votes earned, and leaves what reached the owner to the automation's page.
+      const menu = place.classList.contains("choice");
+      const unit = menu ? "/ 1k Earning Power" : "earned, per 1,000 Earning Power";
+      fill(place, { record, "record-unit": per ? unit : "", ...(!menu && { "record-paid": toYou }) });
     }
   }
+  // Beside them, what voting yourself earned: Hydrex's average, and, with a wallet, its own votes, and how they compare.
+  const average = averagePerThousand();
+  fill(document, { average: average === undefined ? "…" : average === null ? "Not read" : () => money(average) });
+  const holdings = connection ? shown : undefined;
+  const yours = holdings && ownPerThousand(holdings);
+  show("#vote-yourself .yours", !!holdings);
+  const known = typeof yours === "object";
+  fill(document, {
+    "yours-average":
+      yours === undefined
+        ? "…"
+        : yours === "none"
+          ? "No votes of your own"
+          : yours === "unvoted"
+            ? "Didn't vote"
+            : () => money(yours),
+  });
+  show(".yours-unit", known);
+  const ratio = holdings && known ? ownVersus(holdings) : undefined;
+  show(".yours-versus", ratio !== undefined);
+  if (ratio !== undefined) fill(document, { "yours-versus": versusWords(ratio) });
 }
 
-// AutoMaxi's row on the menu, its page and its group, once it is on Base.
+// How some votes compare with Hydrex's average, in words and ink, not colour: "44.7% below the average".
+const versusWords = (ratio: number): string =>
+  Math.abs(ratio - 1) < 0.005
+    ? "About the average"
+    : `${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "above" : "below"} the average`;
+
+// All of Hydrex is thousands of reads: only the pages that show its average read it.
+const showsAverage = (): boolean => ["hydrex", "product"].includes(route().view);
+const readAverage = (): void => {
+  if (showsAverage()) void loadAverage().then((changed) => changed && showRecords());
+};
+onRoute(() => {
+  readAverage();
+  void showShares();
+});
+
+// AutoMaxi's state, on the menu and its page.
 let autoMaxiFreshness: Freshness | undefined;
 
 function showAutoMaxi(): void {
-  const on = present().includes(AUTOMAXI);
-  show('[data-needs="automaxi"]', on);
-  show(".automaxi-absent", !!checks && !on);
-  if (checks && !on) showAbsent(AUTOMAXI);
-  if (!on) return;
   const fresh = autoMaxiFreshness;
   const stopped = !!fresh && hasStopped(fresh.voted, fresh.epochStart);
   const state = !fresh ? "…" : !fresh.voted ? "Not voted yet" : stopped ? "Stopped" : "Running";
@@ -339,7 +378,6 @@ function showAutoMaxi(): void {
 let autoMaxiRead: Promise<void> | undefined;
 
 function readAutoMaxi(): void {
-  if (!present().includes(AUTOMAXI)) return;
   autoMaxiRead ??= readFreshness(AUTOMAXI)
     .then((found) => {
       autoMaxiFreshness = found;
@@ -363,7 +401,8 @@ function catchUp(): void {
   const ready = !!page && (!page.failed || Date.now() - page.tried >= 300_000);
   if (ready && page.holdings && epoch > page.holdings.epochStart && !ownHoldings(page.id)) void loadPosition();
   if (!carbonImpact || epoch > carbonImpact.epochStart) readCarbonImpactAgain().catch(console.error);
-  if (earningsDue(epoch, present())) loadAllEarnings();
+  if (earningsDue(epoch, AUTOMATIONS)) loadAllEarnings();
+  readAverage();
   if (!autoMaxiFreshness || epoch > autoMaxiFreshness.epochStart) readAutoMaxi();
   appPayouts.check();
   if (page) positionPayouts.check();
@@ -371,29 +410,35 @@ function catchUp(): void {
 }
 
 // Each read of figures, whoever started it, shows on the menu, on the automations' pages and in the accounts' shares.
-const loadAllEarnings = (): void => void loadEarnings(present()).catch(console.error);
+const loadAllEarnings = (): void => void loadEarnings(AUTOMATIONS).catch(console.error);
 onEarnings(() => {
   void showShares();
+  readAverage();
   showAutoMaxi();
   showRecords();
 });
 
-// What each account's votes earned last epoch: the wallet's, and that of the account whose page is shown.
+// What each account's votes earned last epoch: the wallet's, and that of the account whose page is shown, in an
+// automation or through whoever voted with it, mostly its owner. Then the wallet's own votes beside Hydrex's average.
+// Only the pages that show them read them: a holder that voted this epoch takes thousands of reads.
+function showsShares(): boolean {
+  return ["hydrex", "product", "position"].includes(route().view);
+}
 async function showShares(): Promise<void> {
-  const read = [shown, onPage()?.holdings].flatMap((holdings) => (holdings ? [loadShares(holdings, present())] : []));
+  if (!showsShares()) return;
+  const read = [shown, onPage()?.holdings].flatMap((holdings) => (holdings ? [loadShares(holdings)] : []));
   if (!(await Promise.all(read)).includes(true)) return;
   showAccounts(true);
   showPosition();
+  showRecords();
 }
 
 // Each automation whose checks failed: joining it is off, its rows and pages say so, and its page marks the checks.
 async function showChecks(): Promise<void> {
   const found = await failedChecks();
-  const more = found.present.filter((automation) => !present().includes(automation));
   checks = found;
   for (const automation of AUTOMATIONS) {
-    // An automation not on Base has no checks to fail.
-    const failing = found.present.includes(automation) ? found.failed.get(automation.kind)! : [];
+    const failing = found.failed.get(automation.kind)!;
     const off = failing.length > 0;
     show(`.checks-failed[data-kind="${automation.kind}"]`, off);
     for (const place of placesOf(automation)) {
@@ -402,9 +447,6 @@ async function showChecks(): Promise<void> {
       for (const item of place.querySelectorAll<HTMLElement>("[data-check]")) markCheck(item, failing);
     }
   }
-  // An automation newly on Base needs its figures.
-  if (more.length) loadAllEarnings();
-  if (more.includes(AUTOMAXI)) readAutoMaxi();
   showAutoMaxi();
   showRecords();
   // A read of the accounts that is under way shows the result when it ends.
@@ -421,9 +463,9 @@ function markCheck(item: HTMLElement, failing: string[]): void {
 const automationOf = (button: HTMLButtonElement): Automation | undefined =>
   button.dataset.automation ? byKind(button.dataset.automation) : undefined;
 
-// Joining an automation needs it on Base and its checks passed. Leaving always works.
+// Joining an automation needs its checks passed. Leaving always works.
 function joinable(account: Account, automation: Automation | undefined): boolean {
-  if (!automation || !checks?.present.includes(automation) || checks.failed.get(automation.kind)!.length) return false;
+  if (!automation || !checks || checks.failed.get(automation.kind)!.length) return false;
   return canJoin(account, automation, now());
 }
 const leavable = (account: Account): boolean => AUTOMATIONS.some((automation) => canLeave(account, automation));
@@ -451,12 +493,20 @@ function accountKind({ lockType, end }: Account): string {
   return end ? `Flex, ${end > now() ? "ends" : "ended"} ${date(end)}` : "Flex";
 }
 
+// A day of this year, or a date with its year: an owner may not have voted for longer than a year.
+const inYear = (time: number): ((time: number) => string) =>
+  new Date(time * 1000).getUTCFullYear() === new Date(now() * 1000).getUTCFullYear() ? day : date;
+
 // An account's status, in one line, in words to its owner when `own`, and about its owner otherwise.
 function statusLine(status: Status, own: boolean): DocumentFragment {
   const line = clone(status.kind);
   fillOwn(line, own);
   if ("date" in status) fillTime(line, "date", status.date);
-  if ("voted" in status) fillTime(line, "voted", status.voted);
+  if ("voted" in status && status.voted) fillTime(line, "voted", status.voted, inYear(status.voted));
+  if (status.kind === "unvoted") {
+    show(".unvoted-since", status.voted > 0, line);
+    show(".unvoted-never", !status.voted, line);
+  }
   if ("name" in status) fill(line, { automation: status.name });
   if ("automation" in status) {
     fill(line, { "automation-name": status.automation.name });
@@ -493,6 +543,9 @@ function accountItem({ account, status }: Member, group: string, pickable: boole
   return item;
 }
 
+// The boxes each group shows, by account number.
+const boxesShown = new WeakMap<HTMLElement, Set<string>>();
+
 // Each group lists its accounts. When its buttons can act on more than one, each gets a box to tick, so that one
 // selection is always one action.
 function showAccounts(keepTicked = false): void {
@@ -516,16 +569,43 @@ function showAccounts(keepTicked = false): void {
     items?.replaceChildren(
       ...these.map((member) => accountItem(member, group, able.length > 1 && able.includes(member.account))),
     );
-    for (const box of section.querySelectorAll<HTMLInputElement>(".pick:not([hidden])"))
-      box.checked = kept.has(box.value);
+    // What needs its owner starts ticked, as one action fits it all; the other groups start with none. A box starts
+    // ticked when it first shows, as when the checks pass after the accounts were drawn, and keeps what was picked then.
+    const before = (keepTicked && boxesShown.get(section)) || new Set<string>();
+    const boxes = [...section.querySelectorAll<HTMLInputElement>(".pick:not([hidden])")];
+    for (const box of boxes) box.checked = kept.has(box.value) || (group === "needs" && !before.has(box.value));
+    boxesShown.set(section, new Set(boxes.map(({ value }) => value)));
+    // Among those without votes, the locks that ended with HYDX still in them, which their owner can withdraw.
+    const ended = these.filter(({ status }) => status.kind === "ended").length;
     fill(section, {
       count: `· ${these.length}`,
-      "nothing-count": count(these.length, "Hydrex account without votes", "Hydrex accounts without votes"),
+      "nothing-count": [
+        count(these.length, "Hydrex account without votes", "Hydrex accounts without votes"),
+        ...(ended ? [`${ended} with HYDX to withdraw`] : []),
+      ].join(" · "),
     });
     actionable.set(section, able);
+    // Accounts their owner votes with, who did not vote, are voted with on Hydrex.
+    show(
+      ".vote-on-hydrex",
+      these.some(({ status }) => status.kind === "unvoted"),
+      section,
+    );
     section.hidden = !these.length;
   }
   updateButtons();
+  // On the menu, how many of the wallet's accounts each automation holds, as the App counts them.
+  for (const automation of AUTOMATIONS) {
+    const n = members.filter(
+      ({ status }) => (status.kind === "in" || status.kind === "joined") && status.automation === automation,
+    ).length;
+    for (const line of document.querySelectorAll<HTMLElement>(
+      `.choice[data-choice="${automation.kind}"] .yours-count`,
+    )) {
+      line.hidden = !n;
+      line.textContent = `Yours: ${count(n, "Hydrex account", "Hydrex accounts")}`;
+    }
+  }
   const full = accounts.filter(({ amount }) => amount > 0n);
   show("#none", !full.length);
   show("#accounts, .mine");
@@ -533,7 +613,7 @@ function showAccounts(keepTicked = false): void {
   // then, its notices say why none can.
   for (const mine of document.querySelectorAll<HTMLElement>(".mine")) {
     const automation = byKind(mine.closest<HTMLElement>(".view")!.dataset.kind!)!;
-    const open = !!checks?.present.includes(automation) && !checks.failed.get(automation.kind)!.length;
+    const open = !!checks && !checks.failed.get(automation.kind)!.length;
     show(".mine-none", open && !mine.querySelector(".group:not([hidden])"), mine);
   }
 }
@@ -549,7 +629,7 @@ async function loadAccounts(quietly = false): Promise<void> {
     appPayouts.forget();
     closeReview();
     show(".accounts-reading");
-    show("#accounts, #none, .mine, #underway", false);
+    show("#accounts, #none, .mine, #underway, .yours-count", false);
     // An account's page drops the actions of the wallet's accounts read before.
     showPosition();
   }
@@ -589,14 +669,25 @@ function updateButtons(): void {
     for (const button of buttons(section)) {
       const allowed = allows(button);
       const verb = (button.dataset.verb ??= button.textContent?.trim() ?? "");
-      const n = accounts.filter(allowed).length;
       button.hidden = !able.some(allowed);
-      button.disabled = !n;
-      button.textContent =
-        able.length > 1 && n ? `${verb} with ${count(n, "Hydrex account", "Hydrex accounts")}` : verb;
+      // How many are ticked is said once, beside the box that ticks them all.
+      button.disabled = !accounts.some(allowed);
+      button.textContent = verb;
     }
-    show(".buttons", able.length > 0, section);
-    show(".pick-hint", able.length > 1 && !accounts.length, section);
+    // Needs you's link to vote on Hydrex shows even when none of its accounts can join or leave, as before the checks.
+    const vote = section.querySelector<HTMLElement>(".vote-on-hydrex");
+    show(".buttons", able.length > 0 || (!!vote && !vote.hidden), section);
+    // With boxes to tick: one that ticks them all, and what is ticked.
+    const all = section.querySelector<HTMLLabelElement>(".pick-all");
+    const tickedAll = all?.querySelector("input");
+    if (!all || !tickedAll) continue;
+    all.hidden = able.length <= 1;
+    tickedAll.checked = accounts.length === able.length;
+    tickedAll.indeterminate = accounts.length > 0 && accounts.length < able.length;
+    const summary = section.querySelector<HTMLElement>(".picked")!;
+    summary.hidden = able.length <= 1 || !accounts.length;
+    const power = accounts.reduce((sum, { votes }) => sum + votes, 0n);
+    summary.textContent = `${accounts.length} of ${able.length} · ${earningPower(power)} Earning Power`;
   }
 }
 
@@ -768,13 +859,22 @@ function showApp(): void {
   const holdings = connection ? shown : undefined;
   if (holdings) {
     const { owner, accounts, epochStart } = holdings;
+    // Accounts their owner votes with, who did not vote last epoch, in one line: they share one remedy.
+    let unvoted = 0;
     for (const account of accounts) {
       const status = statusOf(account, owner, now(), epochStart);
       const change = { link: hrefOf({ view: "position", id: account.id }), label: "Change" };
       const named = `Hydrex account #${account.id}`;
-      if (status.kind === "stopped")
-        add(need("stopped", `${named} earns nothing: ${status.name} stopped since ${day(status.voted)}`, change));
+      if (status.kind === "stopped") {
+        const since = inYear(status.voted)(status.voted);
+        add(need("stopped", `${named} earns nothing: ${status.name} stopped since ${since}`, change));
+      }
       if (status.kind === "partly") add(need("stopped", `${named} is partly in ${status.automation.name}`, change));
+      if (status.kind === "unvoted") unvoted++;
+    }
+    if (unvoted) {
+      const which = count(unvoted, "Hydrex account", "Hydrex accounts");
+      add(need("stopped", `${which} didn't vote last epoch`, { link: hrefOf({ view: "hydrex" }), label: "Change" }));
     }
     for (const entry of overdue()) {
       const waits = waitsLine(entry);
@@ -965,7 +1065,8 @@ function showPosition(): void {
   // A read that failed says so, over what an earlier one found.
   if (target.failed) show(".position-failed", true, view);
   fill(view, { "position-id": `#${target.id}` });
-  showActions(own?.accounts[0]);
+  const mine = own?.accounts[0];
+  showActions(mine, mine && statusOf(mine, own.owner, now(), own.epochStart));
   if (!holdings) {
     document.title = `Hydrex account #${target.id} · metaDEX Café`;
     return void fill(view, { "position-name": pageName("") });
@@ -1012,8 +1113,44 @@ function showPosition(): void {
 // What the wallet can do with its own account, on its page. A join from one of the page's automations is a move.
 const actions = positionView.querySelector<HTMLElement>(".position-actions")!;
 
-function showActions(account: Account | undefined): void {
+// The gas of a change for an account that earns nothing: what moving it would cost, without projecting what it would
+// earn. Read again after a minute, as the gas price is, or for another automation or wallet.
+const changeGas = new Map<string, { at: number; words: Promise<() => string> }>();
+
+function showChangeGas(account: Account | undefined, status: Status | undefined): void {
+  const line = actions.querySelector<HTMLElement>(".position-gas")!;
+  const automation = account && AUTOMATIONS.find((each) => joinable(account, each));
+  line.hidden = !connection || !automation || !status || !["stopped", "unvoted"].includes(status.kind);
+  if (line.hidden || !account || !automation || !connection) return;
+  const from = connection.address;
+  const key = `${account.id} ${automation.kind} ${from}`;
+  let found = changeGas.get(key);
+  if (!found || Date.now() - found.at >= 60_000) {
+    const words = gasCosts()(join([account], automation), from).then(
+      ({ wei, prices }) =>
+        () =>
+          gasWords(wei, prices),
+    );
+    changeGas.set(key, (found = { at: Date.now(), words }));
+    words.catch((error) => {
+      console.error(error);
+      changeGas.delete(key);
+    });
+  }
+  const { words } = found;
+  const id = account.id;
+  words.then(
+    (text) => onPage()?.id === id && live(line.querySelector(".change-gas")!, text),
+    () => onPage()?.id === id && (line.hidden = true),
+  );
+}
+
+function showActions(account: Account | undefined, status?: Status): void {
   let any = false;
+  showChangeGas(account, status);
+  const vote = actions.querySelector<HTMLElement>(".vote-on-hydrex")!;
+  vote.hidden = !connection || status?.kind !== "unvoted";
+  any ||= !vote.hidden;
   for (const button of buttons(actions)) {
     const allowed = !!connection && !!account && allows(button)(account);
     const automation = automationOf(button);
@@ -1022,6 +1159,11 @@ function showActions(account: Account | undefined): void {
       button.textContent = `${moves ? "Move to" : "Join"} ${automation.name}`;
       // A move is a secondary action, as in the groups of Hydrex's page.
       button.classList.toggle("secondary", moves);
+    }
+    // Leaving one of the page's automations, or one of Hydrex's to vote yourself.
+    if (actionOf(button) === "self") {
+      const ours = !!account && AUTOMATIONS.some((automation) => canLeave(account, automation));
+      button.textContent = ours ? "Leave" : "Vote yourself";
     }
     button.hidden = !allowed;
     any ||= allowed;
@@ -1052,6 +1194,8 @@ const showConnectPop = (shown: boolean): void => {
 
 function showConnection(): void {
   show(".wallet-slot, header.site .connect", !connection);
+  // "‹ Your wallet" leads back only once there is one.
+  show(".trail-wallet", !!connection);
   show("header.site .to-app", !!connection);
   if (connection) showConnectPop(false);
   show("#epoch", !!connection);
@@ -1120,10 +1264,11 @@ function letGo(): void {
   appPayouts.forget();
   closeReview();
   showConnection();
-  show(".accounts-reading, #accounts, #none, .mine, #underway", false);
+  show(".accounts-reading, #accounts, #none, .mine, #underway, .yours-count", false);
   showPosition();
   walletChanged();
   showApp();
+  showRecords();
 }
 
 // Connects a wallet picked from a list, or from the header's button. What goes wrong shows where the wallets are listed:
@@ -1178,7 +1323,12 @@ groupAllHex(document);
 // A reload keeps the hash, and so the view.
 document.querySelector("#error .again")!.addEventListener("click", () => location.reload());
 document.addEventListener("change", (event) => {
-  if ((event.target as Element).matches(".group .pick")) updateButtons();
+  const target = event.target as HTMLInputElement;
+  if (target.matches(".pick-all input")) {
+    for (const box of target.closest(".group")!.querySelectorAll<HTMLInputElement>(".pick:not([hidden])"))
+      box.checked = target.checked;
+  }
+  if (target.matches(".group :is(.pick, .pick-all input)")) updateButtons();
 });
 for (const section of groups()) {
   for (const button of buttons(section))

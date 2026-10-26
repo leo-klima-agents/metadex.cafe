@@ -17,8 +17,8 @@ export type Automation = {
   // What joining approves: 3 sends the account's claims to the automation, 5 delegates its votes.
   actions: number[];
 };
-// Hydrex's automation, whose votes and payouts a keeper now sends. One admin key controls its settings, which the
-// page reads from Base.
+// Hydrex's automation, whose votes and payouts a keeper now sends. Hydrex controls its settings, which the page reads
+// from Base.
 export const CARBON_IMPACT: Automation = {
   kind: "carbon-impact",
   name: "Carbon Impact",
@@ -27,8 +27,8 @@ export const CARBON_IMPACT: Automation = {
   actions: [3, 5],
 };
 // ImmutableVeTokenConduit version 2, from https://github.com/ldeso/hydrex-conduit at tag v2, commit 718c107. It has no
-// owner and no settings: its code fixes its fee and where the fee goes. It deploys through CREATE2, so its address is
-// known before; until there is code there, the page leaves it out. Version 1, at
+// owner and no settings: its code fixes its fee and where the fee goes. It deployed through CREATE2, on Tue 20 Oct 2026.
+// Version 1, at
 // 0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B, still works, but the page does not offer it.
 export const AUTOMAXI: Automation = {
   kind: "automaxi",

@@ -27,7 +27,8 @@ layout of slips and receipts. `style.css` and `index.html` follow these rules. S
   decides what they pay for ([Aaker](https://www.gsb.stanford.edu/news/research/aaker_warm.html)).
 - No puns where money moves: no brewing, roasting or fresh cups of yield, and nothing "on the house" that is not free.
 - Independent, and says so: not Dromos's, not Hydrex's. Anonymous for now: the page names no operator, nobody behind
-  Carbon Impact's keeper or admin key, and links to no repository of the café's.
+  Carbon Impact's keeper, and links to no repository of the café's. Hydrex controls Carbon Impact's settings, and the
+  page says so.
 - Say "Aero", not "Aerodrome", from 22 Oct 2026, and "Coinbase Wallet", its name again since 10 Sep 2026. Aerodrome's
   pools and its AERO keep their name where the swap names an exchange or a token.
 - "Small balances", not "dust", in the page's words: plain, and no pun.
@@ -142,11 +143,11 @@ and works in one colour.
 ## Navigation
 
 - **The header is the same on every view, at every width:** the logo and the name, which lead Home, and one button:
-  "Connect a wallet", or the wallet's chip once connected, which leads to the App. On the App itself, the chip reads as
-  where you are.
-- **The title of every page below the App leads back to it,** before the page's own name, in the heading's face and
-  quieter: "Your wallet › Hydrex", "Your wallet › Hydrex › Carbon Impact". Wallets' browsers and Safe{Wallet}'s frame
-  have no address bar. Home and About are the page's own, and have none.
+  "Connect a wallet", or the wallet's chip once connected, which leads to the App. The chip is outlined, so that the
+  page's own main action stays the one filled button in view. On the App itself, the chip reads as where you are.
+- **Every page below the App leads one level back,** above its title, small and quiet: "‹ Hydrex" from an automation or
+  an account, and "‹ Your wallet" from Hydrex and the swap once a wallet is connected. Wallets' browsers and
+  Safe{Wallet}'s frame have no address bar. Home and About are the page's own, and have none.
 - **A view repeats only its own main action,** as a button, such as "Open the app" on Home. It never offers a second way
   to a page the header already leads to.
 - **Within a view, a link leads to a section and says what it holds,** such as "What it means" or "More on leaving",

@@ -317,11 +317,10 @@ footer p {
 .mine > * + *,
 #accounts > * + *,
 .swap-form > * + *,
-.position-found > * + *,
-div[data-needs] > * + * {
+.position-found > * + * {
   margin-block-start: var(--gap-l);
 }
-.view > :is(section, #accounts, .mine, .swap-form, div[data-needs]),
+.view > :is(section, #accounts, .mine, .swap-form),
 .mine > section,
 #accounts > :is(section, details),
 .swap-form > .swap-tokens,
@@ -331,11 +330,23 @@ div[data-needs] > * + * {
 main > .notice {
   margin-block-end: var(--gap-l);
 }
-.view > .title-line + :is(.state-line, .automaxi-absent),
+.view > .title-line + .state-line,
 .view > .title-line ~ .position-found,
-.view > .automaxi-absent + .state-line,
-.view > .state-line + .notice {
+.view > .state-line + .notice,
+.view > .lead + .custody {
   margin-block-start: var(--gap-s);
+}
+/* What a product does, in one sentence, then that the account stays in the wallet. */
+.lead {
+  max-inline-size: 60ch;
+}
+.custody,
+.note {
+  color: var(--quiet);
+}
+.custody > .info {
+  margin-inline-start: var(--gap-xs);
+  vertical-align: middle;
 }
 section > * + *,
 .group > * + * {
@@ -350,40 +361,44 @@ section > * + *,
   align-items: center;
   gap: var(--gap-s) var(--gap);
 }
-:is(.title-line, .group-head) > :not(h1, h2, .info, .trail) {
+:is(.title-line, .group-head) > :not(h1, h2, h3, .info, .trail) {
   margin-inline-start: auto;
 }
-/* The pages of the wallet lead back to it in their title, before their own name, in the heading's face and quieter:
-   "Your wallet › Hydrex". */
+/* What is ticked, then the box that ticks them all, together at the end of a group's heading. */
+.picked:not([hidden]) + .pick-all {
+  margin-inline-start: 0;
+}
+.picked {
+  color: var(--quiet);
+}
+.pick-all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-s);
+  cursor: pointer;
+}
 /* The swap's Approvals button, shown once a wallet is connected, is taller than its heading's line: it reaches over the
    space around it, so that the heading does not move when it shows. */
 .swap-approvals-open {
   margin-block: -0.375rem;
 }
-.title-line:has(> .trail) {
-  column-gap: 0.6rem;
-}
+/* The pages below the App lead one level back, above their title, small and quiet: "‹ Hydrex". */
 .trail {
   display: flex;
-  flex-wrap: wrap;
-  column-gap: 0.6rem;
+  flex-basis: 100%;
 }
 .trail a {
   color: var(--quiet);
-  font-family: var(--serif);
-  font-size: var(--text-h1);
-  letter-spacing: -0.01em;
-  line-height: 1.2;
+  font-size: var(--text-small);
   text-decoration: none;
 }
-.trail a::after {
-  content: "\203A";
-  margin-inline-start: 0.3em;
+.trail a::before {
+  content: "\2039";
+  margin-inline-end: 0.3em;
 }
 .trail a:hover {
   color: var(--ink);
   text-decoration: underline;
-  text-decoration-thickness: 2px;
 }
 .view h1:focus,
 .view h2:focus,
@@ -587,13 +602,17 @@ button img {
   display: grid;
   gap: 0.125rem;
 }
+/* "≈ $0.55 / 1k Earning Power", then how it compares with Hydrex's average, under it. */
+.choice .record-versus {
+  display: block;
+}
+.yours-count {
+  color: var(--quiet);
+}
 .choice > .facts {
   margin-block-start: var(--gap-s);
 }
 /* "≈ $0.37", then what it is per, under it. */
-.choice .record-unit {
-  display: block;
-}
 /* A card that leads somewhere is a link as large as the card, with a chevron at its end, or an arrow when it leaves the
    page. What else it holds, such as an account's box, stays above the link. */
 .choice:has(h3 a),
@@ -837,6 +856,10 @@ details.nothing > .accounts {
 }
 .facts.tiles dd {
   font-size: 1.125rem;
+}
+/* "≈ $0.48 / 1k Earning Power, last epoch": the unit stays whole, beside the figure or under it. */
+.facts.tiles dd > .small {
+  white-space: nowrap;
 }
 /* The review's figures, two by two. */
 .facts.tiles.estimate {
@@ -1087,6 +1110,13 @@ details[open] > summary:not(.info)::before {
   border-block-end: 1px solid var(--line);
   text-align: start;
   vertical-align: top;
+}
+/* What the popup "Against all of Hydrex" finds, first, then its tables, the popup's width. */
+.versus {
+  font-weight: 700;
+}
+.record-found table {
+  inline-size: 100%;
 }
 .earnings td:not(:first-child),
 .earned-pools td + td {
@@ -1667,8 +1697,7 @@ footer select {
   body {
     padding-inline: 1rem;
   }
-  h1,
-  .trail a {
+  h1 {
     font-size: 1.75rem;
   }
   /* The header stays on one line: the logo, the name and the button. */
@@ -1727,6 +1756,7 @@ footer select {
   }
   .facts.tiles dd.sub {
     grid-column: 1 / -1;
+    font-size: var(--text-small);
   }
   .facts.tiles .through {
     justify-content: flex-end;

@@ -3,7 +3,7 @@ import { after, before, describe, test } from "node:test";
 import { toFunctionSelector } from "viem";
 import { blockTime, read } from "../src/chain.ts";
 import { KVCM, VOTER } from "../src/config.ts";
-import { readEarnings, rewardsFor, sharesOf, tokensOf } from "../src/earnings.ts";
+import { readEarnings, rewardsFor, stakesOf, tokensOf } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
 import {
@@ -71,7 +71,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await connectButton(page).waitFor();
     assert.equal(await page.locator("header .to-app").isVisible(), false);
     assert.equal(await page.locator("header.site > .name img").getAttribute("src"), "icon.svg");
-    assert.equal(await page.getByRole("navigation", { name: "Breadcrumb" }).count(), 0, "Home is the page's own");
+    assert.equal(await page.getByRole("navigation", { name: "Back" }).count(), 0, "Home is the page's own");
     assert.equal(await page.evaluate(() => document.documentElement.scrollHeight), 844, "Home fits one screen");
     await shoot(page, "home-390-light");
     await home.getByRole("link", { name: "Open app" }).click();
@@ -96,7 +96,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await page.locator("footer").getByRole("link", { name: "About" }).click();
     await page.getByRole("heading", { name: "About", level: 1 }).waitFor();
     assert.equal(await page.title(), "About · metaDEX Café");
-    assert.equal(await page.getByRole("navigation", { name: "Breadcrumb" }).count(), 0, "About is the page's own");
+    assert.equal(await page.getByRole("navigation", { name: "Back" }).count(), 0, "About is the page's own");
     assert.deepEqual(await page.locator('.view[data-view="about"] > .rows dt').allInnerTexts(), [
       "Official address",
       "Cookies stored",
@@ -160,18 +160,24 @@ describe("the page against a fork of Base: its views, and each account's payouts
   test("a link in the review opens its section, Back keeps the ticks, and an account's page says what stopped", async () => {
     const { page, violations } = await connected({ owner: ELSEWHERE }, { width: 390, height: 844 });
     await pick(page, 2435, 2439);
-    await page.getByRole("button", { name: "Join Carbon Impact with 2 Hydrex accounts" }).click();
+    await group(page, "needs").getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
     await review(page).getByRole("heading", { name: "Before you join" }).waitFor();
     await review(page).getByRole("link", { name: "Can change" }).click();
     assert.equal(await review(page).isVisible(), false);
-    await page.locator('.pop:popover-open [data-section="control"]').getByText("The admin key").waitFor();
+    await page
+      .locator('.pop:popover-open [data-section="control"]')
+      .getByText("Can change the share retired")
+      .waitFor();
     assert.equal(await page.title(), "Carbon Impact · metaDEX Café");
     assert.equal(new URL(page.url()).hash, "#hydrex/carbon-impact/control");
     assert.equal(await appTitle(page).isVisible(), false);
     await page.goBack();
     await hydrexTitle(page).waitFor();
     assert.equal(await page.getByRole("checkbox", { name: "Pick Hydrex account #2439" }).isChecked(), true);
-    await page.getByRole("button", { name: "Join Carbon Impact with 2 Hydrex accounts" }).waitFor();
+    await group(page, "needs")
+      .locator(".picked")
+      .getByText(/^2 of 2 · /)
+      .waitFor();
     await account(page, 2439).getByRole("link", { name: "Hydrex account #2439" }).click();
     await position(page).getByRole("heading", { name: "Account #2439", level: 1 }).waitFor();
     assert.equal(new URL(page.url()).hash, "#hydrex/2439");
@@ -182,19 +188,16 @@ describe("the page against a fork of Base: its views, and each account's payouts
       .getByText(/Earns nothing\s+since\s+Thu,? 10 Sept?\./)
       .waitFor();
     await position(page).getByRole("button", { name: "Join Carbon Impact", exact: true }).waitFor();
-    await position(page).getByRole("button", { name: "Leave", exact: true }).waitFor();
+    await position(page).getByRole("button", { name: "Vote yourself", exact: true }).waitFor();
     assert.equal(await position(page).locator(".position-owner-row").isVisible(), false, "its own account");
     await shoot(page, "stopped-account-390-light");
-    // Its title leads back: "Your wallet › Hydrex › Account #2439".
-    const trail = position(page).getByRole("navigation", { name: "Breadcrumb" });
-    assert.deepEqual(await trail.getByRole("link").allInnerTexts(), ["Your wallet", "Hydrex"]);
-    await trail.getByRole("link", { name: "Hydrex" }).click();
+    // It leads back to Hydrex, above its title.
+    const back = position(page).getByRole("navigation", { name: "Back" });
+    assert.deepEqual(await back.getByRole("link").allInnerTexts(), ["Hydrex"]);
+    await back.getByRole("link", { name: "Hydrex" }).click();
     await hydrexTitle(page).waitFor();
     // Hydrex's page leads back to the wallet, the App.
-    await hydrex(page)
-      .getByRole("navigation", { name: "Breadcrumb" })
-      .getByRole("link", { name: "Your wallet" })
-      .click();
+    await hydrex(page).getByRole("navigation", { name: "Back" }).getByRole("link", { name: "Your wallet" }).click();
     await appTitle(page).waitFor();
     assert.equal(new URL(page.url()).hash, "#app");
     assert.equal(await page.title(), "Your wallet · metaDEX Café");
@@ -217,12 +220,12 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.deepEqual(violations, []);
   });
 
-  test("what the votes earned last epoch: on the menu, for a member's account, and all of Hydrex once its popup opens", async () => {
+  test("what the votes earned last epoch: on the menu, for a member's account, and when all of Hydrex cannot be read", async () => {
     await warm(async () => {
       const found = (await readEarnings(CONDUIT))!;
-      await sharesOf([9540n, 14485n], found.start, found.votes, CONDUIT);
+      await stakesOf([9540n, 14485n], found.start);
     });
-    // All of Hydrex takes too many reads for the fork to answer in time, so they are refused, and noted.
+    // All of Hydrex, for its average and the record's popup, is refused, and noted: the rest of the page still shows.
     const everyPool = toFunctionSelector("function totalWeightAt(uint256)").slice(2);
     let compared = false;
     const refuse = (body: string) => {
@@ -235,23 +238,26 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await account(page, 9540)
       .getByText(/≈\s\$6\.1\d last epoch/)
       .waitFor({ timeout: 120_000 });
-    assert.equal(await account(page, 14485).locator(".earned").isVisible(), false, "its own account voted itself");
+    assert.equal(await account(page, 14485).locator(".earned").isVisible(), false, "its owner did not vote");
     await shoot(page, "member-earned-390-light");
-    // What reached the owner for each 1,000 Earning Power: what the votes earned is in the record's popup.
+    // What the votes earned for each 1,000 Earning Power: what reached the owner is on the automation's page.
     const menu = hydrex(page).locator('.choice[data-choice="carbon-impact"]');
     assert.match(await menu.locator(".record").innerText(), /^≈\s\$0\.\d\d$/);
-    assert.equal(await menu.locator(".record-unit").innerText(), "per 1,000 Earning Power");
+    assert.equal(await menu.locator(".record-unit").innerText(), "/ 1k Earning Power");
+    assert.equal(await menu.locator(".yours-count").innerText(), "Yours: 1 Hydrex account");
+    // Beside it, Hydrex's average, which could not be read here.
+    await hydrex(page).locator("#vote-yourself .average").getByText("Not read", { exact: true }).waitFor();
+    assert.equal(compared, true);
+    assert.equal(await menu.locator(".record-versus").isVisible(), false, "nothing to compare with");
     await page.goto(`${SITE}/#hydrex/carbon-impact`);
     const impact = product(page, "carbon-impact");
     assert.match(await impact.locator(".record").innerText(), /^≈\s\$0\.\d\d$/);
-    assert.equal(compared, false, "all of Hydrex waits until its popup opens");
     await page.goto(`${SITE}/#hydrex/carbon-impact/record`);
     const table = impact.locator(".earnings");
     assert.equal(await table.locator(".ours.earning-power").innerText(), "1.17M");
     assert.equal(await table.locator(".ours.pools").innerText(), "27 pools");
     assert.match(await table.locator(".ours.per-power").innerText(), /^≈\s\$0\.5\d$/);
     await impact.locator(".all-failed").getByText("Reading all of Hydrex failed.").waitFor();
-    assert.equal(compared, true);
     assert.equal(await page.locator("#error").isVisible(), false, "the rest of the page is as it was");
     await impact.locator(".earned-pools tr").filter({ hasText: "AVNT / USDC" }).waitFor();
     await shoot(page, "record-390-light");

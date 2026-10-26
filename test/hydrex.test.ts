@@ -11,7 +11,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { AUTOMAXI, CARBON_IMPACT, VOTING_ESCROW, type Automation } from "../src/config.ts";
+import { AUTOMAXI, CARBON_IMPACT, VOTING_ESCROW } from "../src/config.ts";
 import { WEEK } from "../src/format.ts";
 import {
   canJoin,
@@ -49,11 +49,11 @@ const account = (changes: Partial<Account> = {}): Account => ({
   delegate: OWNER,
   delegateAtStart: OWNER,
   delegateVoted: 0,
+  ownerVoted: NOW,
   claimer: zeroAddress,
   ...changes,
 });
-const statusWith = (changes: Partial<Account>, automations?: Automation[]) =>
-  statusOf(account(changes), OWNER, NOW, START, automations);
+const statusWith = (changes: Partial<Account>) => statusOf(account(changes), OWNER, NOW, START);
 const groupWith = (changes: Partial<Account>) => groupOf(account(changes), statusWith(changes));
 const inCarbonImpact = { automation: CARBON_IMPACT };
 
@@ -89,6 +89,11 @@ test("votes without claims, or claims without votes, is only partly in", () => {
 test("other delegates: the owner, nobody, another automation on Hydrex's list, any other address", () => {
   assert.deepEqual(statusWith({}), { kind: "self" });
   assert.deepEqual(statusWith({ delegate: zeroAddress }), { kind: "self" });
+  // An owner who voted last epoch, or since, still votes; one who last voted before, or never, needs to.
+  assert.deepEqual(statusWith({ ownerVoted: START - WEEK }), { kind: "self" });
+  assert.deepEqual(statusWith({ ownerVoted: START - WEEK - 1 }), { kind: "unvoted", voted: START - WEEK - 1 });
+  assert.deepEqual(statusWith({ ownerVoted: 0 }), { kind: "unvoted", voted: 0 }, "never voted");
+  assert.equal(groupWith({ ownerVoted: 0 }), "needs");
   assert.deepEqual(statusWith({ delegate: USDC.toLowerCase() as Address }), { kind: "other", name: "USDC" });
   assert.deepEqual(statusWith({ delegate: STRANGER }), { kind: "delegated", to: STRANGER });
 });
@@ -253,12 +258,6 @@ test("AutoMaxi: in it, joining it, and moving between the two in one call, which
   const [both] = join([account({ delegate: USDC, claimer: CONDUIT })], AUTOMAXI);
   assert.equal(both!.says, "Account #141 leaves Carbon Impact and the USDC automation and joins AutoMaxi.");
   assert.deepEqual(txs(leave([account({ delegate: MAXI, claimer: MAXI })], AUTOMAXI)), [approval(141n, false, MAXI)]);
-});
-
-test("until AutoMaxi is on Base, the page leaves it out", () => {
-  const changes = { delegate: MAXI, delegateAtStart: MAXI, claimer: MAXI };
-  assert.deepEqual(statusWith(changes, [CARBON_IMPACT]), { kind: "delegated", to: MAXI });
-  assert.equal(groupOf(account(changes), statusWith(changes, [CARBON_IMPACT]), [CARBON_IMPACT]), "other");
 });
 
 test("an account whose ownerOf fails is asked again on its own before it is taken for gone", async () => {
