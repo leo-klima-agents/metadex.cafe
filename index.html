@@ -1312,11 +1312,12 @@
                 <dd class="swap-gas"></dd>
               </div>
             </dl>
+            <!-- The button first, so that it stays where it is while a status comes and goes after it. -->
             <p class="swap-bar">
+              <button type="button" class="swap-review" disabled>Review</button>
               <span class="small swap-checking" role="status" hidden>Checking Base…</span>
               <span class="small swap-routing" role="status" hidden>Routing them together…</span>
               <span class="small swap-split" hidden></span>
-              <button type="button" class="swap-review" disabled>Review</button>
             </p>
             <p class="swap-review-failed notice" role="alert" hidden></p>
           </section>
