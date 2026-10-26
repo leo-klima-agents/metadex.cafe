@@ -318,7 +318,7 @@ test("on Hydrex's page, the automations, then voting yourself apart, come before
 test("AutoMaxi's page no longer says that owners can claim on Hydrex without its fee, but still does for leaving", () => {
   const joining = /data-section="joining"[\s\S]*?<\/dl>/.exec(productOf(read("index.html"), "automaxi"))?.[0] ?? "";
   assert.doesNotMatch(joining, /claim on Hydrex yourself/);
-  assert.match(joining, /what\s+nobody\s+has\s+claimed\s+through\s+it\s+is\s+yours\s+to\s+claim\s+on\s+Hydrex/);
+  assert.match(joining, /rewards\s+not\s+claimed\s+yet\s+stay\s+yours,\s+to\s+claim\s+on\s+Hydrex/);
 });
 
 test("each automation's page says what it does, and that the account stays in the wallet, before its figures", () => {

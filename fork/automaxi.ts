@@ -153,7 +153,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await group(page, "needs").getByRole("button", { name: "Join AutoMaxi", exact: true }).click();
     await review(page).getByText("Join AutoMaxi · 1 of 2").waitFor();
     await review(page)
-      .getByText("Anyone can then claim the rewards this Hydrex account has not claimed yet, less 1%.")
+      .getByText("Rewards this Hydrex account has not claimed yet go to you through it too, less 1%.")
       .waitFor();
     await review(page).getByRole("link", { name: "Fixed" }).waitFor();
     await review(page)
@@ -221,7 +221,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     assert.equal(await receipt.locator(".receipt-fee-share").innerText(), "1%");
     assert.match(await receipt.locator(".receipt-fee").innerText(), /^−[\d,.<\s]+ USDC$/);
     assert.match(await receipt.locator(".receipt-paid").innerText(), /^(< )?[\d,.]+ USDC$/);
-    assert.deepEqual(await receipt.locator(".claim-by").allTextContents(), ["by 0x0000…dEaD", "by AutoMaxi"]);
+    assert.deepEqual(await receipt.locator(".claim-by").allTextContents(), ["sent by 0x0000…dEaD", "sent by AutoMaxi"]);
     assert.equal(await receipt.locator(".receipt-stopped").isVisible(), false);
     // USDC counts as a dollar.
     await receipt
