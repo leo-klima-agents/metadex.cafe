@@ -110,4 +110,7 @@ test("a frame's parent is Safe{Wallet} only at its origin, and an opaque origin 
   assert.equal(parentOrigin("null", ""), undefined);
   assert.equal(parentOrigin(undefined, "about:blank"), undefined);
   assert.equal(parentOrigin(undefined, ""), undefined);
+  // Nor a referrer of the page's own, where the browser lists no ancestors: the frame navigated within itself.
+  assert.equal(parentOrigin(undefined, "https://metadex.cafe/#app", "https://metadex.cafe"), undefined);
+  assert.equal(parentOrigin("https://metadex.cafe", "", "https://metadex.cafe"), "https://metadex.cafe");
 });

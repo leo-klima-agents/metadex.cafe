@@ -15,7 +15,7 @@ import {
   summed,
   type Claim,
 } from "./claim.ts";
-import { clone, fill, live, show } from "./dom.ts";
+import { clone, fill, live, rewrite, show } from "./dom.ts";
 import { between, count, figure, list, money, moneyAt, type Money } from "./format.ts";
 import type { Entry } from "./last-payout.ts";
 import { pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
@@ -35,13 +35,14 @@ const key = (address: string): string => address.toLowerCase();
 // The slippage of a swap after a claim: the swap's page's own default.
 const MARGIN = 50n;
 
-// What reached the owner in each claim of the page's own, from its Claimed events, at prices now if read.
+// What reached the owner in each claim of the page's own, from its Claimed events, at prices now once read: `prices`
+// gives them, if read yet, and the line is written again when they are.
 function claimReceipts(
   receipts: Receipt[],
   claims: Claim[],
   caller: Address,
   tokens: Map<string, Token>,
-  prices: Prices | undefined,
+  prices: () => Prices | undefined,
 ): DocumentFragment {
   const fragment = document.createDocumentFragment();
   const words = (amounts: Amount[], sign = "") =>
@@ -61,10 +62,13 @@ function claimReceipts(
   );
   for (const { id, received, fees, paid } of found) {
     const receipt = clone("claim-receipt");
-    const value = prices ? valueAt(received, tokens, prices) : 0;
     fill(receipt, {
       "claim-receipt-id": `Account #${id}`,
-      "claim-receipt-worth": value > 0 ? () => money(moneyAt(value, prices!), { cents: true }) : "",
+      "claim-receipt-worth": () => {
+        const read = prices();
+        const value = read ? valueAt(received, tokens, read) : 0;
+        return value > 0 ? money(moneyAt(value, read!), { cents: true }) : "";
+      },
       "claim-receipt-claimed": words(received),
       "claim-receipt-fee": words(fees, "−"),
       "claim-receipt-paid": words(paid),
@@ -217,6 +221,8 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     (read) => {
       [prices, settled] = [read, true];
       drawPrices();
+      // A claim's receipt drawn before they came.
+      rewrite();
       return read;
     },
     (error: unknown) => {
@@ -249,7 +255,8 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       ).flatMap(({ paid }) => paid),
     );
   const asTheyAre = async (receipts: Receipt[]) => {
-    const fragment = claimReceipts(receipts, owing, connection.address, tokens, await priced);
+    // At once, in tokens, then in money once the prices come.
+    const fragment = claimReceipts(receipts, owing, connection.address, tokens, () => prices);
     const next = clone("claim-next");
     next.querySelector(".claim-swap-next")!.remove();
     next.querySelector(".claim-swap-failed")!.remove();
@@ -339,7 +346,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       // The claim first; its receipt then opens the swap's own review, for the amounts it brought.
       opened.replace(claimSlips, {
         outcomeOf: (receipts) => {
-          const fragment = claimReceipts(receipts, owing, connection.address, tokens, current);
+          const fragment = claimReceipts(receipts, owing, connection.address, tokens, () => current);
           const next = clone("claim-next");
           next.querySelector(".claim-swap-these")!.remove();
           const button = next.querySelector<HTMLButtonElement>(".claim-swap-next")!;
@@ -387,7 +394,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     opened.replace(all, {
       atomic: true,
       outcomeOf: (receipts) => {
-        const fragment = claimReceipts(receipts, owing, connection.address, tokens, current);
+        const fragment = claimReceipts(receipts, owing, connection.address, tokens, () => current);
         fragment.append(swapReceipt(receipts, swapPlan, tokens, connection.address, current));
         return Promise.resolve(fragment);
       },

@@ -27,11 +27,15 @@ export function clone(id: string): DocumentFragment {
 // it ends that. An element gone from memory leaves the set.
 const writers = new WeakMap<Element, () => string>();
 const written = new Set<WeakRef<Element>>();
+// Each element's one reference in the set, kept while it is there: plain text written over an element, then money
+// again, as a line between "…" and a sum, does not add another.
+const refs = new WeakMap<Element, WeakRef<Element>>();
 const gone = new FinalizationRegistry<WeakRef<Element>>((ref) => written.delete(ref));
 
 export function live(element: Element, write: () => string): void {
-  if (!writers.has(element)) {
+  if (!refs.has(element)) {
     const ref = new WeakRef(element);
+    refs.set(element, ref);
     written.add(ref);
     gone.register(element, ref);
   }
@@ -44,7 +48,10 @@ export function rewrite(): void {
     const element = ref.deref();
     const write = element && writers.get(element);
     if (write) element.textContent = write();
-    else written.delete(ref);
+    else {
+      written.delete(ref);
+      if (element) refs.delete(element);
+    }
   }
 }
 

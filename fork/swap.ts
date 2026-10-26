@@ -126,7 +126,8 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       );
       assert.doesNotMatch(route, /0x|tick spacing|%/, route);
     }
-    assert.equal(await bill.locator(".swap-slippage").innerText(), "Minimum at 0.5% slippage");
+    // The total's label shows in capitals; its text is as written.
+    assert.equal(await bill.locator(".swap-slippage").textContent(), "Minimum at 0.5% slippage");
     await review(page).getByRole("button", { name: "Continue" }).click();
     await review(page).getByText("All 4 in one prompt, all or nothing").waitFor();
     const says = await review(page).locator(".says").allTextContents();
@@ -149,7 +150,8 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await review(page).getByRole("heading", { name: "Done" }).waitFor({ timeout: 120_000 });
     assert.doesNotMatch(await review(page).locator(".progress").innerText(), /went through/);
     assert.equal(sent.length, 4);
-    const receipt = review(page).locator(".receipt");
+    // The receipt on the Done screen, not the bill on its hidden page, nor the calls' slips.
+    const receipt = review(page).locator(".done .receipt");
     // When, the gas the wallet paid, then each token sold, what it fetched, and how that compares with the quote.
     assert.match(await receipt.locator(".swap-receipt-time").innerText(), / UTC$/);
     assert.match(await receipt.locator(".swap-receipt-gas .exact").innerText(), /^[\d.]+ ETH$/);
