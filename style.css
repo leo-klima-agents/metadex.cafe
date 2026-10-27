@@ -211,8 +211,9 @@ table,
 
 /* What is being read from Base keeps its place: a figure, as a quiet bar of about its width; a list or a page, as cards
    of bars where its items will show. They show a moment after the read starts, so that a quick read flashes nothing,
-   and pulse where motion is welcome. Screen readers say "Loading" instead. See PENDING in dom.ts. */
-.pending::before,
+   and pulse where motion is welcome. Screen readers say "Loading" instead. See PENDING in dom.ts. A figure's bar shows
+   only while the figure holds no more than those words, so that text written over it some other way hides it. */
+.pending:has(> .visually-hidden)::before,
 .skeleton > li::before,
 .skeleton > li::after {
   content: "";
@@ -224,12 +225,12 @@ table,
   background: var(--line);
   vertical-align: -0.1em;
 }
-.pending::before,
+.pending:has(> .visually-hidden)::before,
 .skeleton {
   animation: later 0s 0.3s backwards;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .pending::before {
+  .pending:has(> .visually-hidden)::before {
     animation:
       later 0s 0.3s backwards,
       pulse 1.6s 0.3s ease-in-out infinite;
