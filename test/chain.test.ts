@@ -4,12 +4,18 @@ import { rate, resetRateLimits, rpc } from "../src/chain.ts";
 import { RPCS } from "../src/config.ts";
 
 type Answer = { status?: number; body?: unknown; fail?: Error };
-const original = { fetch: globalThis.fetch, random: Math.random, setTimeout: globalThis.setTimeout };
+const original = {
+  fetch: globalThis.fetch,
+  random: Math.random,
+  setTimeout: globalThis.setTimeout,
+  now: performance.now.bind(performance),
+};
 beforeEach(() => resetRateLimits());
 afterEach(() => {
   globalThis.fetch = original.fetch;
   Math.random = original.random;
   globalThis.setTimeout = original.setTimeout;
+  performance.now = original.now;
 });
 
 type Asked = { url: string; method: string; at: number };
@@ -234,4 +240,33 @@ test("an answer to a request for logs gives back to an RPC's limit of all reques
   // Logs go to the first RPC first, while it has room for them.
   await Promise.all(Array.from({ length: 4 }, () => rpc("eth_getLogs", [])));
   assert.equal(rate(), 13 + 25 + 25);
+});
+
+test("once no RPC answered at all three times in a row, requests fail at once for ten seconds, then one is asked", async () => {
+  Math.random = () => 0;
+  const asked = answering(everywhere({ fail: new TypeError("fetch failed") }));
+  await assert.rejects(rpc("eth_call", []), /No Base RPC can be reached\./);
+  assert.equal(asked.length, 3 * RPCS.length);
+  await assert.rejects(rpc("eth_chainId", []), /No Base RPC can be reached\./);
+  await assert.rejects(rpc("eth_call", []), /No Base RPC can be reached\./);
+  assert.equal(asked.length, 3 * RPCS.length, "nothing is asked meanwhile");
+  performance.now = () => original.now() + 10_000;
+  answering(everywhere(result("0x1")));
+  assert.equal(await rpc("eth_chainId", []), "0x1");
+});
+
+test("an RPC that answers, even with an error, or too slowly, can be reached", async () => {
+  for (const answer of [
+    error(3, "execution reverted"),
+    { status: 503 },
+    { fail: new DOMException("The operation timed out.", "TimeoutError") },
+  ]) {
+    resetRateLimits();
+    Math.random = () => 0;
+    answering(everywhere(answer));
+    await assert.rejects(rpc("eth_call", []), /No Base RPC answered eth_call\./);
+    const asked = answering(everywhere(result("0x1")));
+    assert.equal(await rpc("eth_chainId", []), "0x1", JSON.stringify(answer));
+    assert.equal(asked.length, 1);
+  }
 });

@@ -226,10 +226,12 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 - **While the page reads Base,** each figure shows as a quiet bar where it will go, and each list as cards of bars; a
   status says "Checking…". A read that takes more than a few seconds says so. One that fails says "Not read", or hides
   its line, and never leaves a bar behind.
-- **"Reading Base failed."** No RPC answered. The page offers to try again. What votes earned, the other automations and
-  the payouts only add to the page: if one of them cannot be read, the rest of the page still works. What votes earned
-  is tried again every five minutes. If one automation's payouts cannot be read, the others' still show, and the page
-  reads them again every five minutes; if none can, an account's page has a button to read them again.
+- **"Reading Base failed."** No RPC answered. The page offers to try again. When none can be reached at all, as offline,
+  it says so within seconds: once each RPC went unanswered three times in a row, every read fails at once for ten
+  seconds, then the next is asked as usual. What votes earned, the other automations and the payouts only add to the
+  page: if one of them cannot be read, the rest of the page still works. What votes earned is tried again every five
+  minutes. If one automation's payouts cannot be read, the others' still show, and the page reads them again every five
+  minutes; if none can, an account's page has a button to read them again.
 - **Joining is off.** A check failed: see [When a contract changes](#when-a-contract-changes).
 - **The wallet is on another network.** The page offers to switch it to Base, or asks the visitor to pick Base in the
   wallet.
