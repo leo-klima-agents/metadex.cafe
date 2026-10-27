@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
+import type { Locator } from "playwright-core";
 import { toFunctionSelector } from "viem";
 import { blockTime, read } from "../src/chain.ts";
 import { KVCM, VOTER } from "../src/config.ts";
@@ -499,5 +500,37 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await account(page, 2439).getByText("In USDC", { exact: true }).waitFor();
     await group(page, "other").getByText("#2435").waitFor();
     assert.equal(await page.locator("#error").isVisible(), false);
+  });
+
+  test("if the Voter cannot be read, nothing stays loading: what needs it says it could not be read", async () => {
+    await anvil("anvil_setCode", [VOTER, "0x"]);
+    const { page } = await connected({ owner: ELSEWHERE });
+    await account(page, 2439).getByText("In USDC", { exact: true }).waitFor();
+    // When Carbon Impact last voted, AutoMaxi's state, and last epoch's figures, and so Hydrex's average and what the
+    // wallet's own votes earned, are all read through the Voter.
+    const notRead = (place: Locator) => place.getByText("Not read yet", { exact: true }).waitFor();
+    const menu = hydrex(page).locator("#menu");
+    await notRead(menu.locator(".impact-state"));
+    await notRead(menu.locator(".automaxi-state"));
+    for (const kind of ["carbon-impact", "automaxi"]) await notRead(menu.locator(`[data-choice="${kind}"] .record`));
+    await notRead(hydrex(page).locator("#vote-yourself .average"));
+    await notRead(hydrex(page).locator("#vote-yourself .yours-average"));
+    const loading = (place: Locator) => place.locator(".pending:visible").count();
+    assert.equal(await loading(hydrex(page)), 0);
+    // The App leaves out the automations' figures; each automation's page says they could not be read, and its record,
+    // with Try again.
+    await page.goto(`${SITE}/#app`);
+    const card = app(page).locator('.choice[data-choice="hydrex"]');
+    await card.locator(".hydrex-yours").waitFor();
+    assert.equal(await card.locator("[data-record]:visible").count(), 0);
+    assert.equal(await loading(card), 0);
+    for (const kind of ["carbon-impact", "automaxi"]) {
+      await page.goto(`${SITE}/#hydrex/${kind}`);
+      await notRead(product(page, kind).locator(".facts .record"));
+      assert.equal(await loading(product(page, kind)), 0, kind);
+    }
+    await page.goto(`${SITE}/#hydrex/automaxi/record`);
+    await product(page, "automaxi").getByText("Reading last epoch failed.").waitFor();
+    await product(page, "automaxi").getByRole("button", { name: "Try again" }).waitFor();
   });
 });

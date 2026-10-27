@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PENDING, fill, live, rewrite, setText } from "../src/dom.ts";
+import { PENDING, fill, fillTime, live, rewrite, setText, showWorth, showWorthIn } from "../src/dom.ts";
 import { money, moneyAt, setCurrency } from "../src/format.ts";
 
 // An element as far as text goes, and a root that holds it under one class.
@@ -105,4 +105,22 @@ test("money stays pending until what it shows is read, and a rewrite then writes
   rewrite();
   assert.equal(shown.classList.contains("pending"), false);
   assert.equal(shown.textContent, "≈\u00a0$3.00");
+});
+
+test("a date, or an amount and what it is worth, ends what was pending where it is written", () => {
+  const [time, exact, worth, line] = [pendable(), pendable(), pendable(), pendable()];
+  for (const each of [time, exact, worth, line]) setText(each as unknown as Element, PENDING);
+  const at = Object.assign(time, { dateTime: "" });
+  fillTime({ querySelectorAll: () => [at] } as unknown as ParentNode, "voted", 1_792_540_800);
+  assert.equal(time.classList.contains("pending"), false);
+  assert.equal(at.dateTime, "2026-10-21T00:00:00.000Z");
+  showWorthIn(exact as unknown as Element, worth as unknown as Element, PENDING);
+  assert.equal(exact.classList.contains("pending"), true, "an amount still read waits");
+  assert.equal(worth.classList.contains("pending"), false, "what it is worth is left empty until then");
+  showWorthIn(exact as unknown as Element, worth as unknown as Element, "0.5 USDC");
+  assert.equal(exact.classList.contains("pending"), false);
+  assert.equal(exact.textContent, "0.5 USDC");
+  showWorth(line as unknown as Element, "0.5 USDC");
+  assert.equal(line.classList.contains("pending"), false);
+  assert.equal(line.textContent, "0.5 USDC");
 });

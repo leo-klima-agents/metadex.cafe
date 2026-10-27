@@ -21,6 +21,7 @@ import {
   join,
   leave,
   leaveOther,
+  paidBpsOf,
   readAccount,
   statusOf,
   type Account,
@@ -297,4 +298,11 @@ test("an account whose ownerOf fails is asked again on its own before it is take
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test("what reaches the owner of Carbon Impact's payouts is not known until its fee is", () => {
+  const settings = { retireBps: 3_333n } as Parameters<typeof paidBpsOf>[0];
+  assert.equal(paidBpsOf(settings), undefined, "an unknown fee is not none");
+  assert.equal(paidBpsOf({ ...settings, feeBps: 0n }), 6_667n);
+  assert.equal(paidBpsOf({ ...settings, feeBps: 100n }), 6_600n);
 });
