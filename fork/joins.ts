@@ -315,7 +315,8 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await group(page, "in:carbon-impact").getByRole("button", { name: "Leave" }).click();
     await review(page).getByRole("heading", { name: "Leave Carbon Impact" }).waitFor();
     await page.keyboard.press("Escape");
-    assert.equal(await page.locator("#epoch .countdown").innerText(), "soon");
+    // Without the block's time, the epoch's end is only Thursday's, with no countdown.
+    assert.equal(await page.locator("#epoch .countdown-line").isVisible(), false);
     opened.rpc.refuse = undefined;
     await page.clock.runFor(30_000);
     await page
