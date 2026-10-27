@@ -1,8 +1,8 @@
 import type { Hex } from "viem";
-import { waitForReceipt, type Receipt } from "./chain.ts";
-import { CHAIN_ID } from "./config.ts";
-import { clone, fill, show, showHex, showWalletAddress, txLink } from "./dom.ts";
-import { count } from "./format.ts";
+import { waitForReceipt, type Receipt } from "../chain.ts";
+import { CHAIN_ID } from "../config.ts";
+import { clone, fill, show, showHex, showWalletAddress, txLink } from "../dom.ts";
+import { count } from "../format.ts";
 import {
   callsStatus,
   capabilities,
@@ -15,7 +15,7 @@ import {
   type Connection,
   type Tx,
   type Wallet,
-} from "./wallet.ts";
+} from "../wallet.ts";
 
 // A field of a call as the wallet shows it: an address, a number or a list of them, in the mono face, or words.
 // `description` says what the field holds, above it, such as the contract an address is; a list's items can each have a

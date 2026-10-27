@@ -1,8 +1,8 @@
 import { maxUint256, type Address } from "viem";
-import { gasPaid, includedAt, now, same, type Receipt } from "./chain.ts";
-import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
-import { PENDING, busy, clone, fill, fillAddress, setText, show, showWorth, showWorthIn } from "./dom.ts";
-import { tokensOf } from "./earnings.ts";
+import { gasPaid, includedAt, now, same, type Receipt } from "../chain.ts";
+import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
+import { PENDING, busy, clone, fill, fillAddress, setText, show, showWorth, showWorthIn } from "../dom.ts";
+import { tokensOf } from "../earnings.ts";
 import {
   between,
   bps,
@@ -16,13 +16,13 @@ import {
   short,
   utc,
   type Money,
-} from "./format.ts";
-import { earningsOf, onEarnings } from "./last-epoch.ts";
-import { pricesIn, pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
-import type { Amount } from "./receipts.ts";
+} from "../format.ts";
+import { earningsOf, onEarnings } from "../last-epoch.ts";
+import { pricesIn, pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
+import type { Amount } from "../receipts.ts";
 import { openReview, type Hooks, type ReviewPage, type Slip } from "./review.ts";
-import { routeTogether, type Sale } from "./routing.ts";
-import { hrefOf, type Route as PageRoute } from "./routes.ts";
+import { routeTogether, type Sale } from "../routing.ts";
+import { hrefOf, type Route as PageRoute } from "../routes.ts";
 import {
   APPROVAL_GAS,
   MIDDLES,
@@ -45,8 +45,8 @@ import {
   type Found,
   type Result,
   type Route,
-} from "./swap.ts";
-import { approveSlip, costs, ethCost, gasCost, hopsWords, swapSlip, type Costs } from "./swap-calls.ts";
+} from "../swap.ts";
+import { approveSlip, costs, ethCost, gasCost, hopsWords, swapSlip, type Costs } from "../swap-calls.ts";
 import {
   allowancesOf,
   describe,
@@ -57,9 +57,9 @@ import {
   lookalike,
   type Allowance,
   type Listed,
-} from "./tokens.ts";
-import { onRoute, route } from "./views.ts";
-import { walletAssets, type Connection } from "./wallet.ts";
+} from "../tokens.ts";
+import { onRoute, route } from "./router.ts";
+import { walletAssets, type Connection } from "../wallet.ts";
 
 // The swap's page, `#swap`: the output first, then the wallet's tokens, each with its route and what it fetches, then
 // what the ticked ones fetch together, and the review. The App's line on the swap and its leftover approvals come from

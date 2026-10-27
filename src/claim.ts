@@ -6,7 +6,7 @@ import { WEEK, count } from "./format.ts";
 import type { Entry } from "./last-payout.ts";
 import type { Token } from "./prices.ts";
 import { readEarned, type Amount } from "./receipts.ts";
-import type { Slip } from "./review.ts";
+import type { Slip } from "./views/review.ts";
 
 // Claiming through AutoMaxi, when its keeper is late. Anyone can call claim(tokenId, feeAddresses, bribeAddresses,
 // tokens) for any account in AutoMaxi, and it pays the owner, less 1%. The page offers it for the wallet's own accounts

@@ -147,8 +147,8 @@ Two axes:
 - **A breadcrumb** on every page below the App: "App › Carbon Impact", "App › Account #9540". In Safe{Wallet}'s frame
   and in wallets' browsers there is no address bar, and Back is not to be relied on.
 - **The footer:** the official address; the version, which leads to `#about/check`; and About. No commit: see rule 10.
-- **Folds** (`<details>`) hold the technical parts of a page. An address that points into a fold opens it, as `views.ts`
-  does today.
+- **Folds** (`<details>`) hold the technical parts of a page. An address that points into a fold opens it, as
+  `views/router.ts` does today.
 
 ### Home
 
@@ -527,7 +527,7 @@ Where each question's answer goes:
 
 ## Implementation
 
-1. **A router.** `views.ts` reads the hash as a route: Home, the App, About, a product, an account, each with an
+1. **A router.** `views/router.ts` reads the hash as a route: Home, the App, About, a product, an account, each with an
    optional section. It shows that view, sets the title, marks the header's link, draws the breadcrumb, opens the fold
    of the section asked for and scrolls to it, and on a new view scrolls to the top and focuses its `h1`, as today. The
    CSS rule that shows views by `:target` goes.

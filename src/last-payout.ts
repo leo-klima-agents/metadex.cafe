@@ -8,7 +8,7 @@ import { WEEK, amount, bps, listWith, money, moneyAt, short, utc, weekStart } fr
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { lastEarnings } from "./last-epoch.ts";
 import { pricesAtFlip, pricesNow, type Prices, type Token } from "./prices.ts";
-import { prefill } from "./swap-view.ts";
+import { prefill } from "./views/swap.ts";
 import {
   SETTLED,
   blockTimes,

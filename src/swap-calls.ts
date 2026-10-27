@@ -3,7 +3,7 @@ import { rpc } from "./chain.ts";
 import { WETH, type Swapper } from "./config.ts";
 import { figure, money, moneyAt, utc, type Money } from "./format.ts";
 import type { Prices, Token } from "./prices.ts";
-import type { Slip } from "./review.ts";
+import type { Slip } from "./views/review.ts";
 import { MAX_TIP, approve, swapCall, venueOf, type Route } from "./swap.ts";
 
 // The calls of a swap, as the review shows them, and what gas costs.

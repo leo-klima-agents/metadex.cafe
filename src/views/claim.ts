@@ -1,6 +1,6 @@
 import { maxUint256, type Address } from "viem";
-import { same, type Receipt } from "./chain.ts";
-import { DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
+import { same, type Receipt } from "../chain.ts";
+import { DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
 import {
   CLAIM_CALL_GAS,
   MAX_CLAIM_GAS,
@@ -14,19 +14,19 @@ import {
   paidBy,
   summed,
   type Claim,
-} from "./claim.ts";
-import { PENDING, clone, fill, live, rewrite, setText, show, type Text } from "./dom.ts";
-import { between, count, figure, list, money, moneyAt, type Money } from "./format.ts";
-import type { Entry } from "./last-payout.ts";
-import { pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
-import { valueAt, weightAt, type Amount } from "./receipts.ts";
+} from "../claim.ts";
+import { PENDING, clone, fill, live, rewrite, setText, show, type Text } from "../dom.ts";
+import { between, count, figure, list, money, moneyAt, type Money } from "../format.ts";
+import type { Entry } from "../last-payout.ts";
+import { pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
+import { valueAt, weightAt, type Amount } from "../receipts.ts";
 import { openReview, type Hooks } from "./review.ts";
-import { hrefOf } from "./routes.ts";
-import { APPROVAL_GAS, MIDDLES, findRoute, minimumOf, paidOf, partOf, routeResults, simulate } from "./swap.ts";
-import { costs, gasCost, gasWords } from "./swap-calls.ts";
-import { openSwapReview, planSteps, prefill, swapReceipt, swapsOff, type Plan } from "./swap-view.ts";
-import { describe } from "./tokens.ts";
-import { capabilities, type Connection } from "./wallet.ts";
+import { hrefOf } from "../routes.ts";
+import { APPROVAL_GAS, MIDDLES, findRoute, minimumOf, paidOf, partOf, routeResults, simulate } from "../swap.ts";
+import { costs, gasCost, gasWords } from "../swap-calls.ts";
+import { openSwapReview, planSteps, prefill, swapReceipt, swapsOff, type Plan } from "./swap.ts";
+import { describe } from "../tokens.ts";
+import { capabilities, type Connection } from "../wallet.ts";
 
 // The review of a claim through AutoMaxi, for the wallet's accounts whose payout is overdue: what waits, how to receive
 // it, then the calls; and its receipt.

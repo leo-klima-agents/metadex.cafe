@@ -20,7 +20,7 @@ import { WEEK, clean, list, weekStart } from "./format.ts";
 import conduits from "./hydrex-conduits.json" with { type: "json" };
 import { anchorsNow, type Prices } from "./prices.ts";
 import { costs } from "./swap-calls.ts";
-import type { Slip } from "./review.ts";
+import type { Slip } from "./views/review.ts";
 import type { Tx } from "./wallet.ts";
 
 const votingEscrowAbi = parseAbi([
