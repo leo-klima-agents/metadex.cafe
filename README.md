@@ -60,10 +60,11 @@ This README is for whoever runs the site. The design and the plan are in [design
   name in the header still leads Home afterwards. The App, "Your wallet", starts with what needs you across the
   products, each with one action: a Hydrex account in a stopped automation, accounts whose owner did not vote last
   epoch, an overdue payout, token approvals to the swappers that haven't been used. Then the products, each with what
-  you hold in it: Hydrex (`#hydrex`), its automations and voting yourself, and the swap (`#swap`). Its Approvals button
-  lists every approval this wallet gave the café's contracts, with the call that undoes it. The pages under it lead one
-  level back, above their title: "‹ Your wallet" from Hydrex and the swap, "‹ Hydrex" from the pages below; Home and
-  About do not.
+  you hold in it: Hydrex (`#hydrex`), its automations and voting yourself, with what each automation's votes earned last
+  epoch against Hydrex's average, for every visitor, wallet or not, and the swap (`#swap`). Its Approvals button lists
+  every approval this wallet gave the café's contracts, with the call that undoes it. The pages under it lead one level
+  back, above their title: "‹ Your wallet" from Hydrex and the swap, "‹ Hydrex" from the pages below; Home and About do
+  not.
 - The page always says "Hydrex account", as "account" alone means an address in crypto: "8 Hydrex accounts", "Hydrex
   Main Protocol Account #26432".
 - Details open from a round info button beside what they explain, as a popup: on a phone, a sheet from the foot of the
@@ -282,9 +283,9 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   that record, such as its owner on Hydrex. The page then says that the account was last claimed outside Carbon Impact,
   and shows no receipt.
 - What votes earned is for the last epoch only. Hydrex's average needs every pool's reward contracts, thousands of reads
-  made once a session, after the page's own, and only on `#hydrex` and the automations' pages. What the votes of
-  accounts in no automation earned is read only there and on an account's page, through whoever held them: as many reads
-  when that holder voted during this epoch, as Hydrex's Voter then holds only the new votes.
+  made once a session, after the page's own, and only on the App, `#hydrex` and the automations' pages. What the votes
+  of accounts in no automation earned is read only there and on an account's page, through whoever held them: as many
+  reads when that holder voted during this epoch, as Hydrex's Voter then holds only the new votes.
 - Prices are approximate. USDC, WETH, cbBTC and EURC take Chainlink's; other tokens, and one of those four whose feed
   does not answer, a half-hour average in their deepest pool against one of those priced. Prices now, for swaps, gas and
   what waits to be claimed, come from Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools and Hydrex Integral,
@@ -353,7 +354,7 @@ the pinned Actions and npm packages every week.
 | `src/hydrex-conduits.json`                              | Hydrex's automations, as <https://api.hydrex.fi/conduits> lists them.                                                                                                                                     |
 | `src/main.ts`                                           | Startup: each view set up, then the reads, and again every half a minute what is due.                                                                                                                     |
 | `src/views/page.ts`                                     | What the views share: the wallet connected, its Hydrex accounts, and how each view is drawn again.                                                                                                        |
-| `src/views/automations.ts`                              | The automations' state and figures, on Hydrex's menu and their pages, beside Hydrex's average; and the checks.                                                                                            |
+| `src/views/automations.ts`                              | The automations' state and figures, on Hydrex's menu, their pages and the App, beside Hydrex's average; and the checks.                                                                                   |
 | `src/views/accounts.ts`                                 | The wallet's Hydrex accounts in groups, their boxes and buttons, and the reviews of joining, leaving and claiming.                                                                                        |
 | `src/views/position.ts`                                 | An account's page.                                                                                                                                                                                        |
 | `src/views/app.ts`                                      | The App: what needs you, the products, and what the wallet allows.                                                                                                                                        |

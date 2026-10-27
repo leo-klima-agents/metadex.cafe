@@ -759,9 +759,17 @@ button img {
   display: grid;
   gap: 0.125rem;
 }
-/* "≈ $0.55 / 1k Earning Power", then how it compares with Hydrex's average, under it. */
+/* "≈ $0.55 / 1k Earning Power", then how it compares with Hydrex's average, under it. On the App, a line for each
+   automation, the comparison on the same line. */
 .choice .record-versus {
   display: block;
+}
+.records {
+  padding: 0;
+  list-style: none;
+}
+.records .record-versus {
+  display: inline;
 }
 .yours-count {
   color: var(--quiet);

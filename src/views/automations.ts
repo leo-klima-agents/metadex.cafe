@@ -75,18 +75,29 @@ export const traits: Record<Kind, Traits> = {
   automaxi: { templates: "automaxi-", settings: false, paid: () => Number(10_000n - AUTOMAXI_FEE_BPS) / 10_000 },
 };
 
-// Where an automation shows: its row on the menu, and its page.
+// Where an automation shows: its row on Hydrex's menu, its page, which holds its popups, and its line on the App. Its
+// figures are written there only, so that other views may use the same class names.
 const placesOf = ({ kind }: Automation): HTMLElement[] => [
-  ...document.querySelectorAll<HTMLElement>(`.choice[data-choice="${kind}"], .view[data-kind="${kind}"]`),
+  ...document.querySelectorAll<HTMLElement>(
+    `.choice[data-choice="${kind}"], .view[data-kind="${kind}"], [data-record="${kind}"]`,
+  ),
 ];
+// Where an automation's place is, for what it shows there.
+const whereOf = (place: HTMLElement): "page" | "menu" | "app" =>
+  place.matches(".view") ? "page" : place.matches(".choice") ? "menu" : "app";
+// The sentence on Hydrex's page that says when a change takes effect; and voting yourself, beside the automations.
+const epochLine = document.getElementById("epoch")!;
+const voteYourself = document.getElementById("vote-yourself")!;
 
 // A status, on the menu and on an automation's page: its shape and its words. Until read, "Checking…", in a quiet ring.
-function showState(shapes: string, words: string, shape: string, state: string): void {
-  for (const each of document.querySelectorAll(`.${shapes}`)) {
-    each.classList.remove("checking", "idle", "running", "stopped");
-    each.classList.add(shape);
+function showState(automation: Automation, prefix: string, shape: string, state: string): void {
+  for (const place of placesOf(automation)) {
+    for (const each of place.querySelectorAll(`.${prefix}-shape`)) {
+      each.classList.remove("checking", "idle", "running", "stopped");
+      each.classList.add(shape);
+    }
+    fill(place, { [`${prefix}-state`]: state });
   }
-  fill(document, { [words]: state });
 }
 
 // What Carbon Impact takes: "33.33% retired, 1% fee", the fee said to be unread when its read failed. The page says
@@ -104,32 +115,37 @@ function showCarbonImpact(): void {
   const stopped = voted !== undefined && hasStopped(voted, epochStart);
   const [shape, state]: [string, string] =
     voted === undefined ? ["idle", "Not read yet"] : stopped ? ["stopped", "Stopped"] : ["running", "Running"];
-  showState("impact-shape", "impact-state", shape, state);
-  fill(document, {
-    "impact-voted-words": stopped ? " since " : " · voted ",
-    tonnes: `${units(tonnes)} t`,
-    retired: bps(retireBps),
-    takes: `${bps(retireBps)} retired, ${feeWords(feeBps)}`,
-    "takes-sub": `retired, ${feeWords(feeBps)}`,
-    "max-takes": `100% retired, ${feeWords(maxFeeBps)}`,
-    entity,
-    beneficiary: beneficiary || "No name",
-    message,
-  });
-  fillAddress(document, "beneficiary-address", beneficiaryAddress);
-  if (treasury) {
-    fillAddress(document, "treasury", treasury);
-    fillAddress(document, "treasury-named", treasury, "its treasury");
-  } else {
-    // Not a link to where an earlier read found it.
-    for (const link of document.querySelectorAll("a.treasury, a.treasury-named")) link.removeAttribute("href");
-    fill(document, { treasury: "Not read yet" });
+  showState(CARBON_IMPACT, "impact", shape, state);
+  for (const place of placesOf(CARBON_IMPACT)) {
+    fill(place, {
+      "impact-voted-words": stopped ? " since " : " · voted ",
+      tonnes: `${units(tonnes)} t`,
+      retired: bps(retireBps),
+      takes: `${bps(retireBps)} retired, ${feeWords(feeBps)}`,
+      "takes-sub": `retired, ${feeWords(feeBps)}`,
+      "max-takes": `100% retired, ${feeWords(maxFeeBps)}`,
+      entity,
+      beneficiary: beneficiary || "No name",
+      message,
+    });
+    fillAddress(place, "beneficiary-address", beneficiaryAddress);
+    if (treasury) {
+      fillAddress(place, "treasury", treasury);
+      fillAddress(place, "treasury-named", treasury, "its treasury");
+    } else {
+      // Not a link to where an earlier read found it.
+      for (const link of place.querySelectorAll("a.treasury, a.treasury-named")) link.removeAttribute("href");
+      fill(place, { treasury: "Not read yet" });
+    }
+    if (voted) fillTime(place, "impact-voted", voted);
+    show(".impact-voted-line", !!voted, place);
   }
-  fillTime(document, "next-epoch", epochStart + WEEK, when);
-  fillTime(document, "epoch-end", epochStart + WEEK, utc);
-  if (voted) fillTime(document, "impact-voted", voted);
-  show(".impact-voted-line", !!voted);
-  show(".countdown-line");
+  // The epoch, by Base's clock: when a join counts from, on each automation's page, and on Hydrex's.
+  for (const automation of AUTOMATIONS) {
+    for (const place of placesOf(automation)) fillTime(place, "next-epoch", epochStart + WEEK, when);
+  }
+  fillTime(epochLine, "epoch-end", epochStart + WEEK, utc);
+  show(".countdown-line", true, epochLine);
   showRecords();
   showCountdown();
   views.catchUp();
@@ -139,12 +155,13 @@ function showCarbonImpact(): void {
 // Carbon Impact's settings could not be read, and none were before: its figures say so, rather than stay pending, until
 // a read succeeds.
 function carbonImpactFailed(): void {
-  showState("impact-shape", "impact-state", "idle", "Not read yet");
-  for (const name of ["tonnes", "retired", "takes", "max-takes", "treasury"])
-    fill(document, { [name]: "Not read yet" });
-  fill(document, { "takes-sub": "" });
+  showState(CARBON_IMPACT, "impact", "idle", "Not read yet");
+  for (const place of placesOf(CARBON_IMPACT)) {
+    for (const name of ["tonnes", "retired", "takes", "max-takes", "treasury"]) fill(place, { [name]: "Not read yet" });
+    fill(place, { "takes-sub": "" });
+  }
   // Without the block's time, the epoch's end is only Thursday's.
-  show(".countdown-line", false);
+  show(".countdown-line", false, epochLine);
   showRecords();
 }
 
@@ -154,11 +171,11 @@ export function showCountdown(): void {
   const time = now();
   const end = impact.value.epochStart + WEEK;
   if (time >= end) return;
-  fill(document, { countdown: `in ${until(end - time)}` });
+  fill(epochLine, { countdown: `in ${until(end - time)}` });
 }
 
-// Each automation's figures for last epoch, on the menu and on its page, for each 1,000 Earning Power: what its votes
-// earned, beside Hydrex's average, then what reached the owner after its cut.
+// Each automation's figures for last epoch, for each 1,000 Earning Power: what its votes earned, beside Hydrex's average,
+// on the menu and on the App, how they compare; on its page, then what reached the owner after its cut.
 export function showRecords(): void {
   for (const automation of AUTOMATIONS) {
     const per = perThousandOf(automation);
@@ -175,29 +192,35 @@ export function showRecords(): void {
     const waits = automation === CARBON_IMPACT && !impact.value && !impact.failed;
     const toYou: Text | (() => Text) =
       per && paid !== undefined ? () => `${money(moneyAt(per.value * paid, per))} to you` : per && waits ? PENDING : "";
-    // On the menu, how it compares with the average, as voting yourself does; what it takes is on the same row.
     const versus = automationVersus(automation);
-    for (const row of document.querySelectorAll<HTMLElement>(`.choice[data-choice="${automation.kind}"]`)) {
-      show(".record-versus", versus !== undefined, row);
-      if (versus !== undefined) fill(row, { "record-versus": versusWords(versus) });
-    }
     for (const place of placesOf(automation)) {
-      // The menu compares what the votes earned, and leaves what reached the owner to the automation's page.
-      const menu = place.classList.contains("choice");
-      const unit = menu ? "/ 1k Earning Power" : "earned, per 1,000 Earning Power";
-      fill(place, { record, "record-unit": per ? unit : "", ...(!menu && { "record-paid": toYou }) });
+      // The menu and the App compare what the votes earned, as voting yourself does, and leave what reached the owner
+      // to the automation's page. The App, early on the way to them, says when, and leaves out an automation with no
+      // record, or none read.
+      const where = whereOf(place);
+      const unit = {
+        page: "earned, per 1,000 Earning Power",
+        menu: "/ 1k Earning Power",
+        app: "/ 1k Earning Power last epoch",
+      };
+      fill(place, { record, "record-unit": per ? unit[where] : "", ...(where === "page" && { "record-paid": toYou }) });
+      if (where === "page") continue;
+      show(".record-versus", versus !== undefined, place);
+      if (versus !== undefined)
+        fill(place, { "record-versus": `${where === "app" ? " · " : ""}${versusWords(versus)}` });
+      if (where === "app") place.hidden = per === null || (per === undefined && earningsFailed(automation));
     }
   }
-  // Beside them, what voting yourself earned: Hydrex's average, and, with a wallet, its own votes, and how they compare.
+  // Beside them, Hydrex's average, on each automation's page and beside voting yourself, and, with a wallet, what its
+  // own votes earned, and how they compare.
   const average = averagePerThousand();
-  fill(document, {
-    average: average === undefined ? PENDING : average === null ? "Not read yet" : () => money(average),
-  });
-  show(".average-unit", average !== null);
+  const averageWords = average === undefined ? PENDING : average === null ? "Not read yet" : () => money(average);
+  for (const place of [voteYourself, ...AUTOMATIONS.flatMap(placesOf)]) fill(place, { average: averageWords });
+  show(".average-unit", average !== null, voteYourself);
   const holdings = session.connection ? shown() : undefined;
   const yours = holdings && ownPerThousand(holdings);
-  show("#vote-yourself .yours", !!holdings);
-  fill(document, {
+  show(".yours", !!holdings, voteYourself);
+  fill(voteYourself, {
     "yours-average":
       yours === undefined
         ? PENDING
@@ -210,10 +233,10 @@ export function showRecords(): void {
               : () => money(yours),
   });
   const known = !!yours && typeof yours === "object";
-  show(".yours-unit", yours === undefined || known);
+  show(".yours-unit", yours === undefined || known, voteYourself);
   const ratio = holdings && known ? ownVersus(holdings) : undefined;
-  show(".yours-versus", ratio !== undefined);
-  if (ratio !== undefined) fill(document, { "yours-versus": versusWords(ratio) });
+  show(".yours-versus", ratio !== undefined, voteYourself);
+  if (ratio !== undefined) fill(voteYourself, { "yours-versus": versusWords(ratio) });
 }
 
 // How some votes compare with Hydrex's average, in words and ink, not colour: "44.7% below the average".
@@ -222,8 +245,9 @@ const versusWords = (ratio: number): string =>
     ? "About the average"
     : `${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "above" : "below"} the average`;
 
-// All of Hydrex is thousands of reads: only the pages that show its average read it.
-const showsAverage = (): boolean => ["hydrex", "product"].includes(route().view);
+// All of Hydrex is thousands of reads: only the pages that show its average read it, the App among them, early on the way
+// to the automations.
+const showsAverage = (): boolean => ["app", "hydrex", "product"].includes(route().view);
 export const readAverage = (): void => {
   if (showsAverage()) void loadAverage().then((changed) => changed && showRecords());
 };
@@ -241,10 +265,12 @@ export function showAutoMaxi(): void {
       : stopped
         ? ["stopped", "Stopped"]
         : ["running", "Running"];
-  showState("automaxi-shape", "automaxi-state", shape, state);
-  fill(document, { "automaxi-voted-words": stopped ? " since " : " · voted " });
-  if (fresh?.voted) fillTime(document, "automaxi-voted", fresh.voted);
-  show(".automaxi-voted-line", !!fresh?.voted);
+  showState(AUTOMAXI, "automaxi", shape, state);
+  for (const place of placesOf(AUTOMAXI)) {
+    fill(place, { "automaxi-voted-words": stopped ? " since " : " · voted " });
+    if (fresh?.voted) fillTime(place, "automaxi-voted", fresh.voted);
+    show(".automaxi-voted-line", !!fresh?.voted, place);
+  }
 }
 
 // Each read of figures, whoever started it, shows on the menu, on the automations' pages and in the accounts' shares.

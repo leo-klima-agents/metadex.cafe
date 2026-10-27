@@ -266,8 +266,10 @@ Swap many tokens into one                                  →
   approvals left over. It shows nothing when nothing needs you; a payout that is merely waiting for Thursday does not
   count, so that the group keeps its weight.
 - **The menu** has one entry per kind of product, Hydrex, for its automations together, and the swap, each with one line
-  of what it does, what it takes, and once connected, what you hold in it. Claiming is not on it: it is an action on
-  accounts in AutoMaxi.
+  of what it does, what it takes, and once connected, what you hold in it. Hydrex's says what each automation's votes
+  earned last epoch against Hydrex's average, for every visitor, as early as the page can: "Carbon Impact: ≈ $0.55 / 1k
+  Earning Power last epoch · 13.5% above the average". An automation with no record yet is left out. Claiming is not on
+  it: it is an action on accounts in AutoMaxi.
 - **Reads:** the App reads only what its lines need: the accounts and their groups, which it reads today, and the
   balances of known tokens with their quotes for the swap line. The swap line can come last, pending, as the earnings
   do, then says what it found so far: "3 tokens · ≈ $31 so far".

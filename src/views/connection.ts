@@ -77,7 +77,8 @@ export async function loadAccounts(quietly = false): Promise<void> {
 // The header: a button to connect a wallet, or the wallet's chip, which leads to the App. The header's popup holds the
 // wallet buttons, as do the App, under its products, and the lists of what a wallet holds: its Hydrex accounts, and the
 // tokens it can sell.
-const connectButton = document.querySelector<HTMLButtonElement>("header.site .connect")!;
+const header = document.querySelector<HTMLElement>("header.site")!;
+const connectButton = header.querySelector<HTMLButtonElement>(".connect")!;
 const connectPop = document.getElementById("connect")!;
 // Older browsers refuse to show a popup already shown, or to hide one already hidden.
 const showConnectPop = (shown: boolean): void => {
@@ -93,7 +94,7 @@ export function showConnection(): void {
   show(".wrong-chain", !!connection && connection.chainId !== CHAIN_ID);
   if (connection) {
     const { wallet, address, chainId } = connection;
-    fill(document, { "wallet-short": short(address) });
+    fill(header, { "wallet-short": short(address) });
     if (chainId === CHAIN_ID) show(".switch-failed", false);
     show(".to-switch, .wrong-chain .switch", !wallet.propose);
     show(".safe-elsewhere", !!wallet.propose);
@@ -167,6 +168,7 @@ function letGo(): void {
 function pickWallet(wallet: Wallet, fromHeader = false): void {
   const click = ++clicks;
   show(".wallet-failed, .no-wallet", false);
+  // In every list of wallets, on each view that has one, and in the header's popup.
   fill(document, { "connecting-wallet": wallet.name });
   show(".connecting");
   connectButton.disabled = true;

@@ -127,8 +127,7 @@ function worth(found: Amount[], tokens: Map<string, Token>, prices: Prices | und
 
 const kvcm = (found: Amount[]): bigint => found.find(({ token }) => same(token, KVCM))?.amount ?? 0n;
 
-// The receipt's fields have class names of their own, because fill(document, …) sets Carbon Impact's figures, such as
-// .tonnes, all over the page.
+// The receipt's fields have class names of their own, apart from Carbon Impact's figures, such as .tonnes, on its page.
 function fillReceipt(
   item: HTMLElement,
   payout: Payout,

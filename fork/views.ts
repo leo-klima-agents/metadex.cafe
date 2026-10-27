@@ -401,8 +401,8 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await position(page).locator(".position-payout:popover-open").getByText("(the owner)").waitFor();
     await page.keyboard.press("Escape");
     await shoot(page, "receipt-390-dark", position(page));
-    // After the flip, the page reads Carbon Impact again and fills its figures, such as .tonnes, across the page. The
-    // receipts keep their own.
+    // After the flip, the page reads Carbon Impact again and fills its figures, such as .tonnes, again. The receipts keep
+    // their own.
     const entityName = toFunctionSelector("function retiringEntityName()").slice(2);
     const readAgain = page.waitForResponse((response) => !!response.request().postData()?.includes(entityName));
     await page.clock.setSystemTime((FLIP + 60) * 1000);
