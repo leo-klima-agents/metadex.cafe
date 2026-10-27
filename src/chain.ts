@@ -108,25 +108,35 @@ function recordStart(url: string, kind: Kind, time: number): void {
     started.set(key, [...(started.get(key) ?? []), time]);
 }
 
-// Once every RPC got no answer at all three times in a row, whichever requests asked, as when the device is offline:
-// the requests under way, those waiting their turn, and those that follow fail at once for a while, rather than each
-// asking again for seconds, so that the page soon says that reading Base failed. As an RPC rests a second after each,
-// that takes two seconds at least of no RPC answering, which a short loss of the network does not. Then the next request
-// is asked as usual, and any answer ends it. An RPC that is busy, or slow, can be reached: only no answer at all counts.
+// Once every RPC got no answer at all three times in a row, for two requests or more, over two seconds or more, as when
+// the device is offline: the requests under way, those waiting their turn, and those that follow fail at once for a
+// while, rather than each asking again for seconds, so that the page soon says that reading Base failed. A short loss of
+// the network does not, nor one request that the RPCs, or a proxy before them, cut off: it fails alone, as any other.
+// Then the next request is asked as usual, and any answer ends it. An RPC that is busy, or slow, can be reached.
 const CUT_OFF = 10_000;
 const UNANSWERED = 3;
-const unanswered = new Map<string, number>();
+const UNANSWERED_FOR = 2_000;
+// Each RPC's run of requests with no answer: how many, since when, and which.
+const unanswered = new Map<string, { count: number; since: number; bodies: Set<string> }>();
 let cutUntil = 0;
 const cutOff = (): boolean => performance.now() < cutUntil;
 
-function reachedOrNot(url: string, reached: boolean): void {
+function reachedOrNot(url: string, body: string, reached: boolean): void {
   if (reached) {
     unanswered.clear();
     cutUntil = 0;
     return;
   }
-  unanswered.set(url, (unanswered.get(url) ?? 0) + 1);
-  if (RPCS.every((each) => (unanswered.get(each) ?? 0) >= UNANSWERED)) cutUntil = performance.now() + CUT_OFF;
+  const time = performance.now();
+  const run = unanswered.get(url) ?? { count: 0, since: time, bodies: new Set() };
+  run.count++;
+  run.bodies.add(body);
+  unanswered.set(url, run);
+  const out = (each: string) => {
+    const { count = 0, since = time, bodies = new Set() } = unanswered.get(each) ?? {};
+    return count >= UNANSWERED && bodies.size >= 2 && time - since >= UNANSWERED_FOR;
+  };
+  if (RPCS.every(out)) cutUntil = time + CUT_OFF;
 }
 export class Unreachable extends Error {
   constructor() {
@@ -226,7 +236,7 @@ async function askEach(
       const [url] = left.splice(i, 1) as [string];
       recordStart(url, kind, time);
       const outcome = await askOne(url, body, accept);
-      reachedOrNot(url, outcome.answered || outcome.reached);
+      reachedOrNot(url, body, outcome.answered || outcome.reached);
       if (outcome.answered) answered(url, kind);
       if (outcome.answered && doubt?.(outcome.result)) doubted ??= { result: outcome.result };
       else if (outcome.answered) return outcome;

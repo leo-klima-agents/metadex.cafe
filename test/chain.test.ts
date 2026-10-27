@@ -242,15 +242,26 @@ test("an answer to a request for logs gives back to an RPC's limit of all reques
   assert.equal(rate(), 13 + 25 + 25);
 });
 
-test("once no RPC answered at all three times in a row, requests fail at once for ten seconds, then one is asked", async () => {
+test("once no RPC answers two requests or more for two seconds, requests fail at once for ten seconds, then one is asked", async () => {
   Math.random = () => 0;
   const asked = answering(everywhere({ fail: new TypeError("fetch failed") }));
-  await assert.rejects(rpc("eth_call", []), /No Base RPC can be reached\./);
-  assert.equal(asked.length, 3 * RPCS.length);
+  const both = await Promise.allSettled([rpc("eth_call", [1]), rpc("eth_call", [2])]);
+  assert.ok(both.every((each) => each.status === "rejected"));
+  // Well before each was asked five times of every RPC.
+  const before = asked.length;
+  assert.ok(before < 2 * 5 * RPCS.length, `asked ${before} times`);
   await assert.rejects(rpc("eth_chainId", []), /No Base RPC can be reached\./);
-  await assert.rejects(rpc("eth_call", []), /No Base RPC can be reached\./);
-  assert.equal(asked.length, 3 * RPCS.length, "nothing is asked meanwhile");
+  assert.equal(asked.length, before, "nothing is asked meanwhile");
   performance.now = () => original.now() + 10_000;
+  answering(everywhere(result("0x1")));
+  assert.equal(await rpc("eth_chainId", []), "0x1");
+});
+
+test("one request that no RPC answers fails alone, and the next is asked as usual", async () => {
+  Math.random = () => 0;
+  const asked = answering(everywhere({ fail: new TypeError("fetch failed") }));
+  await assert.rejects(rpc("eth_call", []), /No Base RPC answered eth_call\./);
+  assert.equal(asked.length, 5 * RPCS.length);
   answering(everywhere(result("0x1")));
   assert.equal(await rpc("eth_chainId", []), "0x1");
 });
