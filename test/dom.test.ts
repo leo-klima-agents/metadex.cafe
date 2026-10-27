@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fill, live, rewrite } from "../src/dom.ts";
+import { PENDING, fill, live, rewrite, setText } from "../src/dom.ts";
 import { money, moneyAt, setCurrency } from "../src/format.ts";
 
 // An element as far as text goes, and a root that holds it under one class.
@@ -48,10 +48,61 @@ test("an element switched between money and plain text is written once a rewrite
   const root = rootOf("line", counted);
   for (let i = 0; i < 3; i++) {
     fill(root, { line: () => "≈ $1.00" });
-    fill(root, { line: "…" });
+    fill(root, { line: "Not read" });
   }
   fill(root, { line: () => "≈ $1.00" });
   writes = 0;
   rewrite();
   assert.equal(writes, 1);
+});
+
+// An element as far as a pending figure goes: its text, its classes, and how often its children were replaced. A
+// document that makes the words screen readers say in its place.
+function pendable() {
+  const classes = new Set<string>();
+  const element = {
+    textContent: "",
+    replaced: 0,
+    classList: {
+      contains: (name: string) => classes.has(name),
+      add: (name: string) => void classes.add(name),
+      remove: (name: string) => void classes.delete(name),
+    },
+    replaceChildren(...nodes: { textContent: string }[]) {
+      element.replaced++;
+      element.textContent = nodes.map((node) => node.textContent).join("");
+    },
+  };
+  return element;
+}
+globalThis.document = { createElement: () => ({ className: "", textContent: "" }) } as unknown as Document;
+
+test("a figure being read is pending, with words for screen readers, until text is written over it", () => {
+  const figure = pendable();
+  const root = rootOf("figure", figure as unknown as Element);
+  fill(root, { figure: PENDING });
+  assert.equal(figure.classList.contains("pending"), true);
+  assert.equal(figure.textContent, "Loading");
+  fill(root, { figure: PENDING });
+  assert.equal(figure.replaced, 1, "pending again changes nothing");
+  fill(root, { figure: "Not read yet" });
+  assert.equal(figure.classList.contains("pending"), false);
+  assert.equal(figure.textContent, "Not read yet");
+  setText(figure as unknown as Element, PENDING);
+  assert.equal(figure.classList.contains("pending"), true);
+});
+
+test("money stays pending until what it shows is read, and a rewrite then writes it", () => {
+  const state: { value?: number } = {};
+  const shown = pendable();
+  live(shown as unknown as Element, () =>
+    state.value === undefined ? PENDING : money({ value: state.value, unit: "USD" }),
+  );
+  assert.equal(shown.classList.contains("pending"), true);
+  rewrite();
+  assert.equal(shown.replaced, 1, "still pending, written once");
+  state.value = 3;
+  rewrite();
+  assert.equal(shown.classList.contains("pending"), false);
+  assert.equal(shown.textContent, "≈\u00a0$3.00");
 });

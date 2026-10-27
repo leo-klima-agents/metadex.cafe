@@ -269,8 +269,8 @@ Swap many tokens into one                                  →
   of what it does, what it takes, and once connected, what you hold in it. Claiming is not on it: it is an action on
   accounts in AutoMaxi.
 - **Reads:** the App reads only what its lines need: the accounts and their groups, which it reads today, and the
-  balances of known tokens with their quotes for the swap line. The swap line can come last, marked "…", as the earnings
-  do today.
+  balances of known tokens with their quotes for the swap line. The swap line can come last, pending, as the earnings
+  do, then says what it found so far: "3 tokens · ≈ $31 so far".
 
 ### Hydrex, `#hydrex`
 

@@ -1,7 +1,7 @@
 import { maxUint256, type Address } from "viem";
 import { gasPaid, includedAt, now, same, type Receipt } from "./chain.ts";
 import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
-import { clone, fill, fillAddress, show, showWorth, showWorthIn } from "./dom.ts";
+import { PENDING, busy, clone, fill, fillAddress, setText, show, showWorth, showWorthIn } from "./dom.ts";
 import { tokensOf } from "./earnings.ts";
 import {
   between,
@@ -122,6 +122,7 @@ let prefilled: Map<string, bigint> | undefined;
 // Whether a scan under way should be followed by another, as when new tokens became known meanwhile.
 let rescan = false;
 let allowances: Allowance[] | undefined;
+let allowancesOwner: Address | undefined;
 const listeners: (() => void)[] = [];
 
 // The ticked tokens' routes, found together, for the tokens and amounts `key` names: each token's parts, and what each
@@ -150,12 +151,12 @@ const tell = (): void => listeners.forEach((listener) => listener());
 // Called once something the App shows from here changes: the swap's line, or the approvals left.
 export const onSwapChange = (listener: () => void): void => void listeners.push(listener);
 
-// The App's line on the swap: how many tokens are worth swapping, and what they would fetch, once read.
-export function swapLine(): { count: number; worth: Money; reading: boolean } | undefined {
+// The App's line on the swap: how many tokens are worth swapping, and what they would fetch, once read, or so far.
+export function swapLine(): { count: number; worth: Money; reading: boolean; failed: boolean } | undefined {
   if (!scan) return undefined;
   const worth = scan.rows.filter((row) => row.found && !row.reason);
   const value = worth.reduce((sum, row) => sum + (row.worth ?? 0), 0);
-  return { count: worth.length, worth: moneyAt(value, scan.prices), reading: scan.reading };
+  return { count: worth.length, worth: moneyAt(value, scan.prices), reading: scan.reading, failed: scan.failed };
 }
 
 export const allowancesLeft = (): Allowance[] | undefined => allowances;
@@ -245,7 +246,7 @@ function showOutput(elements: [Element, Element], amount: bigint, swapper: Swapp
 
 // A swap's figures, as the summary and the bill both show them, each as a quote, what it is worth under it: what it
 // fetches, in the element `fetched` names, the 1%, what reaches you, the least that may, and the gas, in the ETH that pays
-// it; without the gas price, `noCosts`. The 1% shows as what lies between the two around it, as they show, so that the
+// it; without the gas price, in gas. The 1% shows as what lies between the two around it, as they show, so that the
 // bill adds up as it reads.
 function showBill(
   root: ParentNode,
@@ -254,7 +255,6 @@ function showBill(
   swapper: Swapper,
   prices: Prices | undefined,
   found: Costs | undefined,
-  noCosts: string,
 ): void {
   const part = (name: string) => root.querySelector(`.${name}`)!;
   const { exact, worth, shown } = outputFigures(swapper, prices);
@@ -264,7 +264,7 @@ function showBill(
   showWorth(part("swap-fee"), exact(shown(paid) - shown(out)), inCents(outWorth && between(outWorth, paidWorth!)));
   showWorth(part("swap-paid"), exact(paid), inCents(paidWorth));
   showWorth(part("swap-least"), exact(least), inCents(worth(least)));
-  if (!found) return void fill(root, { "swap-gas": noCosts });
+  if (!found) return void fill(root, { "swap-gas": `${gas.toLocaleString("en-GB")} gas` });
   const wei = gas * found.gasPrice;
   showWorth(part("swap-gas"), `${figure(wei, 18)} ETH`, inCents(ethCost(wei, prices)));
 }
@@ -302,14 +302,13 @@ function drawRow(row: Row, scanned: Scan): void {
   });
   const quote = [node.querySelector(".swap-fetches")!, node.querySelector(".swap-worth")!] as [Element, Element];
   const fetches = fetchesOf(row, scanned);
+  // While its route is found, its quote is pending.
+  const routing = found === undefined && !row.failed;
   if (fetches !== undefined) showOutput(quote, fetches, swapper, scanned.prices);
-  else showWorthIn(...quote, "");
-  // Only why a token is not ticked, or that its route is being found, or that Base would skip it among the others: the
-  // route itself is in the review.
-  const routeLine = node.querySelector(".swap-route")!;
+  else showWorthIn(...quote, routing ? PENDING : "");
+  // Only why a token is not ticked, or that Base would skip it among the others: the route itself is in the review.
   const skipped = !!found && fetches === undefined;
-  routeLine.textContent =
-    found === undefined && !row.failed ? "…" : (row.reason ?? (skipped ? "Base would skip it" : ""));
+  setText(node.querySelector(".swap-route")!, row.reason ?? (skipped ? "Base would skip it" : ""));
   show(".swap-lookalike", !!row.like, node);
   if (row.like) fill(node, { "swap-like": row.like.symbol });
   // A quote far under the page's own price says so, with both.
@@ -378,7 +377,7 @@ function summarise(scanned: Scan, ticked: Row[]): void {
   const swaps = split(routes).length;
   const gas = found?.gas ?? BigInt(approvals) * APPROVAL_GAS + swapGas(routes);
   const { costs, prices } = scanned;
-  showBill(breakdown, "swap-quoted", { out, fee, least, gas }, swapper, prices, costs, "…");
+  showBill(breakdown, "swap-quoted", { out, fee, least, gas }, swapper, prices, costs);
   splitLine.hidden = swaps < 2;
   splitLine.textContent = `${swaps} swaps`;
 }
@@ -594,20 +593,28 @@ async function startScan(owner: Address, swapper: Swapper): Promise<void> {
 async function readAllowances(): Promise<void> {
   const connection = context.connection();
   const statusLine = view.querySelector<HTMLElement>(".allowances-status")!;
+  const reading = view.querySelector<HTMLElement>(".allowances-reading")!;
   if (!connection) {
     allowances = undefined;
+    reading.hidden = true;
     statusLine.textContent = "Connect a wallet.";
     allowanceList.replaceChildren();
     show(".allowances-all", false, view);
     return tell();
   }
-  statusLine.textContent = "Loading…";
+  // Until the wallet's are read, cards of bars where they will show; read again, as after a reset, they stay until then.
   const owner = connection.address;
+  if (!allowances || !same(allowancesOwner ?? "", owner)) {
+    statusLine.textContent = "";
+    allowanceList.replaceChildren();
+    reading.hidden = false;
+  }
   try {
     const found = await allowancesOf(owner, [...new Set(known().map(key))] as Address[]);
     if (!same(context.connection()?.address ?? "", owner)) return;
-    allowances = found;
+    [allowances, allowancesOwner] = [found, owner];
     const tokens = await describe(found.map(({ token }) => token));
+    reading.hidden = true;
     statusLine.textContent = found.length ? "" : "None";
     allowanceList.replaceChildren(
       ...found.map((allowance) => {
@@ -626,6 +633,8 @@ async function readAllowances(): Promise<void> {
     show(".allowances-all", found.length > 1, view);
   } catch (error) {
     console.error(error);
+    if (!same(context.connection()?.address ?? "", owner)) return;
+    reading.hidden = true;
     statusLine.textContent = "Reading the approvals failed.";
   }
   tell();
@@ -695,9 +704,9 @@ async function reviewSwap(): Promise<void> {
   if (!connection || !scanned) return;
   const { swapper } = scanned;
   if (!tickedOf(scanned).length || swapsOff() || reviewing) return;
-  reviewing = reviewButton.disabled = true;
+  reviewing = true;
+  busy(reviewButton);
   reviewFailed.hidden = true;
-  reviewButton.textContent = "Checking…";
   try {
     // The routes found together, once found.
     await routeTicked(scanned);
@@ -727,7 +736,7 @@ async function reviewSwap(): Promise<void> {
     reviewFailed.hidden = false;
   } finally {
     reviewing = false;
-    reviewButton.textContent = "Review";
+    busy(reviewButton, false);
     drawAll();
   }
 }
@@ -817,15 +826,7 @@ export async function openSwapReview(
     ? simulated.reduce((sum, { gas }) => sum + gas, 0n)
     : BigInt(approvals.length) * APPROVAL_GAS + swapGas(going.map(({ route }) => route));
 
-  showBill(
-    body,
-    "swap-fetched",
-    { out, fee, least, gas },
-    swapper,
-    prices,
-    found,
-    `${gas.toLocaleString("en-GB")} gas`,
-  );
+  showBill(body, "swap-fetched", { out, fee, least, gas }, swapper, prices, found);
   fill(body, {
     "swap-output": swapper.symbol,
     "swap-slippage": `Minimum at ${bps(plan.margin)} slippage`,

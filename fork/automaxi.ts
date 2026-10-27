@@ -304,7 +304,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await impact.getByRole("heading", { name: "Carbon Impact", level: 1 }).waitFor();
     await impact
       .locator(".tonnes")
-      .getByText(/^\d[\d,]*$/)
+      .getByText(/^\d[\d,]* t$/)
       .waitFor();
     // Its popups start closed, its fee facts among them, and the address of one opens it.
     assert.equal(await page.locator(":popover-open").count(), 0);

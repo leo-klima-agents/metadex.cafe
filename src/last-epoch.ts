@@ -1,5 +1,5 @@
 import { AUTOMATIONS, byKind, type Automation, type Kind } from "./config.ts";
-import { clone, fill, fillAddress, isOpen, show } from "./dom.ts";
+import { PENDING, clone, fill, fillAddress, isOpen, show } from "./dom.ts";
 import { zeroAddress, type Address } from "viem";
 import { same } from "./chain.ts";
 import {
@@ -35,9 +35,14 @@ const allOf = new Map<number, Promise<Earnings>>();
 const compared = new Map<Kind, number>();
 // An account's votes count for whoever held them when the epoch began: an automation, or mostly its owner. Each
 // account's holder and votes then, by account number, whoever holds it now; `asked` holds the accounts read or being
-// read. Then what each holder that is none of the page's automations earned, for the epoch from `start`.
-let stakes: { start: number; of: Map<bigint, Stake | undefined>; asked: Set<bigint> } | undefined;
-const voters = new Map<string, { start: number; read?: Read; reading?: Promise<void> | undefined }>();
+// read. Then what each holder that is none of the page's automations earned, for the epoch from `start`. A read that
+// failed, when: it is tried again five minutes after.
+let stakes:
+  { start: number; of: Map<bigint, Stake | undefined>; asked: Set<bigint>; failed?: number | undefined } | undefined;
+type Voter = { start: number; read?: Read; reading?: Promise<void> | undefined; failed?: number | undefined };
+const voters = new Map<string, Voter>();
+const RETRY = 300_000;
+const retries = (failed: number | undefined): boolean => !failed || Date.now() - failed >= RETRY;
 // All of Hydrex, for the average beside each choice: its value per 1,000 Earning Power, once read.
 type Average = { start: number; all?: Earnings; per?: Money; failed?: number };
 let average: Average | undefined;
@@ -108,10 +113,14 @@ export async function lastEarnings(automation: Automation, start = 0): Promise<E
 // The epoch the automations' figures are of, once one is read.
 const shownStart = (): number | undefined =>
   Math.max(0, ...[...earned.values()].map(({ found }) => found.start)) || undefined;
+// Whether no epoch can be shown: every automation's figures failed, and none were read before. What waits for them, as
+// the average and the wallet's own votes, says it could not be read rather than stay pending, until a read succeeds.
+const noEpoch = (): boolean => !shownStart() && AUTOMATIONS.every(({ kind }) => failedKinds.has(kind));
 
 // Resolves to true once what the accounts' votes earned in the epoch shown is newly read: each account's holder and
 // votes, read once an epoch, then what each holder that is none of the page's automations earned, read once. Calls that
-// overlap read each account and each holder only once; a read that failed is tried again at the next call.
+// overlap read each account and each holder only once; a read that failed is tried again at a call five minutes after,
+// and resolves to true too, so that what waited for it says it could not be read.
 export async function loadShares(holdings: Holdings): Promise<boolean> {
   const start = shownStart();
   if (!start) return false;
@@ -122,11 +131,17 @@ export async function loadShares(holdings: Holdings): Promise<boolean> {
     .map(({ id }) => id)
     .filter((id) => !known.asked.has(id));
   let changed = false;
-  if (missing.length) {
+  if (missing.length && retries(known.failed)) {
     for (const id of missing) known.asked.add(id);
     const found = await stakesOf(missing, start).catch((error) => void console.error(error));
     if (!found) for (const id of missing) known.asked.delete(id);
-    if (!found || stakes !== known) return false;
+    if (stakes !== known) return false;
+    // A failure is news too: what waited for it says so.
+    if (!found) {
+      known.failed = Date.now();
+      return true;
+    }
+    known.failed = undefined;
     for (const id of missing) known.of.set(id, found.get(id));
     changed = true;
   }
@@ -134,16 +149,16 @@ export async function loadShares(holdings: Holdings): Promise<boolean> {
     const key = holder.toLowerCase();
     let voter = voters.get(key);
     if (voter?.start !== start) voters.set(key, (voter = { start }));
-    if (voter.read) return Promise.resolve(false);
+    if (voter.read || (!voter.reading && !retries(voter.failed))) return Promise.resolve(false);
     const entry = voter;
     entry.reading ??= readVoterEarnings(holder, start).then(
-      (found) => void (entry.read = { found, value: valueOf(found) }),
+      (found) => void Object.assign(entry, { read: { found, value: valueOf(found) }, failed: undefined }),
       (error) => {
         console.error(error);
-        entry.reading = undefined;
+        Object.assign(entry, { reading: undefined, failed: Date.now() });
       },
     );
-    return entry.reading.then(() => voters.get(key) === entry && !!entry.read);
+    return entry.reading.then(() => voters.get(key) === entry && (!!entry.read || !!entry.failed));
   });
   return (await Promise.all(reads)).includes(true) || changed;
 }
@@ -153,14 +168,18 @@ const voterOf = (holder: Address): Read | undefined => {
   return voter && voter.start === stakes?.start ? voter.read : undefined;
 };
 
-// What an owner's own votes earned in the epoch shown per 1,000 Earning Power: undefined until read; "none" if none of
-// their accounts' votes were theirs when it began, as when all were in automations; "unvoted" if they did not vote.
-export function ownPerThousand({ owner, accounts }: Holdings): Money | "none" | "unvoted" | undefined {
+// What an owner's own votes earned in the epoch shown per 1,000 Earning Power: undefined until read, and null if it
+// could not be, until read again; "none" if none of their accounts' votes were theirs when it began, as when all were
+// in automations; "unvoted" if they did not vote.
+export function ownPerThousand({ owner, accounts }: Holdings): Money | "none" | "unvoted" | null | undefined {
   const ids = accounts.filter(({ amount }) => amount > 0n).map(({ id }) => id);
-  if (!stakes || stakes.start !== shownStart() || ids.some((id) => !stakes!.of.has(id))) return undefined;
+  if (noEpoch()) return null;
+  if (!stakes || stakes.start !== shownStart()) return undefined;
+  if (ids.some((id) => !stakes!.of.has(id))) return stakes.failed ? null : undefined;
   if (!ids.some((id) => same(stakes!.of.get(id)?.delegate ?? zeroAddress, owner))) return "none";
   const read = voterOf(owner);
-  if (!read) return undefined;
+  const voter = voters.get(owner.toLowerCase());
+  if (!read) return voter?.start === stakes.start && voter.failed ? null : undefined;
   if (!read.found.votes) return "none";
   return read.found.pools.length ? moneyAt(perThousand(read.value.total, read.found.votes), read.value) : "unvoted";
 }
@@ -205,9 +224,9 @@ export async function loadAverage(): Promise<boolean> {
   }
 }
 
-// Hydrex's average: undefined until read, and null if it could not be.
+// Hydrex's average: undefined until read, and null if it, or the epoch it is of, could not be.
 export const averagePerThousand = (): Money | null | undefined =>
-  average?.start !== shownStart() ? undefined : average?.failed ? null : average?.per;
+  noEpoch() ? null : average?.start !== shownStart() ? undefined : average?.failed ? null : average?.per;
 
 // What some votes earned per 1,000 Earning Power against Hydrex's average, as a ratio: both at the average's prices,
 // so that they compare fairly, as the popup "Against all of Hydrex" does. Undefined until both are read.
@@ -243,15 +262,15 @@ const perThousand = (value: number, votes: bigint): number =>
 // A table's figures to the cent, so that each column lines up at the point.
 const CENTS = { cents: true };
 
-function showColumn(table: HTMLElement, column: "ours" | "all", { votes, pools }: Earnings, value?: Value): void {
-  const per = value && perThousand(value.total, votes);
+function showColumn(table: HTMLElement, column: "ours" | "all", { votes, pools }: Earnings, value: Value): void {
+  const per = perThousand(value.total, votes);
   fill(table, {
     [`${column}.earning-power`]: compact(toEarningPower(votes)),
     [`${column}.pools`]: count(pools.length, "pool", "pools"),
-    [`${column}.earned`]: value ? () => money(moneyAt(value.total, value), CENTS) : "…",
-    [`${column}.fees`]: value ? () => money(moneyAt(value.fees, value), CENTS) : "…",
-    [`${column}.incentives`]: value ? () => money(moneyAt(value.incentives, value), CENTS) : "…",
-    [`${column}.per-power`]: per === undefined ? "…" : () => money(moneyAt(per, value!), CENTS),
+    [`${column}.earned`]: () => money(moneyAt(value.total, value), CENTS),
+    [`${column}.fees`]: () => money(moneyAt(value.fees, value), CENTS),
+    [`${column}.incentives`]: () => money(moneyAt(value.incentives, value), CENTS),
+    [`${column}.per-power`]: () => money(moneyAt(per, value), CENTS),
   });
 }
 
@@ -272,15 +291,14 @@ function showPools(fold: HTMLElement, { pools, votes }: Earnings, value: Value):
 function showEarnings(automation: Automation, { found, value }: Read): void {
   const fold = foldOf(automation);
   const table = part(fold, "earnings");
-  part(fold, "record-waiting").hidden = true;
+  part(fold, "record-waiting").hidden = part(fold, "record-failed").hidden = true;
   show(".record-none", !found.votes, fold);
   show(".record-found", !!found.votes, fold);
   showColumn(table, "ours", found, value);
   showPools(fold, found, value);
   part(fold, "all-status").hidden = false;
-  part(fold, "all-status").textContent = "Loading all of Hydrex…";
   part(fold, "all-failed").hidden = part(fold, "versus").hidden = true;
-  fill(table, { all: "…" });
+  fill(table, { all: PENDING });
   compared.delete(automation.kind);
   if (isOpen(fold)) compare(automation);
 }
@@ -311,6 +329,7 @@ function compare(automation: Automation): void {
   ];
   failed.hidden = true;
   status.hidden = false;
+  fill(table, { all: PENDING });
   readAll(mine.start).then(
     (all) => {
       if (earned.get(kind)?.found !== mine) return;
@@ -333,22 +352,34 @@ function compare(automation: Automation): void {
       compared.delete(kind);
       status.hidden = true;
       failed.hidden = false;
+      // Its column waits no more: the notice under it says why, with Try again.
+      fill(table, { all: "" });
     },
   );
 }
 
-// Each automation's figures show in its fold, and the fold compares once it opens. Until they are read, it says so.
+// Each automation's figures show in its fold, and the fold compares once it opens. Until they are read, its table shows
+// with its figures pending; if they cannot be, it says so, with Try again, which the page also does five minutes after.
+function showWaiting(automation: Automation, failed: boolean): void {
+  const fold = foldOf(automation);
+  part(fold, "record-waiting").hidden = failed;
+  part(fold, "record-found").hidden = failed;
+  part(fold, "record-failed").hidden = !failed;
+}
+
 onEarnings((kind, outcome) => {
   const automation = byKind(kind)!;
   const read = earned.get(kind);
   if (outcome === "read" && read) showEarnings(automation, read);
-  if (outcome === "failed" && !read) {
-    part(foldOf(automation), "record-waiting").textContent = "Reading last epoch failed.";
-  }
+  if (outcome === "failed" && !read) showWaiting(automation, true);
 });
 
 for (const automation of AUTOMATIONS) {
   const fold = foldOf(automation);
   fold.addEventListener("toggle", () => isOpen(fold) && compare(automation));
   fold.querySelector(".compare-again")!.addEventListener("click", () => compare(automation));
+  fold.querySelector(".record-again")!.addEventListener("click", () => {
+    showWaiting(automation, false);
+    void loadOne(automation);
+  });
 }

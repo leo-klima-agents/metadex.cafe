@@ -12,7 +12,23 @@ import {
   type Automation,
   type Kind,
 } from "./config.ts";
-import { clone, fill, fillAddress, fillOwn, fillPlural, fillTime, groupAllHex, isOpen, live, show } from "./dom.ts";
+import {
+  PENDING,
+  busy,
+  clone,
+  fill,
+  fillAddress,
+  fillOwn,
+  fillPlural,
+  fillTime,
+  groupAllHex,
+  isOpen,
+  live,
+  pendAll,
+  setText,
+  show,
+  type Text,
+} from "./dom.ts";
 import {
   WEEK,
   bps,
@@ -111,6 +127,8 @@ let connection: Connection | undefined;
 let shown: Holdings | undefined;
 let carbonImpact: CarbonImpact | undefined;
 let carbonImpactRead: Promise<void> | undefined;
+// Whether its read failed, with none before: its figures then say so.
+let carbonImpactUnread = false;
 // Until the checks have run, joining is off.
 let checks: Checks | undefined;
 let reads = 0;
@@ -227,14 +245,17 @@ type Traits = {
   templates: string;
   // Whether joining it shows Carbon Impact's settings, and so waits for them.
   settings: boolean;
-  // The share of what its votes earn that reaches the owner, once known.
+  // The share of what its votes earn that reaches the owner, once known: Carbon Impact's needs its fee read.
   paid(): number | undefined;
 };
 const traits: Record<Kind, Traits> = {
   "carbon-impact": {
     templates: "",
     settings: true,
-    paid: () => (carbonImpact ? Number(paidBpsOf(carbonImpact)) / 10_000 : undefined),
+    paid: () => {
+      const paid = carbonImpact && paidBpsOf(carbonImpact);
+      return paid === undefined ? undefined : Number(paid) / 10_000;
+    },
   },
   automaxi: { templates: "automaxi-", settings: false, paid: () => Number(10_000n - AUTOMAXI_FEE_BPS) / 10_000 },
 };
@@ -249,22 +270,36 @@ function failed(error: unknown): void {
   show("#error");
 }
 
+// A status, on the menu and on an automation's page: its shape and its words. Until read, "Checking…", in a quiet ring.
+function showState(shapes: string, words: string, shape: string, state: string): void {
+  for (const each of document.querySelectorAll(`.${shapes}`)) {
+    each.classList.remove("checking", "idle", "running", "stopped");
+    each.classList.add(shape);
+  }
+  fill(document, { [words]: state });
+}
+
+// What Carbon Impact takes: "33.33% retired, 1% fee", the fee said to be unread when its read failed.
+const feeWords = (feeBps: bigint | undefined): string => (feeBps === undefined ? "fee not read" : `${bps(feeBps)} fee`);
+
 function showCarbonImpact(found: CarbonImpact): void {
   carbonImpact = found;
+  carbonImpactUnread = false;
   sawBlock(found.time);
   const { epochStart, tonnes, retireBps, entity, beneficiary, beneficiaryAddress, message, voted } = found;
   const { feeBps, maxFeeBps, treasury } = found;
-  const stopped = hasStopped(voted, epochStart);
-  for (const shape of document.querySelectorAll(".impact-shape")) {
-    shape.classList.replace(stopped ? "running" : "stopped", stopped ? "stopped" : "running");
-  }
+  // Whether it runs depends on when it last voted: unread, the status says so rather than guess.
+  const stopped = voted !== undefined && hasStopped(voted, epochStart);
+  const [shape, state]: [string, string] =
+    voted === undefined ? ["idle", "Not read yet"] : stopped ? ["stopped", "Stopped"] : ["running", "Running"];
+  showState("impact-shape", "impact-state", shape, state);
   fill(document, {
-    "impact-state": stopped ? "Stopped" : "Running",
     "impact-voted-words": stopped ? " since " : " · voted ",
-    tonnes: units(tonnes),
+    tonnes: `${units(tonnes)} t`,
     retired: bps(retireBps),
-    fee: feeBps === undefined ? "…" : bps(feeBps),
-    "max-fee": maxFeeBps === undefined ? "…" : bps(maxFeeBps),
+    takes: `${bps(retireBps)} retired, ${feeWords(feeBps)}`,
+    "takes-sub": `retired, ${feeWords(feeBps)}`,
+    "max-takes": `100% retired, ${feeWords(maxFeeBps)}`,
     entity,
     beneficiary: beneficiary || "No name",
     message,
@@ -273,12 +308,32 @@ function showCarbonImpact(found: CarbonImpact): void {
   if (treasury) {
     fillAddress(document, "treasury", treasury);
     fillAddress(document, "treasury-named", treasury, "its treasury");
+  } else {
+    // Not a link to where an earlier read found it.
+    for (const link of document.querySelectorAll("a.treasury, a.treasury-named")) link.removeAttribute("href");
+    fill(document, { treasury: "Not read" });
   }
   fillTime(document, "next-epoch", epochStart + WEEK, when);
   fillTime(document, "epoch-end", epochStart + WEEK, utc);
   if (voted) fillTime(document, "impact-voted", voted);
+  show(".impact-voted-line", !!voted);
+  show(".countdown-line");
   showRecords();
   tick();
+}
+
+// Carbon Impact's settings could not be read, and none were before: its figures say so, rather than stay pending, until
+// a read succeeds. The page tries again at each tick.
+function carbonImpactFailed(): void {
+  if (carbonImpact) return;
+  carbonImpactUnread = true;
+  showState("impact-shape", "impact-state", "idle", "Not read yet");
+  for (const name of ["tonnes", "retired", "takes", "max-takes", "treasury"])
+    fill(document, { [name]: "Not read yet" });
+  fill(document, { "takes-sub": "" });
+  // Without the block's time, the epoch's end is only Thursday's.
+  show(".countdown-line", false);
+  showRecords();
 }
 
 function tick(): void {
@@ -301,11 +356,14 @@ function showRecords(): void {
       per === undefined
         ? earningsFailed(automation)
           ? "Not read yet"
-          : "…"
+          : PENDING
         : per === null
           ? "No record yet"
           : () => money(per);
-    const toYou = per && paid !== undefined ? () => `${money(moneyAt(per.value * paid, per))} to you` : per ? "…" : "";
+    // What reached the owner, once what the automation takes is read too; without it, the line hides.
+    const waits = automation === CARBON_IMPACT && !carbonImpact && !carbonImpactUnread;
+    const toYou: Text | (() => Text) =
+      per && paid !== undefined ? () => `${money(moneyAt(per.value * paid, per))} to you` : per && waits ? PENDING : "";
     // On the menu, how it compares with the average, as voting yourself does; what it takes is on the same row.
     const versus = automationVersus(automation);
     for (const row of document.querySelectorAll<HTMLElement>(`.choice[data-choice="${automation.kind}"]`)) {
@@ -321,22 +379,25 @@ function showRecords(): void {
   }
   // Beside them, what voting yourself earned: Hydrex's average, and, with a wallet, its own votes, and how they compare.
   const average = averagePerThousand();
-  fill(document, { average: average === undefined ? "…" : average === null ? "Not read" : () => money(average) });
+  fill(document, { average: average === undefined ? PENDING : average === null ? "Not read" : () => money(average) });
+  show(".average-unit", average !== null);
   const holdings = connection ? shown : undefined;
   const yours = holdings && ownPerThousand(holdings);
   show("#vote-yourself .yours", !!holdings);
-  const known = typeof yours === "object";
   fill(document, {
     "yours-average":
       yours === undefined
-        ? "…"
-        : yours === "none"
-          ? "No votes of your own"
-          : yours === "unvoted"
-            ? "Didn't vote"
-            : () => money(yours),
+        ? PENDING
+        : yours === null
+          ? "Not read yet"
+          : yours === "none"
+            ? "No votes of your own"
+            : yours === "unvoted"
+              ? "Didn't vote"
+              : () => money(yours),
   });
-  show(".yours-unit", known);
+  const known = !!yours && typeof yours === "object";
+  show(".yours-unit", yours === undefined || known);
   const ratio = holdings && known ? ownVersus(holdings) : undefined;
   show(".yours-versus", ratio !== undefined);
   if (ratio !== undefined) fill(document, { "yours-versus": versusWords(ratio) });
@@ -358,18 +419,24 @@ onRoute(() => {
   void showShares();
 });
 
-// AutoMaxi's state, on the menu and its page.
+// AutoMaxi's state, on the menu and its page: "Checking…" until read, and "Not read yet" while its reads fail.
 let autoMaxiFreshness: Freshness | undefined;
+let autoMaxiUnread = false;
 
 function showAutoMaxi(): void {
   const fresh = autoMaxiFreshness;
   const stopped = !!fresh && hasStopped(fresh.voted, fresh.epochStart);
-  const state = !fresh ? "…" : !fresh.voted ? "Not voted yet" : stopped ? "Stopped" : "Running";
-  for (const shape of document.querySelectorAll(".automaxi-shape")) {
-    shape.classList.remove("idle", "running", "stopped");
-    shape.classList.add(!fresh?.voted ? "idle" : stopped ? "stopped" : "running");
-  }
-  fill(document, { "automaxi-state": state, "automaxi-voted-words": stopped ? " since " : " · voted " });
+  const [shape, state]: [string, string] = !fresh
+    ? autoMaxiUnread
+      ? ["idle", "Not read yet"]
+      : ["checking", "Checking…"]
+    : !fresh.voted
+      ? ["idle", "Not voted yet"]
+      : stopped
+        ? ["stopped", "Stopped"]
+        : ["running", "Running"];
+  showState("automaxi-shape", "automaxi-state", shape, state);
+  fill(document, { "automaxi-voted-words": stopped ? " since " : " · voted " });
   if (fresh?.voted) fillTime(document, "automaxi-voted", fresh.voted);
   show(".automaxi-voted-line", !!fresh?.voted);
 }
@@ -379,18 +446,36 @@ let autoMaxiRead: Promise<void> | undefined;
 
 function readAutoMaxi(): void {
   autoMaxiRead ??= readFreshness(AUTOMAXI)
-    .then((found) => {
-      autoMaxiFreshness = found;
-      showAutoMaxi();
-    }, console.error)
+    .then(
+      (found) => {
+        autoMaxiFreshness = found;
+        autoMaxiUnread = false;
+      },
+      (error: unknown) => {
+        console.error(error);
+        autoMaxiUnread = true;
+      },
+    )
+    .then(showAutoMaxi)
     .finally(() => (autoMaxiRead = undefined));
 }
 
-// One read at a time.
-const readCarbonImpactAgain = (): Promise<void> =>
-  (carbonImpactRead ??= readCarbonImpact()
-    .then(showCarbonImpact)
+// One read at a time. One that fails says so where its figures go.
+let carbonImpactTried = 0;
+const readCarbonImpactAgain = (): Promise<void> => {
+  carbonImpactTried = Date.now();
+  return (carbonImpactRead ??= readCarbonImpact()
+    .then(showCarbonImpact, (error: unknown) => {
+      carbonImpactFailed();
+      throw error;
+    })
     .finally(() => (carbonImpactRead = undefined)));
+};
+
+// Whether some of Carbon Impact's settings could not be read: they are read again five minutes after.
+const carbonImpactPartly = (found: CarbonImpact): boolean =>
+  [found.voted, found.feeBps, found.maxFeeBps, found.treasury].includes(undefined) &&
+  Date.now() - carbonImpactTried >= 300_000;
 
 // Reads again whatever is missing or from an epoch that has ended, so that the page moves on by itself.
 function catchUp(): void {
@@ -400,9 +485,13 @@ function catchUp(): void {
   const page = onPage();
   const ready = !!page && (!page.failed || Date.now() - page.tried >= 300_000);
   if (ready && page.holdings && epoch > page.holdings.epochStart && !ownHoldings(page.id)) void loadPosition();
-  if (!carbonImpact || epoch > carbonImpact.epochStart) readCarbonImpactAgain().catch(console.error);
+  if (!carbonImpact || epoch > carbonImpact.epochStart || carbonImpactPartly(carbonImpact)) {
+    readCarbonImpactAgain().catch(console.error);
+  }
   if (earningsDue(epoch, AUTOMATIONS)) loadAllEarnings();
   readAverage();
+  // Reads what the accounts' votes earned that failed before, once due again.
+  void showShares();
   if (!autoMaxiFreshness || epoch > autoMaxiFreshness.epochStart) readAutoMaxi();
   appPayouts.check();
   if (page) positionPayouts.check();
@@ -632,6 +721,7 @@ async function loadAccounts(quietly = false): Promise<void> {
     show("#accounts, #none, .mine, #underway, .yours-count", false);
     // An account's page drops the actions of the wallet's accounts read before.
     showPosition();
+    showApp();
   }
   try {
     const found = await readAccounts(connection.address);
@@ -650,6 +740,7 @@ async function loadAccounts(quietly = false): Promise<void> {
     if (read === reads) {
       reading = false;
       show(".accounts-reading", false);
+      showApp();
     }
   }
 }
@@ -715,7 +806,7 @@ function act(button: HTMLButtonElement, accountsOf: () => Account[], redraw: () 
 }
 
 // The review of a claim through AutoMaxi for the accounts whose payout is overdue.
-// What waits can take a while to read, for an account whose keeper missed two epochs: the button says so meanwhile, and
+// What waits can take a while to read, for an account whose keeper missed two epochs: the button spins meanwhile, and
 // takes no second click.
 let claiming = false;
 
@@ -724,13 +815,12 @@ function claim(accounts: Account[], redraw: () => void, button?: HTMLButtonEleme
   if (!connection || !entries.length) return redraw();
   if (claiming) return;
   claiming = true;
-  const words = button?.textContent;
-  if (button) Object.assign(button, { disabled: true, textContent: "Loading…" });
+  if (button) busy(button);
   openClaim(entries, connection, hooks)
     .catch(failed)
     .finally(() => {
       claiming = false;
-      if (button) Object.assign(button, { disabled: false, textContent: words });
+      if (button) busy(button, false);
       redraw();
     });
 }
@@ -785,12 +875,7 @@ function review(accounts: Account[], action: Action, automation?: Automation): v
     const part = clone(id);
     fillTime(part, "next", epochStart + WEEK, utc);
     fillPlural(part, accounts.length);
-    if (settings) {
-      fill(part, {
-        retired: bps(settings.retireBps),
-        fee: settings.feeBps === undefined ? "…" : bps(settings.feeBps),
-      });
-    }
+    if (settings) fill(part, { takes: `${bps(settings.retireBps)} retired, ${feeWords(settings.feeBps)}` });
     return part;
   };
   const checkOf = ({ kind }: Automation) => hrefOf({ view: "product", kind, section: "check" });
@@ -907,10 +992,11 @@ function showApp(): void {
     fill(needs, { count: `· ${items.length}` });
     needs.querySelector(".needs-list")!.replaceChildren(...items);
   }
-  // What you hold in each product, once connected.
+  // What you hold in each product, once connected: pending while read.
   const hydrexYours = appView.querySelector<HTMLElement>(".hydrex-yours")!;
-  hydrexYours.hidden = !holdings;
-  if (holdings) {
+  hydrexYours.hidden = !holdings && !(connection && reading);
+  if (!holdings) setText(hydrexYours, PENDING);
+  else {
     const full = holdings.accounts.filter(({ amount }) => amount > 0n);
     const counts = AUTOMATIONS.flatMap((automation) => {
       const n = full.filter((account) => {
@@ -923,18 +1009,21 @@ function showApp(): void {
       }).length;
       return n ? [`${n} in ${automation.name}`] : [];
     });
-    hydrexYours.textContent = [count(full.length, "Hydrex account", "Hydrex accounts"), ...counts].join(" · ");
+    setText(hydrexYours, [count(full.length, "Hydrex account", "Hydrex accounts"), ...counts].join(" · "));
   }
   const swapYours = appView.querySelector<HTMLElement>(".swap-yours")!;
   const line = connection ? swapLine() : undefined;
   swapYours.hidden = !line;
+  // What is found so far, while the wallet's tokens are quoted.
   if (line) {
     live(swapYours, () =>
-      line.reading && !line.count
-        ? "…"
-        : line.count
-          ? `${count(line.count, "token", "tokens")} · ${money(line.worth)}${line.reading ? " · …" : ""}`
-          : "Nothing to swap",
+      line.failed
+        ? "Not read"
+        : line.reading && !line.count
+          ? PENDING
+          : line.count
+            ? `${count(line.count, "token", "tokens")} · ${money(line.worth)}${line.reading ? " so far" : ""}`
+            : "Nothing to swap",
     );
   }
   void showAllows(holdings, left);
@@ -1114,8 +1203,10 @@ function showPosition(): void {
 const actions = positionView.querySelector<HTMLElement>(".position-actions")!;
 
 // The gas of a change for an account that earns nothing: what moving it would cost, without projecting what it would
-// earn. Read again after a minute, as the gas price is, or for another automation or wallet.
+// earn. Read again after a minute, as the gas price is, or for another automation or wallet. Pending until read for the
+// account shown, rather than another account's.
 const changeGas = new Map<string, { at: number; words: Promise<() => string> }>();
+let changeGasShown: string | undefined;
 
 function showChangeGas(account: Account | undefined, status: Status | undefined): void {
   const line = actions.querySelector<HTMLElement>(".position-gas")!;
@@ -1139,8 +1230,14 @@ function showChangeGas(account: Account | undefined, status: Status | undefined)
   }
   const { words } = found;
   const id = account.id;
+  const cost = line.querySelector(".change-gas")!;
+  if (changeGasShown !== key) setText(cost, PENDING);
   words.then(
-    (text) => onPage()?.id === id && live(line.querySelector(".change-gas")!, text),
+    (text) => {
+      if (onPage()?.id !== id) return;
+      changeGasShown = key;
+      live(cost, text);
+    },
     () => onPage()?.id === id && (line.hidden = true),
   );
 }
@@ -1311,6 +1408,16 @@ connectButton.addEventListener("click", () => {
 });
 
 for (const slot of document.querySelectorAll(".wallet-slot")) slot.append(clone("wallet-picker"));
+// Where a list or a page is read, cards of bars where its items will show, three, or as many as the slot says, or the
+// tiles of a page's key figures.
+for (const slot of document.querySelectorAll<HTMLElement>(".loading-slot")) {
+  const loading = clone("loading");
+  const cards = loading.querySelector(".skeleton")!;
+  cards.classList.toggle("tiles", "tiles" in slot.dataset);
+  cards.append(...Array.from({ length: Number(slot.dataset.cards ?? 3) }, () => document.createElement("li")));
+  slot.append(loading);
+}
+pendAll(document);
 initSwap({ connection: () => connection, hooks });
 onSwapChange(showApp);
 // The footer's currency, for the visit: every figure in money is drawn again in it.

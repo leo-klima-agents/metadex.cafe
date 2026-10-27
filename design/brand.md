@@ -168,7 +168,16 @@ and works in one colour.
 - **Buttons look like buttons:** filled for the main action of a group, outlined for the others, compact inside a line
   or a notice. In a row, the main action comes first, a move between automations next, and Leave last. A link that does
   a button's job, such as a need's "Change", is drawn as a button.
-- **Empty and loading lines are quiet and small:** "Loading…", "No record yet.", "No tokens to sell.".
+- **Empty lines are quiet and small:** "No record yet.", "No tokens to sell.".
+- **What is being read keeps its place.** A figure shows as a quiet bar of about its width, in the line colour; a list
+  or a page, as cards of such bars where its items will show; a status, as a quiet ring and "Checking…", never a status
+  it may not have, such as "Running". They show a moment after the read starts, so that a quick read flashes nothing,
+  and pulse only where motion is welcome. Screen readers say "Loading" in their place. A read that takes long says so in
+  words after a few seconds: "Still loading. This can take a minute." An optional part of a line, such as "· voted Wed
+  21 Oct" or "to you", stays hidden until read. A read that fails never leaves a bar: the figure says "Not read" or "Not
+  read yet", or its line hides. Figures read again, as each hour or epoch, keep the ones shown until then.
+- **A button whose action is being prepared** keeps its size and its name, shows a spinner over its words, and takes no
+  second click: never "Loading…" in its place.
 
 ## Slips and receipts
 

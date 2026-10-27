@@ -43,8 +43,8 @@ async function tickOnly(page: Page, symbols: string[]): Promise<void> {
   try {
     for (const symbol of symbols)
       await swap.getByRole("checkbox", { name: `Sell ${symbol}` }).waitFor({ timeout: 120_000 });
-    // Each row says "…" until its route is found.
-    await swap.locator(".swap-route").filter({ hasText: /^…$/ }).first().waitFor({ state: "hidden", timeout: 120_000 });
+    // Each row's quote is pending until its route is found.
+    await swap.locator(".swap-fetches.pending").first().waitFor({ state: "hidden", timeout: 120_000 });
   } catch (error) {
     throw new Error(`The swap's page shows: ${await swap.locator(".swap-tokens").innerText()}`, { cause: error });
   }
@@ -202,7 +202,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await review(page).getByRole("radio", { name: "Into" }).check();
     // Once every token's route is found, the quote, or why there is none.
     const into = review(page).locator(".claim-into");
-    await into.getByText(/^[^…]/).waitFor({ timeout: 600_000 });
+    await review(page).locator(".claim-into:not(.pending)").waitFor({ timeout: 600_000 });
     assert.match(await into.innerText(), /^[\d,.]+ USDC, at least [\d,.]+, from /);
     await shoot(page, "claim-into-390-light", review(page));
     await review(page).getByRole("button", { name: "Continue" }).click();

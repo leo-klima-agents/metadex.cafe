@@ -104,18 +104,18 @@ export type CarbonImpact = {
   beneficiary: string;
   beneficiaryAddress: Address;
   message: string;
-  // When it last voted, or 0.
-  voted: number;
-  // Its fee, the most the fee can become, and where it goes. Only its page shows them, so they may be unknown.
+  // When it last voted, or 0. It, its fee, the most the fee can become, and where the fee goes may be unknown, as
+  // their reads may fail apart from the others: the page then says so, and reads them again later.
+  voted?: number;
   feeBps?: bigint;
   maxFeeBps?: bigint;
   treasury?: Address;
 };
 
 // The share of a payout's kVCM that reaches the owner: Carbon Impact retires its share first, then takes its fee from
-// the rest. An unknown fee counts as none.
-export const paidBpsOf = ({ retireBps, feeBps = 0n }: CarbonImpact): bigint =>
-  ((10_000n - retireBps) * (10_000n - feeBps)) / 10_000n;
+// the rest. Unknown while the fee is: counting it as none would promise the owner too much.
+export const paidBpsOf = ({ retireBps, feeBps }: CarbonImpact): bigint | undefined =>
+  feeBps === undefined ? undefined : ((10_000n - retireBps) * (10_000n - feeBps)) / 10_000n;
 
 export type Account = {
   id: bigint;
@@ -188,7 +188,6 @@ export async function readCarbonImpact(): Promise<CarbonImpact> {
     Address,
     string,
   ];
-  // Only Home shows when it last voted, so a failed read just leaves it out. The same for the fee.
   const voted = replies[7] as bigint | undefined;
   const [feeBps, maxFeeBps, treasury] = replies.slice(8) as [bigint?, bigint?, Address?];
   return {
@@ -200,7 +199,7 @@ export async function readCarbonImpact(): Promise<CarbonImpact> {
     beneficiary: clean(beneficiary),
     beneficiaryAddress,
     message: clean(message),
-    voted: Number(voted ?? 0n),
+    ...(voted !== undefined && { voted: Number(voted) }),
     ...(feeBps !== undefined && { feeBps }),
     ...(maxFeeBps !== undefined && { maxFeeBps }),
     ...(treasury && { treasury }),

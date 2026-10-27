@@ -145,9 +145,10 @@
                 <h3><a href="#hydrex/carbon-impact">Carbon Impact</a></h3>
                 <p class="small state">
                   <span class="state-normal"
-                    ><span class="shape running impact-shape" aria-hidden="true"></span
-                    ><b class="impact-state">Running</b><span class="impact-voted-words"> · voted </span
-                    ><time class="impact-voted">…</time></span
+                    ><span class="shape checking impact-shape" aria-hidden="true"></span
+                    ><b class="impact-state">Checking…</b
+                    ><span class="impact-voted-line" hidden
+                      ><span class="impact-voted-words"> · voted </span><time class="impact-voted"></time></span></span
                   ><span class="state-failed" hidden
                     ><span class="shape failed" aria-hidden="true"></span><b>Joining off</b></span
                   >
@@ -157,7 +158,7 @@
               <dl class="facts">
                 <div>
                   <dt>Takes</dt>
-                  <dd><span class="retired">…</span> retired, <span class="fee">…</span> fee</dd>
+                  <dd class="takes pending"></dd>
                 </div>
                 <div>
                   <dt>Pays in</dt>
@@ -166,7 +167,7 @@
                 <div>
                   <dt>Last epoch</dt>
                   <dd>
-                    <span class="record">…</span> <span class="record-unit small"></span
+                    <span class="record pending"></span> <span class="record-unit small"></span
                     ><span class="record-versus small" hidden></span>
                   </dd>
                 </div>
@@ -177,7 +178,8 @@
                 <h3><a href="#hydrex/automaxi">AutoMaxi</a></h3>
                 <p class="small state">
                   <span class="state-normal"
-                    ><span class="shape idle automaxi-shape" aria-hidden="true"></span><b class="automaxi-state">…</b
+                    ><span class="shape checking automaxi-shape" aria-hidden="true"></span
+                    ><b class="automaxi-state">Checking…</b
                     ><span class="automaxi-voted-line" hidden
                       ><span class="automaxi-voted-words"> · voted </span
                       ><time class="automaxi-voted"></time></span></span
@@ -199,7 +201,7 @@
                 <div>
                   <dt>Last epoch</dt>
                   <dd>
-                    <span class="record">…</span> <span class="record-unit small"></span
+                    <span class="record pending"></span> <span class="record-unit small"></span
                     ><span class="record-versus small" hidden></span>
                   </dd>
                 </div>
@@ -216,12 +218,15 @@
           <dl class="facts tiles">
             <div>
               <dt>Hydrex average</dt>
-              <dd><span class="average">…</span> <span class="small">/ 1k Earning Power, last epoch</span></dd>
+              <dd>
+                <span class="average pending"></span>
+                <span class="small average-unit">/ 1k Earning Power, last epoch</span>
+              </dd>
             </div>
             <div class="yours" hidden>
               <dt>Your votes</dt>
               <dd>
-                <span class="yours-average">…</span>
+                <span class="yours-average pending"></span>
                 <span class="small yours-unit" hidden>/ 1k Earning Power, last epoch</span>
               </dd>
               <dd class="sub yours-versus" hidden></dd>
@@ -239,11 +244,11 @@
         <section id="yours" aria-labelledby="yours-title">
           <h2 id="yours-title">Your Hydrex accounts</h2>
           <p id="epoch" class="epoch" hidden>
-            A change made now moves the votes from <time class="epoch-end">Thursday, 00:00 UTC</time>,
-            <span class="countdown">soon</span>.
+            A change made now moves the votes from <time class="epoch-end">Thursday, 00:00 UTC</time
+            ><span class="countdown-line">, <span class="countdown pending"></span></span>.
           </p>
           <div class="wallet-slot"></div>
-          <p class="accounts-reading small" role="status" hidden>Loading…</p>
+          <div class="accounts-reading loading-slot" hidden></div>
           <p id="none" class="small" hidden>
             No Hydrex accounts.
             <a href="https://www.hydrex.fi/accounts" target="_blank" rel="noopener"
@@ -336,8 +341,9 @@
         <div class="state-line">
           <p class="state">
             <span class="state-normal"
-              ><span class="shape running impact-shape" aria-hidden="true"></span><b class="impact-state">Running</b
-              ><span class="impact-voted-words"> · voted </span><time class="impact-voted">…</time></span
+              ><span class="shape checking impact-shape" aria-hidden="true"></span><b class="impact-state">Checking…</b
+              ><span class="impact-voted-line" hidden
+                ><span class="impact-voted-words"> · voted </span><time class="impact-voted"></time></span></span
             ><span class="state-failed" hidden
               ><span class="shape failed" aria-hidden="true"></span><b>Joining off</b></span
             >
@@ -368,8 +374,8 @@
                 <span aria-hidden="true">i</span>
               </button>
             </dt>
-            <dd class="retired">…</dd>
-            <dd class="sub">retired, <span class="fee">…</span> fee</dd>
+            <dd class="retired pending"></dd>
+            <dd class="sub takes-sub"></dd>
           </div>
           <div>
             <dt>Pays in</dt>
@@ -382,10 +388,10 @@
                 <span aria-hidden="true">i</span>
               </button>
             </dt>
-            <dd class="record">…</dd>
+            <dd class="record pending"></dd>
             <dd class="sub record-unit"></dd>
             <dd class="sub record-paid"></dd>
-            <dd class="sub">Hydrex average <span class="average">…</span></dd>
+            <dd class="sub">Hydrex average <span class="average pending"></span></dd>
           </div>
           <div>
             <dt>
@@ -394,12 +400,12 @@
                 <span aria-hidden="true">i</span>
               </button>
             </dt>
-            <dd><span class="tonnes">…</span> t</dd>
+            <dd class="tonnes pending"></dd>
             <dd class="sub through"><img src="klima-protocol.svg" alt="" width="24" height="24" /> Klima Protocol</dd>
           </div>
         </dl>
         <div class="wallet-slot"></div>
-        <p class="accounts-reading small" role="status" hidden>Loading…</p>
+        <div class="accounts-reading loading-slot" hidden></div>
         <div class="mine" hidden>
           <p class="mine-none small" hidden>No Hydrex account can join.</p>
           <section class="group" data-group="in:carbon-impact" aria-labelledby="mine-carbon-impact" hidden>
@@ -443,11 +449,11 @@
           <dl class="fee-facts">
             <div>
               <dt>Taken</dt>
-              <dd><span class="retired">…</span> retired, <span class="fee">…</span> fee</dd>
+              <dd class="takes pending"></dd>
             </div>
             <div>
               <dt>The most it can become</dt>
-              <dd>100% retired, <span class="max-fee">…</span> fee</dd>
+              <dd class="max-takes pending"></dd>
             </div>
             <div>
               <dt>Goes to</dt>
@@ -481,9 +487,17 @@
               <span aria-hidden="true">×</span>
             </button>
           </div>
-          <p class="record-waiting small">Loading…</p>
+          <p class="record-waiting small loading" role="status">
+            <span class="visually-hidden">Loading…</span
+            ><span class="slow">Still loading. The first read of last epoch can take a minute.</span>
+          </p>
+          <p class="record-failed notice" role="alert" hidden>
+            <span>Reading last epoch failed.</span>
+            <button type="button" class="record-again secondary compact">Try again</button>
+          </p>
           <p class="record-none small" hidden>No record yet.</p>
-          <div class="record-found" hidden>
+          <!-- Shown while last epoch is read, its figures pending, as a skeleton of itself. -->
+          <div class="record-found">
             <p class="versus" hidden></p>
             <div class="scroll">
               <table class="earnings">
@@ -497,38 +511,41 @@
                 <tbody>
                   <tr>
                     <th scope="row">Earning Power</th>
-                    <td class="ours earning-power">…</td>
-                    <td class="all earning-power">…</td>
+                    <td class="ours earning-power pending"></td>
+                    <td class="all earning-power pending"></td>
                   </tr>
                   <tr>
                     <th scope="row">Pools</th>
-                    <td class="ours pools">…</td>
-                    <td class="all pools">…</td>
+                    <td class="ours pools pending"></td>
+                    <td class="all pools pending"></td>
                   </tr>
                   <tr>
                     <th scope="row">Earned</th>
-                    <td class="ours earned">…</td>
-                    <td class="all earned">…</td>
+                    <td class="ours earned pending"></td>
+                    <td class="all earned pending"></td>
                   </tr>
                   <tr>
                     <th scope="row">Fees</th>
-                    <td class="ours fees">…</td>
-                    <td class="all fees">…</td>
+                    <td class="ours fees pending"></td>
+                    <td class="all fees pending"></td>
                   </tr>
                   <tr>
                     <th scope="row">Incentives</th>
-                    <td class="ours incentives">…</td>
-                    <td class="all incentives">…</td>
+                    <td class="ours incentives pending"></td>
+                    <td class="all incentives pending"></td>
                   </tr>
                   <tr>
                     <th scope="row">Per 1,000 Earning Power</th>
-                    <td class="ours per-power">…</td>
-                    <td class="all per-power">…</td>
+                    <td class="ours per-power pending"></td>
+                    <td class="all per-power pending"></td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <p class="all-status small" role="status" hidden>Loading all of Hydrex…</p>
+            <p class="all-status small loading" role="status" hidden>
+              <span class="visually-hidden">Loading all of Hydrex…</span
+              ><span class="slow">Still loading all of Hydrex. This can take a minute.</span>
+            </p>
             <p class="all-failed notice" role="alert" hidden>
               <span>Reading all of Hydrex failed.</span>
               <button type="button" class="compare-again secondary compact">Try again</button>
@@ -717,7 +734,7 @@
             <div>
               <dt>Treasury</dt>
               <dd>
-                <code translate="no"><a class="treasury">…</a></code>
+                <code translate="no"><a class="treasury pending"></a></code>
               </dd>
             </div>
             <div>
@@ -753,7 +770,8 @@
         <div class="state-line">
           <p class="state">
             <span class="state-normal"
-              ><span class="shape idle automaxi-shape" aria-hidden="true"></span><b class="automaxi-state">…</b
+              ><span class="shape checking automaxi-shape" aria-hidden="true"></span
+              ><b class="automaxi-state">Checking…</b
               ><span class="automaxi-voted-line" hidden
                 ><span class="automaxi-voted-words"> · voted </span><time class="automaxi-voted"></time></span></span
             ><span class="state-failed" hidden
@@ -799,10 +817,10 @@
                 <span aria-hidden="true">i</span>
               </button>
             </dt>
-            <dd class="record">…</dd>
+            <dd class="record pending"></dd>
             <dd class="sub record-unit"></dd>
             <dd class="sub record-paid"></dd>
-            <dd class="sub">Hydrex average <span class="average">…</span></dd>
+            <dd class="sub">Hydrex average <span class="average pending"></span></dd>
           </div>
           <div>
             <dt>
@@ -815,7 +833,7 @@
           </div>
         </dl>
         <div class="wallet-slot"></div>
-        <p class="accounts-reading small" role="status" hidden>Loading…</p>
+        <div class="accounts-reading loading-slot" hidden></div>
         <div class="mine" hidden>
           <p class="mine-none small" hidden>No Hydrex account can join.</p>
           <section class="group" data-group="in:automaxi" aria-labelledby="mine-automaxi" hidden>
@@ -904,9 +922,17 @@
               <span aria-hidden="true">×</span>
             </button>
           </div>
-          <p class="record-waiting small">Loading…</p>
+          <p class="record-waiting small loading" role="status">
+            <span class="visually-hidden">Loading…</span
+            ><span class="slow">Still loading. The first read of last epoch can take a minute.</span>
+          </p>
+          <p class="record-failed notice" role="alert" hidden>
+            <span>Reading last epoch failed.</span>
+            <button type="button" class="record-again secondary compact">Try again</button>
+          </p>
           <p class="record-none small" hidden>No record yet.</p>
-          <div class="record-found" hidden>
+          <!-- Shown while last epoch is read, its figures pending, as a skeleton of itself. -->
+          <div class="record-found">
             <p class="versus" hidden></p>
             <div class="scroll">
               <table class="earnings">
@@ -920,38 +946,41 @@
                 <tbody>
                   <tr>
                     <th scope="row">Earning Power</th>
-                    <td class="ours earning-power">…</td>
-                    <td class="all earning-power">…</td>
+                    <td class="ours earning-power pending"></td>
+                    <td class="all earning-power pending"></td>
                   </tr>
                   <tr>
                     <th scope="row">Pools</th>
-                    <td class="ours pools">…</td>
-                    <td class="all pools">…</td>
+                    <td class="ours pools pending"></td>
+                    <td class="all pools pending"></td>
                   </tr>
                   <tr>
                     <th scope="row">Earned</th>
-                    <td class="ours earned">…</td>
-                    <td class="all earned">…</td>
+                    <td class="ours earned pending"></td>
+                    <td class="all earned pending"></td>
                   </tr>
                   <tr>
                     <th scope="row">Fees</th>
-                    <td class="ours fees">…</td>
-                    <td class="all fees">…</td>
+                    <td class="ours fees pending"></td>
+                    <td class="all fees pending"></td>
                   </tr>
                   <tr>
                     <th scope="row">Incentives</th>
-                    <td class="ours incentives">…</td>
-                    <td class="all incentives">…</td>
+                    <td class="ours incentives pending"></td>
+                    <td class="all incentives pending"></td>
                   </tr>
                   <tr>
                     <th scope="row">Per 1,000 Earning Power</th>
-                    <td class="ours per-power">…</td>
-                    <td class="all per-power">…</td>
+                    <td class="ours per-power pending"></td>
+                    <td class="all per-power pending"></td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <p class="all-status small" role="status" hidden>Loading all of Hydrex…</p>
+            <p class="all-status small loading" role="status" hidden>
+              <span class="visually-hidden">Loading all of Hydrex…</span
+              ><span class="slow">Still loading all of Hydrex. This can take a minute.</span>
+            </p>
             <p class="all-failed notice" role="alert" hidden>
               <span>Reading all of Hydrex failed.</span>
               <button type="button" class="compare-again secondary compact">Try again</button>
@@ -1125,7 +1154,7 @@
             <bdi class="position-name" translate="no">Account</bdi> <span class="position-id"></span>
           </h1>
         </div>
-        <p class="position-reading small" role="status">Loading…</p>
+        <div class="position-reading loading-slot" data-tiles></div>
         <p class="position-failed notice" role="alert" hidden>
           <span>Reading the Hydrex account failed.</span>
           <button type="button" class="position-again secondary compact">Try again</button>
@@ -1180,7 +1209,7 @@
                 >Vote on Hydrex <span aria-hidden="true">↗</span></a
               >
             </p>
-            <p class="position-gas small" hidden>A change costs <span class="change-gas">…</span> in gas.</p>
+            <p class="position-gas small" hidden>A change costs <span class="change-gas pending"></span> in gas.</p>
           </section>
           <section class="position-payouts" aria-labelledby="position-payouts-title" hidden>
             <div class="group-head">
@@ -1194,7 +1223,7 @@
                 <span aria-hidden="true">i</span>
               </button>
             </div>
-            <p class="receipts-reading small" role="status">Loading…</p>
+            <div class="receipts-reading loading-slot" data-cards="1"></div>
             <p class="receipts-failed notice" hidden>
               <span>Reading the payouts failed.</span>
               <button type="button" class="receipts-again secondary compact">Try again</button>
@@ -1252,7 +1281,7 @@
               </button>
             </div>
             <div class="wallet-slot"></div>
-            <p class="swap-status small" role="status" hidden>Loading…</p>
+            <div class="swap-status loading-slot" hidden></div>
             <p class="swap-failed notice" role="alert" hidden>
               <span>Reading your tokens failed.</span>
               <button type="button" class="swap-again secondary compact">Try again</button>
@@ -1469,6 +1498,7 @@
             </button>
           </div>
           <p class="allowances-status small" role="status">Connect a wallet.</p>
+          <div class="allowances-reading loading-slot" data-cards="2" hidden></div>
           <ul class="allowances"></ul>
           <p class="buttons allowances-all" hidden>
             <button type="button" class="reset-all secondary compact">Reset all</button>
@@ -1533,6 +1563,14 @@
       </div>
     </dialog>
 
+    <!-- While a list or a page is read: cards of bars where its items will show, and words for screen readers, which
+         show to everyone too once the read takes long. Each .loading-slot gets one: see main.ts. -->
+    <template id="loading">
+      <p class="small loading" role="status">
+        <span class="visually-hidden">Loading…</span><span class="slow">Still loading. This can take a minute.</span>
+      </p>
+      <ul class="skeleton" aria-hidden="true"></ul>
+    </template>
     <template id="wallet-picker">
       <div class="wallets">
         <p class="label">Connect a wallet</p>
@@ -1634,15 +1672,15 @@
         </div>
         <div>
           <dt>Est. per week</dt>
-          <dd class="estimate-week">…</dd>
+          <dd class="estimate-week pending"></dd>
         </div>
         <div>
           <dt>Gas</dt>
-          <dd class="estimate-gas">…</dd>
+          <dd class="estimate-gas pending"></dd>
         </div>
         <div>
           <dt>Takes</dt>
-          <dd><span class="retired"></span> retired, <span class="fee"></span> fee</dd>
+          <dd class="takes"></dd>
           <dd class="sub"><a href="#hydrex/carbon-impact/control">Can change</a></dd>
         </div>
       </dl>
@@ -1671,11 +1709,11 @@
         </div>
         <div>
           <dt>Est. per week</dt>
-          <dd class="estimate-week">…</dd>
+          <dd class="estimate-week pending"></dd>
         </div>
         <div>
           <dt>Gas</dt>
-          <dd class="estimate-gas">…</dd>
+          <dd class="estimate-gas pending"></dd>
         </div>
         <div>
           <dt>Takes</dt>
@@ -2023,10 +2061,13 @@
           <label
             ><span class="visually-hidden">The token to receive</span
             ><select class="claim-output"></select></label
-          >: <span class="claim-into">…</span>
+          >: <span class="claim-into pending"></span>
         </p>
       </fieldset>
-      <p class="small claim-gas"></p>
+      <p class="small">
+        Gas <span class="claim-gas pending"></span
+        ><span class="claim-gas-swap-line" hidden>, <span class="claim-gas-swap"></span> with the swap</span>
+      </p>
     </template>
     <template id="claim-token">
       <li>

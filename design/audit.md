@@ -27,7 +27,7 @@ of this file, it wins.
   leaving, who controls what, the carbon credits, the checks, About's facts, each call's fields in the review. They keep
   every address, hash and check, and drop the explanations. An address that points into a fold opens it.
 - **Statuses and messages in a word or two:** "In USDC · stopped Wed 9 Sept", "Payout late", "Reading the payouts
-  failed. Try again", "Loading…". Only the exception is said: the swap's review says "Not simulated" when it could not
+  failed. Try again", "Checking…". Only the exception is said: the swap's review says "Not simulated" when it could not
   run the swap through Base, and nothing when it could. A token's row says why it is not ticked, and not its route,
   which the review shows.
 - **One look everywhere:** one spacing scale, one radius, a card for every item of a list (choices, accounts, tokens,
