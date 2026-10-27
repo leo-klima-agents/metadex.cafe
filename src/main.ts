@@ -96,6 +96,7 @@ import {
 } from "./last-epoch.ts";
 import { UNDER_WAY, payouts, type Entry, type Found, type UnderWay } from "./last-payout.ts";
 import { waitingWords } from "./receipts.ts";
+import { RETRY, reader, type Reader } from "./read.ts";
 import { closeReview, openReview, refreshReview, type Hooks } from "./review.ts";
 import { hrefOf } from "./routes.ts";
 import { openClaim } from "./claim-view.ts";
@@ -124,15 +125,35 @@ const actionable = new WeakMap<HTMLElement, Account[]>();
 const positionView = document.querySelector<HTMLElement>('.view[data-view="position"]')!;
 
 let connection: Connection | undefined;
-let shown: Holdings | undefined;
-let carbonImpact: CarbonImpact | undefined;
-let carbonImpactRead: Promise<void> | undefined;
-// Whether its read failed, with none before: its figures then say so.
-let carbonImpactUnread = false;
-// Until the checks have run, joining is off.
-let checks: Checks | undefined;
-let reads = 0;
-let reading = false;
+// The wallet's Hydrex accounts, read anew for each wallet, again in each new epoch, after each review that sent
+// something, and five minutes after a read that failed.
+let owned: Reader<Holdings> | undefined;
+const shown = (): Holdings | undefined => owned?.value;
+// Carbon Impact's settings: read again in each new epoch, and five minutes after a read that left some unread. Until one
+// succeeds, at each tick, its figures say they could not be read.
+const impact: Reader<CarbonImpact> = reader(readCarbonImpact, {
+  retry: 0,
+  stale: (found, since) =>
+    weekStart(now()) > found.epochStart ||
+    ([found.voted, found.feeBps, found.maxFeeBps, found.treasury].includes(undefined) && since >= RETRY),
+  settled: () => showCarbonImpact(),
+});
+
+// AutoMaxi's state, on the menu and its page: "Checking…" until read, and "Not read yet" while its reads fail, which
+// each tick tries again. Read again in each new epoch.
+const autoMaxi: Reader<Freshness> = reader(() => readFreshness(AUTOMAXI), {
+  retry: 0,
+  stale: (fresh) => weekStart(now()) > fresh.epochStart,
+  settled: () => showAutoMaxi(),
+});
+
+// The checks of each automation, before anyone can join it: until they have run, joining is off. They run again each
+// hour.
+const checks: Reader<Checks> = reader(failedChecks, {
+  stale: (_, since) => since >= 3_600_000,
+  settled: () => showChecks(),
+});
+
 // Wallet connections that finish are ignored up to this attempt: a later one connected, or the wallet was let go.
 let attempts = 0;
 let ignoredUpTo = 0;
@@ -143,15 +164,9 @@ let under: UnderWay | undefined;
 let appFound: Found | undefined;
 // How many times the payouts were read: an overdue line is of one read, and drawn again with the next.
 let appReads = 0;
-// The account whose page is shown: the wallet's own, or one read by its number; `tried`, when its last read began.
-type Viewing = {
-  id: bigint;
-  holdings?: Holdings | undefined;
-  none: boolean;
-  failed: boolean;
-  reading: boolean;
-  tried: number;
-};
+// The account whose page is shown: the wallet's own, or one read by its number, null if there is none, read each time
+// its page shows, again in each new epoch, and five minutes after a read that failed; and what its page showed last.
+type Viewing = { id: bigint; account: Reader<Holdings | null>; held?: Holdings | undefined };
 let viewing: Viewing | undefined;
 const viewerOwns = (owner: Address): boolean => !!connection && same(owner, connection.address);
 
@@ -186,14 +201,14 @@ const appPayouts = payouts(
 function overdueEntry(id: bigint): Entry | undefined {
   const entry = appFound?.entries.find(({ account }) => account.id === id);
   if (!entry || !appFound || entry.automation !== AUTOMAXI || !entry.standing || !entry.earnings) return undefined;
-  if (!same(entry.account.claimer, AUTOMAXI.address) || !shown?.accounts.some((account) => account.id === id)) return;
+  if (!same(entry.account.claimer, AUTOMAXI.address) || !shown()?.accounts.some((account) => account.id === id)) return;
   const { standing } = entry;
   const waits = standing.waiting.length > 0 || standing.unknown;
   const missed = entry.due && !standing.paid && waits && now() - appFound.epochStart >= UNDER_WAY;
   return missed || standing.late ? entry : undefined;
 }
 const overdue = (): Entry[] =>
-  (shown?.accounts ?? []).flatMap((account) => {
+  (shown()?.accounts ?? []).flatMap((account) => {
     const entry = overdueEntry(account.id);
     return entry ? [entry] : [];
   });
@@ -221,7 +236,7 @@ const positionPayouts = payouts(
   positionView.querySelector<HTMLElement>(".position-payouts")!,
   ({ entries }) => {
     const target = onPage();
-    const owner = target?.holdings?.owner;
+    const owner = target && holdingsOf(target)?.owner;
     const awaits = entries.some(
       ({ due, standing }) => due && standing && !standing.paid && (standing.waiting.length > 0 || standing.unknown),
     );
@@ -253,7 +268,7 @@ const traits: Record<Kind, Traits> = {
     templates: "",
     settings: true,
     paid: () => {
-      const paid = carbonImpact && paidBpsOf(carbonImpact);
+      const paid = impact.value && paidBpsOf(impact.value);
       return paid === undefined ? undefined : Number(paid) / 10_000;
     },
   },
@@ -279,12 +294,14 @@ function showState(shapes: string, words: string, shape: string, state: string):
   fill(document, { [words]: state });
 }
 
-// What Carbon Impact takes: "33.33% retired, 1% fee", the fee said to be unread when its read failed.
-const feeWords = (feeBps: bigint | undefined): string => (feeBps === undefined ? "fee not read" : `${bps(feeBps)} fee`);
+// What Carbon Impact takes: "33.33% retired, 1% fee", the fee said to be unread when its read failed. The page says
+// "Not read yet" of what it reads again by itself, and "Not read" of what it does not.
+const feeWords = (feeBps: bigint | undefined): string =>
+  feeBps === undefined ? "fee not read yet" : `${bps(feeBps)} fee`;
 
-function showCarbonImpact(found: CarbonImpact): void {
-  carbonImpact = found;
-  carbonImpactUnread = false;
+function showCarbonImpact(): void {
+  const found = impact.value;
+  if (!found) return carbonImpactFailed();
   sawBlock(found.time);
   const { epochStart, tonnes, retireBps, entity, beneficiary, beneficiaryAddress, message, voted } = found;
   const { feeBps, maxFeeBps, treasury } = found;
@@ -311,7 +328,7 @@ function showCarbonImpact(found: CarbonImpact): void {
   } else {
     // Not a link to where an earlier read found it.
     for (const link of document.querySelectorAll("a.treasury, a.treasury-named")) link.removeAttribute("href");
-    fill(document, { treasury: "Not read" });
+    fill(document, { treasury: "Not read yet" });
   }
   fillTime(document, "next-epoch", epochStart + WEEK, when);
   fillTime(document, "epoch-end", epochStart + WEEK, utc);
@@ -323,10 +340,8 @@ function showCarbonImpact(found: CarbonImpact): void {
 }
 
 // Carbon Impact's settings could not be read, and none were before: its figures say so, rather than stay pending, until
-// a read succeeds. The page tries again at each tick.
+// a read succeeds.
 function carbonImpactFailed(): void {
-  if (carbonImpact) return;
-  carbonImpactUnread = true;
   showState("impact-shape", "impact-state", "idle", "Not read yet");
   for (const name of ["tonnes", "retired", "takes", "max-takes", "treasury"])
     fill(document, { [name]: "Not read yet" });
@@ -339,9 +354,9 @@ function carbonImpactFailed(): void {
 function tick(): void {
   catchUp();
   showApp();
-  if (!carbonImpact) return;
+  if (!impact.value) return;
   const time = now();
-  const end = carbonImpact.epochStart + WEEK;
+  const end = impact.value.epochStart + WEEK;
   if (time >= end) return;
   fill(document, { countdown: `in ${until(end - time)}` });
 }
@@ -361,7 +376,7 @@ function showRecords(): void {
           ? "No record yet"
           : () => money(per);
     // What reached the owner, once what the automation takes is read too; without it, the line hides.
-    const waits = automation === CARBON_IMPACT && !carbonImpact && !carbonImpactUnread;
+    const waits = automation === CARBON_IMPACT && !impact.value && !impact.failed;
     const toYou: Text | (() => Text) =
       per && paid !== undefined ? () => `${money(moneyAt(per.value * paid, per))} to you` : per && waits ? PENDING : "";
     // On the menu, how it compares with the average, as voting yourself does; what it takes is on the same row.
@@ -379,9 +394,11 @@ function showRecords(): void {
   }
   // Beside them, what voting yourself earned: Hydrex's average, and, with a wallet, its own votes, and how they compare.
   const average = averagePerThousand();
-  fill(document, { average: average === undefined ? PENDING : average === null ? "Not read" : () => money(average) });
+  fill(document, {
+    average: average === undefined ? PENDING : average === null ? "Not read yet" : () => money(average),
+  });
   show(".average-unit", average !== null);
-  const holdings = connection ? shown : undefined;
+  const holdings = connection ? shown() : undefined;
   const yours = holdings && ownPerThousand(holdings);
   show("#vote-yourself .yours", !!holdings);
   fill(document, {
@@ -419,15 +436,12 @@ onRoute(() => {
   void showShares();
 });
 
-// AutoMaxi's state, on the menu and its page: "Checking…" until read, and "Not read yet" while its reads fail.
-let autoMaxiFreshness: Freshness | undefined;
-let autoMaxiUnread = false;
-
+// AutoMaxi's state, on the menu and its page.
 function showAutoMaxi(): void {
-  const fresh = autoMaxiFreshness;
+  const fresh = autoMaxi.value;
   const stopped = !!fresh && hasStopped(fresh.voted, fresh.epochStart);
   const [shape, state]: [string, string] = !fresh
-    ? autoMaxiUnread
+    ? autoMaxi.failed
       ? ["idle", "Not read yet"]
       : ["checking", "Checking…"]
     : !fresh.voted
@@ -441,58 +455,19 @@ function showAutoMaxi(): void {
   show(".automaxi-voted-line", !!fresh?.voted);
 }
 
-// One read at a time. Until one succeeds, each tick tries again.
-let autoMaxiRead: Promise<void> | undefined;
-
-function readAutoMaxi(): void {
-  autoMaxiRead ??= readFreshness(AUTOMAXI)
-    .then(
-      (found) => {
-        autoMaxiFreshness = found;
-        autoMaxiUnread = false;
-      },
-      (error: unknown) => {
-        console.error(error);
-        autoMaxiUnread = true;
-      },
-    )
-    .then(showAutoMaxi)
-    .finally(() => (autoMaxiRead = undefined));
-}
-
-// One read at a time. One that fails says so where its figures go.
-let carbonImpactTried = 0;
-const readCarbonImpactAgain = (): Promise<void> => {
-  carbonImpactTried = Date.now();
-  return (carbonImpactRead ??= readCarbonImpact()
-    .then(showCarbonImpact, (error: unknown) => {
-      carbonImpactFailed();
-      throw error;
-    })
-    .finally(() => (carbonImpactRead = undefined)));
-};
-
-// Whether some of Carbon Impact's settings could not be read: they are read again five minutes after.
-const carbonImpactPartly = (found: CarbonImpact): boolean =>
-  [found.voted, found.feeBps, found.maxFeeBps, found.treasury].includes(undefined) &&
-  Date.now() - carbonImpactTried >= 300_000;
-
 // Reads again whatever is missing or from an epoch that has ended, so that the page moves on by itself.
 function catchUp(): void {
-  const epoch = weekStart(now());
-  if (shown && !reading && epoch > shown.epochStart) loadAccounts(true);
-  // The wallet's own account moves on with the wallet's accounts. After a failed read, the next waits five minutes.
+  if (owned?.due()) void loadAccounts(true);
+  // The wallet's own account moves on with the wallet's accounts.
   const page = onPage();
-  const ready = !!page && (!page.failed || Date.now() - page.tried >= 300_000);
-  if (ready && page.holdings && epoch > page.holdings.epochStart && !ownHoldings(page.id)) void loadPosition();
-  if (!carbonImpact || epoch > carbonImpact.epochStart || carbonImpactPartly(carbonImpact)) {
-    readCarbonImpactAgain().catch(console.error);
-  }
-  if (earningsDue(epoch, AUTOMATIONS)) loadAllEarnings();
+  if (page && !ownHoldings(page.id) && page.account.due()) loadPosition();
+  impact.check();
+  checks.check();
+  if (earningsDue(AUTOMATIONS)) loadAllEarnings();
   readAverage();
   // Reads what the accounts' votes earned that failed before, once due again.
   void showShares();
-  if (!autoMaxiFreshness || epoch > autoMaxiFreshness.epochStart) readAutoMaxi();
+  autoMaxi.check();
   appPayouts.check();
   if (page) positionPayouts.check();
   if (page) ownerPayouts.check();
@@ -515,7 +490,8 @@ function showsShares(): boolean {
 }
 async function showShares(): Promise<void> {
   if (!showsShares()) return;
-  const read = [shown, onPage()?.holdings].flatMap((holdings) => (holdings ? [loadShares(holdings)] : []));
+  const page = onPage();
+  const read = [shown(), page && holdingsOf(page)].flatMap((holdings) => (holdings ? [loadShares(holdings)] : []));
   if (!(await Promise.all(read)).includes(true)) return;
   showAccounts(true);
   showPosition();
@@ -523,9 +499,9 @@ async function showShares(): Promise<void> {
 }
 
 // Each automation whose checks failed: joining it is off, its rows and pages say so, and its page marks the checks.
-async function showChecks(): Promise<void> {
-  const found = await failedChecks();
-  checks = found;
+function showChecks(): void {
+  const found = checks.value;
+  if (!found) return;
   for (const automation of AUTOMATIONS) {
     const failing = found.failed.get(automation.kind)!;
     const off = failing.length > 0;
@@ -539,7 +515,7 @@ async function showChecks(): Promise<void> {
   showAutoMaxi();
   showRecords();
   // A read of the accounts that is under way shows the result when it ends.
-  if (!reading) showAccounts(true);
+  if (!owned?.reading) showAccounts(true);
   showPosition();
 }
 
@@ -554,7 +530,7 @@ const automationOf = (button: HTMLButtonElement): Automation | undefined =>
 
 // Joining an automation needs its checks passed. Leaving always works.
 function joinable(account: Account, automation: Automation | undefined): boolean {
-  if (!automation || !checks || checks.failed.get(automation.kind)!.length) return false;
+  if (!automation || !checks.value || checks.value.failed.get(automation.kind)!.length) return false;
   return canJoin(account, automation, now());
 }
 const leavable = (account: Account): boolean => AUTOMATIONS.some((automation) => canLeave(account, automation));
@@ -638,7 +614,7 @@ const boxesShown = new WeakMap<HTMLElement, Set<string>>();
 // Each group lists its accounts. When its buttons can act on more than one, each gets a box to tick, so that one
 // selection is always one action.
 function showAccounts(keepTicked = false): void {
-  const holdings = shown;
+  const holdings = shown();
   if (!holdings) return;
   const { owner, accounts, epochStart } = holdings;
   const time = now();
@@ -702,17 +678,20 @@ function showAccounts(keepTicked = false): void {
   // then, its notices say why none can.
   for (const mine of document.querySelectorAll<HTMLElement>(".mine")) {
     const automation = byKind(mine.closest<HTMLElement>(".view")!.dataset.kind!)!;
-    const open = !!checks && !checks.failed.get(automation.kind)!.length;
+    const open = !!checks.value && !checks.value.failed.get(automation.kind)!.length;
     show(".mine-none", open && !mine.querySelector(".group:not([hidden])"), mine);
   }
 }
 
+// Reads the wallet's accounts. Unless `quietly`, as for another wallet, what was shown goes first; a quiet read keeps it
+// until the new one ends, and drops a read under way, which may not see a transaction just sent.
 async function loadAccounts(quietly = false): Promise<void> {
   if (!connection) return;
-  const read = ++reads;
-  reading = true;
-  if (!quietly) {
-    shown = appFound = undefined;
+  if (!quietly || !owned) {
+    const { address } = connection;
+    owned?.forget();
+    owned = reader(() => readAccounts(address), { stale: (found) => weekStart(now()) > found.epochStart });
+    appFound = undefined;
     late = new Set();
     under = undefined;
     appPayouts.forget();
@@ -723,11 +702,12 @@ async function loadAccounts(quietly = false): Promise<void> {
     showPosition();
     showApp();
   }
+  const these = owned;
+  const current = () => owned === these;
   try {
-    const found = await readAccounts(connection.address);
-    if (read !== reads) return;
+    const found = await these.refresh();
+    if (!current() || these.value !== found) return;
     sawBlock(found.time);
-    shown = found;
     showAccounts();
     showApp();
     appPayouts.show(found);
@@ -735,10 +715,9 @@ async function loadAccounts(quietly = false): Promise<void> {
     void showShares();
     syncPosition();
   } catch (error) {
-    if (read === reads) failed(error);
+    if (current() && !these.reading) failed(error);
   } finally {
-    if (read === reads) {
-      reading = false;
+    if (current() && !these.reading) {
       show(".accounts-reading", false);
       showApp();
     }
@@ -790,15 +769,16 @@ const hooks: Hooks = {
 // A button's review of the accounts it can act on: a group's picked accounts, or an account's page's own. `redraw`
 // shows them again when none can be acted on any more.
 function act(button: HTMLButtonElement, accountsOf: () => Account[], redraw: () => void): void {
-  if (!connection || !shown) return;
+  const holdings = shown();
+  if (!connection || !holdings) return;
   // In a new epoch, the statuses and dates shown would be wrong: read the accounts again instead.
-  if (weekStart(now()) > shown.epochStart) return void loadAccounts();
+  if (weekStart(now()) > holdings.epochStart) return void loadAccounts();
   const action = actionOf(button);
   const automation = automationOf(button);
   if (action === "claim") return claim(accountsOf().filter(allows(button)), redraw, button);
   // A join of Carbon Impact shows its settings, so it waits for them. Leaving never waits.
-  if (action === "join" && automation && traits[automation.kind].settings && !carbonImpact) {
-    return void readCarbonImpactAgain().then(() => act(button, accountsOf, redraw), failed);
+  if (action === "join" && automation && traits[automation.kind].settings && !impact.value) {
+    return void impact.read().then(() => act(button, accountsOf, redraw), failed);
   }
   const accounts = accountsOf().filter(allows(button));
   if (!accounts.length) return redraw();
@@ -868,9 +848,10 @@ function estimate(element: Element, accounts: Account[], automation: Automation,
 
 // The review of a join, or of leaving: "leave" leaves the page's automations, and "self" also Hydrex's others.
 function review(accounts: Account[], action: Action, automation?: Automation): void {
-  if (!connection || !shown) return;
-  const { owner, epochStart } = shown;
-  const settings = carbonImpact;
+  const holdings = shown();
+  if (!connection || !holdings) return;
+  const { owner, epochStart } = holdings;
+  const settings = impact.value;
   const prepare = (id: string): DocumentFragment => {
     const part = clone(id);
     fillTime(part, "next", epochStart + WEEK, utc);
@@ -941,7 +922,7 @@ function showApp(): void {
   // What each line is keyed on: its words, or, for a line whose words change as prices come, what it is of.
   const keys: string[] = [];
   const add = (item: DocumentFragment, key = item.textContent ?? ""): void => void (items.push(item), keys.push(key));
-  const holdings = connection ? shown : undefined;
+  const holdings = connection ? shown() : undefined;
   if (holdings) {
     const { owner, accounts, epochStart } = holdings;
     // Accounts their owner votes with, who did not vote last epoch, in one line: they share one remedy.
@@ -994,7 +975,7 @@ function showApp(): void {
   }
   // What you hold in each product, once connected: pending while read.
   const hydrexYours = appView.querySelector<HTMLElement>(".hydrex-yours")!;
-  hydrexYours.hidden = !holdings && !(connection && reading);
+  hydrexYours.hidden = !holdings && !(connection && owned?.reading);
   if (!holdings) setText(hydrexYours, PENDING);
   else {
     const full = holdings.accounts.filter(({ amount }) => amount > 0n);
@@ -1099,9 +1080,14 @@ function showUnderWay(): void {
 
 // The wallet's own account, as its holdings of that account alone.
 function ownHoldings(id: bigint): Holdings | undefined {
-  const account = shown?.accounts.find((each) => each.id === id);
-  return shown && account && { ...shown, accounts: [account] };
+  const holdings = shown();
+  const account = holdings?.accounts.find((each) => each.id === id);
+  return holdings && account && { ...holdings, accounts: [account] };
 }
+
+// What an account's page shows: the wallet's own account, or what was read by its number.
+const holdingsOf = (target: Viewing): Holdings | undefined =>
+  ownHoldings(target.id) ?? target.account.value ?? undefined;
 
 // The account whose page is shown, if any. Its page reads and draws only while shown.
 function onPage(): Viewing | undefined {
@@ -1113,31 +1099,27 @@ function onPage(): Viewing | undefined {
 // number: it may have just left the wallet.
 function syncPosition(): void {
   const target = onPage();
-  const held = target?.holdings;
-  if (target && !ownHoldings(target.id) && held && shown && same(held.owner, shown.owner)) void loadPosition();
+  const held = target?.held;
+  const holdings = shown();
+  if (target && !ownHoldings(target.id) && held && holdings && same(held.owner, holdings.owner)) loadPosition();
   else showPosition();
 }
 
-// One read at a time. The wallet's own accounts are read already.
-async function loadPosition(): Promise<void> {
+// Reads the account shown, or joins the read under way. The wallet's own accounts are read already.
+function loadPosition(): void {
   const target = onPage();
   if (!target) return;
-  if (target.reading || ownHoldings(target.id)) return showPosition();
-  Object.assign(target, { reading: true, failed: false, tried: Date.now() });
+  if (!ownHoldings(target.id)) target.account.read().catch(() => {});
   showPosition();
-  try {
-    const found = await readAccount(target.id);
-    if (found) sawBlock(found.time);
-    Object.assign(target, { holdings: found, none: !found });
-    // An account that is gone, as when it was merged, has no payouts to follow.
-    if (!found) [positionPayouts, ownerPayouts].forEach((each) => each.forget());
-    void showShares();
-  } catch (error) {
-    console.error(error);
-    target.failed = true;
-  } finally {
-    target.reading = false;
-  }
+}
+
+// What the read of an account by its number found, once it ends.
+function positionRead(target: Viewing): void {
+  const found = target.account.value;
+  if (found) sawBlock(found.time);
+  // An account that is gone, as when it was merged, has no payouts to follow.
+  if (found === null && onPage() === target) [positionPayouts, ownerPayouts].forEach((each) => each.forget());
+  void showShares();
   showPosition();
 }
 
@@ -1147,12 +1129,15 @@ function showPosition(): void {
   if (!target) return;
   const view = positionView;
   const own = ownHoldings(target.id);
-  if (own) Object.assign(target, { holdings: own, none: false, failed: false });
-  const { holdings } = target;
-  const state = holdings ? "found" : target.none ? "none" : target.failed ? "failed" : "reading";
+  const read = target.account;
+  const holdings = holdingsOf(target);
+  target.held = holdings;
+  // A read under way shows as one, even after one that failed, as when Try again was clicked.
+  const failed = !own && read.failed && !read.reading;
+  const state = holdings ? "found" : !own && read.value === null ? "none" : failed ? "failed" : "reading";
   for (const name of ["reading", "none", "failed", "found"]) show(`.position-${name}`, name === state, view);
   // A read that failed says so, over what an earlier one found.
-  if (target.failed) show(".position-failed", true, view);
+  if (failed) show(".position-failed", true, view);
   fill(view, { "position-id": `#${target.id}` });
   const mine = own?.accounts[0];
   showActions(mine, mine && statusOf(mine, own.owner, now(), own.epochStart));
@@ -1272,11 +1257,19 @@ function showActions(account: Account | undefined, status?: Status): void {
 onRoute((next) => {
   if (next.view !== "position") return;
   if (viewing?.id !== next.id) {
-    viewing = { id: next.id, none: false, failed: false, reading: false, tried: 0 };
+    const { id } = next;
+    const target: Viewing = {
+      id,
+      account: reader(async () => (await readAccount(id)) ?? null, {
+        stale: (found) => !!found && weekStart(now()) > found.epochStart,
+        settled: () => positionRead(target),
+      }),
+    };
+    viewing = target;
     [positionPayouts, ownerPayouts].forEach((each) => each.forget());
     ownerUnder = ownerRead = undefined;
   }
-  void loadPosition();
+  loadPosition();
 });
 
 // The header: a button to connect a wallet, or the wallet's chip, which leads to the App. The header's popup holds the
@@ -1352,9 +1345,8 @@ function listen(provider: Provider): void {
 
 function letGo(): void {
   ignoredUpTo = attempts;
-  reads++;
-  reading = false;
-  connection = shown = under = appFound = undefined;
+  owned?.forget();
+  connection = owned = under = appFound = undefined;
   late = new Set();
   appPayouts.forget();
   closeReview();
@@ -1454,7 +1446,7 @@ for (const button of document.querySelectorAll(".wrong-chain .switch"))
       show(".switch-failed");
     });
   });
-positionView.querySelector(".position-again")!.addEventListener("click", () => void loadPosition());
+positionView.querySelector(".position-again")!.addEventListener("click", loadPosition);
 
 findWallets((found) => {
   wallets = found;
@@ -1463,8 +1455,8 @@ findWallets((found) => {
 safeWallet()
   .then((wallet) => wallet && connectTo(wallet, false))
   .catch(console.error);
-readCarbonImpactAgain().catch(failed);
-showChecks().catch(failed);
+impact.read().catch(failed);
+checks.read().catch(failed);
+autoMaxi.check();
 loadAllEarnings();
-setInterval(() => showChecks().catch(console.error), 3_600_000);
 setInterval(tick, 30_000);

@@ -28,6 +28,7 @@ import {
   type Standing,
   type Waiting,
 } from "./receipts.ts";
+import { RETRY } from "./read.ts";
 
 // The payouts of accounts in the page's automations: for each, up to when it has been paid and what waits to be
 // claimed, then the receipt of its last payout. The App reads them for all of an owner's accounts, to mark those paid
@@ -639,7 +640,7 @@ export function payouts(
       }
     },
     check() {
-      if (!readFor || checking || Date.now() - checked < 300_000) return;
+      if (!readFor || checking || Date.now() - checked < RETRY) return;
       if (!signals.length && !missed && now() < underUntil) return;
       const key = readFor;
       checked = Date.now();
