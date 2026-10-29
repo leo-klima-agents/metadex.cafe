@@ -86,7 +86,7 @@ export const SCENARIOS: Scenario[] = [
   },
   {
     name: "double-espresso",
-    title: "As hydrex, with #82774 in Double Espresso, claimed by its operator and by a stranger",
+    title: "As hydrex, with #82774 in Double Espresso, claimed by two strangers",
     block: BLOCK,
     hash: "#hydrex/double-espresso",
     owners: [

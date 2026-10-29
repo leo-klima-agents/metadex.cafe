@@ -43,11 +43,8 @@ export const byKind = (kind: string): Automation | undefined =>
 // Double Espresso's fee, FEE_BPS in its code, of each claim, and its recipient, TREASURY in its code, a 2-of-3 Safe.
 export const DOUBLE_ESPRESSO_FEE_BPS = 100n;
 export const DOUBLE_ESPRESSO_FEE_RECIPIENT: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
-// The address whose claims through Double Espresso the receipts show as Double Espresso's own, made for its members
-// after each epoch. It holds Matcha Latte's EXECUTOR_ROLE. Anyone may claim through Double Espresso.
-export const OPERATOR: Address = "0x40FBFe5312330f278824ddbB7521ab77409192f0";
-// Matcha Latte's operator, as its popup gives it: a 2-of-3 Safe that holds its EXECUTOR_ROLE too, whose module votes
-// and sends payouts for it.
+// Matcha Latte's operator, as its popup gives it: a 2-of-3 Safe that holds its EXECUTOR_ROLE, whose module votes and
+// sends payouts for it.
 export const MATCHA_LATTE_OPERATOR: Address = "0x17f513C024C1C67db050258ba569c714a9CF1B12";
 export const KVCM: Address = "0x00fBAC94Fec8D4089d3fe979F39454F48c71A65d";
 export const VOTING_ESCROW: Address = "0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1";

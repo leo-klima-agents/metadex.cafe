@@ -51,7 +51,7 @@ test("Double Espresso takes 1% of what each token brings, rounded down, and pays
   ]);
 });
 
-test("a claim's receipt reads its Claimed event, and says so when the operator's claim came first", () => {
+test("a claim's receipt reads its Claimed event, and says so when someone else's claim came first", () => {
   const abi = parseAbi([
     "event Claimed(uint256 indexed tokenId, address indexed owner, address indexed caller, address[] tokens, uint256[] amounts, uint256[] fees, uint256 previousClaimBlock)",
   ]);
@@ -83,7 +83,7 @@ test("a claim's receipt reads its Claimed event, and says so when the operator's
   assert.deepEqual(claimedIn([receipt([log([0n, 0n], [0n, 0n])])], [9540n], OWNER), [
     { id: 9540n, received: [], fees: [], paid: [] },
   ]);
-  // Another caller's claim, as the operator's, is not the page's own.
+  // Another caller's claim is not the page's own.
   assert.deepEqual(claimedIn([receipt([log([5n, 0n], [0n, 0n], AVNT)])], [9540n], OWNER), []);
 });
 

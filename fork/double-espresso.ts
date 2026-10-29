@@ -205,7 +205,7 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     assert.deepEqual([...sent, ...member.sent].length, 4);
   });
 
-  test("Double Espresso's receipts: a claim by its operator, a stranger's dust, and where the page stops reading", async () => {
+  test("Double Espresso's receipts: anyone's claims, a stranger's dust, and where the page stops reading", async () => {
     // Its standing is read in the pools Matcha Latte voted for, last epoch and the one before, as test 7 reads them.
     const rewards = await doubleEspressoReceipts();
     const { page, violations } = await open(
@@ -223,7 +223,7 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     assert.match(await receipt.locator(".receipt-paid").innerText(), /^(< )?[\d,.]+ USDC$/);
     assert.deepEqual(await receipt.locator(".claim-by").allTextContents(), [
       "sent by 0x0000…dEaD",
-      "sent by Double Espresso",
+      "sent by 0x0000…1234",
     ]);
     assert.equal(await receipt.locator(".receipt-stopped").isVisible(), false);
     // USDC counts as a dollar.

@@ -18,7 +18,7 @@ test("each address is a route, and anything else is Home", () => {
     ["#about", { view: "about" }],
     ["#hydrex/matcha-latte", { view: "product", kind: "matcha-latte" }],
     ["#hydrex/matcha-latte/control", { view: "product", kind: "matcha-latte", section: "control" }],
-    ["#hydrex/double-espresso/votes", { view: "product", kind: "double-espresso", section: "votes" }],
+    ["#hydrex/double-espresso/record", { view: "product", kind: "double-espresso", section: "record" }],
     ["#hydrex/9540", { view: "position", id: 9540n }],
     ["#hydrex%2F9540", { view: "position", id: 9540n }],
   ];
@@ -31,6 +31,7 @@ test("each address is a route, and anything else is Home", () => {
     "#about/figures",
     "#about/safe",
     "#hydrex/matcha-latte/votes",
+    "#hydrex/double-espresso/votes",
     "#hydrex/matcha-latte/carbon",
     "#hydrex/matcha-latte/joining",
     "#hydrex/double-espresso/carbon",
