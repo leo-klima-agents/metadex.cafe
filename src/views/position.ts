@@ -1,7 +1,7 @@
 import { now, same, sawBlock } from "../chain.ts";
 import { AUTOMATIONS, CARBON_IMPACT } from "../config.ts";
 import { PENDING, fill, fillAddress, fillOwn, fillTime, live, setText, show } from "../dom.ts";
-import { earningPower, money, short, weekStart } from "../format.ts";
+import { money, short, voteFigure, weekStart } from "../format.ts";
 import {
   canLeave,
   gasCosts,
@@ -171,7 +171,7 @@ export function showPosition(): void {
   fill(view, {
     "position-name": pageName(account.name),
     "position-kind": account.amount === 0n ? "Empty" : accountKind(account),
-    "position-votes": earningPower(account.votes),
+    "position-votes": voteFigure(account.votes),
   });
   view.querySelector(".position-status")!.replaceChildren(statusLine(status, !theirs));
   // What its votes earned last epoch, its place kept while read.

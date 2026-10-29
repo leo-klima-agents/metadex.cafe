@@ -178,7 +178,7 @@ export function showCountdown(): void {
   fill(epochLine, { countdown: `in ${until(end - time)}` });
 }
 
-// Each automation's figures for last epoch, for each 1,000 Earning Power: what its votes earned, beside Hydrex's average,
+// Each automation's figures for last epoch, for each 1,000 votes: what its votes earned, beside Hydrex's average,
 // on the menu and on the App, how they compare; on its page, then what reached the owner after its cut. Each line keeps
 // its place while read, as most automations have a record: it goes only once the read finds none, or fails.
 export function showRecords(): void {

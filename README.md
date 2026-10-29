@@ -70,15 +70,14 @@ This README is for whoever runs the site. The design and the plan are in [design
 - Details open from a round info button beside what they explain, as a popup: on a phone, a sheet from the foot of the
   screen. A popup has an address of its own, such as `#hydrex/carbon-impact/check`.
 - `#hydrex` starts with the automations, in one box, a row each, with what each takes, what it pays in, what its votes
-  earned last epoch per 1,000 Earning Power and how that compares with Hydrex's average, both at the average's prices,
-  and, with a wallet, how many of its Hydrex accounts are in it. Then, apart, as it is no automation, voting yourself:
-  what votes earned on Hydrex last epoch per 1,000 Earning Power, on average and, with a wallet, by the wallet's own
-  votes, with how the two compare, and a link to vote on Hydrex. Then the wallet's Hydrex accounts, in groups a level
-  below: those that need their owner (in an automation that stopped, or voted with by an owner who has not voted since
-  before last epoch, as Hydrex counts a vote only in the epoch it is cast), those in each automation, and the others.
-  Each account shows what its votes earned last epoch, in an automation or through whoever voted with it. Needs you
-  starts with its accounts ticked; each group with boxes has one that ticks them all, and says how many are ticked and
-  their Earning Power.
+  earned last epoch per 1,000 votes and how that compares with Hydrex's average, both at the average's prices, and, with
+  a wallet, how many of its Hydrex accounts are in it. Then, apart, as it is no automation, voting yourself: what votes
+  earned on Hydrex last epoch per 1,000 votes, on average and, with a wallet, by the wallet's own votes, with how the
+  two compare, and a link to vote on Hydrex. Then the wallet's Hydrex accounts, in groups a level below: those that need
+  their owner (in an automation that stopped, or voted with by an owner who has not voted since before last epoch, as
+  Hydrex counts a vote only in the epoch it is cast), those in each automation, and the others. Each account shows what
+  its votes earned last epoch, in an automation or through whoever voted with it. Needs you starts with its accounts
+  ticked; each group with boxes has one that ticks them all, and says how many are ticked and their votes.
 - `#swap` takes the output from its address, `#swap/weth`, USDC by default, then lists the wallet's tokens, each with
   what it fetches, ticked when the quote is worth twice its gas. What the ticked ones fetch shows line by line: the
   quote, the 1%, what reaches you, the least that may, on the line where the slippage is picked, and the gas, paid apart

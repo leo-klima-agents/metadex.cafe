@@ -79,19 +79,18 @@
               <ul class="records small">
                 <li data-record="carbon-impact">
                   Carbon Impact: <span class="record pending"></span>
-                  <span class="record-unit">/ 1k Earning Power last epoch</span
+                  <span class="record-unit">/ 1k votes last epoch</span
                   ><span class="record-versus-line"> · <span class="record-versus pending"></span></span>
                 </li>
                 <li data-record="automaxi">
-                  AutoMaxi: <span class="record pending"></span>
-                  <span class="record-unit">/ 1k Earning Power last epoch</span
+                  AutoMaxi: <span class="record pending"></span> <span class="record-unit">/ 1k votes last epoch</span
                   ><span class="record-versus-line"> · <span class="record-versus pending"></span></span>
                 </li>
               </ul>
               <p class="small yours hydrex-yours" hidden></p>
             </li>
             <li class="choice" data-choice="swap">
-              <h3><a href="#swap">Swap many tokens</a></h3>
+              <h3><a href="#swap">Swap</a></h3>
               <p class="note small">Sell many tokens for one.</p>
               <p class="small yours swap-yours" hidden></p>
             </li>
@@ -181,7 +180,7 @@
                 <div>
                   <dt>Last epoch</dt>
                   <dd>
-                    <span class="record pending"></span> <span class="record-unit small">/ 1k Earning Power</span
+                    <span class="record pending"></span> <span class="record-unit small">/ 1k votes</span
                     ><span class="record-versus-line small"><span class="record-versus pending"></span></span>
                   </dd>
                 </div>
@@ -215,7 +214,7 @@
                 <div>
                   <dt>Last epoch</dt>
                   <dd>
-                    <span class="record pending"></span> <span class="record-unit small">/ 1k Earning Power</span
+                    <span class="record pending"></span> <span class="record-unit small">/ 1k votes</span
                     ><span class="record-versus-line small"><span class="record-versus pending"></span></span>
                   </dd>
                 </div>
@@ -234,14 +233,14 @@
               <dt>Hydrex average</dt>
               <dd>
                 <span class="average pending"></span>
-                <span class="small average-unit">/ 1k Earning Power, last epoch</span>
+                <span class="small average-unit">/ 1k votes, last epoch</span>
               </dd>
             </div>
             <div class="yours" hidden>
               <dt>Your votes</dt>
               <dd>
                 <span class="yours-average pending"></span>
-                <span class="small yours-unit" hidden>/ 1k Earning Power, last epoch</span>
+                <span class="small yours-unit" hidden>/ 1k votes, last epoch</span>
               </dd>
               <dd class="sub yours-versus pending"></dd>
             </div>
@@ -403,7 +402,7 @@
               </button>
             </dt>
             <dd class="record pending"></dd>
-            <dd class="sub record-unit">earned, per 1,000 Earning Power</dd>
+            <dd class="sub record-unit">earned, per 1,000 votes</dd>
             <dd class="sub record-paid pending"></dd>
             <dd class="sub">Hydrex average <span class="average pending"></span></dd>
           </div>
@@ -524,9 +523,9 @@
                 </thead>
                 <tbody>
                   <tr>
-                    <th scope="row">Earning Power</th>
-                    <td class="ours earning-power pending"></td>
-                    <td class="all earning-power pending"></td>
+                    <th scope="row">Votes</th>
+                    <td class="ours votes pending"></td>
+                    <td class="all votes pending"></td>
                   </tr>
                   <tr>
                     <th scope="row">Pools</th>
@@ -549,9 +548,9 @@
                     <td class="all incentives pending"></td>
                   </tr>
                   <tr>
-                    <th scope="row">Per 1,000 Earning Power</th>
-                    <td class="ours per-power pending"></td>
-                    <td class="all per-power pending"></td>
+                    <th scope="row">Per 1,000 votes</th>
+                    <td class="ours per-thousand pending"></td>
+                    <td class="all per-thousand pending"></td>
                   </tr>
                 </tbody>
               </table>
@@ -832,7 +831,7 @@
               </button>
             </dt>
             <dd class="record pending"></dd>
-            <dd class="sub record-unit">earned, per 1,000 Earning Power</dd>
+            <dd class="sub record-unit">earned, per 1,000 votes</dd>
             <dd class="sub record-paid pending"></dd>
             <dd class="sub">Hydrex average <span class="average pending"></span></dd>
           </div>
@@ -959,9 +958,9 @@
                 </thead>
                 <tbody>
                   <tr>
-                    <th scope="row">Earning Power</th>
-                    <td class="ours earning-power pending"></td>
-                    <td class="all earning-power pending"></td>
+                    <th scope="row">Votes</th>
+                    <td class="ours votes pending"></td>
+                    <td class="all votes pending"></td>
                   </tr>
                   <tr>
                     <th scope="row">Pools</th>
@@ -984,9 +983,9 @@
                     <td class="all incentives pending"></td>
                   </tr>
                   <tr>
-                    <th scope="row">Per 1,000 Earning Power</th>
-                    <td class="ours per-power pending"></td>
-                    <td class="all per-power pending"></td>
+                    <th scope="row">Per 1,000 votes</th>
+                    <td class="ours per-thousand pending"></td>
+                    <td class="all per-thousand pending"></td>
                   </tr>
                 </tbody>
               </table>
@@ -1182,7 +1181,7 @@
               <dd class="position-kind"></dd>
             </div>
             <div>
-              <dt>Earning Power</dt>
+              <dt>Votes</dt>
               <dd class="position-votes"></dd>
             </div>
             <div class="position-earned-row" hidden>
@@ -1268,12 +1267,12 @@
       <div class="view swap" data-view="swap" data-title="Swap · metaDEX Café" hidden>
         <div class="title-line">
           <nav class="trail" aria-label="Back"><a href="#app">Your wallet</a></nav>
-          <h1 tabindex="-1">Swap many tokens</h1>
+          <h1 tabindex="-1">Swap</h1>
           <button type="button" class="info" popovertarget="swap-info" aria-label="Costs and contracts">
             <span aria-hidden="true">i</span>
           </button>
         </div>
-        <p class="note small">Through the pools of Hydrex, Aero, Aerodrome, and Uniswap.</p>
+        <p class="note small">Swap many tokens through Aero, Hydrex, Uniswap, and Aerodrome.</p>
         <p class="notice swap-off" role="alert" hidden>
           <span class="shape failed" aria-hidden="true"></span>Swaps are off.
         </p>
@@ -1617,9 +1616,8 @@
         <span class="about">
           <a class="account-link"><bdi class="name" translate="no"></bdi> <span class="id"></span></a
           ><span class="small meta"
-            ><span class="votes"></span> Earning Power<span class="earned" hidden>
-              · <span class="earned-worth"></span> last epoch</span
-            ></span
+            ><span class="votes"></span
+            ><span class="earned" hidden> · <span class="earned-worth"></span> last epoch</span></span
           ><span class="status-line"><span class="status"></span></span
           ><span class="late" hidden
             ><span class="shape stopped" aria-hidden="true"></span><strong>Payout late</strong></span

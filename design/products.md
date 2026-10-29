@@ -100,9 +100,9 @@ Not swappable: native ETH in, or out. The output WETH is not ETH.
 
 From Base on 21 Oct 2026, with the page's own reader (`readEarnings` in `src/earnings.ts`):
 
-- In the epoch from 8 to 15 Oct, Carbon Impact's 1.17M Earning Power voted for 27 pools, which earned rewards in **28
-  tokens**: USDC ≈ $677, then wtMSTR ≈ $3.29, GOO ≈ $2.01, AVNT ≈ $1.57, and 18 more under $1.50 each. Six had no price
-  in Hydrex's pools at all.
+- In the epoch from 8 to 15 Oct, Carbon Impact's 897k votes went to 27 pools, which earned rewards in **28 tokens**:
+  USDC ≈ $677, then wtMSTR ≈ $3.29, GOO ≈ $2.01, AVNT ≈ $1.57, and 18 more under $1.50 each. Six had no price in
+  Hydrex's pools at all.
 - So the 27 tokens beside USDC came to about $16. An account with about 1% of the votes, as #9540 has, would get about
   **$0.16 spread over 27 tokens**.
 - AutoMaxi votes for bribes, so its members should expect the same spread: a few tokens worth something, and many worth
@@ -255,8 +255,8 @@ THE MENU
 Hydrex                                                     →
   Automations that vote with your Hydrex accounts.
   Yours: 5 accounts, 2 in Carbon Impact, 1 in AutoMaxi
-Swap many tokens into one                                  →
-  Sell the tokens you pick for one, in one transaction.
+Swap                                                       →
+  Sell many tokens for one.
   Takes 1% of what each fetches.
   Yours: 11 tokens worth swapping, ≈ $31
 ```
@@ -268,9 +268,9 @@ Swap many tokens into one                                  →
   for Thursday does not count, so that the group keeps its weight.
 - **The menu** has one entry per kind of product, Hydrex, for its automations together, and the swap, each with one line
   of what it does, what it takes, and once connected, what you hold in it. Hydrex's says what each automation's votes
-  earned last epoch against Hydrex's average, for every visitor, as early as the page can: "Carbon Impact: ≈ $0.55 / 1k
-  Earning Power last epoch · 13.5% above the average". An automation with no record yet is left out. Claiming is not on
-  it: it is an action on accounts in AutoMaxi.
+  earned last epoch against Hydrex's average, for every visitor, as early as the page can: "Carbon Impact: ≈ $0.72 / 1k
+  votes last epoch · 13.5% above the average". An automation with no record yet is left out. Claiming is not on it: it
+  is an action on accounts in AutoMaxi.
 - **Reads:** the App reads only what its lines need: the accounts and their groups, which it reads today, and the
   balances of known tokens with their quotes for the swap line. The swap line can come last, pending, as the earnings
   do, then says what it found so far: "3 tokens · ≈ $31 so far". Hydrex's average, thousands of reads, comes after all
@@ -381,7 +381,8 @@ The page holds them in memory for the visit; nothing is stored.
 
 ```
 App ›
-Swap many tokens into one
+Swap
+Swap many tokens through Aero, Hydrex, Uniswap, and Aerodrome.
 
 Pick the tokens to sell and the token you want. One transaction
 sells them all, through pools on Hydrex, Aero and Uniswap that
@@ -593,4 +594,4 @@ Still open:
 | **WETH or ETH**                  | WETH only; an "unwrap to ETH" call after the swap                            | WETH only at first. Unwrapping is one more call, worth adding once batching works                                                                                                      |
 | **Swap from a Safe**             | The same deadline; a longer one for co-signers                               | A day, said in the brief: a route that falls below its minimum while co-signers sign is skipped                                                                                        |
 | **AutoMaxi version 1**           | Claim for its members too; not at all                                        | Not at all: the page does not offer version 1                                                                                                                                          |
-| **The swap's name**              | "Swap"; a name of its own, as AutoMaxi                                       | "Swap many tokens into one" on the menu, "Swap" in crumbs: plain words, and nothing to brand                                                                                           |
+| **The swap's name**              | "Swap"; a name of its own, as AutoMaxi                                       | "Swap", on the menu, as its page's title and in crumbs, with "many tokens" said under it: plain words, and nothing to brand                                                            |

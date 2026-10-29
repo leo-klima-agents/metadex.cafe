@@ -252,7 +252,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await menu.locator(".automaxi-state").getByText("Not voted yet").waitFor();
     await menu
       .locator('[data-choice="carbon-impact"] .record')
-      .getByText(/^≈\s\$0\.\d\d$/)
+      .getByText(/^≈\s\$\d+\.\d\d$/)
       .waitFor({ timeout: 120_000 });
     assert.equal(await menu.locator('[data-choice="automaxi"] .record').innerText(), "No record yet");
     // Carbon Impact against the average, in words; none of the wallet's accounts is in it.
@@ -265,7 +265,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     const self = hydrex(page).locator("#vote-yourself");
     await self
       .locator(".average")
-      .getByText(/^≈\s\$0\.\d\d$/)
+      .getByText(/^≈\s\$\d+\.\d\d$/)
       .waitFor({ timeout: 300_000 });
     await self.locator(".yours-average").getByText("Didn't vote", { exact: true }).waitFor({ timeout: 120_000 });
     assert.equal(await self.locator(".yours-versus").innerText(), "", "no figure to compare");
@@ -290,7 +290,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
       .waitFor();
     await maxi
       .locator(".facts .average")
-      .getByText(/^≈\s\$0\.\d\d$/)
+      .getByText(/^≈\s\$\d+\.\d\d$/)
       .waitFor();
     const back = maxi.getByRole("navigation", { name: "Back" });
     assert.deepEqual(await back.getByRole("link").allInnerTexts(), ["Hydrex"]);
@@ -304,7 +304,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await impactLine.locator(".record-versus:not(.pending)").waitFor();
     assert.match(
       await impactLine.innerText(),
-      /^Carbon Impact: ≈\s\$0\.\d\d \/ 1k Earning Power last epoch · (\d[\d.]*% (above|below) the average|About the average)$/,
+      /^Carbon Impact: ≈\s\$\d+\.\d\d \/ 1k votes last epoch · (\d[\d.]*% (above|below) the average|About the average)$/,
     );
     assert.equal(await app(page).locator('[data-record="automaxi"]').isVisible(), false, "no record yet");
 

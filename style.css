@@ -780,7 +780,7 @@ button img {
   display: grid;
   gap: 0.125rem;
 }
-/* "≈ $0.55 / 1k Earning Power", then how it compares with Hydrex's average, under it. On the App, a line for each
+/* "≈ $0.72 / 1k votes", then how it compares with Hydrex's average, under it. On the App, a line for each
    automation, the comparison on the same line. */
 .choice .record-versus-line {
   display: block;
@@ -1046,7 +1046,7 @@ details.nothing > .accounts {
 .facts.tiles dd {
   font-size: 1.125rem;
 }
-/* "≈ $0.48 / 1k Earning Power, last epoch": the unit stays whole, beside the figure or under it. */
+/* "≈ $0.62 / 1k votes, last epoch": the unit stays whole, beside the figure or under it. */
 .facts.tiles dd > .small {
   white-space: nowrap;
 }

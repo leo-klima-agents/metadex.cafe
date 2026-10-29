@@ -63,7 +63,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await fund([WETH, ZORA, AVNT]);
     const { page, sent, violations } = await connected({ owner: SELLER, batch: true }, { url: `${SITE}/#swap` });
     const swap = swapView(page);
-    await swap.getByRole("heading", { name: "Swap many tokens", level: 1 }).waitFor();
+    await swap.getByRole("heading", { name: "Swap", exact: true, level: 1 }).waitFor();
     assert.equal(
       await swap.getByRole("radio", { name: "USDC" }).isChecked(),
       true,

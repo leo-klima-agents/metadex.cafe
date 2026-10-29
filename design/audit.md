@@ -198,10 +198,10 @@ The groups show only when they hold accounts, with the count in their heading:
   `review(accounts, "self")` already leaves both the page's and Hydrex's.
 - Other accounts' Leave shows only for an account in one of Hydrex's running automations, and takes it out of it.
 - Boxes to tick, and the hint, stay as today: one selection, one action.
-- A row: the account's name and number, which lead to its page; its Earning Power; what its votes earned last epoch. A
-  status only where the group does not already say it: joining ("votes from Thu 22 Oct"), leaving, partly in, a late
-  payout (triangle), which automation stopped ("In USDC · stopped 9 Sep"), the address it is delegated to. The kind of
-  lock goes to the account's page.
+- A row: the account's name and number, which lead to its page; its votes; what its votes earned last epoch. A status
+  only where the group does not already say it: joining ("votes from Thu 22 Oct"), leaving, partly in, a late payout
+  (triangle), which automation stopped ("In USDC · stopped 9 Sep"), the address it is delegated to. The kind of lock
+  goes to the account's page.
 
 ### The menu
 
@@ -213,8 +213,7 @@ leaves "Vote yourself" alone on a row on a desk. Each choice has:
   off" with the square;
 - one sentence: what it does, and what it pays in;
 - **Takes:** "33.33% retired, and a fee of 0%", "1% of each claim", or "Nothing";
-- **Last epoch, per 1,000 Earning Power:** "≈ $0.59 earned, ≈ $0.39 paid to you", "No record yet", or "Depends on your
-  votes".
+- **Last epoch, per 1,000 votes:** "≈ $0.77 earned, ≈ $0.51 paid to you", "No record yet", or "Depends on your votes".
 
 "Vote yourself" is one of the choices, with no page of its own. It is the only place that says "If you only want the
 most, and have time each week, vote yourself."
@@ -267,8 +266,8 @@ Then folds, closed, each with a summary of one line:
 1. The breadcrumb, then the account's name and number.
 2. Its status, with a link to its product: "In Carbon Impact", "You vote with it", "In USDC, which stopped voting on Wed
    9 Sep".
-3. Its kind of lock, its Earning Power, what its votes earned last epoch, and its owner, in the short form, when it is
-   not the wallet connected.
+3. Its kind of lock, its votes, what its votes earned last epoch, and its owner, in the short form, when it is not the
+   wallet connected.
 4. Its actions, as in its group, for this account alone.
 5. In a stopped automation: what that means, in three lines (its votes count for nothing; it has earned nothing since
    Thu 10 Sep; you can't vote with it while that automation holds its votes), and that what the automation left
@@ -294,9 +293,9 @@ are read for that one account, where `last-payout.ts` reads an owner's.
    Basescan's, can make.
 7. **How the figures are read** (`figures`), the one place for the page's methods: the prices (each token's average over
    the half hour before the epoch ended, in the deepest of Hydrex's pools; Chainlink for WETH and cbBTC; the depth a
-   pool needs; and that a token without one counts for nothing); Earning Power as Hydrex shows it, 1.3 times the votes;
-   fees and incentives, and why Hydrex's own figures are lower; when the page counts an epoch as paid; and why what
-   waits to be claimed is a floor. Figures marked "≈" elsewhere can link here.
+   pool needs; and that a token without one counts for nothing); fees and incentives, and why Hydrex's own figures are
+   lower; when the page counts an epoch as paid; and why what waits to be claimed is a floor. Figures marked "≈"
+   elsewhere can link here.
 
 ### The review
 
@@ -323,14 +322,14 @@ co-signers leads to the product's `check`.
 ### Choose
 
 Today, a Choose button sits beside Join and Leave in the App's groups. For the accounts ticked, it opens a dialog with a
-card for each choice: each automation, and voting yourself. A card gives last epoch's figure per 1,000 Earning Power,
-what a week at that rate would pay those accounts, the gas of the change, and a button to make it. Under the cards, a
-folded table compares what each pays in, what it takes, the most it can take, and leaving.
+card for each choice: each automation, and voting yourself. A card gives last epoch's figure per 1,000 votes, what a
+week at that rate would pay those accounts, the gas of the change, and a button to make it. Under the cards, a folded
+table compares what each pays in, what it takes, the most it can take, and leaving.
 
 Cut: the Join buttons beside it already make the change, and it is the third place that compares the choices. Its parts
 go:
 
-- **Last epoch, per 1,000 Earning Power:** the same for everyone, so it goes on the menu.
+- **Last epoch, per 1,000 votes:** the same for everyone, so it goes on the menu.
 - **A week for the accounts ticked, and the gas:** they depend on the accounts, so they go in the review's first step,
   for the product being joined.
 - **The table:** the menu compares the choices, and each product's page has its fee facts.
@@ -353,8 +352,7 @@ review, then the wallet. What is lost: the weekly estimate for the accounts tick
 6. **One status per row,** as a shape and words, and none that repeats its group's heading.
 7. **Nothing that sells inside the App:** no tonnes retired, and no pitch for one product. Klima's mark stays beside a
    retirement only: on Carbon Impact's page and on its receipts.
-8. **Hydrex's words, not the page's own.** Account, Earning Power, epoch, Flex and Protocol Account, as Hydrex uses
-   them. No glossary.
+8. **Plain words.** Account, votes, epoch, Flex and Protocol Account, as Hydrex uses them. No glossary.
 9. **Heights on a phone,** 390 × 844: Home in one screen; the App, with a wallet, shows its first account in the first
    screen; a product's page in two screens with its folds closed; a position's in two, with its receipt.
 10. **Anonymous.** No operator named, and nobody behind Carbon Impact's keeper; Hydrex is named as the one who controls
@@ -395,9 +393,9 @@ by their id or class in `index.html` at commit `682c47e`.
 | `.promise .states`: Hydrex's stopped automations            | Rewrite  | Home 4, which leads to the App.                                                                                                       |
 | `.numbers`: Retired so far, with Klima's mark               | Move     | Carbon Impact's page, Last epoch.                                                                                                     |
 | `.numbers`: Of the rewards                                  | Cut      | The fee facts say it.                                                                                                                 |
-| `.numbers`: Its Earning Power                               | Move     | `record`, whose table shows it.                                                                                                       |
+| `.numbers`: Its votes                                       | Move     | `record`, whose table shows it.                                                                                                       |
 | `.numbers`: This epoch ends, and the countdown              | Move     | The App's line on the epoch.                                                                                                          |
-| `.numbers`: Last epoch, per 1,000 Earning Power             | Move     | The menu, and the product's Last epoch.                                                                                               |
+| `.numbers`: Last epoch, per 1,000 votes                     | Move     | The menu, and the product's Last epoch.                                                                                               |
 | `#menu`: its paragraph                                      | Cut      | Home 2 and the product's line on custody say it.                                                                                      |
 | `#menu .choice`: the cards                                  | Move     | The menu, slimmer. Costs you and Leaving go: both automations say the same. Pays you joins the sentence.                              |
 | `#menu`: "If you only want the most…"                       | Move     | The choice to vote yourself.                                                                                                          |
@@ -433,7 +431,6 @@ by their id or class in `index.html` at commit `682c47e`.
 | The status templates, `#in` to `#empty`                   | Rewrite  | Shorter, without what the group says. In full on the account's page.                                                    |
 | `.pick-hint`                                              | Keep     |                                                                                                                         |
 | `[data-action="choose"]`                                  | Cut      | Choose is cut.                                                                                                          |
-| "Earning Power is shown as on Hydrex…"                    | Move     | `#about/figures`.                                                                                                       |
 | `#receipts`: its heading and paragraph                    | Move     | The paragraph to `#about/figures`.                                                                                      |
 | `#receipts .receipts-underway`                            | Rewrite  | A notice line in the App, and on the page of each account it concerns.                                                  |
 | `#receipts .standings`, and the receipts                  | Move     | Each account's page. A late payout also marks the account's row.                                                        |
@@ -475,7 +472,7 @@ by their id or class in `index.html` at commit `682c47e`.
 | ----------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `.lead`, `nav.contents`                                                       | Cut      |                                                                                                                                     |
 | `#if-your-automation-stopped`: its paragraph                                  | Cut      | Out of date: it says Carbon Impact is the one that still votes.                                                                     |
-| `table.automations`: 13 automations and the Earning Power still in them       | Cut      | Hydrex's history, not the owner's. `readAutomations` and `showAutomations` go with it; `hydrex-conduits.json` stays, for the names. |
+| `table.automations`: 13 automations and the votes still in them               | Cut      | Hydrex's history, not the owner's. `readAutomations` and `showAutomations` go with it; `hydrex-conduits.json` stays, for the names. |
 | "What it means for an account still in one"                                   | Move     | A position, 5, and Needs you's line.                                                                                                |
 | "What you can do", and "Check my accounts"                                    | Cut      | Out of date: it offers Carbon Impact only. Needs you's actions are the choices.                                                     |
 | `#what-joining-allows`                                                        | Move     | `joining`. That the settings can change is in the fee facts and `control`; the swaps and payouts are in `carbon`.                   |

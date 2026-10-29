@@ -82,7 +82,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await page.title(), "Your wallet · metaDEX Café");
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Your wallet");
     // The App lists the products, each with what it is: Hydrex, and the swap.
-    assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), ["Hydrex", "Swap many tokens"]);
+    assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), ["Hydrex", "Swap"]);
     assert.deepEqual(await app(page).locator("#products .note").allInnerTexts(), [
       "Automations that vote with your Hydrex accounts.",
       "Sell many tokens for one.",
@@ -244,10 +244,10 @@ describe("the page against a fork of Base: its views, and each account's payouts
     // Its owner did not vote: once read, its line goes.
     await account(page, 14485).locator(".earned").waitFor({ state: "hidden", timeout: 120_000 });
     await shoot(page, "member-earned-390-light");
-    // What the votes earned for each 1,000 Earning Power: what reached the owner is on the automation's page.
+    // What the votes earned for each 1,000 votes: what reached the owner is on the automation's page.
     const menu = hydrex(page).locator('.choice[data-choice="carbon-impact"]');
-    assert.match(await menu.locator(".record").innerText(), /^≈\s\$0\.\d\d$/);
-    assert.equal(await menu.locator(".record-unit").innerText(), "/ 1k Earning Power");
+    assert.match(await menu.locator(".record").innerText(), /^≈\s\$\d+\.\d\d$/);
+    assert.equal(await menu.locator(".record-unit").innerText(), "/ 1k votes");
     assert.equal(await menu.locator(".yours-count").innerText(), "Yours: 1 Hydrex account");
     // Beside it, Hydrex's average, which could not be read here.
     await hydrex(page).locator("#vote-yourself .average").getByText("Not read yet", { exact: true }).waitFor();
@@ -255,12 +255,12 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await menu.locator(".record-versus").isVisible(), false, "nothing to compare with");
     await page.goto(`${SITE}/#hydrex/carbon-impact`);
     const impact = product(page, "carbon-impact");
-    assert.match(await impact.locator(".record").innerText(), /^≈\s\$0\.\d\d$/);
+    assert.match(await impact.locator(".record").innerText(), /^≈\s\$\d+\.\d\d$/);
     await page.goto(`${SITE}/#hydrex/carbon-impact/record`);
     const table = impact.locator(".earnings");
-    assert.equal(await table.locator(".ours.earning-power").innerText(), "1.17M");
+    assert.equal(await table.locator(".ours.votes").innerText(), "897k");
     assert.equal(await table.locator(".ours.pools").innerText(), "27 pools");
-    assert.match(await table.locator(".ours.per-power").innerText(), /^≈\s\$0\.5\d$/);
+    assert.match(await table.locator(".ours.per-thousand").innerText(), /^≈\s\$0\.[67]\d$/);
     await impact.locator(".all-failed").getByText("Reading all of Hydrex failed.").waitFor();
     assert.equal(await page.locator("#error").isVisible(), false, "the rest of the page is as it was");
     await impact.locator(".earned-pools tr").filter({ hasText: "AVNT / USDC" }).waitFor();

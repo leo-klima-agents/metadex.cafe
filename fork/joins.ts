@@ -67,7 +67,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     assert.equal(await page.getByRole("checkbox", { name: "Pick Hydrex account #2439" }).isChecked(), true);
     await needs
       .locator(".picked")
-      .getByText(/^2 of 2 · [\d,]+ Earning Power$/)
+      .getByText(/^2 of 2 · [\d,]+ votes$/)
       .waitFor();
     await needs.getByRole("checkbox", { name: "All" }).uncheck();
     assert.equal(await needs.getByRole("button", { name: "Join Carbon Impact" }).isDisabled(), true);

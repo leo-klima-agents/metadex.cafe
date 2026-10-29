@@ -12,7 +12,7 @@ import {
   type Earnings,
   type Stake,
 } from "./earnings.ts";
-import { WEEK, compact, count, fraction, money, moneyAt, toEarningPower, weekStart, type Money } from "./format.ts";
+import { WEEK, compact, count, fraction, money, moneyAt, weekStart, type Money } from "./format.ts";
 import type { Holdings } from "./hydrex.ts";
 import { RETRY, reader, type Reader } from "./read.ts";
 
@@ -59,7 +59,7 @@ const compared = new Map<Kind, number>();
 let stakes:
   { start: number; of: Map<bigint, Stake | undefined>; asked: Set<bigint>; failed?: number | undefined } | undefined;
 const voters = new Map<string, Reader<Read>>();
-// All of Hydrex, for the average beside each choice, for the epoch from `start`: its value per 1,000 Earning Power.
+// All of Hydrex, for the average beside each choice, for the epoch from `start`: its value per 1,000 votes.
 let average: { start: number; figures: Reader<{ all: Earnings; per: Money }> } | undefined;
 
 // Each automation's popup "Against all of Hydrex", on its page.
@@ -166,7 +166,7 @@ export async function loadShares(holdings: Holdings): Promise<boolean> {
 const voterOf = (holder: Address): Reader<Read> | undefined =>
   stakes?.start === shownStart() ? voters.get(holder.toLowerCase()) : undefined;
 
-// What an owner's own votes earned in the epoch shown per 1,000 Earning Power: undefined until read, and null if it
+// What an owner's own votes earned in the epoch shown per 1,000 votes: undefined until read, and null if it
 // could not be, until read again; "none" if none of their accounts' votes were theirs when it began, as when all were
 // in automations; "unvoted" if they did not vote.
 export function ownPerThousand({ owner, accounts }: Holdings): Money | "none" | "unvoted" | null | undefined {
@@ -206,10 +206,10 @@ export function earnedByAccount({ id, amount }: { id: bigint; amount: bigint }):
   if (!read) return figures?.failed ? null : undefined;
   if (read.found.start !== stakes.start || !read.found.votes) return null;
   if (!automation && !read.found.pools.length) return null;
-  return moneyAt((Number(stake.power) / Number(read.found.votes)) * read.value.total, read.value);
+  return moneyAt((Number(stake.votes) / Number(read.found.votes)) * read.value.total, read.value);
 }
 
-// Hydrex's average, per 1,000 Earning Power, in the epoch the automations' figures are of: read once, after the page's
+// Hydrex's average, per 1,000 votes, in the epoch the automations' figures are of: read once, after the page's
 // own reads, and five minutes after a read that failed. Resolves to true once newly read, or failed.
 export async function loadAverage(): Promise<boolean> {
   const start = shownStart();
@@ -235,7 +235,7 @@ export function averagePerThousand(): Money | null | undefined {
   return figures?.failed ? null : figures?.value?.per;
 }
 
-// What some votes earned per 1,000 Earning Power against Hydrex's average, as a ratio: both at the average's prices,
+// What some votes earned per 1,000 votes against Hydrex's average, as a ratio: both at the average's prices,
 // so that they compare fairly, as the popup "Against all of Hydrex" does. Undefined until the average is read, and null
 // if it could not be, or if it is of another epoch than the one shown, which the page does not read.
 function versusAverage(found: Earnings): number | null | undefined {
@@ -262,7 +262,7 @@ export const automationVersus = (automation: Automation): number | null | undefi
 // An automation's figures shown, if read.
 export const earningsOf = (automation: Automation): Earnings | undefined => figuresOf(automation).value?.found;
 
-// What an automation earned last epoch per 1,000 Earning Power, at last epoch's prices: undefined until read, and null
+// What an automation earned last epoch per 1,000 votes, at last epoch's prices: undefined until read, and null
 // if it had no votes then, so no record yet.
 export function perThousandOf(automation: Automation): Money | null | undefined {
   const read = figuresOf(automation).value;
@@ -270,8 +270,7 @@ export function perThousandOf(automation: Automation): Money | null | undefined 
   return read.found.votes ? moneyAt(perThousand(read.value.total, read.found.votes), read.value) : null;
 }
 
-const perThousand = (value: number, votes: bigint): number =>
-  votes > 0n ? value / (Number(toEarningPower(votes)) / 1e21) : 0;
+const perThousand = (value: number, votes: bigint): number => (votes > 0n ? value / (Number(votes) / 1e21) : 0);
 
 // A table's figures to the cent, so that each column lines up at the point.
 const CENTS = { cents: true };
@@ -279,12 +278,12 @@ const CENTS = { cents: true };
 function showColumn(table: HTMLElement, column: "ours" | "all", { votes, pools }: Earnings, value: Value): void {
   const per = perThousand(value.total, votes);
   fill(table, {
-    [`${column}.earning-power`]: compact(toEarningPower(votes)),
+    [`${column}.votes`]: compact(votes),
     [`${column}.pools`]: count(pools.length, "pool", "pools"),
     [`${column}.earned`]: () => money(moneyAt(value.total, value), CENTS),
     [`${column}.fees`]: () => money(moneyAt(value.fees, value), CENTS),
     [`${column}.incentives`]: () => money(moneyAt(value.incentives, value), CENTS),
-    [`${column}.per-power`]: () => money(moneyAt(per, value), CENTS),
+    [`${column}.per-thousand`]: () => money(moneyAt(per, value), CENTS),
   });
 }
 

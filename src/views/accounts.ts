@@ -2,21 +2,7 @@ import type { Address } from "viem";
 import { now } from "../chain.ts";
 import { AUTOMATIONS, CARBON_IMPACT, byKind, type Automation } from "../config.ts";
 import { PENDING, busy, clone, fill, fillAddress, fillOwn, fillPlural, fillTime, live, show } from "../dom.ts";
-import {
-  WEEK,
-  bps,
-  count,
-  date,
-  day,
-  earningPower,
-  list,
-  money,
-  moneyAt,
-  short,
-  toEarningPower,
-  utc,
-  weekStart,
-} from "../format.ts";
+import { WEEK, bps, count, date, day, list, money, moneyAt, short, utc, voteWords, weekStart } from "../format.ts";
 import {
   LockType,
   canJoin,
@@ -121,7 +107,7 @@ export function statusLine(status: Status, own: boolean): DocumentFragment {
 function accountItem({ account, status }: Member, group: string, pickable: boolean): DocumentFragment {
   const item = clone("account");
   const name = accountName(account.name);
-  fill(item, { name, id: `#${account.id}`, votes: earningPower(account.votes) });
+  fill(item, { name, id: `#${account.id}`, votes: voteWords(account.votes) });
   item.querySelector("a.account-link")!.setAttribute("href", hrefOf({ view: "position", id: account.id }));
   // A group of an automation needs not say its accounts are in it.
   if (status.kind === "in" && group === `in:${status.automation.kind}`) item.querySelector(".status-line")!.remove();
@@ -249,8 +235,8 @@ export function updateButtons(): void {
     tickedAll.indeterminate = accounts.length > 0 && accounts.length < able.length;
     const summary = section.querySelector<HTMLElement>(".picked")!;
     summary.hidden = able.length <= 1 || !accounts.length;
-    const power = accounts.reduce((sum, { votes }) => sum + votes, 0n);
-    summary.textContent = `${accounts.length} of ${able.length} · ${earningPower(power)} Earning Power`;
+    const votes = accounts.reduce((sum, account) => sum + account.votes, 0n);
+    summary.textContent = `${accounts.length} of ${able.length} · ${voteWords(votes)}`;
   }
 }
 
@@ -308,8 +294,8 @@ function leaveAll(accounts: Account[], listed = true): { steps: Step[]; from: Au
 // What the accounts would have been paid in a week at last epoch's rate, and the gas of the change. Each shows once
 // read: last epoch's figures can take long to read the first time.
 function estimate(element: Element, accounts: Account[], automation: Automation, owner: Address): void {
-  const power = accounts.reduce((sum, { votes }) => sum + toEarningPower(votes), 0n);
-  const thousands = Number(power) / 1e21;
+  const votes = accounts.reduce((sum, account) => sum + account.votes, 0n);
+  const thousands = Number(votes) / 1e21;
   const [week, gas] = [".estimate-week", ".estimate-gas"].map((part) => element.querySelector(part)!) as [
     Element,
     Element,

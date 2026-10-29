@@ -57,11 +57,10 @@ Two audiences. By count, many small holders delegate, and stay put. By value, a 
   account in an automation, yet automations hold only 2% of the votes. The top 10 owners hold 72% of the votes; one
   2-of-3 Safe holds 59.6%.
 - **Stranded accounts:** 2,331 accounts of 1,640 owners still sit in the 13 automations that stopped on 9 Sep 2026, with
-  11.4M Earning Power that earns nothing. The median owner among them holds about $3, 208 hold $100 or more, and 39 hold
-  $1,000 or more. Moving an account costs about $0.004 in gas. Hydrex's app only tells them to switch to "No
-  Automation".
-- **Carbon Impact:** 17 accounts of 11 owners, 0.19% of the votes. In the epoch from 8 to 15 Oct, its 1.17M Earning
-  Power voted for 27 pools and earned about $693, or $0.59 per 1,000 Earning Power.
+  8.77M votes that earn nothing. The median owner among them holds about $3, 208 hold $100 or more, and 39 hold $1,000
+  or more. Moving an account costs about $0.004 in gas. Hydrex's app only tells them to switch to "No Automation".
+- **Carbon Impact:** 17 accounts of 11 owners, 0.19% of the votes. In the epoch from 8 to 15 Oct, its 897k votes went to
+  27 pools and earned about $693, or $0.77 per 1,000 votes.
 - **Competition:** a contract not on Hydrex's list votes for 26 owners, with as many votes as all of Hydrex's 14
   automations together. On Aero, Autopilot is the protocol's own.
 - **Aerodrome:** relays held 55% of veAERO, most of it in relays with two or three owners each; 7,006 owners used
@@ -170,9 +169,9 @@ with one action each: an automation that stopped or is ending, a position out of
 Then positions by protocol, each with who looks after it, its status and last epoch. On a desk, tables with boxes to
 tick and a bar for what to do with the ticked ones; on a phone, a card per position.
 
-**Choosing for an account.** The menu compares the automations and voting yourself, per 1,000 Earning Power; the join
-review gives what a week at last epoch's rate would pay the accounts picked, next to the gas of the change. Choose, a
-dialog that did both, is gone.
+**Choosing for an account.** The menu compares the automations and voting yourself, per 1,000 votes; the join review
+gives what a week at last epoch's rate would pay the accounts picked, next to the gas of the change. Choose, a dialog
+that did both, is gone.
 
 **The join review.** Today's three steps. "What changes" adds the fee facts and an estimate for the accounts picked,
 marked "not a promise". "Transactions" sends one request for several accounts where the wallet can batch. "Done" offers
@@ -284,9 +283,9 @@ plain-language decoding raised how many risky transactions they caught.
 
 ## How to know it works
 
-The page collects nothing, so the measures come from Base: accounts and Earning Power leaving stopped automations each
-epoch, and where they go; Earning Power in each automation, and how much leaves; the share of joins made with one
-batched prompt; Safe transactions executed after a brief was made.
+The page collects nothing, so the measures come from Base: accounts and votes leaving stopped automations each epoch,
+and where they go; votes in each automation, and how much leaves; the share of joins made with one batched prompt; Safe
+transactions executed after a brief was made.
 
 And from people: five moderated sessions per persona, on their own phone or desk, with three tasks: "Is your account
 earning?", "What would this cost you?", and "Leave". After joining, three questions: when do the votes move, what is
@@ -315,8 +314,8 @@ Voter `0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b`, and the automations in
 [`src/hydrex-conduits.json`](../src/hydrex-conduits.json). Aerodrome: VotingEscrow
 `0xeBf418Fe2512e7E6bd9b87a8F0f294aCDC67e6B4`, Voter `0x16613524e02ad97eDfeF371bC883F2F5d6C480A5`.
 
-- **Hydrex's votes:** 469.8M votes, or 610.8M Earning Power, at about $0.0246 per HYDX. 123,857 accounts minted, 6,183
-  holding votes; 96.3% of votes are in permanent locks. 1,000 Earning Power is worth about $19.
+- **Hydrex's votes:** 469.8M votes, at about $0.0246 per HYDX. 123,857 accounts minted, 6,183 holding votes; 96.3% of
+  votes are in permanent locks. 1,000 votes are worth about $25.
 - **Who votes with them:** the owners themselves, 86.85% of votes; 21 other addresses, 11.08%; the 13 stopped
   automations, 1.87%; Carbon Impact, 0.19%. 35.9% of voting power voted last epoch, down from 94–99% before
   mid-September.

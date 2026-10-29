@@ -12,7 +12,6 @@ import {
   currency,
   date,
   day,
-  earningPower,
   fixed,
   fraction,
   hexLines,
@@ -24,6 +23,8 @@ import {
   setCurrency,
   short,
   units,
+  voteFigure,
+  voteWords,
   until,
   walletLines,
   weekStart,
@@ -65,9 +66,13 @@ test("numbers", () => {
   assert.equal(bps(0n), "0%");
   assert.equal(bps(100n), "1%");
   assert.equal(units(5_691_499_999_999_999_999_999n), "5,691");
-  assert.equal(earningPower(897_043n * 10n ** 18n), "1,166,155");
-  assert.equal(earningPower(10n ** 17n), "< 1");
-  assert.equal(earningPower(0n), "0");
+  assert.equal(voteFigure(897_043n * 10n ** 18n), "897,043");
+  assert.equal(voteFigure(10n ** 17n), "< 1");
+  assert.equal(voteFigure(0n), "0");
+  assert.equal(voteWords(897_043n * 10n ** 18n), "897,043 votes");
+  assert.equal(voteWords(15n * 10n ** 17n), "1 vote");
+  assert.equal(voteWords(10n ** 17n), "< 1 vote");
+  assert.equal(voteWords(0n), "0 votes");
   assert.equal(short("0x5a1C2f3A4b5C6d7E8f9A0b1C2d3E4f5A6b7C7e40"), "0x5a1C…7e40");
 });
 

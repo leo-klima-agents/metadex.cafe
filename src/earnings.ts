@@ -266,13 +266,13 @@ export async function readAllEarnings(start: number): Promise<Earnings> {
 }
 
 // Who held each account's votes when the epoch from `start` began, and how many: an account counts for whoever held them.
-export type Stake = { delegate: Address; power: bigint };
+export type Stake = { delegate: Address; votes: bigint };
 export async function stakesOf(ids: bigint[], start: number): Promise<Map<bigint, Stake>> {
   const found = await read(ids.flatMap((id) => [escrow("delegates", id, start), escrow("balanceOfNFTAt", id, start)]));
   return new Map(
     ids.flatMap((id, i) => {
-      const [delegate, power] = found.slice(2 * i, 2 * i + 2) as [Address | undefined, bigint | undefined];
-      return delegate && power ? [[id, { delegate, power }]] : [];
+      const [delegate, votes] = found.slice(2 * i, 2 * i + 2) as [Address | undefined, bigint | undefined];
+      return delegate && votes ? [[id, { delegate, votes }]] : [];
     }),
   );
 }
