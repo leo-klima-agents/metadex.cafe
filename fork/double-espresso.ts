@@ -155,7 +155,7 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     await review(page)
       .getByText("Unclaimed rewards on this Hydrex account will be paid to you with its next payout, less the 1% fee.")
       .waitFor();
-    await review(page).getByRole("link", { name: "Fixed" }).waitFor();
+    await review(page).getByRole("link", { name: "Immutable" }).waitFor();
     await review(page)
       .locator(".estimate-week")
       .getByText("No record yet", { exact: true })

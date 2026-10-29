@@ -86,7 +86,7 @@ test("each automation has a kind, a name and the approvals of its own, and Doubl
   const facts = factsOf("double-espresso");
   assert.equal(bps(DOUBLE_ESPRESSO_FEE_BPS), "1%");
   assert.match(facts, /<dd>1% of each claim<\/dd>/);
-  assert.match(facts, /<dd[^>]*>1%, fixed in its code<\/dd>/);
+  assert.match(facts, /<dd[^>]*>1%, immutable in its code<\/dd>/);
   assert.ok(facts.includes(`/address/${DOUBLE_ESPRESSO_TREASURY}"`));
   // The page checks each automation's code hash, and shows only its address: the hash is no use to read.
   for (const { kind, codeHash, address } of AUTOMATIONS) {

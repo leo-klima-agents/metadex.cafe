@@ -354,7 +354,7 @@ As each published it on 17 Oct 2026.
 | ----------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | Hydrex's automations    | Vote, claim, pay out                      | 0.5% or 1% of earnings, as its sources disagree; Lock Maxi nothing                                                                     |
 | Matcha Latte            | Vote, claim, retire, pay out              | 33.33% retired; a fee of 0%, up to 1%                                                                                                  |
-| Double Espresso         | Vote for bribes, claim, pay out unswapped | 1% of each claim, fixed in its code                                                                                                    |
+| Double Espresso         | Vote for bribes, claim, pay out unswapped | 1% of each claim, immutable in its code                                                                                                |
 | Autopilot, on Aerodrome | Vote, pay out in USDC                     | 5% of rewards ([DefiLlama](https://defillama.com/protocol/autopilot))                                                                  |
 | Convex                  | Votes for Curve lockers                   | 17% of CRV rewards, capped at 20% ([docs](https://docs.convexfinance.com/convexfinance/faq/fees.md))                                   |
 | Votium                  | Vote incentives market                    | 2% of incentives, capped at 4% ([docs](https://docs.votium.app/faq/fees.md))                                                           |

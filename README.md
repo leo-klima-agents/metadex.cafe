@@ -111,8 +111,8 @@ has read that its RPCs serve Base, and says nothing of it.
 
 Hydrex controls Matcha Latte. It can change the share retired (up to 100%), the fee (up to 1%), the payout tokens, the
 swap routers, any owner's payout address, and who claims and votes for it. The page always shows the settings as they
-are on Base. Nobody controls Double Espresso: its code fixes its fee, 1% of each claim, and the 2-of-3 Safe it goes to.
-A change means a new deployment, and owners joining again.
+are on Base. Nobody controls Double Espresso: its fee, 1% of each claim, and the 2-of-3 Safe it goes to are immutable in
+its code. A change means a new deployment, and owners joining again.
 
 ## Network access
 

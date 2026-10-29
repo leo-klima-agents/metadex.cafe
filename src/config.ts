@@ -27,8 +27,8 @@ export const MATCHA_LATTE: Automation = {
   actions: [3, 5],
 };
 // ImmutableVeTokenConduit version 2, from https://github.com/ldeso/hydrex-conduit at tag v2, commit 718c107. It has no
-// owner and no settings: its code fixes its fee and where the fee goes. It deployed through CREATE2, on Tue 20 Oct
-// 2026. Version 1, at 0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B, still works, but the page does not offer it.
+// owner and no settings: its fee and where the fee goes are immutable in its code. It deployed through CREATE2, on Tue
+// 20 Oct 2026. Version 1, at 0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B, still works, but the page does not offer it.
 export const DOUBLE_ESPRESSO: Automation = {
   kind: "double-espresso",
   name: "Double Espresso",
