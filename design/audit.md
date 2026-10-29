@@ -196,8 +196,8 @@ The groups show only when they hold accounts, with the count in their heading:
 
 - What needs you comes first, with no heading over it: a group for each remedy, each under its own heading at the level
   of the others, "Didn't vote last epoch", "In a stopped automation", "Partly in an automation", in the App's order.
-  Their Leave leaves whichever automation holds each account: `review(accounts, "self")` already leaves both the page's
-  and Hydrex's.
+  Their Leave, "Leave automation" in the stopped group, leaves whichever automation holds each account:
+  `review(accounts, "self")` already leaves both the page's and Hydrex's.
 - Other accounts' Leave shows only for an account in one of Hydrex's running automations, and takes it out of it.
 - Boxes to tick, and the hint, stay as today: one selection, one action.
 - A row: the account's name and number, which lead to its page; its votes; what its votes earned last epoch. A status

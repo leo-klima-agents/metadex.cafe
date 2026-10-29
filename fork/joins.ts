@@ -239,7 +239,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
       .waitFor();
     await shoot(page, "stopped-390-light");
     await only(page, "needs:stopped", 2439);
-    await group(page, "needs:stopped").getByRole("button", { name: "Leave", exact: true }).click();
+    await group(page, "needs:stopped").getByRole("button", { name: "Leave automation", exact: true }).click();
     await review(page).getByRole("heading", { name: "Leave USDC" }).waitFor();
     await review(page).locator(".pages").getByText("Claims stop").waitFor();
     assert.deepEqual(await review(page).locator(".says").allTextContents(), [
