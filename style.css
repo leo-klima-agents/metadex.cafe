@@ -1255,7 +1255,8 @@ summary:not(.info)::before {
   margin-inline-end: 0.6em;
   border-block-end: 2px solid var(--quiet);
   border-inline-end: 2px solid var(--quiet);
-  transform: translateY(-0.15em) rotate(-45deg);
+  vertical-align: middle;
+  transform: rotate(-45deg);
   transition: transform 0.15s;
 }
 details[open] > summary:not(.info)::before {

@@ -162,12 +162,16 @@ export function showAccounts(keepTicked = false): void {
     for (const box of boxes)
       box.checked = kept.has(box.value) || (group.startsWith("needs:") && !before.has(box.value));
     boxesShown.set(section, new Set(boxes.map(({ value }) => value)));
-    // Among those without votes, the locks that ended with HYDX still in them, which their owner can withdraw.
+    // Those folded away are without votes, unless one has some but less than one. Among them, the locks that ended with
+    // HYDX still in them, which their owner can withdraw.
+    const some = these.some(({ account }) => account.votes > 0n);
     const ended = these.filter(({ status }) => status.kind === "ended").length;
     fill(section, {
       count: `· ${these.length}`,
       "nothing-count": [
-        count(these.length, "Hydrex account without votes", "Hydrex accounts without votes"),
+        some
+          ? count(these.length, "Hydrex account with less than one vote", "Hydrex accounts with less than one vote")
+          : count(these.length, "Hydrex account without votes", "Hydrex accounts without votes"),
         ...(ended ? [`${ended} with HYDX to withdraw`] : []),
       ].join(" · "),
     });
