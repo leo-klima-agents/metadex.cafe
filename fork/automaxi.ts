@@ -268,14 +268,14 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
       .getByText(/^≈\s\$0\.\d\d$/)
       .waitFor({ timeout: 300_000 });
     await self.locator(".yours-average").getByText("Didn't vote", { exact: true }).waitFor({ timeout: 120_000 });
-    assert.equal(await self.locator(".yours-versus").isVisible(), false, "no figure to compare");
+    assert.equal(await self.locator(".yours-versus").innerText(), "", "no figure to compare");
     await shoot(page, "menu-390-light", menu);
     await menu.getByRole("link", { name: "AutoMaxi" }).click();
     const maxi = product(page, "automaxi");
     await maxi.getByRole("heading", { name: "AutoMaxi", level: 1 }).waitFor();
     assert.equal(await page.title(), "AutoMaxi · metaDEX Café");
     assert.equal(await maxi.locator(".record").innerText(), "No record yet");
-    assert.equal(await maxi.locator(".record-unit").innerText(), "");
+    assert.equal(await maxi.locator(".record-unit").isVisible(), false);
     await shoot(page, "automaxi-390-light");
     // #141 and #42877 can join it, so its button waits for a tick.
     assert.equal(await maxi.getByRole("button", { name: "Join AutoMaxi", exact: true }).isDisabled(), true);
@@ -301,7 +301,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     // The App says what Carbon Impact's votes earned against the average, as the menu does, and leaves out AutoMaxi,
     // which has no record yet.
     const impactLine = app(page).locator('[data-record="carbon-impact"]');
-    await impactLine.locator(".record-versus").waitFor();
+    await impactLine.locator(".record-versus:not(.pending)").waitFor();
     assert.match(
       await impactLine.innerText(),
       /^Carbon Impact: ≈\s\$0\.\d\d \/ 1k Earning Power last epoch · (\d[\d.]*% (above|below) the average|About the average)$/,

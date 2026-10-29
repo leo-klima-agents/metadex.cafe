@@ -51,6 +51,7 @@ export async function loadAccounts(quietly = false): Promise<void> {
     // An account's page drops the actions of the wallet's accounts read before.
     showPosition();
     showApp();
+    showRecords();
   }
   const these = session.accounts;
   const current = () => session.accounts === these;
@@ -67,9 +68,11 @@ export async function loadAccounts(quietly = false): Promise<void> {
   } catch (error) {
     if (current() && !these.reading) failed(error);
   } finally {
+    // The wallet's own votes beside Hydrex's average wait for its accounts, read or not, even with no epoch read.
     if (current() && !these.reading) {
       show(".accounts-reading", false);
       showApp();
+      showRecords();
     }
   }
 }

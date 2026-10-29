@@ -104,15 +104,32 @@ export function showWorth(element: Element, exact: string, worth?: () => string)
   element.replaceChildren(amount, " ", quiet);
 }
 
+// An amount and what it is worth, both waiting, under each other: a bar for each line, which screen readers hear once.
+export function pendWorth(element: Element): void {
+  if (element.querySelector(":scope > .exact.pending")) return;
+  writers.delete(element);
+  unmark(element);
+  const [amount, quiet] = ["exact", "worth"].map((className) =>
+    Object.assign(document.createElement("span"), { className }),
+  ) as [HTMLElement, HTMLElement];
+  put(amount, PENDING);
+  put(quiet, PENDING);
+  quiet.setAttribute("aria-hidden", "true");
+  element.replaceChildren(amount, " ", quiet);
+}
+
 // An exact amount and what it is worth, if known, each in an element of its own: as in a bill's line, where what it is
-// worth takes the second row, under the amount. Until the amount is read, both wait.
+// worth takes the second row, under the amount. Until the amount is read, both wait, each line in its place, and screen
+// readers hear it once.
 export function showWorthIn(exactElement: Element, worthElement: Element, exact: Text, worth?: () => string): void {
   writers.delete(exactElement);
   put(exactElement, exact);
+  if (exact === PENDING) worthElement.setAttribute("aria-hidden", "true");
+  else worthElement.removeAttribute("aria-hidden");
   if (worth) live(worthElement, worth);
   else {
     writers.delete(worthElement);
-    put(worthElement, "");
+    put(worthElement, exact === PENDING ? PENDING : "");
   }
 }
 

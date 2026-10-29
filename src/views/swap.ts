@@ -1,7 +1,7 @@
 import { maxUint256, type Address } from "viem";
 import { gasPaid, includedAt, now, same, type Receipt } from "../chain.ts";
 import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
-import { PENDING, busy, clone, fill, fillAddress, setText, show, showWorth, showWorthIn } from "../dom.ts";
+import { PENDING, busy, clone, fill, fillAddress, pendWorth, setText, show, showWorth, showWorthIn } from "../dom.ts";
 import { tokensOf } from "../earnings.ts";
 import {
   between,
@@ -289,6 +289,9 @@ function judge(row: Row, scanned: Scan): void {
   row.reason = row.worth === undefined ? "No price" : row.worth < CLEARS * cost ? "Below gas" : undefined;
 }
 
+// A quoted row's rank in the list: by what its quote is worth, those not worth swapping last.
+const worthFirst = (row: Row): number => (row.reason || row.worth === undefined ? -1 : row.worth);
+
 function drawRow(row: Row, scanned: Scan): void {
   const { node, token, found } = row;
   const box = node.querySelector<HTMLInputElement>(".pick")!;
@@ -302,8 +305,8 @@ function drawRow(row: Row, scanned: Scan): void {
   });
   const quote = [node.querySelector(".swap-fetches")!, node.querySelector(".swap-worth")!] as [Element, Element];
   const fetches = fetchesOf(row, scanned);
-  // While its route is found, its quote is pending.
   const routing = found === undefined && !row.failed;
+  // While its route is found, its quote keeps the place of both its lines.
   if (fetches !== undefined) showOutput(quote, fetches, swapper, scanned.prices);
   else showWorthIn(...quote, routing ? PENDING : "");
   // Only why a token is not ticked, or that Base would skip it among the others: the route itself is in the review.
@@ -349,6 +352,9 @@ function drawAll(): void {
   summarise(scanned, ticked);
 }
 
+// The bill's figures, each an amount and what it is worth.
+const BILL = ["swap-quoted", "swap-fee", "swap-paid", "swap-least", "swap-gas"];
+
 // What the ticked tokens fetch together, row by row: the quote, less the 1%, is what reaches you, and the slippage picked
 // sets the least that may. Gas is paid apart, in ETH. Each in tokens, then what it is worth. Until their routes are
 // found together, and run through Base in order, each token's own quote, which the bar says.
@@ -360,11 +366,15 @@ function summarise(scanned: Scan, ticked: Row[]): void {
   reviewButton.disabled = !ticked.length || swapsOff() || reviewing;
   // Until the page has read that its RPCs serve Base, which is soon, the button waits, and says why.
   show(".swap-checking", !!ticked.length && base === undefined, view);
-  sells.hidden = ticked.length > 0;
-  breakdown.hidden = !ticked.length;
+  // While the wallet's tokens are quoted, those worth swapping tick themselves: until one does, the bill keeps its place,
+  // unless the owner ticked or unticked one already.
+  const waiting = !ticked.length && scanned.reading && !scanned.failed && !scanned.rows.some((row) => row.touched);
+  sells.hidden = ticked.length > 0 || waiting;
+  breakdown.hidden = !ticked.length && !waiting;
   const found = togetherFor(scanned, ticked);
   const waits = !!ticked.length && !found && !scanned.reading && !swapsOff();
   show(".swap-routing", waits, view);
+  if (waiting) for (const name of BILL) pendWorth(breakdown.querySelector(`.${name}`)!);
   if (!ticked.length) return void (splitLine.hidden = true);
   if (waits) routeSoon(scanned);
   const parts = ticked.flatMap((row) => partsOf(row, found));
@@ -475,8 +485,11 @@ function rowNode(): HTMLElement {
 }
 
 // Reads the wallet's tokens, their prices, and each one's route into the output, the ticked and the most valuable
-// first. Another scan, as of another output, takes over.
-async function startScan(owner: Address, swapper: Swapper): Promise<void> {
+// first. Another scan, as of another output, takes over. With `quoted`, as when more tokens became known, the wallet
+// holds what it held: its rows stay as they are until the new scan knows its tokens, so that nothing moves meanwhile,
+// and those it holds the same amount of keep their quotes, so that only the others are quoted. Otherwise, as after a
+// swap, the rows go at once, so that none shows what the wallet may no longer hold.
+async function startScan(owner: Address, swapper: Swapper, quoted = false): Promise<void> {
   const id = ++scans;
   const kept = scan && same(scan.owner, owner) && scan.swapper === swapper ? scan : undefined;
   const scanned: Scan = {
@@ -490,11 +503,14 @@ async function startScan(owner: Address, swapper: Swapper): Promise<void> {
     failed: false,
     done: 0,
   };
-  scan = scanned;
-  rowsList.replaceChildren();
-  drawAll();
-  tell();
-  const current = () => scan === scanned;
+  const current = () => scans === id;
+  const begin = (): void => {
+    scan = scanned;
+    rowsList.replaceChildren(...scanned.rows.map(({ node }) => node));
+    drawAll();
+    tell();
+  };
+  if (!quoted || !kept) begin();
   try {
     // Hydrex's reward tokens, as last epoch's rewards name them, once read, and the wallet's own list where it offers one.
     knowRewards();
@@ -535,18 +551,31 @@ async function startScan(owner: Address, swapper: Swapper): Promise<void> {
         ticked: keptRow?.touched ? keptRow.ticked : false,
         touched: !!keptRow?.touched,
       };
+      if (quoted && keptRow && keptRow.found !== undefined && !keptRow.failed) {
+        const again: Row = { ...row, found: keptRow.found, ticked: keptRow.ticked, node: keptRow.node };
+        judge(again, scanned);
+        scanned.done++;
+        return [again];
+      }
       return [{ ...row, node: rowNode() }];
     });
-    const value = (row: Row) => (row.price === undefined ? -1 : worthOf(row.amount, row.token.decimals, row.price));
+    // Those quoted already where they would be once all are; the others by value.
+    const value = (row: Row) =>
+      row.found !== undefined
+        ? worthFirst(row)
+        : row.price === undefined
+          ? -1
+          : worthOf(row.amount, row.token.decimals, row.price);
     rows.sort((a, b) => value(b) - value(a));
     scanned.rows = rows;
-    rowsList.replaceChildren(...rows.map(({ node }) => node));
+    begin();
     rows.forEach((row) => drawRow(row, scanned));
-    drawAll();
     // The payout's tokens first, then by value.
-    const queue = [...rows].sort(
-      (a, b) => Number(prefilled?.has(key(b.token.address)) ?? 0) - Number(prefilled?.has(key(a.token.address)) ?? 0),
-    );
+    const queue = rows
+      .filter((row) => row.found === undefined)
+      .sort(
+        (a, b) => Number(prefilled?.has(key(b.token.address)) ?? 0) - Number(prefilled?.has(key(a.token.address)) ?? 0),
+      );
     let next = 0;
     const gasValue = gasValueIn(scanned);
     await Promise.all(
@@ -572,15 +601,17 @@ async function startScan(owner: Address, swapper: Swapper): Promise<void> {
     );
   } catch (error) {
     console.error(error);
-    if (current()) scanned.failed = true;
+    if (current()) {
+      scanned.failed = true;
+      if (scan !== scanned) begin();
+    }
   } finally {
     if (current() && rescan) {
       rescan = false;
       rescanNow();
     } else if (current()) {
       // By value, once all are quoted: those worth swapping first.
-      const worth = (row: Row) => (row.reason || row.worth === undefined ? -1 : row.worth);
-      scanned.rows.sort((a, b) => worth(b) - worth(a));
+      scanned.rows.sort((a, b) => worthFirst(b) - worthFirst(a));
       rowsList.replaceChildren(...scanned.rows.map(({ node }) => node));
       scanned.reading = false;
       drawAll();
@@ -1018,10 +1049,10 @@ function knowRewards(): boolean {
   return known().length > before;
 }
 
-// The wallet's tokens read again, as they were scanned last.
+// The wallet's tokens read again, as they were scanned last, once more tokens became known: the quotes found stay.
 function rescanNow(): void {
   const owner = context.connection()?.address;
-  if (owner) void startScan(owner, scan?.swapper ?? swapperShown());
+  if (owner) void startScan(owner, scan?.swapper ?? swapperShown(), true);
 }
 
 // The wallet changed, or what it holds did: read its tokens and approvals again. A payout's amounts no longer apply.

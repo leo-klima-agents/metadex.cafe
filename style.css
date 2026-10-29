@@ -262,6 +262,12 @@ time.pending,
 .swap-fetches.pending {
   --bar: 5.5em;
 }
+.swap-worth.pending {
+  --bar: 4em;
+}
+.breakdown .exact.pending {
+  --bar: 6em;
+}
 .takes.pending,
 .claim-into.pending {
   --bar: 11em;
@@ -269,8 +275,22 @@ time.pending,
 .treasury.pending {
   --bar: 22ch;
 }
-.average.pending {
-  --bar: 3em;
+.average.pending,
+.record.pending,
+.earned-worth.pending,
+.position-earned.pending {
+  --bar: 3.25em;
+}
+.need-words.pending {
+  --bar: 14em;
+}
+.takes-sub.pending,
+.record-paid.pending {
+  --bar: 7em;
+}
+.record-versus.pending,
+.yours-versus.pending {
+  --bar: 10em;
 }
 .skeleton {
   display: grid;
@@ -762,14 +782,14 @@ button img {
 }
 /* "≈ $0.55 / 1k Earning Power", then how it compares with Hydrex's average, under it. On the App, a line for each
    automation, the comparison on the same line. */
-.choice .record-versus {
+.choice .record-versus-line {
   display: block;
 }
 .records {
   padding: 0;
   list-style: none;
 }
-.records .record-versus {
+.records .record-versus-line {
   display: inline;
 }
 .yours-count {
@@ -956,6 +976,8 @@ details.nothing > .accounts {
   flex: none;
   margin: 0;
 }
+/* As tall as a line with an action, whether it has one or not: the line that keeps the list's place while the wallet's
+   accounts are read, or says nothing needs it, then gives way to one that does without a jump. */
 .need-body {
   display: flex;
   flex: 1;
@@ -963,6 +985,7 @@ details.nothing > .accounts {
   align-items: center;
   justify-content: space-between;
   gap: var(--gap-s) var(--gap-l);
+  min-block-size: 2.25rem;
 }
 /* Its words take the room, so that its action stays at the end of the line until the line is too narrow. */
 .need-words {
@@ -1042,6 +1065,11 @@ details.nothing > .accounts {
 }
 .facts dd:empty {
   display: none;
+}
+/* The wallet's own votes keep a line for how they compare with the average, whether or not they have a figure to. */
+.facts .yours-versus:empty {
+  display: block;
+  min-block-size: 1lh;
 }
 .facts dd code {
   overflow-wrap: normal;

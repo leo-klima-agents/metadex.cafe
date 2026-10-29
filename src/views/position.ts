@@ -171,9 +171,10 @@ export function showPosition(): void {
     "position-votes": earningPower(account.votes),
   });
   view.querySelector(".position-status")!.replaceChildren(statusLine(status, !theirs));
-  const earned = earnedByAccount(account.id);
-  if (earned !== undefined) fill(view, { "position-earned": () => money(earned) });
-  show(".position-earned-row", earned !== undefined, view);
+  // What its votes earned last epoch, its place kept while read.
+  const earned = earnedByAccount(account);
+  show(".position-earned-row", earned !== null, view);
+  if (earned !== null) fill(view, { "position-earned": earned === undefined ? PENDING : () => money(earned) });
   show(".position-owner-row", theirs, view);
   fillAddress(view, "position-owner", owner, short(owner));
   show(".position-stopped", status.kind === "stopped", view);

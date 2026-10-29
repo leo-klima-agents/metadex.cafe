@@ -56,10 +56,11 @@ test("an element switched between money and plain text is written once a rewrite
   assert.equal(writes, 1);
 });
 
-// An element as far as a pending figure goes: its text, its classes, and how often its children were replaced. A
-// document that makes the words screen readers say in its place.
+// An element as far as a pending figure goes: its text, its classes and attributes, and how often its children were
+// replaced. A document that makes the words screen readers say in its place.
 function pendable() {
   const classes = new Set<string>();
+  const attributes = new Map<string, string>();
   const element = {
     textContent: "",
     replaced: 0,
@@ -68,6 +69,9 @@ function pendable() {
       add: (name: string) => void classes.add(name),
       remove: (name: string) => void classes.delete(name),
     },
+    getAttribute: (name: string) => attributes.get(name) ?? null,
+    setAttribute: (name: string, value: string) => void attributes.set(name, value),
+    removeAttribute: (name: string) => void attributes.delete(name),
     replaceChildren(...nodes: { textContent: string }[]) {
       element.replaced++;
       element.textContent = nodes.map((node) => node.textContent).join("");
@@ -116,10 +120,13 @@ test("a date, or an amount and what it is worth, ends what was pending where it 
   assert.equal(at.dateTime, "2026-10-21T00:00:00.000Z");
   showWorthIn(exact as unknown as Element, worth as unknown as Element, PENDING);
   assert.equal(exact.classList.contains("pending"), true, "an amount still read waits");
-  assert.equal(worth.classList.contains("pending"), false, "what it is worth is left empty until then");
+  assert.equal(worth.classList.contains("pending"), true, "what it is worth keeps its line meanwhile");
+  assert.equal(worth.getAttribute("aria-hidden"), "true", "screen readers hear it wait once");
   showWorthIn(exact as unknown as Element, worth as unknown as Element, "0.5 USDC");
   assert.equal(exact.classList.contains("pending"), false);
   assert.equal(exact.textContent, "0.5 USDC");
+  assert.equal(worth.classList.contains("pending"), false, "with no worth, its line goes");
+  assert.equal(worth.getAttribute("aria-hidden"), null);
   showWorth(line as unknown as Element, "0.5 USDC");
   assert.equal(line.classList.contains("pending"), false);
   assert.equal(line.textContent, "0.5 USDC");

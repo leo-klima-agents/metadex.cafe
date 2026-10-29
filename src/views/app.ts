@@ -1,7 +1,7 @@
 import type { Address } from "viem";
 import { now, same } from "../chain.ts";
 import { AUTOMATIONS, SWAPPERS } from "../config.ts";
-import { PENDING, clone, fill, live, setText, show } from "../dom.ts";
+import { PENDING, clone, fill, live, setText, show, type Text } from "../dom.ts";
 import { count, figure, money } from "../format.ts";
 import { automationName, canLeave, statusOf, type Holdings } from "../hydrex.ts";
 import { hrefOf } from "../routes.ts";
@@ -19,16 +19,16 @@ const appView = document.querySelector<HTMLElement>('.view[data-view="app"]')!;
 
 function need(
   shape: string,
-  words: string | (() => string),
-  act: { link?: string; button?: (event: MouseEvent) => void; label: string },
+  words: Text | (() => Text),
+  act: { link?: string; button?: (event: MouseEvent) => void; label: string } | undefined,
 ): DocumentFragment {
   const item = clone("need");
   item.querySelector(".shape")!.classList.add(shape);
   fill(item, { "need-words": words });
   const link = item.querySelector<HTMLAnchorElement>(".need-link")!;
   const button = item.querySelector<HTMLButtonElement>(".need-button")!;
-  if (act.link) Object.assign(link, { href: act.link, textContent: act.label, hidden: false });
-  if (act.button) {
+  if (act?.link) Object.assign(link, { href: act.link, textContent: act.label, hidden: false });
+  if (act?.button) {
     Object.assign(button, { textContent: act.label, hidden: false });
     button.addEventListener("click", act.button);
   }
@@ -86,19 +86,27 @@ export function showApp(): void {
       }),
     );
   }
-  // Drawn again only when its lines change, so that a button keeps its focus between ticks.
+  // Above the products, with a wallet: while its accounts are read, a line keeps the list's place, and once read, a line
+  // says when nothing needs it, so that the products stay where they are. Drawn again only when its lines change, so
+  // that a button keeps its focus between ticks.
   const needs = document.getElementById("needs")!;
+  const reading = !!connection && !holdings && !session.accounts?.failed;
+  const placeholder = reading ? "reading" : holdings && !items.length ? "nothing" : "";
   // Keyed on what each line acts on, not only its words.
-  const drawnNeeds = [...keys, ...(left ?? []).map(({ token, spender }) => `${token} ${spender}`)].join("\n");
+  const drawnNeeds = [...keys, ...(left ?? []).map(({ token, spender }) => `${token} ${spender}`), placeholder].join(
+    "\n",
+  );
   if (drawnNeeds !== needsShown) {
     needsShown = drawnNeeds;
-    needs.hidden = !items.length;
-    fill(needs, { count: `· ${items.length}` });
+    needs.hidden = !items.length && !placeholder;
+    fill(needs, { count: items.length ? `· ${items.length}` : "" });
+    if (placeholder === "reading") items.push(need("checking", PENDING, undefined));
+    if (placeholder === "nothing") items.push(need("running", "Nothing right now", undefined));
     needs.querySelector(".needs-list")!.replaceChildren(...items);
   }
   // What you hold in each product, once connected: pending while read.
   const hydrexYours = appView.querySelector<HTMLElement>(".hydrex-yours")!;
-  hydrexYours.hidden = !holdings && !(connection && session.accounts?.reading);
+  hydrexYours.hidden = !connection || (!holdings && !!session.accounts?.failed);
   if (!holdings) setText(hydrexYours, PENDING);
   else {
     const full = holdings.accounts.filter(({ amount }) => amount > 0n);
@@ -117,9 +125,10 @@ export function showApp(): void {
   }
   const swapYours = appView.querySelector<HTMLElement>(".swap-yours")!;
   const line = connection ? swapLine() : undefined;
-  swapYours.hidden = !line;
+  swapYours.hidden = !connection;
   // What is found so far, while the wallet's tokens are quoted.
-  if (line) {
+  if (!line) setText(swapYours, PENDING);
+  else {
     live(swapYours, () =>
       line.failed
         ? "Not read"

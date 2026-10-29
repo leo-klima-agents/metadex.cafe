@@ -1,7 +1,7 @@
 import type { Address } from "viem";
 import { now } from "../chain.ts";
 import { AUTOMATIONS, CARBON_IMPACT, byKind, type Automation } from "../config.ts";
-import { busy, clone, fill, fillAddress, fillOwn, fillPlural, fillTime, live, show } from "../dom.ts";
+import { PENDING, busy, clone, fill, fillAddress, fillOwn, fillPlural, fillTime, live, show } from "../dom.ts";
 import {
   WEEK,
   bps,
@@ -126,11 +126,10 @@ function accountItem({ account, status }: Member, group: string, pickable: boole
   // A group of an automation needs not say its accounts are in it.
   if (status.kind === "in" && group === `in:${status.automation.kind}`) item.querySelector(".status-line")!.remove();
   else item.querySelector(".status")!.replaceWith(statusLine(status, true));
-  const earned = earnedByAccount(account.id);
-  if (earned !== undefined) {
-    fill(item, { "earned-worth": () => money(earned) });
-    show(".earned", true, item);
-  }
+  // What its votes earned last epoch, its place kept while read.
+  const earned = earnedByAccount(account);
+  show(".earned", earned !== null, item);
+  if (earned !== null) fill(item, { "earned-worth": earned === undefined ? PENDING : () => money(earned) });
   show(".late", owed.late.has(account.id), item);
   if (pickable) {
     const box = item.querySelector<HTMLInputElement>(".pick")!;

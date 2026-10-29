@@ -173,9 +173,13 @@ and works in one colour.
   or a page, as cards of such bars where its items will show; a status, as a quiet ring and "Checking…", never a status
   it may not have, such as "Running". They show a moment after the read starts, so that a quick read flashes nothing,
   and pulse only where motion is welcome. Screen readers say "Loading" in their place. A read that takes long says so in
-  words after a few seconds: "Still loading. This can take a minute." An optional part of a line, such as "· voted Wed
-  21 Oct" or "to you", stays hidden until read. A read that fails never leaves a bar: the figure says "Not read" or "Not
-  read yet", or its line hides. Figures read again, as each hour or epoch, keep the ones shown until then.
+  words after a few seconds: "Still loading. This can take a minute." Nothing moves once shown: a line that most reads
+  fill, such as "17.2% above the average", "to you", an account's "· ≈ $6.12 last epoch", or a quote's worth under it,
+  shows its bar meanwhile, and goes only once the read finds nothing to say; words that do not depend on the read, such
+  as "/ 1k Earning Power", show from the start; a list that may hold nothing, as Needs you, keeps a line's place while
+  read, then says so: "Nothing right now". Only a part inside a line, such as "· voted Wed 21 Oct", waits hidden. A read
+  that fails never leaves a bar: the figure says "Not read" or "Not read yet", or its line hides. Figures read again, as
+  each hour or epoch, keep the ones shown until then, and so do the swap's tokens when more become known.
 - **A button whose action is being prepared** keeps its size and its name, shows a spinner over its words, and takes no
   second click: never "Loading…" in its place.
 

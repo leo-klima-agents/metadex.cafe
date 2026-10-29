@@ -225,8 +225,9 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 ## What visitors may run into
 
 - **While the page reads Base,** each figure shows as a quiet bar where it will go, and each list as cards of bars; a
-  status says "Checking…". A read that takes more than a few seconds says so. One that fails says "Not read", or hides
-  its line, and never leaves a bar behind.
+  status says "Checking…". Lines that most reads fill, such as how an automation compares with Hydrex's average, keep
+  their place meanwhile, so that nothing moves once shown. A read that takes more than a few seconds says so. One that
+  fails says "Not read", or hides its line, and never leaves a bar behind.
 - **"Reading Base failed."** No RPC answered. The page offers to try again. When none can be reached at all, as offline,
   it says so within seconds: once each RPC went unanswered three times in a row, for two reads or more over two seconds
   or more, every read fails at once for ten seconds, then the next is asked as usual. What votes earned, the other

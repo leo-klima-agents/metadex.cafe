@@ -263,8 +263,9 @@ Swap many tokens into one                                  →
 
 - **Without a wallet:** the wallet picker, then the menu, without the "Yours" lines.
 - **Needs you gathers from every product,** each with one action: an account in a stopped automation, an overdue payout,
-  approvals left over. It shows nothing when nothing needs you; a payout that is merely waiting for Thursday does not
-  count, so that the group keeps its weight.
+  approvals left over. Once connected, it keeps a line's place while the wallet's accounts are read, so that the
+  products under it do not move, then says "Nothing right now" when nothing needs you; a payout that is merely waiting
+  for Thursday does not count, so that the group keeps its weight.
 - **The menu** has one entry per kind of product, Hydrex, for its automations together, and the swap, each with one line
   of what it does, what it takes, and once connected, what you hold in it. Hydrex's says what each automation's votes
   earned last epoch against Hydrex's average, for every visitor, as early as the page can: "Carbon Impact: ≈ $0.55 / 1k

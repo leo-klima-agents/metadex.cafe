@@ -175,51 +175,56 @@ export function showCountdown(): void {
 }
 
 // Each automation's figures for last epoch, for each 1,000 Earning Power: what its votes earned, beside Hydrex's average,
-// on the menu and on the App, how they compare; on its page, then what reached the owner after its cut.
+// on the menu and on the App, how they compare; on its page, then what reached the owner after its cut. Each line keeps
+// its place while read, as most automations have a record: it goes only once the read finds none, or fails.
 export function showRecords(): void {
   for (const automation of AUTOMATIONS) {
     const per = perThousandOf(automation);
     const paid = traits[automation.kind].paid();
-    const record =
-      per === undefined
-        ? earningsFailed(automation)
-          ? "Not read yet"
-          : PENDING
+    const failed = per === undefined && earningsFailed(automation);
+    const none = per === null || failed;
+    const record = failed
+      ? "Not read yet"
+      : per === undefined
+        ? PENDING
         : per === null
           ? "No record yet"
           : () => money(per);
-    // What reached the owner, once what the automation takes is read too; without it, the line hides.
+    // What reached the owner, once what the automation takes is read too; if that read failed, the line goes.
     const waits = automation === CARBON_IMPACT && !impact.value && !impact.failed;
     const toYou: Text | (() => Text) =
-      per && paid !== undefined ? () => `${money(moneyAt(per.value * paid, per))} to you` : per && waits ? PENDING : "";
+      per && paid !== undefined
+        ? () => `${money(moneyAt(per.value * paid, per))} to you`
+        : !none && (per === undefined || waits)
+          ? PENDING
+          : "";
     const versus = automationVersus(automation);
     for (const place of placesOf(automation)) {
       // The menu and the App compare what the votes earned, as voting yourself does, and leave what reached the owner
       // to the automation's page. The App, early on the way to them, says when, and leaves out an automation with no
       // record, or none read.
       const where = whereOf(place);
-      const unit = {
-        page: "earned, per 1,000 Earning Power",
-        menu: "/ 1k Earning Power",
-        app: "/ 1k Earning Power last epoch",
-      };
-      fill(place, { record, "record-unit": per ? unit[where] : "", ...(where === "page" && { "record-paid": toYou }) });
-      if (where === "page") continue;
-      show(".record-versus", versus !== undefined, place);
-      if (versus !== undefined)
-        fill(place, { "record-versus": `${where === "app" ? " · " : ""}${versusWords(versus)}` });
-      if (where === "app") place.hidden = per === null || (per === undefined && earningsFailed(automation));
+      fill(place, { record });
+      show(".record-unit", !none, place);
+      if (where === "page") fill(place, { "record-paid": toYou });
+      else {
+        show(".record-versus-line", versus !== null, place);
+        fill(place, { "record-versus": versus === undefined ? PENDING : versus === null ? "" : versusWords(versus) });
+      }
+      if (where === "app") place.hidden = none;
     }
   }
   // Beside them, Hydrex's average, on each automation's page and beside voting yourself, and, with a wallet, what its
-  // own votes earned, and how they compare.
+  // own votes earned, and how they compare: pending while its accounts are read, and its comparison's line kept for it
+  // whether or not it shows one, as the wallet may not have voted with its own.
   const average = averagePerThousand();
   const averageWords = average === undefined ? PENDING : average === null ? "Not read yet" : () => money(average);
   for (const place of [voteYourself, ...AUTOMATIONS.flatMap(placesOf)]) fill(place, { average: averageWords });
   show(".average-unit", average !== null, voteYourself);
-  const holdings = session.connection ? shown() : undefined;
-  const yours = holdings && ownPerThousand(holdings);
-  show(".yours", !!holdings, voteYourself);
+  const { connection, accounts } = session;
+  const holdings = connection ? shown() : undefined;
+  const yours = holdings ? ownPerThousand(holdings) : accounts?.failed ? null : undefined;
+  show(".yours", !!connection, voteYourself);
   fill(voteYourself, {
     "yours-average":
       yours === undefined
@@ -232,11 +237,9 @@ export function showRecords(): void {
               ? "Didn't vote"
               : () => money(yours),
   });
-  const known = !!yours && typeof yours === "object";
-  show(".yours-unit", yours === undefined || known, voteYourself);
-  const ratio = holdings && known ? ownVersus(holdings) : undefined;
-  show(".yours-versus", ratio !== undefined, voteYourself);
-  if (ratio !== undefined) fill(voteYourself, { "yours-versus": versusWords(ratio) });
+  show(".yours-unit", yours === undefined || typeof yours === "object", voteYourself);
+  const ratio = holdings ? ownVersus(holdings) : yours === null ? null : undefined;
+  fill(voteYourself, { "yours-versus": ratio === undefined ? PENDING : ratio === null ? "" : versusWords(ratio) });
 }
 
 // How some votes compare with Hydrex's average, in words and ink, not colour: "44.7% below the average".

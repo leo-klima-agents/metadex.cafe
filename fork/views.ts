@@ -241,7 +241,8 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await account(page, 9540)
       .getByText(/≈\s\$6\.1\d last epoch/)
       .waitFor({ timeout: 120_000 });
-    assert.equal(await account(page, 14485).locator(".earned").isVisible(), false, "its owner did not vote");
+    // Its owner did not vote: once read, its line goes.
+    await account(page, 14485).locator(".earned").waitFor({ state: "hidden", timeout: 120_000 });
     await shoot(page, "member-earned-390-light");
     // What the votes earned for each 1,000 Earning Power: what reached the owner is on the automation's page.
     const menu = hydrex(page).locator('.choice[data-choice="carbon-impact"]');

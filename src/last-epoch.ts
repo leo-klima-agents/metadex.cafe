@@ -177,21 +177,29 @@ export function ownPerThousand({ owner, accounts }: Holdings): Money | "none" | 
   return read.found.pools.length ? moneyAt(perThousand(read.value.total, read.found.votes), read.value) : "unvoted";
 }
 
-// An owner's own votes against the average, when they voted with them.
-export function ownVersus(holdings: Holdings): number | undefined {
-  if (typeof ownPerThousand(holdings) !== "object") return undefined;
-  return versusAverage(voterOf(holdings.owner)?.value?.found);
+// An owner's own votes against the average, when they voted with them: undefined until both are read, and null when
+// there is none to show.
+export function ownVersus(holdings: Holdings): number | null | undefined {
+  const own = ownPerThousand(holdings);
+  if (typeof own !== "object") return own === undefined ? undefined : null;
+  return versusAverage(voterOf(holdings.owner)!.value!.found);
 }
 
 // What the account's votes earned in the epoch shown, at its prices: its part of its automation's, or of whoever else
-// held its votes, if they voted then.
-export function earnedByAccount(id: bigint): Money | undefined {
-  const stake: Stake | undefined = stakes?.of.get(id);
-  if (!stake) return undefined;
+// held its votes, if they voted then. Undefined until read, and null when there is none to show: an account with no
+// votes, or none then, a holder that did not vote, or a read that failed.
+export function earnedByAccount({ id, amount }: { id: bigint; amount: bigint }): Money | null | undefined {
+  if (amount === 0n || noEpoch()) return null;
+  if (!stakes || stakes.start !== shownStart()) return undefined;
+  if (!stakes.of.has(id)) return stakes.failed ? null : undefined;
+  const stake: Stake | undefined = stakes.of.get(id);
+  if (!stake) return null;
   const automation = AUTOMATIONS.find(({ address }) => same(address, stake.delegate));
-  const read = automation ? figuresOf(automation).value : voterOf(stake.delegate)?.value;
-  if (!read || read.found.start !== stakes!.start || !read.found.votes) return undefined;
-  if (!automation && !read.found.pools.length) return undefined;
+  const figures = automation ? figuresOf(automation) : voterOf(stake.delegate);
+  const read = figures?.value;
+  if (!read) return figures?.failed ? null : undefined;
+  if (read.found.start !== stakes.start || !read.found.votes) return null;
+  if (!automation && !read.found.pools.length) return null;
   return moneyAt((Number(stake.power) / Number(read.found.votes)) * read.value.total, read.value);
 }
 
@@ -222,20 +230,27 @@ export function averagePerThousand(): Money | null | undefined {
 }
 
 // What some votes earned per 1,000 Earning Power against Hydrex's average, as a ratio: both at the average's prices,
-// so that they compare fairly, as the popup "Against all of Hydrex" does. Undefined until both are read.
-function versusAverage(found: Earnings | undefined): number | undefined {
-  const all = average?.start === found?.start ? average?.figures.value?.all : undefined;
-  if (!found || !all || !found.votes) return undefined;
+// so that they compare fairly, as the popup "Against all of Hydrex" does. Undefined until the average is read, and null
+// if it could not be, or if it is of another epoch than the one shown, which the page does not read.
+function versusAverage(found: Earnings): number | null | undefined {
+  const figures = average?.start === found.start ? average.figures : undefined;
+  if (!figures) return found.start === shownStart() ? undefined : null;
+  if (figures.failed) return null;
+  const all = figures.value?.all;
+  if (!all) return undefined;
   const ratio =
     perThousand(valueOf({ ...found, prices: all.prices }).total, found.votes) /
     perThousand(valueOf(all).total, all.votes);
-  return Number.isFinite(ratio) ? ratio : undefined;
+  return Number.isFinite(ratio) ? ratio : null;
 }
 
-// An automation's votes against the average, once it has a record.
-export const automationVersus = (automation: Automation): number | undefined => {
-  const found = figuresOf(automation).value?.found;
-  return found?.pools.length ? versusAverage(found) : undefined;
+// An automation's votes against the average: undefined until both are read, and null when there is none to show, as
+// with no record, or with figures that could not be read.
+export const automationVersus = (automation: Automation): number | null | undefined => {
+  const figures = figuresOf(automation);
+  const found = figures.value?.found;
+  if (!found) return figures.failed ? null : undefined;
+  return found.pools.length && found.votes ? versusAverage(found) : null;
 };
 
 // An automation's figures shown, if read.
