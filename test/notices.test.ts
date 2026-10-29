@@ -1,6 +1,8 @@
 import * as esbuild from "esbuild";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { bundled, noticeOf, packagePart, partsOf } from "../scripts/notices.ts";
@@ -38,10 +40,18 @@ test("the script's notices name each npm package it bundles, by its LICENSE, und
   }
   // The café's own code is not among them.
   assert.ok(!parts.some(({ name }) => name.startsWith("src/")));
-  // A package without a LICENSE goes by its author.
+  // A package whose npm package leaves its LICENSE out goes by its repository's; one the build knows no line for stops
+  // it.
   assert.deepEqual(packagePart(ROOT, "node_modules/@safe-global/safe-apps-sdk").copyright, [
-    "Copyright Safe (https://safe.global)",
+    "Copyright (c) 2018-2023 Safe Ecosystem Foundation",
   ]);
+  const elsewhere = mkdtempSync(join(tmpdir(), "notices-"));
+  mkdirSync(join(elsewhere, "node_modules/unknown"), { recursive: true });
+  writeFileSync(
+    join(elsewhere, "node_modules/unknown/package.json"),
+    JSON.stringify({ name: "unknown", version: "1.0.0", license: "MIT", author: "Someone" }),
+  );
+  assert.throws(() => packagePart(elsewhere, "node_modules/unknown"), /unknown@1\.0\.0 ships no LICENSE/);
 });
 
 test("the stylesheet's notices name each font it embeds, by REUSE.toml, under the OFL", () => {
