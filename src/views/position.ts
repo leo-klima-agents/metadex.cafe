@@ -21,7 +21,6 @@ import {
   accountKind,
   accountName,
   act,
-  actionOf,
   allows,
   automationOf,
   buttons,
@@ -261,11 +260,6 @@ function showActions(account: Account | undefined, status?: Status): void {
       button.textContent = `${moves ? "Move to" : "Join"} ${automation.name}`;
       // A move is a secondary action, as in the groups of Hydrex's page.
       button.classList.toggle("secondary", moves);
-    }
-    // Leaving one of the page's automations, or one of Hydrex's to vote yourself.
-    if (actionOf(button) === "self") {
-      const ours = !!account && AUTOMATIONS.some((automation) => canLeave(account, automation));
-      button.textContent = ours ? "Leave" : "Vote yourself";
     }
     button.hidden = !allowed;
     any ||= allowed;

@@ -163,7 +163,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
   test("a link in the review opens its section, Back keeps the ticks, and an account's page says what stopped", async () => {
     const { page, violations } = await connected({ owner: ELSEWHERE }, { width: 390, height: 844 });
     await pick(page, 2435, 2439);
-    await group(page, "needs").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
+    await group(page, "needs:stopped").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
     await review(page).getByRole("heading", { name: "Before you join" }).waitFor();
     await review(page).getByRole("link", { name: "Can change" }).click();
     assert.equal(await review(page).isVisible(), false);
@@ -177,7 +177,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await page.goBack();
     await hydrexTitle(page).waitFor();
     assert.equal(await page.getByRole("checkbox", { name: "Pick Hydrex account #2439" }).isChecked(), true);
-    await group(page, "needs")
+    await group(page, "needs:stopped")
       .locator(".picked")
       .getByText(/^2 of 2 · /)
       .waitFor();
@@ -191,7 +191,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
       .getByText(/Earns nothing\s+since\s+Thu,? 10 Sept?\./)
       .waitFor();
     await position(page).getByRole("button", { name: "Join Matcha Latte", exact: true }).waitFor();
-    await position(page).getByRole("button", { name: "Vote yourself", exact: true }).waitFor();
+    await position(page).getByRole("button", { name: "Leave", exact: true }).waitFor();
     assert.equal(await position(page).locator(".position-owner-row").isVisible(), false, "its own account");
     await shoot(page, "stopped-account-390-light");
     // It leads back to Hydrex, above its title.

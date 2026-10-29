@@ -494,7 +494,7 @@ section > * + *,
   align-items: center;
   gap: var(--gap-s) var(--gap);
 }
-:is(.title-line, .group-head) > :not(h1, h2, h3, .info, .trail) {
+:is(.title-line, .group-head) > :not(h1, h2, h3, h4, .info, .trail) {
   margin-inline-start: auto;
 }
 /* What is ticked, then the box that ticks them all, together at the end of a group's heading. */
@@ -948,11 +948,18 @@ input[type="radio"] {
 }
 
 /* A count beside a heading, whatever the heading's level: "Needs you · 2", "Sell · 3 of 4". */
-:is(h2, h3) :is(.count, .swap-ticked) {
+:is(h2, h3) :is(.count, .needs-count, .swap-ticked) {
   color: var(--quiet);
   font-family: var(--sans);
   font-size: var(--text-h3);
   font-weight: 400;
+}
+/* Needs you, over a group for each remedy, each under a label of what its accounts need, apart from the one before. */
+.needs-groups > .group {
+  margin-block-start: var(--gap-l);
+}
+.needs-groups > .group:not([hidden]) ~ .group {
+  margin-block-start: var(--gap-xl);
 }
 /* The fold of the accounts with nothing to vote with, as quiet as the other folds. */
 details.nothing > .accounts {

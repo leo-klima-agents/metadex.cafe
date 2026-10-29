@@ -94,7 +94,7 @@ test("other delegates: the owner, nobody, another automation on Hydrex's list, a
   assert.deepEqual(statusWith({ ownerVoted: START - WEEK }), { kind: "self" });
   assert.deepEqual(statusWith({ ownerVoted: START - WEEK - 1 }), { kind: "unvoted", voted: START - WEEK - 1 });
   assert.deepEqual(statusWith({ ownerVoted: 0 }), { kind: "unvoted", voted: 0 }, "never voted");
-  assert.equal(groupWith({ ownerVoted: 0 }), "needs");
+  assert.equal(groupWith({ ownerVoted: 0 }), "needs:unvoted");
   assert.deepEqual(statusWith({ delegate: USDC.toLowerCase() as Address }), { kind: "other", name: "USDC" });
   assert.deepEqual(statusWith({ delegate: STRANGER }), { kind: "delegated", to: STRANGER });
 });
@@ -121,8 +121,8 @@ test("an account that left another automation this epoch votes from the next", (
 });
 
 test("accounts are grouped by what their owner can do with them", () => {
-  assert.equal(groupWith({ delegate: USDC, delegateAtStart: USDC, delegateVoted: STOPPED }), "needs");
-  assert.equal(groupWith({ claimer: CONDUIT }), "needs", "partly in");
+  assert.equal(groupWith({ delegate: USDC, delegateAtStart: USDC, delegateVoted: STOPPED }), "needs:stopped");
+  assert.equal(groupWith({ claimer: CONDUIT }), "needs:partly");
   assert.equal(groupWith({ delegate: CONDUIT, delegateAtStart: CONDUIT, claimer: CONDUIT }), "in:matcha-latte");
   assert.equal(groupWith({ delegate: MAXI, delegateAtStart: MAXI, claimer: MAXI }), "in:double-espresso");
   assert.equal(groupWith({ delegate: CONDUIT, claimer: CONDUIT }), "in:matcha-latte", "joining");

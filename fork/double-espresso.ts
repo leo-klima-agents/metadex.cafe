@@ -58,8 +58,8 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
   test("closing the review before Base includes the transaction still updates the account", async () => {
     const { page } = await connected({ owner: NEWCOMER });
     await account(page, 141).getByText(UNVOTED).waitFor();
-    await only(page, "needs", 141);
-    await group(page, "needs").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
+    await only(page, "needs:unvoted", 141);
+    await group(page, "needs:unvoted").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
     await toWallet(page);
     await anvil("evm_setAutomine", [false]);
     try {
@@ -149,8 +149,8 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     );
     const { page, sent } = await connected({ owner: NEWCOMER });
     await account(page, 141).getByText(UNVOTED).waitFor();
-    await only(page, "needs", 141);
-    await group(page, "needs").getByRole("button", { name: "Join Double Espresso", exact: true }).click();
+    await only(page, "needs:unvoted", 141);
+    await group(page, "needs:unvoted").getByRole("button", { name: "Join Double Espresso", exact: true }).click();
     await review(page).getByText("Join Double Espresso · 1 of 2").waitFor();
     await review(page)
       .getByText("Rewards this Hydrex account has not claimed yet go to you through it too, less 1%.")
@@ -363,7 +363,7 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     await anvil("evm_setNextBlockTimestamp", [FLIP + 60]);
     await anvil("evm_mine");
     await page.clock.setSystemTime((FLIP + 60) * 1000);
-    const joinStopped = group(page, "needs").getByRole("button", { name: "Join Matcha Latte" });
+    const joinStopped = group(page, "needs:stopped").getByRole("button", { name: "Join Matcha Latte" });
     await joinStopped.click();
     await group(page, "in:matcha-latte").locator("li").filter({ hasText: "#141" }).waitFor();
     await account(page, 141).getByText("Joining Matcha Latte:").waitFor({ state: "detached" });

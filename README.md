@@ -74,10 +74,13 @@ This README is for whoever runs the site. The design and the plan are in [design
   a wallet, how many of its Hydrex accounts are in it. Then, apart, as it is no automation, voting yourself: what votes
   earned on Hydrex last epoch per 1,000 votes, on average and, with a wallet, by the wallet's own votes, with how the
   two compare, and a link to vote on Hydrex. Then the wallet's Hydrex accounts, in groups a level below: those that need
-  their owner (in an automation that stopped, or voted with by an owner who has not voted since before last epoch, as
-  Hydrex counts a vote only in the epoch it is cast), those in each automation, and the others. Each account shows what
-  its votes earned last epoch, in an automation or through whoever voted with it. Needs you starts with its accounts
-  ticked; each group with boxes has one that ticks them all, and says how many are ticked and their votes.
+  their owner, under Needs you, in a group for each remedy, so that each group's buttons fit each of its accounts (in an
+  automation that stopped, or partly in one of the page's: join an automation, or leave; voted with by an owner who has
+  not voted since before last epoch, as Hydrex counts a vote only in the epoch it is cast: join an automation, or vote
+  on Hydrex); those in each automation; and the others. Leaving says, once done, that the votes are the owner's from the
+  next epoch, to vote with on Hydrex each week. Each account shows what its votes earned last epoch, in an automation or
+  through whoever voted with it. Needs you starts with its accounts ticked; each group with boxes has one that ticks
+  them all, and says how many are ticked and their votes.
 - `#swap` takes the output from its address, `#swap/weth`, USDC by default, then lists the wallet's tokens, each with
   what it fetches, ticked when the quote is worth twice its gas. What the ticked ones fetch shows line by line: the
   quote, the 1%, what reaches you, the least that may, on the line where the slippage is picked, and the gas, paid apart
