@@ -69,10 +69,11 @@ export function annotations(root: string): Annotation[] {
   });
 }
 
-const glob = (pattern: string) =>
-  new RegExp(
-    `^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*\*|\*/g, (star) => (star === "**" ? ".*" : "[^/]*"))}$`,
-  );
+// A REUSE.toml path as a pattern: "*" within a folder, "**" across them.
+const glob = (pattern: string) => {
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escaped.replace(/\*\*|\*/g, (star) => (star === "**" ? ".*" : "[^/]*"))}$`);
+};
 
 // The notices of what a built file bundles, each package once, and each file of the repository's own that REUSE.toml
 // gives another holder than the café, whose own files its "**" annotation covers.
