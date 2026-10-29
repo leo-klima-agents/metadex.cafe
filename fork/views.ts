@@ -400,10 +400,8 @@ describe("the page against a fork of Base: its views, and each account's payouts
       .locator(".receipt-paid-worth")
       .getByText(/^≈\s\$\d/)
       .waitFor({ timeout: 120_000 });
-    // Its payout address, its owner's own, is behind an info button.
-    await position(page).getByRole("button", { name: "Payout address" }).click();
-    await position(page).locator(".position-payout:popover-open").getByText("(the owner)").waitFor();
-    await page.keyboard.press("Escape");
+    // No info button gives its payout address: the receipt says where it was paid when not to its owner.
+    assert.equal(await position(page).getByRole("button", { name: "Payout address" }).count(), 0);
     await shoot(page, "receipt-390-dark", position(page));
     // After the flip, the page reads Matcha Latte again and fills its figures, such as .tonnes, again. The receipts
     // keep their own.

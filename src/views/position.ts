@@ -1,5 +1,5 @@
 import { now, same, sawBlock } from "../chain.ts";
-import { AUTOMATIONS, MATCHA_LATTE } from "../config.ts";
+import { AUTOMATIONS } from "../config.ts";
 import { PENDING, fill, fillAddress, fillOwn, fillTime, live, setText, show } from "../dom.ts";
 import { money, short, voteFigure, weekStart } from "../format.ts";
 import {
@@ -162,7 +162,7 @@ export function showPosition(): void {
     return void fill(view, { "position-name": pageName("") });
   }
   const account = holdings.accounts[0]!;
-  const { owner, epochStart, payout } = holdings;
+  const { owner, epochStart } = holdings;
   const status = statusOf(account, owner, now(), epochStart);
   const name = accountName(account.name);
   const theirs = !viewerOwns(owner);
@@ -187,16 +187,6 @@ export function showPosition(): void {
   if (status.kind === "stopped") fillTime(view, "position-since", status.since);
   const underWay = own ? owed.under : ownerUnder;
   show(".position-underway", !!underWay?.left.some((entry) => entry.account.id === account.id), view);
-  // Matcha Latte pays an owner's accounts to one address, once read.
-  const inImpact = [account.delegate, account.claimer, account.delegateAtStart].some((address) =>
-    same(address, MATCHA_LATTE.address),
-  );
-  const paidTo = inImpact ? payout : undefined;
-  show(".position-payout-open", !!paidTo, view);
-  if (paidTo) {
-    fillAddress(view, "payout-to", paidTo);
-    show(".payout-itself", same(paidTo, owner), view);
-  }
   fillOwn(view, !theirs);
   positionPayouts.show(holdings);
 }

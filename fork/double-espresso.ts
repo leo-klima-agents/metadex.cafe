@@ -153,7 +153,7 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     await group(page, "needs:unvoted").getByRole("button", { name: "Join Double Espresso", exact: true }).click();
     await review(page).getByText("Join Double Espresso · 1 of 2").waitFor();
     await review(page)
-      .getByText("Rewards this Hydrex account has not claimed yet go to you through it too, less 1%.")
+      .getByText("Unclaimed rewards on this Hydrex account will be paid to you with its next payout, less the 1% fee.")
       .waitFor();
     await review(page).getByRole("link", { name: "Fixed" }).waitFor();
     await review(page)

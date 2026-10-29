@@ -276,7 +276,6 @@ Then folds, closed, each with a summary of one line:
    unclaimed can be claimed on Hydrex first.
 6. In an automation, or just out of one: its payouts, as today: its standing (paid up to, late, not paid yet, nothing to
    pay, not final yet, not read), what waits, the notes on claims made elsewhere, then the receipt of its last payout.
-7. In Matcha Latte: its payout address, in a fold, open only when it is not the owner's own.
 
 Reading an account by its number is new: its owner, then the reads `readAccounts` makes for each account. Its payouts
 are read for that one account, where `last-payout.ts` reads an owner's.

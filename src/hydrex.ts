@@ -65,7 +65,6 @@ const matchaLatteAbi = parseAbi([
   "function beneficiaryString() view returns (string)",
   "function impactBeneficiaryAddress() view returns (address)",
   "function retirementMessage() view returns (string)",
-  "function getEffectiveRecipientForOwner(address owner) view returns (address)",
 ]);
 
 const doubleEspressoAbi = parseAbi([
@@ -133,12 +132,9 @@ export type Account = {
   claimer: Address;
 };
 
-// `payout` is where Matcha Latte pays the owner's accounts, unknown if its read failed: only an account's page shows
-// it.
 export type Holdings = {
   owner: Address;
   accounts: Account[];
-  payout: Address | undefined;
   time: number;
   epochStart: number;
 };
@@ -217,14 +213,13 @@ const othersVoted = (replies: unknown[]): Map<string, number> =>
 const withContext = (calls: Call[]): Promise<unknown[]> =>
   read([...calls, blockTime, ...others.map(({ address }) => voter("lastVoted", address))]);
 
-// The accounts, and the replies to the `more` calls, which share their read.
+// The accounts, as read for their owner.
 async function accountsOf(
   owner: Address,
   ids: bigint[],
   epochStart: number,
   lastVoted: Map<string, number>,
-  more: Call[] = [],
-): Promise<{ accounts: Account[]; more: unknown[] }> {
+): Promise<Account[]> {
   const details = await read([
     voter("lastVoted", owner),
     ...ids.flatMap((id) => [
@@ -235,7 +230,6 @@ async function accountsOf(
       escrow("getClaimRedirectApproved", id),
     ]),
     call(ACCOUNT_NAMES, accountNamesAbi, "getBulkNames", ids),
-    ...more,
   ]);
   // If the Voter cannot be read, the owner is just not known to have stopped voting.
   const ownerVoted = Number((details.shift() as bigint | undefined) ?? BigInt(epochStart));
@@ -258,21 +252,18 @@ async function accountsOf(
       claimer,
     };
   });
-  return { accounts, more: details.slice(5 * ids.length + 1) };
+  return accounts;
 }
 
 export async function readAccounts(owner: Address): Promise<Holdings> {
-  const [count, payout, time, ...voted] = await withContext([
-    escrow("balanceOf", owner),
-    matchaLatte("getEffectiveRecipientForOwner", owner),
-  ]);
+  const [count, time, ...voted] = await withContext([escrow("balanceOf", owner)]);
   required([count, time]);
   const epochStart = epochAt(time);
   const indexes = Array.from({ length: Number(count) }, (_, i) => BigInt(i));
   const ids = required(await read(indexes.map((i) => escrow("tokenOfOwnerByIndex", owner, i)))) as bigint[];
-  const { accounts } = await accountsOf(owner, ids, epochStart, othersVoted(voted));
+  const accounts = await accountsOf(owner, ids, epochStart, othersVoted(voted));
   accounts.sort((a, b) => (a.votes === b.votes ? Number(a.id - b.id) : a.votes > b.votes ? -1 : 1));
-  return { owner, accounts, payout: payout as Address | undefined, time: Number(time), epochStart };
+  return { owner, accounts, time: Number(time), epochStart };
 }
 
 // One account, whoever owns it, as its owner's holdings of that account alone. Undefined if Hydrex has no account with
@@ -284,13 +275,8 @@ export async function readAccount(id: bigint): Promise<Holdings | undefined> {
   if (owner === undefined) return undefined;
   required([time]);
   const epochStart = epochAt(time);
-  const {
-    accounts,
-    more: [payout],
-  } = await accountsOf(owner as Address, [id], epochStart, othersVoted(voted), [
-    matchaLatte("getEffectiveRecipientForOwner", owner as Address),
-  ]);
-  return { owner: owner as Address, accounts, payout: payout as Address | undefined, time: Number(time), epochStart };
+  const accounts = await accountsOf(owner as Address, [id], epochStart, othersVoted(voted));
+  return { owner: owner as Address, accounts, time: Number(time), epochStart };
 }
 
 const ended = (account: Account, now: number): boolean => account.lockType === LockType.timed && account.end <= now;

@@ -1256,17 +1256,7 @@
             <p class="position-gas small" hidden>A change costs <span class="change-gas pending"></span> in gas.</p>
           </section>
           <section class="position-payouts" aria-labelledby="position-payouts-title" hidden>
-            <div class="group-head">
-              <h2 id="position-payouts-title">Last payout</h2>
-              <button
-                type="button"
-                class="info position-payout-open"
-                popovertarget="pos-payout"
-                aria-label="Payout address"
-              >
-                <span aria-hidden="true">i</span>
-              </button>
-            </div>
+            <h2 id="position-payouts-title">Last payout</h2>
             <div class="receipts-reading loading-slot" data-cards="1"></div>
             <p class="receipts-failed notice" hidden>
               <span>Reading the payouts failed.</span>
@@ -1274,24 +1264,6 @@
             </p>
             <div class="receipts-found standings" hidden></div>
           </section>
-        </div>
-
-        <div class="pop position-payout" id="pos-payout" popover role="dialog" aria-labelledby="pos-payout-title">
-          <div class="pop-head">
-            <h3 id="pos-payout-title">Payout address</h3>
-            <button
-              type="button"
-              class="pop-close"
-              popovertarget="pos-payout"
-              popovertargetaction="hide"
-              aria-label="Close"
-            >
-              <span aria-hidden="true">×</span>
-            </button>
-          </div>
-          <p>
-            <code translate="no"><a class="payout-to"></a></code><span class="payout-itself"> (the owner)</span>
-          </p>
         </div>
       </div>
 
@@ -1698,8 +1670,9 @@
       <div class="callout">
         <p>
           <strong
-            >Rewards <span data-one="this Hydrex account has" data-many="these Hydrex accounts have"></span> not claimed
-            yet go to you with its next payout, in kVCM, after the share retired.</strong
+            >Unclaimed rewards on <span data-one="this Hydrex account" data-many="these Hydrex accounts"></span> will be
+            paid to you in kVCM with <span data-one="its next payout" data-many="their next payouts"></span>, less the
+            share retired.</strong
           >
         </p>
         <p class="buttons">
@@ -1735,8 +1708,9 @@
       <div class="callout">
         <p>
           <strong
-            >Rewards <span data-one="this Hydrex account has" data-many="these Hydrex accounts have"></span> not claimed
-            yet go to you through it too, less 1%.</strong
+            >Unclaimed rewards on <span data-one="this Hydrex account" data-many="these Hydrex accounts"></span> will be
+            paid to you with <span data-one="its next payout" data-many="their next payouts"></span>, less the 1%
+            fee.</strong
           >
         </p>
         <p class="buttons">
