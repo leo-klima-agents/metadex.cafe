@@ -73,7 +73,7 @@ function claimReceipts(
       "claim-receipt-fee": words(fees, "−"),
       "claim-receipt-paid": words(paid),
     });
-    show(".claim-receipt-keeper", !received.length, receipt);
+    show(".claim-receipt-other", !received.length, receipt);
     fragment.append(receipt);
   }
   return fragment;
@@ -134,7 +134,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     fragment.append(body);
     openReview({ name, pages: [{ title: name, body: fragment }], steps: [], checkHref, connection, hooks });
   };
-  if (!owing.length) return nothing("Nothing to claim: the keeper may have just claimed it for you.");
+  if (!owing.length) return nothing("Nothing to claim: someone else may have just claimed it for you.");
   const totals = paidBy(owing.flatMap(({ owed }) => owed));
   const paid = totals.map(({ token, paid }) => ({ token, amount: paid }));
   // Each account's claim, in calls that fit a transaction, or small ones for a Safe to pack together, the most valuable
@@ -153,7 +153,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   });
   const claimSlips = calls.map(({ part, whole }) => claimSlip(part, tokens, whole));
   const simulated = await simulate(connection.address, claimSlips).catch(() => undefined);
-  if (simulated?.some(({ ok }) => !ok)) return nothing("Base refused the claim. The keeper may be claiming now.");
+  if (simulated?.some(({ ok }) => !ok)) return nothing("Base refused the claim. Someone else may be claiming now.");
   if (simulated?.some(({ gas }) => gas > MAX_CLAIM_GAS)) return nothing("This claim needs more gas than Base allows.");
   // More gas together than one transaction may use: the calls go one at a time, and a Safe proposes them in as few
   // Safe transactions as hold them, by the gas each used in the simulation, or else by its estimate.
@@ -387,7 +387,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
           const button = next.querySelector<HTMLButtonElement>(".claim-swap-next")!;
           const refused = next.querySelector<HTMLElement>(".claim-swap-failed")!;
           button.textContent = `Review the swap into ${swapper.symbol}`;
-          // For what the claims brought, as their events say, not what the page expected: the keeper may have
+          // For what the claims brought, as their events say, not what the page expected: the operator may have
           // claimed some first, of a token from some of its reward contracts and not others.
           const came = brought(receipts);
           const exact: Plan = {

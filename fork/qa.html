@@ -210,12 +210,12 @@
         <p class="hint" id="replayed"></p>
       </div>
       <button id="move-on">Hydrex moves on to the new epoch</button>
-      <button id="keeper-votes">Matcha Latte's keeper votes</button>
+      <button id="operator-votes">Matcha Latte's operator votes</button>
       <button id="incentive">Someone adds incentives</button>
       <p class="hint">
-        As on Base after a flip: Hydrex moves on, until when what the epoch before earned is not final; the keeper votes
-        as it did last; and others add incentives, here 100 USDC in the pool Matcha Latte votes for most. On the fork,
-        nobody does any of it unasked. Reload the page after any change here.
+        As on Base after a flip: Hydrex moves on, until when what the epoch before earned is not final; the operator
+        votes as it did last; and others add incentives, here 100 USDC in the pool Matcha Latte votes for most. On the
+        fork, nobody does any of it unasked. Reload the page after any change here.
       </p>
       <fieldset data-group="hydrex"></fieldset>
     </section>
@@ -291,7 +291,7 @@
         for (const key of ["asks", "switches", "lists"]) if (!pending.has(key)) $(key).checked = state[key];
         $("replays").hidden = !state.replays;
         if (state.replays) {
-          $("replay").textContent = state.replays.next ? `The keeper ${state.replays.next}` : "The keeper is done";
+          $("replay").textContent = state.replays.next ? `The operator ${state.replays.next}` : "The operator is done";
           $("replay").disabled = !!state.busy || !state.replays.next;
           $("replayed").textContent =
             `${state.replays.sent} of the ${state.replays.total} transactions Base included after the fork's block, ` +
@@ -394,7 +394,7 @@
       };
       $("replay").onclick = () => run("replay");
       $("move-on").onclick = () => run("move-on");
-      $("keeper-votes").onclick = () => run("keeper-votes");
+      $("operator-votes").onclick = () => run("operator-votes");
       $("incentive").onclick = () => run("incentive");
       $("delegate").onsubmit = (event) => {
         event.preventDefault();

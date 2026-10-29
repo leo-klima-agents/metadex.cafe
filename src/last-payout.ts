@@ -1,7 +1,7 @@
 import type { Address, Hex } from "viem";
 import { blockTime, now, readLater, required, rpc, same, type Call } from "./chain.ts";
 import { lastClaimBlocks, readClaimsAt, totals, walkClaims, WALK_LIMIT, type Walk } from "./claims.ts";
-import { AUTOMATIONS, DOUBLE_ESPRESSO_FEE_BPS, KEEPER, KVCM, type Automation, type Kind } from "./config.ts";
+import { AUTOMATIONS, DOUBLE_ESPRESSO_FEE_BPS, KVCM, OPERATOR, type Automation, type Kind } from "./config.ts";
 import { clone, fill, fillAddress, fillOwn, fillTime, rewrite, show, showHex, txUrl } from "./dom.ts";
 import { rewardsFor, tokensOf, type Earnings } from "./earnings.ts";
 import { WEEK, amount, bps, listWith, money, moneyAt, short, utc, weekStart } from "./format.ts";
@@ -218,7 +218,7 @@ function fillClaims(
     ...claims.map(({ block, caller, owner: paid, tx }) => {
       const line = clone("claim-line");
       fillTime(line, "claim-time", times.get(block)!, utc);
-      const by = same(caller, KEEPER) ? "sent by Double Espresso" : `sent by ${short(caller)}`;
+      const by = same(caller, OPERATOR) ? "sent by Double Espresso" : `sent by ${short(caller)}`;
       ownWords(
         line.querySelector(".claim-by")!,
         same(caller, owner) ? "sent by you" : by,

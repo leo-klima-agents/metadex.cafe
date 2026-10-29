@@ -1,18 +1,14 @@
 import { encodeFunctionData, parseAbi, zeroAddress, type Address, type Hex } from "viem";
-import { blockTime, call, codeHash, implementation, read, required, rpc, same, type Call } from "./chain.ts";
+import { blockTime, call, implementation, read, required, rpc, same, type Call } from "./chain.ts";
 import {
   ACCOUNT_NAMES,
-  APPROVAL_LOGIC,
-  APPROVAL_LOGIC_CODE_HASH,
   AUTOMATIONS,
   DOUBLE_ESPRESSO,
   MATCHA_LATTE,
   CHAIN_ID,
-  KVCM,
   VOTER,
   VOTING_ESCROW,
   VOTING_ESCROW_IMPLEMENTATION,
-  VOTING_ESCROW_IMPLEMENTATION_CODE_HASH,
   type Automation,
   type Kind,
 } from "./config.ts";
@@ -34,8 +30,6 @@ const votingEscrowAbi = parseAbi([
   "function delegates(uint256 tokenId, uint48 timestamp) view returns (address)",
   "function getClaimRedirectApproved(uint256 tokenId) view returns (address)",
   "function getPastVotes(address account, uint256 timepoint) view returns (uint256)",
-  "function getConduitApprovalConfig(address conduit) view returns (uint8[] actions, bool active, string description)",
-  "function approvalLogic() view returns (address)",
   "function setConduitApproval(address conduit, uint256 tokenId, bool approve)",
 ]);
 
@@ -53,26 +47,14 @@ const voterAbi = parseAbi([
 ]);
 
 const matchaLatteAbi = parseAbi([
-  "function veToken() view returns (address)",
-  "function voter() view returns (address)",
-  "function kvcm() view returns (address)",
   "function retireBps() view returns (uint256)",
   "function treasuryFeeBps() view returns (uint256)",
   "function MAX_TREASURY_FEE_BPS() view returns (uint256)",
   "function treasury() view returns (address)",
   "function totalTonnesRetired() view returns (uint256)",
-  "function retiringEntityName() view returns (string)",
-  "function beneficiaryString() view returns (string)",
-  "function impactBeneficiaryAddress() view returns (address)",
-  "function retirementMessage() view returns (string)",
-  "function getEffectiveRecipientForOwner(address owner) view returns (address)",
 ]);
 
-const doubleEspressoAbi = parseAbi([
-  "function veToken() view returns (address)",
-  "function voter() view returns (address)",
-  "function lastClaimBlock(uint256 tokenId) view returns (uint256)",
-]);
+const doubleEspressoAbi = parseAbi(["function lastClaimBlock(uint256 tokenId) view returns (uint256)"]);
 
 // Base's predeploy that prices posting a transaction's data to Ethereum.
 const GAS_PRICE_ORACLE: Address = "0x420000000000000000000000000000000000000F";
@@ -100,16 +82,12 @@ export type MatchaLatte = {
   epochStart: number;
   retireBps: bigint;
   tonnes: bigint;
-  entity: string;
-  beneficiary: string;
-  beneficiaryAddress: Address;
-  message: string;
   // When it last voted, or 0. It, its fee, the most the fee can become, and where the fee goes may be unknown, as
   // their reads may fail apart from the others: the page then says so, and reads them again later.
   voted?: number;
   feeBps?: bigint;
   maxFeeBps?: bigint;
-  treasury?: Address;
+  feeRecipient?: Address;
 };
 
 // The share of a payout's kVCM that reaches the owner: Matcha Latte retires its share first, then takes its fee from
@@ -133,12 +111,9 @@ export type Account = {
   claimer: Address;
 };
 
-// `payout` is where Matcha Latte pays the owner's accounts, unknown if its read failed: only an account's page shows
-// it.
 export type Holdings = {
   owner: Address;
   accounts: Account[];
-  payout: Address | undefined;
   time: number;
   epochStart: number;
 };
@@ -172,39 +147,23 @@ export async function readMatchaLatte(): Promise<MatchaLatte> {
     blockTime,
     matchaLatte("retireBps"),
     matchaLatte("totalTonnesRetired"),
-    matchaLatte("retiringEntityName"),
-    matchaLatte("beneficiaryString"),
-    matchaLatte("impactBeneficiaryAddress"),
-    matchaLatte("retirementMessage"),
     voter("lastVoted", MATCHA_LATTE.address),
     matchaLatte("treasuryFeeBps"),
     matchaLatte("MAX_TREASURY_FEE_BPS"),
     matchaLatte("treasury"),
   ]);
-  const [time, retireBps, tonnes, entity, beneficiary, beneficiaryAddress, message] = required(replies.slice(0, 7)) as [
-    bigint,
-    bigint,
-    bigint,
-    string,
-    string,
-    Address,
-    string,
-  ];
-  const voted = replies[7] as bigint | undefined;
-  const [feeBps, maxFeeBps, treasury] = replies.slice(8) as [bigint?, bigint?, Address?];
+  const [time, retireBps, tonnes] = required(replies.slice(0, 3)) as [bigint, bigint, bigint];
+  const voted = replies[3] as bigint | undefined;
+  const [feeBps, maxFeeBps, feeRecipient] = replies.slice(4) as [bigint?, bigint?, Address?];
   return {
     time: Number(time),
     epochStart: epochAt(time),
     retireBps,
     tonnes,
-    entity: clean(entity),
-    beneficiary: clean(beneficiary),
-    beneficiaryAddress,
-    message: clean(message),
     ...(voted !== undefined && { voted: Number(voted) }),
     ...(feeBps !== undefined && { feeBps }),
     ...(maxFeeBps !== undefined && { maxFeeBps }),
-    ...(treasury && { treasury }),
+    ...(feeRecipient && { feeRecipient }),
   };
 }
 
@@ -217,14 +176,13 @@ const othersVoted = (replies: unknown[]): Map<string, number> =>
 const withContext = (calls: Call[]): Promise<unknown[]> =>
   read([...calls, blockTime, ...others.map(({ address }) => voter("lastVoted", address))]);
 
-// The accounts, and the replies to the `more` calls, which share their read.
+// The accounts, as read for their owner.
 async function accountsOf(
   owner: Address,
   ids: bigint[],
   epochStart: number,
   lastVoted: Map<string, number>,
-  more: Call[] = [],
-): Promise<{ accounts: Account[]; more: unknown[] }> {
+): Promise<Account[]> {
   const details = await read([
     voter("lastVoted", owner),
     ...ids.flatMap((id) => [
@@ -235,7 +193,6 @@ async function accountsOf(
       escrow("getClaimRedirectApproved", id),
     ]),
     call(ACCOUNT_NAMES, accountNamesAbi, "getBulkNames", ids),
-    ...more,
   ]);
   // If the Voter cannot be read, the owner is just not known to have stopped voting.
   const ownerVoted = Number((details.shift() as bigint | undefined) ?? BigInt(epochStart));
@@ -258,21 +215,18 @@ async function accountsOf(
       claimer,
     };
   });
-  return { accounts, more: details.slice(5 * ids.length + 1) };
+  return accounts;
 }
 
 export async function readAccounts(owner: Address): Promise<Holdings> {
-  const [count, payout, time, ...voted] = await withContext([
-    escrow("balanceOf", owner),
-    matchaLatte("getEffectiveRecipientForOwner", owner),
-  ]);
+  const [count, time, ...voted] = await withContext([escrow("balanceOf", owner)]);
   required([count, time]);
   const epochStart = epochAt(time);
   const indexes = Array.from({ length: Number(count) }, (_, i) => BigInt(i));
   const ids = required(await read(indexes.map((i) => escrow("tokenOfOwnerByIndex", owner, i)))) as bigint[];
-  const { accounts } = await accountsOf(owner, ids, epochStart, othersVoted(voted));
+  const accounts = await accountsOf(owner, ids, epochStart, othersVoted(voted));
   accounts.sort((a, b) => (a.votes === b.votes ? Number(a.id - b.id) : a.votes > b.votes ? -1 : 1));
-  return { owner, accounts, payout: payout as Address | undefined, time: Number(time), epochStart };
+  return { owner, accounts, time: Number(time), epochStart };
 }
 
 // One account, whoever owns it, as its owner's holdings of that account alone. Undefined if Hydrex has no account with
@@ -284,13 +238,8 @@ export async function readAccount(id: bigint): Promise<Holdings | undefined> {
   if (owner === undefined) return undefined;
   required([time]);
   const epochStart = epochAt(time);
-  const {
-    accounts,
-    more: [payout],
-  } = await accountsOf(owner as Address, [id], epochStart, othersVoted(voted), [
-    matchaLatte("getEffectiveRecipientForOwner", owner as Address),
-  ]);
-  return { owner: owner as Address, accounts, payout: payout as Address | undefined, time: Number(time), epochStart };
+  const accounts = await accountsOf(owner as Address, [id], epochStart, othersVoted(voted));
+  return { owner: owner as Address, accounts, time: Number(time), epochStart };
 }
 
 const ended = (account: Account, now: number): boolean => account.lockType === LockType.timed && account.end <= now;
@@ -379,7 +328,9 @@ function withoutVotes(account: Account): Group {
 type Target = { address: Address; name: string };
 
 function approval({ id }: Account, approve: boolean, says: string, target: Target, other = false): Step {
-  const conduitName = other ? `The ${target.name} automation` : target.name;
+  // Beside its address, the page's own automations go by their contract's name.
+  const ours = AUTOMATIONS.find(({ address }) => same(address, target.address));
+  const conduitName = other ? `The ${target.name} automation` : (ours?.contract ?? target.name);
   return {
     to: VOTING_ESCROW,
     data: encodeFunctionData({
@@ -451,63 +402,15 @@ export type Checks = {
   failed: Map<Kind, string[]>;
 };
 
-const points = (escrowAddress: unknown, voterOf: unknown) =>
-  same(String(escrowAddress), VOTING_ESCROW) && same(String(voterOf), VOTER);
-
-// Each automation's own checks: what its code must hash to and what joining it must approve, which every automation
-// has, then the reads of its own and what they must answer. Each check is named by the id of its message on the page.
-type Own = {
-  calls: Call[];
-  checks(answers: unknown[], code: boolean, approvals: boolean): Record<string, boolean>;
-};
-const own: Record<Kind, Own> = {
-  "matcha-latte": {
-    calls: [matchaLatte("veToken"), matchaLatte("voter"), matchaLatte("kvcm")],
-    checks: ([veToken, voterOf, payoutToken], code, approvals) => ({
-      code: !code,
-      contracts: !points(veToken, voterOf),
-      token: !same(String(payoutToken), KVCM),
-      approvals: !approvals,
-    }),
-  },
-  "double-espresso": {
-    calls: [doubleEspresso("veToken"), doubleEspresso("voter")],
-    checks: ([veToken, voterOf], code, approvals) => ({
-      "double-espresso-code": !code,
-      "double-espresso-contracts": !points(veToken, voterOf),
-      "double-espresso-approvals": !approvals,
-    }),
-  },
-};
-
+// Base, through the page's RPCs, and Hydrex's VotingEscrow as the page knows it: an upgrade points it at other code, and
+// with it what joining allows. Each check is named by the id of its message on the page, and fails for every automation.
 export async function failedChecks(): Promise<Checks> {
-  const reads = AUTOMATIONS.map(({ kind, address }) => [
-    escrow("getConduitApprovalConfig", address),
-    ...own[kind].calls,
-  ]);
-  const [chainId, hashes, impl, [logic, ...answers]] = await Promise.all([
-    rpc<string>("eth_chainId", []),
-    Promise.all(AUTOMATIONS.map(({ address }) => codeHash(address))),
-    implementation(VOTING_ESCROW),
-    read([escrow("approvalLogic"), ...reads.flat()]),
-  ]);
-  const [implHash, logicHash] = await Promise.all([codeHash(impl), logic ? codeHash(logic as Address) : undefined]);
-  const failing = (checks: Record<string, boolean>) =>
-    Object.entries(checks).flatMap(([id, fails]) => (fails ? [id] : []));
-  const all = failing({
+  const [chainId, impl] = await Promise.all([rpc<string>("eth_chainId", []), implementation(VOTING_ESCROW)]);
+  const failed = Object.entries({
     chain: Number(chainId) !== CHAIN_ID,
-    upgrade: !same(impl, VOTING_ESCROW_IMPLEMENTATION) || implHash !== VOTING_ESCROW_IMPLEMENTATION_CODE_HASH,
-    logic: !same(String(logic), APPROVAL_LOGIC) || logicHash !== APPROVAL_LOGIC_CODE_HASH,
-  });
-  let at = 0;
-  const found = AUTOMATIONS.map((automation, i) => {
-    const [config, ...mine] = answers.slice(at, (at += reads[i]!.length));
-    const [actions, active] = (config ?? [[], false]) as [number[], boolean];
-    const approvals = active && actions.join() === automation.actions.join();
-    const checks = own[automation.kind].checks(mine, hashes[i] === automation.codeHash, approvals);
-    return { automation, failed: [...all, ...failing(checks)] };
-  });
-  return { failed: new Map(found.map(({ automation, failed }) => [automation.kind, failed])) };
+    upgrade: !same(impl, VOTING_ESCROW_IMPLEMENTATION),
+  }).flatMap(([id, fails]) => (fails ? [id] : []));
+  return { failed: new Map(AUTOMATIONS.map(({ kind }) => [kind, failed])) };
 }
 
 // What gas costs for some calls from `from`, in wei, with today's prices to show it at: each costs about what the first

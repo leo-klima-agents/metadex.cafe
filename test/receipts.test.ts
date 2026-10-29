@@ -356,7 +356,7 @@ const of = (records: Partial<Records>, voted = both) =>
 test("an epoch is paid once claims since it ended took more than half of what its rewards were worth", () => {
   const end = OCT_15;
   assert.equal(paidFor(last.pairs, [end, 0, 0], end), true, "its largest reward");
-  assert.equal(paidFor(last.pairs, [end, end, 0], end), true, "all but a token the keeper could not swap");
+  assert.equal(paidFor(last.pairs, [end, end, 0], end), true, "all but a token the operator could not swap");
   assert.equal(paidFor(last.pairs, [OCT_8, end, end], end), false, "a claim of a few small rewards");
   assert.equal(paidFor(before.pairs, [end, 0], OCT_8), true, "claimed after the next epoch ended still counts");
   assert.equal(paidFor(before.pairs, [OCT_1, OCT_1], OCT_8), false, "claimed before it ended");

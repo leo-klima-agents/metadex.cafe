@@ -144,7 +144,7 @@ const sum = (values: number[]): number => values.reduce((total, value) => total 
 
 // Whether claims since an epoch ended, at `end`, took more than half of what its rewards were worth: that is a payout
 // for the epoch. A claim of a few of the rewards is not, such as anyone may make through Double Espresso; nor do the
-// tokens a keeper leaves out, such as those it cannot swap, keep a payout from counting. `stamps` are the account's
+// tokens an operator leaves out, such as those it cannot swap, keep a payout from counting. `stamps` are the account's
 // records.
 export function paidFor(pairs: Weighed[], stamps: number[], end: number): boolean {
   if (!pairs.length) return true;

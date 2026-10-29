@@ -5,8 +5,8 @@ run it: at `https://metadex.cafe`, its RPCs answered by the fork, its Content Se
 window, the QA wallet, signs as any address on Base, and holds the controls for the fork. Nothing reaches Base: every
 transaction stays on the fork, and Safe{Wallet} is a stand-in that only takes proposals.
 
-It needs what `npm run test:fork` needs: Node 26, [anvil](https://getfoundry.sh/), and Chromium (`CHROMIUM` names one,
-as for the tests). The fork reads Base's state through `BASE_RPC_URL`, or the page's first RPC, and keeps it in
+It needs what `npm run test:fork` needs: Node 26 LTS, [anvil](https://getfoundry.sh/), and Chromium (`CHROMIUM` names
+one, as for the tests). The fork reads Base's state through `BASE_RPC_URL`, or the page's first RPC, and keeps it in
 `FORK_CACHE`, which the browser tests share. The first time, a scenario can take many minutes to start, and the page's
 first reads can fail while anvil still fetches state: **run `npm run test:fork` once first**, and each scenario then
 starts in seconds. The `payout` scenario forks a block of its own, which the browser tests do not read: its first start
@@ -58,12 +58,12 @@ not have those yet: reload the page, and it shows the change.
   Hydrex** the most valuable of what waits for it in the pools of each of the last two epochs, ten of each at most.
   **Matcha Latte pays there** sets where Matcha Latte pays the accounts of the address signed as.
 - **Hydrex, as on Base each week,** which nobody does on the fork unasked: **Hydrex moves on to the new epoch** after a
-  flip, through its minter, until when what the epoch before earned is not final; **Matcha Latte's keeper votes** as
-  Matcha Latte did last, through its executor module; **Someone adds incentives:** 100 USDC, from Matcha Latte's
-  treasury, in the pool Matcha Latte votes for most. **Hydrex's other automations vote again** makes those that stopped
+  flip, through its minter, until when what the epoch before earned is not final; **Matcha Latte's operator votes** as
+  Matcha Latte did last, through its executor module; **Someone adds incentives:** 100 USDC, from Matcha Latte's fee
+  recipient, in the pool Matcha Latte votes for most. **Hydrex's other automations vote again** makes those that stopped
   in September look as if they voted just now.
-- **The keeper,** in the `payout` scenario: sends again, one by one, the payouts that Base included after the fork's
-  block, from the keeper's own address, with their own calldata. One that fails on the fork, as the QA wallet changed
+- **The operator,** in the `payout` scenario: sends again, one by one, the payouts that Base included after the fork's
+  block, from the operator's own address, with their own calldata. One that fails on the fork, as the QA wallet changed
   it, says so, and the next is then sent.
 - **Base:** its time on the fork, which runs on a block every 2 seconds. **Next epoch** moves it to a minute after the
   next Thursday, 00:00 UTC; **12 hours later**, half a day on. The page's clock follows. Nobody votes or pays on the
@@ -71,24 +71,24 @@ not have those yet: reload the page, and it shows the change.
 - **Failures:** Base's RPCs fail, or serve another chain; Hydrex's Voter cannot be read; tokens' symbols cannot be read,
   each such read failing on its own, as a token's would; Matcha Latte's figures cannot be read, while Double Espresso's
   can, or the other way round; or the swappers' quotes come in a tenth under what their pools give.
-- **Checks that fail:** each of the page's checks, by the id the README's table gives it, fails on its own. A code check
-  fails as the contract's code changes; the others, as the fork answers that one read otherwise. The page checks
-  contracts as it opens, then every hour: reload it after a change.
+- **Checks that fail:** `upgrade`, by the id the README's table gives it: the page reads another implementation for the
+  VotingEscrow, while the fork's stays as it is. The page checks contracts as it opens, then every hour: reload it after
+  a change.
 - **What the wallet was asked:** each connection, switch and transaction, and its answer, and each change to the fork.
 
 Links out of the page, such as to Basescan, open the real site, which knows nothing of the fork.
 
 ## The scenarios
 
-Each starts from the state of some of the browser tests, or, for `payout`, of Base just before the keeper's payouts.
+Each starts from the state of some of the browser tests, or, for `payout`, of Base just before the operator's payouts.
 
 | Scenario          | Base on              | Signs as, first            | What it is for                                                                    |
 | ----------------- | -------------------- | -------------------------- | --------------------------------------------------------------------------------- |
 | `hydrex`          | Fri 16 Oct, 19:03    | `0x0208…4C95`, #141        | Both automations: joining and leaving, those that stopped, and what can fail.     |
 | `double-espresso` | Fri 16 Oct, 19:03    | `0x0208…4C95`, #141        | As `hydrex`, with Double Espresso's receipts for #82774.                          |
-| `swap`            | Wed 21 Oct, 15:42    | `0x0000…FFEE`, WETH ZORA … | The swap, from a wallet that holds three tokens, or Matcha Latte's treasury.      |
+| `swap`            | Wed 21 Oct, 15:42    | `0x0000…FFEE`, WETH ZORA … | The swap, from a wallet that holds three tokens, or Matcha Latte's fee recipient. |
 | `claim`           | Wed 21 Oct, 15:42    | `0x6092…6c93`, #82774      | An overdue payout in Double Espresso: claim it as it is, swapped, or from a Safe. |
-| `payout`          | Thu 22 Oct, 00:00:26 | `0x6092…6c93`, #82774      | Matcha Latte's payouts after a flip, sent by its keeper one by one, as on Base.   |
+| `payout`          | Thu 22 Oct, 00:00:26 | `0x6092…6c93`, #82774      | Matcha Latte's payouts after a flip, sent by its operator one by one, as on Base. |
 
 ## The flows
 
@@ -110,50 +110,49 @@ the wallet's own failures. Start the scenario again to try a flow from its start
 
 ### Hydrex: `hydrex`
 
-| Flow                                                          | Sign as       | What to do                                                                                                                                                                   |
-| ------------------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Join with an account of its own                               | `0x0208…4C95` | Needs you: untick #42877, Join Matcha Latte, Continue, Sign transaction. #141 then says Joining Matcha Latte, votes from Thu 22 Oct.                                         |
-| An account whose owner did not vote                           | `0x0208…4C95` | #141: Not voted since 4 Oct 2025, in Needs you, with Vote on Hydrex. The App's Needs you counts it; `#hydrex/141` gives the gas of a change.                                 |
-| Join from automations that stopped, one transaction at a time | `0x6970…a655` | Needs you starts with #2435 and #2439 ticked, 2 of 2: Join Matcha Latte. Two transactions. All unticks and ticks them both.                                                  |
-| The same, in one prompt                                       | `0x6970…a655` | Calls: several in one prompt, all or nothing. Reload, then as above: One prompt, 2 calls.                                                                                    |
-| Closing between transactions                                  | `0x6970…a655` | As above, confirm the first, then Close: #2439 joins, #2435 stays.                                                                                                           |
-| Leave                                                         | `0x388b…7b40` | Leave beside #9540.                                                                                                                                                          |
-| Leave an automation that stopped, to vote yourself            | `0x6970…a655` | Untick #2435, Vote yourself.                                                                                                                                                 |
-| A lock that ended                                             | `0x2518…e84d` | #123351 under the closed group: Lock ended, nothing to tick.                                                                                                                 |
-| Votes delegated to an address                                 | `0x0208…4C95` | Account #141, delegate its votes to `0x000000000000000000000000000000000000dEaD`, reload: Delegated to 0x0000…dEaD. Delegate them to `owner` to undo.                        |
-| Partly in an automation                                       | `0x0208…4C95` | Account #141, delegate its votes to `Matcha Latte`, reload: Partly in Matcha Latte, which the App's Needs you lists.                                                         |
-| In another automation that still votes                        | `0x6970…a655` | Tick Hydrex's other automations vote again, reload: #2439 is In USDC, and not stopped.                                                                                       |
-| What votes earned last epoch                                  | `0x388b…7b40` | #9540: about $6 last epoch. Vote yourself: Hydrex's average, and Your votes: Didn't vote; each automation's page, the average beside its own. `#hydrex/matcha-latte/record`. |
-| A late payout, and its last receipt                           | `0x6092…6c93` | #82774: Payout late. Its page, `#hydrex/82774`, shows the receipt of the payout of Wed 23 Sep. 93 accounts: the first time, reading takes a while.                           |
-| Payouts not final yet, then final                             | `0x388b…7b40` | Next epoch, then `#hydrex/9540`: Not final yet. Hydrex moves on, reload: Late, with its receipt.                                                                             |
-| Nothing to pay                                                | `0x388b…7b40` | As above, then Next epoch and Hydrex moves on again: Matcha Latte earned nothing in either epoch on the fork, and `#hydrex/9540` says Nothing to pay.                        |
-| Not paid yet                                                  | `0x0208…4C95` | Join Matcha Latte with #141; Next epoch; Hydrex moves on; Matcha Latte's keeper votes; Someone adds incentives; Next epoch; Hydrex moves on: `#hydrex/141`, Not paid yet.    |
-| Payouts that cannot be read                                   | `0x6092…6c93` | Tick Matcha Latte's figures cannot be read, open `#hydrex/82774`: Reading the payouts failed. Untick, then Try again.                                                        |
-| Tokens whose symbol cannot be read                            | `0x6092…6c93` | Tick Tokens' symbols cannot be read, reload `#hydrex/82774`: its receipt earned 8.56 ? and 89.04 ?, and paid its owner 727.11 ?.                                             |
-| An account's page, anyone's                                   | any           | `#hydrex/9540`, `#hydrex/14485`; `#hydrex/999999999` has no such account.                                                                                                    |
-| Inside Safe{Wallet}                                           | `0x2573…0b16` | Open the page in Safe{Wallet}. Tick #53350 and #82206, Leave: one Safe transaction, 2 calls, then Proposed.                                                                  |
-| A Safe that is not on Base                                    | `0x2573…0b16` | Network: Ethereum, then open the page in Safe{Wallet}: This Safe isn't on Base.                                                                                              |
-| The wrong network                                             | `0x0208…4C95` | Network: Ethereum. The page says Wrong network; its Switch to Base switches the wallet. With Can switch networks off, it says to switch there.                               |
-| A refusal in the wallet                                       | `0x0208…4C95` | Tick Asks you, start a join, and Reject in the QA wallet: You said no in your wallet.                                                                                        |
-| A transaction that fails                                      | `0x0208…4C95` | Fail the next transaction, then join: A transaction failed on Base.                                                                                                          |
-| Back while the wallet asks                                    | `0x0208…4C95` | Tick Asks you, Sign transaction on the page, then Back. Confirm in the QA wallet: the account still updates.                                                                 |
-| Two clicks while the wallet asks to connect                   | any           | Tick Asks you, reload, click Test Wallet in the App twice: the second did not connect. Confirm: the first still does.                                                        |
-| Reading Base failed                                           | any           | Tick Base's RPCs fail, reload: Reading Base failed. Untick, then Try again.                                                                                                  |
-| A check that fails                                            | any           | Tick one under Checks that fail, reload: joining Matcha Latte is off, and its Check it, `#hydrex/matcha-latte/check`, marks that check alone.                                |
-| The Voter cannot be read                                      | `0x6970…a655` | Tick Hydrex's Voter cannot be read, reload: the accounts still show.                                                                                                         |
-| A new epoch                                                   | `0x0208…4C95` | Join with #141, then Next epoch: the page moves on to the next one, and #141 is in Matcha Latte. Nobody votes on the fork: Matcha Latte reads as stopped.                    |
+| Flow                                                          | Sign as       | What to do                                                                                                                                                                               |
+| ------------------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Join with an account of its own                               | `0x0208…4C95` | Needs you: untick #42877, Join Matcha Latte, Continue, Sign transaction. #141 then says Joining Matcha Latte, votes from Thu 22 Oct.                                                     |
+| An account whose owner did not vote                           | `0x0208…4C95` | #141: Not voted since 4 Oct 2025, in Needs you, with Vote on Hydrex. The App's Needs you counts it; `#hydrex/141` gives the gas of a change.                                             |
+| Join from automations that stopped, one transaction at a time | `0x6970…a655` | Needs you starts with #2435 and #2439 ticked, 2 of 2: Join Matcha Latte. Two transactions. All unticks and ticks them both.                                                              |
+| The same, in one prompt                                       | `0x6970…a655` | Calls: several in one prompt, all or nothing. Reload, then as above: One prompt, 2 calls.                                                                                                |
+| Closing between transactions                                  | `0x6970…a655` | As above, confirm the first, then Close: #2439 joins, #2435 stays.                                                                                                                       |
+| Leave                                                         | `0x388b…7b40` | Leave beside #9540.                                                                                                                                                                      |
+| Leave an automation that stopped, to vote yourself            | `0x6970…a655` | Untick #2435, Vote yourself.                                                                                                                                                             |
+| A lock that ended                                             | `0x2518…e84d` | #123351 under the closed group: Lock ended, nothing to tick.                                                                                                                             |
+| Votes delegated to an address                                 | `0x0208…4C95` | Account #141, delegate its votes to `0x000000000000000000000000000000000000dEaD`, reload: Delegated to 0x0000…dEaD. Delegate them to `owner` to undo.                                    |
+| Partly in an automation                                       | `0x0208…4C95` | Account #141, delegate its votes to `Matcha Latte`, reload: Partly in Matcha Latte, which the App's Needs you lists.                                                                     |
+| In another automation that still votes                        | `0x6970…a655` | Tick Hydrex's other automations vote again, reload: #2439 is In USDC, and not stopped.                                                                                                   |
+| What votes earned last epoch                                  | `0x388b…7b40` | #9540: about $6 last epoch. Vote yourself: Hydrex's average, and Your votes: Didn't vote; each automation's page, the average beside its own. `#hydrex/matcha-latte/record`.             |
+| A late payout, and its last receipt                           | `0x6092…6c93` | #82774: Payout late. Its page, `#hydrex/82774`, shows the receipt of the payout of Wed 23 Sep. 93 accounts: the first time, reading takes a while.                                       |
+| Payouts not final yet, then final                             | `0x388b…7b40` | Next epoch, then `#hydrex/9540`: Not final yet. Hydrex moves on, reload: Late, with its receipt.                                                                                         |
+| Nothing to pay                                                | `0x388b…7b40` | As above, then Next epoch and Hydrex moves on again: Matcha Latte earned nothing in either epoch on the fork, and `#hydrex/9540` says Nothing to pay.                                    |
+| Not paid yet                                                  | `0x0208…4C95` | Join Matcha Latte with #141; Next epoch; Hydrex moves on; Matcha Latte's operator votes; Someone adds incentives; Next epoch; Hydrex moves on: `#hydrex/141`, Not paid yet.              |
+| Payouts that cannot be read                                   | `0x6092…6c93` | Tick Matcha Latte's figures cannot be read, open `#hydrex/82774`: Reading the payouts failed. Untick, then Try again.                                                                    |
+| Tokens whose symbol cannot be read                            | `0x6092…6c93` | Tick Tokens' symbols cannot be read, reload `#hydrex/82774`: its receipt earned 8.56 ? and 89.04 ?, and paid its owner 727.11 ?.                                                         |
+| An account's page, anyone's                                   | any           | `#hydrex/9540`, `#hydrex/14485`; `#hydrex/999999999` has no such account.                                                                                                                |
+| Inside Safe{Wallet}                                           | `0x2573…0b16` | Open the page in Safe{Wallet}. Tick #53350 and #82206, Leave: one Safe transaction, 2 calls, then Proposed.                                                                              |
+| A Safe that is not on Base                                    | `0x2573…0b16` | Network: Ethereum, then open the page in Safe{Wallet}: This Safe isn't on Base.                                                                                                          |
+| The wrong network                                             | `0x0208…4C95` | Network: Ethereum. The page says Wrong network; its Switch to Base switches the wallet. With Can switch networks off, it says to switch there.                                           |
+| A refusal in the wallet                                       | `0x0208…4C95` | Tick Asks you, start a join, and Reject in the QA wallet: You said no in your wallet.                                                                                                    |
+| A transaction that fails                                      | `0x0208…4C95` | Fail the next transaction, then join: A transaction failed on Base.                                                                                                                      |
+| Back while the wallet asks                                    | `0x0208…4C95` | Tick Asks you, Sign transaction on the page, then Back. Confirm in the QA wallet: the account still updates.                                                                             |
+| Two clicks while the wallet asks to connect                   | any           | Tick Asks you, reload, click Test Wallet in the App twice: the second did not connect. Confirm: the first still does.                                                                    |
+| Reading Base failed                                           | any           | Tick Base's RPCs fail, reload: Reading Base failed. Untick, then Try again.                                                                                                              |
+| A check that fails                                            | any           | Tick the one under Checks that fail, reload: Hydrex's page says joining is off, as Hydrex upgraded its VotingEscrow; each automation's page says joining it is off, and Why leads there. |
+| The Voter cannot be read                                      | `0x6970…a655` | Tick Hydrex's Voter cannot be read, reload: the accounts still show.                                                                                                                     |
+| A new epoch                                                   | `0x0208…4C95` | Join with #141, then Next epoch: the page moves on to the next one, and #141 is in Matcha Latte. Nobody votes on the fork: Matcha Latte reads as stopped.                                |
 
 ### Double Espresso: `hydrex`, and `double-espresso` for its receipts
 
-| Flow                                    | Sign as       | What to do                                                                                                                                                                                         |
-| --------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The menu, and Double Espresso's page    | `0x0208…4C95` | `#hydrex`: Matcha Latte, Double Espresso and Vote yourself. Double Espresso has no record yet. Its page: `#hydrex/double-espresso`.                                                                |
-| Join Double Espresso                    | `0x0208…4C95` | Needs you: untick #42877, Join Double Espresso.                                                                                                                                                    |
-| Move between the two automations        | `0x2573…0b16` | Tick #53350, Move to Double Espresso; then Move to Matcha Latte.                                                                                                                                   |
-| Leave Double Espresso                   | `0x0208…4C95` | Once #141 is in, Leave: claims stop.                                                                                                                                                               |
-| Its receipts: its keeper and a stranger | `0x6092…6c93` | In `double-espresso`, `#hydrex/82774`: Receipt · #82774 · Double Espresso, claims sent by `0x0000…dEaD` and by Double Espresso, each paid to the owner, less 1%.                                   |
-| One automation's payouts that fail      | `0x0208…4C95` | #141 joins Double Espresso, #42877 Matcha Latte; twice, Next epoch and Hydrex moves on; tick Double Espresso's figures cannot be read: `#hydrex/141` cannot read its payouts, `#hydrex/42877` can. |
-| A check of Double Espresso's that fails | any           | Tick double-espresso-code, double-espresso-contracts or double-espresso-approvals, reload: `#hydrex/double-espresso/check` marks it alone.                                                         |
+| Flow                                      | Sign as       | What to do                                                                                                                                                                                         |
+| ----------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The menu, and Double Espresso's page      | `0x0208…4C95` | `#hydrex`: Matcha Latte, Double Espresso and Vote yourself. Double Espresso has no record yet. Its page: `#hydrex/double-espresso`.                                                                |
+| Join Double Espresso                      | `0x0208…4C95` | Needs you: untick #42877, Join Double Espresso.                                                                                                                                                    |
+| Move between the two automations          | `0x2573…0b16` | Tick #53350, Move to Double Espresso; then Move to Matcha Latte.                                                                                                                                   |
+| Leave Double Espresso                     | `0x0208…4C95` | Once #141 is in, Leave: claims stop.                                                                                                                                                               |
+| Its receipts: its operator and a stranger | `0x6092…6c93` | In `double-espresso`, `#hydrex/82774`: Receipt · #82774 · Double Espresso, claims sent by `0x0000…dEaD` and by Double Espresso, each paid to the owner, less 1%.                                   |
+| One automation's payouts that fail        | `0x0208…4C95` | #141 joins Double Espresso, #42877 Matcha Latte; twice, Next epoch and Hydrex moves on; tick Double Espresso's figures cannot be read: `#hydrex/141` cannot read its payouts, `#hydrex/42877` can. |
 
 ### The swap: `swap`
 
@@ -166,7 +165,7 @@ the wallet's own failures. Start the scenario again to try a flow from its start
 | A token with a listed token's symbol          | `0x0000…FFEE` | Give it a token of symbol `USDC`; then tick Lists those tokens and reload: USDC, no route, Not the usual USDC.                                                       |
 | Another output                                | `0x0000…FFEE` | `#swap/weth`, or pick it on the page.                                                                                                                                |
 | The approvals given to the swappers           | `0x0000…FFEE` | After a swap, the swap's Approvals, and the App's.                                                                                                                   |
-| Many tokens                                   | `0xd9e9…50aF` | Matcha Latte's treasury, a Safe: as a wallet, or in Safe{Wallet}.                                                                                                    |
+| Many tokens                                   | `0xd9e9…50aF` | Matcha Latte's fee recipient, a Safe: as a wallet, or in Safe{Wallet}.                                                                                               |
 | Swaps are off                                 | any           | Tick Base's RPCs serve another chain, reload: Swaps are off, without naming the check.                                                                               |
 
 ### Claiming: `claim`
@@ -182,17 +181,17 @@ the wallet's own failures. Start the scenario again to try a flow from its start
 
 ### Payouts: `payout`
 
-Base on Thu 22 Oct, 26 seconds after the flip: Hydrex has moved on, and the keeper has not paid yet. On Base, it then
-paid #82774 in three transactions, #35366 in three, and #9540 in one: the keeper's button sends them again, in turn.
+Base on Thu 22 Oct, 26 seconds after the flip: Hydrex has moved on, and the operator has not paid yet. On Base, it then
+paid #82774 in three transactions, #35366 in three, and #9540 in one: the operator's button sends them again, in turn.
 
-| Flow                                  | Sign as       | What to do                                                                                                                                                                                                   |
-| ------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Payouts due, then paid                | `0x6092…6c93` | `#hydrex/82774`: Late, ≈ $52 waiting. The keeper pays #82774, 1 of 3, reload: Paid up to Thu 22 Oct, and the receipt of that payout, from Base's own transaction.                                            |
-| A payout under way                    | `0x6092…6c93` | Account #35366, Give it to the address signed as; on the page, Join Matcha Latte with #35366; then the keeper pays #82774, 1 of 3, reload: Hydrex's page says Payout under way, and so does `#hydrex/35366`. |
-| Paid to another address               | `0x6092…6c93` | Matcha Latte pays there: `0x000000000000000000000000000000000000dEaD`; then the keeper pays #82774, 1 of 3: its receipt reads To 0x…dEaD.                                                                    |
-| Paid to its owner then                | `0x6092…6c93` | Account #35366, Give it to the address signed as: `#hydrex/35366`'s receipt was paid to its owner then, at its address.                                                                                      |
-| Last claimed outside Matcha Latte     | `0x388b…7b40` | Account #9540, Its owner claims on Hydrex, reload `#hydrex/9540`: Last claimed outside Matcha Latte: no receipt.                                                                                             |
-| An account its automation can't claim | `0x6092…6c93` | Account #35366, Give it to the address signed as: Matcha Latte no longer claims it: claim on Hydrex.                                                                                                         |
+| Flow                                  | Sign as       | What to do                                                                                                                                                                                                     |
+| ------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Payouts due, then paid                | `0x6092…6c93` | `#hydrex/82774`: Late, ≈ $52 waiting. The operator pays #82774, 1 of 3, reload: Paid up to Thu 22 Oct, and the receipt of that payout, from Base's own transaction.                                            |
+| A payout under way                    | `0x6092…6c93` | Account #35366, Give it to the address signed as; on the page, Join Matcha Latte with #35366; then the operator pays #82774, 1 of 3, reload: Hydrex's page says Payout under way, and so does `#hydrex/35366`. |
+| Paid to another address               | `0x6092…6c93` | Matcha Latte pays there: `0x000000000000000000000000000000000000dEaD`; then the operator pays #82774, 1 of 3: its receipt reads To 0x…dEaD.                                                                    |
+| Paid to its owner then                | `0x6092…6c93` | Account #35366, Give it to the address signed as: `#hydrex/35366`'s receipt was paid to its owner then, at its address.                                                                                        |
+| Last claimed outside Matcha Latte     | `0x388b…7b40` | Account #9540, Its owner claims on Hydrex, reload `#hydrex/9540`: Last claimed outside Matcha Latte: no receipt.                                                                                               |
+| An account its automation can't claim | `0x6092…6c93` | Account #35366, Give it to the address signed as: Matcha Latte no longer claims it: claim on Hydrex.                                                                                                           |
 
 ## Every state, and where to find it
 
@@ -217,7 +216,7 @@ An account's payouts, on its page, in `standingItem` in `src/last-payout.ts`:
 
 | What the page says                              | Where                                                                       |
 | ----------------------------------------------- | --------------------------------------------------------------------------- |
-| Paid up to …                                    | `payout`, #82774 once the keeper pays it                                    |
+| Paid up to …                                    | `payout`, #82774 once the operator pays it                                  |
 | Not paid yet                                    | `hydrex`, #141, as in Not paid yet above                                    |
 | Late · paid up to …, or Late · never paid       | `hydrex`, #82774; `hydrex`, #53350                                          |
 | Nothing to pay                                  | `hydrex`, #9540, as in Nothing to pay above                                 |
@@ -232,7 +231,7 @@ An account's payouts, on its page, in `standingItem` in `src/last-payout.ts`:
 | Reading the payouts failed                      | any, with Matcha Latte's figures, or Double Espresso's, that cannot be read |
 
 Each of the page's checks, in `failedChecks` in `src/hydrex.ts`, can fail on its own: `chain` as Base's RPCs serve
-another chain, the others under Checks that fail. Double Espresso's need a scenario where it is on Base.
+another chain, and `upgrade` under Checks that fail. Each fails for both automations.
 
 ## What the scenarios do not show
 

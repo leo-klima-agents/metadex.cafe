@@ -167,11 +167,17 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await pick(page, 2435, 2439);
     await group(page, "needs:stopped").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
     await review(page).getByRole("heading", { name: "Before you join" }).waitFor();
+    // With no fee, the rewards not claimed yet come less the share retired alone.
+    const unclaimed = await review(page).locator(".callout strong").innerText();
+    assert.equal(
+      unclaimed,
+      "Unclaimed rewards on these Hydrex accounts will be paid to you in kVCM with their next payouts, less the share retired.",
+    );
     await review(page).getByRole("link", { name: "Can change" }).click();
     assert.equal(await review(page).isVisible(), false);
     await page
       .locator('.pop:popover-open [data-section="control"]')
-      .getByText("Can change the share retired")
+      .getByText("the share retired (up to 100%)")
       .waitFor();
     assert.equal(await page.title(), "Matcha Latte · metaDEX Café");
     assert.equal(new URL(page.url()).hash, "#hydrex/matcha-latte/control");
@@ -193,7 +199,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
       .getByText(/Earns nothing\s+since\s+Thu,? 10 Sept?\./)
       .waitFor();
     await position(page).getByRole("button", { name: "Join Matcha Latte", exact: true }).waitFor();
-    await position(page).getByRole("button", { name: "Leave", exact: true }).waitFor();
+    await position(page).getByRole("button", { name: "Leave automation", exact: true }).waitFor();
     assert.equal(await position(page).locator(".position-owner-row").isVisible(), false, "its own account");
     await shoot(page, "stopped-account-390-light");
     // It leads back to Hydrex, above its title.
@@ -246,7 +252,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     // Its owner did not vote: once read, its line goes.
     await account(page, 14485).locator(".earned").waitFor({ state: "hidden", timeout: 120_000 });
     await shoot(page, "member-earned-390-light");
-    // What the votes earned for each 1,000 votes: what reached the owner is on the automation's page.
+    // What the votes earned for each 1,000 votes, as each automation's page shows it too.
     const menu = hydrex(page).locator('.choice[data-choice="matcha-latte"]');
     assert.match(await menu.locator(".record").innerText(), /^≈\s\$\d+\.\d\d$/);
     assert.equal(await menu.locator(".record-unit").innerText(), "/ 1k votes");
@@ -400,15 +406,13 @@ describe("the page against a fork of Base: its views, and each account's payouts
       .locator(".receipt-paid-worth")
       .getByText(/^≈\s\$\d/)
       .waitFor({ timeout: 120_000 });
-    // Its payout address, its owner's own, is behind an info button.
-    await position(page).getByRole("button", { name: "Payout address" }).click();
-    await position(page).locator(".position-payout:popover-open").getByText("(the owner)").waitFor();
-    await page.keyboard.press("Escape");
+    // No info button gives its payout address: the receipt says where it was paid when not to its owner.
+    assert.equal(await position(page).getByRole("button", { name: "Payout address" }).count(), 0);
     await shoot(page, "receipt-390-dark", position(page));
     // After the flip, the page reads Matcha Latte again and fills its figures, such as .tonnes, again. The receipts
     // keep their own.
-    const entityName = toFunctionSelector("function retiringEntityName()").slice(2);
-    const readAgain = page.waitForResponse((response) => !!response.request().postData()?.includes(entityName));
+    const retireBps = toFunctionSelector("function retireBps()").slice(2);
+    const readAgain = page.waitForResponse((response) => !!response.request().postData()?.includes(retireBps));
     await page.clock.setSystemTime((FLIP + 60) * 1000);
     await page.clock.runFor(30_000);
     await readAgain;

@@ -22,7 +22,7 @@ import {
 import { earnedByAccount, lastEarnings, perThousandOf } from "../last-epoch.ts";
 import { hrefOf } from "../routes.ts";
 import { gasWords } from "../swap-calls.ts";
-import { checks, feeWords, matchaLatte, traits } from "./automations.ts";
+import { checks, matchaLatte, takesWords, traits } from "./automations.ts";
 import { openClaim } from "./claim.ts";
 import { failed, hooks, session, shown, views } from "./page.ts";
 import { overdueEntry, owed } from "./payouts.ts";
@@ -266,7 +266,7 @@ export function act(button: HTMLButtonElement, accountsOf: () => Account[], redr
 }
 
 // The review of a claim through Double Espresso for the accounts whose payout is overdue.
-// What waits can take a while to read, for an account whose keeper missed two epochs: the button spins meanwhile, and
+// What waits can take a while to read, for an account whose operator missed two epochs: the button spins meanwhile, and
 // takes no second click.
 let claiming = false;
 
@@ -338,7 +338,13 @@ export function review(accounts: Account[], action: Action, automation?: Automat
     const part = clone(id);
     fillTime(part, "next", epochStart + WEEK, utc);
     fillPlural(part, accounts.length);
-    if (settings) fill(part, { takes: `${bps(settings.retireBps)} retired, ${feeWords(settings.feeBps)}` });
+    if (settings) {
+      // What Matcha Latte keeps of the rewards not claimed yet: the share retired, and its fee unless it is none, or
+      // any fee while it is not read.
+      const { retireBps, feeBps } = settings;
+      const fee = feeBps === 0n ? "" : feeBps === undefined ? " and any fee" : ` and the ${bps(feeBps)} fee`;
+      fill(part, { takes: takesWords(retireBps, feeBps), "takes-fee": fee });
+    }
     return part;
   };
   const checkOf = ({ kind }: Automation) => hrefOf({ view: "product", kind, section: "check" });

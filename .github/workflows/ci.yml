@@ -61,7 +61,7 @@ jobs:
           cache: npm
       - uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1.9.2
         with:
-          version: v1.8.6
+          version: v1.8.7
       - run: npm ci --ignore-scripts
       - run: '"$CHROMIUM" --version'
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

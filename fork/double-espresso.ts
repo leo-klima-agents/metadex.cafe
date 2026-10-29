@@ -98,7 +98,7 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     // Co-signers compare each call's fields and calldata, shown in full, with Safe{Wallet}'s.
     const call = dialog.locator(".slip").first();
     assert.equal(await call.locator(".conduit").innerText(), CONDUIT, "co-signers see the address, not only its name");
-    assert.equal(await call.locator(".conduit-name").innerText(), "Matcha Latte");
+    assert.equal(await call.locator(".conduit-name").innerText(), "KlimaVeTokenConduit");
     assert.equal(await call.locator(".call").innerText(), "100 bytes");
     assert.equal(await call.locator(".count").textContent(), "Safe · Call 1 of 2 · Leave Matcha Latte");
     assert.equal(await dialog.locator(".operation").first().isVisible(), false, "Safe{Wallet} sets the operation");
@@ -153,9 +153,9 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     await group(page, "needs:unvoted").getByRole("button", { name: "Join Double Espresso", exact: true }).click();
     await review(page).getByText("Join Double Espresso · 1 of 2").waitFor();
     await review(page)
-      .getByText("Rewards this Hydrex account has not claimed yet go to you through it too, less 1%.")
+      .getByText("Unclaimed rewards on this Hydrex account will be paid to you with its next payout, less the 1% fee.")
       .waitFor();
-    await review(page).getByRole("link", { name: "Fixed" }).waitFor();
+    await review(page).getByRole("link", { name: "Immutable" }).waitFor();
     await review(page)
       .locator(".estimate-week")
       .getByText("No record yet", { exact: true })
@@ -164,7 +164,7 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     await shoot(page, "double-espresso-join-1-1440-light");
     await review(page).getByRole("button", { name: "Continue" }).click();
     assert.deepEqual(await review(page).locator(".says").allTextContents(), ["Account #141 joins Double Espresso."]);
-    assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["Double Espresso"]);
+    assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["ImmutableVeTokenConduit"]);
     assert.equal(await review(page).locator(".conduit").textContent(), DOUBLE_ESPRESSO.address);
     await confirm(page);
     await expectApprovals([141n], DOUBLE_ESPRESSO.address, DOUBLE_ESPRESSO.address);
@@ -205,7 +205,7 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     assert.deepEqual([...sent, ...member.sent].length, 4);
   });
 
-  test("Double Espresso's receipts: a claim by its keeper, a stranger's dust, and where the page stops reading", async () => {
+  test("Double Espresso's receipts: a claim by its operator, a stranger's dust, and where the page stops reading", async () => {
     // Its standing is read in the pools Matcha Latte voted for, last epoch and the one before, as test 7 reads them.
     const rewards = await doubleEspressoReceipts();
     const { page, violations } = await open(
@@ -288,15 +288,12 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     await maxi.getByRole("button", { name: "Join Double Espresso", exact: true }).click();
     await review(page).getByText("Join Double Espresso · 1 of 2").waitFor();
     await page.keyboard.press("Escape");
-    // It says what it does, beside Hydrex's average, and leads back to Hydrex, which leads back to the wallet.
+    // It says what it does, with no record to compare, and leads back to Hydrex, which leads back to the wallet.
     await maxi
       .locator(".lead")
       .getByText(/most rewards/)
       .waitFor();
-    await maxi
-      .locator(".facts .average")
-      .getByText(/^≈\s\$\d+\.\d\d$/)
-      .waitFor();
+    assert.equal(await maxi.locator(".facts .record-versus-line").isVisible(), false, "no record to compare");
     const back = maxi.getByRole("navigation", { name: "Back" });
     assert.deepEqual(await back.getByRole("link").allInnerTexts(), ["Hydrex"]);
     await back.getByRole("link", { name: "Hydrex" }).click();
@@ -311,23 +308,24 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
       .locator(".tonnes")
       .getByText(/^\d[\d,]* t$/)
       .waitFor();
-    // Its popups start closed, its fee facts among them, and the address of one opens it.
+    // Its popups start closed, its costs and contracts among them, and the address of one opens it.
     assert.equal(await page.locator(":popover-open").count(), 0);
     await shoot(page, "matcha-latte-390-light");
     await page.goto(`${SITE}/#hydrex/matcha-latte/fees`);
-    const facts = matcha.locator(".fee-facts dd");
-    await facts.first().getByText("33.33% retired, 0% fee").waitFor();
-    assert.equal(await facts.nth(1).innerText(), "100% retired, 1% fee");
-    const treasury = "0xd9e966a6Bfa2aE2113a34Bb4dd02ded921DA50aF";
-    assert.equal(
-      await facts.nth(2).getByRole("link", { name: "its treasury" }).getAttribute("href"),
-      `https://basescan.org/address/${treasury}`,
-    );
+    const info = matcha.locator(".pop:popover-open");
+    const costs = info.locator(".fee-facts dd");
+    await costs.first().getByText("Up to 33.33% of each payout").waitFor();
+    assert.deepEqual(await costs.allInnerTexts(), ["Up to 33.33% of each payout", "0%", "Part of the payout"]);
+    // Who can change what, with the most the fee can become, as read; then where the fee goes, short, in full on hover.
+    await info.locator('[data-section="control"]').getByText("the payout fee (up to 1%)").waitFor();
+    const recipient = "0xd9e966a6Bfa2aE2113a34Bb4dd02ded921DA50aF";
+    const recipientLink = info.locator("a.fee-recipient");
+    assert.equal(await recipientLink.innerText(), "0xd9e9…50aF");
+    assert.equal(await recipientLink.getAttribute("href"), `https://basescan.org/address/${recipient}`);
+    assert.equal(await recipientLink.getAttribute("title"), recipient);
+    // Its contracts, as co-signers' links lead to them.
     await page.goto(`${SITE}/#hydrex/matcha-latte/check`);
-    const check = matcha.locator('[data-section="check"]');
-    assert.equal(await check.evaluate((pop) => pop.matches(":popover-open")), true);
-    assert.match(await check.locator("a.treasury").innerText(), new RegExp(`^${treasury}$`));
-    assert.equal(await check.locator(".check-failed").count(), 0, "every check passed");
+    await matcha.locator('.pop:popover-open [data-section="check"]').getByText("Fee recipient").waitFor();
 
     // An account's page: the wallet's own has its actions; another's names its owner.
     await page.goto(`${SITE}/#hydrex/141`);

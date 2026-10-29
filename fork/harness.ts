@@ -37,7 +37,7 @@ import {
   MATCHA_LATTE,
   DEFAULT_OUTPUT,
   HYDX,
-  KEEPER,
+  OPERATOR,
   RPCS,
   SWAPPERS,
   VOTING_ESCROW,
@@ -242,11 +242,10 @@ export async function deployDoubleEspresso(): Promise<void> {
   if ((await anvil<Hex>("eth_getCode", [DOUBLE_ESPRESSO.address, "latest"])) !== "0x") return;
   const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", [toHex(BLOCK), false]);
   await anvil("evm_setNextBlockTimestamp", [Number(timestamp) + 60]);
-  await anvil("anvil_setBalance", [KEEPER, toHex(FOR_GAS)]);
-  await mined(KEEPER, CREATE2_DEPLOYER, concat([SALT, INIT_CODE]));
+  await anvil("anvil_setBalance", [OPERATOR, toHex(FOR_GAS)]);
+  await mined(OPERATOR, CREATE2_DEPLOYER, concat([SALT, INIT_CODE]));
   const at = getContractAddress({ opcode: "CREATE2", from: CREATE2_DEPLOYER, salt: SALT, bytecode: INIT_CODE });
   assert.equal(at, DOUBLE_ESPRESSO.address);
-  assert.equal(keccak256(await anvil<Hex>("eth_getCode", [at, "latest"])), DOUBLE_ESPRESSO.codeHash);
 }
 
 // The page reads a few blocks before the latest, which on the fork can be before the last transactions. Blocks after
@@ -629,10 +628,10 @@ export async function toWallet(page: Page): Promise<void> {
     .waitFor();
 }
 
-// Waits until the page names the next epoch's start, as it does in each automation's popup on joining.
+// Waits until the page names the next epoch's start, as Hydrex's page does when a change made now moves the votes.
 export async function nextEpoch(page: Page, day: RegExp): Promise<void> {
   await page.waitForFunction(
-    (source) => new RegExp(source).test(document.querySelector("time.next-epoch")?.textContent ?? ""),
+    (source) => new RegExp(source).test(document.querySelector("time.epoch-end")?.textContent ?? ""),
     day.source,
   );
 }
@@ -814,7 +813,7 @@ export const warmStandings = (owners: Address[], ids: bigint[]) =>
     await Promise.all([readStamps(ids, last, top), readEarned(ids, last, top), readStamps(ids, before, top)]);
   });
 
-// Double Espresso on Base, with #82774 in it, claimed by its keeper and then by a stranger, a USDC reward each; and
+// Double Espresso on Base, with #82774 in it, claimed by its operator and then by a stranger, a USDC reward each; and
 // what the page reads of it, and of `owners`, read with no time limit. It answers Matcha Latte's rewards of last epoch,
 // which Double Espresso's accounts earn in the same pools.
 export async function doubleEspressoReceipts(owners: Address[] = []): Promise<Reward[]> {
@@ -828,7 +827,7 @@ export async function doubleEspressoReceipts(owners: Address[] = []): Promise<Re
   await anvil("anvil_setBalance", [STRANGER, toHex(FOR_GAS)]);
   await approveConduit(PAYEE, DOUBLE_ESPRESSO.address, 82774n);
   const usdc = rewards.filter(({ token }) => token.symbol === "USDC");
-  await claimOne(KEEPER, 82774n, usdc[0]!);
+  await claimOne(OPERATOR, 82774n, usdc[0]!);
   await claimOne(STRANGER, 82774n, usdc[1]!);
   await settle();
   await warmStandings(owners, [82774n]);
@@ -893,14 +892,14 @@ export const balanceOf = (token: Address, owner: Address) => readOn<bigint>(toke
 
 export const swapView = (page: Page) => page.locator('.view[data-view="swap"]');
 
-// Matcha Latte's treasury, a Safe that holds many of the tokens its fee took.
+// Matcha Latte's fee recipient, a Safe that holds many of the tokens its fee took.
 export const HOLDER = getAddress("0xd9e966a6bfa2ae2113a34bb4dd02ded921da50af");
 export const AVNT = getAddress("0x696f9436b67233384889472cd7cd58a6fb5df4f1");
 export const ZORA = getAddress("0x1111111111166b7fe7bd91427724b487980afc69");
-// A wallet of the test's own, which the treasury gives three of its tokens, so that the page has only those to route.
+// A wallet of the test's own, which the fee recipient gives three of its tokens, so that the page has only those to route.
 export const SELLER = getAddress("0x0000000000000000000000000000000000c0ffee");
 
-// Gives SELLER the treasury's whole balance of each token, then reads what the page will: the balances, the prices, and
+// Gives SELLER the fee recipient's whole balance of each token, then reads what the page will: the balances, the prices, and
 // each token's route into USDC, with no time limit, as anvil reads the pools from FORK_URL a slot at a time.
 export async function fund(tokens: Address[]): Promise<void> {
   const into = SWAPPERS[0]!;

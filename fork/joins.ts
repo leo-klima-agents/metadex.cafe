@@ -94,7 +94,10 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
       "Account #2439 leaves the USDC automation and joins Matcha Latte.",
       "Account #2435 leaves the Hydrex Lock Maxi automation and joins Matcha Latte.",
     ]);
-    assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["Matcha Latte", "Matcha Latte"]);
+    assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), [
+      "KlimaVeTokenConduit",
+      "KlimaVeTokenConduit",
+    ]);
     assert.deepEqual(await review(page).locator(".account").allTextContents(), ["2439", "2435"]);
     assert.deepEqual(await review(page).locator(".approve").allTextContents(), ["true", "true"]);
     // Each call is a bill, its fields in full under what it does, with nothing to open.
@@ -180,11 +183,11 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     assert.equal(sent.length, 1);
     await expectApprovals([141n], CONDUIT, CONDUIT);
     await account(page, 141).getByText("Joining Matcha Latte:").waitFor();
-    // Double Espresso's page, before it ever voted, has no record, and marks none of its checks failed.
+    // Double Espresso's page, before it ever voted, has no record, and joining it is on.
     await page.goto(`${SITE}/#hydrex/double-espresso/check`);
     const maxi = product(page, "double-espresso");
     await maxi.locator(".record").getByText("No record yet").waitFor();
-    assert.equal(await maxi.locator(".check-failed").count(), 0);
+    assert.equal(await maxi.locator(".checks-failed").isVisible(), false);
   });
 
   test("closing between transactions stops there; a link then opens in a new tab", async () => {
@@ -239,7 +242,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
       .waitFor();
     await shoot(page, "stopped-390-light");
     await only(page, "needs:stopped", 2439);
-    await group(page, "needs:stopped").getByRole("button", { name: "Leave", exact: true }).click();
+    await group(page, "needs:stopped").getByRole("button", { name: "Leave automation", exact: true }).click();
     await review(page).getByRole("heading", { name: "Leave USDC" }).waitFor();
     await review(page).locator(".pages").getByText("Claims stop").waitFor();
     assert.deepEqual(await review(page).locator(".says").allTextContents(), [

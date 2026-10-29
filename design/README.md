@@ -2,8 +2,8 @@
 
 What metaDEX Café is today, what it should become, and why. The brand, from type and colour to the layout of receipts,
 is in [brand.md](brand.md). The redesign towards minimalism is in [audit.md](audit.md): where the two disagree, it wins.
-The next product, a swap of many tokens into one, and a way to claim Double Espresso's rewards when its keeper is late,
-are in [products.md](products.md).
+The next product, a swap of many tokens into one, and a way to claim Double Espresso's rewards when its operator is
+late, are in [products.md](products.md).
 
 Figures were read from Base on 17 Oct 2026, unless marked. [Brackets] mark decisions not yet taken, such as "[cap]".
 Mockups of the planned screens are on a design canvas, private to its owner:
@@ -30,8 +30,8 @@ technical parts open from an info button, as popups.
   fetch line by line, from the quote down to the least that may reach you, with the slippage picked on that line, and
   popups: its costs, what the slippage is, and the six swappers' contracts; approvals you gave the swappers.
 - **An automation's page** (`#hydrex/matcha-latte`, `#hydrex/double-espresso`): its status, its key figures, and your
-  accounts in it and Join. Info buttons beside them open fee facts, against all of Hydrex, joining and leaving, one of
-  its own, and Check it, with who controls what.
+  accounts in it and Join. An info button beside its name opens Costs and contracts, as the swap's: its costs, who can
+  change it, and its contract and fee recipient. Another, beside last epoch, opens how it did against all of Hydrex.
 - **An account's page** (`#hydrex/` and its number): its status, its lock, what it earned, what its owner can do, and
   its last payout as a receipt.
 - **The review:** a dialog in two steps: before you join, claim or swap, with what it costs, the swap as a bill, then
@@ -129,7 +129,7 @@ wallet's browser, so every export also offers a copy.
   Choose for one or many accounts, with the gas cost, since replaced by the menu and the review; fee facts for Carbon
   Impact; the redesign towards minimalism, in [audit.md](audit.md), with positions first in the App.
 - **Done, the products:** a level for the products in the App; the swap of many tokens into one, with each route, its
-  minimum and a simulation before the wallet asks; claiming Double Espresso's rewards when its keeper is late, as they
+  minimum and a simulation before the wallet asks; claiming Double Espresso's rewards when its operator is late, as they
   are or swapped into one token; one prompt with batching, for joining and leaving too; What this wallet allows. See
   [products.md](products.md).
 - **Next, the rescue:** change watch; ERC-7730 metadata for `setConduitApproval`, `claim` and `swap`.
@@ -180,7 +180,7 @@ a calendar file for payday, made on the device.
 **An automation's page,** one template for all: status; what it does; four key facts (takes, pays you, costs you,
 leaving) and Join; your accounts in it; fee facts; money per 1,000 units of voting power; its record against the
 average; how it voted; what joining allows, and custody; if you join now; who controls what; what the page checks.
-Hydrex, which controls Matcha Latte's settings, and its keeper go under "who controls what".
+Hydrex, which controls Matcha Latte's settings, and its operator go under "who controls what".
 
 **An Aero relay's page,** the same template, with what changes: custody moves into the relay, you hold two tokens,
 deposits and withdrawals wait in queues, and Aero takes a fee in and out. Until its first allocation it shows "no record
@@ -206,26 +206,26 @@ for the record. Then the status Safe{Wallet} reports, and a monthly statement fo
 
 ## Patterns
 
-**Fee facts.** The same six rows, in this order, for every product, on its page. The review gives what it takes and who
-can change it. They are read from the contract each time, with the block. A product that cannot fill a row does not go
-on the menu.
+**Costs.** Every product's, in its Costs and contracts popup, as the swap's: what it takes; then who can change it, and
+its contracts. The review gives what it takes and who can change it. They are read from the contract each time, with the
+block. A product that cannot fill a row does not go on the menu.
 
 1. **Taken:** each cut, with its base, such as "of the rewards".
 2. **The most it can become:** the cap in the contract, or "no cap" in words.
-3. **Goes to:** carbon credits, a treasury, an operator, a keeper.
+3. **Goes to:** carbon credits, a fee recipient, an operator, a keeper.
 4. **When:** each payout, each compounding, each collection.
 5. **Other costs:** swaps, the lock, gas if the owner pays it.
 6. **Who can change it:** the role, its holder, and any delay before a change applies.
 
 For the four kinds of product:
 
-| Kind                                                | Taken                                  | Most            | Goes to                  | When             | Other costs   | Who can change it        |
-| --------------------------------------------------- | -------------------------------------- | --------------- | ------------------------ | ---------------- | ------------- | ------------------------ |
-| Votes for you, retires a share                      | Of the rewards: 33.33% retired, 0% fee | 100%, 1%        | Carbon credits; treasury | Each payout      | Swaps         | Hydrex                   |
-| Votes for you, pays you as earned (Double Espresso) | Of each claim: 1%                      | 1%, in its code | A 2-of-3 Safe            | Each claim       | None          | Nobody: a new deployment |
-| Swaps many tokens into one                          | Of what each token fetches: 1%         | 1%, in its code | The same 2-of-3 Safe     | Each swap        | Pools, gas    | Nobody: a new deployment |
-| Pools your stake in a relay                         | Of the deposit, then of the rewards    | [cap]           | Aero; [operator]         | Each compounding | Swaps         | [Role, delay]            |
-| Manages a liquidity position                        | Of fees and emissions: [10%]           | [cap]           | [Operator]               | Each collection  | A swap a move | [Role, delay]            |
+| Kind                                                | Taken                                  | Most            | Goes to                       | When             | Other costs   | Who can change it        |
+| --------------------------------------------------- | -------------------------------------- | --------------- | ----------------------------- | ---------------- | ------------- | ------------------------ |
+| Votes for you, retires a share                      | Of the rewards: 33.33% retired, 0% fee | 100%, 1%        | Carbon credits; fee recipient | Each payout      | Swaps         | Hydrex                   |
+| Votes for you, pays you as earned (Double Espresso) | Of each claim: 1%                      | 1%, in its code | A 2-of-3 Safe                 | Each claim       | None          | Nobody: a new deployment |
+| Swaps many tokens into one                          | Of what each token fetches: 1%         | 1%, in its code | The same 2-of-3 Safe          | Each swap        | Pools, gas    | Nobody: a new deployment |
+| Pools your stake in a relay                         | Of the deposit, then of the rewards    | [cap]           | Aero; [operator]              | Each compounding | Swaps         | [Role, delay]            |
+| Manages a liquidity position                        | Of fees and emissions: [10%]           | [cap]           | [Operator]                    | Each collection  | A swap a move | [Role, delay]            |
 
 **Money.** Earned, then taken, then what reached you, always in that order, with a bar split the same way. Dollars at
 the prices in the protocol's pools when the epoch ended, or, for what waits to be claimed, now, marked ≈, with the
@@ -277,7 +277,7 @@ plain-language decoding raised how many risky transactions they caught.
 | Brief for co-signers         | The accounts and the automation in the fragment                                | Check everything read from it                                |
 | Calendar file, CSV, image    | Made in the browser                                                            | In-app browsers on iOS may not download: offer a copy too    |
 | Safe status                  | Safe{Wallet} reports it through the Safe Apps SDK                              | None                                                         |
-| Aero and liquidity           | More contracts and code hashes in `src/config.ts`                              | More checks to keep up to date                               |
+| Aero and liquidity           | More contracts in `src/config.ts`                                              | More checks to keep up to date                               |
 | Alerts                       | A calendar file; Basescan's Watch List e-mails activity on a payout address    | Push, a bot or our own e-mail needs a server: a decision     |
 | A feed of settings changes   | An Atom file built by CI from the automations' events                          | A scheduled job; the page itself still reaches only the RPCs |
 
@@ -354,7 +354,7 @@ As each published it on 17 Oct 2026.
 | ----------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | Hydrex's automations    | Vote, claim, pay out                      | 0.5% or 1% of earnings, as its sources disagree; Lock Maxi nothing                                                                     |
 | Matcha Latte            | Vote, claim, retire, pay out              | 33.33% retired; a fee of 0%, up to 1%                                                                                                  |
-| Double Espresso         | Vote for bribes, claim, pay out unswapped | 1% of each claim, fixed in its code                                                                                                    |
+| Double Espresso         | Vote for bribes, claim, pay out unswapped | 1% of each claim, immutable in its code                                                                                                |
 | Autopilot, on Aerodrome | Vote, pay out in USDC                     | 5% of rewards ([DefiLlama](https://defillama.com/protocol/autopilot))                                                                  |
 | Convex                  | Votes for Curve lockers                   | 17% of CRV rewards, capped at 20% ([docs](https://docs.convexfinance.com/convexfinance/faq/fees.md))                                   |
 | Votium                  | Vote incentives market                    | 2% of incentives, capped at 4% ([docs](https://docs.votium.app/faq/fees.md))                                                           |

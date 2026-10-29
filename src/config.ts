@@ -1,4 +1,4 @@
-import type { Address, Hex } from "viem";
+import type { Address } from "viem";
 import type { Fiat } from "./format.ts";
 
 export const CHAIN_ID = 8453;
@@ -12,46 +12,39 @@ export type Kind = "matcha-latte" | "double-espresso";
 export type Automation = {
   kind: Kind;
   name: string;
+  // Its contract's name, which the page gives beside its address.
+  contract: string;
   address: Address;
-  codeHash: Hex;
-  // What joining approves: 3 sends the account's claims to the automation, 5 delegates its votes.
-  actions: number[];
 };
-// Hydrex's automation, whose votes and payouts a keeper now sends. Hydrex controls its settings, which the page reads
-// from Base.
+// Hydrex's automation, whose votes and payouts an operator now sends. Hydrex controls its settings, which the page
+// reads from Base.
 export const MATCHA_LATTE: Automation = {
   kind: "matcha-latte",
   name: "Matcha Latte",
+  contract: "KlimaVeTokenConduit",
   address: "0xdE91885cF35ac57DF0c4A75c16862127dBe8317c",
-  codeHash: "0x0d67cd335e3ae9cde256cf399f819a3ea2b9c248b0336840a3b20a2ee82c192e",
-  actions: [3, 5],
 };
 // ImmutableVeTokenConduit version 2, from https://github.com/ldeso/hydrex-conduit at tag v2, commit 718c107. It has no
-// owner and no settings: its code fixes its fee and where the fee goes. It deployed through CREATE2, on Tue 20 Oct
-// 2026. Version 1, at 0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B, still works, but the page does not offer it.
+// owner and no settings: its fee and where the fee goes are immutable in its code. It deployed through CREATE2, on Tue
+// 20 Oct 2026. Version 1, at 0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B, still works, but the page does not offer it.
 export const DOUBLE_ESPRESSO: Automation = {
   kind: "double-espresso",
   name: "Double Espresso",
+  contract: "ImmutableVeTokenConduit",
   address: "0x692c323B425A9DfeebE302F56168a7798D93EAC5",
-  codeHash: "0x4872932431e0d175fb1213e9ffec2b8f0ebd1d9d490643d6df5b2c6d0b379847",
-  actions: [3, 5],
 };
 export const AUTOMATIONS = [MATCHA_LATTE, DOUBLE_ESPRESSO];
 export const byKind = (kind: string): Automation | undefined =>
   AUTOMATIONS.find((automation) => automation.kind === kind);
-// Double Espresso's fee, FEE_BPS in its code, of each claim, and TREASURY, the 2-of-3 Safe it goes to.
+// Double Espresso's fee, FEE_BPS in its code, of each claim, and its recipient, TREASURY in its code, a 2-of-3 Safe.
 export const DOUBLE_ESPRESSO_FEE_BPS = 100n;
-export const DOUBLE_ESPRESSO_TREASURY: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
+export const DOUBLE_ESPRESSO_FEE_RECIPIENT: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
 // The address whose claims through Double Espresso the receipts show as Double Espresso's own, made for its members
 // after each epoch. It holds Matcha Latte's EXECUTOR_ROLE. Anyone may claim through Double Espresso.
-export const KEEPER: Address = "0x40FBFe5312330f278824ddbB7521ab77409192f0";
+export const OPERATOR: Address = "0x40FBFe5312330f278824ddbB7521ab77409192f0";
 export const KVCM: Address = "0x00fBAC94Fec8D4089d3fe979F39454F48c71A65d";
 export const VOTING_ESCROW: Address = "0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1";
 export const VOTING_ESCROW_IMPLEMENTATION: Address = "0x0FC68cE53Be957a1AA779f553AD49f6068fFf231";
-export const VOTING_ESCROW_IMPLEMENTATION_CODE_HASH: Hex =
-  "0xe6b54672ba85711eac5516d6ce09fe96cabe9cc3764a178e5d2f33a6241c2b42";
-export const APPROVAL_LOGIC: Address = "0x4B0BC0889EB524Dbae36d409fF733851E9B4f63D";
-export const APPROVAL_LOGIC_CODE_HASH: Hex = "0xd1fab3adcd045439b72359a675665cb9f9267b32aebb140df865fc723681a930";
 export const VOTER: Address = "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b";
 export const ACCOUNT_NAMES: Address = "0x998cf40a742460b4eBbFB569A0D23eA91976c0d3";
 
@@ -93,7 +86,7 @@ export const ANCHORS: Anchor[] = [
 
 // The swap: ImmutableSwapper, deployed once per output token on 21 Oct 2026. Each sells the tokens its caller names for
 // its output, along the routes its caller picks, through pools it checks against the twelve factories below, and sends
-// 1% of each route's output to Double Espresso's treasury. It has no owner and no settings. Its sources are verified,
+// 1% of each route's output to Double Espresso's fee recipient. It has no owner and no settings. Its sources are verified,
 // with an exact match, on Basescan and Sourcify.
 export type Output = "usdc" | "eurc" | "weth" | "cbbtc" | "aero" | "hydx";
 export type Swapper = {

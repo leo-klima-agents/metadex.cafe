@@ -54,12 +54,12 @@ const ACCOUNTS: Owner[] = [
   { address: PAYEE, holds: "93 Hydrex accounts; #82774 in Matcha Latte, its payout late" },
 ];
 
-// The first block after Hydrex moved on to the epoch from Thu 22 Oct, 00:00 UTC, and before the keeper paid Carbon
+// The first block after Hydrex moved on to the epoch from Thu 22 Oct, 00:00 UTC, and before the operator paid Carbon
 // Impact's accounts for the one that ended: Thu 22 Oct 2026, 00:00:26 UTC.
 export const PAYOUT_BLOCK = 52_918_940;
 const OWNER_35366 = getAddress("0x8cafed70f1b60066d3b076410c9eed0ce1f9667c");
-// The keeper's payouts after that flip, in the order Base included them, in blocks 52,918,941 to 52,918,956: each a
-// claimSwapAndDistribute through Matcha Latte's executor module, as the keeper's README says.
+// The operator's payouts after that flip, in the order Base included them, in blocks 52,918,941 to 52,918,956: each a
+// claimSwapAndDistribute through Matcha Latte's executor module, as the operator's README says.
 const PAYOUTS: { hash: Hex; does: string }[] = [
   { hash: "0x4d64bad5fc3b699f9f10210ae3e368c475da5e09670c5358496f46fec4bbee4e", does: "pays #82774, 1 of 3" },
   { hash: "0xecd665d62e9571f45d54d1cd5f791f8bd4105569d4b1eb27280802c1824bbcf0", does: "pays #82774, 2 of 3" },
@@ -86,7 +86,7 @@ export const SCENARIOS: Scenario[] = [
   },
   {
     name: "double-espresso",
-    title: "As hydrex, with #82774 in Double Espresso, claimed by its keeper and by a stranger",
+    title: "As hydrex, with #82774 in Double Espresso, claimed by its operator and by a stranger",
     block: BLOCK,
     hash: "#hydrex/double-espresso",
     owners: [
@@ -103,8 +103,8 @@ export const SCENARIOS: Scenario[] = [
     block: RECENT,
     hash: "#swap",
     owners: [
-      { address: SELLER, holds: "WETH, ZORA and AVNT, from Matcha Latte's treasury" },
-      { address: HOLDER, holds: "Matcha Latte's treasury, a Safe with many tokens" },
+      { address: SELLER, holds: "WETH, ZORA and AVNT, from Matcha Latte's fee recipient" },
+      { address: HOLDER, holds: "Matcha Latte's fee recipient, a Safe with many tokens" },
       { address: PAYEE, holds: "93 Hydrex accounts; #82774 in Matcha Latte, its payout late" },
     ],
     // The others' balances too, as the page reads them first.
@@ -127,7 +127,7 @@ export const SCENARIOS: Scenario[] = [
   },
   {
     name: "payout",
-    title: "Thu 22 Oct 2026, just after the flip: Matcha Latte's payouts due, which the keeper sends one by one",
+    title: "Thu 22 Oct 2026, just after the flip: Matcha Latte's payouts due, which the operator sends one by one",
     block: PAYOUT_BLOCK,
     hash: "#app",
     owners: [

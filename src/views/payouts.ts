@@ -45,7 +45,7 @@ function showUnderWay(): void {
   views.position();
 }
 
-// An account's payout through Double Espresso is overdue when something waits for it and its keeper has not paid it:
+// An account's payout through Double Espresso is overdue when something waits for it and its operator has not paid it:
 // half a day after the flip, the time a payout takes, for the epoch that just ended, or once it is late for the one
 // before. Only the wallet's own accounts, while Double Espresso holds their claims: a claim pays the owner, whoever
 // calls.

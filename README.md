@@ -2,7 +2,7 @@
 
 metaDEX Café is a static web page at <https://metadex.cafe/>. It lets owners of Hydrex accounts on Base join or leave
 Matcha Latte, Hydrex's automation, and Double Espresso, an automation nobody controls, and claim Double Espresso's
-rewards when its keeper is late. It also swaps many tokens on Base into one, through ImmutableSwapper. Hydrex's
+rewards when its operator is late. It also swaps many tokens on Base into one, through ImmutableSwapper. Hydrex's
 contracts call automations "conduits".
 
 The page has no server. It reads Base through public RPCs and asks the visitor's wallet to send transactions. It holds
@@ -21,17 +21,18 @@ This README is for whoever runs the site. The design and the plan are in [design
   takes the votes and the claims from the other, in one call.
 - **Leaving** is the same call with `false`. The page can also take accounts out of Hydrex's other automations, such as
   those that stopped voting in September 2026: same call, with that automation's address.
-- **Before anyone can join, the page checks** the chain, each automation's code, Matcha Latte's settings, and the code
-  of Hydrex's VotingEscrow against `src/config.ts`. If a check fails, joining that automation is turned off, and the
-  page marks the check on that automation's page, under Check it. Leaving always works. The checks run again every hour.
+- **Before anyone can join, the page checks** that its RPCs serve Base, and that Hydrex's VotingEscrow has not been
+  upgraded: that its implementation is still the one in `src/config.ts`. If a check fails, joining that automation is
+  turned off, its page and its row say so, and Hydrex's page says why. Leaving always works. The checks run again every
+  hour.
 - **Claiming** is `claim(tokenId, feeAddresses, bribeAddresses, tokens)` on Double Espresso, which anyone can call for
-  any account in it, and which pays the owner, less 1%. Double Espresso's keeper claims for every member right after
+  any account in it, and which pays the owner, less 1%. Double Espresso's operator claims for every member right after
   each epoch, so the page offers it only for the wallet's own accounts, once a payout is overdue: half a day after the
   flip with something waiting, or a full epoch late. It passes only the contracts and tokens that `earned()` finds
-  owing, in last epoch's pools, and the epoch before's when the keeper missed it too. Double Espresso asks each contract
-  for every token passed, and each answer reads the account's past epochs, so a claim of many contracts and tokens
-  splits into calls that each fit a transaction, the most valuable first; calls that need more gas together than one
-  transaction may use go one at a time. A Safe, which sends many calls in one Safe transaction, gets small calls
+  owing, in last epoch's pools, and the epoch before's when the operator missed it too. Double Espresso asks each
+  contract for every token passed, and each answer reads the account's past epochs, so a claim of many contracts and
+  tokens splits into calls that each fit a transaction, the most valuable first; calls that need more gas together than
+  one transaction may use go one at a time. A Safe, which sends many calls in one Safe transaction, gets small calls
   instead, none asking a contract for a token it does not owe, which together use the least gas; it proposes them in as
   few Safe transactions as their simulated gas allows, each under 15 million. The review offers the rewards as they are,
   or swapped into one token, but not from a Safe whose claim takes several Safe transactions: the swap follows the
@@ -90,10 +91,10 @@ This README is for whoever runs the site. The design and the plan are in [design
   a bill: each token, or each part of one, with its route by tokens and pools, under the gas, then the least, with the
   slippage that set it.
 - Each automation has a page, `#hydrex/matcha-latte` and `#hydrex/double-espresso`: what it does in one sentence, that
-  the account stays in the wallet, its key figures (what it takes, what it pays in, what it paid last epoch beside
-  Hydrex's average, and what it retired or who controls it), and a way to join, or the wallet buttons. Everything else
-  is in popups: its six fee facts, how it did against all of Hydrex, joining and leaving, who controls what, and Check
-  it.
+  the account stays in the wallet, its key figures (what it takes, what it pays in, what its votes earned last epoch
+  against Hydrex's average, as Hydrex's page shows it, and what it retired or who controls it), and a way to join, or
+  the wallet buttons. Everything else is in two popups. Costs and contracts, beside its name, as the swap's: its costs,
+  who can change it, and its contract and fee recipient. And how it did against all of Hydrex, beside last epoch.
 - Each account has a page, `#hydrex/` and its number, which anyone can open: its status, what its votes earned, what its
   owner can do with it, with the gas of a change when it earns nothing, and, in an automation, up to when it has been
   paid, what waits to be claimed, and the receipt of its last payout. The App marks the accounts paid late.
@@ -111,8 +112,8 @@ has read that its RPCs serve Base, and says nothing of it.
 
 Hydrex controls Matcha Latte. It can change the share retired (up to 100%), the fee (up to 1%), the payout tokens, the
 swap routers, any owner's payout address, and who claims and votes for it. The page always shows the settings as they
-are on Base. Nobody controls Double Espresso: its code fixes its fee, 1% of each claim, and the 2-of-3 Safe it goes to.
-A change means a new deployment, and owners joining again.
+are on Base. Nobody controls Double Espresso: its fee, 1% of each claim, and the 2-of-3 Safe it goes to are immutable in
+its code. A change means a new deployment, and owners joining again.
 
 ## Network access
 
@@ -154,42 +155,26 @@ them, because their hashes no longer match, so the page may not work for that vi
 
 ## When a contract changes
 
-The App and the automation's page say that joining it is off, and its Check it marks each check that failed, by its id
-in `src/hydrex.ts`:
+Each automation's page and its row on Hydrex's page say that joining it is off, and Hydrex's page says why, for the
+check it names, by its id in `src/hydrex.ts`:
 
-| Check                                                | Marked on         | What changed                                                                              |
-| ---------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------- |
-| `chain`: the RPC serves Base                         | Not shown         | An RPC answered for another chain. Joining both, and every swap, turn off.                |
-| `code`: Matcha Latte's code                          | Matcha Latte's    | Matcha Latte's code.                                                                      |
-| `contracts`: its VotingEscrow and Voter              | Matcha Latte's    | `veToken()` or `voter()` on Matcha Latte.                                                 |
-| `token`: it pays in kVCM                             | Matcha Latte's    | `kvcm()` on Matcha Latte.                                                                 |
-| `approvals`: what joining approves                   | Matcha Latte's    | `getConduitApprovalConfig` on the VotingEscrow: no longer active, or other than `[3, 5]`. |
-| `double-espresso-code`: Double Espresso's code       | Double Espresso's | Double Espresso's code.                                                                   |
-| `double-espresso-contracts`: its VotingEscrow, Voter | Double Espresso's | `veToken()` or `voter()` on Double Espresso.                                              |
-| `double-espresso-approvals`: what joining approves   | Double Espresso's | `getConduitApprovalConfig` on the VotingEscrow, for Double Espresso.                      |
-| `upgrade`: the VotingEscrow                          | Both pages        | The VotingEscrow's implementation, or its code.                                           |
-| `logic`: its approval logic                          | Both pages        | `approvalLogic()` on the VotingEscrow, or its code.                                       |
+| Check                        | Marked on | What changed                                                               |
+| ---------------------------- | --------- | -------------------------------------------------------------------------- |
+| `chain`: the RPC serves Base | Not shown | An RPC answered for another chain. Joining both, and every swap, turn off. |
+| `upgrade`: the VotingEscrow  | Hydrex's  | The VotingEscrow's implementation: Hydrex upgraded it.                     |
 
-Read what changed, and decide whether the page should trust it. If it should, update `src/config.ts`, run the tests and
-release. These [Foundry](https://getfoundry.sh/) commands print the values that `src/config.ts` holds:
+The rest cannot change while the VotingEscrow is not upgraded, as the contracts' verified sources show: each
+automation's VotingEscrow, Voter and Matcha Latte's kVCM are immutable; what joining an automation approves is set once,
+and no call sets it again; and the VotingEscrow's approval logic is set only as it is initialized. Code at an address
+cannot change on Base, so the implementation's address is enough to know its code.
+
+After an upgrade, read the new implementation's verified source, and decide whether the page should trust it. If it
+should, update `VOTING_ESCROW_IMPLEMENTATION` in `src/config.ts`, run the tests and release. This
+[Foundry](https://getfoundry.sh/) command prints it:
 
 ```sh
-RPC=https://mainnet.base.org
-MATCHA_LATTE=0xdE91885cF35ac57DF0c4A75c16862127dBe8317c
-DOUBLE_ESPRESSO=0x692c323B425A9DfeebE302F56168a7798D93EAC5
 ESCROW=0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1
-IMPLEMENTATION=$(cast to-check-sum-address $(cast implementation $ESCROW --rpc-url $RPC))
-LOGIC=$(cast call $ESCROW "approvalLogic()(address)" --rpc-url $RPC)
-
-cast keccak $(cast code $MATCHA_LATTE --rpc-url $RPC)   # MATCHA_LATTE's codeHash
-cast keccak $(cast code $DOUBLE_ESPRESSO --rpc-url $RPC)        # DOUBLE_ESPRESSO's codeHash
-echo $IMPLEMENTATION                                    # VOTING_ESCROW_IMPLEMENTATION
-cast keccak $(cast code $IMPLEMENTATION --rpc-url $RPC)  # VOTING_ESCROW_IMPLEMENTATION_CODE_HASH
-echo $LOGIC                                             # APPROVAL_LOGIC
-cast keccak $(cast code $LOGIC --rpc-url $RPC)           # APPROVAL_LOGIC_CODE_HASH
-for AUTOMATION in $MATCHA_LATTE $DOUBLE_ESPRESSO; do           # each automation's actions
-  cast call $ESCROW "getConduitApprovalConfig(address)(uint8[],bool,string)" $AUTOMATION --rpc-url $RPC
-done
+cast to-check-sum-address $(cast implementation $ESCROW --rpc-url https://mainnet.base.org)
 ```
 
 When Hydrex adds or removes automations, update `src/hydrex-conduits.json` from <https://api.hydrex.fi/conduits>. If
@@ -203,15 +188,13 @@ kept by hand. `node scripts/tokens.ts` checks each token's symbol and decimals a
 `--write` writes Base's answers back.
 
 Double Espresso is version 2 of `ImmutableVeTokenConduit`, from <https://github.com/ldeso/hydrex-conduit> at tag `v2`,
-commit `718c107`. It was deployed on 20 Oct 2026, in block 52,854,750, through the CREATE2 deployer. The command above
-prints the code hash in that commit's `verification/bytecode-hashes.json`,
-`0x4872932431e0d175fb1213e9ffec2b8f0ebd1d9d490643d6df5b2c6d0b379847`. Version 1, at
+commit `718c107`. It was deployed on 20 Oct 2026, in block 52,854,750, through the CREATE2 deployer. Version 1, at
 `0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B`, still works, and nobody had joined it when version 2 was deployed. The
-page offers only version 2. Its source is verified, with an exact match, on Basescan and Sourcify, which the page links
-to.
+page offers only version 2. Its source is verified, with an exact match, on Basescan and Sourcify; the page links to
+Basescan's.
 
-The page is anonymous for now: it names no operator, and links to no repository but Hydrex's, neither this one nor
-Double Espresso's. A test checks it.
+The page is anonymous for now: it names nobody, neither who runs it nor who runs Matcha Latte as its operator, and links
+to no repository, neither this one nor Double Espresso's. A test checks it.
 
 ## Checking a deployment
 
@@ -255,7 +238,7 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   epoch yet. Its rewards wait in Hydrex's reward contracts until someone claims them, for up to 50 epochs.
 - **An overdue payout in Double Espresso.** Half a day after the flip, an account whose payout has not come and that has
   something waiting is overdue: its page, the Double Espresso group and the App's Needs you offer to claim it. If the
-  keeper's claim lands first, the page's claim receives nothing, and its receipt says so; it still costs its gas.
+  operator's claim lands first, the page's claim receives nothing, and its receipt says so; it still costs its gas.
 - **A token the swap skipped.** Its route would have fetched less than its minimum, or its token refused the transfer.
   It stays in the wallet with its approval; the receipt, Needs you and the swap's Approvals offer to reset it. A route
   that Base finds would not go through even with no minimum is left out before the wallet asks, and the bill says why.
@@ -318,7 +301,7 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 
 ## Development
 
-Needs Node 26.
+Needs Node 26 LTS, 26.13 or later.
 
 ```sh
 npm ci --ignore-scripts
@@ -357,7 +340,7 @@ security update comes at once, on its own.
 | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `index.html`                                            | The page. Its views are Home, the App (`#app`), the Hydrex accounts (`#hydrex`), a page per automation (`#hydrex/double-espresso`), an account's page (`#hydrex/9540`), the swap (`#swap`) and About (`#about`). |
 | `style.css`, `fonts/`                                   | Styles and fonts.                                                                                                                                                                                                |
-| `src/config.ts`                                         | What the page trusts: contract addresses and code hashes, the RPCs, and the price anchors.                                                                                                                       |
+| `src/config.ts`                                         | What the page trusts: contract addresses, the RPCs, and the price anchors.                                                                                                                                       |
 | `src/hydrex-conduits.json`                              | Hydrex's automations, as <https://api.hydrex.fi/conduits> lists them.                                                                                                                                            |
 | `src/main.ts`                                           | Startup: each view set up, then the reads, and again every half a minute what is due.                                                                                                                            |
 | `src/views/page.ts`                                     | What the views share: the wallet connected, its Hydrex accounts, and how each view is drawn again.                                                                                                               |
@@ -383,7 +366,7 @@ security update comes at once, on its own.
 | `test/`, `fork/`                                        | Unit tests; the browser tests, which `fork/run.ts` runs at once, the harness they share in `fork/harness.ts`, and `fork/rpc-cache.ts`, which keeps the answers their forks read from Base.                       |
 | `fork/qa.ts`, `fork/qa.html`, `fork/scenarios.ts`       | `npm run qa`: the page against a fork, the QA wallet's window beside it, and the states it can start the fork in.                                                                                                |
 | `fork/fixtures/`                                        | Double Espresso's init code, for the browser tests to deploy it on the fork; and a token of the QA wallet's own, its source and init code.                                                                       |
-| `scripts/`                                              | The build; `fonts.py` makes `fonts/`, `icons.ts` draws the icons from `icon.svg`, and `tokens.ts` checks the list of tokens.                                                                                     |
+| `scripts/`                                              | The build, and `notices.ts`, the license notices it appends to each built file; `fonts.py` makes `fonts/`, `icons.ts` draws the icons from `icon.svg`, and `tokens.ts` checks the list of tokens.                |
 
 ## License
 

@@ -50,9 +50,9 @@ page led back to "App", which Home already is once a wallet is connected; and th
 - **A call's fields** in the review open from the same button, at the corner of its slip.
 - **Home is the App once a wallet is connected,** so the name in the header leads there. The breadcrumb is gone: a page
   within Hydrex has one link back to it, "‹ Hydrex", and the others have none.
-- **Addresses, not code hashes.** A contract shows by its address, linked to Basescan; the page still checks its code
-  hash, but no longer shows it. An address is "0x", then groups of four. It stays on one line where it fits; otherwise
-  it breaks once, in the middle, its second half's groups under the first's, both halves ending flush.
+- **Addresses, not code hashes.** A contract shows by its address, linked to its code, verified on Basescan; the page
+  shows no code hash. An address is "0x", then groups of four. It stays on one line where it fits; otherwise it breaks
+  once, in the middle, its second half's groups under the first's, both halves ending flush.
 - **The swap's costs, each as one row:** its fee, pools' fees, price impact, slippage and gas. Its fee is in its code,
   so no row says who can change it. Its contracts are listed by name, without numbers, in the order the page checks
   them: the swappers, then the exchanges, from Aero's to Hydrex's.
@@ -69,12 +69,12 @@ page led back to "App", which Home already is once a wallet is connected; and th
 
 Settled by the owner on 20 Oct 2026:
 
-- **Matcha Latte is Hydrex's automation,** even though Hydrex no longer sends its votes: a keeper does. The page says
+- **Matcha Latte is Hydrex's automation,** even though Hydrex no longer sends its votes: an operator does. The page says
   "Hydrex's automation" wherever it says whose it is, never "Klima's".
-- **The café is anonymous for now.** The page names no operator, nobody behind Matcha Latte's keeper, and links to no
-  repository of the café's: neither this one nor Double Espresso's. This repository is public, but nothing on the page
-  leads to it. Hydrex's own repository stays linked as Matcha Latte's source, and the commit leaves the footer. See
-  rule 10.
+- **The café is anonymous for now.** The page names nobody, neither who runs the café nor who runs Matcha Latte as its
+  operator, and links to no repository of the café's: neither this one nor Double Espresso's. This repository is public,
+  but nothing on the page leads to it. Each automation's contract links to its code on Basescan, and the commit leaves
+  the footer. See rule 10.
 - **Double Espresso's source is verified, with an exact match, on Basescan and on Sourcify.** The page links to it
   there, not to its repository. Its verified files name no author and no repository: checked on 20 Oct 2026.
 - **No legal pages for now:** no terms, and no page on privacy.
@@ -136,8 +136,8 @@ Two axes:
 - The protocol is in every address from now, since account numbers are per protocol, so that adding Aero changes no
   address.
 - A level that would hold fewer than three things is not built. That is why there is no protocol page yet.
-- Sections: a product's are `record`, `joining`, `control`, its own (`carbon` for Matcha Latte, `votes` for Double
-  Espresso) and `check`; About's are `check`, `safe` and `figures`.
+- Sections: a product's are `fees`, `control` and `check`, in one popup, then `record`, and Double Espresso's `votes` in
+  it; About's are `check`, `safe` and `figures`.
 - An address the page does not know shows Home.
 - Inside Safe{Wallet}, the page opens on the App, as today.
 
@@ -196,8 +196,8 @@ The groups show only when they hold accounts, with the count in their heading:
 
 - What needs you comes first, with no heading over it: a group for each remedy, each under its own heading at the level
   of the others, "Didn't vote last epoch", "In a stopped automation", "Partly in an automation", in the App's order.
-  Their Leave leaves whichever automation holds each account: `review(accounts, "self")` already leaves both the page's
-  and Hydrex's.
+  Their Leave, "Leave automation" in the stopped group, leaves whichever automation holds each account:
+  `review(accounts, "self")` already leaves both the page's and Hydrex's.
 - Other accounts' Leave shows only for an account in one of Hydrex's running automations, and takes it out of it.
 - Boxes to tick, and the hint, stay as today: one selection, one action.
 - A row: the account's name and number, which lead to its page; its votes; what its votes earned last epoch. A status
@@ -231,35 +231,23 @@ One template for every product, in this order. Visible:
    come back on Thu 22 Oct, 00:00 UTC."
 4. With a wallet: your accounts in it, which lead to their pages, and Join for those that can join, with boxes to tick
    when there are several. Without a wallet: the wallet buttons. They are the App's parts, not copies.
-5. **Last epoch:** the menu's line, with the epoch's dates. Matcha Latte adds "Retired so far: 5,691 tonnes of carbon
-   credits", with Klima's mark and "through Klima Protocol".
-6. **Fee facts:** the six rows, as today. "Goes to" names the treasury and links to it; its address in full is in
-   `check`.
+5. **Last epoch:** the menu's line, as Hydrex's page has it: per 1,000 votes, against Hydrex's average. Matcha Latte
+   adds "Retired so far: 5,691 tonnes of carbon credits", with Klima's mark and "through Klima Protocol".
+6. **Costs and contracts** (`fees`), from the info button beside its name, as the swap's popup: its costs (for Matcha
+   Latte, up to its share retired, its payout fee and the swap costs; for Double Espresso, its fee on claims); who can
+   change it (`control`): for Matcha Latte, Hydrex and its operator, without naming who that is; for Double Espresso,
+   nothing, as it is immutable, while anyone can propose its votes; then its contract and its fee recipient, short
+   (`check`). The checks are not listed: Hydrex's page says why joining is off when one fails.
 
-Then folds, closed, each with a summary of one line:
+Then one fold, closed:
 
 7. **Against all of Hydrex** (`record`): the table of today's `#last-epoch`, read only once the fold opens, as it costs
    about 10,000 reads; the sentence that compares; "Earned by its votes, not paid to you"; then the pools it voted for.
-   Every product has it.
-8. **Joining and leaving** (`joining`): what joining approves, and when: claims at once, votes at the next epoch, with
-   the dates of now rather than examples; that it can claim the rewards not claimed yet, even those your own votes
-   earned, and how to keep them; that nothing is transferred; and how leaving works, even when the checks fail. Timing
-   in one sentence: "Join on Wednesday at 23:00 UTC, and the votes move an hour later; join on Thursday at 10:00 UTC,
-   and almost a week later."
-9. **Who controls what** (`control`): for Matcha Latte, that it is Hydrex's, and that a keeper, not Hydrex, now sends
-   its votes and payouts, without naming who runs the keeper; Hydrex's powers over its settings, as Hydrex holds them;
-   what nobody can do; and how a change would show. For Double Espresso, that nobody does, and what Hydrex and the owner
-   of its reward contracts can do.
-10. **A fold of the product's own:** for Matcha Latte, "The carbon credits" (`carbon`): kVCM, retiring, where to see
-    each retirement, and whose name is on them. For Double Espresso, "How it picks its votes" (`votes`): the $1
-    threshold, Chainlink's prices, the pools' prices, and what can make a worse vote win.
-11. **Check it** (`check`): the contracts in full (the product, Hydrex's VotingEscrow and Voter, its treasury, and for
-    Matcha Latte kVCM); its code hash; its source: for Matcha Latte, in Hydrex's repository, and for Double Espresso, as
-    verified on Basescan (`https://basescan.org/address/<address>#code`) and Sourcify
-    (`https://repo.sourcify.dev/8453/<address>`), never its repository (rule 10); the call,
-    `setConduitApproval(conduit, tokenId, true)`, or `false` to leave; what the page checks, with any check that failed
-    marked by the square and its words (today's list in `#checks`); that nothing was transferred, on Basescan; how to
-    leave without this page; and, for co-signers, what the Safe transaction does.
+   Every product has it. Double Espresso's ends with how it picks its votes (`votes`).
+
+Joining and leaving, the carbon credits, Hydrex's contracts and the calls are no longer popups of their own: the line on
+custody and the review say when joining counts and what happens to the rewards not claimed yet, and the review shows
+each call in full before it is signed.
 
 ### A position
 
@@ -276,7 +264,6 @@ Then folds, closed, each with a summary of one line:
    unclaimed can be claimed on Hydrex first.
 6. In an automation, or just out of one: its payouts, as today: its standing (paid up to, late, not paid yet, nothing to
    pay, not final yet, not read), what waits, the notes on claims made elsewhere, then the receipt of its last payout.
-7. In Matcha Latte: its payout address, in a fold, open only when it is not the owner's own.
 
 Reading an account by its number is new: its owner, then the reads `readAccounts` makes for each account. Its payouts
 are read for that one account, where `last-payout.ts` reads an owner's.
@@ -357,12 +344,11 @@ review, then the wallet. What is lost: the weekly estimate for the accounts tick
 8. **Plain words.** Account, votes, epoch, Flex and Protocol Account, as Hydrex uses them. No glossary.
 9. **Heights on a phone,** 390 × 844: Home in one screen; the App, with a wallet, shows its first account in the first
    screen; a product's page in two screens with its folds closed; a position's in two, with its receipt.
-10. **Anonymous.** No operator named, and nobody behind Matcha Latte's keeper; Hydrex is named as the one who controls
-    its settings. No link to this repository or to Double Espresso's, `github.com/ldeso/hydrex-conduit`, and no commit
-    hash, which could be searched for. Double Espresso's source is linked where it is verified, on Basescan and
-    Sourcify. Hydrex's own repository stays linked as Matcha Latte's source: it is Hydrex's, and says nothing of who
-    runs the café. Links that a visitor follows need no change to the Content Security Policy, which governs only what
-    the page itself fetches.
+10. **Anonymous.** Nobody named, neither who runs the café nor Matcha Latte's operator; Hydrex is named as the one who
+    controls its settings. No link to this repository or to Double Espresso's, `github.com/ldeso/hydrex-conduit`, and no
+    commit hash, which could be searched for. Each automation's contract links to its code on Basescan, where Double
+    Espresso's is verified. Links that a visitor follows need no change to the Content Security Policy, which governs
+    only what the page itself fetches.
 
 ## Everything, item by item
 
@@ -448,7 +434,7 @@ by their id or class in `index.html` at commit `682c47e`.
 | `.lead`               | Rewrite  | A product, 2: "Hydrex's automation", not "Klima's".                                                    |
 | `.key-facts`          | Cut      | Pays you joins the sentence; Leaving is the line on custody; Takes and Costs you are in the fee facts. |
 | "Join from the app"   | Rewrite  | A product, 4: join on the page.                                                                        |
-| `.fee-facts`          | Keep     | The treasury named and linked; its address in `check`.                                                 |
+| `.fee-facts`          | Keep     | The fee recipient named and linked; its address in `check`.                                            |
 | Last epoch, per 1,000 | Keep     | A product, 5.                                                                                          |
 | The rest, in full     | Cut      | The folds hold it.                                                                                     |
 
