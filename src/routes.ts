@@ -18,7 +18,7 @@ export type Route =
 export const APP_SECTIONS = ["allows"];
 export const PRODUCT_SECTIONS: Record<Kind, string[]> = {
   "matcha-latte": ["fees", "control", "check", "record"],
-  "double-espresso": ["fees", "control", "check", "record", "votes"],
+  "double-espresso": ["fees", "control", "check", "record"],
 };
 export const SWAP_SECTIONS = ["fees", "check", "approvals"];
 
