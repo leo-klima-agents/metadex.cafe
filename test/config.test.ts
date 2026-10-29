@@ -94,7 +94,7 @@ test("each automation has a kind, a name, its approvals and its costs, Double Es
   const controlOf = (kind: string) =>
     /<div data-section="control">[\s\S]*?<\/dl>/.exec(productOf(html, kind))?.[0] ?? "";
   assert.deepEqual(rows(controlOf("matcha-latte")), ["Hydrex admin", "Operator"]);
-  assert.deepEqual(rows(controlOf("double-espresso")), ["Immutable", "Democratic"]);
+  assert.deepEqual(rows(controlOf("double-espresso")), ["Immutable", "Permissionless"]);
   assert.match(controlOf("double-espresso"), /It cannot be changed or upgraded/);
   // Then its contract and where its fee goes.
   const contractsOf = (kind: string) =>

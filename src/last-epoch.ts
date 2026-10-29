@@ -17,7 +17,8 @@ import type { Holdings } from "./hydrex.ts";
 import { RETRY, reader, type Reader } from "./read.ts";
 
 // What the automations' votes earned last epoch: each automation's line on the menu and on its page, each account's
-// part of its automation's, and, on each automation's page, the fold that sets it against all of Hydrex.
+// part of its automation's, and, on each automation's page, the fold that sets it against all of Hydrex: its
+// "Performance".
 
 type Value = ReturnType<typeof valueOf>;
 type Read = { found: Earnings; value: Value };
@@ -62,7 +63,7 @@ const voters = new Map<string, Reader<Read>>();
 // All of Hydrex, for the average beside each choice, for the epoch from `start`: its value per 1,000 votes.
 let average: { start: number; figures: Reader<{ all: Earnings; per: Money }> } | undefined;
 
-// Each automation's popup "Against all of Hydrex", on its page.
+// Each automation's popup "Performance", on its page.
 const foldOf = ({ kind }: Automation): HTMLElement =>
   document.querySelector<HTMLElement>(`.view[data-kind="${kind}"] [data-section="record"]`)!;
 const part = (fold: HTMLElement, name: string): HTMLElement => fold.querySelector<HTMLElement>(`.${name}`)!;
@@ -236,7 +237,7 @@ export function averagePerThousand(): Money | null | undefined {
 }
 
 // What some votes earned per 1,000 votes against Hydrex's average, as a ratio: both at the average's prices,
-// so that they compare fairly, as the popup "Against all of Hydrex" does. Undefined until the average is read, and null
+// so that they compare fairly, as the popup "Performance" does. Undefined until the average is read, and null
 // if it could not be, or if it is of another epoch than the one shown, which the page does not read.
 function versusAverage(found: Earnings): number | null | undefined {
   const figures = average?.start === found.start ? average.figures : undefined;
@@ -354,8 +355,8 @@ function compare(automation: Automation): void {
       // Before what it takes: the menu and its key figure give what reached the owner.
       versus.textContent =
         Math.abs(ratio - 1) < 0.005
-          ? `${name}'s votes earned about Hydrex's average, before what it takes`
-          : `${name}'s votes earned ${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "more" : "less"} than Hydrex's average, before what it takes`;
+          ? `${name}'s votes earned about the average last epoch.`
+          : `${name}'s votes earned ${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "more" : "less"} than average last epoch.`;
       status.hidden = true;
       versus.hidden = !Number.isFinite(ratio);
     },

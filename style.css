@@ -1294,10 +1294,7 @@ details[open] > summary:not(.info)::before {
   text-align: start;
   vertical-align: top;
 }
-/* What the popup "Against all of Hydrex" finds, first, then its tables, the popup's width. */
-.versus {
-  font-weight: 700;
-}
+/* The popup "Performance": its tables, the popup's width. */
 .record-found table {
   inline-size: 100%;
 }

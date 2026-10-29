@@ -94,7 +94,7 @@ This README is for whoever runs the site. The design and the plan are in [design
   the account stays in the wallet, its key figures (what it takes, what it pays in, what its votes earned last epoch
   against Hydrex's average, as Hydrex's page shows it, and what it retired or who controls it), and a way to join, or
   the wallet buttons. Everything else is in two popups. Costs and contracts, beside its name, as the swap's: its costs,
-  who can change it, and its contract and fee recipient. And how it did against all of Hydrex, beside last epoch.
+  who can change it, and its contracts. And Performance, beside last epoch: how it did against all of Hydrex.
 - Each account has a page, `#hydrex/` and its number, which anyone can open: its status, what its votes earned, what its
   owner can do with it, with the gas of a change when it earns nothing, and, in an automation, up to when it has been
   paid, what waits to be claimed, and the receipt of its last payout. The App marks the accounts paid late.
