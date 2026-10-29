@@ -366,9 +366,14 @@ security update comes at once, on its own.
 | `test/`, `fork/`                                        | Unit tests; the browser tests, which `fork/run.ts` runs at once, the harness they share in `fork/harness.ts`, and `fork/rpc-cache.ts`, which keeps the answers their forks read from Base.                       |
 | `fork/qa.ts`, `fork/qa.html`, `fork/scenarios.ts`       | `npm run qa`: the page against a fork, the QA wallet's window beside it, and the states it can start the fork in.                                                                                                |
 | `fork/fixtures/`                                        | Double Espresso's init code, for the browser tests to deploy it on the fork; and a token of the QA wallet's own, its source and init code.                                                                       |
-| `scripts/`                                              | The build; `fonts.py` makes `fonts/`, `icons.ts` draws the icons from `icon.svg`, and `tokens.ts` checks the list of tokens.                                                                                     |
+| `scripts/`                                              | The build, and `notices.ts`, the license notices it appends to each built file; `fonts.py` makes `fonts/`, `icons.ts` draws the icons from `icon.svg`, and `tokens.ts` checks the list of tokens.                |
 
 ## License
 
 MIT, and REUSE compliant. The fonts in `fonts/` are under the SIL Open Font License 1.1. Klima Protocol's logo,
 `klima-protocol.svg`, belongs to Klima Protocol, all rights reserved, and is used with its permission.
+
+The built `main.js` and `style.css` each end with the license notices of what they bundle, which the build writes from
+what esbuild bundled: each npm package by the copyright lines of its LICENSE, or else its author, and each font by
+`REUSE.toml`; then each license's text, verbatim from `LICENSES/`. A bundled package under a license with no text or
+name there stops the build.

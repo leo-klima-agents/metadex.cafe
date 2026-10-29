@@ -1,7 +1,8 @@
 import * as esbuild from "esbuild";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { bundled, noticeOf, partsOf } from "./notices.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUT = `${ROOT}/dist`;
@@ -16,7 +17,7 @@ function integrity(file: string): string {
 
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT);
-await esbuild.build({
+const { metafile } = await esbuild.build({
   absWorkingDir: ROOT,
   entryPoints: { main: "src/main.ts", style: "style.css" },
   outdir: OUT,
@@ -26,9 +27,18 @@ await esbuild.build({
   minify: true,
   charset: "utf8",
   loader: { ".woff2": "dataurl" },
-  legalComments: "linked",
+  legalComments: "none",
+  metafile: true,
   logLevel: "warning",
 });
+// Each built file ends with the license notices of what it bundles, before its integrity is taken.
+for (const file of ["main.js", "style.css"]) {
+  const built = readFileSync(`${OUT}/${file}`, "utf8");
+  appendFileSync(
+    `${OUT}/${file}`,
+    `${built.endsWith("\n") ? "" : "\n"}${noticeOf(ROOT, partsOf(ROOT, bundled(metafile, file)))}`,
+  );
+}
 for (const file of ["icon.svg", "favicon.ico", "apple-touch-icon.png", "klima-protocol.svg", "manifest.json"])
   copyFileSync(`${ROOT}/${file}`, `${OUT}/${file}`);
 const values: Record<string, string> = {
