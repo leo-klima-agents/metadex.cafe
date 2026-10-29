@@ -244,6 +244,10 @@ test("an answer to a request for logs gives back to an RPC's limit of all reques
 
 test("once no RPC answers two requests or more for two seconds, requests fail at once for ten seconds, then one is asked", async () => {
   Math.random = () => 0;
+  // An RPC answered, more than ten seconds before.
+  answering(everywhere(result("0x1")));
+  await rpc("eth_chainId", []);
+  performance.now = () => original.now() + 10_000;
   const asked = answering(everywhere({ fail: new TypeError("fetch failed") }));
   const both = await Promise.allSettled([rpc("eth_call", [1]), rpc("eth_call", [2])]);
   assert.ok(both.every((each) => each.status === "rejected"));
@@ -252,9 +256,28 @@ test("once no RPC answers two requests or more for two seconds, requests fail at
   assert.ok(before < 2 * 5 * RPCS.length, `asked ${before} times`);
   await assert.rejects(rpc("eth_chainId", []), /No Base RPC can be reached\./);
   assert.equal(asked.length, before, "nothing is asked meanwhile");
-  performance.now = () => original.now() + 10_000;
+  performance.now = () => original.now() + 20_000;
   answering(everywhere(result("0x1")));
   assert.equal(await rpc("eth_chainId", []), "0x1");
+});
+
+test("before any RPC answered, as the page opens, only the browser's word that it is offline cuts requests off", async () => {
+  Math.random = () => 0;
+  // A burst of first requests refused without CORS headers, which the browser tells from no network at all.
+  const asked = answering(everywhere({ fail: new TypeError("Failed to fetch") }));
+  await Promise.allSettled([rpc("eth_call", [1]), rpc("eth_call", [2])]);
+  const before = asked.length;
+  assert.equal(before, 2 * 5 * RPCS.length);
+  await assert.rejects(rpc("eth_chainId", []), /No Base RPC answered eth_chainId\./);
+  assert.ok(asked.length > before, "still asked");
+  const navigator = Object.getOwnPropertyDescriptor(globalThis, "navigator")!;
+  Object.defineProperty(globalThis, "navigator", { value: { onLine: false }, configurable: true });
+  try {
+    await assert.rejects(rpc("eth_call", [3]), /No Base RPC/);
+    await assert.rejects(rpc("eth_chainId", []), /No Base RPC can be reached\./);
+  } finally {
+    Object.defineProperty(globalThis, "navigator", navigator);
+  }
 });
 
 test("RPCs that answered within ten seconds are not cut off, as when they refuse a burst in a way the browser hides", async () => {

@@ -54,10 +54,10 @@ const allOf = new Map<number, Promise<Earnings>>();
 const compared = new Map<Kind, number>();
 // An account's votes count for whoever held them when the epoch began: an automation, or mostly its owner. Each
 // account's holder and votes then, by account number, whoever holds it now; `asked` holds the accounts read or being
-// read, and when a read of some failed: they are read again five minutes after. Then what each holder that is none of
-// the page's automations earned, for the epoch from `start`, by holder.
+// read, and `failed` when the last read of each that failed began: it is read again five minutes after. Then what each
+// holder that is none of the page's automations earned, for the epoch from `start`, by holder.
 let stakes:
-  { start: number; of: Map<bigint, Stake | undefined>; asked: Set<bigint>; failed?: number | undefined } | undefined;
+  { start: number; of: Map<bigint, Stake | undefined>; asked: Set<bigint>; failed: Map<bigint, number> } | undefined;
 const voters = new Map<string, Reader<Read>>();
 // All of Hydrex, for the average beside each choice, for the epoch from `start`: its value per 1,000 votes.
 let average: { start: number; figures: Reader<{ all: Earnings; per: Money }> } | undefined;
@@ -69,11 +69,7 @@ const part = (fold: HTMLElement, name: string): HTMLElement => fold.querySelecto
 
 // Whether any of the automations' figures are due to be read; and whether each one's read has ended, found or failed.
 export const earningsDue = (automations: Automation[]): boolean => automations.some((each) => figuresOf(each).due());
-export const earningsEnded = (automations: Automation[]): boolean =>
-  automations.every((each) => {
-    const figures = figuresOf(each);
-    return !figures.reading && (figures.value !== undefined || figures.failed);
-  });
+export const earningsEnded = (automations: Automation[]): boolean => automations.every((each) => figuresOf(each).ended);
 
 // Resolves to true once new figures are shown for any of the automations. Callers share a read under way.
 export const loadEarnings = (automations: Automation[]): Promise<boolean> =>
@@ -122,27 +118,30 @@ export async function loadShares(holdings: Holdings): Promise<boolean> {
   const start = shownStart();
   if (!start) return false;
   if (stakes?.start !== start) {
-    stakes = { start, of: new Map(), asked: new Set() };
+    stakes = { start, of: new Map(), asked: new Set(), failed: new Map() };
     voters.clear();
   }
   const known = stakes;
+  const time = Date.now();
   const missing = holdings.accounts
     .filter(({ amount }) => amount > 0n)
     .map(({ id }) => id)
-    .filter((id) => !known.asked.has(id));
+    .filter((id) => !known.asked.has(id) && time - (known.failed.get(id) ?? -Infinity) >= RETRY);
   let changed = false;
-  if (missing.length && (!known.failed || Date.now() - known.failed >= RETRY)) {
+  if (missing.length) {
     for (const id of missing) known.asked.add(id);
     const found = await stakesOf(missing, start).catch((error) => void console.error(error));
     if (!found) for (const id of missing) known.asked.delete(id);
     if (stakes !== known) return false;
     // A failure is news too: what waited for it says so.
     if (!found) {
-      known.failed = Date.now();
+      for (const id of missing) known.failed.set(id, time);
       return true;
     }
-    known.failed = undefined;
-    for (const id of missing) known.of.set(id, found.get(id));
+    for (const id of missing) {
+      known.failed.delete(id);
+      known.of.set(id, found.get(id));
+    }
     changed = true;
   }
   const reads = holdersOf(known.of.values()).map((holder) => {
@@ -173,7 +172,8 @@ export function ownPerThousand({ owner, accounts }: Holdings): Money | "none" | 
   const ids = accounts.filter(({ amount }) => amount > 0n).map(({ id }) => id);
   if (noEpoch()) return null;
   if (!stakes || stakes.start !== shownStart()) return undefined;
-  if (ids.some((id) => !stakes!.of.has(id))) return stakes.failed ? null : undefined;
+  const unread = ids.filter((id) => !stakes!.of.has(id));
+  if (unread.length) return unread.some((id) => stakes!.failed.has(id)) ? null : undefined;
   if (!ids.some((id) => same(stakes!.of.get(id)?.delegate ?? zeroAddress, owner))) return "none";
   const voter = voterOf(owner);
   const read = voter?.value;
@@ -197,7 +197,7 @@ export function ownVersus(holdings: Holdings): number | null | undefined {
 export function earnedByAccount({ id, amount }: { id: bigint; amount: bigint }): Money | null | undefined {
   if (amount === 0n || noEpoch()) return null;
   if (!stakes || stakes.start !== shownStart()) return undefined;
-  if (!stakes.of.has(id)) return stakes.failed ? null : undefined;
+  if (!stakes.of.has(id)) return stakes.failed.has(id) ? null : undefined;
   const stake: Stake | undefined = stakes.of.get(id);
   if (!stake) return null;
   const automation = AUTOMATIONS.find(({ address }) => same(address, stake.delegate));

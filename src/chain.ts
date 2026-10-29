@@ -113,15 +113,17 @@ function recordStart(url: string, kind: Kind, time: number): void {
 // the network does not, nor one request that the RPCs, or a proxy before them, cut off: it fails alone, as any other.
 // Then the next request is asked as usual, and any answer ends it. An RPC that is busy, or slow, can be reached. So can
 // one that answered within the while: a browser tells a refusal sent without the headers that let the page read it, as
-// some RPCs send when too many requests come at once, from no network at all.
+// some RPCs send when too many requests come at once, from no network at all. Before any RPC answered, as the page
+// opens with a burst of reads, only the browser's word that it is offline cuts them off.
 const CUT_OFF = 10_000;
 const UNANSWERED = 3;
 const UNANSWERED_FOR = 2_000;
-// Each RPC's run of requests with no answer: how many, since when, and which; and when it last answered.
+// Each RPC's run of requests with no answer: how many, since when, and which, up to two; and when it last answered.
 const unanswered = new Map<string, { count: number; since: number; bodies: Set<string> }>();
 const reachedAt = new Map<string, number>();
 let cutUntil = 0;
 const cutOff = (): boolean => performance.now() < cutUntil;
+const offline = (): boolean => globalThis.navigator?.onLine === false;
 
 function reachedOrNot(url: string, body: string, reached: boolean): void {
   const time = performance.now();
@@ -134,13 +136,13 @@ function reachedOrNot(url: string, body: string, reached: boolean): void {
   if (time - (reachedAt.get(url) ?? -Infinity) < CUT_OFF) return;
   const run = unanswered.get(url) ?? { count: 0, since: time, bodies: new Set() };
   run.count++;
-  run.bodies.add(body);
+  if (run.bodies.size < 2) run.bodies.add(body);
   unanswered.set(url, run);
   const out = (each: string) => {
     const { count = 0, since = time, bodies = new Set() } = unanswered.get(each) ?? {};
     return count >= UNANSWERED && bodies.size >= 2 && time - since >= UNANSWERED_FOR;
   };
-  if (RPCS.every(out)) cutUntil = time + CUT_OFF;
+  if (RPCS.every(out) && (reachedAt.size > 0 || offline())) cutUntil = time + CUT_OFF;
 }
 export class Unreachable extends Error {
   constructor() {
