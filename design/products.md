@@ -252,6 +252,8 @@ NEEDS YOU · 3
 ○ 2 approvals left from a swap that failed.       [Reset]
 
 THE MENU
+Aero                                     (greyed out, no link)
+  Coming soon
 Hydrex                                                     →
   Automations that vote with your Hydrex accounts.
   Yours: 5 accounts, 2 in Matcha Latte, 1 in Double Espresso
@@ -266,10 +268,10 @@ Swap                                                       →
   approvals left over. Once connected, it keeps a line's place while the wallet's accounts are read, so that the
   products under it do not move, then says "Nothing right now" when nothing needs you; a payout that is merely waiting
   for Thursday does not count, so that the group keeps its weight.
-- **The menu** has one entry per kind of product, Hydrex, for its automations together, and the swap, each with one line
-  of what it does, what it takes, and once connected, what you hold in it. What each automation's votes earned last
-  epoch, against Hydrex's average, is on Hydrex's menu, one level down. Claiming is not on it: it is an action on
-  accounts in Double Espresso.
+- **The menu** has one entry per kind of product: Aero first, greyed out and leading nowhere, "Coming soon"; then
+  Hydrex, for its automations together, and the swap, each with one line of what it does, what it takes, and once
+  connected, what you hold in it. What each automation's votes earned last epoch, against Hydrex's average, is on
+  Hydrex's menu, one level down. Claiming is not on it: it is an action on accounts in Double Espresso.
 - **Reads:** the App's own reads are what its lines need: the accounts and their groups, which it reads today, and the
   balances of known tokens with their quotes for the swap line. The swap line can come last, pending, as the earnings
   do, then says what it found so far: "3 tokens · ≈ $31 so far". Home starts those that need no wallet, so that the App

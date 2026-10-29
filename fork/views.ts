@@ -81,9 +81,11 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await homeTitle(page).isVisible(), false);
     assert.equal(await page.title(), "Your wallet · metaDEX Café");
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Your wallet");
-    // The App lists the products, each with what it is: Hydrex, and the swap.
-    assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), ["Hydrex", "Swap"]);
+    // The App lists the products, each with what it is: Aero, still to come, with no link; Hydrex; and the swap.
+    assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), ["Aero", "Hydrex", "Swap"]);
+    assert.equal(await app(page).locator('#products [data-choice="aero"] a').count(), 0);
     assert.deepEqual(await app(page).locator("#products .note").allInnerTexts(), [
+      "Coming soon",
       "Automations that vote with your Hydrex accounts.",
       "Sell many tokens for one.",
     ]);

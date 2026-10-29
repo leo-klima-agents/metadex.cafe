@@ -780,6 +780,10 @@ button img {
   display: grid;
   gap: 0.125rem;
 }
+/* A product still to come, greyed out as what cannot be used yet. */
+.choice.soon {
+  opacity: 0.45;
+}
 /* "≈ $0.72 / 1k votes", then how it compares with Hydrex's average, under it. */
 .choice .record-versus-line {
   display: block;
