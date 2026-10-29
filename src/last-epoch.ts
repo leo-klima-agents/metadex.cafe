@@ -181,8 +181,9 @@ export function ownPerThousand({ owner, accounts }: Holdings): Money | "none" | 
 // there is none to show.
 export function ownVersus(holdings: Holdings): number | null | undefined {
   const own = ownPerThousand(holdings);
-  if (typeof own !== "object") return own === undefined ? undefined : null;
-  return versusAverage(voterOf(holdings.owner)!.value!.found);
+  if (own === undefined) return undefined;
+  const found = typeof own === "object" && own ? voterOf(holdings.owner)?.value?.found : undefined;
+  return found ? versusAverage(found) : null;
 }
 
 // What the account's votes earned in the epoch shown, at its prices: its part of its automation's, or of whoever else

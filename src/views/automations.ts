@@ -237,7 +237,7 @@ export function showRecords(): void {
               ? "Didn't vote"
               : () => money(yours),
   });
-  show(".yours-unit", yours === undefined || typeof yours === "object", voteYourself);
+  show(".yours-unit", yours === undefined || (!!yours && typeof yours === "object"), voteYourself);
   const ratio = holdings ? ownVersus(holdings) : yours === null ? null : undefined;
   fill(voteYourself, { "yours-versus": ratio === undefined ? PENDING : ratio === null ? "" : versusWords(ratio) });
 }

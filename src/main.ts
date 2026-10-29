@@ -53,12 +53,18 @@ onRoute(() => {
   readAverage();
   void showShares();
 });
-// Each read of figures, whoever started it, shows on the menu, on the automations' pages and in the accounts' shares.
-onEarnings(() => {
+// Each read of figures, whoever started it, shows on the menu, on the automations' pages and in the accounts' shares. A
+// read that failed is news to the accounts too: what each earned, pending until then, says nothing once no epoch can be
+// read.
+onEarnings((_, outcome) => {
   void showShares();
   readAverage();
   showAutoMaxi();
   showRecords();
+  if (outcome === "failed") {
+    views.accounts(true);
+    views.position();
+  }
 });
 
 // Reads again whatever is missing or from an epoch that has ended, so that the page moves on by itself.
