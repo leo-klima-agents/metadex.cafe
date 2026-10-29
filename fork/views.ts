@@ -167,6 +167,12 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await pick(page, 2435, 2439);
     await group(page, "needs:stopped").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
     await review(page).getByRole("heading", { name: "Before you join" }).waitFor();
+    // With no fee, the rewards not claimed yet come less the share retired alone.
+    const unclaimed = await review(page).locator(".callout strong").innerText();
+    assert.equal(
+      unclaimed,
+      "Unclaimed rewards on these Hydrex accounts will be paid to you in kVCM with their next payouts, less the share retired.",
+    );
     await review(page).getByRole("link", { name: "Can change" }).click();
     assert.equal(await review(page).isVisible(), false);
     await page

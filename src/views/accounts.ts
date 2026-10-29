@@ -338,7 +338,13 @@ export function review(accounts: Account[], action: Action, automation?: Automat
     const part = clone(id);
     fillTime(part, "next", epochStart + WEEK, utc);
     fillPlural(part, accounts.length);
-    if (settings) fill(part, { takes: `${bps(settings.retireBps)} retired, ${feeWords(settings.feeBps)}` });
+    if (settings) {
+      // What Matcha Latte keeps of the rewards not claimed yet: the share retired, and its fee unless it is none, or
+      // any fee while it is not read.
+      const { retireBps, feeBps } = settings;
+      const fee = feeBps === 0n ? "" : feeBps === undefined ? " and any fee" : ` and the ${bps(feeBps)} fee`;
+      fill(part, { takes: `${bps(retireBps)} retired, ${feeWords(feeBps)}`, "takes-fee": fee });
+    }
     return part;
   };
   const checkOf = ({ kind }: Automation) => hrefOf({ view: "product", kind, section: "check" });
