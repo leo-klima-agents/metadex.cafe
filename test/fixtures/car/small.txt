@@ -1,0 +1,1 @@
+A file of one chunk, whose CID is its own raw block.
