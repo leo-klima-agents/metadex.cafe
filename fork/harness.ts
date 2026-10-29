@@ -629,10 +629,10 @@ export async function toWallet(page: Page): Promise<void> {
     .waitFor();
 }
 
-// Waits until the page names the next epoch's start, as it does in each automation's popup on joining.
+// Waits until the page names the next epoch's start, as Hydrex's page does when a change made now moves the votes.
 export async function nextEpoch(page: Page, day: RegExp): Promise<void> {
   await page.waitForFunction(
-    (source) => new RegExp(source).test(document.querySelector("time.next-epoch")?.textContent ?? ""),
+    (source) => new RegExp(source).test(document.querySelector("time.epoch-end")?.textContent ?? ""),
     day.source,
   );
 }
