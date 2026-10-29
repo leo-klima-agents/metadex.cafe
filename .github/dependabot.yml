@@ -1,10 +1,23 @@
+# Each week, one pull request for the Actions and one for the npm packages, each with every update due. A release is
+# proposed only once it is a week old, as a compromised one is mostly found and pulled within days. Security updates
+# come apart, and at once: neither the groups nor the wait apply to them.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      npm:
+        patterns: ["*"]
