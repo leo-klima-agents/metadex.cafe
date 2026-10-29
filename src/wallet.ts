@@ -1,4 +1,3 @@
-import SafeAppsSDK from "@safe-global/safe-apps-sdk";
 import { getAddress, type Address, type Hex } from "viem";
 import { CHAIN_ID, RPCS } from "./config.ts";
 import { clean } from "./format.ts";
@@ -55,26 +54,55 @@ async function injected(): Promise<Provider> {
   return provider;
 }
 
-// Where Safe{Wallet} runs: the page answers no other frame, and the SDK takes messages from no other.
+// Where Safe{Wallet} runs: the page asks no other frame, and takes answers from no other.
 export const SAFE_ORIGIN = "https://app.safe.global";
-export const SAFE_DOMAIN = new RegExp(`^${SAFE_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
+// The Safe Apps SDK's version that the page's requests carry, as Safe{Wallet} expects of a Safe App.
+const SAFE_APPS_VERSION = "9.1.0";
 
 // The origin of the page that frames this one, when the browser says. An opaque origin, "null", as a sandboxed frame or
-// one framed without a referrer has, says nothing: the SDK's handshake decides then. Nor does a referrer of the page's
-// own origin, `own`, where the browser does not list the frame's ancestors: the frame navigated within itself.
+// one framed without a referrer has, says nothing: whether Safe{Wallet} answers decides then. Nor does a referrer of the
+// page's own origin, `own`, where the browser does not list the frame's ancestors: the frame navigated within itself.
 export function parentOrigin(ancestor: string | undefined, referrer: string, own?: string): string | undefined {
   const origin = ancestor ?? (referrer ? new URL(referrer).origin : "");
   if (ancestor === undefined && origin === own) return undefined;
   return origin && origin !== "null" ? origin : undefined;
 }
 
+type SafeAnswer = { id: string; success: boolean; data?: unknown; error?: string };
+
+// Asks Safe{Wallet}, the page's parent, as a Safe App does: a message of an id, a method, its params and the SDK's
+// version, sent to Safe{Wallet}'s origin only, which it answers with the same id. An answer counts only from the parent,
+// at that origin, to a question the page asked.
+export function askSafe(
+  parent: { postMessage(message: unknown, targetOrigin: string): void },
+  events: Pick<EventTarget, "addEventListener"> = window,
+): (method: string, params?: unknown) => Promise<unknown> {
+  const waiting = new Map<string, (answer: SafeAnswer) => void>();
+  events.addEventListener("message", (event) => {
+    const { origin, source, data } = event as MessageEvent<SafeAnswer | undefined>;
+    if (origin !== SAFE_ORIGIN || source !== parent || !data) return;
+    const answered = waiting.get(data.id);
+    if (!answered) return;
+    waiting.delete(data.id);
+    answered(data);
+  });
+  let asked = 0;
+  return (method, params) =>
+    new Promise((resolve, reject) => {
+      const id = `${++asked}`;
+      waiting.set(id, ({ success, data, error }) => (success ? resolve(data) : reject(new Error(error))));
+      parent.postMessage({ id, method, params, env: { sdkVersion: SAFE_APPS_VERSION } }, SAFE_ORIGIN);
+    });
+}
+
 export async function safeWallet(): Promise<Wallet | undefined> {
   if (window.parent === window) return undefined;
   const parent = parentOrigin(location.ancestorOrigins?.[0], document.referrer, location.origin);
   if (parent && parent !== SAFE_ORIGIN) return undefined;
-  const sdk = new SafeAppsSDK({ allowedDomains: [SAFE_DOMAIN] });
+  const ask = askSafe(window.parent);
   const timeout = new Promise<undefined>((resolve) => setTimeout(resolve, parent ? 10_000 : 1_000));
-  const info = await Promise.race([sdk.safe.getInfo(), timeout]).catch(() => undefined);
+  const info = (await Promise.race([ask("getSafeInfo"), timeout]).catch(() => undefined)) as
+    { safeAddress: string; chainId: number } | undefined;
   if (!info) return undefined;
   const provider: Provider = {
     async request({ method }) {
@@ -88,9 +116,11 @@ export async function safeWallet(): Promise<Wallet | undefined> {
     provider: async () => provider,
     async propose(txs) {
       // Safe{Wallet} says "Transaction was rejected" when its window is closed.
-      await sdk.txs.send({ txs: txs.map(({ to, data }) => ({ to, data, value: "0" })) }).catch((error: Error) => {
-        throw Object.assign(error, /rejected/i.test(error.message) ? { code: USER_REJECTED } : {});
-      });
+      await ask("sendTransactions", { txs: txs.map(({ to, data }) => ({ to, data, value: "0" })) }).catch(
+        (error: Error) => {
+          throw Object.assign(error, /rejected/i.test(error.message) ? { code: USER_REJECTED } : {});
+        },
+      );
     },
   };
 }

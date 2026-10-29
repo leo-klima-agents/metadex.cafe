@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  SAFE_DOMAIN,
   SAFE_ORIGIN,
+  askSafe,
   callsStatus,
   capabilities,
   parentOrigin,
@@ -99,10 +99,7 @@ test("a wallet that failed to answer wallet_getCapabilities is asked again, unle
   }
 });
 
-test("a frame's parent is Safe{Wallet} only at its origin, and an opaque origin leaves it to the SDK to say", () => {
-  assert.ok(SAFE_DOMAIN.test(SAFE_ORIGIN));
-  assert.ok(!SAFE_DOMAIN.test("https://appXsafe.global"), "the dots are dots");
-  assert.ok(!SAFE_DOMAIN.test(`${SAFE_ORIGIN}.evil.example`));
+test("a frame's parent is Safe{Wallet} only at its origin, and an opaque origin leaves it to Safe{Wallet} to say", () => {
   assert.equal(parentOrigin(SAFE_ORIGIN, ""), SAFE_ORIGIN);
   assert.equal(parentOrigin(undefined, `${SAFE_ORIGIN}/apps/open?safe=base:0x1`), SAFE_ORIGIN);
   assert.equal(parentOrigin("https://evil.example", ""), "https://evil.example");
@@ -113,4 +110,32 @@ test("a frame's parent is Safe{Wallet} only at its origin, and an opaque origin 
   // Nor a referrer of the page's own, where the browser lists no ancestors: the frame navigated within itself.
   assert.equal(parentOrigin(undefined, "https://metadex.cafe/#app", "https://metadex.cafe"), undefined);
   assert.equal(parentOrigin("https://metadex.cafe", "", "https://metadex.cafe"), "https://metadex.cafe");
+});
+
+test("Safe{Wallet} is asked at its origin only, and answers count from the parent, at that origin, to what was asked", async () => {
+  const sent: { message: { id?: string }; origin: string }[] = [];
+  const parent = { postMessage: (message: { id?: string }, origin: string) => sent.push({ message, origin }) };
+  const events = new EventTarget();
+  const answer = (data: unknown, origin = SAFE_ORIGIN, source: unknown = parent) =>
+    events.dispatchEvent(Object.assign(new Event("message"), { origin, source, data }));
+  const ask = askSafe(parent, events);
+  const info = ask("getSafeInfo");
+  // As the Safe Apps SDK asked.
+  assert.deepEqual(sent, [
+    {
+      message: { id: "1", method: "getSafeInfo", params: undefined, env: { sdkVersion: "9.1.0" } },
+      origin: SAFE_ORIGIN,
+    },
+  ]);
+  answer({ id: "1", success: true, data: "from elsewhere" }, "https://evil.example");
+  answer({ id: "1", success: true, data: "from another frame" }, SAFE_ORIGIN, {});
+  answer({ id: "2", success: true, data: "to nothing asked" });
+  answer(undefined);
+  answer({ id: "1", success: true, data: { safeAddress: ADDRESS, chainId: 8453 } });
+  assert.deepEqual(await info, { safeAddress: ADDRESS, chainId: 8453 });
+  // Each question has its own id; an error, as Safe{Wallet} gives one, rejects it.
+  const proposed = ask("sendTransactions", { txs: [] });
+  assert.equal(sent[1]?.message.id, "2");
+  answer({ id: "2", success: false, error: "Transaction was rejected" });
+  await assert.rejects(proposed, /^Error: Transaction was rejected$/);
 });

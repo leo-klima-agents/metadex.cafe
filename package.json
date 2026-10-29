@@ -19,7 +19,6 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "@safe-global/safe-apps-sdk": "9.1.0",
     "viem": "2.57.13"
   },
   "devDependencies": {
