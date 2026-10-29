@@ -209,7 +209,9 @@ describe("the page against a fork of Base: its views, and each account's payouts
     // which Hydrex's page groups with their remedy.
     const needs = app(page).locator("#needs");
     await needs.getByRole("heading", { name: "Needs you · 1" }).waitFor();
-    const stopped = needs.locator("li").filter({ hasText: /^2 Hydrex accounts in stopped automations/ });
+    const words = "2 Hydrex accounts in stopped automations";
+    const stopped = needs.locator("li").filter({ hasText: words });
+    await stopped.getByText(words, { exact: true }).waitFor();
     assert.equal(await stopped.getByRole("link", { name: "Change" }).getAttribute("href"), "#hydrex");
     await app(page).locator(".hydrex-yours").getByText("2 Hydrex accounts", { exact: true }).waitFor();
     // With a wallet connected, Home is still Home: the name in the header leads there.
