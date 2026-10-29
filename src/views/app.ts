@@ -64,25 +64,28 @@ export function showApp(): void {
   const holdings = connection ? shown() : undefined;
   if (holdings) {
     const { owner, accounts, epochStart } = holdings;
-    // Accounts in automations that stopped, and accounts their owner votes with, who did not vote last epoch, a line
-    // each, as each shares one remedy, which Hydrex's page offers. An account with less than a vote needs nothing.
-    let [stopped, unvoted] = [0, 0];
+    // Accounts their owner votes with, who did not vote last epoch, and accounts in automations that stopped, a line
+    // each, as each shares one remedy, which Hydrex's page offers; then a line for each account partly in one, to its
+    // page. In the order of Hydrex's page. An account with less than a vote needs nothing.
+    let [unvoted, stopped] = [0, 0];
+    const partly: DocumentFragment[] = [];
     const toHydrex = { link: hrefOf({ view: "hydrex" }), label: "Change" };
     for (const account of accounts.filter(hasVotes)) {
       const status = statusOf(account, owner, now(), epochStart);
+      if (status.kind === "unvoted") unvoted++;
+      if (status.kind === "stopped") stopped++;
       if (status.kind === "partly") {
         const change = { link: hrefOf({ view: "position", id: account.id }), label: "Change" };
-        add(need("stopped", `Hydrex account #${account.id} is partly in ${status.automation.name}`, change));
+        partly.push(need("stopped", `Hydrex account #${account.id} is partly in ${status.automation.name}`, change));
       }
-      if (status.kind === "stopped") stopped++;
-      if (status.kind === "unvoted") unvoted++;
     }
+    if (unvoted)
+      add(need("stopped", `${count(unvoted, "Hydrex account", "Hydrex accounts")} didn't vote last epoch`, toHydrex));
     if (stopped) {
       const where = stopped === 1 ? "a stopped automation" : "stopped automations";
       add(need("stopped", `${count(stopped, "Hydrex account", "Hydrex accounts")} in ${where}`, toHydrex));
     }
-    if (unvoted)
-      add(need("stopped", `${count(unvoted, "Hydrex account", "Hydrex accounts")} didn't vote last epoch`, toHydrex));
+    for (const item of partly) add(item);
     for (const entry of overdue()) {
       const waits = waitsLine(entry);
       add(

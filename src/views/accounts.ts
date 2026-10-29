@@ -184,12 +184,6 @@ export function showAccounts(keepTicked = false): void {
     );
     section.hidden = !these.length;
   }
-  // Needs you, over its groups, says how many need their owner, whatever each needs.
-  const needing = members.filter(({ group }) => group.startsWith("needs:")).length;
-  for (const needs of document.querySelectorAll<HTMLElement>(".needs-groups")) {
-    needs.hidden = !needing;
-    fill(needs, { "needs-count": `· ${needing}` });
-  }
   updateButtons();
   // On the menu, how many of the wallet's accounts each automation holds, as the App counts them.
   for (const automation of AUTOMATIONS) {
@@ -235,7 +229,7 @@ export function updateButtons(): void {
       button.disabled = !accounts.some(allowed);
       button.textContent = verb;
     }
-    // Needs you's link to vote on Hydrex shows even when none of its accounts can join or leave, as before the checks.
+    // The link to vote on Hydrex shows even when none of its group's accounts can join, as before the checks.
     const vote = section.querySelector<HTMLElement>(".vote-on-hydrex");
     show(".buttons", able.length > 0 || (!!vote && !vote.hidden), section);
     // With boxes to tick: one that ticks them all, and what is ticked.

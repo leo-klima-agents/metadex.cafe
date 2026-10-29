@@ -264,10 +264,11 @@ Aero                                     (greyed out, no link)
 ```
 
 - **Without a wallet:** the wallet picker, then the menu, without the "Yours" lines.
-- **Needs you gathers from every product,** each with one action: an account in a stopped automation, an overdue payout,
-  approvals left over. Once connected, it keeps a line's place while the wallet's accounts are read, so that the
-  products under it do not move, then says "Nothing right now" when nothing needs you; a payout that is merely waiting
-  for Thursday does not count, so that the group keeps its weight.
+- **Needs you gathers from every product,** each with one action: accounts not voted with last epoch, accounts in a
+  stopped automation, in the order of Hydrex's page, an overdue payout, approvals left over. Once connected, it keeps a
+  line's place while the wallet's accounts are read, so that the products under it do not move, then says "Nothing right
+  now" when nothing needs you; a payout that is merely waiting for Thursday does not count, so that the group keeps its
+  weight.
 - **The menu** has one entry per kind of product: the swap, then Hydrex, for its automations together, each with one
   line of what it does, what it takes, and once connected, what you hold in it; and last Aero, greyed out and leading
   nowhere: "Coming soon." What each automation's votes earned last epoch, against Hydrex's average, is on Hydrex's menu,
