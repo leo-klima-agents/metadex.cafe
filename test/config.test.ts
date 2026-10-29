@@ -9,7 +9,7 @@ import {
   AUTOMATIONS,
   DOUBLE_ESPRESSO,
   DOUBLE_ESPRESSO_FEE_BPS,
-  DOUBLE_ESPRESSO_TREASURY,
+  DOUBLE_ESPRESSO_FEE_RECIPIENT,
   MATCHA_LATTE,
   OPERATOR,
   KVCM,
@@ -39,7 +39,7 @@ test("addresses are checksummed", () => {
   const contracts = [
     MULTICALL3,
     ...AUTOMATIONS.map(({ address }) => address),
-    DOUBLE_ESPRESSO_TREASURY,
+    DOUBLE_ESPRESSO_FEE_RECIPIENT,
     OPERATOR,
     KVCM,
     VOTING_ESCROW,
@@ -56,9 +56,17 @@ test("Matcha Latte is Hydrex's Carbon Impact automation, as its popup says, with
   const html = read("index.html");
   assert.match(
     productOf(html, "matcha-latte"),
-    /Matcha Latte is the "Carbon Impact" automation from Klima, also known as KlimaVeTokenConduit\./,
+    /Matcha Latte is the "Carbon Impact" automation from Hydrex\.\s+Its contract is named KlimaVeTokenConduit\./,
   );
-  assert.match(productOf(html, "double-espresso"), /Double Espresso is also known as ImmutableVeTokenConduit\./);
+  assert.match(
+    productOf(html, "double-espresso"),
+    /Double Espresso is an immutable automation with no owner\.\s+Its contract is named ImmutableVeTokenConduit\./,
+  );
+  // Beside its address, each goes by its contract's name.
+  assert.deepEqual(
+    AUTOMATIONS.map(({ contract }) => contract),
+    ["KlimaVeTokenConduit", "ImmutableVeTokenConduit"],
+  );
   assert.ok(html.includes(`<html lang="${LANG}">`), "the page and its numbers and dates use one language");
 });
 
@@ -87,9 +95,9 @@ test("each automation has a kind, a name and its costs, Double Espresso's as its
   // Then its contract and where its fee goes.
   const contractsOf = (kind: string) =>
     /<div data-section="check">[\s\S]*?<\/dl>/.exec(productOf(html, kind))?.[0] ?? "";
-  assert.deepEqual(rows(contractsOf("matcha-latte")), ["Matcha Latte", "Fee recipient"]);
-  assert.deepEqual(rows(contractsOf("double-espresso")), ["Double Espresso", "Fee recipient"]);
-  assert.ok(contractsOf("double-espresso").includes(`/address/${DOUBLE_ESPRESSO_TREASURY}"`));
+  assert.deepEqual(rows(contractsOf("matcha-latte")), ["KlimaVeTokenConduit", "Fee recipient"]);
+  assert.deepEqual(rows(contractsOf("double-espresso")), ["ImmutableVeTokenConduit", "Fee recipient"]);
+  assert.ok(contractsOf("double-espresso").includes(`/address/${DOUBLE_ESPRESSO_FEE_RECIPIENT}"`));
   // Each automation's address leads to its code, verified on Basescan.
   for (const { kind, address } of AUTOMATIONS) {
     assert.ok(productOf(html, kind).includes(`/address/${address}#code"`), `${kind}'s page links its code`);
@@ -203,7 +211,7 @@ test("the page names nobody who runs it, links to no repository but Hydrex's, an
 });
 
 test("each swapper has its output and a checksummed address, and the swap's page links them all", async () => {
-  const { SWAPPERS, EXCHANGES, DOUBLE_ESPRESSO_TREASURY } = await import("../src/config.ts");
+  const { SWAPPERS, EXCHANGES, DOUBLE_ESPRESSO_FEE_RECIPIENT } = await import("../src/config.ts");
   const tokens = (await import("../src/base-tokens.json", { with: { type: "json" } })).default;
   const html = read("index.html");
   const swap = viewOf(html, 'data-view="swap"');
@@ -256,7 +264,7 @@ test("each swapper has its output and a checksummed address, and the swap's page
   assert.match(slippage, /The token isn't swapped/);
   // The swap's own summary sets the slippage on the line of the least that may reach you.
   assert.match(swap, /<label\s*>Minimum at\s*<select class="swap-margin">/);
-  assert.ok(!swap.includes(DOUBLE_ESPRESSO_TREASURY) && !swap.includes("2-of-3"));
+  assert.ok(!swap.includes(DOUBLE_ESPRESSO_FEE_RECIPIENT) && !swap.includes("2-of-3"));
   // The swappers are immutable: the page checks only that its RPCs serve Base, and says nothing of it.
   assert.doesNotMatch(swap, /data-check=|>Checks<\/h4>|serves Base/);
 });

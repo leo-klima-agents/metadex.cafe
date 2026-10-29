@@ -512,9 +512,9 @@ finding routes for many tokens strains the free RPCs' limits, the page finds the
 
 The page's rules stand, and extend:
 
-- **Checks before use.** The page checks each swapper's output, treasury, fee and factories before it offers swaps into
-  it, as it checks the automations before it offers joining. A failed check turns that output off, with a square and
-  words. Resetting an approval always works.
+- **Checks before use.** The page checks each swapper's output, fee recipient, fee and factories before it offers swaps
+  into it, as it checks the automations before it offers joining. A failed check turns that output off, with a square
+  and words. Resetting an approval always works.
 - **Each call shown before the wallet asks,** approvals included.
 - **Nothing sold unasked.** Claims pay "as they are" by default; the swap ticks only what is worth it, and never sells
   more than the review shows.

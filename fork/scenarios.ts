@@ -103,8 +103,8 @@ export const SCENARIOS: Scenario[] = [
     block: RECENT,
     hash: "#swap",
     owners: [
-      { address: SELLER, holds: "WETH, ZORA and AVNT, from Matcha Latte's treasury" },
-      { address: HOLDER, holds: "Matcha Latte's treasury, a Safe with many tokens" },
+      { address: SELLER, holds: "WETH, ZORA and AVNT, from Matcha Latte's fee recipient" },
+      { address: HOLDER, holds: "Matcha Latte's fee recipient, a Safe with many tokens" },
       { address: PAYEE, holds: "93 Hydrex accounts; #82774 in Matcha Latte, its payout late" },
     ],
     // The others' balances too, as the page reads them first.

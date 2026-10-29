@@ -179,7 +179,7 @@ test("joining sets the conduit's approval on the VotingEscrow", () => {
   assert.equal(step!.says, "Account #141 joins Matcha Latte.");
   assert.deepEqual([step!.conduit, step!.id, step!.approve], [CONDUIT, 141n, true]);
   assert.equal(step!.on, "Hydrex's VotingEscrow");
-  assert.equal(step!.conduitName, "Matcha Latte");
+  assert.equal(step!.conduitName, "KlimaVeTokenConduit");
 });
 
 test("an account in other automations joins directly, one call per account, naming what it leaves", () => {
@@ -259,7 +259,7 @@ test("Double Espresso: in it, joining it, and moving between the two in one call
   const [move] = join([account({ delegate: CONDUIT, delegateAtStart: CONDUIT, claimer: CONDUIT })], DOUBLE_ESPRESSO);
   assert.deepEqual(txs([move!]), [approval(141n, true, MAXI)]);
   assert.equal(move!.says, "Account #141 leaves Matcha Latte and joins Double Espresso.");
-  assert.equal(move!.conduitName, "Double Espresso");
+  assert.equal(move!.conduitName, "ImmutableVeTokenConduit");
   const [back] = join([account({ delegate: MAXI, claimer: MAXI })], MATCHA_LATTE);
   assert.equal(back!.says, "Account #141 leaves Double Espresso and joins Matcha Latte.");
   const [both] = join([account({ delegate: USDC, claimer: CONDUIT })], DOUBLE_ESPRESSO);

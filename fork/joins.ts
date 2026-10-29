@@ -94,7 +94,10 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
       "Account #2439 leaves the USDC automation and joins Matcha Latte.",
       "Account #2435 leaves the Hydrex Lock Maxi automation and joins Matcha Latte.",
     ]);
-    assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["Matcha Latte", "Matcha Latte"]);
+    assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), [
+      "KlimaVeTokenConduit",
+      "KlimaVeTokenConduit",
+    ]);
     assert.deepEqual(await review(page).locator(".account").allTextContents(), ["2439", "2435"]);
     assert.deepEqual(await review(page).locator(".approve").allTextContents(), ["true", "true"]);
     // Each call is a bill, its fields in full under what it does, with nothing to open.

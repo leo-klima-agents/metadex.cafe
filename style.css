@@ -272,7 +272,7 @@ time.pending,
 .claim-into.pending {
   --bar: 11em;
 }
-.treasury.pending {
+.fee-recipient.pending {
   --bar: 22ch;
 }
 .average.pending,

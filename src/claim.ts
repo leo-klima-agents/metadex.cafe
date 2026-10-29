@@ -128,7 +128,7 @@ export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true
     data: encodeFunctionData({ abi: doubleEspressoAbi, functionName: "claim", args }),
     title: "Claim",
     says: `Claims account #${id}'s rewards${from} through Double Espresso, which pays them to you, less 1%.`,
-    on: "Double Espresso",
+    on: DOUBLE_ESPRESSO.contract,
     call: "claim",
     fields: [
       { label: "Account", name: "account", code: String(id) },

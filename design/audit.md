@@ -434,7 +434,7 @@ by their id or class in `index.html` at commit `682c47e`.
 | `.lead`               | Rewrite  | A product, 2: "Hydrex's automation", not "Klima's".                                                    |
 | `.key-facts`          | Cut      | Pays you joins the sentence; Leaving is the line on custody; Takes and Costs you are in the fee facts. |
 | "Join from the app"   | Rewrite  | A product, 4: join on the page.                                                                        |
-| `.fee-facts`          | Keep     | The treasury named and linked; its address in `check`.                                                 |
+| `.fee-facts`          | Keep     | The fee recipient named and linked; its address in `check`.                                            |
 | Last epoch, per 1,000 | Keep     | A product, 5.                                                                                          |
 | The rest, in full     | Cut      | The folds hold it.                                                                                     |
 

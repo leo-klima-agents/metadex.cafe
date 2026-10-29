@@ -892,14 +892,14 @@ export const balanceOf = (token: Address, owner: Address) => readOn<bigint>(toke
 
 export const swapView = (page: Page) => page.locator('.view[data-view="swap"]');
 
-// Matcha Latte's treasury, a Safe that holds many of the tokens its fee took.
+// Matcha Latte's fee recipient, a Safe that holds many of the tokens its fee took.
 export const HOLDER = getAddress("0xd9e966a6bfa2ae2113a34bb4dd02ded921da50af");
 export const AVNT = getAddress("0x696f9436b67233384889472cd7cd58a6fb5df4f1");
 export const ZORA = getAddress("0x1111111111166b7fe7bd91427724b487980afc69");
-// A wallet of the test's own, which the treasury gives three of its tokens, so that the page has only those to route.
+// A wallet of the test's own, which the fee recipient gives three of its tokens, so that the page has only those to route.
 export const SELLER = getAddress("0x0000000000000000000000000000000000c0ffee");
 
-// Gives SELLER the treasury's whole balance of each token, then reads what the page will: the balances, the prices, and
+// Gives SELLER the fee recipient's whole balance of each token, then reads what the page will: the balances, the prices, and
 // each token's route into USDC, with no time limit, as anvil reads the pools from FORK_URL a slot at a time.
 export async function fund(tokens: Address[]): Promise<void> {
   const into = SWAPPERS[0]!;

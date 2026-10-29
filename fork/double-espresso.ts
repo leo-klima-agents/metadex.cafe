@@ -98,7 +98,7 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     // Co-signers compare each call's fields and calldata, shown in full, with Safe{Wallet}'s.
     const call = dialog.locator(".slip").first();
     assert.equal(await call.locator(".conduit").innerText(), CONDUIT, "co-signers see the address, not only its name");
-    assert.equal(await call.locator(".conduit-name").innerText(), "Matcha Latte");
+    assert.equal(await call.locator(".conduit-name").innerText(), "KlimaVeTokenConduit");
     assert.equal(await call.locator(".call").innerText(), "100 bytes");
     assert.equal(await call.locator(".count").textContent(), "Safe · Call 1 of 2 · Leave Matcha Latte");
     assert.equal(await dialog.locator(".operation").first().isVisible(), false, "Safe{Wallet} sets the operation");
@@ -164,7 +164,7 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     await shoot(page, "double-espresso-join-1-1440-light");
     await review(page).getByRole("button", { name: "Continue" }).click();
     assert.deepEqual(await review(page).locator(".says").allTextContents(), ["Account #141 joins Double Espresso."]);
-    assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["Double Espresso"]);
+    assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["ImmutableVeTokenConduit"]);
     assert.equal(await review(page).locator(".conduit").textContent(), DOUBLE_ESPRESSO.address);
     await confirm(page);
     await expectApprovals([141n], DOUBLE_ESPRESSO.address, DOUBLE_ESPRESSO.address);
@@ -319,7 +319,7 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     // Who can change what, with the most the fee can become, as read; then where the fee goes, short, in full on hover.
     await info.locator('[data-section="control"]').getByText("the payout fee (up to 1%)").waitFor();
     const recipient = "0xd9e966a6Bfa2aE2113a34Bb4dd02ded921DA50aF";
-    const recipientLink = info.locator("a.treasury");
+    const recipientLink = info.locator("a.fee-recipient");
     assert.equal(await recipientLink.innerText(), "0xd9e9…50aF");
     assert.equal(await recipientLink.getAttribute("href"), `https://basescan.org/address/${recipient}`);
     assert.equal(await recipientLink.getAttribute("title"), recipient);

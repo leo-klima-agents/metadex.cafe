@@ -212,20 +212,20 @@ block. A product that cannot fill a row does not go on the menu.
 
 1. **Taken:** each cut, with its base, such as "of the rewards".
 2. **The most it can become:** the cap in the contract, or "no cap" in words.
-3. **Goes to:** carbon credits, a treasury, an operator, a keeper.
+3. **Goes to:** carbon credits, a fee recipient, an operator, a keeper.
 4. **When:** each payout, each compounding, each collection.
 5. **Other costs:** swaps, the lock, gas if the owner pays it.
 6. **Who can change it:** the role, its holder, and any delay before a change applies.
 
 For the four kinds of product:
 
-| Kind                                                | Taken                                  | Most            | Goes to                  | When             | Other costs   | Who can change it        |
-| --------------------------------------------------- | -------------------------------------- | --------------- | ------------------------ | ---------------- | ------------- | ------------------------ |
-| Votes for you, retires a share                      | Of the rewards: 33.33% retired, 0% fee | 100%, 1%        | Carbon credits; treasury | Each payout      | Swaps         | Hydrex                   |
-| Votes for you, pays you as earned (Double Espresso) | Of each claim: 1%                      | 1%, in its code | A 2-of-3 Safe            | Each claim       | None          | Nobody: a new deployment |
-| Swaps many tokens into one                          | Of what each token fetches: 1%         | 1%, in its code | The same 2-of-3 Safe     | Each swap        | Pools, gas    | Nobody: a new deployment |
-| Pools your stake in a relay                         | Of the deposit, then of the rewards    | [cap]           | Aero; [operator]         | Each compounding | Swaps         | [Role, delay]            |
-| Manages a liquidity position                        | Of fees and emissions: [10%]           | [cap]           | [Operator]               | Each collection  | A swap a move | [Role, delay]            |
+| Kind                                                | Taken                                  | Most            | Goes to                       | When             | Other costs   | Who can change it        |
+| --------------------------------------------------- | -------------------------------------- | --------------- | ----------------------------- | ---------------- | ------------- | ------------------------ |
+| Votes for you, retires a share                      | Of the rewards: 33.33% retired, 0% fee | 100%, 1%        | Carbon credits; fee recipient | Each payout      | Swaps         | Hydrex                   |
+| Votes for you, pays you as earned (Double Espresso) | Of each claim: 1%                      | 1%, in its code | A 2-of-3 Safe                 | Each claim       | None          | Nobody: a new deployment |
+| Swaps many tokens into one                          | Of what each token fetches: 1%         | 1%, in its code | The same 2-of-3 Safe          | Each swap        | Pools, gas    | Nobody: a new deployment |
+| Pools your stake in a relay                         | Of the deposit, then of the rewards    | [cap]           | Aero; [operator]              | Each compounding | Swaps         | [Role, delay]            |
+| Manages a liquidity position                        | Of fees and emissions: [10%]           | [cap]           | [Operator]                    | Each collection  | A swap a move | [Role, delay]            |
 
 **Money.** Earned, then taken, then what reached you, always in that order, with a bar split the same way. Dollars at
 the prices in the protocol's pools when the epoch ended, or, for what waits to be claimed, now, marked ≈, with the

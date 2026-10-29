@@ -59,8 +59,8 @@ not have those yet: reload the page, and it shows the change.
   **Matcha Latte pays there** sets where Matcha Latte pays the accounts of the address signed as.
 - **Hydrex, as on Base each week,** which nobody does on the fork unasked: **Hydrex moves on to the new epoch** after a
   flip, through its minter, until when what the epoch before earned is not final; **Matcha Latte's operator votes** as
-  Matcha Latte did last, through its executor module; **Someone adds incentives:** 100 USDC, from Matcha Latte's
-  treasury, in the pool Matcha Latte votes for most. **Hydrex's other automations vote again** makes those that stopped
+  Matcha Latte did last, through its executor module; **Someone adds incentives:** 100 USDC, from Matcha Latte's fee
+  recipient, in the pool Matcha Latte votes for most. **Hydrex's other automations vote again** makes those that stopped
   in September look as if they voted just now.
 - **The operator,** in the `payout` scenario: sends again, one by one, the payouts that Base included after the fork's
   block, from the operator's own address, with their own calldata. One that fails on the fork, as the QA wallet changed
@@ -86,7 +86,7 @@ Each starts from the state of some of the browser tests, or, for `payout`, of Ba
 | ----------------- | -------------------- | -------------------------- | --------------------------------------------------------------------------------- |
 | `hydrex`          | Fri 16 Oct, 19:03    | `0x0208…4C95`, #141        | Both automations: joining and leaving, those that stopped, and what can fail.     |
 | `double-espresso` | Fri 16 Oct, 19:03    | `0x0208…4C95`, #141        | As `hydrex`, with Double Espresso's receipts for #82774.                          |
-| `swap`            | Wed 21 Oct, 15:42    | `0x0000…FFEE`, WETH ZORA … | The swap, from a wallet that holds three tokens, or Matcha Latte's treasury.      |
+| `swap`            | Wed 21 Oct, 15:42    | `0x0000…FFEE`, WETH ZORA … | The swap, from a wallet that holds three tokens, or Matcha Latte's fee recipient. |
 | `claim`           | Wed 21 Oct, 15:42    | `0x6092…6c93`, #82774      | An overdue payout in Double Espresso: claim it as it is, swapped, or from a Safe. |
 | `payout`          | Thu 22 Oct, 00:00:26 | `0x6092…6c93`, #82774      | Matcha Latte's payouts after a flip, sent by its operator one by one, as on Base. |
 
@@ -165,7 +165,7 @@ the wallet's own failures. Start the scenario again to try a flow from its start
 | A token with a listed token's symbol          | `0x0000…FFEE` | Give it a token of symbol `USDC`; then tick Lists those tokens and reload: USDC, no route, Not the usual USDC.                                                       |
 | Another output                                | `0x0000…FFEE` | `#swap/weth`, or pick it on the page.                                                                                                                                |
 | The approvals given to the swappers           | `0x0000…FFEE` | After a swap, the swap's Approvals, and the App's.                                                                                                                   |
-| Many tokens                                   | `0xd9e9…50aF` | Matcha Latte's treasury, a Safe: as a wallet, or in Safe{Wallet}.                                                                                                    |
+| Many tokens                                   | `0xd9e9…50aF` | Matcha Latte's fee recipient, a Safe: as a wallet, or in Safe{Wallet}.                                                                                               |
 | Swaps are off                                 | any           | Tick Base's RPCs serve another chain, reload: Swaps are off, without naming the check.                                                                               |
 
 ### Claiming: `claim`

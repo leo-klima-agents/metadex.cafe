@@ -42,7 +42,7 @@ export const matchaLatte: Reader<MatchaLatte> = reader(readMatchaLatte, {
   retry: SOON,
   stale: (found, since) =>
     weekStart(now()) > found.epochStart ||
-    ([found.voted, found.feeBps, found.maxFeeBps, found.treasury].includes(undefined) && since >= RETRY),
+    ([found.voted, found.feeBps, found.maxFeeBps, found.feeRecipient].includes(undefined) && since >= RETRY),
   settled: () => showMatchaLatte(),
 });
 
@@ -121,7 +121,7 @@ function showMatchaLatte(): void {
   const found = matchaLatte.value;
   if (!found) return matchaLatteFailed();
   sawBlock(found.time);
-  const { epochStart, tonnes, retireBps, voted, feeBps, maxFeeBps, treasury } = found;
+  const { epochStart, tonnes, retireBps, voted, feeBps, maxFeeBps, feeRecipient } = found;
   // Whether it runs depends on when it last voted: unread, the status says so rather than guess.
   const stopped = voted !== undefined && hasStopped(voted, epochStart);
   const [shape, state]: [string, string] =
@@ -140,16 +140,16 @@ function showMatchaLatte(): void {
       "max-fee": maxFeeBps === undefined ? "" : ` (up to ${bps(maxFeeBps)})`,
     });
     // Its fee recipient, short, as the swap's contracts are, in full on hover.
-    for (const link of place.querySelectorAll<HTMLAnchorElement>("a.treasury")) {
-      if (treasury) link.title = treasury;
+    for (const link of place.querySelectorAll<HTMLAnchorElement>("a.fee-recipient")) {
+      if (feeRecipient) link.title = feeRecipient;
       else {
         // Not a link to where an earlier read found it.
         link.removeAttribute("href");
         link.removeAttribute("title");
       }
     }
-    if (treasury) fillAddress(place, "treasury", treasury, short(treasury));
-    else fill(place, { treasury: "Not read yet" });
+    if (feeRecipient) fillAddress(place, "fee-recipient", feeRecipient, short(feeRecipient));
+    else fill(place, { "fee-recipient": "Not read yet" });
     if (voted) fillTime(place, "matcha-latte-voted", voted);
     show(".matcha-latte-voted-line", !!voted, place);
   }
@@ -166,7 +166,7 @@ function showMatchaLatte(): void {
 function matchaLatteFailed(): void {
   showState(MATCHA_LATTE, "matcha-latte", "idle", "Not read yet");
   for (const place of placesOf(MATCHA_LATTE)) {
-    for (const name of ["tonnes", "retired", "takes", "retire-cost", "fee-cost", "treasury"])
+    for (const name of ["tonnes", "retired", "takes", "retire-cost", "fee-cost", "fee-recipient"])
       fill(place, { [name]: "Not read yet" });
     fill(place, { "takes-sub": "", "max-fee": "" });
   }

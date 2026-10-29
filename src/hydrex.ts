@@ -87,7 +87,7 @@ export type MatchaLatte = {
   voted?: number;
   feeBps?: bigint;
   maxFeeBps?: bigint;
-  treasury?: Address;
+  feeRecipient?: Address;
 };
 
 // The share of a payout's kVCM that reaches the owner: Matcha Latte retires its share first, then takes its fee from
@@ -154,7 +154,7 @@ export async function readMatchaLatte(): Promise<MatchaLatte> {
   ]);
   const [time, retireBps, tonnes] = required(replies.slice(0, 3)) as [bigint, bigint, bigint];
   const voted = replies[3] as bigint | undefined;
-  const [feeBps, maxFeeBps, treasury] = replies.slice(4) as [bigint?, bigint?, Address?];
+  const [feeBps, maxFeeBps, feeRecipient] = replies.slice(4) as [bigint?, bigint?, Address?];
   return {
     time: Number(time),
     epochStart: epochAt(time),
@@ -163,7 +163,7 @@ export async function readMatchaLatte(): Promise<MatchaLatte> {
     ...(voted !== undefined && { voted: Number(voted) }),
     ...(feeBps !== undefined && { feeBps }),
     ...(maxFeeBps !== undefined && { maxFeeBps }),
-    ...(treasury && { treasury }),
+    ...(feeRecipient && { feeRecipient }),
   };
 }
 
@@ -328,7 +328,9 @@ function withoutVotes(account: Account): Group {
 type Target = { address: Address; name: string };
 
 function approval({ id }: Account, approve: boolean, says: string, target: Target, other = false): Step {
-  const conduitName = other ? `The ${target.name} automation` : target.name;
+  // Beside its address, the page's own automations go by their contract's name.
+  const ours = AUTOMATIONS.find(({ address }) => same(address, target.address));
+  const conduitName = other ? `The ${target.name} automation` : (ours?.contract ?? target.name);
   return {
     to: VOTING_ESCROW,
     data: encodeFunctionData({

@@ -796,7 +796,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     note(`Matcha Latte's operator voted for ${pools.length} pools`);
   }
 
-  // As anyone may: 100 USDC of incentives, from Matcha Latte's treasury, for the votes of this epoch in the pool that
+  // As anyone may: 100 USDC of incentives, from Matcha Latte's fee recipient, for the votes of this epoch in the pool that
   // Matcha Latte votes for most, so that its votes earn something on the fork.
   async function incentive(): Promise<void> {
     const { pools, weights } = await lastVote();
@@ -804,7 +804,8 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     const top = pools[weights.indexOf(weights.reduce((a, b) => (b > a ? b : a)))]!;
     const contract = await view<Address>(VOTER, "external_bribes", [await view<Address>(VOTER, "gauges", [top])]);
     const amount = 100_000_000n;
-    if ((await balanceOf(USDC, HOLDER)) < amount) throw new Error("Matcha Latte's treasury holds too little USDC.");
+    if ((await balanceOf(USDC, HOLDER)) < amount)
+      throw new Error("Matcha Latte's fee recipient holds too little USDC.");
     await gas(HOLDER);
     await mined(HOLDER, USDC, encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [contract, amount] }));
     await as(HOLDER, contract, "notifyRewardAmount", [USDC, amount]);

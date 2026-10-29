@@ -12,6 +12,8 @@ export type Kind = "matcha-latte" | "double-espresso";
 export type Automation = {
   kind: Kind;
   name: string;
+  // Its contract's name, which the page gives beside its address.
+  contract: string;
   address: Address;
 };
 // Hydrex's automation, whose votes and payouts an operator now sends. Hydrex controls its settings, which the page
@@ -19,6 +21,7 @@ export type Automation = {
 export const MATCHA_LATTE: Automation = {
   kind: "matcha-latte",
   name: "Matcha Latte",
+  contract: "KlimaVeTokenConduit",
   address: "0xdE91885cF35ac57DF0c4A75c16862127dBe8317c",
 };
 // ImmutableVeTokenConduit version 2, from https://github.com/ldeso/hydrex-conduit at tag v2, commit 718c107. It has no
@@ -27,14 +30,15 @@ export const MATCHA_LATTE: Automation = {
 export const DOUBLE_ESPRESSO: Automation = {
   kind: "double-espresso",
   name: "Double Espresso",
+  contract: "ImmutableVeTokenConduit",
   address: "0x692c323B425A9DfeebE302F56168a7798D93EAC5",
 };
 export const AUTOMATIONS = [MATCHA_LATTE, DOUBLE_ESPRESSO];
 export const byKind = (kind: string): Automation | undefined =>
   AUTOMATIONS.find((automation) => automation.kind === kind);
-// Double Espresso's fee, FEE_BPS in its code, of each claim, and TREASURY, the 2-of-3 Safe it goes to.
+// Double Espresso's fee, FEE_BPS in its code, of each claim, and its recipient, TREASURY in its code, a 2-of-3 Safe.
 export const DOUBLE_ESPRESSO_FEE_BPS = 100n;
-export const DOUBLE_ESPRESSO_TREASURY: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
+export const DOUBLE_ESPRESSO_FEE_RECIPIENT: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
 // The address whose claims through Double Espresso the receipts show as Double Espresso's own, made for its members
 // after each epoch. It holds Matcha Latte's EXECUTOR_ROLE. Anyone may claim through Double Espresso.
 export const OPERATOR: Address = "0x40FBFe5312330f278824ddbB7521ab77409192f0";
@@ -82,7 +86,7 @@ export const ANCHORS: Anchor[] = [
 
 // The swap: ImmutableSwapper, deployed once per output token on 21 Oct 2026. Each sells the tokens its caller names for
 // its output, along the routes its caller picks, through pools it checks against the twelve factories below, and sends
-// 1% of each route's output to Double Espresso's treasury. It has no owner and no settings. Its sources are verified,
+// 1% of each route's output to Double Espresso's fee recipient. It has no owner and no settings. Its sources are verified,
 // with an exact match, on Basescan and Sourcify.
 export type Output = "usdc" | "eurc" | "weth" | "cbbtc" | "aero" | "hydx";
 export type Swapper = {
