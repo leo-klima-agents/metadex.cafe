@@ -205,14 +205,12 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(new URL(page.url()).hash, "#app");
     assert.equal(await page.title(), "Your wallet · metaDEX Café");
     assert.equal(await homeTitle(page).isVisible(), false);
-    // The App says what needs you across the products: here, the accounts in automations that stopped.
+    // The App says what needs you across the products: here, in one line, the accounts in automations that stopped,
+    // which Hydrex's page groups with their remedy.
     const needs = app(page).locator("#needs");
-    await needs.getByRole("heading", { name: "Needs you · 2" }).waitFor();
-    await needs.getByText(/^Hydrex account #2439 earns nothing: USDC stopped since Wed,? 9 Sept?$/).waitFor();
-    assert.equal(
-      await needs.locator("li").filter({ hasText: "#2439" }).getByRole("link", { name: "Change" }).getAttribute("href"),
-      "#hydrex/2439",
-    );
+    await needs.getByRole("heading", { name: "Needs you · 1" }).waitFor();
+    const stopped = needs.locator("li").filter({ hasText: /^2 Hydrex accounts in stopped automations/ });
+    assert.equal(await stopped.getByRole("link", { name: "Change" }).getAttribute("href"), "#hydrex");
     await app(page).locator(".hydrex-yours").getByText("2 Hydrex accounts", { exact: true }).waitFor();
     // With a wallet connected, Home is still Home: the name in the header leads there.
     await page.locator("header.site").getByRole("link", { name: "metaDEX Café" }).click();

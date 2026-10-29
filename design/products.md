@@ -245,9 +245,8 @@ keeps nothing.
 ```
 Your wallet                                      0x0208…4C95
 
-NEEDS YOU · 2
-▲ #42877 is in Liquid Hydrex, which stopped on Wed 9 Sep.
-  It earns nothing.                                 Change it →
+NEEDS YOU · 3
+▲ 1 Hydrex account in a stopped automation        Change it →
 ▲ #9540's payout is overdue: ≈ $1.84 waits in 9 tokens.
                                                 [Claim now]
 ○ 2 approvals left from a swap that failed.       [Reset]

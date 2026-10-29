@@ -59,12 +59,12 @@ This README is for whoever runs the site. The design and the plan are in [design
   list the wallets in the page too.
 - Home is a heading and the button to the App (`#app`). A wallet connected on Home or About leads on to the App; the
   name in the header still leads Home afterwards. The App, "Your wallet", starts with what needs you across the
-  products, each with one action: a Hydrex account in a stopped automation, accounts whose owner did not vote last
-  epoch, an overdue payout, token approvals to the swappers that haven't been used. Then the products, each with what
-  you hold in it: Hydrex (`#hydrex`), its automations and voting yourself, and the swap (`#swap`). Its Approvals button
-  lists every approval this wallet gave the café's contracts, with the call that undoes it. The pages under it lead one
-  level back, above their title: "‹ Your wallet" from Hydrex and the swap, "‹ Hydrex" from the pages below; Home and
-  About do not.
+  products, each with one action: the Hydrex accounts in stopped automations, those whose owner did not vote last epoch,
+  an overdue payout, token approvals to the swappers that haven't been used. Then the products, each with what you hold
+  in it: Hydrex (`#hydrex`), its automations and voting yourself, and the swap (`#swap`). Its Approvals button lists
+  every approval this wallet gave the café's contracts, with the call that undoes it. The pages under it lead one level
+  back, above their title: "‹ Your wallet" from Hydrex and the swap, "‹ Hydrex" from the pages below; Home and About do
+  not.
 - The page always says "Hydrex account", as "account" alone means an address in crypto: "8 Hydrex accounts", "Hydrex
   Main Protocol Account #26432".
 - Details open from a round info button beside what they explain, as a popup: on a phone, a sheet from the foot of the
