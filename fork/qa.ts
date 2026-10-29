@@ -120,7 +120,7 @@ const QA_ABI = parseAbi([
   "function external_bribes(address gauge) view returns (address)",
   "function notifyRewardAmount(address token, uint256 amount)",
 ]);
-// Matcha Latte's executor module, through which its keeper votes and pays: see the README of
+// Matcha Latte's executor module, through which its operator votes and pays: see the README of
 // https://github.com/ldeso/hydrex-keeper.
 const MATCHA_LATTE_MODULE: Address = "0x750973E0CB728C3112561Bc8E9b235afA9B17E81";
 // A token of the QA wallet's own, deployed with a name and symbol: see fixtures/QaToken.sol.
@@ -139,7 +139,7 @@ const SENDS = new Set([
   "pay-to",
   "move-on",
   "replay",
-  "keeper-votes",
+  "operator-votes",
   "incentive",
   "mint",
   "send-away",
@@ -831,14 +831,14 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     return { pools, weights };
   }
 
-  // As its keeper does each week, which it does not on the fork: the vote it cast last, in the epoch now.
-  async function keeperVotes(): Promise<void> {
+  // As its operator does each week, which it does not on the fork: the vote it cast last, in the epoch now.
+  async function operatorVotes(): Promise<void> {
     const { pools, weights } = await lastVote();
     if (!pools.length) throw new Error("Matcha Latte has no vote to cast again.");
-    const keeper = await view<Address>(MATCHA_LATTE_MODULE, "KEEPER");
-    await gas(keeper);
-    await as(keeper, MATCHA_LATTE_MODULE, "vote", [pools, weights.map((weight) => (weight > 0n ? weight : 1n))]);
-    note(`Matcha Latte's keeper voted for ${pools.length} pools`);
+    const operator = await view<Address>(MATCHA_LATTE_MODULE, "KEEPER");
+    await gas(operator);
+    await as(operator, MATCHA_LATTE_MODULE, "vote", [pools, weights.map((weight) => (weight > 0n ? weight : 1n))]);
+    note(`Matcha Latte's operator voted for ${pools.length} pools`);
   }
 
   // As anyone may: 100 USDC of incentives, from Matcha Latte's treasury, for the votes of this epoch in the pool that
@@ -886,8 +886,8 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     });
     // Sent, it is the next one's turn, even if this one fails on a fork that the QA wallet changed.
     replayed++;
-    await included(hash, `The keeper's transaction that ${next.does}`);
-    note(`The keeper ${next.does}`);
+    await included(hash, `The operator's transaction that ${next.does}`);
+    note(`The operator ${next.does}`);
   }
 
   // A token of the QA wallet's own, with a listed token's symbol, or any: it holds 1,000.
@@ -1039,8 +1039,8 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       case "replay":
         await replay();
         break;
-      case "keeper-votes":
-        await keeperVotes();
+      case "operator-votes":
+        await operatorVotes();
         break;
       case "incentive":
         await incentive();

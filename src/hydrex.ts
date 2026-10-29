@@ -61,10 +61,6 @@ const matchaLatteAbi = parseAbi([
   "function MAX_TREASURY_FEE_BPS() view returns (uint256)",
   "function treasury() view returns (address)",
   "function totalTonnesRetired() view returns (uint256)",
-  "function retiringEntityName() view returns (string)",
-  "function beneficiaryString() view returns (string)",
-  "function impactBeneficiaryAddress() view returns (address)",
-  "function retirementMessage() view returns (string)",
 ]);
 
 const doubleEspressoAbi = parseAbi([
@@ -99,10 +95,6 @@ export type MatchaLatte = {
   epochStart: number;
   retireBps: bigint;
   tonnes: bigint;
-  entity: string;
-  beneficiary: string;
-  beneficiaryAddress: Address;
-  message: string;
   // When it last voted, or 0. It, its fee, the most the fee can become, and where the fee goes may be unknown, as
   // their reads may fail apart from the others: the page then says so, and reads them again later.
   voted?: number;
@@ -168,35 +160,19 @@ export async function readMatchaLatte(): Promise<MatchaLatte> {
     blockTime,
     matchaLatte("retireBps"),
     matchaLatte("totalTonnesRetired"),
-    matchaLatte("retiringEntityName"),
-    matchaLatte("beneficiaryString"),
-    matchaLatte("impactBeneficiaryAddress"),
-    matchaLatte("retirementMessage"),
     voter("lastVoted", MATCHA_LATTE.address),
     matchaLatte("treasuryFeeBps"),
     matchaLatte("MAX_TREASURY_FEE_BPS"),
     matchaLatte("treasury"),
   ]);
-  const [time, retireBps, tonnes, entity, beneficiary, beneficiaryAddress, message] = required(replies.slice(0, 7)) as [
-    bigint,
-    bigint,
-    bigint,
-    string,
-    string,
-    Address,
-    string,
-  ];
-  const voted = replies[7] as bigint | undefined;
-  const [feeBps, maxFeeBps, treasury] = replies.slice(8) as [bigint?, bigint?, Address?];
+  const [time, retireBps, tonnes] = required(replies.slice(0, 3)) as [bigint, bigint, bigint];
+  const voted = replies[3] as bigint | undefined;
+  const [feeBps, maxFeeBps, treasury] = replies.slice(4) as [bigint?, bigint?, Address?];
   return {
     time: Number(time),
     epochStart: epochAt(time),
     retireBps,
     tonnes,
-    entity: clean(entity),
-    beneficiary: clean(beneficiary),
-    beneficiaryAddress,
-    message: clean(message),
     ...(voted !== undefined && { voted: Number(voted) }),
     ...(feeBps !== undefined && { feeBps }),
     ...(maxFeeBps !== undefined && { maxFeeBps }),

@@ -477,10 +477,6 @@ main > .notice {
 .note {
   color: var(--quiet);
 }
-.custody > .info {
-  margin-inline-start: var(--gap-xs);
-  vertical-align: middle;
-}
 section > * + *,
 .group > * + * {
   margin-block-start: var(--gap);

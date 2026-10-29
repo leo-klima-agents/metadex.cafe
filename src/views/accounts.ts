@@ -266,7 +266,7 @@ export function act(button: HTMLButtonElement, accountsOf: () => Account[], redr
 }
 
 // The review of a claim through Double Espresso for the accounts whose payout is overdue.
-// What waits can take a while to read, for an account whose keeper missed two epochs: the button spins meanwhile, and
+// What waits can take a while to read, for an account whose operator missed two epochs: the button spins meanwhile, and
 // takes no second click.
 let claiming = false;
 

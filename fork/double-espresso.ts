@@ -205,7 +205,7 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     assert.deepEqual([...sent, ...member.sent].length, 4);
   });
 
-  test("Double Espresso's receipts: a claim by its keeper, a stranger's dust, and where the page stops reading", async () => {
+  test("Double Espresso's receipts: a claim by its operator, a stranger's dust, and where the page stops reading", async () => {
     // Its standing is read in the pools Matcha Latte voted for, last epoch and the one before, as test 7 reads them.
     const rewards = await doubleEspressoReceipts();
     const { page, violations } = await open(
@@ -311,22 +311,29 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
       .locator(".tonnes")
       .getByText(/^\d[\d,]* t$/)
       .waitFor();
-    // Its popups start closed, its fee facts among them, and the address of one opens it.
+    // Its popups start closed, its costs and contracts among them, and the address of one opens it.
     assert.equal(await page.locator(":popover-open").count(), 0);
     await shoot(page, "matcha-latte-390-light");
     await page.goto(`${SITE}/#hydrex/matcha-latte/fees`);
-    const facts = matcha.locator(".fee-facts dd");
-    await facts.first().getByText("33.33% retired, 0% fee").waitFor();
-    assert.equal(await facts.nth(1).innerText(), "100% retired, 1% fee");
+    const info = matcha.locator(".pop:popover-open");
+    const costs = info.locator(".fee-facts dd");
+    await costs.first().getByText("Up to 33.33% of each payout").waitFor();
+    assert.deepEqual(await costs.allInnerTexts(), [
+      "Up to 33.33% of each payout",
+      "0%",
+      "Paid during payout",
+      "Paid separately, in ETH",
+    ]);
+    // Who can change what, with the most the fee can become, as read; then its treasury, short, in full on hover.
+    await info.locator('[data-section="control"]').getByText("the fee (up to 1%)").waitFor();
     const treasury = "0xd9e966a6Bfa2aE2113a34Bb4dd02ded921DA50aF";
-    assert.equal(
-      await facts.nth(2).getByRole("link", { name: "its treasury" }).getAttribute("href"),
-      `https://basescan.org/address/${treasury}`,
-    );
+    const treasuryLink = info.locator("a.treasury");
+    assert.equal(await treasuryLink.innerText(), "0xd9e9…50aF");
+    assert.equal(await treasuryLink.getAttribute("href"), `https://basescan.org/address/${treasury}`);
+    assert.equal(await treasuryLink.getAttribute("title"), treasury);
     await page.goto(`${SITE}/#hydrex/matcha-latte/check`);
-    const check = matcha.locator('[data-section="check"]');
-    assert.equal(await check.evaluate((pop) => pop.matches(":popover-open")), true);
-    assert.match(await check.locator("a.treasury").innerText(), new RegExp(`^${treasury}$`));
+    const check = matcha.locator('.pop:popover-open [data-section="check"]');
+    await check.waitFor();
     assert.equal(await check.locator(".check-failed").count(), 0, "every check passed");
 
     // An account's page: the wallet's own has its actions; another's names its owner.

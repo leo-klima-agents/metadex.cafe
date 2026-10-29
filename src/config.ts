@@ -17,8 +17,8 @@ export type Automation = {
   // What joining approves: 3 sends the account's claims to the automation, 5 delegates its votes.
   actions: number[];
 };
-// Hydrex's automation, whose votes and payouts a keeper now sends. Hydrex controls its settings, which the page reads
-// from Base.
+// Hydrex's automation, whose votes and payouts an operator now sends. Hydrex controls its settings, which the page
+// reads from Base.
 export const MATCHA_LATTE: Automation = {
   kind: "matcha-latte",
   name: "Matcha Latte",
@@ -44,7 +44,7 @@ export const DOUBLE_ESPRESSO_FEE_BPS = 100n;
 export const DOUBLE_ESPRESSO_TREASURY: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
 // The address whose claims through Double Espresso the receipts show as Double Espresso's own, made for its members
 // after each epoch. It holds Matcha Latte's EXECUTOR_ROLE. Anyone may claim through Double Espresso.
-export const KEEPER: Address = "0x40FBFe5312330f278824ddbB7521ab77409192f0";
+export const OPERATOR: Address = "0x40FBFe5312330f278824ddbB7521ab77409192f0";
 export const KVCM: Address = "0x00fBAC94Fec8D4089d3fe979F39454F48c71A65d";
 export const VOTING_ESCROW: Address = "0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1";
 export const VOTING_ESCROW_IMPLEMENTATION: Address = "0x0FC68cE53Be957a1AA779f553AD49f6068fFf231";

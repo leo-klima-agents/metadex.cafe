@@ -177,7 +177,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await review(page).isVisible(), false);
     await page
       .locator('.pop:popover-open [data-section="control"]')
-      .getByText("Can change the share retired")
+      .getByText("The share retired (up to 100%)")
       .waitFor();
     assert.equal(await page.title(), "Matcha Latte · metaDEX Café");
     assert.equal(new URL(page.url()).hash, "#hydrex/matcha-latte/control");
@@ -411,8 +411,8 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await shoot(page, "receipt-390-dark", position(page));
     // After the flip, the page reads Matcha Latte again and fills its figures, such as .tonnes, again. The receipts
     // keep their own.
-    const entityName = toFunctionSelector("function retiringEntityName()").slice(2);
-    const readAgain = page.waitForResponse((response) => !!response.request().postData()?.includes(entityName));
+    const retireBps = toFunctionSelector("function retireBps()").slice(2);
+    const readAgain = page.waitForResponse((response) => !!response.request().postData()?.includes(retireBps));
     await page.clock.setSystemTime((FLIP + 60) * 1000);
     await page.clock.runFor(30_000);
     await readAgain;

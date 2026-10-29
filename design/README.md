@@ -2,8 +2,8 @@
 
 What metaDEX Café is today, what it should become, and why. The brand, from type and colour to the layout of receipts,
 is in [brand.md](brand.md). The redesign towards minimalism is in [audit.md](audit.md): where the two disagree, it wins.
-The next product, a swap of many tokens into one, and a way to claim Double Espresso's rewards when its keeper is late,
-are in [products.md](products.md).
+The next product, a swap of many tokens into one, and a way to claim Double Espresso's rewards when its operator is
+late, are in [products.md](products.md).
 
 Figures were read from Base on 17 Oct 2026, unless marked. [Brackets] mark decisions not yet taken, such as "[cap]".
 Mockups of the planned screens are on a design canvas, private to its owner:
@@ -30,8 +30,8 @@ technical parts open from an info button, as popups.
   fetch line by line, from the quote down to the least that may reach you, with the slippage picked on that line, and
   popups: its costs, what the slippage is, and the six swappers' contracts; approvals you gave the swappers.
 - **An automation's page** (`#hydrex/matcha-latte`, `#hydrex/double-espresso`): its status, its key figures, and your
-  accounts in it and Join. Info buttons beside them open fee facts, against all of Hydrex, joining and leaving, one of
-  its own, and Check it, with who controls what.
+  accounts in it and Join. An info button beside its name opens Costs and contracts, as the swap's: its costs, who can
+  change it, its contracts and the checks. Another, beside last epoch, opens how it did against all of Hydrex.
 - **An account's page** (`#hydrex/` and its number): its status, its lock, what it earned, what its owner can do, and
   its last payout as a receipt.
 - **The review:** a dialog in two steps: before you join, claim or swap, with what it costs, the swap as a bill, then
@@ -129,7 +129,7 @@ wallet's browser, so every export also offers a copy.
   Choose for one or many accounts, with the gas cost, since replaced by the menu and the review; fee facts for Carbon
   Impact; the redesign towards minimalism, in [audit.md](audit.md), with positions first in the App.
 - **Done, the products:** a level for the products in the App; the swap of many tokens into one, with each route, its
-  minimum and a simulation before the wallet asks; claiming Double Espresso's rewards when its keeper is late, as they
+  minimum and a simulation before the wallet asks; claiming Double Espresso's rewards when its operator is late, as they
   are or swapped into one token; one prompt with batching, for joining and leaving too; What this wallet allows. See
   [products.md](products.md).
 - **Next, the rescue:** change watch; ERC-7730 metadata for `setConduitApproval`, `claim` and `swap`.
@@ -180,7 +180,7 @@ a calendar file for payday, made on the device.
 **An automation's page,** one template for all: status; what it does; four key facts (takes, pays you, costs you,
 leaving) and Join; your accounts in it; fee facts; money per 1,000 units of voting power; its record against the
 average; how it voted; what joining allows, and custody; if you join now; who controls what; what the page checks.
-Hydrex, which controls Matcha Latte's settings, and its keeper go under "who controls what".
+Hydrex, which controls Matcha Latte's settings, and its operator go under "who controls what".
 
 **An Aero relay's page,** the same template, with what changes: custody moves into the relay, you hold two tokens,
 deposits and withdrawals wait in queues, and Aero takes a fee in and out. Until its first allocation it shows "no record
@@ -206,9 +206,9 @@ for the record. Then the status Safe{Wallet} reports, and a monthly statement fo
 
 ## Patterns
 
-**Fee facts.** The same six rows, in this order, for every product, on its page. The review gives what it takes and who
-can change it. They are read from the contract each time, with the block. A product that cannot fill a row does not go
-on the menu.
+**Costs.** Every product's, in its Costs and contracts popup, as the swap's: what it takes, then the gas; then who can
+change it, and its contracts. The review gives what it takes and who can change it. They are read from the contract each
+time, with the block. A product that cannot fill a row does not go on the menu.
 
 1. **Taken:** each cut, with its base, such as "of the rewards".
 2. **The most it can become:** the cap in the contract, or "no cap" in words.

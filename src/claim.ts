@@ -8,7 +8,7 @@ import type { Token } from "./prices.ts";
 import { readEarned, type Amount } from "./receipts.ts";
 import type { Slip } from "./views/review.ts";
 
-// Claiming through Double Espresso, when its keeper is late. Anyone can call claim(tokenId, feeAddresses,
+// Claiming through Double Espresso, when its operator is late. Anyone can call claim(tokenId, feeAddresses,
 // bribeAddresses, tokens) for any account in Double Espresso, and it pays the owner, less 1%. The page offers it for
 // the wallet's own accounts only, once a payout is overdue. A claim asks every contract given for every token given,
 // and a contract walks back up to 50 epochs for a token it has not paid recently, so the page passes only the contracts
@@ -144,8 +144,8 @@ export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true
   };
 }
 
-// What waits for each account, read now: in the pools its automation voted for last epoch, and, when the keeper missed
-// the epoch before too, in that epoch's. Pools from further back are not read, so it is a floor.
+// What waits for each account, read now: in the pools its automation voted for last epoch, and, when the operator
+// missed the epoch before too, in that epoch's. Pools from further back are not read, so it is a floor.
 export async function owedOf(
   entries: Entry[],
 ): Promise<{ claims: Claim[]; tokens: Map<string, Token>; earlier: boolean }> {
@@ -181,7 +181,7 @@ export async function owedOf(
 
 // Each of the page's own claims, from its Claimed events: what Double Espresso received for the account, its fee, and
 // what it paid the owner, summed over the calls a claim was split into. A claim that received nothing, as when the
-// keeper claimed first, has none.
+// operator claimed first, has none.
 export type Claimed = { id: bigint; received: Amount[]; fees: Amount[]; paid: Amount[] };
 
 export function claimedIn(receipts: Receipt[], ids: bigint[], caller: Address): Claimed[] {

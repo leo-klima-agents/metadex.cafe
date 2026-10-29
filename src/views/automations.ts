@@ -8,7 +8,7 @@ import {
   type Kind,
 } from "../config.ts";
 import { PENDING, clone, fill, fillAddress, fillTime, show, type Text } from "../dom.ts";
-import { WEEK, bps, fraction, money, moneyAt, units, until, utc, weekStart, when } from "../format.ts";
+import { WEEK, bps, fraction, money, moneyAt, short, units, until, utc, weekStart, when } from "../format.ts";
 import {
   failedChecks,
   hasStopped,
@@ -118,8 +118,7 @@ function showMatchaLatte(): void {
   const found = matchaLatte.value;
   if (!found) return matchaLatteFailed();
   sawBlock(found.time);
-  const { epochStart, tonnes, retireBps, entity, beneficiary, beneficiaryAddress, message, voted } = found;
-  const { feeBps, maxFeeBps, treasury } = found;
+  const { epochStart, tonnes, retireBps, voted, feeBps, maxFeeBps, treasury } = found;
   // Whether it runs depends on when it last voted: unread, the status says so rather than guess.
   const stopped = voted !== undefined && hasStopped(voted, epochStart);
   const [shape, state]: [string, string] =
@@ -132,26 +131,24 @@ function showMatchaLatte(): void {
       retired: bps(retireBps),
       takes: `${bps(retireBps)} retired, ${feeWords(feeBps)}`,
       "takes-sub": `retired, ${feeWords(feeBps)}`,
-      "max-takes": `100% retired, ${feeWords(maxFeeBps)}`,
-      entity,
-      beneficiary: beneficiary || "No name",
-      message,
+      // Its costs and who can change them, in its popup: the most the fee can become, once read.
+      "retire-cost": `Up to ${bps(retireBps)} of each payout`,
+      "fee-cost": feeBps === undefined ? "Not read yet" : bps(feeBps),
+      "max-fee": maxFeeBps === undefined ? "" : ` (up to ${bps(maxFeeBps)})`,
     });
-    fillAddress(place, "beneficiary-address", beneficiaryAddress);
-    if (treasury) {
-      fillAddress(place, "treasury", treasury);
-      fillAddress(place, "treasury-named", treasury, "its treasury");
-    } else {
-      // Not a link to where an earlier read found it.
-      for (const link of place.querySelectorAll("a.treasury, a.treasury-named")) link.removeAttribute("href");
-      fill(place, { treasury: "Not read yet" });
+    // Its treasury, short, as the swap's contracts are, in full on hover.
+    for (const link of place.querySelectorAll<HTMLAnchorElement>("a.treasury")) {
+      if (treasury) link.title = treasury;
+      else {
+        // Not a link to where an earlier read found it.
+        link.removeAttribute("href");
+        link.removeAttribute("title");
+      }
     }
+    if (treasury) fillAddress(place, "treasury", treasury, short(treasury));
+    else fill(place, { treasury: "Not read yet" });
     if (voted) fillTime(place, "matcha-latte-voted", voted);
     show(".matcha-latte-voted-line", !!voted, place);
-  }
-  // The epoch, by Base's clock: when a join counts from, on each automation's page, and on Hydrex's.
-  for (const automation of AUTOMATIONS) {
-    for (const place of placesOf(automation)) fillTime(place, "next-epoch", epochStart + WEEK, when);
   }
   fillTime(epochLine, "epoch-end", epochStart + WEEK, utc);
   show(".countdown-line", true, epochLine);
@@ -166,8 +163,9 @@ function showMatchaLatte(): void {
 function matchaLatteFailed(): void {
   showState(MATCHA_LATTE, "matcha-latte", "idle", "Not read yet");
   for (const place of placesOf(MATCHA_LATTE)) {
-    for (const name of ["tonnes", "retired", "takes", "max-takes", "treasury"]) fill(place, { [name]: "Not read yet" });
-    fill(place, { "takes-sub": "" });
+    for (const name of ["tonnes", "retired", "takes", "retire-cost", "fee-cost", "treasury"])
+      fill(place, { [name]: "Not read yet" });
+    fill(place, { "takes-sub": "", "max-fee": "" });
   }
   // Without the block's time, the epoch's end is only Thursday's.
   show(".countdown-line", false, epochLine);

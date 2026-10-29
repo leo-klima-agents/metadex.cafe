@@ -13,12 +13,12 @@ export type Route =
   | { view: "position"; id: bigint }
   | { view: "swap"; output: Output; section?: string };
 
-// The sections each page has, in the order they come. Most open a popup; some are a part of one, as "control" is of
-// "check".
+// The sections each page has, in the order they come. Most open a popup; some are a part of one, as "control" and
+// "check" are of "fees".
 export const APP_SECTIONS = ["allows"];
 export const PRODUCT_SECTIONS: Record<Kind, string[]> = {
-  "matcha-latte": ["fees", "record", "joining", "carbon", "check", "control"],
-  "double-espresso": ["fees", "record", "votes", "joining", "check", "control"],
+  "matcha-latte": ["fees", "control", "check", "record"],
+  "double-espresso": ["fees", "control", "check", "record", "votes"],
 };
 export const SWAP_SECTIONS = ["fees", "check", "approvals"];
 

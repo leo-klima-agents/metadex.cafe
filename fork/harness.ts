@@ -37,7 +37,7 @@ import {
   MATCHA_LATTE,
   DEFAULT_OUTPUT,
   HYDX,
-  KEEPER,
+  OPERATOR,
   RPCS,
   SWAPPERS,
   VOTING_ESCROW,
@@ -242,8 +242,8 @@ export async function deployDoubleEspresso(): Promise<void> {
   if ((await anvil<Hex>("eth_getCode", [DOUBLE_ESPRESSO.address, "latest"])) !== "0x") return;
   const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", [toHex(BLOCK), false]);
   await anvil("evm_setNextBlockTimestamp", [Number(timestamp) + 60]);
-  await anvil("anvil_setBalance", [KEEPER, toHex(FOR_GAS)]);
-  await mined(KEEPER, CREATE2_DEPLOYER, concat([SALT, INIT_CODE]));
+  await anvil("anvil_setBalance", [OPERATOR, toHex(FOR_GAS)]);
+  await mined(OPERATOR, CREATE2_DEPLOYER, concat([SALT, INIT_CODE]));
   const at = getContractAddress({ opcode: "CREATE2", from: CREATE2_DEPLOYER, salt: SALT, bytecode: INIT_CODE });
   assert.equal(at, DOUBLE_ESPRESSO.address);
   assert.equal(keccak256(await anvil<Hex>("eth_getCode", [at, "latest"])), DOUBLE_ESPRESSO.codeHash);
@@ -814,7 +814,7 @@ export const warmStandings = (owners: Address[], ids: bigint[]) =>
     await Promise.all([readStamps(ids, last, top), readEarned(ids, last, top), readStamps(ids, before, top)]);
   });
 
-// Double Espresso on Base, with #82774 in it, claimed by its keeper and then by a stranger, a USDC reward each; and
+// Double Espresso on Base, with #82774 in it, claimed by its operator and then by a stranger, a USDC reward each; and
 // what the page reads of it, and of `owners`, read with no time limit. It answers Matcha Latte's rewards of last epoch,
 // which Double Espresso's accounts earn in the same pools.
 export async function doubleEspressoReceipts(owners: Address[] = []): Promise<Reward[]> {
@@ -828,7 +828,7 @@ export async function doubleEspressoReceipts(owners: Address[] = []): Promise<Re
   await anvil("anvil_setBalance", [STRANGER, toHex(FOR_GAS)]);
   await approveConduit(PAYEE, DOUBLE_ESPRESSO.address, 82774n);
   const usdc = rewards.filter(({ token }) => token.symbol === "USDC");
-  await claimOne(KEEPER, 82774n, usdc[0]!);
+  await claimOne(OPERATOR, 82774n, usdc[0]!);
   await claimOne(STRANGER, 82774n, usdc[1]!);
   await settle();
   await warmStandings(owners, [82774n]);

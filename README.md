@@ -2,7 +2,7 @@
 
 metaDEX Café is a static web page at <https://metadex.cafe/>. It lets owners of Hydrex accounts on Base join or leave
 Matcha Latte, Hydrex's automation, and Double Espresso, an automation nobody controls, and claim Double Espresso's
-rewards when its keeper is late. It also swaps many tokens on Base into one, through ImmutableSwapper. Hydrex's
+rewards when its operator is late. It also swaps many tokens on Base into one, through ImmutableSwapper. Hydrex's
 contracts call automations "conduits".
 
 The page has no server. It reads Base through public RPCs and asks the visitor's wallet to send transactions. It holds
@@ -23,15 +23,16 @@ This README is for whoever runs the site. The design and the plan are in [design
   those that stopped voting in September 2026: same call, with that automation's address.
 - **Before anyone can join, the page checks** the chain, each automation's code, Matcha Latte's settings, and the code
   of Hydrex's VotingEscrow against `src/config.ts`. If a check fails, joining that automation is turned off, and the
-  page marks the check on that automation's page, under Check it. Leaving always works. The checks run again every hour.
+  page marks the check on that automation's page, under Costs and contracts. Leaving always works. The checks run again
+  every hour.
 - **Claiming** is `claim(tokenId, feeAddresses, bribeAddresses, tokens)` on Double Espresso, which anyone can call for
-  any account in it, and which pays the owner, less 1%. Double Espresso's keeper claims for every member right after
+  any account in it, and which pays the owner, less 1%. Double Espresso's operator claims for every member right after
   each epoch, so the page offers it only for the wallet's own accounts, once a payout is overdue: half a day after the
   flip with something waiting, or a full epoch late. It passes only the contracts and tokens that `earned()` finds
-  owing, in last epoch's pools, and the epoch before's when the keeper missed it too. Double Espresso asks each contract
-  for every token passed, and each answer reads the account's past epochs, so a claim of many contracts and tokens
-  splits into calls that each fit a transaction, the most valuable first; calls that need more gas together than one
-  transaction may use go one at a time. A Safe, which sends many calls in one Safe transaction, gets small calls
+  owing, in last epoch's pools, and the epoch before's when the operator missed it too. Double Espresso asks each
+  contract for every token passed, and each answer reads the account's past epochs, so a claim of many contracts and
+  tokens splits into calls that each fit a transaction, the most valuable first; calls that need more gas together than
+  one transaction may use go one at a time. A Safe, which sends many calls in one Safe transaction, gets small calls
   instead, none asking a contract for a token it does not owe, which together use the least gas; it proposes them in as
   few Safe transactions as their simulated gas allows, each under 15 million. The review offers the rewards as they are,
   or swapped into one token, but not from a Safe whose claim takes several Safe transactions: the swap follows the
@@ -92,8 +93,8 @@ This README is for whoever runs the site. The design and the plan are in [design
 - Each automation has a page, `#hydrex/matcha-latte` and `#hydrex/double-espresso`: what it does in one sentence, that
   the account stays in the wallet, its key figures (what it takes, what it pays in, what it paid last epoch beside
   Hydrex's average, and what it retired or who controls it), and a way to join, or the wallet buttons. Everything else
-  is in popups: its six fee facts, how it did against all of Hydrex, joining and leaving, who controls what, and Check
-  it.
+  is in two popups. Costs and contracts, beside its name, as the swap's: its costs, who can change it, its contracts and
+  the checks. And how it did against all of Hydrex, beside last epoch.
 - Each account has a page, `#hydrex/` and its number, which anyone can open: its status, what its votes earned, what its
   owner can do with it, with the gas of a change when it earns nothing, and, in an automation, up to when it has been
   paid, what waits to be claimed, and the receipt of its last payout. The App marks the accounts paid late.
@@ -154,8 +155,8 @@ them, because their hashes no longer match, so the page may not work for that vi
 
 ## When a contract changes
 
-The App and the automation's page say that joining it is off, and its Check it marks each check that failed, by its id
-in `src/hydrex.ts`:
+The App and the automation's page say that joining it is off, and its Costs and contracts marks each check that failed,
+by its id in `src/hydrex.ts`:
 
 | Check                                                | Marked on         | What changed                                                                              |
 | ---------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------- |
@@ -207,11 +208,11 @@ commit `718c107`. It was deployed on 20 Oct 2026, in block 52,854,750, through t
 prints the code hash in that commit's `verification/bytecode-hashes.json`,
 `0x4872932431e0d175fb1213e9ffec2b8f0ebd1d9d490643d6df5b2c6d0b379847`. Version 1, at
 `0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B`, still works, and nobody had joined it when version 2 was deployed. The
-page offers only version 2. Its source is verified, with an exact match, on Basescan and Sourcify, which the page links
-to.
+page offers only version 2. Its source is verified, with an exact match, on Basescan and Sourcify; the page links to
+Basescan's.
 
-The page is anonymous for now: it names no operator, and links to no repository but Hydrex's, neither this one nor
-Double Espresso's. A test checks it.
+The page is anonymous for now: it names nobody, neither who runs it nor who runs Matcha Latte as its operator, and links
+to no repository, neither this one nor Double Espresso's. A test checks it.
 
 ## Checking a deployment
 
@@ -255,7 +256,7 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   epoch yet. Its rewards wait in Hydrex's reward contracts until someone claims them, for up to 50 epochs.
 - **An overdue payout in Double Espresso.** Half a day after the flip, an account whose payout has not come and that has
   something waiting is overdue: its page, the Double Espresso group and the App's Needs you offer to claim it. If the
-  keeper's claim lands first, the page's claim receives nothing, and its receipt says so; it still costs its gas.
+  operator's claim lands first, the page's claim receives nothing, and its receipt says so; it still costs its gas.
 - **A token the swap skipped.** Its route would have fetched less than its minimum, or its token refused the transfer.
   It stays in the wallet with its approval; the receipt, Needs you and the swap's Approvals offer to reset it. A route
   that Base finds would not go through even with no minimum is left out before the wallet asks, and the bill says why.
