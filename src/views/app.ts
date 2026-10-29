@@ -3,7 +3,7 @@ import { now, same } from "../chain.ts";
 import { AUTOMATIONS, SWAPPERS } from "../config.ts";
 import { PENDING, clone, fill, live, setText, show, type Text } from "../dom.ts";
 import { count, figure, money } from "../format.ts";
-import { automationName, canLeave, statusOf, type Holdings } from "../hydrex.ts";
+import { automationName, canLeave, hasVotes, statusOf, type Holdings } from "../hydrex.ts";
 import { earningsEnded } from "../last-epoch.ts";
 import type { Reader } from "../read.ts";
 import { hrefOf } from "../routes.ts";
@@ -65,10 +65,10 @@ export function showApp(): void {
   if (holdings) {
     const { owner, accounts, epochStart } = holdings;
     // Accounts in automations that stopped, and accounts their owner votes with, who did not vote last epoch, a line
-    // each, as each shares one remedy, which Hydrex's page offers.
+    // each, as each shares one remedy, which Hydrex's page offers. An account with less than a vote needs nothing.
     let [stopped, unvoted] = [0, 0];
     const toHydrex = { link: hrefOf({ view: "hydrex" }), label: "Change" };
-    for (const account of accounts) {
+    for (const account of accounts.filter(hasVotes)) {
       const status = statusOf(account, owner, now(), epochStart);
       if (status.kind === "partly") {
         const change = { link: hrefOf({ view: "position", id: account.id }), label: "Change" };

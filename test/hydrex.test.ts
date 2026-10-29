@@ -128,6 +128,12 @@ test("accounts are grouped by what their owner can do with them", () => {
   assert.equal(groupWith({ delegate: CONDUIT, claimer: CONDUIT }), "in:matcha-latte", "joining");
   assert.equal(groupWith({ delegateAtStart: CONDUIT }), "other", "leaving");
   assert.equal(groupWith({}), "other");
+  // With less than a vote, nothing needs its owner: it is folded away, unless the page's automation still holds it.
+  const dust = { votes: 10n ** 18n - 1n };
+  assert.equal(groupWith({ ...dust, ownerVoted: 0 }), "closed");
+  assert.equal(groupWith({ ...dust, delegate: USDC, delegateAtStart: USDC, delegateVoted: STOPPED }), "closed");
+  assert.equal(groupWith({ ...dust, claimer: CONDUIT }), "in:matcha-latte");
+  assert.equal(groupWith({ votes: 10n ** 18n, ownerVoted: 0 }), "needs:unvoted", "one vote needs its owner");
   assert.equal(groupWith({ delegate: USDC, delegateVoted: NOW }), "other", "in a running automation");
   assert.equal(groupWith({ delegate: STRANGER }), "other");
   assert.equal(groupWith({ delegateAtStart: USDC }), "other", "left another automation");
