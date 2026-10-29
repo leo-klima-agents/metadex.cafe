@@ -188,15 +188,16 @@ The groups show only when they hold accounts, with the count in their heading:
 
 | Group                                        | Holds today's groups                                                                                        | Its actions                                                                                                   |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| **Needs you**, a group for each remedy       | `stopped`, `attention` (partly in), each in its own; and accounts whose owner did not vote                  | Join Matcha Latte, Join Double Espresso, Leave; or, for those not voted with, Vote on Hydrex instead of Leave |
+| What needs you, a group for each remedy      | Accounts whose owner did not vote, `stopped`, `attention` (partly in): each in its own, in that order       | Join Matcha Latte, Join Double Espresso, Leave; or, for those not voted with, Vote on Hydrex instead of Leave |
 | **Matcha Latte**, which leads to its page    | `in:matcha-latte`, and `joining` into it; empty or ended accounts that still approve it stay here           | Leave, Move to Double Espresso                                                                                |
 | **Double Espresso**, which leads to its page | `in:double-espresso`, and `joining` into it, as for Matcha Latte                                            | Leave, Move to Matcha Latte                                                                                   |
 | **Other accounts**                           | `open` (votes itself, delegated to an address, in a running automation of Hydrex's), and `leaving`          | Join Matcha Latte, Join Double Espresso, Leave                                                                |
 | A fold: "3 Hydrex accounts without votes"    | `closed` (empty, its lock ended, or less than a vote, then "with less than one vote"; none needs its owner) | None                                                                                                          |
 
-- Needs you has one line under its heading: "Those in an automation that stopped voting earn nothing.", which also holds
-  when the group has an account only partly in one. Its Leave leaves whichever automation holds each account:
-  `review(accounts, "self")` already leaves both the page's and Hydrex's.
+- What needs you comes first, with no heading over it: a group for each remedy, each under its own heading at the level
+  of the others, "Didn't vote last epoch", "In a stopped automation", "Partly in an automation", in the App's order.
+  Their Leave leaves whichever automation holds each account: `review(accounts, "self")` already leaves both the page's
+  and Hydrex's.
 - Other accounts' Leave shows only for an account in one of Hydrex's running automations, and takes it out of it.
 - Boxes to tick, and the hint, stay as today: one selection, one action.
 - A row: the account's name and number, which lead to its page; its votes; what its votes earned last epoch. A status

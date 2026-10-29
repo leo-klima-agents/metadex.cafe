@@ -59,12 +59,12 @@ This README is for whoever runs the site. The design and the plan are in [design
   list the wallets in the page too.
 - Home is a heading and the button to the App (`#app`). A wallet connected on Home or About leads on to the App; the
   name in the header still leads Home afterwards. The App, "Your wallet", starts with what needs you across the
-  products, each with one action: the Hydrex accounts with a vote or more in stopped automations, those whose owner did
-  not vote last epoch, an overdue payout, token approvals to the swappers that haven't been used. Then the products,
-  each with what you hold in it: the swap (`#swap`); Hydrex (`#hydrex`), its automations and voting yourself; and Aero,
-  greyed out, "Coming soon." Its Approvals button lists every approval this wallet gave the café's contracts, with the
-  call that undoes it. The pages under it lead one level back, above their title: "‹ Your wallet" from Hydrex and the
-  swap, "‹ Hydrex" from the pages below; Home and About do not.
+  products, each with one action: the Hydrex accounts with a vote or more whose owner did not vote last epoch, those in
+  stopped automations, each one partly in an automation, an overdue payout, token approvals to the swappers that haven't
+  been used. Then the products, each with what you hold in it: the swap (`#swap`); Hydrex (`#hydrex`), its automations
+  and voting yourself; and Aero, greyed out, "Coming soon". Its Approvals button lists every approval this wallet gave
+  the café's contracts, with the call that undoes it. The pages under it lead one level back, above their title: "‹ Your
+  wallet" from Hydrex and the swap, "‹ Hydrex" from the pages below; Home and About do not.
 - The page always says "Hydrex account", as "account" alone means an address in crypto: "8 Hydrex accounts", "Hydrex
   Main Protocol Account #26432".
 - Details open from a round info button beside what they explain, as a popup: on a phone, a sheet from the foot of the
@@ -73,14 +73,14 @@ This README is for whoever runs the site. The design and the plan are in [design
   earned last epoch per 1,000 votes and how that compares with Hydrex's average, both at the average's prices, and, with
   a wallet, how many of its Hydrex accounts are in it. Then, apart, as it is no automation, voting yourself: what votes
   earned on Hydrex last epoch per 1,000 votes, on average and, with a wallet, by the wallet's own votes, with how the
-  two compare, and a link to vote on Hydrex. Then the wallet's Hydrex accounts, in groups a level below: those with a
-  vote or more that need their owner, under Needs you, in a group for each remedy, so that each group's buttons fit each
-  of its accounts (in an automation that stopped, or partly in one of the page's: join an automation, or leave; voted
-  with by an owner who has not voted since before last epoch, as Hydrex counts a vote only in the epoch it is cast: join
-  an automation, or vote on Hydrex); those in each automation; and the others. Leaving says, once done, that the votes
-  are the owner's from the next epoch, to vote with on Hydrex each week. Each account shows what its votes earned last
-  epoch, in an automation or through whoever voted with it. Needs you starts with its accounts ticked; each group with
-  boxes has one that ticks them all, and says how many are ticked and their votes.
+  two compare, and a link to vote on Hydrex. Then the wallet's Hydrex accounts, in groups a level below: first those
+  with a vote or more that need their owner, in a group for each remedy, so that each group's buttons fit each of its
+  accounts (Didn't vote last epoch, voted with by an owner who has not voted since before last epoch, as Hydrex counts a
+  vote only in the epoch it is cast: join an automation, or vote on Hydrex; In a stopped automation, and Partly in an
+  automation, one of the page's: join an automation, or leave); those in each automation; and the others. Leaving says,
+  once done, that the votes are the owner's from the next epoch, to vote with on Hydrex each week. Each account shows
+  what its votes earned last epoch, in an automation or through whoever voted with it. Those that need their owner start
+  ticked; each group with boxes has one that ticks them all, and says how many are ticked and their votes.
 - `#swap` takes the output from its address, `#swap/weth`, USDC by default, then lists the wallet's tokens, each with
   what it fetches, ticked when the quote is worth twice its gas. What the ticked ones fetch shows line by line: the
   quote, the 1%, what reaches you, the least that may, on the line where the slippage is picked, and the gas, paid apart

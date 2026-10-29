@@ -85,9 +85,9 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), ["Swap", "Hydrex", "Aero"]);
     assert.equal(await app(page).locator('#products [data-choice="aero"] a').count(), 0);
     assert.deepEqual(await app(page).locator("#products .note").allInnerTexts(), [
-      "Sell many tokens for one.",
-      "Automations that vote with your Hydrex accounts.",
-      "Coming soon.",
+      "Sell many tokens for one",
+      "Automations that vote with your Hydrex accounts",
+      "Coming soon",
     ]);
     assert.equal(await page.locator("header .to-app").getAttribute("aria-current"), "page");
     await app(page).getByRole("button", { name: "Test Wallet" }).waitFor();

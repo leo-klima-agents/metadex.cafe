@@ -73,18 +73,18 @@
           <ul class="menu">
             <li class="choice" data-choice="swap">
               <h3><a href="#swap">Swap</a></h3>
-              <p class="note small">Sell many tokens for one.</p>
+              <p class="note small">Sell many tokens for one</p>
               <p class="small yours swap-yours" hidden></p>
             </li>
             <li class="choice" data-choice="hydrex">
               <h3><a href="#hydrex">Hydrex</a></h3>
-              <p class="note small">Automations that vote with your Hydrex accounts.</p>
+              <p class="note small">Automations that vote with your Hydrex accounts</p>
               <p class="small yours hydrex-yours" hidden></p>
             </li>
             <!-- Aero, greyed out until it comes: no page to lead to, and nothing to hold in it yet. -->
             <li class="choice soon" data-choice="aero">
               <h3>Aero</h3>
-              <p class="note small">Coming soon.</p>
+              <p class="note small">Coming soon</p>
             </li>
           </ul>
         </section>
@@ -262,62 +262,54 @@
             >
           </p>
           <div id="accounts" hidden>
-            <!-- What needs its owner, by what it needs, so that each group's buttons are the remedy of each of its
-                 accounts: join an automation, or leave the one that holds it; or vote with it on Hydrex. -->
-            <section class="needs-groups" aria-labelledby="group-needs" hidden>
-              <h3 id="group-needs">Needs you <span class="needs-count"></span></h3>
-              <section class="group" data-group="needs:stopped" aria-labelledby="group-needs-stopped" hidden>
-                <div class="group-head">
-                  <h4 id="group-needs-stopped" class="label">In a stopped automation <span class="count"></span></h4>
-                  <p class="picked small" hidden></p>
-                  <label class="pick-all small" hidden><input type="checkbox" /> All</label>
-                </div>
-                <ul class="accounts"></ul>
-                <p class="buttons">
-                  <button type="button" data-action="join" data-automation="matcha-latte">Join Matcha Latte</button>
-                  <button type="button" data-action="join" data-automation="double-espresso">
-                    Join Double Espresso
-                  </button>
-                  <button type="button" data-action="self" class="secondary">Leave</button>
-                </p>
-              </section>
-              <section class="group" data-group="needs:partly" aria-labelledby="group-needs-partly" hidden>
-                <div class="group-head">
-                  <h4 id="group-needs-partly" class="label">Partly in an automation <span class="count"></span></h4>
-                  <p class="picked small" hidden></p>
-                  <label class="pick-all small" hidden><input type="checkbox" /> All</label>
-                </div>
-                <ul class="accounts"></ul>
-                <p class="buttons">
-                  <button type="button" data-action="join" data-automation="matcha-latte">Join Matcha Latte</button>
-                  <button type="button" data-action="join" data-automation="double-espresso">
-                    Join Double Espresso
-                  </button>
-                  <button type="button" data-action="self" class="secondary">Leave</button>
-                </p>
-              </section>
-              <section class="group" data-group="needs:unvoted" aria-labelledby="group-needs-unvoted" hidden>
-                <div class="group-head">
-                  <h4 id="group-needs-unvoted" class="label">Didn't vote last epoch <span class="count"></span></h4>
-                  <p class="picked small" hidden></p>
-                  <label class="pick-all small" hidden><input type="checkbox" /> All</label>
-                </div>
-                <ul class="accounts"></ul>
-                <p class="buttons">
-                  <button type="button" data-action="join" data-automation="matcha-latte">Join Matcha Latte</button>
-                  <button type="button" data-action="join" data-automation="double-espresso">
-                    Join Double Espresso
-                  </button>
-                  <a
-                    class="button secondary vote-on-hydrex"
-                    href="https://www.hydrex.fi/"
-                    target="_blank"
-                    rel="noopener"
-                    hidden
-                    >Vote on Hydrex <span aria-hidden="true">↗</span></a
-                  >
-                </p>
-              </section>
+            <!-- What needs its owner first, a group for each thing it needs, so that each group's buttons are the remedy
+                 of each of its accounts: join an automation, or vote with it on Hydrex; or leave the one that holds
+                 it. -->
+            <section class="group" data-group="needs:unvoted" aria-labelledby="group-needs-unvoted" hidden>
+              <div class="group-head">
+                <h3 id="group-needs-unvoted">Didn't vote last epoch <span class="count"></span></h3>
+                <p class="picked small" hidden></p>
+                <label class="pick-all small" hidden><input type="checkbox" /> All</label>
+              </div>
+              <ul class="accounts"></ul>
+              <p class="buttons">
+                <button type="button" data-action="join" data-automation="matcha-latte">Join Matcha Latte</button>
+                <button type="button" data-action="join" data-automation="double-espresso">Join Double Espresso</button>
+                <a
+                  class="button secondary vote-on-hydrex"
+                  href="https://www.hydrex.fi/"
+                  target="_blank"
+                  rel="noopener"
+                  hidden
+                  >Vote on Hydrex <span aria-hidden="true">↗</span></a
+                >
+              </p>
+            </section>
+            <section class="group" data-group="needs:stopped" aria-labelledby="group-needs-stopped" hidden>
+              <div class="group-head">
+                <h3 id="group-needs-stopped">In a stopped automation <span class="count"></span></h3>
+                <p class="picked small" hidden></p>
+                <label class="pick-all small" hidden><input type="checkbox" /> All</label>
+              </div>
+              <ul class="accounts"></ul>
+              <p class="buttons">
+                <button type="button" data-action="join" data-automation="matcha-latte">Join Matcha Latte</button>
+                <button type="button" data-action="join" data-automation="double-espresso">Join Double Espresso</button>
+                <button type="button" data-action="self" class="secondary">Leave</button>
+              </p>
+            </section>
+            <section class="group" data-group="needs:partly" aria-labelledby="group-needs-partly" hidden>
+              <div class="group-head">
+                <h3 id="group-needs-partly">Partly in an automation <span class="count"></span></h3>
+                <p class="picked small" hidden></p>
+                <label class="pick-all small" hidden><input type="checkbox" /> All</label>
+              </div>
+              <ul class="accounts"></ul>
+              <p class="buttons">
+                <button type="button" data-action="join" data-automation="matcha-latte">Join Matcha Latte</button>
+                <button type="button" data-action="join" data-automation="double-espresso">Join Double Espresso</button>
+                <button type="button" data-action="self" class="secondary">Leave</button>
+              </p>
             </section>
             <section class="group" data-group="in:matcha-latte" aria-labelledby="group-matcha-latte" hidden>
               <div class="group-head">

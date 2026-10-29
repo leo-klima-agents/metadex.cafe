@@ -607,7 +607,7 @@ export const account = (page: Page, id: number) =>
   hydrex(page)
     .locator("#accounts li")
     .filter({ hasText: `#${id}` });
-// The Hydrex accounts' groups: those Needs you holds, "needs:stopped", "needs:partly" and "needs:unvoted";
+// The Hydrex accounts' groups: those that need their owner, "needs:unvoted", "needs:stopped" and "needs:partly";
 // "in:matcha-latte", "in:double-espresso", "other" and "closed".
 export const group = (page: Page, key: string) => hydrex(page).locator(`.group[data-group="${key}"]`);
 export const product = (page: Page, kind: string) => page.locator(`.view[data-kind="${kind}"]`);

@@ -62,7 +62,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
       .getByText(/In USDC\s+· stopped since\s+Wed,? 9 Sept?/)
       .waitFor();
     // Both are in automations that stopped: one group, whose buttons are the remedy of each.
-    await hydrex(page).getByRole("heading", { name: "Needs you · 2" }).waitFor();
+    await hydrex(page).getByRole("heading", { name: "In a stopped automation · 2" }).waitFor();
     const needs = group(page, "needs:stopped");
     assert.equal(await needs.locator(".count").innerText(), "· 2");
     // What needs you starts ticked, with what it adds up to.
@@ -122,7 +122,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     const joined = /Joining Matcha Latte:\s+votes from\s+Thu,? 22 Oct/;
     await group(page, "in:matcha-latte").locator("li").filter({ hasText: "#2439" }).getByText(joined).waitFor();
     await account(page, 2435).getByText(joined).waitFor();
-    assert.equal(await hydrex(page).locator(".needs-groups").isVisible(), false);
+    assert.equal(await hydrex(page).locator('.group[data-group^="needs:"]:not([hidden])').count(), 0, "none needs you");
     assert.deepEqual([...new Set(asked)].sort(), [
       "eth_chainId",
       "eth_requestAccounts",
