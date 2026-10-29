@@ -199,7 +199,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
       .getByText(/Earns nothing\s+since\s+Thu,? 10 Sept?\./)
       .waitFor();
     await position(page).getByRole("button", { name: "Join Matcha Latte", exact: true }).waitFor();
-    await position(page).getByRole("button", { name: "Leave", exact: true }).waitFor();
+    await position(page).getByRole("button", { name: "Leave automation", exact: true }).waitFor();
     assert.equal(await position(page).locator(".position-owner-row").isVisible(), false, "its own account");
     await shoot(page, "stopped-account-390-light");
     // It leads back to Hydrex, above its title.

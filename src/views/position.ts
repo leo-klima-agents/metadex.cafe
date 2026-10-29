@@ -251,6 +251,9 @@ function showActions(account: Account | undefined, status?: Status): void {
       // A move is a secondary action, as in the groups of Hydrex's page.
       button.classList.toggle("secondary", moves);
     }
+    // Leaving an automation that stopped says so, as in its group on Hydrex's page.
+    if (button.dataset.action === "self")
+      button.textContent = status?.kind === "stopped" ? "Leave automation" : "Leave";
     button.hidden = !allowed;
     any ||= allowed;
   }
