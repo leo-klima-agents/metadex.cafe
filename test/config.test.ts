@@ -12,6 +12,7 @@ import {
   DOUBLE_ESPRESSO_FEE_BPS,
   DOUBLE_ESPRESSO_FEE_RECIPIENT,
   MATCHA_LATTE,
+  MATCHA_LATTE_OPERATOR,
   OPERATOR,
   KVCM,
   MULTICALL3,
@@ -42,6 +43,7 @@ test("addresses are checksummed", () => {
     ...AUTOMATIONS.map(({ address }) => address),
     DOUBLE_ESPRESSO_FEE_RECIPIENT,
     OPERATOR,
+    MATCHA_LATTE_OPERATOR,
     KVCM,
     VOTING_ESCROW,
     VOTING_ESCROW_IMPLEMENTATION,
@@ -58,13 +60,13 @@ test("Matcha Latte is Hydrex's Carbon Impact automation, as its popup says, with
   const html = read("index.html");
   assert.match(
     productOf(html, "matcha-latte"),
-    /Matcha Latte is the "Carbon Impact" automation from Hydrex\.\s+Its contract is named KlimaVeTokenConduit\./,
+    /Matcha Latte is the "Carbon Impact" automation from Hydrex\.\s+Its smart contract is named\s+KlimaVeTokenConduit\./,
   );
   assert.match(
     productOf(html, "double-espresso"),
-    /Double Espresso is an immutable automation with no owner\.\s+Its contract is named ImmutableVeTokenConduit\./,
+    /Double Espresso is an immutable automation with no owner\.\s+Its smart contract is named\s+ImmutableVeTokenConduit\./,
   );
-  // Beside its address, each goes by its contract's name.
+  // In a review, beside its address, each goes by its smart contract's name.
   assert.deepEqual(
     AUTOMATIONS.map(({ contract }) => contract),
     ["KlimaVeTokenConduit", "ImmutableVeTokenConduit"],
@@ -85,20 +87,21 @@ test("each automation has a kind, a name, its approvals and its costs, Double Es
   const factsOf = (kind: string) => /<dl class="fee-facts">[\s\S]*?<\/dl>/.exec(productOf(html, kind))?.[0] ?? "";
   // Each one's costs: what it takes of the rewards.
   assert.deepEqual(rows(factsOf("matcha-latte")), ["Retirements", "Payout fee", "Swap costs"]);
-  assert.deepEqual(rows(factsOf("double-espresso")), ["Fee on claims"]);
+  assert.deepEqual(rows(factsOf("double-espresso")), ["Claim fee"]);
   assert.equal(bps(DOUBLE_ESPRESSO_FEE_BPS), "1%");
   assert.match(factsOf("double-espresso"), /<dd>1%<\/dd>/);
   // Who can change it: Hydrex and the operator Matcha Latte; nobody Double Espresso, whose votes are anyone's.
   const controlOf = (kind: string) =>
     /<div data-section="control">[\s\S]*?<\/dl>/.exec(productOf(html, kind))?.[0] ?? "";
-  assert.deepEqual(rows(controlOf("matcha-latte")), ["Hydrex", "The operator"]);
+  assert.deepEqual(rows(controlOf("matcha-latte")), ["Hydrex admin", "Operator"]);
   assert.deepEqual(rows(controlOf("double-espresso")), ["Immutable", "Democratic"]);
   assert.match(controlOf("double-espresso"), /It cannot be changed or upgraded/);
   // Then its contract and where its fee goes.
   const contractsOf = (kind: string) =>
     /<div data-section="check">[\s\S]*?<\/dl>/.exec(productOf(html, kind))?.[0] ?? "";
-  assert.deepEqual(rows(contractsOf("matcha-latte")), ["KlimaVeTokenConduit", "Fee recipient"]);
-  assert.deepEqual(rows(contractsOf("double-espresso")), ["ImmutableVeTokenConduit", "Fee recipient"]);
+  assert.deepEqual(rows(contractsOf("matcha-latte")), ["Matcha Latte", "Fee recipient", "Operator"]);
+  assert.deepEqual(rows(contractsOf("double-espresso")), ["Double Espresso", "Fee recipient"]);
+  assert.ok(contractsOf("matcha-latte").includes(`/address/${MATCHA_LATTE_OPERATOR}"`));
   assert.ok(contractsOf("double-espresso").includes(`/address/${DOUBLE_ESPRESSO_FEE_RECIPIENT}"`));
   // Each automation's address leads to its code, verified on Basescan.
   for (const { kind, address } of AUTOMATIONS) {

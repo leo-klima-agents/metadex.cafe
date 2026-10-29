@@ -12,7 +12,7 @@ export type Kind = "matcha-latte" | "double-espresso";
 export type Automation = {
   kind: Kind;
   name: string;
-  // Its contract's name, which the page gives beside its address.
+  // Its smart contract's name, which a review gives beside its address.
   contract: string;
   address: Address;
   // What joining approves: 3 sends the account's claims to the automation, 5 delegates its votes.
@@ -46,6 +46,9 @@ export const DOUBLE_ESPRESSO_FEE_RECIPIENT: Address = "0x450c72de8c0079B49AcedF2
 // The address whose claims through Double Espresso the receipts show as Double Espresso's own, made for its members
 // after each epoch. It holds Matcha Latte's EXECUTOR_ROLE. Anyone may claim through Double Espresso.
 export const OPERATOR: Address = "0x40FBFe5312330f278824ddbB7521ab77409192f0";
+// Matcha Latte's operator, as its popup gives it: a 2-of-3 Safe that holds its EXECUTOR_ROLE too, whose module votes
+// and sends payouts for it.
+export const MATCHA_LATTE_OPERATOR: Address = "0x17f513C024C1C67db050258ba569c714a9CF1B12";
 export const KVCM: Address = "0x00fBAC94Fec8D4089d3fe979F39454F48c71A65d";
 export const VOTING_ESCROW: Address = "0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1";
 export const VOTING_ESCROW_IMPLEMENTATION: Address = "0x0FC68cE53Be957a1AA779f553AD49f6068fFf231";
