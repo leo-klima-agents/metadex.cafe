@@ -18,9 +18,9 @@ technical parts open from an info button, as popups.
   wallet's chip once one is, which leads to the App.
 - **Home** (`/`): what the café does, in a heading, and the one button. A wallet connected there, or on About, leads on
   to the App.
-- **The App** (`#app`): what needs you across the products, each with one action; then the products, the Hydrex
-  automations and the swap, each with what you hold in it; and Approvals, what this wallet allows, in a popup. See
-  [products.md](products.md).
+- **The App** (`#app`): what needs you across the products, each with one action; then the products, the swap and the
+  Hydrex automations, each with what you hold in it, then Aero, still to come; and Approvals, what this wallet allows,
+  in a popup. See [products.md](products.md).
 - **Hydrex** (`#hydrex`), under "‹ Your wallet": the automations first, in one box, a row each: each automation and
   voting yourself, with what it takes, what it pays in and what it paid last epoch. Then, with a wallet, its Hydrex
   accounts, in groups a level below: those that need their owner, those in each automation, the others, and a fold for

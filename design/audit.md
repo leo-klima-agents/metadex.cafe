@@ -186,13 +186,13 @@ With no account holding HYDX: today's `#none` line, then the menu.
 
 The groups show only when they hold accounts, with the count in their heading:
 
-| Group                                          | Holds today's groups                                                                               | Its actions                                    |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| **Needs you**                                  | `stopped`, `attention` (partly in)                                                                 | Join Matcha Latte, Join Double Espresso, Leave |
-| **Matcha Latte**, which leads to its page      | `in:matcha-latte`, and `joining` into it; empty or ended accounts that still approve it stay here  | Leave, Move to Double Espresso                 |
-| **Double Espresso**, which leads to its page   | `in:double-espresso`, and `joining` into it, as for Matcha Latte                                   | Leave, Move to Matcha Latte                    |
-| **Other accounts**                             | `open` (votes itself, delegated to an address, in a running automation of Hydrex's), and `leaving` | Join Matcha Latte, Join Double Espresso, Leave |
-| A fold: "3 accounts with nothing to vote with" | `closed` (empty, or its lock ended)                                                                | None                                           |
+| Group                                        | Holds today's groups                                                                                        | Its actions                                                                                                   |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Needs you**, a group for each remedy       | `stopped`, `attention` (partly in), each in its own; and accounts whose owner did not vote                  | Join Matcha Latte, Join Double Espresso, Leave; or, for those not voted with, Vote on Hydrex instead of Leave |
+| **Matcha Latte**, which leads to its page    | `in:matcha-latte`, and `joining` into it; empty or ended accounts that still approve it stay here           | Leave, Move to Double Espresso                                                                                |
+| **Double Espresso**, which leads to its page | `in:double-espresso`, and `joining` into it, as for Matcha Latte                                            | Leave, Move to Matcha Latte                                                                                   |
+| **Other accounts**                           | `open` (votes itself, delegated to an address, in a running automation of Hydrex's), and `leaving`          | Join Matcha Latte, Join Double Espresso, Leave                                                                |
+| A fold: "3 Hydrex accounts without votes"    | `closed` (empty, its lock ended, or less than a vote, then "with less than one vote"; none needs its owner) | None                                                                                                          |
 
 - Needs you has one line under its heading: "Those in an automation that stopped voting earn nothing.", which also holds
   when the group has an account only partly in one. Its Leave leaves whichever automation holds each account:

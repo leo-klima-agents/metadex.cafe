@@ -3,12 +3,12 @@ import { now, same } from "../chain.ts";
 import { AUTOMATIONS, SWAPPERS } from "../config.ts";
 import { PENDING, clone, fill, live, setText, show, type Text } from "../dom.ts";
 import { count, figure, money } from "../format.ts";
-import { automationName, canLeave, statusOf, type Holdings } from "../hydrex.ts";
+import { automationName, canLeave, hasVotes, statusOf, type Holdings } from "../hydrex.ts";
 import { earningsEnded } from "../last-epoch.ts";
 import type { Reader } from "../read.ts";
 import { hrefOf } from "../routes.ts";
 import { describe } from "../tokens.ts";
-import { claim, inYear, review, showAccounts, type Action } from "./accounts.ts";
+import { claim, review, showAccounts, type Action } from "./accounts.ts";
 import { doubleEspresso, matchaLatte, readAverage } from "./automations.ts";
 import { session, shown, views } from "./page.ts";
 import { appPayouts, overdue, owed, waitsLine } from "./payouts.ts";
@@ -64,23 +64,25 @@ export function showApp(): void {
   const holdings = connection ? shown() : undefined;
   if (holdings) {
     const { owner, accounts, epochStart } = holdings;
-    // Accounts their owner votes with, who did not vote last epoch, in one line: they share one remedy.
-    let unvoted = 0;
-    for (const account of accounts) {
+    // Accounts in automations that stopped, and accounts their owner votes with, who did not vote last epoch, a line
+    // each, as each shares one remedy, which Hydrex's page offers. An account with less than a vote needs nothing.
+    let [stopped, unvoted] = [0, 0];
+    const toHydrex = { link: hrefOf({ view: "hydrex" }), label: "Change" };
+    for (const account of accounts.filter(hasVotes)) {
       const status = statusOf(account, owner, now(), epochStart);
-      const change = { link: hrefOf({ view: "position", id: account.id }), label: "Change" };
-      const named = `Hydrex account #${account.id}`;
-      if (status.kind === "stopped") {
-        const since = inYear(status.voted)(status.voted);
-        add(need("stopped", `${named} earns nothing: ${status.name} stopped since ${since}`, change));
+      if (status.kind === "partly") {
+        const change = { link: hrefOf({ view: "position", id: account.id }), label: "Change" };
+        add(need("stopped", `Hydrex account #${account.id} is partly in ${status.automation.name}`, change));
       }
-      if (status.kind === "partly") add(need("stopped", `${named} is partly in ${status.automation.name}`, change));
+      if (status.kind === "stopped") stopped++;
       if (status.kind === "unvoted") unvoted++;
     }
-    if (unvoted) {
-      const which = count(unvoted, "Hydrex account", "Hydrex accounts");
-      add(need("stopped", `${which} didn't vote last epoch`, { link: hrefOf({ view: "hydrex" }), label: "Change" }));
+    if (stopped) {
+      const where = stopped === 1 ? "a stopped automation" : "stopped automations";
+      add(need("stopped", `${count(stopped, "Hydrex account", "Hydrex accounts")} in ${where}`, toHydrex));
     }
+    if (unvoted)
+      add(need("stopped", `${count(unvoted, "Hydrex account", "Hydrex accounts")} didn't vote last epoch`, toHydrex));
     for (const entry of overdue()) {
       const waits = waitsLine(entry);
       add(

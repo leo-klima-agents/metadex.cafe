@@ -155,9 +155,10 @@ export type Status =
   | { kind: "unvoted"; voted: number }
   | { kind: "delegated"; to: Address };
 
-// The App's groups: accounts that need their owner, those in each of the page's automations or joining it, the others,
-// and those with nothing to vote with.
-export type Group = "needs" | `in:${Kind}` | "other" | "closed";
+// The App's groups: accounts that need their owner, by what each needs, as each takes its own remedy (in one of Hydrex's
+// automations that stopped, partly in one of the page's, or not voted with), those in each of the page's automations or
+// joining it, the others, and those with nothing to vote with.
+export type Group = "needs:stopped" | "needs:partly" | "needs:unvoted" | `in:${Kind}` | "other" | "closed";
 
 // `automation` is set only when the call is about another of Hydrex's automations.
 export type Step = Slip & { id: bigint; approve: boolean; conduit: Address; conduitName: string; automation?: string };
@@ -348,24 +349,31 @@ export function canLeave(account: Account, automation: Automation): boolean {
 
 export const canLeaveOther = (account: Account): boolean => automationName(account.delegate) !== undefined;
 
+// Whether an account has a vote or more: one with less needs nothing of its owner.
+export const hasVotes = ({ votes }: Account): boolean => votes >= 10n ** 18n;
+
 export function groupOf(account: Account, status: Status): Group {
   switch (status.kind) {
     case "stopped":
     case "partly":
     case "unvoted":
-      return "needs";
+      return hasVotes(account) ? `needs:${status.kind}` : withoutVotes(account);
     case "in":
     case "joined":
       return `in:${status.automation.kind}`;
-    // An automation may still hold the approvals of an account it can no longer vote with.
     case "ended":
-    case "empty": {
-      const holder = AUTOMATIONS.find((automation) => canLeave(account, automation));
-      return holder ? `in:${holder.kind}` : "closed";
-    }
+    case "empty":
+      return withoutVotes(account);
     default:
       return "other";
   }
+}
+
+// An account with nothing, or less than a vote, to vote with is folded away; but one of the page's automations may
+// still hold its approvals, which its group can take back.
+function withoutVotes(account: Account): Group {
+  const holder = AUTOMATIONS.find((automation) => canLeave(account, automation));
+  return holder ? `in:${holder.kind}` : "closed";
 }
 
 type Target = { address: Address; name: string };

@@ -81,11 +81,13 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await homeTitle(page).isVisible(), false);
     assert.equal(await page.title(), "Your wallet · metaDEX Café");
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Your wallet");
-    // The App lists the products, each with what it is: Hydrex, and the swap.
-    assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), ["Hydrex", "Swap"]);
+    // The App lists the products, each with what it is: the swap; Hydrex; and Aero, still to come, with no link.
+    assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), ["Swap", "Hydrex", "Aero"]);
+    assert.equal(await app(page).locator('#products [data-choice="aero"] a').count(), 0);
     assert.deepEqual(await app(page).locator("#products .note").allInnerTexts(), [
-      "Automations that vote with your Hydrex accounts.",
       "Sell many tokens for one.",
+      "Automations that vote with your Hydrex accounts.",
+      "Coming soon.",
     ]);
     assert.equal(await page.locator("header .to-app").getAttribute("aria-current"), "page");
     await app(page).getByRole("button", { name: "Test Wallet" }).waitFor();
@@ -163,7 +165,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
   test("a link in the review opens its section, Back keeps the ticks, and an account's page says what stopped", async () => {
     const { page, violations } = await connected({ owner: ELSEWHERE }, { width: 390, height: 844 });
     await pick(page, 2435, 2439);
-    await group(page, "needs").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
+    await group(page, "needs:stopped").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
     await review(page).getByRole("heading", { name: "Before you join" }).waitFor();
     await review(page).getByRole("link", { name: "Can change" }).click();
     assert.equal(await review(page).isVisible(), false);
@@ -177,7 +179,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await page.goBack();
     await hydrexTitle(page).waitFor();
     assert.equal(await page.getByRole("checkbox", { name: "Pick Hydrex account #2439" }).isChecked(), true);
-    await group(page, "needs")
+    await group(page, "needs:stopped")
       .locator(".picked")
       .getByText(/^2 of 2 · /)
       .waitFor();
@@ -191,7 +193,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
       .getByText(/Earns nothing\s+since\s+Thu,? 10 Sept?\./)
       .waitFor();
     await position(page).getByRole("button", { name: "Join Matcha Latte", exact: true }).waitFor();
-    await position(page).getByRole("button", { name: "Vote yourself", exact: true }).waitFor();
+    await position(page).getByRole("button", { name: "Leave", exact: true }).waitFor();
     assert.equal(await position(page).locator(".position-owner-row").isVisible(), false, "its own account");
     await shoot(page, "stopped-account-390-light");
     // It leads back to Hydrex, above its title.
@@ -205,14 +207,14 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(new URL(page.url()).hash, "#app");
     assert.equal(await page.title(), "Your wallet · metaDEX Café");
     assert.equal(await homeTitle(page).isVisible(), false);
-    // The App says what needs you across the products: here, the accounts in automations that stopped.
+    // The App says what needs you across the products: here, in one line, the accounts in automations that stopped,
+    // which Hydrex's page groups with their remedy.
     const needs = app(page).locator("#needs");
-    await needs.getByRole("heading", { name: "Needs you · 2" }).waitFor();
-    await needs.getByText(/^Hydrex account #2439 earns nothing: USDC stopped since Wed,? 9 Sept?$/).waitFor();
-    assert.equal(
-      await needs.locator("li").filter({ hasText: "#2439" }).getByRole("link", { name: "Change" }).getAttribute("href"),
-      "#hydrex/2439",
-    );
+    await needs.getByRole("heading", { name: "Needs you · 1" }).waitFor();
+    const words = "2 Hydrex accounts in stopped automations";
+    const stopped = needs.locator("li").filter({ hasText: words });
+    await stopped.getByText(words, { exact: true }).waitFor();
+    assert.equal(await stopped.getByRole("link", { name: "Change" }).getAttribute("href"), "#hydrex");
     await app(page).locator(".hydrex-yours").getByText("2 Hydrex accounts", { exact: true }).waitFor();
     // With a wallet connected, Home is still Home: the name in the header leads there.
     await page.locator("header.site").getByRole("link", { name: "metaDEX Café" }).click();

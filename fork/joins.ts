@@ -61,8 +61,10 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await account(page, 2439)
       .getByText(/In USDC\s+· stopped since\s+Wed,? 9 Sept?/)
       .waitFor();
-    const needs = group(page, "needs");
-    await needs.getByRole("heading", { name: "Needs you · 2" }).waitFor();
+    // Both are in automations that stopped: one group, whose buttons are the remedy of each.
+    await hydrex(page).getByRole("heading", { name: "Needs you · 2" }).waitFor();
+    const needs = group(page, "needs:stopped");
+    assert.equal(await needs.locator(".count").innerText(), "· 2");
     // What needs you starts ticked, with what it adds up to.
     assert.equal(await page.getByRole("checkbox", { name: "Pick Hydrex account #2439" }).isChecked(), true);
     await needs
@@ -120,7 +122,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     const joined = /Joining Matcha Latte:\s+votes from\s+Thu,? 22 Oct/;
     await group(page, "in:matcha-latte").locator("li").filter({ hasText: "#2439" }).getByText(joined).waitFor();
     await account(page, 2435).getByText(joined).waitFor();
-    assert.equal(await group(page, "needs").isVisible(), false);
+    assert.equal(await hydrex(page).locator(".needs-groups").isVisible(), false);
     assert.deepEqual([...new Set(asked)].sort(), [
       "eth_chainId",
       "eth_requestAccounts",
@@ -135,7 +137,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
   test("join with an account of its own; the header shows the wallet on every view", async () => {
     const { page, sent } = await connected({ owner: NEWCOMER });
     // Its owner last voted before last epoch: it earns nothing, and needs them.
-    await group(page, "needs").locator("li").filter({ hasText: "#141" }).getByText(UNVOTED).waitFor();
+    await group(page, "needs:unvoted").locator("li").filter({ hasText: "#141" }).getByText(UNVOTED).waitFor();
     await account(page, 42877)
       .getByText(/In Liquid Hydrex\s+· stopped since\s+Wed,? 9 Sept?/)
       .waitFor();
@@ -143,10 +145,19 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await nothing.locator("summary").click();
     await nothing.locator("li").getByText("Empty", { exact: true }).first().waitFor();
     assert.equal(await nothing.locator(".pick").first().isVisible(), false, "an empty account has no box");
-    assert.equal(await account(page, 141).locator(".pick").isChecked(), true, "what needs you starts ticked");
-    await group(page, "needs")
+    // #42877, in an automation that stopped, needs another remedy, in a group of its own: alone in its group, #141
+    // needs no box.
+    await group(page, "needs:stopped").locator("li").filter({ hasText: "#42877" }).waitFor();
+    assert.equal(await account(page, 141).locator(".pick").isVisible(), false);
+    await group(page, "needs:unvoted")
       .getByRole("link", { name: /Vote on Hydrex/ })
       .waitFor();
+    assert.equal(
+      await group(page, "needs:stopped")
+        .getByRole("link", { name: /Vote on Hydrex/ })
+        .count(),
+      0,
+    );
     // With a wallet connected, the name in the header still leads Home, which stays apart from the App; the wallet's
     // chip leads to the App.
     await page.getByRole("link", { name: "metaDEX Café" }).click();
@@ -160,8 +171,8 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await appTitle(page).waitFor();
     assert.equal(await homeTitle(page).isVisible(), false);
     await toHydrex(page);
-    await only(page, "needs", 141);
-    await group(page, "needs").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
+    await only(page, "needs:unvoted", 141);
+    await group(page, "needs:unvoted").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
     await toWallet(page);
     assert.equal(await review(page).locator(".how").isVisible(), false, "one transaction needs no line");
     assert.deepEqual(await review(page).locator(".says").allTextContents(), ["Account #141 joins Matcha Latte."]);
@@ -179,7 +190,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
   test("closing between transactions stops there; a link then opens in a new tab", async () => {
     const { page, sent } = await connected({ owner: ELSEWHERE });
     await pick(page, 2435, 2439);
-    await group(page, "needs").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
+    await group(page, "needs:stopped").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
     await toWallet(page);
     await review(page).getByRole("button", { name: "Sign transaction 1 of 2" }).click();
     await review(page).getByText("Sign transaction 2 when you are ready.").waitFor();
@@ -227,8 +238,8 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
       .getByText(/In USDC\s+· stopped/)
       .waitFor();
     await shoot(page, "stopped-390-light");
-    await only(page, "needs", 2439);
-    await group(page, "needs").getByRole("button", { name: "Vote yourself", exact: true }).click();
+    await only(page, "needs:stopped", 2439);
+    await group(page, "needs:stopped").getByRole("button", { name: "Leave", exact: true }).click();
     await review(page).getByRole("heading", { name: "Leave USDC" }).waitFor();
     await review(page).locator(".pages").getByText("Claims stop").waitFor();
     assert.deepEqual(await review(page).locator(".says").allTextContents(), [
@@ -243,7 +254,13 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
       "one transaction has no count",
     );
     await shoot(page, "release-390-light");
-    await confirm(page);
+    // Once left, the review says its votes are the owner's from the next epoch, to vote with on Hydrex.
+    await review(page).getByRole("button", { name: "Sign transaction" }).click();
+    await review(page).getByText("its votes are yours", { exact: false }).waitFor({ timeout: 120_000 });
+    await review(page)
+      .getByRole("link", { name: /Vote on Hydrex/ })
+      .waitFor();
+    await review(page).getByRole("button", { name: "Close" }).click();
     assert.equal(sent.length, 1);
     await expectApprovals([2439n], ELSEWHERE, zeroAddress);
     await group(page, "other")
@@ -258,8 +275,8 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     const { page, wallet, sent } = await connected({ owner: NEWCOMER, chainId: 1, decline: true });
     await hydrex(page).getByText("Wrong network.").waitFor();
     await account(page, 141).getByText(UNVOTED).waitFor();
-    await only(page, "needs", 141);
-    const joinOwn = group(page, "needs").getByRole("button", { name: "Join Matcha Latte", exact: true });
+    await only(page, "needs:unvoted", 141);
+    const joinOwn = group(page, "needs:unvoted").getByRole("button", { name: "Join Matcha Latte", exact: true });
     await joinOwn.click();
     await toWallet(page);
     await review(page).getByRole("button", { name: "Switch to Base" }).click();
@@ -287,8 +304,8 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     const sending = new Promise<void>((resolve) => (answer = resolve));
     const { page, sent } = await connected({ owner: NEWCOMER, sending });
     await account(page, 141).getByText(UNVOTED).waitFor();
-    await only(page, "needs", 141);
-    await group(page, "needs").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
+    await only(page, "needs:unvoted", 141);
+    await group(page, "needs:unvoted").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
     await toWallet(page);
     await review(page).getByRole("button", { name: "Sign transaction" }).click();
     await review(page).getByText("Waiting for your wallet…").waitFor();

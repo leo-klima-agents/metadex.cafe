@@ -154,19 +154,24 @@ export function showAccounts(keepTicked = false): void {
     items?.replaceChildren(
       ...these.map((member) => accountItem(member, group, able.length > 1 && able.includes(member.account))),
     );
-    // What needs its owner starts ticked, as one action fits it all; the other groups start with none. A box starts
-    // ticked when it first shows, as when the checks pass after the accounts were drawn, and keeps what was picked
-    // then.
+    // What needs its owner starts ticked, as one remedy fits each of its groups; the other groups start with none. A box
+    // starts ticked when it first shows, as when the checks pass after the accounts were drawn, and keeps what was
+    // picked then.
     const before = (keepTicked && boxesShown.get(section)) || new Set<string>();
     const boxes = [...section.querySelectorAll<HTMLInputElement>(".pick:not([hidden])")];
-    for (const box of boxes) box.checked = kept.has(box.value) || (group === "needs" && !before.has(box.value));
+    for (const box of boxes)
+      box.checked = kept.has(box.value) || (group.startsWith("needs:") && !before.has(box.value));
     boxesShown.set(section, new Set(boxes.map(({ value }) => value)));
-    // Among those without votes, the locks that ended with HYDX still in them, which their owner can withdraw.
+    // Those folded away are without votes, unless one has some but less than one. Among them, the locks that ended with
+    // HYDX still in them, which their owner can withdraw.
+    const some = these.some(({ account }) => account.votes > 0n);
     const ended = these.filter(({ status }) => status.kind === "ended").length;
     fill(section, {
       count: `· ${these.length}`,
       "nothing-count": [
-        count(these.length, "Hydrex account without votes", "Hydrex accounts without votes"),
+        some
+          ? count(these.length, "Hydrex account with less than one vote", "Hydrex accounts with less than one vote")
+          : count(these.length, "Hydrex account without votes", "Hydrex accounts without votes"),
         ...(ended ? [`${ended} with HYDX to withdraw`] : []),
       ].join(" · "),
     });
@@ -178,6 +183,12 @@ export function showAccounts(keepTicked = false): void {
       section,
     );
     section.hidden = !these.length;
+  }
+  // Needs you, over its groups, says how many need their owner, whatever each needs.
+  const needing = members.filter(({ group }) => group.startsWith("needs:")).length;
+  for (const needs of document.querySelectorAll<HTMLElement>(".needs-groups")) {
+    needs.hidden = !needing;
+    fill(needs, { "needs-count": `· ${needing}` });
   }
   updateButtons();
   // On the menu, how many of the wallet's accounts each automation holds, as the App counts them.
@@ -358,6 +369,7 @@ export function review(accounts: Account[], action: Action, automation?: Automat
   const { steps, from, names } = leaveAll(accounts, action === "self");
   const title = `Leave ${list(names)}`;
   const effects = prepare(from.length ? "leave-effects" : "leave-other-effects");
+  // Once left, the votes are the owner's, to vote with on Hydrex each week.
   openReview({
     name: title,
     pages: [{ title, body: effects }],
@@ -365,6 +377,7 @@ export function review(accounts: Account[], action: Action, automation?: Automat
     checkHref: checkOf(from[0] ?? MATCHA_LATTE),
     connection,
     hooks,
+    outcome: prepare("leave-done"),
   });
 }
 
