@@ -2,6 +2,7 @@ import { encodeFunctionData, parseAbi, zeroAddress, type Address, type Hex } fro
 import { blockTime, call, implementation, read, required, rpc, same, type Call } from "./chain.ts";
 import {
   ACCOUNT_NAMES,
+  APPROVAL_LOGIC,
   AUTOMATIONS,
   DOUBLE_ESPRESSO,
   MATCHA_LATTE,
@@ -30,6 +31,8 @@ const votingEscrowAbi = parseAbi([
   "function delegates(uint256 tokenId, uint48 timestamp) view returns (address)",
   "function getClaimRedirectApproved(uint256 tokenId) view returns (address)",
   "function getPastVotes(address account, uint256 timepoint) view returns (uint256)",
+  "function getConduitApprovalConfig(address conduit) view returns (uint8[] actions, bool active, string description)",
+  "function approvalLogic() view returns (address)",
   "function setConduitApproval(address conduit, uint256 tokenId, bool approve)",
 ]);
 
@@ -402,15 +405,33 @@ export type Checks = {
   failed: Map<Kind, string[]>;
 };
 
-// Base, through the page's RPCs, and Hydrex's VotingEscrow as the page knows it: an upgrade points it at other code, and
-// with it what joining allows. Each check is named by the id of its message on the page, and fails for every automation.
+// Each automation's own check, by the id of its message: what joining it approves. Matcha Latte's was the page's first.
+const approvalsCheck: Record<Kind, string> = {
+  "matcha-latte": "approvals",
+  "double-espresso": "double-espresso-approvals",
+};
+
+// Base, through the page's RPCs; Hydrex's VotingEscrow as the page knows it, and its approval logic: an upgrade or
+// other logic changes what joining allows; and what joining each automation approves, which must be on, and its claims
+// and votes only. Each check is named by the id of its message on the page.
 export async function failedChecks(): Promise<Checks> {
-  const [chainId, impl] = await Promise.all([rpc<string>("eth_chainId", []), implementation(VOTING_ESCROW)]);
-  const failed = Object.entries({
+  const [chainId, impl, [logic, ...configs]] = await Promise.all([
+    rpc<string>("eth_chainId", []),
+    implementation(VOTING_ESCROW),
+    read([escrow("approvalLogic"), ...AUTOMATIONS.map(({ address }) => escrow("getConduitApprovalConfig", address))]),
+  ]);
+  const failing = (checks: Record<string, boolean>) =>
+    Object.entries(checks).flatMap(([id, fails]) => (fails ? [id] : []));
+  const all = failing({
     chain: Number(chainId) !== CHAIN_ID,
     upgrade: !same(impl, VOTING_ESCROW_IMPLEMENTATION),
-  }).flatMap(([id, fails]) => (fails ? [id] : []));
-  return { failed: new Map(AUTOMATIONS.map(({ kind }) => [kind, failed])) };
+    logic: !same(String(logic), APPROVAL_LOGIC),
+  });
+  const found = AUTOMATIONS.map(({ kind, actions }, i): [Kind, string[]] => {
+    const [approved, active] = (configs[i] ?? [[], false]) as [number[], boolean];
+    return [kind, [...all, ...failing({ [approvalsCheck[kind]]: !active || approved.join() !== actions.join() })]];
+  });
+  return { failed: new Map(found) };
 }
 
 // What gas costs for some calls from `from`, in wei, with today's prices to show it at: each costs about what the first

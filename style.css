@@ -284,8 +284,7 @@ time.pending,
 .need-words.pending {
   --bar: 14em;
 }
-.takes-sub.pending,
-.record-paid.pending {
+.takes-sub.pending {
   --bar: 7em;
 }
 .record-versus.pending,

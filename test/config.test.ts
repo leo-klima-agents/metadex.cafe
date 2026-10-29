@@ -6,6 +6,7 @@ import {
   ACCOUNT_NAMES,
   ALGEBRA_FACTORY,
   ANCHORS,
+  APPROVAL_LOGIC,
   AUTOMATIONS,
   DOUBLE_ESPRESSO,
   DOUBLE_ESPRESSO_FEE_BPS,
@@ -44,6 +45,7 @@ test("addresses are checksummed", () => {
     KVCM,
     VOTING_ESCROW,
     VOTING_ESCROW_IMPLEMENTATION,
+    APPROVAL_LOGIC,
     VOTER,
   ];
   const prices = [ALGEBRA_FACTORY, PAIR_FACTORY, ...ANCHORS.flatMap(({ address, feed }) => [address, feed.address])];
@@ -70,12 +72,12 @@ test("Matcha Latte is Hydrex's Carbon Impact automation, as its popup says, with
   assert.ok(html.includes(`<html lang="${LANG}">`), "the page and its numbers and dates use one language");
 });
 
-test("each automation has a kind, a name and its costs, Double Espresso's as its code", () => {
+test("each automation has a kind, a name, its approvals and its costs, Double Espresso's as its code", () => {
   assert.deepEqual(
-    AUTOMATIONS.map(({ kind, name }) => [kind, name]),
+    AUTOMATIONS.map(({ kind, name, actions }) => [kind, name, actions]),
     [
-      ["matcha-latte", "Matcha Latte"],
-      ["double-espresso", "Double Espresso"],
+      ["matcha-latte", "Matcha Latte", [3, 5]],
+      ["double-espresso", "Double Espresso", [3, 5]],
     ],
   );
   const html = read("index.html");
@@ -105,14 +107,13 @@ test("each automation has a kind, a name and its costs, Double Espresso's as its
   assert.equal(DOUBLE_ESPRESSO.address, getAddress(DOUBLE_ESPRESSO.address));
 });
 
-test("each automation's page has the same parts, in the same order, and Hydrex's names the check that can fail", () => {
+test("each automation's page has the same parts, in the same order, and Hydrex's names each check that can fail", () => {
   const html = read("index.html");
-  // Every check that can fail but the RPC's, which the page runs without naming: that the VotingEscrow is not upgraded.
-  // Hydrex's page says so, and an automation's page only that joining it is off.
+  // Every check that can fail: Hydrex's page says why joining is off, and an automation's page only that it is.
   const hydrex = viewOf(html, 'data-view="hydrex"');
   assert.deepEqual(
     [...hydrex.matchAll(/data-check="([^"]+)"/g)].map(([, check]) => check),
-    ["upgrade"],
+    ["chain", "upgrade", "logic", "approvals", "double-espresso-approvals"],
   );
   for (const { kind } of AUTOMATIONS) {
     const page = productOf(html, kind);

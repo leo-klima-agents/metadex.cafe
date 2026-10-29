@@ -125,10 +125,26 @@
           <nav class="trail" aria-label="Back"><a href="#app">Your wallet</a></nav>
           <h1 tabindex="-1">Hydrex</h1>
         </div>
-        <!-- A check that failed, which turns joining off: the only one the page names. -->
+        <!-- Why joining is off: each check that failed, by its id in src/hydrex.ts. -->
+        <p class="notice check-notice" data-check="chain" role="alert" hidden>
+          <span class="shape failed" aria-hidden="true"></span>Joining is off: the page reached another network than
+          Base.
+        </p>
         <p class="notice check-notice" data-check="upgrade" role="alert" hidden>
           <span class="shape failed" aria-hidden="true"></span>Joining is off: Hydrex upgraded its VotingEscrow, which
           this page has not checked yet.
+        </p>
+        <p class="notice check-notice" data-check="logic" role="alert" hidden>
+          <span class="shape failed" aria-hidden="true"></span>Joining is off: Hydrex changed its VotingEscrow's
+          approval logic, which this page has not checked yet.
+        </p>
+        <p class="notice check-notice" data-check="approvals" role="alert" hidden>
+          <span class="shape failed" aria-hidden="true"></span>Joining Matcha Latte is off: Hydrex changed what joining
+          it approves, which this page has not checked yet.
+        </p>
+        <p class="notice check-notice" data-check="double-espresso-approvals" role="alert" hidden>
+          <span class="shape failed" aria-hidden="true"></span>Joining Double Espresso is off: Hydrex changed what
+          joining it approves, which this page has not checked yet.
         </p>
         <p class="wrong-chain notice" role="alert" hidden>
           <span class="to-switch">Wrong network.<span class="switch-failed" hidden> Switch in your wallet.</span></span>
