@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { type Locator, type Page } from "playwright-core";
 import { encodeFunctionData } from "viem";
-import { AUTOMAXI, SWAPPERS, WETH } from "../src/config.ts";
+import { DOUBLE_ESPRESSO, SWAPPERS, WETH } from "../src/config.ts";
 import {
   AVNT,
   HOLDER,
@@ -192,7 +192,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
   });
 
   test("claim, then swap what it brought into USDC in one prompt", async () => {
-    await approveConduit(PAYEE, AUTOMAXI.address, 82774n);
+    await approveConduit(PAYEE, DOUBLE_ESPRESSO.address, 82774n);
     await settle();
     await warmPayouts(PAYEE);
     const { page, sent } = await connected({ owner: PAYEE, batch: true }, { url: `${SITE}/#app` });

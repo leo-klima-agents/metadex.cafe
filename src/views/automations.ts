@@ -1,14 +1,21 @@
 import { now, sawBlock } from "../chain.ts";
-import { AUTOMATIONS, AUTOMAXI, AUTOMAXI_FEE_BPS, CARBON_IMPACT, type Automation, type Kind } from "../config.ts";
+import {
+  AUTOMATIONS,
+  DOUBLE_ESPRESSO,
+  DOUBLE_ESPRESSO_FEE_BPS,
+  MATCHA_LATTE,
+  type Automation,
+  type Kind,
+} from "../config.ts";
 import { PENDING, clone, fill, fillAddress, fillTime, show, type Text } from "../dom.ts";
 import { WEEK, bps, fraction, money, moneyAt, units, until, utc, weekStart, when } from "../format.ts";
 import {
   failedChecks,
   hasStopped,
   paidBpsOf,
-  readCarbonImpact,
+  readMatchaLatte,
   readFreshness,
-  type CarbonImpact,
+  type MatchaLatte,
   type Checks,
   type Freshness,
 } from "../hydrex.ts";
@@ -29,23 +36,23 @@ import { route } from "./router.ts";
 // The automations' state and figures, wherever they show: on Hydrex's menu, on their own pages, and beside them,
 // Hydrex's average and what the wallet's own votes earned.
 
-// Carbon Impact's settings: read again in each new epoch, and five minutes after a read that left some unread. Until one
+// Matcha Latte's settings: read again in each new epoch, and five minutes after a read that left some unread. Until one
 // succeeds, read again at each tick, its figures say they could not be read.
-export const impact: Reader<CarbonImpact> = reader(readCarbonImpact, {
+export const matchaLatte: Reader<MatchaLatte> = reader(readMatchaLatte, {
   retry: SOON,
   stale: (found, since) =>
     weekStart(now()) > found.epochStart ||
     ([found.voted, found.feeBps, found.maxFeeBps, found.treasury].includes(undefined) && since >= RETRY),
-  settled: () => showCarbonImpact(),
+  settled: () => showMatchaLatte(),
 });
 
-// AutoMaxi's state, on the menu and its page: "Checking…" until read, and "Not read yet" while its reads fail, which
-// each tick tries again. Read again in each new epoch.
-export const autoMaxi: Reader<Freshness> = reader(() => readFreshness(AUTOMAXI), {
+// Double Espresso's state, on the menu and its page: "Checking…" until read, and "Not read yet" while its reads fail,
+// which each tick tries again. Read again in each new epoch.
+export const doubleEspresso: Reader<Freshness> = reader(() => readFreshness(DOUBLE_ESPRESSO), {
   retry: SOON,
   stale: (fresh) => weekStart(now()) > fresh.epochStart,
   settled: () => {
-    showAutoMaxi();
+    showDoubleEspresso();
     views.app();
   },
 });
@@ -59,23 +66,27 @@ export const checks: Reader<Checks> = reader(failedChecks, {
 
 // What differs between the page's automations, kind by kind.
 type Traits = {
-  // The start of its review's template ids. Carbon Impact's were the page's first, and have none.
+  // The start of its review's template ids. Matcha Latte's were the page's first, and have none.
   templates: string;
-  // Whether joining it shows Carbon Impact's settings, and so waits for them.
+  // Whether joining it shows Matcha Latte's settings, and so waits for them.
   settings: boolean;
-  // The share of what its votes earn that reaches the owner, once known: Carbon Impact's needs its fee read.
+  // The share of what its votes earn that reaches the owner, once known: Matcha Latte's needs its fee read.
   paid(): number | undefined;
 };
 export const traits: Record<Kind, Traits> = {
-  "carbon-impact": {
+  "matcha-latte": {
     templates: "",
     settings: true,
     paid: () => {
-      const paid = impact.value && paidBpsOf(impact.value);
+      const paid = matchaLatte.value && paidBpsOf(matchaLatte.value);
       return paid === undefined ? undefined : Number(paid) / 10_000;
     },
   },
-  automaxi: { templates: "automaxi-", settings: false, paid: () => Number(10_000n - AUTOMAXI_FEE_BPS) / 10_000 },
+  "double-espresso": {
+    templates: "double-espresso-",
+    settings: false,
+    paid: () => Number(10_000n - DOUBLE_ESPRESSO_FEE_BPS) / 10_000,
+  },
 };
 
 // Where an automation shows: its row on Hydrex's menu, and its page, which holds its popups. Its figures are written
@@ -98,14 +109,14 @@ function showState(automation: Automation, prefix: string, shape: string, state:
   }
 }
 
-// What Carbon Impact takes: "33.33% retired, 1% fee", the fee said to be unread when its read failed. The page says
+// What Matcha Latte takes: "33.33% retired, 1% fee", the fee said to be unread when its read failed. The page says
 // "Not read yet" of what it reads again by itself, and "Not read" of what it does not.
 export const feeWords = (feeBps: bigint | undefined): string =>
   feeBps === undefined ? "fee not read yet" : `${bps(feeBps)} fee`;
 
-function showCarbonImpact(): void {
-  const found = impact.value;
-  if (!found) return carbonImpactFailed();
+function showMatchaLatte(): void {
+  const found = matchaLatte.value;
+  if (!found) return matchaLatteFailed();
   sawBlock(found.time);
   const { epochStart, tonnes, retireBps, entity, beneficiary, beneficiaryAddress, message, voted } = found;
   const { feeBps, maxFeeBps, treasury } = found;
@@ -113,10 +124,10 @@ function showCarbonImpact(): void {
   const stopped = voted !== undefined && hasStopped(voted, epochStart);
   const [shape, state]: [string, string] =
     voted === undefined ? ["idle", "Not read yet"] : stopped ? ["stopped", "Stopped"] : ["running", "Running"];
-  showState(CARBON_IMPACT, "impact", shape, state);
-  for (const place of placesOf(CARBON_IMPACT)) {
+  showState(MATCHA_LATTE, "matcha-latte", shape, state);
+  for (const place of placesOf(MATCHA_LATTE)) {
     fill(place, {
-      "impact-voted-words": stopped ? " since " : " · voted ",
+      "matcha-latte-voted-words": stopped ? " since " : " · voted ",
       tonnes: `${units(tonnes)} t`,
       retired: bps(retireBps),
       takes: `${bps(retireBps)} retired, ${feeWords(feeBps)}`,
@@ -135,8 +146,8 @@ function showCarbonImpact(): void {
       for (const link of place.querySelectorAll("a.treasury, a.treasury-named")) link.removeAttribute("href");
       fill(place, { treasury: "Not read yet" });
     }
-    if (voted) fillTime(place, "impact-voted", voted);
-    show(".impact-voted-line", !!voted, place);
+    if (voted) fillTime(place, "matcha-latte-voted", voted);
+    show(".matcha-latte-voted-line", !!voted, place);
   }
   // The epoch, by Base's clock: when a join counts from, on each automation's page, and on Hydrex's.
   for (const automation of AUTOMATIONS) {
@@ -150,11 +161,11 @@ function showCarbonImpact(): void {
   views.app();
 }
 
-// Carbon Impact's settings could not be read, and none were before: its figures say so, rather than stay pending, until
+// Matcha Latte's settings could not be read, and none were before: its figures say so, rather than stay pending, until
 // a read succeeds.
-function carbonImpactFailed(): void {
-  showState(CARBON_IMPACT, "impact", "idle", "Not read yet");
-  for (const place of placesOf(CARBON_IMPACT)) {
+function matchaLatteFailed(): void {
+  showState(MATCHA_LATTE, "matcha-latte", "idle", "Not read yet");
+  for (const place of placesOf(MATCHA_LATTE)) {
     for (const name of ["tonnes", "retired", "takes", "max-takes", "treasury"]) fill(place, { [name]: "Not read yet" });
     fill(place, { "takes-sub": "" });
   }
@@ -164,11 +175,11 @@ function carbonImpactFailed(): void {
   views.app();
 }
 
-// How long until the epoch ends, by Base's clock, once Carbon Impact's settings say when it began.
+// How long until the epoch ends, by Base's clock, once Matcha Latte's settings say when it began.
 export function showCountdown(): void {
-  if (!impact.value) return;
+  if (!matchaLatte.value) return;
   const time = now();
-  const end = impact.value.epochStart + WEEK;
+  const end = matchaLatte.value.epochStart + WEEK;
   if (time >= end) return;
   fill(epochLine, { countdown: `in ${until(end - time)}` });
 }
@@ -190,7 +201,7 @@ export function showRecords(): void {
           ? "No record yet"
           : () => money(per);
     // What reached the owner, once what the automation takes is read too; if that read failed, the line goes.
-    const waits = automation === CARBON_IMPACT && !impact.value && !impact.failed;
+    const waits = automation === MATCHA_LATTE && !matchaLatte.value && !matchaLatte.failed;
     const toYou: Text | (() => Text) =
       per && paid !== undefined
         ? () => `${money(moneyAt(per.value * paid, per))} to you`
@@ -252,12 +263,12 @@ export function readAverage(anyway = false): void {
     void loadAverage().then((changed) => changed && showRecords());
 }
 
-// AutoMaxi's state, on the menu and its page.
-export function showAutoMaxi(): void {
-  const fresh = autoMaxi.value;
+// Double Espresso's state, on the menu and its page.
+export function showDoubleEspresso(): void {
+  const fresh = doubleEspresso.value;
   const stopped = !!fresh && hasStopped(fresh.voted, fresh.epochStart);
   const [shape, state]: [string, string] = !fresh
-    ? autoMaxi.failed
+    ? doubleEspresso.failed
       ? ["idle", "Not read yet"]
       : ["checking", "Checking…"]
     : !fresh.voted
@@ -265,11 +276,11 @@ export function showAutoMaxi(): void {
       : stopped
         ? ["stopped", "Stopped"]
         : ["running", "Running"];
-  showState(AUTOMAXI, "automaxi", shape, state);
-  for (const place of placesOf(AUTOMAXI)) {
-    fill(place, { "automaxi-voted-words": stopped ? " since " : " · voted " });
-    if (fresh?.voted) fillTime(place, "automaxi-voted", fresh.voted);
-    show(".automaxi-voted-line", !!fresh?.voted, place);
+  showState(DOUBLE_ESPRESSO, "double-espresso", shape, state);
+  for (const place of placesOf(DOUBLE_ESPRESSO)) {
+    fill(place, { "double-espresso-voted-words": stopped ? " since " : " · voted " });
+    if (fresh?.voted) fillTime(place, "double-espresso-voted", fresh.voted);
+    show(".double-espresso-voted-line", !!fresh?.voted, place);
   }
 }
 
@@ -290,7 +301,7 @@ export function showChecks(): void {
       for (const item of place.querySelectorAll<HTMLElement>("[data-check]")) markCheck(item, failing);
     }
   }
-  showAutoMaxi();
+  showDoubleEspresso();
   showRecords();
   // A read of the accounts that is under way shows the result when it ends.
   if (!session.accounts?.reading) views.accounts(true);

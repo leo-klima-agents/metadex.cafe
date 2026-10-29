@@ -5,12 +5,12 @@ import { earningsDue, onEarnings } from "./last-epoch.ts";
 import { initAccounts, showAccounts } from "./views/accounts.ts";
 import { initApp, showApp } from "./views/app.ts";
 import {
-  autoMaxi,
+  doubleEspresso,
   checks,
-  impact,
+  matchaLatte,
   loadAllEarnings,
   readAverage,
-  showAutoMaxi,
+  showDoubleEspresso,
   showCountdown,
   showRecords,
 } from "./views/automations.ts";
@@ -61,7 +61,7 @@ onRoute(() => {
 onEarnings((_, outcome) => {
   void showShares();
   readAverage();
-  showAutoMaxi();
+  showDoubleEspresso();
   showRecords();
   showApp();
   if (outcome === "same") return;
@@ -74,13 +74,13 @@ function catchUp(): void {
   if (session.accounts?.due()) void loadAccounts(true);
   // The wallet's own account moves on with the wallet's accounts.
   catchUpPosition();
-  impact.check();
+  matchaLatte.check();
   checks.check();
   if (earningsDue(AUTOMATIONS)) loadAllEarnings();
   readAverage();
   // Reads what the accounts' votes earned that failed before, once due again.
   void showShares();
-  autoMaxi.check();
+  doubleEspresso.check();
   appPayouts.check();
 }
 
@@ -90,8 +90,8 @@ function tick(): void {
   showCountdown();
 }
 
-impact.read().catch(failed);
+matchaLatte.read().catch(failed);
 checks.read().catch(failed);
-autoMaxi.check();
+doubleEspresso.check();
 loadAllEarnings();
 setInterval(tick, 30_000);

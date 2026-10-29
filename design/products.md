@@ -1,15 +1,15 @@
 # Products
 
 How the page grows from one kind of product to two: the Hydrex automations it has, and a swap of many tokens into one.
-On the way, it gains a way to claim AutoMaxi's rewards when its keeper is late. It is UX research and a plan, written
-for the owner, who has decisions to take, and for whoever implements it. [Brackets] mark those decisions;
+On the way, it gains a way to claim Double Espresso's rewards when its keeper is late. It is UX research and a plan,
+written for the owner, who has decisions to take, and for whoever implements it. [Brackets] mark those decisions;
 [Decisions](#decisions) lists them with a recommendation each. Where this file disagrees with [audit.md](audit.md), this
 file wins for the parts it covers.
 
-Read on 21 Oct 2026, from version 0.5.2 of the page (main at `5b7b9d8`), AutoMaxi version 2 at
+Read on 21 Oct 2026, from version 0.5.2 of the page (main at `5b7b9d8`), Double Espresso version 2 at
 `0x692c323B425A9DfeebE302F56168a7798D93EAC5`, and the six swappers deployed that day. Both contracts' sources are
 verified with an exact match on Basescan and Sourcify, and their verified files name no author and no repository, so the
-page links to them there, as it does for AutoMaxi today, and never to a repository.
+page links to them there, as it does for Double Espresso today, and never to a repository.
 
 Implemented in version 0.6.0, with each open decision as recommended below.
 
@@ -19,16 +19,16 @@ Implemented in version 0.6.0, with each open decision as recommended below.
   products, after what needs you across all of them: Hydrex as one entry, for its automations, and the swap. Today's
   App, the wallet's Hydrex accounts and who votes for them, moves one level down to `#hydrex`. A new `#swap` sits beside
   it.
-- **Claiming is a fallback, not a product.** AutoMaxi's keeper claims for every member right after each epoch ends, so a
-  Claim button shows only when an account's payout is overdue: on its page, in the AutoMaxi group, and in the App's
-  Needs you.
-- **Payouts and the swap meet.** Every AutoMaxi receipt offers to swap the payout into one token, and the claim's review
-  offers the rewards "as they are" or "into one token". That gives the hands-off holder what they want, "paid weekly in
-  one token", without a new contract.
+- **Claiming is a fallback, not a product.** Double Espresso's keeper claims for every member right after each epoch
+  ends, so a Claim button shows only when an account's payout is overdue: on its page, in the Double Espresso group, and
+  in the App's Needs you.
+- **Payouts and the swap meet.** Every Double Espresso receipt offers to swap the payout into one token, and the claim's
+  review offers the rewards "as they are" or "into one token". That gives the hands-off holder what they want, "paid
+  weekly in one token", without a new contract.
 - **The swap does what the contract leaves out on purpose:** finding the wallet's tokens, choosing each route, setting
   each minimum, and approving each token. The page does all four in the browser, within its rules: three RPCs, no
   server, no signatures.
-- **Most tokens are worth less than their gas.** Last epoch, Carbon Impact's votes earned 28 different tokens: USDC was
+- **Most tokens are worth less than their gas.** Last epoch, Matcha Latte's votes earned 28 different tokens: USDC was
   98% of the value, and the 27 others came to about $16 together. So the swap preselects only what is worth swapping,
   and says why it leaves the rest.
 - **Batching becomes essential.** A swap of 11 tokens is 11 approvals and a swap. One prompt with EIP-5792 where the
@@ -36,23 +36,24 @@ Implemented in version 0.6.0, with each open decision as recommended below.
 
 ## What the contracts allow
 
-### AutoMaxi's claim
+### Double Espresso's claim
 
-`claim(tokenId, feeAddresses, bribeAddresses, tokens)` claims `tokens` for an account in AutoMaxi from the fee and bribe
-contracts given. Of each token received, 1% goes to the 2-of-3 Safe `0x450c72de8c0079B49AcedF294a13011bd09D125B` and the
-rest to the account's owner.
+`claim(tokenId, feeAddresses, bribeAddresses, tokens)` claims `tokens` for an account in Double Espresso from the fee
+and bribe contracts given. Of each token received, 1% goes to the 2-of-3 Safe
+`0x450c72de8c0079B49AcedF294a13011bd09D125B` and the rest to the account's owner.
 
-- **Anyone can call it, for any account in AutoMaxi,** and it always pays the owner. Whoever calls pays the gas. The fee
-  is the same whoever calls.
-- **AutoMaxi's keeper claims for every member right after each epoch ends.** Claiming earlier gains nothing: an epoch's
-  rewards can be claimed only once it has ended. The page already reads when the last payout came, and calls an account
-  late a full epoch after a missed payout, which is too late for the fallback: see [Where it shows](#where-it-shows).
+- **Anyone can call it, for any account in Double Espresso,** and it always pays the owner. Whoever calls pays the gas.
+  The fee is the same whoever calls.
+- **Double Espresso's keeper claims for every member right after each epoch ends.** Claiming earlier gains nothing: an
+  epoch's rewards can be claimed only once it has ended. The page already reads when the last payout came, and calls an
+  account late a full epoch after a missed payout, which is too late for the fallback: see
+  [Where it shows](#where-it-shows).
 - **It asks every contract for every token.** A bribe walks back up to 50 epochs for a token it has not paid recently,
   so a first claim, or one after a long gap, should pass only the contracts and tokens that owe something. The page
   already reads `earned(tokenId, token)` for last epoch's pools, so it knows which.
-- **Owners can also claim on Hydrex directly, without the fee,** for rewards nobody has claimed through AutoMaxi yet.
-  The page does not say so: the keeper claims right after each epoch, so there is almost never anything left to claim
-  that way. Settled by the owner on 21 Oct 2026.
+- **Owners can also claim on Hydrex directly, without the fee,** for rewards nobody has claimed through Double Espresso
+  yet. The page does not say so: the keeper claims right after each epoch, so there is almost never anything left to
+  claim that way. Settled by the owner on 21 Oct 2026.
 - **A claim that receives nothing does not revert.** If the keeper claims first, the tokens still reach the owner.
 
 ### The swapper
@@ -100,13 +101,13 @@ Not swappable: native ETH in, or out. The output WETH is not ETH.
 
 From Base on 21 Oct 2026, with the page's own reader (`readEarnings` in `src/earnings.ts`):
 
-- In the epoch from 8 to 15 Oct, Carbon Impact's 897k votes went to 27 pools, which earned rewards in **28 tokens**:
-  USDC ≈ $677, then wtMSTR ≈ $3.29, GOO ≈ $2.01, AVNT ≈ $1.57, and 18 more under $1.50 each. Six had no price in
-  Hydrex's pools at all.
+- In the epoch from 8 to 15 Oct, Matcha Latte's 897k votes went to 27 pools, which earned rewards in **28 tokens**: USDC
+  ≈ $677, then wtMSTR ≈ $3.29, GOO ≈ $2.01, AVNT ≈ $1.57, and 18 more under $1.50 each. Six had no price in Hydrex's
+  pools at all.
 - So the 27 tokens beside USDC came to about $16. An account with about 1% of the votes, as #9540 has, would get about
   **$0.16 spread over 27 tokens**.
-- AutoMaxi votes for bribes, so its members should expect the same spread: a few tokens worth something, and many worth
-  cents. Its first payout comes after the flip of Thu 22 Oct.
+- Double Espresso votes for bribes, so its members should expect the same spread: a few tokens worth something, and many
+  worth cents. Its first payout comes after the flip of Thu 22 Oct.
 
 ### Gas sets the floor
 
@@ -168,10 +169,10 @@ a wallet set to "fast" can cross it.
 
 Two new personas join [README.md's](README.md#personas), as hypotheses to test:
 
-| Persona                       | Holds                                           | Wants                                    | Would pay                               | Needs to see                                     | Wrong if                                               |
-| ----------------------------- | ----------------------------------------------- | ---------------------------------------- | --------------------------------------- | ------------------------------------------------ | ------------------------------------------------------ |
-| **The reward collector**      | Accounts in AutoMaxi, paid in 20 or more tokens | One token, weekly, without a spreadsheet | 1% of the swap, on top of AutoMaxi's 1% | What it fetched, the fees, what stayed and why   | They keep the tokens, hoping some rise                 |
-| **The wallet with leftovers** | Small balances on Base from trades and airdrops | A clean wallet, in one token             | 1%, if gas stays below a cent           | Which tokens are worth swapping, and the minimum | Their leftovers are worth less than gas: nothing to do |
+| Persona                       | Holds                                                  | Wants                                    | Would pay                                      | Needs to see                                     | Wrong if                                               |
+| ----------------------------- | ------------------------------------------------------ | ---------------------------------------- | ---------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------ |
+| **The reward collector**      | Accounts in Double Espresso, paid in 20 or more tokens | One token, weekly, without a spreadsheet | 1% of the swap, on top of Double Espresso's 1% | What it fetched, the fees, what stayed and why   | They keep the tokens, hoping some rise                 |
+| **The wallet with leftovers** | Small balances on Base from trades and airdrops        | A clean wallet, in one token             | 1%, if gas stays below a cent                  | Which tokens are worth swapping, and the minimum | Their leftovers are worth less than gas: nothing to do |
 
 The existing **hands-off holder**, "paid weekly in one token, or a lock that grows", is the one claim-and-swap serves
 best.
@@ -195,7 +196,7 @@ New moments that matter, after [README.md's](README.md#the-moments-that-matter) 
 | 1     | About                | `#about`                                          | The café's facts, for every product                                                          |
 | 2     | Hydrex               | `#hydrex`                                         | Today's App: the wallet's accounts in groups, then who votes for them                        |
 | 2     | Swap                 | `#swap`, `#swap/weth`; a fold, `#swap/weth/check` | The swap, into USDC unless the address names another output                                  |
-| 3     | An automation's page | `#hydrex/carbon-impact`, `#hydrex/automaxi`       | As today, with Claim in AutoMaxi's while a member's payout is overdue                        |
+| 3     | An automation's page | `#hydrex/matcha-latte`, `#hydrex/double-espresso` | As today, with Claim in Double Espresso's while a member's payout is overdue                 |
 | 4     | An account's page    | `#hydrex/9540`                                    | As today, with Claim while its payout is overdue                                             |
 | –     | The review           | A dialog                                          | Join, leave, claim, swap: each in two steps                                                  |
 
@@ -213,8 +214,8 @@ nothing, but a link can carry the output.
   becomes "Your wallet, connected as", since the App is no longer only your accounts.
 - **Crumbs** gain a level: "App › Hydrex ›" on an automation's page and on an account's page; "App ›" on `#hydrex` and
   `#swap`.
-- **Deep links** go straight to the level that answers: Home's stopped line to `#hydrex`, AutoMaxi's receipt to the
-  swap, an overdue payout in the App to the account.
+- **Deep links** go straight to the level that answers: Home's stopped line to `#hydrex`, Double Espresso's receipt to
+  the swap, an overdue payout in the App to the account.
 
 ### Home
 
@@ -254,7 +255,7 @@ NEEDS YOU · 2
 THE MENU
 Hydrex                                                     →
   Automations that vote with your Hydrex accounts.
-  Yours: 5 accounts, 2 in Carbon Impact, 1 in AutoMaxi
+  Yours: 5 accounts, 2 in Matcha Latte, 1 in Double Espresso
 Swap                                                       →
   Sell many tokens for one.
   Takes 1% of what each fetches.
@@ -269,7 +270,7 @@ Swap                                                       →
 - **The menu** has one entry per kind of product, Hydrex, for its automations together, and the swap, each with one line
   of what it does, what it takes, and once connected, what you hold in it. What each automation's votes earned last
   epoch, against Hydrex's average, is on Hydrex's menu, one level down. Claiming is not on it: it is an action on
-  accounts in AutoMaxi.
+  accounts in Double Espresso.
 - **Reads:** the App's own reads are what its lines need: the accounts and their groups, which it reads today, and the
   balances of known tokens with their quotes for the swap line. The swap line can come last, pending, as the earnings
   do, then says what it found so far: "3 tokens · ≈ $31 so far". Home starts those that need no wallet, so that the App
@@ -278,14 +279,14 @@ Swap                                                       →
 
 ### Hydrex, `#hydrex`
 
-Today's App, unchanged but for its heading, "Your Hydrex accounts", its crumb, and Claim in the AutoMaxi group:
+Today's App, unchanged but for its heading, "Your Hydrex accounts", its crumb, and Claim in the Double Espresso group:
 
-| Group        | Its actions                                                           |
-| ------------ | --------------------------------------------------------------------- |
-| **AutoMaxi** | Leave, Move to Carbon Impact, and **Claim** while a payout is overdue |
+| Group               | Its actions                                                          |
+| ------------------- | -------------------------------------------------------------------- |
+| **Double Espresso** | Leave, Move to Matcha Latte, and **Claim** while a payout is overdue |
 
-"Who votes for your accounts", the menu of automations, stays at the bottom. Its AutoMaxi entry says "Pays you in the
-tokens earned, right after each epoch. Swap them into one here." with a link to the swap.
+"Who votes for your accounts", the menu of automations, stays at the bottom. Its Double Espresso entry says "Pays you in
+the tokens earned, right after each epoch. Swap them into one here." with a link to the swap.
 
 ## Claiming
 
@@ -295,10 +296,10 @@ Only while an account's payout is overdue: a payout is due since the flip, it ha
 waits, and more than half a day has passed since the flip, the time a payout takes. The page's "late" comes a full epoch
 later, when the next flip finds the epoch still unpaid, so the fallback needs this earlier mark.
 
-- **An account's page,** for the wallet's own account in AutoMaxi: a notice, "Its payout is overdue", with **Claim
-  now**.
-- **The AutoMaxi group** in `#hydrex`, and "Your accounts in it" on AutoMaxi's page: **Claim**, for the overdue
-  accounts, with boxes to tick when there are more than one.
+- **An account's page,** for the wallet's own account in Double Espresso: a notice, "Its payout is overdue", with
+  **Claim now**.
+- **The Double Espresso group** in `#hydrex`, and "Your accounts in it" on Double Espresso's page: **Claim**, for the
+  overdue accounts, with boxes to tick when there are more than one.
 - **The App's Needs you,** with the same line.
 
 Never in a normal week. Right after each epoch, something always waits until the keeper's payout arrives, up to half a
@@ -306,8 +307,9 @@ day later, and a button then would only spend the member's gas on what the keepe
 accounts: anyone may claim for anyone, and it pays the owner, but a button on a stranger's account invites confusion
 about who gets paid. [Claim for others]
 
-The button says what it costs before anyone presses it: "AutoMaxi's keeper usually claims right after each epoch, and
-has not for this account yet. Claiming now costs the gas, ≈ $0.01, and AutoMaxi takes 1%, as from the keeper's claim."
+The button says what it costs before anyone presses it: "Double Espresso's keeper usually claims right after each epoch,
+and has not for this account yet. Claiming now costs the gas, ≈ $0.01, and Double Espresso takes 1%, as from the
+keeper's claim."
 
 ### Its review
 
@@ -321,7 +323,7 @@ WHAT WAITS                                   in last epoch's pools
   6 more tokens                ≈ $0.12   (show)
   ─────────────────────────────────────
   Earned                       ≈ $1.84
-  AutoMaxi's 1%                ≈ −$0.02
+  Double Espresso's 1%                ≈ −$0.02
   Reaches you                  ≈ $1.82
 
 RECEIVE THEM
@@ -343,26 +345,26 @@ other pools.
 - **"Receive them" is the one dial** that [README.md](README.md#principles) asks for: the payout token, by the owner's
   choice, without a contract that swaps. "As they are" is the default, so that nothing is sold unasked.
 - **Step 2, what your wallet will ask:** one `claim` per account, as slips, with only the contracts and tokens that owe
-  something. AutoMaxi asks each contract for every token, so an account owed by many contracts in many tokens, as one
-  the keeper missed for weeks, would need more gas than Base allows a transaction: its claim splits into calls that each
-  fit one, the most valuable first. Calls that need more than one transaction's gas together go one at a time, even from
-  a wallet that sends several in one prompt. A Safe sends many calls in one Safe transaction, so its claim splits into
-  small calls instead, none asking a contract for a token it does not owe, which together use the least gas: #82774's
-  take 55 calls and 41 million gas, where the 12 calls a wallet sends one by one take 79 million. It proposes them as
-  several Safe transactions, as few as their simulated gas allows, one after the other from one click, for its owners to
-  sign each. With "Swapped into", the approvals and the swap follow, as in the swap's review, or in a review of their
-  own after split calls; a Safe whose claim takes several Safe transactions swaps later, on the swap page, as the swap
-  follows the claim's receipts.
+  something. Double Espresso asks each contract for every token, so an account owed by many contracts in many tokens, as
+  one the keeper missed for weeks, would need more gas than Base allows a transaction: its claim splits into calls that
+  each fit one, the most valuable first. Calls that need more than one transaction's gas together go one at a time, even
+  from a wallet that sends several in one prompt. A Safe sends many calls in one Safe transaction, so its claim splits
+  into small calls instead, none asking a contract for a token it does not owe, which together use the least gas:
+  #82774's take 55 calls and 41 million gas, where the 12 calls a wallet sends one by one take 79 million. It proposes
+  them as several Safe transactions, as few as their simulated gas allows, one after the other from one click, for its
+  owners to sign each. With "Swapped into", the approvals and the swap follow, as in the swap's review, or in a review
+  of their own after split calls; a Safe whose claim takes several Safe transactions swaps later, on the swap page, as
+  the swap follows the claim's receipts.
 - **Done:** a receipt from the `Claimed` events: what was received, the 1%, what reached you. If the keeper claimed
   first, the receipt says the tokens came in its claim, not this one, which still cost its gas.
 
 ### Claim and swap in one prompt
 
-The amounts are known before the claim: `earned` gives them, and AutoMaxi's 1% is rounded down. So the page can approve
-each token for exactly what the claim will bring, and swap with the amount `type(uint256).max`, which the swapper reads
-as "my balance, up to the allowance". It sells what the claim brought and no more, even when the wallet held some of the
-token before. If the keeper's claim lands first, the tokens are in the wallet all the same, and the swap still sells
-them.
+The amounts are known before the claim: `earned` gives them, and Double Espresso's 1% is rounded down. So the page can
+approve each token for exactly what the claim will bring, and swap with the amount `type(uint256).max`, which the
+swapper reads as "my balance, up to the allowance". It sells what the claim brought and no more, even when the wallet
+held some of the token before. If the keeper's claim lands first, the tokens are in the wallet all the same, and the
+swap still sells them.
 
 - **With EIP-5792 and atomic batching:** claims, approvals and swap in one prompt, all or nothing.
 - **From a Safe:** one Safe transaction, through MultiSend, as for joining today.
@@ -370,9 +372,9 @@ them.
 
 ### On a payout's receipt
 
-This is the usual path to one token, week after week. AutoMaxi's receipt on an account's page, and the review's receipt
-after a claim, end with **Swap these into one token**, which opens `#swap` with the payout's tokens and amounts ticked.
-The page holds them in memory for the visit; nothing is stored.
+This is the usual path to one token, week after week. Double Espresso's receipt on an account's page, and the review's
+receipt after a claim, end with **Swap these into one token**, which opens `#swap` with the payout's tokens and amounts
+ticked. The page holds them in memory for the visit; nothing is stored.
 
 ## Swapping, `#swap`
 
@@ -487,14 +489,14 @@ finding routes for many tokens strains the free RPCs' limits, the page finds the
 
 - **Fee facts,** the same six rows as every product:
 
-  | Row                    | The swap                                                                                |
-  | ---------------------- | --------------------------------------------------------------------------------------- |
-  | Taken                  | 1% of what each token fetches, in the output token                                      |
-  | The most it can become | 1%, in its code                                                                         |
-  | Goes to                | A 2-of-3 Safe, `0x450c72de8c0079B49AcedF294a13011bd09D125B`, the same as AutoMaxi's fee |
-  | When                   | Each swap                                                                               |
-  | Other costs            | The pools' own fees, the price moved by the swap, and gas                               |
-  | Who can change it      | Nobody: a new fee means a new deployment                                                |
+  | Row                    | The swap                                                                                       |
+  | ---------------------- | ---------------------------------------------------------------------------------------------- |
+  | Taken                  | 1% of what each token fetches, in the output token                                             |
+  | The most it can become | 1%, in its code                                                                                |
+  | Goes to                | A 2-of-3 Safe, `0x450c72de8c0079B49AcedF294a13011bd09D125B`, the same as Double Espresso's fee |
+  | When                   | Each swap                                                                                      |
+  | Other costs            | The pools' own fees, the price moved by the swap, and gas                                      |
+  | Who can change it      | Nobody: a new fee means a new deployment                                                       |
 
 - **Who controls what:** nobody controls the swappers. Each exchange can change its pools' fees, pause pools, or upgrade
   code that runs in the swap, which can worsen a price down to the minimum, but none can take the tokens. One line per
@@ -514,11 +516,11 @@ The page's rules stand, and extend:
 - **Each call shown before the wallet asks,** approvals included.
 - **Nothing sold unasked.** Claims pay "as they are" by default; the swap ticks only what is worth it, and never sells
   more than the review shows.
-- **Money as earned, taken, yours,** with every fee named: AutoMaxi's 1%, the swap's 1%, the pools', gas.
+- **Money as earned, taken, yours,** with every fee named: Double Espresso's 1%, the swap's 1%, the pools', gas.
 - **Three RPCs and nothing else.** No price API, no token list from a server, no aggregator: the token list is part of
   the page, and routes are found from the factories.
 - **No signatures.** Approvals are transactions.
-- **Anonymous.** The swapper and AutoMaxi link to Basescan and Sourcify, never to a repository.
+- **Anonymous.** The swapper and Double Espresso link to Basescan and Sourcify, never to a repository.
 
 ## Elsewhere on the page
 
@@ -544,8 +546,8 @@ The refactor touches every level, so these come cheaply with it:
 - **"What this wallet allows",** a fold on the App: every approval this wallet gave the café's contracts, which are the
   automations' conduit approvals and the swappers' allowances, each with the call that undoes it. It answers "what can
   these contracts do with my wallet?" in one place, and it is where leaving and resetting meet.
-- **Carbon Impact's members** are paid in kVCM, one token, so the swap matters less to them. If kVCM has a pool the
-  swapper can use, the swap lists it like any other token, and Carbon Impact's receipt can offer the same "Swap into one
+- **Matcha Latte's members** are paid in kVCM, one token, so the swap matters less to them. If kVCM has a pool the
+  swapper can use, the swap lists it like any other token, and Matcha Latte's receipt can offer the same "Swap into one
   token".
 
 ## Implementing
@@ -565,8 +567,8 @@ The refactor touches every level, so these come cheaply with it:
 
 ## How to know it works
 
-From Base, with nothing collected: claims through AutoMaxi by callers other than its keeper; swaps through the six
-swappers, with the tokens and outputs; leftover approvals to the swappers.
+From Base, with nothing collected: claims through Double Espresso by callers other than its keeper; swaps through the
+six swappers, with the tokens and outputs; leftover approvals to the swappers.
 
 From people, five sessions per new persona, with four tasks: "Your payout is late: get it", "Turn last week's rewards
 into USDC", "What did that cost you?", and "Make sure nothing is still approved". After each, ask what was sold, what
@@ -574,10 +576,10 @@ stayed, and why.
 
 ## Decisions
 
-Settled by the owner on 21 Oct 2026: the page does not say that owners can claim AutoMaxi's rewards on Hydrex without
-the fee, as the keeper claims right after each epoch. AutoMaxi's page no longer says it under "Joining and leaving". It
-still says, under leaving, that what nobody has claimed through AutoMaxi is the owner's to claim on Hydrex: after
-leaving, that is the only way.
+Settled by the owner on 21 Oct 2026: the page does not say that owners can claim Double Espresso's rewards on Hydrex
+without the fee, as the keeper claims right after each epoch. Double Espresso's page no longer says it under "Joining
+and leaving". It still says, under leaving, that what nobody has claimed through Double Espresso is the owner's to claim
+on Hydrex: after leaving, that is the only way.
 
 Still open:
 
@@ -592,5 +594,5 @@ Still open:
 | **Aero's classic pools**         | Use them; prefer others within 1%; avoid them                                | Prefer others within 1%, and cap the tip at 1 gwei where the wallet allows                                                                                                             |
 | **WETH or ETH**                  | WETH only; an "unwrap to ETH" call after the swap                            | WETH only at first. Unwrapping is one more call, worth adding once batching works                                                                                                      |
 | **Swap from a Safe**             | The same deadline; a longer one for co-signers                               | A day, said in the brief: a route that falls below its minimum while co-signers sign is skipped                                                                                        |
-| **AutoMaxi version 1**           | Claim for its members too; not at all                                        | Not at all: the page does not offer version 1                                                                                                                                          |
-| **The swap's name**              | "Swap"; a name of its own, as AutoMaxi                                       | "Swap", on the menu, as its page's title and in crumbs, with "many tokens" said under it: plain words, and nothing to brand                                                            |
+| **Double Espresso version 1**    | Claim for its members too; not at all                                        | Not at all: the page does not offer version 1                                                                                                                                          |
+| **The swap's name**              | "Swap"; a name of its own, as Double Espresso                                | "Swap", on the menu, as its page's title and in crumbs, with "many tokens" said under it: plain words, and nothing to brand                                                            |

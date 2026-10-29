@@ -120,13 +120,13 @@
           <nav class="trail" aria-label="Back"><a href="#app">Your wallet</a></nav>
           <h1 tabindex="-1">Hydrex</h1>
         </div>
-        <p class="notice checks-failed" data-kind="carbon-impact" role="alert" hidden>
-          <span class="shape failed" aria-hidden="true"></span>Joining Carbon Impact is off.
-          <a href="#hydrex/carbon-impact/check">Why</a>
+        <p class="notice checks-failed" data-kind="matcha-latte" role="alert" hidden>
+          <span class="shape failed" aria-hidden="true"></span>Joining Matcha Latte is off.
+          <a href="#hydrex/matcha-latte/check">Why</a>
         </p>
-        <p class="notice checks-failed" data-kind="automaxi" role="alert" hidden>
-          <span class="shape failed" aria-hidden="true"></span>Joining AutoMaxi is off.
-          <a href="#hydrex/automaxi/check">Why</a>
+        <p class="notice checks-failed" data-kind="double-espresso" role="alert" hidden>
+          <span class="shape failed" aria-hidden="true"></span>Joining Double Espresso is off.
+          <a href="#hydrex/double-espresso/check">Why</a>
         </p>
         <p class="wrong-chain notice" role="alert" hidden>
           <span class="to-switch">Wrong network.<span class="switch-failed" hidden> Switch in your wallet.</span></span>
@@ -140,15 +140,16 @@
           <h2 id="menu-title">Automations</h2>
           <p class="note small">They vote with your Hydrex accounts each week. Your accounts stay in your wallet.</p>
           <ul class="menu table">
-            <li class="choice" data-choice="carbon-impact">
+            <li class="choice" data-choice="matcha-latte">
               <div class="choice-head">
-                <h3><a href="#hydrex/carbon-impact">Carbon Impact</a></h3>
+                <h3><a href="#hydrex/matcha-latte">Matcha Latte</a></h3>
                 <p class="small state">
                   <span class="state-normal"
-                    ><span class="shape checking impact-shape" aria-hidden="true"></span
-                    ><b class="impact-state">Checking…</b
-                    ><span class="impact-voted-line" hidden
-                      ><span class="impact-voted-words"> · voted </span><time class="impact-voted"></time></span></span
+                    ><span class="shape checking matcha-latte-shape" aria-hidden="true"></span
+                    ><b class="matcha-latte-state">Checking…</b
+                    ><span class="matcha-latte-voted-line" hidden
+                      ><span class="matcha-latte-voted-words"> · voted </span
+                      ><time class="matcha-latte-voted"></time></span></span
                   ><span class="state-failed" hidden
                     ><span class="shape failed" aria-hidden="true"></span><b>Joining off</b></span
                   >
@@ -173,16 +174,16 @@
                 </div>
               </dl>
             </li>
-            <li class="choice" data-choice="automaxi">
+            <li class="choice" data-choice="double-espresso">
               <div class="choice-head">
-                <h3><a href="#hydrex/automaxi">AutoMaxi</a></h3>
+                <h3><a href="#hydrex/double-espresso">Double Espresso</a></h3>
                 <p class="small state">
                   <span class="state-normal"
-                    ><span class="shape checking automaxi-shape" aria-hidden="true"></span
-                    ><b class="automaxi-state">Checking…</b
-                    ><span class="automaxi-voted-line" hidden
-                      ><span class="automaxi-voted-words"> · voted </span
-                      ><time class="automaxi-voted"></time></span></span
+                    ><span class="shape checking double-espresso-shape" aria-hidden="true"></span
+                    ><b class="double-espresso-state">Checking…</b
+                    ><span class="double-espresso-voted-line" hidden
+                      ><span class="double-espresso-voted-words"> · voted </span
+                      ><time class="double-espresso-voted"></time></span></span
                   ><span class="state-failed" hidden
                     ><span class="shape failed" aria-hidden="true"></span><b>Joining off</b></span
                   >
@@ -264,8 +265,8 @@
               </div>
               <ul class="accounts"></ul>
               <p class="buttons">
-                <button type="button" data-action="join" data-automation="carbon-impact">Join Carbon Impact</button>
-                <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
+                <button type="button" data-action="join" data-automation="matcha-latte">Join Matcha Latte</button>
+                <button type="button" data-action="join" data-automation="double-espresso">Join Double Espresso</button>
                 <button type="button" data-action="self" class="secondary">Vote yourself</button>
                 <a
                   class="button secondary vote-on-hydrex"
@@ -277,31 +278,31 @@
                 >
               </p>
             </section>
-            <section class="group" data-group="in:carbon-impact" aria-labelledby="group-carbon-impact" hidden>
+            <section class="group" data-group="in:matcha-latte" aria-labelledby="group-matcha-latte" hidden>
               <div class="group-head">
-                <h3 id="group-carbon-impact">In Carbon Impact <span class="count"></span></h3>
+                <h3 id="group-matcha-latte">In Matcha Latte <span class="count"></span></h3>
                 <p class="picked small" hidden></p>
                 <label class="pick-all small" hidden><input type="checkbox" /> All</label>
               </div>
               <ul class="accounts"></ul>
               <p class="buttons">
-                <button type="button" data-action="join" data-automation="automaxi" class="secondary">
-                  Move to AutoMaxi
+                <button type="button" data-action="join" data-automation="double-espresso" class="secondary">
+                  Move to Double Espresso
                 </button>
                 <button type="button" data-action="leave" class="secondary">Leave</button>
               </p>
             </section>
-            <section class="group" data-group="in:automaxi" aria-labelledby="group-automaxi" hidden>
+            <section class="group" data-group="in:double-espresso" aria-labelledby="group-double-espresso" hidden>
               <div class="group-head">
-                <h3 id="group-automaxi">In AutoMaxi <span class="count"></span></h3>
+                <h3 id="group-double-espresso">In Double Espresso <span class="count"></span></h3>
                 <p class="picked small" hidden></p>
                 <label class="pick-all small" hidden><input type="checkbox" /> All</label>
               </div>
               <ul class="accounts"></ul>
               <p class="buttons">
                 <button type="button" data-action="claim">Claim</button>
-                <button type="button" data-action="join" data-automation="carbon-impact" class="secondary">
-                  Move to Carbon Impact
+                <button type="button" data-action="join" data-automation="matcha-latte" class="secondary">
+                  Move to Matcha Latte
                 </button>
                 <button type="button" data-action="leave" class="secondary">Leave</button>
               </p>
@@ -314,8 +315,8 @@
               </div>
               <ul class="accounts"></ul>
               <p class="buttons">
-                <button type="button" data-action="join" data-automation="carbon-impact">Join Carbon Impact</button>
-                <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
+                <button type="button" data-action="join" data-automation="matcha-latte">Join Matcha Latte</button>
+                <button type="button" data-action="join" data-automation="double-espresso">Join Double Espresso</button>
                 <button type="button" data-action="self" class="secondary">Vote yourself</button>
               </p>
             </section>
@@ -330,25 +331,27 @@
       <div
         class="view product"
         data-view="product"
-        data-kind="carbon-impact"
-        data-title="Carbon Impact · metaDEX Café"
+        data-kind="matcha-latte"
+        data-title="Matcha Latte · metaDEX Café"
         hidden
       >
         <div class="title-line">
           <nav class="trail" aria-label="Back"><a href="#hydrex">Hydrex</a></nav>
-          <h1 tabindex="-1">Carbon Impact</h1>
+          <h1 tabindex="-1">Matcha Latte</h1>
         </div>
         <div class="state-line">
           <p class="state">
             <span class="state-normal"
-              ><span class="shape checking impact-shape" aria-hidden="true"></span><b class="impact-state">Checking…</b
-              ><span class="impact-voted-line" hidden
-                ><span class="impact-voted-words"> · voted </span><time class="impact-voted"></time></span></span
+              ><span class="shape checking matcha-latte-shape" aria-hidden="true"></span
+              ><b class="matcha-latte-state">Checking…</b
+              ><span class="matcha-latte-voted-line" hidden
+                ><span class="matcha-latte-voted-words"> · voted </span
+                ><time class="matcha-latte-voted"></time></span></span
             ><span class="state-failed" hidden
               ><span class="shape failed" aria-hidden="true"></span><b>Joining off</b></span
             >
           </p>
-          <button type="button" class="info" popovertarget="ci-check" aria-label="Check it">
+          <button type="button" class="info" popovertarget="ml-check" aria-label="Check it">
             <span aria-hidden="true">i</span>
           </button>
         </div>
@@ -358,19 +361,19 @@
         </p>
         <p class="custody small">
           Your Hydrex account stays in your wallet. Leave with one call, at any time.
-          <button type="button" class="info" popovertarget="ci-joining" aria-label="Joining and leaving">
+          <button type="button" class="info" popovertarget="ml-joining" aria-label="Joining and leaving">
             <span aria-hidden="true">i</span>
           </button>
         </p>
-        <p class="notice checks-failed" data-kind="carbon-impact" role="alert" hidden>
-          <span class="shape failed" aria-hidden="true"></span>Joining Carbon Impact is off.
-          <a href="#hydrex/carbon-impact/check">Why</a>
+        <p class="notice checks-failed" data-kind="matcha-latte" role="alert" hidden>
+          <span class="shape failed" aria-hidden="true"></span>Joining Matcha Latte is off.
+          <a href="#hydrex/matcha-latte/check">Why</a>
         </p>
         <dl class="facts tiles">
           <div>
             <dt>
               Takes
-              <button type="button" class="info" popovertarget="ci-fees" aria-label="Fees">
+              <button type="button" class="info" popovertarget="ml-fees" aria-label="Fees">
                 <span aria-hidden="true">i</span>
               </button>
             </dt>
@@ -384,7 +387,7 @@
           <div>
             <dt>
               Last epoch
-              <button type="button" class="info" popovertarget="ci-record" aria-label="Against all of Hydrex">
+              <button type="button" class="info" popovertarget="ml-record" aria-label="Against all of Hydrex">
                 <span aria-hidden="true">i</span>
               </button>
             </dt>
@@ -396,7 +399,7 @@
           <div>
             <dt>
               Retired
-              <button type="button" class="info" popovertarget="ci-carbon" aria-label="Carbon credits">
+              <button type="button" class="info" popovertarget="ml-carbon" aria-label="Carbon credits">
                 <span aria-hidden="true">i</span>
               </button>
             </dt>
@@ -408,19 +411,19 @@
         <div class="accounts-reading loading-slot" hidden></div>
         <div class="mine" hidden>
           <p class="mine-none small" hidden>No Hydrex account can join.</p>
-          <section class="group" data-group="in:carbon-impact" aria-labelledby="mine-carbon-impact" hidden>
+          <section class="group" data-group="in:matcha-latte" aria-labelledby="mine-matcha-latte" hidden>
             <div class="group-head">
-              <h2 id="mine-carbon-impact">Your Hydrex accounts</h2>
-              <button type="button" class="info" popovertarget="ci-joining" aria-label="Joining and leaving">
+              <h2 id="mine-matcha-latte">Your Hydrex accounts</h2>
+              <button type="button" class="info" popovertarget="ml-joining" aria-label="Joining and leaving">
                 <span aria-hidden="true">i</span>
               </button>
             </div>
             <ul class="accounts"></ul>
           </section>
-          <section class="group" data-group="can:carbon-impact" aria-labelledby="can-carbon-impact" hidden>
+          <section class="group" data-group="can:matcha-latte" aria-labelledby="can-matcha-latte" hidden>
             <div class="group-head">
-              <h2 id="can-carbon-impact">Can join</h2>
-              <button type="button" class="info" popovertarget="ci-joining" aria-label="Joining and leaving">
+              <h2 id="can-matcha-latte">Can join</h2>
+              <button type="button" class="info" popovertarget="ml-joining" aria-label="Joining and leaving">
                 <span aria-hidden="true">i</span>
               </button>
               <p class="picked small" hidden></p>
@@ -428,18 +431,18 @@
             </div>
             <ul class="accounts"></ul>
             <p class="buttons">
-              <button type="button" data-action="join" data-automation="carbon-impact">Join Carbon Impact</button>
+              <button type="button" data-action="join" data-automation="matcha-latte">Join Matcha Latte</button>
             </p>
           </section>
         </div>
 
-        <div class="pop" id="ci-fees" popover role="dialog" aria-labelledby="ci-fees-title" data-section="fees">
+        <div class="pop" id="ml-fees" popover role="dialog" aria-labelledby="ml-fees-title" data-section="fees">
           <div class="pop-head">
-            <h3 id="ci-fees-title">Fees</h3>
+            <h3 id="ml-fees-title">Fees</h3>
             <button
               type="button"
               class="pop-close"
-              popovertarget="ci-fees"
+              popovertarget="ml-fees"
               popovertargetaction="hide"
               aria-label="Close"
             >
@@ -474,13 +477,13 @@
           </dl>
         </div>
 
-        <div class="pop" id="ci-record" popover role="dialog" aria-labelledby="ci-record-title" data-section="record">
+        <div class="pop" id="ml-record" popover role="dialog" aria-labelledby="ml-record-title" data-section="record">
           <div class="pop-head">
-            <h3 id="ci-record-title">Against all of Hydrex</h3>
+            <h3 id="ml-record-title">Against all of Hydrex</h3>
             <button
               type="button"
               class="pop-close"
-              popovertarget="ci-record"
+              popovertarget="ml-record"
               popovertargetaction="hide"
               aria-label="Close"
             >
@@ -504,7 +507,7 @@
                 <thead>
                   <tr>
                     <td></td>
-                    <th scope="col">Carbon Impact</th>
+                    <th scope="col">Matcha Latte</th>
                     <th scope="col">All of Hydrex</th>
                   </tr>
                 </thead>
@@ -567,18 +570,18 @@
 
         <div
           class="pop"
-          id="ci-joining"
+          id="ml-joining"
           popover
           role="dialog"
-          aria-labelledby="ci-joining-title"
+          aria-labelledby="ml-joining-title"
           data-section="joining"
         >
           <div class="pop-head">
-            <h3 id="ci-joining-title">Joining and leaving</h3>
+            <h3 id="ml-joining-title">Joining and leaving</h3>
             <button
               type="button"
               class="pop-close"
-              popovertarget="ci-joining"
+              popovertarget="ml-joining"
               popovertargetaction="hide"
               aria-label="Close"
             >
@@ -605,13 +608,13 @@
           </dl>
         </div>
 
-        <div class="pop" id="ci-carbon" popover role="dialog" aria-labelledby="ci-carbon-title" data-section="carbon">
+        <div class="pop" id="ml-carbon" popover role="dialog" aria-labelledby="ml-carbon-title" data-section="carbon">
           <div class="pop-head">
-            <h3 id="ci-carbon-title">Carbon credits</h3>
+            <h3 id="ml-carbon-title">Carbon credits</h3>
             <button
               type="button"
               class="pop-close"
-              popovertarget="ci-carbon"
+              popovertarget="ml-carbon"
               popovertargetaction="hide"
               aria-label="Close"
             >
@@ -657,19 +660,20 @@
           </dl>
         </div>
 
-        <div class="pop" id="ci-check" popover role="dialog" aria-labelledby="ci-check-title" data-section="check">
+        <div class="pop" id="ml-check" popover role="dialog" aria-labelledby="ml-check-title" data-section="check">
           <div class="pop-head">
-            <h3 id="ci-check-title">Check it</h3>
+            <h3 id="ml-check-title">Check it</h3>
             <button
               type="button"
               class="pop-close"
-              popovertarget="ci-check"
+              popovertarget="ml-check"
               popovertargetaction="hide"
               aria-label="Close"
             >
               <span aria-hidden="true">×</span>
             </button>
           </div>
+          <p class="small">Matcha Latte is the "Carbon Impact" conduit from Klima, as Hydrex lists it.</p>
           <div data-section="control">
             <dl class="rows">
               <div>
@@ -692,7 +696,7 @@
           <h4 class="label">Contracts</h4>
           <dl class="rows">
             <div>
-              <dt>Carbon Impact</dt>
+              <dt>Matcha Latte</dt>
               <dd>
                 <code translate="no"
                   ><a href="https://basescan.org/address/0xdE91885cF35ac57DF0c4A75c16862127dBe8317c"
@@ -762,23 +766,30 @@
         </div>
       </div>
 
-      <div class="view product" data-view="product" data-kind="automaxi" data-title="AutoMaxi · metaDEX Café" hidden>
+      <div
+        class="view product"
+        data-view="product"
+        data-kind="double-espresso"
+        data-title="Double Espresso · metaDEX Café"
+        hidden
+      >
         <div class="title-line">
           <nav class="trail" aria-label="Back"><a href="#hydrex">Hydrex</a></nav>
-          <h1 tabindex="-1">AutoMaxi</h1>
+          <h1 tabindex="-1">Double Espresso</h1>
         </div>
         <div class="state-line">
           <p class="state">
             <span class="state-normal"
-              ><span class="shape checking automaxi-shape" aria-hidden="true"></span
-              ><b class="automaxi-state">Checking…</b
-              ><span class="automaxi-voted-line" hidden
-                ><span class="automaxi-voted-words"> · voted </span><time class="automaxi-voted"></time></span></span
+              ><span class="shape checking double-espresso-shape" aria-hidden="true"></span
+              ><b class="double-espresso-state">Checking…</b
+              ><span class="double-espresso-voted-line" hidden
+                ><span class="double-espresso-voted-words"> · voted </span
+                ><time class="double-espresso-voted"></time></span></span
             ><span class="state-failed" hidden
               ><span class="shape failed" aria-hidden="true"></span><b>Joining off</b></span
             >
           </p>
-          <button type="button" class="info" popovertarget="am-check" aria-label="Check it">
+          <button type="button" class="info" popovertarget="de-check" aria-label="Check it">
             <span aria-hidden="true">i</span>
           </button>
         </div>
@@ -788,19 +799,19 @@
         </p>
         <p class="custody small">
           Your Hydrex account stays in your wallet. Leave with one call, at any time.
-          <button type="button" class="info" popovertarget="am-joining" aria-label="Joining and leaving">
+          <button type="button" class="info" popovertarget="de-joining" aria-label="Joining and leaving">
             <span aria-hidden="true">i</span>
           </button>
         </p>
-        <p class="notice checks-failed" data-kind="automaxi" role="alert" hidden>
-          <span class="shape failed" aria-hidden="true"></span>Joining AutoMaxi is off.
-          <a href="#hydrex/automaxi/check">Why</a>
+        <p class="notice checks-failed" data-kind="double-espresso" role="alert" hidden>
+          <span class="shape failed" aria-hidden="true"></span>Joining Double Espresso is off.
+          <a href="#hydrex/double-espresso/check">Why</a>
         </p>
         <dl class="facts tiles">
           <div>
             <dt>
               Takes
-              <button type="button" class="info" popovertarget="am-fees" aria-label="Fees">
+              <button type="button" class="info" popovertarget="de-fees" aria-label="Fees">
                 <span aria-hidden="true">i</span>
               </button>
             </dt>
@@ -813,7 +824,7 @@
           <div>
             <dt>
               Last epoch
-              <button type="button" class="info" popovertarget="am-record" aria-label="Against all of Hydrex">
+              <button type="button" class="info" popovertarget="de-record" aria-label="Against all of Hydrex">
                 <span aria-hidden="true">i</span>
               </button>
             </dt>
@@ -825,7 +836,7 @@
           <div>
             <dt>
               Owner
-              <button type="button" class="info" popovertarget="am-check" aria-label="Who controls what">
+              <button type="button" class="info" popovertarget="de-check" aria-label="Who controls what">
                 <span aria-hidden="true">i</span>
               </button>
             </dt>
@@ -836,10 +847,10 @@
         <div class="accounts-reading loading-slot" hidden></div>
         <div class="mine" hidden>
           <p class="mine-none small" hidden>No Hydrex account can join.</p>
-          <section class="group" data-group="in:automaxi" aria-labelledby="mine-automaxi" hidden>
+          <section class="group" data-group="in:double-espresso" aria-labelledby="mine-double-espresso" hidden>
             <div class="group-head">
-              <h2 id="mine-automaxi">Your Hydrex accounts</h2>
-              <button type="button" class="info" popovertarget="am-joining" aria-label="Joining and leaving">
+              <h2 id="mine-double-espresso">Your Hydrex accounts</h2>
+              <button type="button" class="info" popovertarget="de-joining" aria-label="Joining and leaving">
                 <span aria-hidden="true">i</span>
               </button>
               <p class="picked small" hidden></p>
@@ -850,10 +861,10 @@
               <button type="button" data-action="claim">Claim</button>
             </p>
           </section>
-          <section class="group" data-group="can:automaxi" aria-labelledby="can-automaxi" hidden>
+          <section class="group" data-group="can:double-espresso" aria-labelledby="can-double-espresso" hidden>
             <div class="group-head">
-              <h2 id="can-automaxi">Can join</h2>
-              <button type="button" class="info" popovertarget="am-joining" aria-label="Joining and leaving">
+              <h2 id="can-double-espresso">Can join</h2>
+              <button type="button" class="info" popovertarget="de-joining" aria-label="Joining and leaving">
                 <span aria-hidden="true">i</span>
               </button>
               <p class="picked small" hidden></p>
@@ -861,18 +872,18 @@
             </div>
             <ul class="accounts"></ul>
             <p class="buttons">
-              <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
+              <button type="button" data-action="join" data-automation="double-espresso">Join Double Espresso</button>
             </p>
           </section>
         </div>
 
-        <div class="pop" id="am-fees" popover role="dialog" aria-labelledby="am-fees-title" data-section="fees">
+        <div class="pop" id="de-fees" popover role="dialog" aria-labelledby="de-fees-title" data-section="fees">
           <div class="pop-head">
-            <h3 id="am-fees-title">Fees</h3>
+            <h3 id="de-fees-title">Fees</h3>
             <button
               type="button"
               class="pop-close"
-              popovertarget="am-fees"
+              popovertarget="de-fees"
               popovertargetaction="hide"
               aria-label="Close"
             >
@@ -909,13 +920,13 @@
           </dl>
         </div>
 
-        <div class="pop" id="am-record" popover role="dialog" aria-labelledby="am-record-title" data-section="record">
+        <div class="pop" id="de-record" popover role="dialog" aria-labelledby="de-record-title" data-section="record">
           <div class="pop-head">
-            <h3 id="am-record-title">Against all of Hydrex</h3>
+            <h3 id="de-record-title">Against all of Hydrex</h3>
             <button
               type="button"
               class="pop-close"
-              popovertarget="am-record"
+              popovertarget="de-record"
               popovertargetaction="hide"
               aria-label="Close"
             >
@@ -939,7 +950,7 @@
                 <thead>
                   <tr>
                     <td></td>
-                    <th scope="col">AutoMaxi</th>
+                    <th scope="col">Double Espresso</th>
                     <th scope="col">All of Hydrex</th>
                   </tr>
                 </thead>
@@ -1015,18 +1026,18 @@
 
         <div
           class="pop"
-          id="am-joining"
+          id="de-joining"
           popover
           role="dialog"
-          aria-labelledby="am-joining-title"
+          aria-labelledby="de-joining-title"
           data-section="joining"
         >
           <div class="pop-head">
-            <h3 id="am-joining-title">Joining and leaving</h3>
+            <h3 id="de-joining-title">Joining and leaving</h3>
             <button
               type="button"
               class="pop-close"
-              popovertarget="am-joining"
+              popovertarget="de-joining"
               popovertargetaction="hide"
               aria-label="Close"
             >
@@ -1053,13 +1064,13 @@
           </dl>
         </div>
 
-        <div class="pop" id="am-check" popover role="dialog" aria-labelledby="am-check-title" data-section="check">
+        <div class="pop" id="de-check" popover role="dialog" aria-labelledby="de-check-title" data-section="check">
           <div class="pop-head">
-            <h3 id="am-check-title">Check it</h3>
+            <h3 id="de-check-title">Check it</h3>
             <button
               type="button"
               class="pop-close"
-              popovertarget="am-check"
+              popovertarget="de-check"
               popovertargetaction="hide"
               aria-label="Close"
             >
@@ -1069,7 +1080,7 @@
           <div data-section="control">
             <dl class="rows">
               <div>
-                <dt>AutoMaxi</dt>
+                <dt>Double Espresso</dt>
                 <dd>Nobody: no owner, no settings, no upgrade</dd>
               </div>
               <div>
@@ -1081,7 +1092,7 @@
           <h4 class="label">Contracts</h4>
           <dl class="rows">
             <div>
-              <dt>AutoMaxi</dt>
+              <dt>Double Espresso</dt>
               <dd>
                 <code translate="no"
                   ><a href="https://basescan.org/address/0x692c323B425A9DfeebE302F56168a7798D93EAC5"
@@ -1138,9 +1149,9 @@
           </dl>
           <h4 class="label">Checks</h4>
           <ul class="checks">
-            <li data-check="automaxi-code">Its code matches</li>
-            <li data-check="automaxi-contracts">Its VotingEscrow and Voter match</li>
-            <li data-check="automaxi-approvals">Joining approves voting and claiming only</li>
+            <li data-check="double-espresso-code">Its code matches</li>
+            <li data-check="double-espresso-contracts">Its VotingEscrow and Voter match</li>
+            <li data-check="double-espresso-approvals">Joining approves voting and claiming only</li>
             <li data-check="upgrade">The VotingEscrow is not upgraded</li>
             <li data-check="logic">Its approval logic matches</li>
           </ul>
@@ -1197,8 +1208,8 @@
           <section class="position-actions" aria-label="Actions" hidden>
             <p class="buttons">
               <button type="button" data-action="claim">Claim now</button>
-              <button type="button" data-action="join" data-automation="carbon-impact">Join Carbon Impact</button>
-              <button type="button" data-action="join" data-automation="automaxi">Join AutoMaxi</button>
+              <button type="button" data-action="join" data-automation="matcha-latte">Join Matcha Latte</button>
+              <button type="button" data-action="join" data-automation="double-espresso">Join Double Espresso</button>
               <button type="button" data-action="self" class="secondary">Leave</button>
               <a
                 class="button secondary vote-on-hydrex"
@@ -1680,14 +1691,14 @@
         <div>
           <dt>Takes</dt>
           <dd class="takes"></dd>
-          <dd class="sub"><a href="#hydrex/carbon-impact/control">Can change</a></dd>
+          <dd class="sub"><a href="#hydrex/matcha-latte/control">Can change</a></dd>
         </div>
       </dl>
     </template>
     <template id="join-done">
       <p><strong>Joined.</strong> Votes from <time class="next"></time>.</p>
     </template>
-    <template id="automaxi-join-before">
+    <template id="double-espresso-join-before">
       <div class="callout">
         <p>
           <strong
@@ -1717,11 +1728,11 @@
         <div>
           <dt>Takes</dt>
           <dd>1% fee</dd>
-          <dd class="sub"><a href="#hydrex/automaxi/control">Fixed</a></dd>
+          <dd class="sub"><a href="#hydrex/double-espresso/control">Fixed</a></dd>
         </div>
       </dl>
     </template>
-    <template id="automaxi-join-done">
+    <template id="double-espresso-join-done">
       <p><strong>Joined.</strong> Votes from <time class="next"></time>.</p>
     </template>
     <template id="proposed">
@@ -1801,7 +1812,7 @@
     <template id="receipt">
       <article class="slip receipt">
         <p class="receipt-name">metaDEX Café</p>
-        <p class="label">Receipt · <span class="receipt-id"></span> · Carbon Impact</p>
+        <p class="label">Receipt · <span class="receipt-id"></span> · Matcha Latte</p>
         <p class="receipt-day"><time class="receipt-from"></time> to <time class="receipt-to"></time></p>
         <dl class="lines">
           <div>
@@ -1843,7 +1854,7 @@
     <template id="claims-receipt">
       <article class="slip receipt">
         <p class="receipt-name">metaDEX Café</p>
-        <p class="label">Receipt · <span class="receipt-id"></span> · AutoMaxi</p>
+        <p class="label">Receipt · <span class="receipt-id"></span> · Double Espresso</p>
         <p class="receipt-day"><time class="receipt-from"></time> to <time class="receipt-to"></time></p>
         <dl class="lines">
           <div>
@@ -2077,7 +2088,7 @@
     <template id="claim-receipt">
       <article class="slip receipt">
         <p class="receipt-name">metaDEX Café</p>
-        <p class="label">Receipt · <span class="claim-receipt-id"></span> · AutoMaxi</p>
+        <p class="label">Receipt · <span class="claim-receipt-id"></span> · Double Espresso</p>
         <dl class="lines">
           <div>
             <dt>Claimed</dt>

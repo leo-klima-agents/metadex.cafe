@@ -6,8 +6,8 @@ rewritten or cut. It is written for whoever implements the redesign. Where it di
 the work: see [Docs to update](#docs-to-update).
 
 Read from version 0.5.1, commit `682c47e`, on 20 Oct 2026: every view at 1280 and 390 px wide, without a wallet, and
-with two owners' wallets on Base. One holds an account in Carbon Impact and an account that votes itself; the other
-holds two accounts in automations that stopped.
+with two owners' wallets on Base. One holds an account in Matcha Latte and an account that votes itself; the other holds
+two accounts in automations that stopped.
 
 ## Second pass: fewer words
 
@@ -19,7 +19,7 @@ of this file, it wins.
   automations, which the App's Needs you shows to the owners they concern. No hints such as "Tick the accounts to
   change".
 - **Labels, not prose.** What a product does is in its figures: Takes, Pays in, Last epoch, then Retired or Controlled
-  by. Each choice on the menu has the first three. Carbon Impact's name sits beside "33.33% retired" and "Pays in kVCM",
+  by. Each choice on the menu has the first three. Matcha Latte's name sits beside "33.33% retired" and "Pays in kVCM",
   which say what it does ([brand.md](brand.md#what-the-page-may-claim)).
 - **The only sentences left warn of what cannot be undone:** in the join review, that joining also lets the automation
   claim the rewards not claimed yet, with "Claim them on Hydrex first".
@@ -45,7 +45,7 @@ page led back to "App", which Home already is once a wallet is connected; and th
 - **Details open from an info button, as a popup.** A small round "i" sits beside what it explains: the status, a key
   figure, a group of accounts, About's rows. It opens a popup over the page with a title and a close button, light to
   dismiss; on a phone, a sheet from the foot of the screen. Nothing of the details shows until then: no folds, no
-  summaries. An address still points into one, such as `#hydrex/carbon-impact/check`, and opens it; it goes from the
+  summaries. An address still points into one, such as `#hydrex/matcha-latte/check`, and opens it; it goes from the
   address once the popup closes. A browser without popups shows them at the foot of the view, and hides the buttons.
 - **A call's fields** in the review open from the same button, at the corner of its slip.
 - **Home is the App once a wallet is connected,** so the name in the header leads there. The breadcrumb is gone: a page
@@ -69,13 +69,14 @@ page led back to "App", which Home already is once a wallet is connected; and th
 
 Settled by the owner on 20 Oct 2026:
 
-- **Carbon Impact is Hydrex's automation,** even though Hydrex no longer sends its votes: a keeper does. The page says
+- **Matcha Latte is Hydrex's automation,** even though Hydrex no longer sends its votes: a keeper does. The page says
   "Hydrex's automation" wherever it says whose it is, never "Klima's".
-- **The café is anonymous for now.** The page names no operator, nobody behind Carbon Impact's keeper, and links to no
-  repository of the café's: neither this one nor AutoMaxi's. This repository is public, but nothing on the page leads to
-  it. Hydrex's own repository stays linked as Carbon Impact's source, and the commit leaves the footer. See rule 10.
-- **AutoMaxi's source is verified, with an exact match, on Basescan and on Sourcify.** The page links to it there, not
-  to its repository. Its verified files name no author and no repository: checked on 20 Oct 2026.
+- **The café is anonymous for now.** The page names no operator, nobody behind Matcha Latte's keeper, and links to no
+  repository of the café's: neither this one nor Double Espresso's. This repository is public, but nothing on the page
+  leads to it. Hydrex's own repository stays linked as Matcha Latte's source, and the commit leaves the footer. See
+  rule 10.
+- **Double Espresso's source is verified, with an exact match, on Basescan and on Sourcify.** The page links to it
+  there, not to its repository. Its verified files name no author and no repository: checked on 20 Oct 2026.
 - **No legal pages for now:** no terms, and no page on privacy.
 
 ## What is wrong today
@@ -85,28 +86,28 @@ Settled by the owner on 20 Oct 2026:
 | Home              | 3,764 px      | 5,390 px, 6.4 screens |
 | How it works      | 9,324 px      | 12,596 px, 15 screens |
 | App, two accounts | 2,347 px      | 2,915 px, 3.5 screens |
-| AutoMaxi          | 2,302 px      | 3,240 px, 3.8 screens |
-| Carbon Impact     | 1,400 px      | 1,858 px, 2.2 screens |
+| Double Espresso   | 2,302 px      | 3,240 px, 3.8 screens |
+| Matcha Latte      | 1,400 px      | 1,858 px, 2.2 screens |
 
-1. **One fact, many places.** On Home, what Carbon Impact does is said at least five times: the heading's paragraph, its
+1. **One fact, many places.** On Home, what Matcha Latte does is said at least five times: the heading's paragraph, its
    card, the three steps, what you keep, give and get, and the comparison. The share it retires shows five times. The
    choices are compared three ways: Home's cards, Home's table and the table in Choose. "If you only want the most… vote
    yourself" is on Home twice, and "Open the app" three times.
-2. **Carbon Impact everywhere, though there are two automations.** Home's heading, the meta description, How it works
-   ("Everything Home and the review say about Carbon Impact"), its questions, the footer's contracts, and the App's
-   timeline of the epoch ("Carbon Impact votes with its accounts"), which every wallet sees. "If your automation
-   stopped" still says Carbon Impact "is the one that still votes", and offers it as the only way out besides voting
-   yourself. The App tells an owner with no account in Carbon Impact that "Carbon Impact pays out to your address", and
-   gives its tonnes retired.
-3. **Your accounts come late.** On a phone, the App's first screen shows the address in full, a summary, Carbon Impact's
+2. **Matcha Latte everywhere, though there are two automations.** Home's heading, the meta description, How it works
+   ("Everything Home and the review say about Matcha Latte"), its questions, the footer's contracts, and the App's
+   timeline of the epoch ("Matcha Latte votes with its accounts"), which every wallet sees. "If your automation stopped"
+   still says Matcha Latte "is the one that still votes", and offers it as the only way out besides voting yourself. The
+   App tells an owner with no account in Matcha Latte that "Matcha Latte pays out to your address", and gives its tonnes
+   retired.
+3. **Your accounts come late.** On a phone, the App's first screen shows the address in full, a summary, Matcha Latte's
    tonnes and the timeline of the epoch, and no account.
 4. **Method before result.** The App's payouts open with almost 100 words on how the page decides an epoch was paid.
    Each account in a stopped automation repeats the sentence its group has just said.
-5. **Two models for one thing.** AutoMaxi's page holds its own facts. Carbon Impact's page is a stub that links to five
-   sections of How it works. The join review shows AutoMaxi's fee facts, and not Carbon Impact's.
+5. **Two models for one thing.** Double Espresso's page holds its own facts. Matcha Latte's page is a stub that links to
+   five sections of How it works. The join review shows Double Espresso's fee facts, and not Matcha Latte's.
 6. **Words of the page's own.** "The flip", and a glossary of twelve words, where a date would do: the page knows when
    the next epoch starts.
-7. **Content in conflict.** Carbon Impact's page calls it "Klima's automation". How it works calls it "a contract of
+7. **Content in conflict.** Matcha Latte's page calls it "Klima's automation". How it works calls it "a contract of
    Hydrex's", and Questions says that the automation is Hydrex's. Settled: it is Hydrex's.
 8. **A crowded header.** On a phone, How it works and the button push the header onto two lines.
 
@@ -119,24 +120,24 @@ Two axes:
 
 ### Addresses
 
-| Level | Address                                     | Page                                                                                             |
-| ----- | ------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 0     | `#`, or none                                | Home                                                                                             |
-| 1     | `#app`                                      | The App: your accounts, then the menu                                                            |
-| 1     | `#about`                                    | About                                                                                            |
-| 2     | `#hydrex`                                   | Not built yet: shows the App. A protocol's page comes with a second protocol, such as Aero.      |
-| 3     | `#hydrex/carbon-impact`, `#hydrex/automaxi` | A product                                                                                        |
-| 4     | `#hydrex/9540`                              | A position: one Hydrex account, whichever product it is in                                       |
-| 5     | `#hydrex/9540/2026-10-22`                   | A receipt, once the page reads more than the last one. Until then, it is on the position's page. |
-| any   | `#<page>/<section>`                         | The page, scrolled to one of its sections, with the section's fold open, such as `#about/check`  |
+| Level | Address                                           | Page                                                                                             |
+| ----- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 0     | `#`, or none                                      | Home                                                                                             |
+| 1     | `#app`                                            | The App: your accounts, then the menu                                                            |
+| 1     | `#about`                                          | About                                                                                            |
+| 2     | `#hydrex`                                         | Not built yet: shows the App. A protocol's page comes with a second protocol, such as Aero.      |
+| 3     | `#hydrex/matcha-latte`, `#hydrex/double-espresso` | A product                                                                                        |
+| 4     | `#hydrex/9540`                                    | A position: one Hydrex account, whichever product it is in                                       |
+| 5     | `#hydrex/9540/2026-10-22`                         | A receipt, once the page reads more than the last one. Until then, it is on the position's page. |
+| any   | `#<page>/<section>`                               | The page, scrolled to one of its sections, with the section's fold open, such as `#about/check`  |
 
 - A position's address carries the protocol, not the product. An account moves between products, and its address must
   neither change nor lie when it does.
 - The protocol is in every address from now, since account numbers are per protocol, so that adding Aero changes no
   address.
 - A level that would hold fewer than three things is not built. That is why there is no protocol page yet.
-- Sections: a product's are `record`, `joining`, `control`, its own (`carbon` for Carbon Impact, `votes` for AutoMaxi)
-  and `check`; About's are `check`, `safe` and `figures`.
+- Sections: a product's are `record`, `joining`, `control`, its own (`carbon` for Matcha Latte, `votes` for Double
+  Espresso) and `check`; About's are `check`, `safe` and `figures`.
 - An address the page does not know shows Home.
 - Inside Safe{Wallet}, the page opens on the App, as today.
 
@@ -144,8 +145,8 @@ Two axes:
 
 - **The header:** the name, which leads Home, and one button: "Open the app", or the wallet chip once connected. Nothing
   else.
-- **A breadcrumb** on every page below the App: "App › Carbon Impact", "App › Account #9540". In Safe{Wallet}'s frame
-  and in wallets' browsers there is no address bar, and Back is not to be relied on.
+- **A breadcrumb** on every page below the App: "App › Matcha Latte", "App › Account #9540". In Safe{Wallet}'s frame and
+  in wallets' browsers there is no address bar, and Back is not to be relied on.
 - **The footer:** the official address; the version, which leads to `#about/check`; and About. No commit: see rule 10.
 - **Folds** (`<details>`) hold the technical parts of a page. An address that points into a fold opens it, as
   `views/router.ts` does today.
@@ -159,7 +160,7 @@ Only these, in this order:
 3. "Open the app".
 4. The stopped automations, in one line with the triangle: "Many of Hydrex's automations, such as USDC, stopped voting
    on Wed 9 Sep. An account still in one earns nothing.", then "Check your accounts", which leads to the App. Not
-   "Hydrex's own": Carbon Impact is Hydrex's too, and still votes. It stays until the owner removes it.
+   "Hydrex's own": Matcha Latte is Hydrex's too, and still votes. It stays until the owner removes it.
 
 No figures, no menu, no questions. A connected visitor sees the same Home, with the wallet chip in the header.
 
@@ -175,7 +176,7 @@ With a wallet:
 
 1. "Your accounts".
 2. Notices, each in one line, only when they apply: the wallet is on another network; joining a product is off because
-   its checks failed ("Joining Carbon Impact is off: this page's checks of it failed. Leaving works."), with a link to
+   its checks failed ("Joining Matcha Latte is off: this page's checks of it failed. Leaving works."), with a link to
    its `check`; a payout is under way.
 3. One line: "This epoch ends Thu 22 Oct, 00:00 UTC, in 1 d 3 h. A change made now moves the votes from then."
 4. The groups, below.
@@ -185,13 +186,13 @@ With no account holding HYDX: today's `#none` line, then the menu.
 
 The groups show only when they hold accounts, with the count in their heading:
 
-| Group                                          | Holds today's groups                                                                               | Its actions                              |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| **Needs you**                                  | `stopped`, `attention` (partly in)                                                                 | Join Carbon Impact, Join AutoMaxi, Leave |
-| **Carbon Impact**, which leads to its page     | `in:carbon-impact`, and `joining` into it; empty or ended accounts that still approve it stay here | Leave, Move to AutoMaxi                  |
-| **AutoMaxi**, which leads to its page          | `in:automaxi`, and `joining` into it, as for Carbon Impact                                         | Leave, Move to Carbon Impact             |
-| **Other accounts**                             | `open` (votes itself, delegated to an address, in a running automation of Hydrex's), and `leaving` | Join Carbon Impact, Join AutoMaxi, Leave |
-| A fold: "3 accounts with nothing to vote with" | `closed` (empty, or its lock ended)                                                                | None                                     |
+| Group                                          | Holds today's groups                                                                               | Its actions                                    |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| **Needs you**                                  | `stopped`, `attention` (partly in)                                                                 | Join Matcha Latte, Join Double Espresso, Leave |
+| **Matcha Latte**, which leads to its page      | `in:matcha-latte`, and `joining` into it; empty or ended accounts that still approve it stay here  | Leave, Move to Double Espresso                 |
+| **Double Espresso**, which leads to its page   | `in:double-espresso`, and `joining` into it, as for Matcha Latte                                   | Leave, Move to Matcha Latte                    |
+| **Other accounts**                             | `open` (votes itself, delegated to an address, in a running automation of Hydrex's), and `leaving` | Join Matcha Latte, Join Double Espresso, Leave |
+| A fold: "3 accounts with nothing to vote with" | `closed` (empty, or its lock ended)                                                                | None                                           |
 
 - Needs you has one line under its heading: "Those in an automation that stopped voting earn nothing.", which also holds
   when the group has an account only partly in one. Its Leave leaves whichever automation holds each account:
@@ -223,13 +224,13 @@ most, and have time each week, vote yourself."
 One template for every product, in this order. Visible:
 
 1. The breadcrumb, the name, and its status.
-2. One sentence: what it does, and what it pays in. A product name the law covers, such as "Carbon Impact", always has
+2. One sentence: what it does, and what it pays in. A product name the law covers, such as "Matcha Latte", always has
    this sentence beside it ([brand.md](brand.md#what-the-page-may-claim)).
 3. One line: "Your account stays in your wallet. Leave with one call, at any time: claims stop at once, and your votes
    come back on Thu 22 Oct, 00:00 UTC."
 4. With a wallet: your accounts in it, which lead to their pages, and Join for those that can join, with boxes to tick
    when there are several. Without a wallet: the wallet buttons. They are the App's parts, not copies.
-5. **Last epoch:** the menu's line, with the epoch's dates. Carbon Impact adds "Retired so far: 5,691 tonnes of carbon
+5. **Last epoch:** the menu's line, with the epoch's dates. Matcha Latte adds "Retired so far: 5,691 tonnes of carbon
    credits", with Klima's mark and "through Klima Protocol".
 6. **Fee facts:** the six rows, as today. "Goes to" names the treasury and links to it; its address in full is in
    `check`.
@@ -244,15 +245,15 @@ Then folds, closed, each with a summary of one line:
    earned, and how to keep them; that nothing is transferred; and how leaving works, even when the checks fail. Timing
    in one sentence: "Join on Wednesday at 23:00 UTC, and the votes move an hour later; join on Thursday at 10:00 UTC,
    and almost a week later."
-9. **Who controls what** (`control`): for Carbon Impact, that it is Hydrex's, and that a keeper, not Hydrex, now sends
+9. **Who controls what** (`control`): for Matcha Latte, that it is Hydrex's, and that a keeper, not Hydrex, now sends
    its votes and payouts, without naming who runs the keeper; Hydrex's powers over its settings, as Hydrex holds them;
-   what nobody can do; and how a change would show. For AutoMaxi, that nobody does, and what Hydrex and the owner of its
-   reward contracts can do.
-10. **A fold of the product's own:** for Carbon Impact, "The carbon credits" (`carbon`): kVCM, retiring, where to see
-    each retirement, and whose name is on them. For AutoMaxi, "How it picks its votes" (`votes`): the $1 threshold,
-    Chainlink's prices, the pools' prices, and what can make a worse vote win.
+   what nobody can do; and how a change would show. For Double Espresso, that nobody does, and what Hydrex and the owner
+   of its reward contracts can do.
+10. **A fold of the product's own:** for Matcha Latte, "The carbon credits" (`carbon`): kVCM, retiring, where to see
+    each retirement, and whose name is on them. For Double Espresso, "How it picks its votes" (`votes`): the $1
+    threshold, Chainlink's prices, the pools' prices, and what can make a worse vote win.
 11. **Check it** (`check`): the contracts in full (the product, Hydrex's VotingEscrow and Voter, its treasury, and for
-    Carbon Impact kVCM); its code hash; its source: for Carbon Impact, in Hydrex's repository, and for AutoMaxi, as
+    Matcha Latte kVCM); its code hash; its source: for Matcha Latte, in Hydrex's repository, and for Double Espresso, as
     verified on Basescan (`https://basescan.org/address/<address>#code`) and Sourcify
     (`https://repo.sourcify.dev/8453/<address>`), never its repository (rule 10); the call,
     `setConduitApproval(conduit, tokenId, true)`, or `false` to leave; what the page checks, with any check that failed
@@ -264,7 +265,7 @@ Then folds, closed, each with a summary of one line:
 `#hydrex/<id>` shows to anyone. Its actions show only to the wallet that owns it, or the Safe that does.
 
 1. The breadcrumb, then the account's name and number.
-2. Its status, with a link to its product: "In Carbon Impact", "You vote with it", "In USDC, which stopped voting on Wed
+2. Its status, with a link to its product: "In Matcha Latte", "You vote with it", "In USDC, which stopped voting on Wed
    9 Sep".
 3. Its kind of lock, its votes, what its votes earned last epoch, and its owner, in the short form, when it is not the
    wallet connected.
@@ -274,7 +275,7 @@ Then folds, closed, each with a summary of one line:
    unclaimed can be claimed on Hydrex first.
 6. In an automation, or just out of one: its payouts, as today: its standing (paid up to, late, not paid yet, nothing to
    pay, not final yet, not read), what waits, the notes on claims made elsewhere, then the receipt of its last payout.
-7. In Carbon Impact: its payout address, in a fold, open only when it is not the owner's own.
+7. In Matcha Latte: its payout address, in a fold, open only when it is not the owner's own.
 
 Reading an account by its number is new: its owner, then the reads `readAccounts` makes for each account. Its payouts
 are read for that one account, where `last-payout.ts` reads an owner's.
@@ -306,13 +307,13 @@ Joining takes two steps instead of three:
    - for the accounts picked, at last epoch's rate: "≈ $0.18 a week would reach you. The change costs < $0.01 in gas. An
      estimate, not a promise." These figures are Choose's;
    - the timeline, with its dates: now, the next epoch, after each epoch;
-   - one line on what it takes and who can change it. Carbon Impact: "It retires 33.33% of the rewards, and takes a fee
+   - one line on what it takes and who can change it. Matcha Latte: "It retires 33.33% of the rewards, and takes a fee
      of 0%. Hydrex can raise them to 100% and 1%, and change the payout tokens, the swap routers and your payout
-     address." AutoMaxi: "It takes 1% of each claim. Nobody can change that.";
+     address." Double Espresso: "It takes 1% of each claim. Nobody can change that.";
    - the notes on accounts in a stopped or a running automation, as today.
 
-   Every product has the same parts. The full fee facts are on the product's page, so AutoMaxi's review no longer copies
-   them.
+   Every product has the same parts. The full fee facts are on the product's page, so Double Espresso's review no longer
+   copies them.
 
 2. **What your wallet will ask:** as today. "How to check these calls" leads to the product's `check`.
 
@@ -351,16 +352,16 @@ review, then the wallet. What is lost: the weekly estimate for the accounts tick
    groups of four has one underline, not one for each group.
 6. **One status per row,** as a shape and words, and none that repeats its group's heading.
 7. **Nothing that sells inside the App:** no tonnes retired, and no pitch for one product. Klima's mark stays beside a
-   retirement only: on Carbon Impact's page and on its receipts.
+   retirement only: on Matcha Latte's page and on its receipts.
 8. **Plain words.** Account, votes, epoch, Flex and Protocol Account, as Hydrex uses them. No glossary.
 9. **Heights on a phone,** 390 × 844: Home in one screen; the App, with a wallet, shows its first account in the first
    screen; a product's page in two screens with its folds closed; a position's in two, with its receipt.
-10. **Anonymous.** No operator named, and nobody behind Carbon Impact's keeper; Hydrex is named as the one who controls
-    its settings. No link to this repository or to AutoMaxi's, `github.com/ldeso/hydrex-conduit`, and no commit hash,
-    which could be searched for. AutoMaxi's source is linked where it is verified, on Basescan and Sourcify. Hydrex's
-    own repository stays linked as Carbon Impact's source: it is Hydrex's, and says nothing of who runs the café. Links
-    that a visitor follows need no change to the Content Security Policy, which governs only what the page itself
-    fetches.
+10. **Anonymous.** No operator named, and nobody behind Matcha Latte's keeper; Hydrex is named as the one who controls
+    its settings. No link to this repository or to Double Espresso's, `github.com/ldeso/hydrex-conduit`, and no commit
+    hash, which could be searched for. Double Espresso's source is linked where it is verified, on Basescan and
+    Sourcify. Hydrex's own repository stays linked as Matcha Latte's source: it is Hydrex's, and says nothing of who
+    runs the café. Links that a visitor follows need no change to the Content Security Policy, which governs only what
+    the page itself fetches.
 
 ## Everything, item by item
 
@@ -380,33 +381,33 @@ by their id or class in `index.html` at commit `682c47e`.
 | `.needs-script`, on Home, the App and How it works      | Cut      | One `<noscript>` line for the whole page.                                                                                                       |
 | Views shown by `:target`, in `style.css` and `views.ts` | Rewrite  | A router: see [Implementation](#implementation).                                                                                                |
 | `footer`: the official address                          | Keep     |                                                                                                                                                 |
-| `footer`: the contracts and the source                  | Move     | Each product's `check`. Today they are Carbon Impact's only.                                                                                    |
+| `footer`: the contracts and the source                  | Move     | Each product's `check`. Today they are Matcha Latte's only.                                                                                     |
 | `footer`: version, commit, Check this page, Questions   | Rewrite  | The version, which leads to `#about/check`, and About. The commit goes: rule 10.                                                                |
 
 ### Home, `#home`
 
-| Item                                                        | Decision | Where it goes, and why                                                                                                                |
-| ----------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `.promise h1` and its paragraph                             | Rewrite  | Home 1 and 2, for every product.                                                                                                      |
-| `.promise .buttons`                                         | Keep     | The one "Open the app" on Home.                                                                                                       |
-| `.promise .states`: Carbon Impact running                   | Cut      | Its status is on the menu and its page.                                                                                               |
-| `.promise .states`: Hydrex's stopped automations            | Rewrite  | Home 4, which leads to the App.                                                                                                       |
-| `.numbers`: Retired so far, with Klima's mark               | Move     | Carbon Impact's page, Last epoch.                                                                                                     |
-| `.numbers`: Of the rewards                                  | Cut      | The fee facts say it.                                                                                                                 |
-| `.numbers`: Its votes                                       | Move     | `record`, whose table shows it.                                                                                                       |
-| `.numbers`: This epoch ends, and the countdown              | Move     | The App's line on the epoch.                                                                                                          |
-| `.numbers`: Last epoch, per 1,000 votes                     | Move     | The menu, and the product's Last epoch.                                                                                               |
-| `#menu`: its paragraph                                      | Cut      | Home 2 and the product's line on custody say it.                                                                                      |
-| `#menu .choice`: the cards                                  | Move     | The menu, slimmer. Costs you and Leaving go: both automations say the same. Pays you joins the sentence.                              |
-| `#menu`: "If you only want the most…"                       | Move     | The choice to vote yourself.                                                                                                          |
-| `#in-three-steps`                                           | Cut      | The product's sentence, and `joining`.                                                                                                |
-| `#in-three-steps`: "A join takes effect in two steps"       | Move     | `joining`.                                                                                                                            |
-| `#what-you-give`                                            | Cut      | It repeats the sentence, the fee facts and the line on custody.                                                                       |
-| `#compared`                                                 | Cut      | The menu compares. AutoMaxi's "when a vote would earn at least $1 more" goes to its `votes`; "Stay in one that stopped" is Needs you. |
-| `#compared`: "If you only want the most yield…"             | Cut      | Said once, on the menu.                                                                                                               |
-| `#safe-to-try`                                              | Cut      | Each point has a place: the line on custody, the review, `check`, the fee facts.                                                      |
-| `#common-questions`                                         | Cut      | See `#questions`, below.                                                                                                              |
-| The last `section`: the button, "You need a Hydrex account" | Cut      | The App's `#none` says it.                                                                                                            |
+| Item                                                        | Decision | Where it goes, and why                                                                                                                       |
+| ----------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.promise h1` and its paragraph                             | Rewrite  | Home 1 and 2, for every product.                                                                                                             |
+| `.promise .buttons`                                         | Keep     | The one "Open the app" on Home.                                                                                                              |
+| `.promise .states`: Matcha Latte running                    | Cut      | Its status is on the menu and its page.                                                                                                      |
+| `.promise .states`: Hydrex's stopped automations            | Rewrite  | Home 4, which leads to the App.                                                                                                              |
+| `.numbers`: Retired so far, with Klima's mark               | Move     | Matcha Latte's page, Last epoch.                                                                                                             |
+| `.numbers`: Of the rewards                                  | Cut      | The fee facts say it.                                                                                                                        |
+| `.numbers`: Its votes                                       | Move     | `record`, whose table shows it.                                                                                                              |
+| `.numbers`: This epoch ends, and the countdown              | Move     | The App's line on the epoch.                                                                                                                 |
+| `.numbers`: Last epoch, per 1,000 votes                     | Move     | The menu, and the product's Last epoch.                                                                                                      |
+| `#menu`: its paragraph                                      | Cut      | Home 2 and the product's line on custody say it.                                                                                             |
+| `#menu .choice`: the cards                                  | Move     | The menu, slimmer. Costs you and Leaving go: both automations say the same. Pays you joins the sentence.                                     |
+| `#menu`: "If you only want the most…"                       | Move     | The choice to vote yourself.                                                                                                                 |
+| `#in-three-steps`                                           | Cut      | The product's sentence, and `joining`.                                                                                                       |
+| `#in-three-steps`: "A join takes effect in two steps"       | Move     | `joining`.                                                                                                                                   |
+| `#what-you-give`                                            | Cut      | It repeats the sentence, the fee facts and the line on custody.                                                                              |
+| `#compared`                                                 | Cut      | The menu compares. Double Espresso's "when a vote would earn at least $1 more" goes to its `votes`; "Stay in one that stopped" is Needs you. |
+| `#compared`: "If you only want the most yield…"             | Cut      | Said once, on the menu.                                                                                                                      |
+| `#safe-to-try`                                              | Cut      | Each point has a place: the line on custody, the review, `check`, the fee facts.                                                             |
+| `#common-questions`                                         | Cut      | See `#questions`, below.                                                                                                                     |
+| The last `section`: the button, "You need a Hydrex account" | Cut      | The App's `#none` says it.                                                                                                                   |
 
 ### The App, `#app`
 
@@ -419,12 +420,12 @@ by their id or class in `index.html` at commit `682c47e`.
 | `#connected`: "Connected with … as …"                     | Cut      | The header's chip says it.                                                                                              |
 | `#wrong-chain`, `#reading`                                | Keep     |                                                                                                                         |
 | `#summary .summary-line`                                  | Cut      | The groups' headings count.                                                                                             |
-| `#summary`: "Carbon Impact pays out to …"                 | Move     | The page of an account in Carbon Impact, when it is not the owner's own. Today owners with no account in it see it too. |
+| `#summary`: "Matcha Latte pays out to …"                  | Move     | The page of an account in Matcha Latte, when it is not the owner's own. Today owners with no account in it see it too.  |
 | `#none`                                                   | Keep     | The menu follows it.                                                                                                    |
 | `p.small`: tonnes retired, and the share                  | Cut      | Rule 7.                                                                                                                 |
 | `#epoch`: dates and countdown                             | Rewrite  | The App's one line on the epoch.                                                                                        |
 | `#epoch progress.elapsed`                                 | Cut      |                                                                                                                         |
-| `#epoch .timeline`                                        | Cut      | It is Carbon Impact's, and everyone sees it. Each product's is in its review and its `joining`.                         |
+| `#epoch .timeline`                                        | Cut      | It is Matcha Latte's, and everyone sees it. Each product's is in its review and its `joining`.                          |
 | `.group`, eight sections                                  | Rewrite  | Four groups and a fold: see [The App](#the-app).                                                                        |
 | `.group` paragraphs                                       | Rewrite  | Needs you's only.                                                                                                       |
 | `template#account`                                        | Rewrite  | A row: see [The App](#the-app).                                                                                         |
@@ -435,10 +436,10 @@ by their id or class in `index.html` at commit `682c47e`.
 | `#receipts .receipts-underway`                            | Rewrite  | A notice line in the App, and on the page of each account it concerns.                                                  |
 | `#receipts .standings`, and the receipts                  | Move     | Each account's page. A late payout also marks the account's row.                                                        |
 | `#receipts .receipts-reading`, `.receipts-failed`         | Move     | The account's page.                                                                                                     |
-| `#payout`                                                 | Move     | The page of an account in Carbon Impact.                                                                                |
+| `#payout`                                                 | Move     | The page of an account in Matcha Latte.                                                                                 |
 | `nav.help`                                                | Cut      |                                                                                                                         |
 
-### Carbon Impact, `#carbon-impact`
+### Matcha Latte, `#matcha-latte`
 
 | Item                  | Decision | Where it goes, and why                                                                                 |
 | --------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
@@ -450,18 +451,18 @@ by their id or class in `index.html` at commit `682c47e`.
 | Last epoch, per 1,000 | Keep     | A product, 5.                                                                                          |
 | The rest, in full     | Cut      | The folds hold it.                                                                                     |
 
-### AutoMaxi, `#automaxi`
+### Double Espresso, `#double-espresso`
 
 | Item                                         | Decision | Where it goes, and why                                                                    |
 | -------------------------------------------- | -------- | ----------------------------------------------------------------------------------------- |
-| `.automaxi-absent`                           | Cut      | AutoMaxi is on Base since Tue 20 Oct: the page always shows it.                           |
+| `.double-espresso-absent`                    | Cut      | Double Espresso is on Base since Tue 20 Oct: the page always shows it.                    |
 | `h1`, `.states`, `.lead`                     | Keep     |                                                                                           |
-| `.key-facts`                                 | Cut      | As Carbon Impact's.                                                                       |
-| `.automaxi-join`                             | Rewrite  | A product, 4.                                                                             |
+| `.key-facts`                                 | Cut      | As Matcha Latte's.                                                                        |
+| `.double-espresso-join`                      | Rewrite  | A product, 4.                                                                             |
 | The fee facts, and "Its code fixes all six…" | Keep     | The Safe named and linked; its address in `check`.                                        |
 | Last epoch                                   | Keep     | A product, 5.                                                                             |
-| `.automaxi-pools`                            | Move     | `record`.                                                                                 |
-| What joining allows                          | Move     | `joining`. That anyone can claim through it stays, as AutoMaxi's own.                     |
+| `.double-espresso-pools`                     | Move     | `record`.                                                                                 |
+| What joining allows                          | Move     | `joining`. That anyone can claim through it stays, as Double Espresso's own.              |
 | If you join now                              | Move     | `joining`; the $1 threshold and the prices to `votes`.                                    |
 | Who controls what                            | Move     | `control`; the points on prices to `votes`.                                               |
 | What the page checks                         | Move     | `check`. Its source on Basescan and Sourcify, not its repository, and no commit: rule 10. |
@@ -471,10 +472,10 @@ by their id or class in `index.html` at commit `682c47e`.
 | Item                                                                          | Decision | Where it goes, and why                                                                                                              |
 | ----------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `.lead`, `nav.contents`                                                       | Cut      |                                                                                                                                     |
-| `#if-your-automation-stopped`: its paragraph                                  | Cut      | Out of date: it says Carbon Impact is the one that still votes.                                                                     |
+| `#if-your-automation-stopped`: its paragraph                                  | Cut      | Out of date: it says Matcha Latte is the one that still votes.                                                                      |
 | `table.automations`: 13 automations and the votes still in them               | Cut      | Hydrex's history, not the owner's. `readAutomations` and `showAutomations` go with it; `hydrex-conduits.json` stays, for the names. |
 | "What it means for an account still in one"                                   | Move     | A position, 5, and Needs you's line.                                                                                                |
-| "What you can do", and "Check my accounts"                                    | Cut      | Out of date: it offers Carbon Impact only. Needs you's actions are the choices.                                                     |
+| "What you can do", and "Check my accounts"                                    | Cut      | Out of date: it offers Matcha Latte only. Needs you's actions are the choices.                                                      |
 | `#what-joining-allows`                                                        | Move     | `joining`. That the settings can change is in the fee facts and `control`; the swaps and payouts are in `carbon`.                   |
 | `#timing`: the two rules                                                      | Move     | `joining`.                                                                                                                          |
 | `#timing`: Join on a Monday                                                   | Cut      | The review and `joining` give the real dates.                                                                                       |
@@ -483,8 +484,8 @@ by their id or class in `index.html` at commit `682c47e`.
 | `#timing`: what Hydrex's app has said                                         | Cut      |                                                                                                                                     |
 | `#last-epoch`: the table, the comparison, the pools                           | Move     | `record`, for every product.                                                                                                        |
 | `#last-epoch`: the four notes                                                 | Move     | "Earned by its votes, not paid to you" under the table in `record`; the other three to `#about/figures`.                            |
-| `#who-controls-what`                                                          | Move     | Carbon Impact's `control`. "This page names no operator…" goes to About.                                                            |
-| `#carbon`                                                                     | Move     | Carbon Impact's `carbon`.                                                                                                           |
+| `#who-controls-what`                                                          | Move     | Matcha Latte's `control`. "This page names no operator…" goes to About.                                                             |
+| `#carbon`                                                                     | Move     | Matcha Latte's `carbon`.                                                                                                            |
 | `#for-co-signers`                                                             | Move     | Each product's `check`, for its own conduit.                                                                                        |
 | `#verify`: the official address, the hashes, the RPCs                         | Move     | About.                                                                                                                              |
 | `#verify`: that this page is the one built from its source                    | Cut      | No visitor can rebuild it without the source, which the page does not link: rule 10. The README keeps it.                           |
@@ -509,18 +510,18 @@ Where each question's answer goes:
 
 ### Dialogs and templates
 
-| Item                                                                                       | Decision | Where it goes, and why                                                               |
-| ------------------------------------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------ |
-| `#review`, joining in three steps                                                          | Rewrite  | Two: see [The review](#the-review).                                                  |
-| `template#join-before`, `#join-changes`, `#automaxi-join-before`, `#automaxi-join-changes` | Merge    | One "Before you join" for each product, with the same parts. `.fee-facts-copy` goes. |
-| `template#join-done`, `#automaxi-join-done`                                                | Keep     |                                                                                      |
-| `template#proposed`                                                                        | Rewrite  | It leads to the product's `check`.                                                   |
-| `template#leave-effects`, `#leave-other-effects`                                           | Keep     | Their link leads to the product's `joining`.                                         |
-| `template#step`                                                                            | Keep     | Its link leads to the product's `check`.                                             |
-| `#choose`, `template#option`                                                               | Cut      | See [Choose](#choose).                                                               |
-| `template#standing`, `#receipt`, `#claims-receipt`, `#claim-line`                          | Keep     | On the account's page.                                                               |
-| `template#earned-pool`                                                                     | Keep     | In `record`.                                                                         |
-| `template#wallet`                                                                          | Keep     |                                                                                      |
+| Item                                                                                                     | Decision | Where it goes, and why                                                               |
+| -------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------ |
+| `#review`, joining in three steps                                                                        | Rewrite  | Two: see [The review](#the-review).                                                  |
+| `template#join-before`, `#join-changes`, `#double-espresso-join-before`, `#double-espresso-join-changes` | Merge    | One "Before you join" for each product, with the same parts. `.fee-facts-copy` goes. |
+| `template#join-done`, `#double-espresso-join-done`                                                       | Keep     |                                                                                      |
+| `template#proposed`                                                                                      | Rewrite  | It leads to the product's `check`.                                                   |
+| `template#leave-effects`, `#leave-other-effects`                                                         | Keep     | Their link leads to the product's `joining`.                                         |
+| `template#step`                                                                                          | Keep     | Its link leads to the product's `check`.                                             |
+| `#choose`, `template#option`                                                                             | Cut      | See [Choose](#choose).                                                               |
+| `template#standing`, `#receipt`, `#claims-receipt`, `#claim-line`                                        | Keep     | On the account's page.                                                               |
+| `template#earned-pool`                                                                                   | Keep     | In `record`.                                                                         |
+| `template#wallet`                                                                                        | Keep     |                                                                                      |
 
 ## Implementation
 
@@ -528,17 +529,18 @@ Where each question's answer goes:
    optional section. It shows that view, sets the title, marks the header's link, draws the breadcrumb, opens the fold
    of the section asked for and scrolls to it, and on a new view scrolls to the top and focuses its `h1`, as today. The
    CSS rule that shows views by `:target` goes.
-2. **One product template.** Today Carbon Impact's page and AutoMaxi's are written out twice, and `fill(document, …)`
-   writes figures into every element of a class across the page. With each figure in one place, fewer classes are filled
-   that way. As built, each product keeps a view of its own in `index.html`, as their words differ in every fold, and a
-   test holds them to the same parts in the same order; the script fills each within its own view.
+2. **One product template.** Today Matcha Latte's page and Double Espresso's are written out twice, and
+   `fill(document, …)` writes figures into every element of a class across the page. With each figure in one place,
+   fewer classes are filled that way. As built, each product keeps a view of its own in `index.html`, as their words
+   differ in every fold, and a test holds them to the same parts in the same order; the script fills each within its own
+   view.
 3. **Accounts by number.** A read of one account by its number, and its payouts read for that account alone. The App's
    rows and the account's page share these reads.
 4. **Code that goes:** `choose.ts`, and `choose`, `factsOf` and `openChoose` in `main.ts`; `readAutomations` and
    `showAutomations`; the styles of `.numbers`, `.columns`, the grid of `.menu`, `.contents`, `.automations`,
    `dl.words`, `.help`, `progress.elapsed`, `.compare`, `.options` and `.needs-script`.
 5. **Anonymous:** `scripts/build.ts` no longer writes the commit into the page, only the version. The links to
-   `github.com/ldeso/hydrex-conduit` go. The comment on `CARBON_IMPACT` in `src/config.ts` says "Hydrex's automation".
+   `github.com/ldeso/hydrex-conduit` go. The comment on `MATCHA_LATTE` in `src/config.ts` says "Hydrex's automation".
 6. **What does not change:** the Content Security Policy and the RPCs; the checks and when they run; the build and its
    hashes; the fonts and colours; the layout of receipts and call slips.
 
@@ -547,7 +549,7 @@ Where each question's answer goes:
 - `test/config.test.ts`: drop "Choose finds each fact…" and "How it works lists each of its sections…". Point the test
   of the six fee facts at the product template. Keep the tests of the CSP, fonts, colours, integrity, and that every
   address within the page has a target, for the new routes. Add one: the page links to no address on `github.com` but
-  Hydrex's repository, links to AutoMaxi's verified source on Basescan and Sourcify, and holds no commit.
+  Hydrex's repository, links to Double Espresso's verified source on Basescan and Sourcify, and holds no commit.
 - The browser tests in `fork/` find things by their headings and words. Rewrite their tests of navigation, Home's menu,
   Choose, How it works and the views without the script. Keep what the others prove: joining and leaving, one
   transaction at a time, Safe, receipts, failed checks, another network, a refusal, the turn of an epoch, and that the
@@ -564,7 +566,7 @@ Where each question's answer goes:
   page's footer": the tag of the version shown instead.
 - [README.md](README.md): The page today, Views, Screens (the front door, Help me choose, and "with the holder named
   once known"), the patterns that put fee facts in Choose and the review, and the roadmap.
-- [brand.md](brand.md): Voice ("Name Carbon Impact's operator and keys once known": no names, for now); Navigation (the
+- [brand.md](brand.md): Voice ("Name Matcha Latte's operator and keys once known": no names, for now); Navigation (the
   header and How it works); What the page may claim (Home's heading); Klima's mark ("under Retired so far on Home").
 
 ## Decisions
@@ -588,7 +590,7 @@ The owner's answers are under [Givens](#givens).
 - `npm run typecheck`, `npm test`, `npx prettier --check .` and `npm run build` pass, and the rewritten browser tests
   pass against anvil.
 - The Content Security Policy and the RPCs have not changed.
-- Nothing on the page names an operator, links to this repository or to AutoMaxi's, or shows a commit. AutoMaxi's
-  `check` links to its verified source on Basescan and Sourcify.
+- Nothing on the page names an operator, links to this repository or to Double Espresso's, or shows a commit. Double
+  Espresso's `check` links to its verified source on Basescan and Sourcify.
 - Each view has one `h1`, which takes the focus on a new view; the breadcrumb is a `nav` with a label; each fold is a
   `<details>`.

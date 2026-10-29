@@ -1,6 +1,6 @@
 import { decodeEventLog, encodeFunctionData, parseAbi, type Address, type Hex } from "viem";
 import { same, type Receipt } from "./chain.ts";
-import { AUTOMAXI, AUTOMAXI_FEE_BPS } from "./config.ts";
+import { DOUBLE_ESPRESSO, DOUBLE_ESPRESSO_FEE_BPS } from "./config.ts";
 import { rewardsFor, type Reward } from "./earnings.ts";
 import { WEEK, count } from "./format.ts";
 import type { Entry } from "./last-payout.ts";
@@ -8,14 +8,14 @@ import type { Token } from "./prices.ts";
 import { readEarned, type Amount } from "./receipts.ts";
 import type { Slip } from "./views/review.ts";
 
-// Claiming through AutoMaxi, when its keeper is late. Anyone can call claim(tokenId, feeAddresses, bribeAddresses,
-// tokens) for any account in AutoMaxi, and it pays the owner, less 1%. The page offers it for the wallet's own accounts
-// only, once a payout is overdue. A claim asks every contract given for every token given, and a contract walks back up
-// to 50 epochs for a token it has not paid recently, so the page passes only the contracts and tokens that owe
-// something, as earned() finds them, and splits a claim that would need more gas than a transaction may use into
-// several, each contract with only the tokens it owes.
+// Claiming through Double Espresso, when its keeper is late. Anyone can call claim(tokenId, feeAddresses,
+// bribeAddresses, tokens) for any account in Double Espresso, and it pays the owner, less 1%. The page offers it for
+// the wallet's own accounts only, once a payout is overdue. A claim asks every contract given for every token given,
+// and a contract walks back up to 50 epochs for a token it has not paid recently, so the page passes only the contracts
+// and tokens that owe something, as earned() finds them, and splits a claim that would need more gas than a transaction
+// may use into several, each contract with only the tokens it owes.
 
-const autoMaxiAbi = parseAbi([
+const doubleEspressoAbi = parseAbi([
   "function claim(uint256 tokenId, address[] feeAddresses, address[] bribeAddresses, address[] tokens) returns (uint256[] amounts)",
   "event Claimed(uint256 indexed tokenId, address indexed owner, address indexed caller, address[] tokens, uint256[] amounts, uint256[] fees, uint256 previousClaimBlock)",
 ]);
@@ -31,10 +31,10 @@ const unique = (addresses: Address[]): Address[] => [
 
 // What a claim's call costs at most, as a trace of one on a fork of Base finds it: each contract walks each token it is
 // asked for back up to 50 epochs, asking the VotingEscrow for the account's votes at each, about 6,400 gas a time; then
-// AutoMaxi takes its fee and pays the owner, token by token.
+// Double Espresso takes its fee and pays the owner, token by token.
 const CLAIM_GAS = { call: 100_000n, token: 80_000n, contract: 50_000n, pair: 400_000n };
-// Each call is kept under this, by the estimate, and under MAX_CLAIM_GAS, as simulated: a transaction may use 16.7 million
-// gas on Base.
+// Each call is kept under this, by the estimate, and under MAX_CLAIM_GAS, as simulated: a transaction may use 16.7
+// million gas on Base.
 export const CLAIM_CALL_GAS = 12_000_000n;
 // A Safe sends many calls in one Safe transaction, so its claim splits into small calls instead, none asking a contract
 // for a token it does not owe: what matters is their gas together. #82774's 105 pairs take 55 calls and 41 million gas,
@@ -100,7 +100,8 @@ export function claimArgs({ id, owed }: Claim): [bigint, Address[], Address[], A
   ];
 }
 
-// What a claim takes and pays, token by token: AutoMaxi's fee is 1% of what it receives of each token, rounded down.
+// What a claim takes and pays, token by token: Double Espresso's fee is 1% of what it receives of each token, rounded
+// down.
 export function paidBy(owed: Owed[]): { token: Address; earned: bigint; fee: bigint; paid: bigint }[] {
   const totals = new Map<string, { token: Address; earned: bigint }>();
   for (const { token, amount } of owed) {
@@ -110,7 +111,7 @@ export function paidBy(owed: Owed[]): { token: Address; earned: bigint; fee: big
   return [...totals.values()]
     .filter(({ earned }) => earned > 0n)
     .map(({ token, earned }) => {
-      const fee = (earned * AUTOMAXI_FEE_BPS) / 10_000n;
+      const fee = (earned * DOUBLE_ESPRESSO_FEE_BPS) / 10_000n;
       return { token, earned, fee, paid: earned - fee };
     });
 }
@@ -123,11 +124,11 @@ export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true
   const symbols = claimed.map((token) => tokens.get(key(token))?.symbol ?? "");
   const from = whole ? "" : ` from ${count(fees.length + bribes.length, "reward contract", "reward contracts")}`;
   return {
-    to: AUTOMAXI.address,
-    data: encodeFunctionData({ abi: autoMaxiAbi, functionName: "claim", args }),
+    to: DOUBLE_ESPRESSO.address,
+    data: encodeFunctionData({ abi: doubleEspressoAbi, functionName: "claim", args }),
     title: "Claim",
-    says: `Claims account #${id}'s rewards${from} through AutoMaxi, which pays them to you, less 1%.`,
-    on: "AutoMaxi",
+    says: `Claims account #${id}'s rewards${from} through Double Espresso, which pays them to you, less 1%.`,
+    on: "Double Espresso",
     call: "claim",
     fields: [
       { label: "Account", name: "account", code: String(id) },
@@ -178,19 +179,19 @@ export async function owedOf(
   return { claims, tokens, earlier };
 }
 
-// Each of the page's own claims, from its Claimed events: what AutoMaxi received for the account, its fee, and what it
-// paid the owner, summed over the calls a claim was split into. A claim that received nothing, as when the keeper
-// claimed first, has none.
+// Each of the page's own claims, from its Claimed events: what Double Espresso received for the account, its fee, and
+// what it paid the owner, summed over the calls a claim was split into. A claim that received nothing, as when the
+// keeper claimed first, has none.
 export type Claimed = { id: bigint; received: Amount[]; fees: Amount[]; paid: Amount[] };
 
 export function claimedIn(receipts: Receipt[], ids: bigint[], caller: Address): Claimed[] {
   const found: Claimed[] = [];
   for (const { logs } of receipts) {
     for (const log of logs) {
-      if (!same(log.address, AUTOMAXI.address)) continue;
+      if (!same(log.address, DOUBLE_ESPRESSO.address)) continue;
       let event;
       try {
-        event = decodeEventLog({ abi: autoMaxiAbi, data: log.data, topics: log.topics as [Hex, ...Hex[]] });
+        event = decodeEventLog({ abi: doubleEspressoAbi, data: log.data, topics: log.topics as [Hex, ...Hex[]] });
       } catch {
         continue;
       }

@@ -1,7 +1,7 @@
 import type { Address, Hex } from "viem";
 import { blockTime, now, readLater, required, rpc, same, type Call } from "./chain.ts";
 import { lastClaimBlocks, readClaimsAt, totals, walkClaims, WALK_LIMIT, type Walk } from "./claims.ts";
-import { AUTOMATIONS, AUTOMAXI_FEE_BPS, KEEPER, KVCM, type Automation, type Kind } from "./config.ts";
+import { AUTOMATIONS, DOUBLE_ESPRESSO_FEE_BPS, KEEPER, KVCM, type Automation, type Kind } from "./config.ts";
 import { clone, fill, fillAddress, fillOwn, fillTime, rewrite, show, showHex, txUrl } from "./dom.ts";
 import { rewardsFor, tokensOf, type Earnings } from "./earnings.ts";
 import { WEEK, amount, bps, listWith, money, moneyAt, short, utc, weekStart } from "./format.ts";
@@ -43,7 +43,7 @@ type Part = {
   // The block and time of its last payout, if any.
   block?: number;
   time?: number;
-  // Carbon Impact's receipt, unless it was claimed elsewhere; AutoMaxi's claims in the epoch of its last one.
+  // Matcha Latte's receipt, unless it was claimed elsewhere; Double Espresso's claims in the epoch of its last one.
   payout?: Payout;
   walk?: Walk;
   // Why there is no receipt: its last claim was made outside the automation, or nothing was claimed through it yet.
@@ -127,7 +127,7 @@ function worth(found: Amount[], tokens: Map<string, Token>, prices: Prices | und
 
 const kvcm = (found: Amount[]): bigint => found.find(({ token }) => same(token, KVCM))?.amount ?? 0n;
 
-// The receipt's fields have class names of their own, apart from Carbon Impact's figures, such as .tonnes, on its page.
+// The receipt's fields have class names of their own, apart from Matcha Latte's figures, such as .tonnes, on its page.
 function fillReceipt(
   item: HTMLElement,
   payout: Payout,
@@ -137,7 +137,7 @@ function fillReceipt(
   own: boolean,
   prices?: Prices,
 ): void {
-  // Rewards claimed as kVCM were not swapped. The shares are of all the kVCM: Carbon Impact retires up to its share,
+  // Rewards claimed as kVCM were not swapped. The shares are of all the kVCM: Matcha Latte retires up to its share,
   // and pays out the rest.
   const all = kvcm(payout.paid) + kvcm(payout.fees) + payout.retiredKvcm;
   const swapped = all - kvcm(payout.earned);
@@ -176,9 +176,9 @@ function fillReceipt(
   fillOwn(item, own);
 }
 
-// AutoMaxi's receipt: what its claims in the epoch of the last one received, its fee, and what reached the account's
-// owner, in the tokens earned. Each claim pays whoever owned the account then, which a claim made before it changed hands
-// shows. Tokens without a price show as amounts only.
+// Double Espresso's receipt: what its claims in the epoch of the last one received, its fee, and what reached the
+// account's owner, in the tokens earned. Each claim pays whoever owned the account then, which a claim made before it
+// changed hands shows. Tokens without a price show as amounts only.
 function fillClaims(
   item: HTMLElement,
   id: bigint,
@@ -200,7 +200,7 @@ function fillClaims(
   );
   fill(item, {
     "receipt-id": `Account #${id}`,
-    "receipt-fee-share": bps(AUTOMAXI_FEE_BPS),
+    "receipt-fee-share": bps(DOUBLE_ESPRESSO_FEE_BPS),
     "receipt-claimed-worth": worth(received, tokens, prices),
     "receipt-fee-worth": worth(fees, tokens, prices),
     "receipt-paid-worth": worth(paid, tokens, prices),
@@ -218,7 +218,7 @@ function fillClaims(
     ...claims.map(({ block, caller, owner: paid, tx }) => {
       const line = clone("claim-line");
       fillTime(line, "claim-time", times.get(block)!, utc);
-      const by = same(caller, KEEPER) ? "sent by AutoMaxi" : `sent by ${short(caller)}`;
+      const by = same(caller, KEEPER) ? "sent by Double Espresso" : `sent by ${short(caller)}`;
       ownWords(
         line.querySelector(".claim-by")!,
         same(caller, owner) ? "sent by you" : by,
@@ -256,8 +256,8 @@ function largestAmounts(amounts: Amount[]): Map<string, bigint> {
   return largest;
 }
 
-// What waits for the accounts, at prices now: those read lately, if they were asked for each of its tokens, for at least
-// as much of it, as a pool deep enough for more is deep enough for less; or else read.
+// What waits for the accounts, at prices now: those read lately, if they were asked for each of its tokens, for at
+// least as much of it, as a pool deep enough for more is deep enough for less; or else read.
 function waitingFor(entries: Entry[]): Promise<Waiting | undefined> {
   const amounts = largestAmounts(entries.flatMap(({ standing }) => standing?.waiting ?? []));
   if (!amounts.size) return Promise.resolve(undefined);
@@ -368,8 +368,8 @@ type Reader = (
   time?: bigint,
 ) => Promise<Part[]>;
 
-// Carbon Impact: about 25 reads to find each block of payouts, then one read of logs per block.
-const carbonImpactPayouts: Reader = async (ids, standings, top, time) => {
+// Matcha Latte: about 25 reads to find each block of payouts, then one read of logs per block.
+const matchaLattePayouts: Reader = async (ids, standings, top, time) => {
   const found = (await standings).flatMap((standing) => (standing ? [standing] : []));
   const blocks = await payoutBlocks(found, top, Number(required([time])[0]));
   const [paid, times] = await Promise.all([payoutsIn([...blocks.values()]), blockTimes([...blocks.values()])]);
@@ -383,9 +383,9 @@ const carbonImpactPayouts: Reader = async (ids, standings, top, time) => {
   });
 };
 
-// AutoMaxi: one read of each account's last claim block, then its claims back to the start of that claim's epoch, one
-// read of logs per block.
-const autoMaxiPayouts: Reader = async (ids, _standings, top) => {
+// Double Espresso: one read of each account's last claim block, then its claims back to the start of that claim's
+// epoch, one read of logs per block.
+const doubleEspressoPayouts: Reader = async (ids, _standings, top) => {
   const last = await lastClaimBlocks(ids, top);
   const lastTimes = await blockTimes([...last.values()].filter((block) => block > 0));
   const starts = new Map(
@@ -410,7 +410,7 @@ const autoMaxiPayouts: Reader = async (ids, _standings, top) => {
   });
 };
 
-const readers: Record<Kind, Reader> = { "carbon-impact": carbonImpactPayouts, automaxi: autoMaxiPayouts };
+const readers: Record<Kind, Reader> = { "matcha-latte": matchaLattePayouts, "double-espresso": doubleEspressoPayouts };
 
 // Each automation's accounts are read on their own: if one automation's payouts cannot be read, the others' still show.
 // An account's standing is read in the pools of the automation it voted with last epoch, and its receipts are those of
@@ -509,8 +509,8 @@ export type Payouts = {
 
 // `section`, if any, shows the payouts and draws their receipts, in words to their owner when `ownedBy` says the
 // account's owner is the viewer; `found` hears of each read, even one of no accounts, and `failed` of each that failed.
-// Where what waits shows, in the section or by `priced`, it is shown in tokens at once, then priced: `priced` hears once
-// the read's `waiting` is set.
+// Where what waits shows, in the section or by `priced`, it is shown in tokens at once, then priced: `priced` hears
+// once the read's `waiting` is set.
 export function payouts(
   section: HTMLElement | undefined,
   found: (found: Found, under: UnderWay | undefined) => void = () => {},

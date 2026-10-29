@@ -2,8 +2,8 @@
 
 What metaDEX Café is today, what it should become, and why. The brand, from type and colour to the layout of receipts,
 is in [brand.md](brand.md). The redesign towards minimalism is in [audit.md](audit.md): where the two disagree, it wins.
-The next product, a swap of many tokens into one, and a way to claim AutoMaxi's rewards when its keeper is late, are in
-[products.md](products.md).
+The next product, a swap of many tokens into one, and a way to claim Double Espresso's rewards when its keeper is late,
+are in [products.md](products.md).
 
 Figures were read from Base on 17 Oct 2026, unless marked. [Brackets] mark decisions not yet taken, such as "[cap]".
 Mockups of the planned screens are on a design canvas, private to its owner:
@@ -29,9 +29,9 @@ technical parts open from an info button, as popups.
 - **The swap** (`#swap`, `#swap/weth`), under "‹ Your wallet": the output, the wallet's tokens, what the ticked ones
   fetch line by line, from the quote down to the least that may reach you, with the slippage picked on that line, and
   popups: its costs, what the slippage is, and the six swappers' contracts; approvals you gave the swappers.
-- **An automation's page** (`#hydrex/carbon-impact`, `#hydrex/automaxi`): its status, its key figures, and your accounts
-  in it and Join. Info buttons beside them open fee facts, against all of Hydrex, joining and leaving, one of its own,
-  and Check it, with who controls what.
+- **An automation's page** (`#hydrex/matcha-latte`, `#hydrex/double-espresso`): its status, its key figures, and your
+  accounts in it and Join. Info buttons beside them open fee facts, against all of Hydrex, joining and leaving, one of
+  its own, and Check it, with who controls what.
 - **An account's page** (`#hydrex/` and its number): its status, its lock, what it earned, what its owner can do, and
   its last payout as a receipt.
 - **The review:** a dialog in two steps: before you join, claim or swap, with what it costs, the swap as a bill, then
@@ -59,7 +59,7 @@ Two audiences. By count, many small holders delegate, and stay put. By value, a 
 - **Stranded accounts:** 2,331 accounts of 1,640 owners still sit in the 13 automations that stopped on 9 Sep 2026, with
   8.77M votes that earn nothing. The median owner among them holds about $3, 208 hold $100 or more, and 39 hold $1,000
   or more. Moving an account costs about $0.004 in gas. Hydrex's app only tells them to switch to "No Automation".
-- **Carbon Impact:** 17 accounts of 11 owners, 0.19% of the votes. In the epoch from 8 to 15 Oct, its 897k votes went to
+- **Matcha Latte:** 17 accounts of 11 owners, 0.19% of the votes. In the epoch from 8 to 15 Oct, its 897k votes went to
   27 pools and earned about $693, or $0.77 per 1,000 votes.
 - **Competition:** a contract not on Hydrex's list votes for 26 owners, with as many votes as all of Hydrex's 14
   automations together. On Aero, Autopilot is the protocol's own.
@@ -74,16 +74,16 @@ Two audiences. By count, many small holders delegate, and stay put. By value, a 
 
 Hypotheses to test, not findings.
 
-| Persona                       | Holds                                                | Wants                                           | Would pay                                  | Needs to see                                         | Wrong if                                                    |
-| ----------------------------- | ---------------------------------------------------- | ----------------------------------------------- | ------------------------------------------ | ---------------------------------------------------- | ----------------------------------------------------------- |
-| **The stranded holder**       | An account in a stopped automation; median about $3  | To earn again without learning how voting works | A share of rewards, nothing up front       | When it last voted; one call to change; plain words  | Few act once told: then attention, not choice, is the limit |
-| **The hands-off holder**      | Accounts or a lock, $1,000 to $50,000                | Paid weekly in one token, or a lock that grows  | 2–17% of rewards, as Beefy and Convex take | Fee facts and their caps; a weekly receipt           | They choose by headline APR rather than by token and fee    |
-| **The optimiser**             | Several locks and liquidity positions, $10k to $500k | More than doing it themselves, after fees       | A fee, when the result beats a benchmark   | The record per epoch against a benchmark; CSV        | They will not join without a projected APR                  |
-| **The treasury**              | Large locks in a Safe                                | Votes and yield handled without weekly signing  | A flat or capped fee governance can pass   | The calldata; build hashes; a risk summary           | They need to direct their own votes: then a custom relay    |
-| **The impact holder**         | Any size                                             | A credible retirement from their rewards        | The share retired is the price             | Each retirement, its tonnes and transaction          | They leave once the share retired is shown in dollars       |
-| **The liquidity provider**    | A concentrated position                              | A position kept in range                        | About 10% of fees, as managers take        | Its range, its moves, and the result against holding | They prefer pooled vaults to positions kept in their wallet |
-| **The reward collector**      | Accounts in AutoMaxi, paid in 20 or more tokens      | One token, weekly, without a spreadsheet        | 1% of the swap, on top of AutoMaxi's 1%    | What it fetched, the fees, what stayed and why       | They keep the tokens, hoping some rise                      |
-| **The wallet with leftovers** | Small balances on Base from trades and airdrops      | A clean wallet, in one token                    | 1%, if gas stays below a cent              | Which tokens are worth swapping, and the minimum     | Their leftovers are worth less than gas: nothing to do      |
+| Persona                       | Holds                                                  | Wants                                           | Would pay                                      | Needs to see                                         | Wrong if                                                    |
+| ----------------------------- | ------------------------------------------------------ | ----------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------------- |
+| **The stranded holder**       | An account in a stopped automation; median about $3    | To earn again without learning how voting works | A share of rewards, nothing up front           | When it last voted; one call to change; plain words  | Few act once told: then attention, not choice, is the limit |
+| **The hands-off holder**      | Accounts or a lock, $1,000 to $50,000                  | Paid weekly in one token, or a lock that grows  | 2–17% of rewards, as Beefy and Convex take     | Fee facts and their caps; a weekly receipt           | They choose by headline APR rather than by token and fee    |
+| **The optimiser**             | Several locks and liquidity positions, $10k to $500k   | More than doing it themselves, after fees       | A fee, when the result beats a benchmark       | The record per epoch against a benchmark; CSV        | They will not join without a projected APR                  |
+| **The treasury**              | Large locks in a Safe                                  | Votes and yield handled without weekly signing  | A flat or capped fee governance can pass       | The calldata; build hashes; a risk summary           | They need to direct their own votes: then a custom relay    |
+| **The impact holder**         | Any size                                               | A credible retirement from their rewards        | The share retired is the price                 | Each retirement, its tonnes and transaction          | They leave once the share retired is shown in dollars       |
+| **The liquidity provider**    | A concentrated position                                | A position kept in range                        | About 10% of fees, as managers take            | Its range, its moves, and the result against holding | They prefer pooled vaults to positions kept in their wallet |
+| **The reward collector**      | Accounts in Double Espresso, paid in 20 or more tokens | One token, weekly, without a spreadsheet        | 1% of the swap, on top of Double Espresso's 1% | What it fetched, the fees, what stayed and why       | They keep the tokens, hoping some rise                      |
+| **The wallet with leftovers** | Small balances on Base from trades and airdrops        | A clean wallet, in one token                    | 1%, if gas stays below a cent                  | Which tokens are worth swapping, and the minimum     | Their leftovers are worth less than gas: nothing to do      |
 
 On a phone, any of them: Coinbase Wallet can send several calls in one prompt, but a download may not work inside a
 wallet's browser, so every export also offers a copy.
@@ -129,13 +129,13 @@ wallet's browser, so every export also offers a copy.
   Choose for one or many accounts, with the gas cost, since replaced by the menu and the review; fee facts for Carbon
   Impact; the redesign towards minimalism, in [audit.md](audit.md), with positions first in the App.
 - **Done, the products:** a level for the products in the App; the swap of many tokens into one, with each route, its
-  minimum and a simulation before the wallet asks; claiming AutoMaxi's rewards when its keeper is late, as they are or
-  swapped into one token; one prompt with batching, for joining and leaving too; What this wallet allows. See
+  minimum and a simulation before the wallet asks; claiming Double Espresso's rewards when its keeper is late, as they
+  are or swapped into one token; one prompt with batching, for joining and leaving too; What this wallet allows. See
   [products.md](products.md).
 - **Next, the rescue:** change watch; ERC-7730 metadata for `setConduitApproval`, `claim` and `swap`.
-- **Then, a second Hydrex automation, AutoMaxi:** on Base since 20 Oct 2026, in its version 2. It votes for the bribes
-  it expects to earn the most, and pays in the tokens earned, unswapped, less 1% of each claim. Done: the menu, one page
-  template per automation, and comparing the two with voting yourself. Still to do: statements and export.
+- **Then, a second Hydrex automation, Double Espresso:** on Base since 20 Oct 2026, in its version 2. It votes for the
+  bribes it expects to earn the most, and pays in the tokens earned, unswapped, less 1% of each claim. Done: the menu,
+  one page template per automation, and comparing the two with voting yourself. Still to do: statements and export.
 - **Later, Aero and liquidity:** Aero relays, once Aero grants the role to deploy one; managed liquidity positions; the
   brief link for co-signers.
 
@@ -143,18 +143,18 @@ wallet's browser, so every export also offers a copy.
 
 One static page, with views addressed by the hash, as [audit.md](audit.md) lays them out.
 
-| View                         | Address                                                                   |
-| ---------------------------- | ------------------------------------------------------------------------- |
-| Home                         | `/`                                                                       |
-| The App: needs you, products | `#app`; its popup `#app/allows`                                           |
-| Hydrex: accounts, then menu  | `#hydrex`                                                                 |
-| The swap                     | `#swap`, `#swap/weth`; a popup, such as `#swap/weth/check`                |
-| An automation's page         | `#hydrex/carbon-impact`, `#hydrex/automaxi`; a popup, such as `…/check`   |
-| An account's page            | `#hydrex/9540`                                                            |
-| A receipt                    | `#hydrex/9540/2026-10-22`, once the page reads more payouts than the last |
-| About                        | `#about`                                                                  |
-| Review                       | A dialog                                                                  |
-| Brief for co-signers         | Planned: the accounts and the automation in the address                   |
+| View                         | Address                                                                       |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| Home                         | `/`                                                                           |
+| The App: needs you, products | `#app`; its popup `#app/allows`                                               |
+| Hydrex: accounts, then menu  | `#hydrex`                                                                     |
+| The swap                     | `#swap`, `#swap/weth`; a popup, such as `#swap/weth/check`                    |
+| An automation's page         | `#hydrex/matcha-latte`, `#hydrex/double-espresso`; a popup, such as `…/check` |
+| An account's page            | `#hydrex/9540`                                                                |
+| A receipt                    | `#hydrex/9540/2026-10-22`, once the page reads more payouts than the last     |
+| About                        | `#about`                                                                      |
+| Review                       | A dialog                                                                      |
+| Brief for co-signers         | Planned: the accounts and the automation in the address                       |
 
 The fragment of an address never reaches a server, so a brief can carry its accounts without the page storing anything.
 The page must check whatever it reads from a fragment, as it would anything from outside.
@@ -180,7 +180,7 @@ a calendar file for payday, made on the device.
 **An automation's page,** one template for all: status; what it does; four key facts (takes, pays you, costs you,
 leaving) and Join; your accounts in it; fee facts; money per 1,000 units of voting power; its record against the
 average; how it voted; what joining allows, and custody; if you join now; who controls what; what the page checks.
-Hydrex, which controls Carbon Impact's settings, and its keeper go under "who controls what".
+Hydrex, which controls Matcha Latte's settings, and its keeper go under "who controls what".
 
 **An Aero relay's page,** the same template, with what changes: custody moves into the relay, you hold two tokens,
 deposits and withdrawals wait in queues, and Aero takes a fee in and out. Until its first allocation it shows "no record
@@ -188,7 +188,7 @@ yet", and never a projected APR. It follows Dromos's interfaces, not deployed co
 
 **A receipt per epoch,** per position: votes, earned, swapped, retired with its tonnes, fee, and paid, with the
 transactions; then what voting yourself would have kept. Three things to keep, each made on the device: a CSV, an image
-of your impact, and a calendar file for Thursdays. Then your share of what was retired, as Carbon Impact retires in one
+of your impact, and a calendar file for Thursdays. Then your share of what was retired, as Matcha Latte retires in one
 name for every member.
 
 **Statements and export,** on a desk: totals for a period (earned, retired, fees, reached you), a row per epoch, and a
@@ -219,13 +219,13 @@ on the menu.
 
 For the four kinds of product:
 
-| Kind                                         | Taken                                  | Most            | Goes to                  | When             | Other costs   | Who can change it        |
-| -------------------------------------------- | -------------------------------------- | --------------- | ------------------------ | ---------------- | ------------- | ------------------------ |
-| Votes for you, retires a share               | Of the rewards: 33.33% retired, 0% fee | 100%, 1%        | Carbon credits; treasury | Each payout      | Swaps         | Hydrex                   |
-| Votes for you, pays you as earned (AutoMaxi) | Of each claim: 1%                      | 1%, in its code | A 2-of-3 Safe            | Each claim       | None          | Nobody: a new deployment |
-| Swaps many tokens into one                   | Of what each token fetches: 1%         | 1%, in its code | The same 2-of-3 Safe     | Each swap        | Pools, gas    | Nobody: a new deployment |
-| Pools your stake in a relay                  | Of the deposit, then of the rewards    | [cap]           | Aero; [operator]         | Each compounding | Swaps         | [Role, delay]            |
-| Manages a liquidity position                 | Of fees and emissions: [10%]           | [cap]           | [Operator]               | Each collection  | A swap a move | [Role, delay]            |
+| Kind                                                | Taken                                  | Most            | Goes to                  | When             | Other costs   | Who can change it        |
+| --------------------------------------------------- | -------------------------------------- | --------------- | ------------------------ | ---------------- | ------------- | ------------------------ |
+| Votes for you, retires a share                      | Of the rewards: 33.33% retired, 0% fee | 100%, 1%        | Carbon credits; treasury | Each payout      | Swaps         | Hydrex                   |
+| Votes for you, pays you as earned (Double Espresso) | Of each claim: 1%                      | 1%, in its code | A 2-of-3 Safe            | Each claim       | None          | Nobody: a new deployment |
+| Swaps many tokens into one                          | Of what each token fetches: 1%         | 1%, in its code | The same 2-of-3 Safe     | Each swap        | Pools, gas    | Nobody: a new deployment |
+| Pools your stake in a relay                         | Of the deposit, then of the rewards    | [cap]           | Aero; [operator]         | Each compounding | Swaps         | [Role, delay]            |
+| Manages a liquidity position                        | Of fees and emissions: [10%]           | [cap]           | [Operator]               | Each collection  | A swap a move | [Role, delay]            |
 
 **Money.** Earned, then taken, then what reached you, always in that order, with a bar split the same way. Dollars at
 the prices in the protocol's pools when the epoch ended, or, for what waits to be claimed, now, marked ≈, with the
@@ -294,8 +294,8 @@ taken, and how do you leave.
 ## Open questions
 
 - **Fees and caps** for each new product, who controls each, and any delay before a change applies. Hydrex can raise
-  Carbon Impact's share retired to 100%, which would likely rate Stage 0 on DeFiScan's scale. Naming Hydrex's signers
-  and threshold, as Convex does, costs nothing.
+  Matcha Latte's share retired to 100%, which would likely rate Stage 0 on DeFiScan's scale. Naming Hydrex's signers and
+  threshold, as Convex does, costs nothing.
 - **Autopilot:** its fee is not published. What a café relay offers against it (a payout token, retirement, receipts)
   decides whether there should be one.
 - **Alerts:** whether to run anything that can send, and who would run it.
@@ -317,11 +317,11 @@ Voter `0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b`, and the automations in
 - **Hydrex's votes:** 469.8M votes, at about $0.0246 per HYDX. 123,857 accounts minted, 6,183 holding votes; 96.3% of
   votes are in permanent locks. 1,000 votes are worth about $25.
 - **Who votes with them:** the owners themselves, 86.85% of votes; 21 other addresses, 11.08%; the 13 stopped
-  automations, 1.87%; Carbon Impact, 0.19%. 35.9% of voting power voted last epoch, down from 94–99% before
+  automations, 1.87%; Matcha Latte, 0.19%. 35.9% of voting power voted last epoch, down from 94–99% before
   mid-September.
 - **In August,** before Hydrex stopped its automations, 2,270 owners used one, with 11–13% of the votes cast. Use fell
   with size: most owners under $1,000 used one, one in eight between $100,000 and $1M, and the largest holder none.
-- **Carbon Impact's settings:** `retireBps` 3333, `treasuryFeeBps` 0. It has retired 22,141 kVCM as 5,691 tonnes, about
+- **Matcha Latte's settings:** `retireBps` 3333, `treasuryFeeBps` 0. It has retired 22,141 kVCM as 5,691 tonnes, about
   3.9 kVCM a tonne, with kVCM at about $0.0273.
 - **Aerodrome:** 1,034M veAERO; 75 relays hold 569M of it. In August, 16% of owners used a relay, and 22–35% of those
   holding $10,000 to $100,000.
@@ -353,8 +353,8 @@ As each published it on 17 Oct 2026.
 | Product                 | Does                                      | Takes                                                                                                                                  |
 | ----------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | Hydrex's automations    | Vote, claim, pay out                      | 0.5% or 1% of earnings, as its sources disagree; Lock Maxi nothing                                                                     |
-| Carbon Impact           | Vote, claim, retire, pay out              | 33.33% retired; a fee of 0%, up to 1%                                                                                                  |
-| AutoMaxi                | Vote for bribes, claim, pay out unswapped | 1% of each claim, fixed in its code                                                                                                    |
+| Matcha Latte            | Vote, claim, retire, pay out              | 33.33% retired; a fee of 0%, up to 1%                                                                                                  |
+| Double Espresso         | Vote for bribes, claim, pay out unswapped | 1% of each claim, fixed in its code                                                                                                    |
 | Autopilot, on Aerodrome | Vote, pay out in USDC                     | 5% of rewards ([DefiLlama](https://defillama.com/protocol/autopilot))                                                                  |
 | Convex                  | Votes for Curve lockers                   | 17% of CRV rewards, capped at 20% ([docs](https://docs.convexfinance.com/convexfinance/faq/fees.md))                                   |
 | Votium                  | Vote incentives market                    | 2% of incentives, capped at 4% ([docs](https://docs.votium.app/faq/fees.md))                                                           |
@@ -363,9 +363,9 @@ As each published it on 17 Oct 2026.
 | Beefy CLM               | Pooled liquidity vaults                   | Up to 9.5% of trading fees, shown net ([docs](https://docs.beefy.finance/beefy-products/clm.md))                                       |
 | ICHI, Gamma             | Pooled liquidity vaults                   | 10% ([ICHI](https://docs.ichi.org/home/protocol-fees.md)); 14–20% ([Gamma](https://docs.gamma.xyz/gamma/lp-vaults/faq/using_gamma.md)) |
 
-2–10% of rewards is the norm for voting and compounding, and about 10% of fees for managed liquidity. Carbon Impact's
-third retired is far above both, which suits people who want the retirement. AutoMaxi's 1% is below the norm. The next
-products should sit in the norm, and say how they compare.
+2–10% of rewards is the norm for voting and compounding, and about 10% of fees for managed liquidity. Matcha Latte's
+third retired is far above both, which suits people who want the retirement. Double Espresso's 1% is below the norm. The
+next products should sit in the norm, and say how they compare.
 
 Worth copying: one plain sentence per strategy; "no automation" next to the products; states that say when, such as
 "earning from next epoch"; ticked consent to side effects that cannot be undone; a payout ledger per account; when it

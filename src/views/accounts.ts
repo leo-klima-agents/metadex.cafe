@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 import { now } from "../chain.ts";
-import { AUTOMATIONS, CARBON_IMPACT, byKind, type Automation } from "../config.ts";
+import { AUTOMATIONS, MATCHA_LATTE, byKind, type Automation } from "../config.ts";
 import { PENDING, busy, clone, fill, fillAddress, fillOwn, fillPlural, fillTime, live, show } from "../dom.ts";
 import { WEEK, bps, count, date, day, list, money, moneyAt, short, utc, voteWords, weekStart } from "../format.ts";
 import {
@@ -22,7 +22,7 @@ import {
 import { earnedByAccount, lastEarnings, perThousandOf } from "../last-epoch.ts";
 import { hrefOf } from "../routes.ts";
 import { gasWords } from "../swap-calls.ts";
-import { checks, feeWords, impact, traits } from "./automations.ts";
+import { checks, feeWords, matchaLatte, traits } from "./automations.ts";
 import { openClaim } from "./claim.ts";
 import { failed, hooks, session, shown, views } from "./page.ts";
 import { overdueEntry, owed } from "./payouts.ts";
@@ -32,7 +32,7 @@ import { openReview } from "./review.ts";
 // earned, the boxes that pick them, and the reviews of what their buttons do.
 
 // "self" leaves whichever automation holds an account, the page's or one of Hydrex's; "claim" claims its rewards
-// through AutoMaxi, while its payout is overdue.
+// through Double Espresso, while its payout is overdue.
 export type Action = "join" | "leave" | "self" | "claim";
 type Member = { account: Account; status: Status; group: Group };
 
@@ -155,7 +155,8 @@ export function showAccounts(keepTicked = false): void {
       ...these.map((member) => accountItem(member, group, able.length > 1 && able.includes(member.account))),
     );
     // What needs its owner starts ticked, as one action fits it all; the other groups start with none. A box starts
-    // ticked when it first shows, as when the checks pass after the accounts were drawn, and keeps what was picked then.
+    // ticked when it first shows, as when the checks pass after the accounts were drawn, and keeps what was picked
+    // then.
     const before = (keepTicked && boxesShown.get(section)) || new Set<string>();
     const boxes = [...section.querySelectorAll<HTMLInputElement>(".pick:not([hidden])")];
     for (const box of boxes) box.checked = kept.has(box.value) || (group === "needs" && !before.has(box.value));
@@ -250,16 +251,16 @@ export function act(button: HTMLButtonElement, accountsOf: () => Account[], redr
   const action = actionOf(button);
   const automation = automationOf(button);
   if (action === "claim") return claim(accountsOf().filter(allows(button)), redraw, button);
-  // A join of Carbon Impact shows its settings, so it waits for them. Leaving never waits.
-  if (action === "join" && automation && traits[automation.kind].settings && !impact.value) {
-    return void impact.read().then(() => act(button, accountsOf, redraw), failed);
+  // A join of Matcha Latte shows its settings, so it waits for them. Leaving never waits.
+  if (action === "join" && automation && traits[automation.kind].settings && !matchaLatte.value) {
+    return void matchaLatte.read().then(() => act(button, accountsOf, redraw), failed);
   }
   const accounts = accountsOf().filter(allows(button));
   if (!accounts.length) return redraw();
   review(accounts, action, automation);
 }
 
-// The review of a claim through AutoMaxi for the accounts whose payout is overdue.
+// The review of a claim through Double Espresso for the accounts whose payout is overdue.
 // What waits can take a while to read, for an account whose keeper missed two epochs: the button spins meanwhile, and
 // takes no second click.
 let claiming = false;
@@ -327,7 +328,7 @@ export function review(accounts: Account[], action: Action, automation?: Automat
   const { connection } = session;
   if (!connection || !holdings) return;
   const { owner, epochStart } = holdings;
-  const settings = impact.value;
+  const settings = matchaLatte.value;
   const prepare = (id: string): DocumentFragment => {
     const part = clone(id);
     fillTime(part, "next", epochStart + WEEK, utc);
@@ -361,7 +362,7 @@ export function review(accounts: Account[], action: Action, automation?: Automat
     name: title,
     pages: [{ title, body: effects }],
     steps,
-    checkHref: checkOf(from[0] ?? CARBON_IMPACT),
+    checkHref: checkOf(from[0] ?? MATCHA_LATTE),
     connection,
     hooks,
   });

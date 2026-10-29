@@ -113,7 +113,7 @@ test("a read anew drops the one under way, and keeps what was read until it ends
 test("a read that fails at once is not asked again sooner than SOON, however often what draws it asks", async () => {
   console.error = () => {};
   let asked = 0;
-  // Like Carbon Impact's settings: what it draws on settling asks whether another read is due.
+  // Like Matcha Latte's settings: what it draws on settling asks whether another read is due.
   const value = reader(
     () => {
       // A loop would never let the timers below run: it stops here, and the count says so.

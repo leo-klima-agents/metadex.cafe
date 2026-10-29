@@ -28,8 +28,8 @@ import { openSwapReview, planSteps, prefill, swapReceipt, swapsOff, type Plan } 
 import { describe } from "../tokens.ts";
 import { capabilities, type Connection } from "../wallet.ts";
 
-// The review of a claim through AutoMaxi, for the wallet's accounts whose payout is overdue: what waits, how to receive
-// it, then the calls; and its receipt.
+// The review of a claim through Double Espresso, for the wallet's accounts whose payout is overdue: what waits, how to
+// receive it, then the calls; and its receipt.
 
 const key = (address: string): string => address.toLowerCase();
 // The slippage of a swap after a claim: the swap's page's own default.
@@ -111,8 +111,8 @@ function tokenLines(
   more.querySelector(".claim-rest")!.replaceChildren(...rest.map(line));
 }
 
-// The review of a claim for the wallet's overdue accounts in AutoMaxi: what waits, then how to receive it, as it is or
-// swapped into one token, then the calls. "As they are" is the default, so that nothing is sold unasked.
+// The review of a claim for the wallet's overdue accounts in Double Espresso: what waits, then how to receive it, as it
+// is or swapped into one token, then the calls. "As they are" is the default, so that nothing is sold unasked.
 export async function openClaim(entries: Entry[], connection: Connection, hooks: Hooks): Promise<void> {
   const [{ claims, tokens }, found, caps, middles] = await Promise.all([
     owedOf(entries),
@@ -125,7 +125,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   const owing = claims.filter(({ owed }) => owed.length);
   const which = list(entries.map(({ account }) => `#${account.id}`));
   const name = `Claim for ${entries.length === 1 ? "Hydrex account" : "Hydrex accounts"} ${which}`;
-  const checkHref = hrefOf({ view: "product", kind: "automaxi", section: "check" });
+  const checkHref = hrefOf({ view: "product", kind: "double-espresso", section: "check" });
   // Nothing to send: the review says why, and asks nothing.
   const nothing = (words: string) => {
     const body = document.createElement("p");
@@ -199,8 +199,8 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     if (withSwap !== undefined) live(swapGasLine, of(withSwap));
   };
   const drawPrices = () => {
-    // To the cent, so that the bill lines up at the point; the fee as what lies between the two around it, as they show,
-    // so that the bill adds up as it reads.
+    // To the cent, so that the bill lines up at the point; the fee as what lies between the two around it, as they
+    // show, so that the bill adds up as it reads.
     const [earned, reaches] = [totals.map(({ token, earned }) => ({ token, amount: earned })), paid].map(
       (amounts) => prices && moneyAt(valueAt(amounts, tokens, prices), prices),
     );
@@ -296,9 +296,8 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   });
   // Swapped into one token: the claim brings exact amounts, known before, so the page approves each for exactly that,
   // and the swap sells "my balance, up to the allowance". With batching, or from a Safe, all in one prompt; otherwise
-  // the claim first, then the swap's own review.
-  // Only all or nothing: should the claim fail, a swap of "my balance" would sell tokens the wallet held before. And only
-  // if the claim leaves room in the transaction for the swap.
+  // the claim first, then the swap's own review. Only all or nothing: should the claim fail, a swap of "my balance"
+  // would sell tokens the wallet held before. And only if the claim leaves room in the transaction for the swap.
   const together = (caps.atomic || !!connection.wallet.propose) && !apart;
   let planned = 0;
   const intoChosen = () => radios.find(({ checked }) => checked)?.value === "into";

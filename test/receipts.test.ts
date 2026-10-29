@@ -397,7 +397,7 @@ test("between the flip and the payout, an account is paid up to the start of las
   });
 });
 
-test("a claim of a few rewards is not a payout, such as a stranger's through AutoMaxi", () => {
+test("a claim of a few rewards is not a payout, such as a stranger's through Double Espresso", () => {
   // Its small bribes were claimed since the flip: it is still paid up to Oct 8 only, and its payout is still due.
   const early = of({ last: [OCT_8, OCT_15, OCT_15], before: [OCT_8, OCT_8] });
   assert.deepEqual([early.through, early.paid, early.late], [OCT_8, false, false]);
@@ -485,7 +485,7 @@ test("no logs in a payout's block is taken only once no RPC has any", async () =
     "the RPC behind is passed over",
   );
   replies.push([], [], []);
-  assert.deepEqual(await payoutsIn([PAID + 1]), [], "every RPC agrees: a claim made outside Carbon Impact");
+  assert.deepEqual(await payoutsIn([PAID + 1]), [], "every RPC agrees: a claim made outside Matcha Latte");
   replies.push([paidOut(TX, PAID + 1, 82774n, OWNER, [[], []], [[KVCM], [t(5)]], [0n])]);
   assert.deepEqual(
     (await payoutsIn([PAID + 1])).map(({ id }) => id),

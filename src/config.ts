@@ -8,7 +8,7 @@ export const MULTICALL3: Address = "0xcA11bde05977b3631167028862bE2a173976CA11";
 
 // The automations the page offers, and the Hydrex contracts the page checks before it lets anyone join. The kind picks
 // an automation's reads and its receipts.
-export type Kind = "carbon-impact" | "automaxi";
+export type Kind = "matcha-latte" | "double-espresso";
 export type Automation = {
   kind: Kind;
   name: string;
@@ -19,32 +19,31 @@ export type Automation = {
 };
 // Hydrex's automation, whose votes and payouts a keeper now sends. Hydrex controls its settings, which the page reads
 // from Base.
-export const CARBON_IMPACT: Automation = {
-  kind: "carbon-impact",
-  name: "Carbon Impact",
+export const MATCHA_LATTE: Automation = {
+  kind: "matcha-latte",
+  name: "Matcha Latte",
   address: "0xdE91885cF35ac57DF0c4A75c16862127dBe8317c",
   codeHash: "0x0d67cd335e3ae9cde256cf399f819a3ea2b9c248b0336840a3b20a2ee82c192e",
   actions: [3, 5],
 };
 // ImmutableVeTokenConduit version 2, from https://github.com/ldeso/hydrex-conduit at tag v2, commit 718c107. It has no
-// owner and no settings: its code fixes its fee and where the fee goes. It deployed through CREATE2, on Tue 20 Oct 2026.
-// Version 1, at
-// 0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B, still works, but the page does not offer it.
-export const AUTOMAXI: Automation = {
-  kind: "automaxi",
-  name: "AutoMaxi",
+// owner and no settings: its code fixes its fee and where the fee goes. It deployed through CREATE2, on Tue 20 Oct
+// 2026. Version 1, at 0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B, still works, but the page does not offer it.
+export const DOUBLE_ESPRESSO: Automation = {
+  kind: "double-espresso",
+  name: "Double Espresso",
   address: "0x692c323B425A9DfeebE302F56168a7798D93EAC5",
   codeHash: "0x4872932431e0d175fb1213e9ffec2b8f0ebd1d9d490643d6df5b2c6d0b379847",
   actions: [3, 5],
 };
-export const AUTOMATIONS = [CARBON_IMPACT, AUTOMAXI];
+export const AUTOMATIONS = [MATCHA_LATTE, DOUBLE_ESPRESSO];
 export const byKind = (kind: string): Automation | undefined =>
   AUTOMATIONS.find((automation) => automation.kind === kind);
-// AutoMaxi's fee, FEE_BPS in its code, of each claim, and TREASURY, the 2-of-3 Safe it goes to.
-export const AUTOMAXI_FEE_BPS = 100n;
-export const AUTOMAXI_TREASURY: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
-// The address whose claims through AutoMaxi the receipts show as AutoMaxi's own, made for its members after each epoch.
-// It holds Carbon Impact's EXECUTOR_ROLE. Anyone may claim through AutoMaxi.
+// Double Espresso's fee, FEE_BPS in its code, of each claim, and TREASURY, the 2-of-3 Safe it goes to.
+export const DOUBLE_ESPRESSO_FEE_BPS = 100n;
+export const DOUBLE_ESPRESSO_TREASURY: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
+// The address whose claims through Double Espresso the receipts show as Double Espresso's own, made for its members
+// after each epoch. It holds Matcha Latte's EXECUTOR_ROLE. Anyone may claim through Double Espresso.
 export const KEEPER: Address = "0x40FBFe5312330f278824ddbB7521ab77409192f0";
 export const KVCM: Address = "0x00fBAC94Fec8D4089d3fe979F39454F48c71A65d";
 export const VOTING_ESCROW: Address = "0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1";
@@ -94,8 +93,8 @@ export const ANCHORS: Anchor[] = [
 
 // The swap: ImmutableSwapper, deployed once per output token on 21 Oct 2026. Each sells the tokens its caller names for
 // its output, along the routes its caller picks, through pools it checks against the twelve factories below, and sends
-// 1% of each route's output to AutoMaxi's treasury. It has no owner and no settings. Its sources are verified, with an
-// exact match, on Basescan and Sourcify.
+// 1% of each route's output to Double Espresso's treasury. It has no owner and no settings. Its sources are verified,
+// with an exact match, on Basescan and Sourcify.
 export type Output = "usdc" | "eurc" | "weth" | "cbbtc" | "aero" | "hydx";
 export type Swapper = {
   output: Output;

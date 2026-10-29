@@ -11,7 +11,7 @@ import { cacheFileOf, forkUrl, serveCached, upstreamOf } from "./rpc-cache.ts";
 // FORK_URL is the archive RPC that BASE_RPC_URL names, or else the page's own first RPC. Its answers are kept between
 // runs in FORK_CACHE: see rpc-cache.ts.
 const FORK_URL = forkUrl(RPCS[0]!);
-const FILES = ["fork/views.ts", "fork/joins.ts", "fork/automaxi.ts", "fork/swap.ts", "fork/claim.ts"];
+const FILES = ["fork/views.ts", "fork/joins.ts", "fork/double-espresso.ts", "fork/swap.ts", "fork/claim.ts"];
 const args = process.argv.slice(2);
 const named = args.some((arg) => !arg.startsWith("-"));
 const upstream = upstreamOf(FORK_URL);

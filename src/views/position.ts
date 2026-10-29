@@ -1,5 +1,5 @@
 import { now, same, sawBlock } from "../chain.ts";
-import { AUTOMATIONS, CARBON_IMPACT } from "../config.ts";
+import { AUTOMATIONS, MATCHA_LATTE } from "../config.ts";
 import { PENDING, fill, fillAddress, fillOwn, fillTime, live, setText, show } from "../dom.ts";
 import { money, short, voteFigure, weekStart } from "../format.ts";
 import {
@@ -181,16 +181,16 @@ export function showPosition(): void {
   show(".position-owner-row", theirs, view);
   fillAddress(view, "position-owner", owner, short(owner));
   show(".position-stopped", status.kind === "stopped", view);
-  // The wallet's own account in AutoMaxi says when its payout is overdue, with Claim now among its actions.
+  // The wallet's own account in Double Espresso says when its payout is overdue, with Claim now among its actions.
   const owing = own ? overdueEntry(account.id) : undefined;
   show(".position-overdue", !!owing, view);
   if (owing) fill(view, { "overdue-waits": waitsLine(owing) });
   if (status.kind === "stopped") fillTime(view, "position-since", status.since);
   const underWay = own ? owed.under : ownerUnder;
   show(".position-underway", !!underWay?.left.some((entry) => entry.account.id === account.id), view);
-  // Carbon Impact pays an owner's accounts to one address, once read.
+  // Matcha Latte pays an owner's accounts to one address, once read.
   const inImpact = [account.delegate, account.claimer, account.delegateAtStart].some((address) =>
-    same(address, CARBON_IMPACT.address),
+    same(address, MATCHA_LATTE.address),
   );
   const paidTo = inImpact ? payout : undefined;
   show(".position-payout-open", !!paidTo, view);

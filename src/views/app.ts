@@ -9,7 +9,7 @@ import type { Reader } from "../read.ts";
 import { hrefOf } from "../routes.ts";
 import { describe } from "../tokens.ts";
 import { claim, inYear, review, showAccounts, type Action } from "./accounts.ts";
-import { autoMaxi, impact, readAverage } from "./automations.ts";
+import { doubleEspresso, matchaLatte, readAverage } from "./automations.ts";
 import { session, shown, views } from "./page.ts";
 import { appPayouts, overdue, owed, waitsLine } from "./payouts.ts";
 import { showPosition } from "./position.ts";
@@ -39,12 +39,12 @@ function need(
   return item;
 }
 
-// Whether the App's own reads have ended, found or failed: Carbon Impact's settings, AutoMaxi's state and last epoch's
-// figures; with a wallet, its accounts and their payouts, its tokens and its approvals too. Each, as it ends, draws the
-// App again.
+// Whether the App's own reads have ended, found or failed: Matcha Latte's settings, Double Espresso's state and last
+// epoch's figures; with a wallet, its accounts and their payouts, its tokens and its approvals too. Each, as it ends,
+// draws the App again.
 function ownReadsEnded(): boolean {
   const ended = (read: Reader<unknown>) => !read.reading && (read.value !== undefined || read.failed);
-  if (!ended(impact) || !ended(autoMaxi) || !earningsEnded(AUTOMATIONS)) return false;
+  if (!ended(matchaLatte) || !ended(doubleEspresso) || !earningsEnded(AUTOMATIONS)) return false;
   const { connection, accounts } = session;
   if (!connection) return true;
   const line = swapLine();
@@ -102,9 +102,9 @@ export function showApp(): void {
       }),
     );
   }
-  // Above the products, with a wallet: while its accounts are read, a line keeps the list's place, and once read, a line
-  // says when nothing needs it, so that the products stay where they are. Drawn again only when its lines change, so
-  // that a button keeps its focus between ticks.
+  // Above the products, with a wallet: while its accounts are read, a line keeps the list's place, and once read, a
+  // line says when nothing needs it, so that the products stay where they are. Drawn again only when its lines change,
+  // so that a button keeps its focus between ticks.
   const needs = document.getElementById("needs")!;
   const reading = !!connection && !holdings && !session.accounts?.failed;
   const placeholder = reading ? "reading" : holdings && !items.length ? "nothing" : "";

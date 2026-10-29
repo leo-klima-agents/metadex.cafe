@@ -1,9 +1,9 @@
 # metaDEX Café
 
 metaDEX Café is a static web page at <https://metadex.cafe/>. It lets owners of Hydrex accounts on Base join or leave
-Carbon Impact, Hydrex's automation, and AutoMaxi, an automation nobody controls, and claim AutoMaxi's rewards when its
-keeper is late. It also swaps many tokens on Base into one, through ImmutableSwapper. Hydrex's contracts call
-automations "conduits".
+Matcha Latte, Hydrex's automation, and Double Espresso, an automation nobody controls, and claim Double Espresso's
+rewards when its keeper is late. It also swaps many tokens on Base into one, through ImmutableSwapper. Hydrex's
+contracts call automations "conduits".
 
 The page has no server. It reads Base through public RPCs and asks the visitor's wallet to send transactions. It holds
 no keys and stores nothing.
@@ -16,38 +16,39 @@ This README is for whoever runs the site. The design and the plan are in [design
   Impact can then claim the account's rewards at once, and votes with it from the next epoch, which starts on Thursday
   at 00:00 UTC. After each epoch, it swaps the rewards to kVCM, retires a share as carbon credits, and pays the rest to
   the owner. The account and its HYDX stay in the owner's wallet.
-- **AutoMaxi** takes the same call. It votes for the pools it expects to earn the most bribes, and anyone can claim an
-  account's rewards through it: it pays them to the owner in the tokens earned, less 1%. Joining one of the two takes
-  the votes and the claims from the other, in one call.
+- **Double Espresso** takes the same call. It votes for the pools it expects to earn the most bribes, and anyone can
+  claim an account's rewards through it: it pays them to the owner in the tokens earned, less 1%. Joining one of the two
+  takes the votes and the claims from the other, in one call.
 - **Leaving** is the same call with `false`. The page can also take accounts out of Hydrex's other automations, such as
   those that stopped voting in September 2026: same call, with that automation's address.
-- **Before anyone can join, the page checks** the chain, each automation's code, Carbon Impact's settings, and the code
+- **Before anyone can join, the page checks** the chain, each automation's code, Matcha Latte's settings, and the code
   of Hydrex's VotingEscrow against `src/config.ts`. If a check fails, joining that automation is turned off, and the
   page marks the check on that automation's page, under Check it. Leaving always works. The checks run again every hour.
-- **Claiming** is `claim(tokenId, feeAddresses, bribeAddresses, tokens)` on AutoMaxi, which anyone can call for any
-  account in it, and which pays the owner, less 1%. AutoMaxi's keeper claims for every member right after each epoch, so
-  the page offers it only for the wallet's own accounts, once a payout is overdue: half a day after the flip with
-  something waiting, or a full epoch late. It passes only the contracts and tokens that `earned()` finds owing, in last
-  epoch's pools, and the epoch before's when the keeper missed it too. AutoMaxi asks each contract for every token
-  passed, and each answer reads the account's past epochs, so a claim of many contracts and tokens splits into calls
-  that each fit a transaction, the most valuable first; calls that need more gas together than one transaction may use
-  go one at a time. A Safe, which sends many calls in one Safe transaction, gets small calls instead, none asking a
-  contract for a token it does not owe, which together use the least gas; it proposes them in as few Safe transactions
-  as their simulated gas allows, each under 15 million. The review offers the rewards as they are, or swapped into one
-  token, but not from a Safe whose claim takes several Safe transactions: the swap follows the claim's receipts.
+- **Claiming** is `claim(tokenId, feeAddresses, bribeAddresses, tokens)` on Double Espresso, which anyone can call for
+  any account in it, and which pays the owner, less 1%. Double Espresso's keeper claims for every member right after
+  each epoch, so the page offers it only for the wallet's own accounts, once a payout is overdue: half a day after the
+  flip with something waiting, or a full epoch late. It passes only the contracts and tokens that `earned()` finds
+  owing, in last epoch's pools, and the epoch before's when the keeper missed it too. Double Espresso asks each contract
+  for every token passed, and each answer reads the account's past epochs, so a claim of many contracts and tokens
+  splits into calls that each fit a transaction, the most valuable first; calls that need more gas together than one
+  transaction may use go one at a time. A Safe, which sends many calls in one Safe transaction, gets small calls
+  instead, none asking a contract for a token it does not owe, which together use the least gas; it proposes them in as
+  few Safe transactions as their simulated gas allows, each under 15 million. The review offers the rewards as they are,
+  or swapped into one token, but not from a Safe whose claim takes several Safe transactions: the swap follows the
+  claim's receipts.
 - **Swapping** goes through `ImmutableSwapper`, deployed once per output token: USDC, EURC, WETH, cbBTC, AERO and HYDX.
   Each `swap(routes, deadline, skipFailed)` sells the tokens named, each along a route of one to three hops the caller
   picks, through pools of Hydrex, Aero, Aerodrome and Uniswap that it checks against each exchange's factory, and sends
-  1% of each route's output to the same 2-of-3 Safe as AutoMaxi's fee. The page finds the wallet's tokens among those it
-  knows (`src/base-tokens.json`, the six outputs, Hydrex's reward tokens, and any added by address), finds each route
-  from the twelve factories and quotes it with the swapper's own `quote`. A quote prices a route as if it sold alone, so
-  the ticked tokens are then routed together (`src/routing.ts`): those that move their pools may go in parts, up to
-  three routes each, through other pools, by a model of each pool read at a few amounts. The page runs the approvals and
-  the routes through `eth_simulateV1`, in order, with no minimum: each route fetches what the pools those before it
-  moved pay, whichever of its own routes and those found together fetches more, net of gas. Each minimum is 0.5% under
-  what Base found, and a route that would not go through even so is left out of the swap. Each approval is exact, one a
-  token for all its parts. A route that falls below its minimum by the time it runs is skipped, and its token stays in
-  the wallet, with its approval, which the page offers to reset.
+  1% of each route's output to the same 2-of-3 Safe as Double Espresso's fee. The page finds the wallet's tokens among
+  those it knows (`src/base-tokens.json`, the six outputs, Hydrex's reward tokens, and any added by address), finds each
+  route from the twelve factories and quotes it with the swapper's own `quote`. A quote prices a route as if it sold
+  alone, so the ticked tokens are then routed together (`src/routing.ts`): those that move their pools may go in parts,
+  up to three routes each, through other pools, by a model of each pool read at a few amounts. The page runs the
+  approvals and the routes through `eth_simulateV1`, in order, with no minimum: each route fetches what the pools those
+  before it moved pay, whichever of its own routes and those found together fetches more, net of gas. Each minimum is
+  0.5% under what Base found, and a route that would not go through even so is left out of the swap. Each approval is
+  exact, one a token for all its parts. A route that falls below its minimum by the time it runs is skipped, and its
+  token stays in the wallet, with its approval, which the page offers to reset.
 - **Batching:** where the wallet answers EIP-5792's `wallet_getCapabilities`, the page sends all the calls of a review
   in one prompt with `wallet_sendCalls`, all or nothing where it can. From a Safe, one Safe transaction. Otherwise one
   prompt per call; the swap is then run through Base again before the wallet asks for it, and never with a lower
@@ -67,7 +68,7 @@ This README is for whoever runs the site. The design and the plan are in [design
 - The page always says "Hydrex account", as "account" alone means an address in crypto: "8 Hydrex accounts", "Hydrex
   Main Protocol Account #26432".
 - Details open from a round info button beside what they explain, as a popup: on a phone, a sheet from the foot of the
-  screen. A popup has an address of its own, such as `#hydrex/carbon-impact/check`.
+  screen. A popup has an address of its own, such as `#hydrex/matcha-latte/check`.
 - `#hydrex` starts with the automations, in one box, a row each, with what each takes, what it pays in, what its votes
   earned last epoch per 1,000 votes and how that compares with Hydrex's average, both at the average's prices, and, with
   a wallet, how many of its Hydrex accounts are in it. Then, apart, as it is no automation, voting yourself: what votes
@@ -85,10 +86,11 @@ This README is for whoever runs the site. The design and the plan are in [design
   swappers' contracts, such as `#swap/weth/check`; and the approvals given to the swappers. Its review shows the swap as
   a bill: each token, or each part of one, with its route by tokens and pools, under the gas, then the least, with the
   slippage that set it.
-- Each automation has a page, `#hydrex/carbon-impact` and `#hydrex/automaxi`: what it does in one sentence, that the
-  account stays in the wallet, its key figures (what it takes, what it pays in, what it paid last epoch beside Hydrex's
-  average, and what it retired or who controls it), and a way to join, or the wallet buttons. Everything else is in
-  popups: its six fee facts, how it did against all of Hydrex, joining and leaving, who controls what, and Check it.
+- Each automation has a page, `#hydrex/matcha-latte` and `#hydrex/double-espresso`: what it does in one sentence, that
+  the account stays in the wallet, its key figures (what it takes, what it pays in, what it paid last epoch beside
+  Hydrex's average, and what it retired or who controls it), and a way to join, or the wallet buttons. Everything else
+  is in popups: its six fee facts, how it did against all of Hydrex, joining and leaving, who controls what, and Check
+  it.
 - Each account has a page, `#hydrex/` and its number, which anyone can open: its status, what its votes earned, what its
   owner can do with it, with the gas of a change when it earns nothing, and, in an automation, up to when it has been
   paid, what waits to be claimed, and the receipt of its last payout. The App marks the accounts paid late.
@@ -104,10 +106,10 @@ Nobody controls the swappers either: their code fixes the fee, 1% of each route'
 output and the twelve factories. As nothing about them can change, the page does not check them: it offers swaps once it
 has read that its RPCs serve Base, and says nothing of it.
 
-Hydrex controls Carbon Impact. It can change the share retired (up to 100%), the fee (up to 1%), the payout tokens, the
+Hydrex controls Matcha Latte. It can change the share retired (up to 100%), the fee (up to 1%), the payout tokens, the
 swap routers, any owner's payout address, and who claims and votes for it. The page always shows the settings as they
-are on Base. Nobody controls AutoMaxi: its code fixes its fee, 1% of each claim, and the 2-of-3 Safe it goes to. A
-change means a new deployment, and owners joining again.
+are on Base. Nobody controls Double Espresso: its code fixes its fee, 1% of each claim, and the 2-of-3 Safe it goes to.
+A change means a new deployment, and owners joining again.
 
 ## Network access
 
@@ -152,43 +154,43 @@ them, because their hashes no longer match, so the page may not work for that vi
 The App and the automation's page say that joining it is off, and its Check it marks each check that failed, by its id
 in `src/hydrex.ts`:
 
-| Check                                         | Marked on       | What changed                                                                              |
-| --------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------- |
-| `chain`: the RPC serves Base                  | Not shown       | An RPC answered for another chain. Joining both, and every swap, turn off.                |
-| `code`: Carbon Impact's code                  | Carbon Impact's | Carbon Impact's code.                                                                     |
-| `contracts`: its VotingEscrow and Voter       | Carbon Impact's | `veToken()` or `voter()` on Carbon Impact.                                                |
-| `token`: it pays in kVCM                      | Carbon Impact's | `kvcm()` on Carbon Impact.                                                                |
-| `approvals`: what joining approves            | Carbon Impact's | `getConduitApprovalConfig` on the VotingEscrow: no longer active, or other than `[3, 5]`. |
-| `automaxi-code`: AutoMaxi's code              | AutoMaxi's      | AutoMaxi's code.                                                                          |
-| `automaxi-contracts`: its VotingEscrow, Voter | AutoMaxi's      | `veToken()` or `voter()` on AutoMaxi.                                                     |
-| `automaxi-approvals`: what joining approves   | AutoMaxi's      | `getConduitApprovalConfig` on the VotingEscrow, for AutoMaxi.                             |
-| `upgrade`: the VotingEscrow                   | Both pages      | The VotingEscrow's implementation, or its code.                                           |
-| `logic`: its approval logic                   | Both pages      | `approvalLogic()` on the VotingEscrow, or its code.                                       |
+| Check                                                | Marked on         | What changed                                                                              |
+| ---------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------- |
+| `chain`: the RPC serves Base                         | Not shown         | An RPC answered for another chain. Joining both, and every swap, turn off.                |
+| `code`: Matcha Latte's code                          | Matcha Latte's    | Matcha Latte's code.                                                                      |
+| `contracts`: its VotingEscrow and Voter              | Matcha Latte's    | `veToken()` or `voter()` on Matcha Latte.                                                 |
+| `token`: it pays in kVCM                             | Matcha Latte's    | `kvcm()` on Matcha Latte.                                                                 |
+| `approvals`: what joining approves                   | Matcha Latte's    | `getConduitApprovalConfig` on the VotingEscrow: no longer active, or other than `[3, 5]`. |
+| `double-espresso-code`: Double Espresso's code       | Double Espresso's | Double Espresso's code.                                                                   |
+| `double-espresso-contracts`: its VotingEscrow, Voter | Double Espresso's | `veToken()` or `voter()` on Double Espresso.                                              |
+| `double-espresso-approvals`: what joining approves   | Double Espresso's | `getConduitApprovalConfig` on the VotingEscrow, for Double Espresso.                      |
+| `upgrade`: the VotingEscrow                          | Both pages        | The VotingEscrow's implementation, or its code.                                           |
+| `logic`: its approval logic                          | Both pages        | `approvalLogic()` on the VotingEscrow, or its code.                                       |
 
 Read what changed, and decide whether the page should trust it. If it should, update `src/config.ts`, run the tests and
 release. These [Foundry](https://getfoundry.sh/) commands print the values that `src/config.ts` holds:
 
 ```sh
 RPC=https://mainnet.base.org
-CARBON_IMPACT=0xdE91885cF35ac57DF0c4A75c16862127dBe8317c
-AUTOMAXI=0x692c323B425A9DfeebE302F56168a7798D93EAC5
+MATCHA_LATTE=0xdE91885cF35ac57DF0c4A75c16862127dBe8317c
+DOUBLE_ESPRESSO=0x692c323B425A9DfeebE302F56168a7798D93EAC5
 ESCROW=0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1
 IMPLEMENTATION=$(cast to-check-sum-address $(cast implementation $ESCROW --rpc-url $RPC))
 LOGIC=$(cast call $ESCROW "approvalLogic()(address)" --rpc-url $RPC)
 
-cast keccak $(cast code $CARBON_IMPACT --rpc-url $RPC)   # CARBON_IMPACT's codeHash
-cast keccak $(cast code $AUTOMAXI --rpc-url $RPC)        # AUTOMAXI's codeHash
+cast keccak $(cast code $MATCHA_LATTE --rpc-url $RPC)   # MATCHA_LATTE's codeHash
+cast keccak $(cast code $DOUBLE_ESPRESSO --rpc-url $RPC)        # DOUBLE_ESPRESSO's codeHash
 echo $IMPLEMENTATION                                    # VOTING_ESCROW_IMPLEMENTATION
 cast keccak $(cast code $IMPLEMENTATION --rpc-url $RPC)  # VOTING_ESCROW_IMPLEMENTATION_CODE_HASH
 echo $LOGIC                                             # APPROVAL_LOGIC
 cast keccak $(cast code $LOGIC --rpc-url $RPC)           # APPROVAL_LOGIC_CODE_HASH
-for AUTOMATION in $CARBON_IMPACT $AUTOMAXI; do           # each automation's actions
+for AUTOMATION in $MATCHA_LATTE $DOUBLE_ESPRESSO; do           # each automation's actions
   cast call $ESCROW "getConduitApprovalConfig(address)(uint8[],bool,string)" $AUTOMATION --rpc-url $RPC
 done
 ```
 
 When Hydrex adds or removes automations, update `src/hydrex-conduits.json` from <https://api.hydrex.fi/conduits>. If
-Hydrex lists AutoMaxi, the page still treats it as its own.
+Hydrex lists Double Espresso, the page still treats it as its own.
 
 The swappers were deployed on 21 Oct 2026, from block 52,894,916. Their sources are verified, with an exact match, on
 Basescan and Sourcify, which the page links to, and name no author and no repository.
@@ -197,16 +199,16 @@ The page's list of tokens, `src/base-tokens.json`, lives in the repository, so t
 kept by hand. `node scripts/tokens.ts` checks each token's symbol and decimals against Base; `--add 0x…` adds one, and
 `--write` writes Base's answers back.
 
-AutoMaxi is version 2 of `ImmutableVeTokenConduit`, from <https://github.com/ldeso/hydrex-conduit> at tag `v2`, commit
-`718c107`. It was deployed on 20 Oct 2026, in block 52,854,750, through the CREATE2 deployer. The command above prints
-the code hash in that commit's `verification/bytecode-hashes.json`,
+Double Espresso is version 2 of `ImmutableVeTokenConduit`, from <https://github.com/ldeso/hydrex-conduit> at tag `v2`,
+commit `718c107`. It was deployed on 20 Oct 2026, in block 52,854,750, through the CREATE2 deployer. The command above
+prints the code hash in that commit's `verification/bytecode-hashes.json`,
 `0x4872932431e0d175fb1213e9ffec2b8f0ebd1d9d490643d6df5b2c6d0b379847`. Version 1, at
 `0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B`, still works, and nobody had joined it when version 2 was deployed. The
 page offers only version 2. Its source is verified, with an exact match, on Basescan and Sourcify, which the page links
 to.
 
 The page is anonymous for now: it names no operator, and links to no repository but Hydrex's, neither this one nor
-AutoMaxi's. A test checks it.
+Double Espresso's. A test checks it.
 
 ## Checking a deployment
 
@@ -239,7 +241,7 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 - **A refused or failed transaction.** The review says so, with links to the transactions that went through. Closing the
   review stops sending, but the page keeps following what was already sent.
 - **A wallet that locks** is disconnected. Picking it again reconnects it.
-- **At the end of an epoch,** Thursday at 00:00 UTC by Base's clock, the page reads the accounts and Carbon Impact again
+- **At the end of an epoch,** Thursday at 00:00 UTC by Base's clock, the page reads the accounts and Matcha Latte again
   within half a minute.
 - **A payout under way.** A payout takes up to half a day after each epoch. While it has paid some of the owner's
   accounts and not yet others, the App says so, and so does the page of each account it has not reached. On the page of
@@ -248,9 +250,9 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   minutes, with one read per account, and reads the payouts again once one has been paid; then not until the next epoch.
 - **A late payout.** An account is late when it voted with an automation two epochs ago and has not been paid for that
   epoch yet. Its rewards wait in Hydrex's reward contracts until someone claims them, for up to 50 epochs.
-- **An overdue payout in AutoMaxi.** Half a day after the flip, an account whose payout has not come and that has
-  something waiting is overdue: its page, the AutoMaxi group and the App's Needs you offer to claim it. If the keeper's
-  claim lands first, the page's claim receives nothing, and its receipt says so; it still costs its gas.
+- **An overdue payout in Double Espresso.** Half a day after the flip, an account whose payout has not come and that has
+  something waiting is overdue: its page, the Double Espresso group and the App's Needs you offer to claim it. If the
+  keeper's claim lands first, the page's claim receives nothing, and its receipt says so; it still costs its gas.
 - **A token the swap skipped.** Its route would have fetched less than its minimum, or its token refused the transfer.
   It stays in the wallet with its approval; the receipt, Needs you and the swap's Approvals offer to reset it. A route
   that Base finds would not go through even with no minimum is left out before the wallet asks, and the bill says why.
@@ -259,8 +261,9 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   price. Tokens whose routes meet in a thin pool, as several into HYDX through USDC, fetch less together than each
   alone: the later ones show it.
 - **Paid, or claimed in part.** An epoch counts as paid once claims since it ended took more than half of what its
-  rewards were worth, at last epoch's prices. A claim of a few small rewards, such as anyone may make through AutoMaxi,
-  does not count, and tokens a payout leaves out, such as those that cannot be swapped, do not keep it from counting.
+  rewards were worth, at last epoch's prices. A claim of a few small rewards, such as anyone may make through Double
+  Espresso, does not count, and tokens a payout leaves out, such as those that cannot be swapped, do not keep it from
+  counting.
 - **An account that moved.** Its standing is read in the pools of the automation it voted with last epoch, where its
   rewards are, and its receipts are those of the automation it is in now. If the one it voted with no longer holds its
   claims, the page says so: what waits can still be claimed on Hydrex.
@@ -269,8 +272,8 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 
 ## Limits
 
-- The page shows each account's last payout only. For AutoMaxi, that is the claims in the epoch of the last one, up to
-  ten blocks of them: anyone can claim dust for an account through a contract of their own, as often as they like.
+- The page shows each account's last payout only. For Double Espresso, that is the claims in the epoch of the last one,
+  up to ten blocks of them: anyone can claim dust for an account through a contract of their own, as often as they like.
 - What waits to be claimed is a floor: the page reads each account's rewards in the pools its automation voted for last
   epoch, and no others. If some of those reads fail, it says "at least".
 - Whether an account was paid for the epoch before last needs that epoch's rewards. Hydrex's Voter no longer holds those
@@ -279,7 +282,7 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
   epoch's prices.
 - The page finds an account's last payout through Hydrex's reward contracts, which record up to when they have paid it,
   through the record of the reward worth the most that the payout claimed. Anyone allowed to claim for the account moves
-  that record, such as its owner on Hydrex. The page then says that the account was last claimed outside Carbon Impact,
+  that record, such as its owner on Hydrex. The page then says that the account was last claimed outside Matcha Latte,
   and shows no receipt.
 - What votes earned is for the last epoch only. Hydrex's average needs every pool's reward contracts, thousands of reads
   made once a session: at once on `#hydrex` and the automations' pages, and on Home and the App only once the App's own
@@ -347,37 +350,37 @@ answers kept in GitHub's cache from one run, or attempt, to the next, one run of
 the pinned Actions and npm packages every week, in one pull request for each, with releases a week old or more; a
 security update comes at once, on its own.
 
-| Path                                                    | What it holds                                                                                                                                                                                             |
-| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html`                                            | The page. Its views are Home, the App (`#app`), the Hydrex accounts (`#hydrex`), a page per automation (`#hydrex/automaxi`), an account's page (`#hydrex/9540`), the swap (`#swap`) and About (`#about`). |
-| `style.css`, `fonts/`                                   | Styles and fonts.                                                                                                                                                                                         |
-| `src/config.ts`                                         | What the page trusts: contract addresses and code hashes, the RPCs, and the price anchors.                                                                                                                |
-| `src/hydrex-conduits.json`                              | Hydrex's automations, as <https://api.hydrex.fi/conduits> lists them.                                                                                                                                     |
-| `src/main.ts`                                           | Startup: each view set up, then the reads, and again every half a minute what is due.                                                                                                                     |
-| `src/views/page.ts`                                     | What the views share: the wallet connected, its Hydrex accounts, and how each view is drawn again.                                                                                                        |
-| `src/views/automations.ts`                              | The automations' state and figures, on Hydrex's menu and their pages, beside Hydrex's average; and the checks.                                                                                            |
-| `src/views/accounts.ts`                                 | The wallet's Hydrex accounts in groups, their boxes and buttons, and the reviews of joining, leaving and claiming.                                                                                        |
-| `src/views/position.ts`                                 | An account's page.                                                                                                                                                                                        |
-| `src/views/app.ts`                                      | The App: what needs you, the products, and what the wallet allows.                                                                                                                                        |
-| `src/views/connection.ts`                               | Connecting a wallet, its events, and reading its Hydrex accounts.                                                                                                                                         |
-| `src/views/payouts.ts`                                  | The wallet's payouts, as the views show them: late, overdue, or under way.                                                                                                                                |
-| `src/pools.ts`                                          | Each exchange's pools of two tokens, for routes and prices.                                                                                                                                               |
-| `src/swap.ts`, `src/swap-calls.ts`, `src/views/swap.ts` | The swap: routes, quotes, minimums and simulation; its calls; and its page.                                                                                                                               |
-| `src/routing.ts`                                        | Routes for the ticked tokens together, in parts, from a model of each pool, within what the RPCs allow.                                                                                                   |
-| `src/tokens.ts`, `src/base-tokens.json`                 | The tokens the page knows, and their balances and approvals.                                                                                                                                              |
-| `src/claim.ts`, `src/views/claim.ts`                    | Claiming through AutoMaxi: the calls from what `earned` found, and the review.                                                                                                                            |
-| `src/views/review.ts`                                   | The review that shows each call before the wallet asks.                                                                                                                                                   |
-| `src/last-epoch.ts`, `src/earnings.ts`, `src/prices.ts` | What votes earned last epoch, and token prices.                                                                                                                                                           |
-| `src/last-payout.ts`, `src/receipts.ts`                 | Payouts: up to when each account was paid, what waits, and its last receipt.                                                                                                                              |
-| `src/claims.ts`                                         | AutoMaxi's claims, read back from the last one.                                                                                                                                                           |
-| `src/hydrex.ts`                                         | Hydrex's contracts: reads, account statuses, the calls, and the checks.                                                                                                                                   |
-| `src/chain.ts`, `src/wallet.ts`                         | RPC requests, and wallets.                                                                                                                                                                                |
-| `src/routes.ts`, `src/views/router.ts`                  | The page's addresses, and the view each shows.                                                                                                                                                            |
-| `src/dom.ts`, `src/format.ts`, `src/read.ts`            | Page helpers; number and date formats; and what the page reads, kept with its state, retried when due.                                                                                                    |
-| `test/`, `fork/`                                        | Unit tests; the browser tests, which `fork/run.ts` runs at once, the harness they share in `fork/harness.ts`, and `fork/rpc-cache.ts`, which keeps the answers their forks read from Base.                |
-| `fork/qa.ts`, `fork/qa.html`, `fork/scenarios.ts`       | `npm run qa`: the page against a fork, the QA wallet's window beside it, and the states it can start the fork in.                                                                                         |
-| `fork/fixtures/`                                        | AutoMaxi's init code, for the browser tests to deploy it on the fork; and a token of the QA wallet's own, its source and init code.                                                                       |
-| `scripts/`                                              | The build; `fonts.py` makes `fonts/`, `icons.ts` draws the icons from `icon.svg`, and `tokens.ts` checks the list of tokens.                                                                              |
+| Path                                                    | What it holds                                                                                                                                                                                                    |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.html`                                            | The page. Its views are Home, the App (`#app`), the Hydrex accounts (`#hydrex`), a page per automation (`#hydrex/double-espresso`), an account's page (`#hydrex/9540`), the swap (`#swap`) and About (`#about`). |
+| `style.css`, `fonts/`                                   | Styles and fonts.                                                                                                                                                                                                |
+| `src/config.ts`                                         | What the page trusts: contract addresses and code hashes, the RPCs, and the price anchors.                                                                                                                       |
+| `src/hydrex-conduits.json`                              | Hydrex's automations, as <https://api.hydrex.fi/conduits> lists them.                                                                                                                                            |
+| `src/main.ts`                                           | Startup: each view set up, then the reads, and again every half a minute what is due.                                                                                                                            |
+| `src/views/page.ts`                                     | What the views share: the wallet connected, its Hydrex accounts, and how each view is drawn again.                                                                                                               |
+| `src/views/automations.ts`                              | The automations' state and figures, on Hydrex's menu and their pages, beside Hydrex's average; and the checks.                                                                                                   |
+| `src/views/accounts.ts`                                 | The wallet's Hydrex accounts in groups, their boxes and buttons, and the reviews of joining, leaving and claiming.                                                                                               |
+| `src/views/position.ts`                                 | An account's page.                                                                                                                                                                                               |
+| `src/views/app.ts`                                      | The App: what needs you, the products, and what the wallet allows.                                                                                                                                               |
+| `src/views/connection.ts`                               | Connecting a wallet, its events, and reading its Hydrex accounts.                                                                                                                                                |
+| `src/views/payouts.ts`                                  | The wallet's payouts, as the views show them: late, overdue, or under way.                                                                                                                                       |
+| `src/pools.ts`                                          | Each exchange's pools of two tokens, for routes and prices.                                                                                                                                                      |
+| `src/swap.ts`, `src/swap-calls.ts`, `src/views/swap.ts` | The swap: routes, quotes, minimums and simulation; its calls; and its page.                                                                                                                                      |
+| `src/routing.ts`                                        | Routes for the ticked tokens together, in parts, from a model of each pool, within what the RPCs allow.                                                                                                          |
+| `src/tokens.ts`, `src/base-tokens.json`                 | The tokens the page knows, and their balances and approvals.                                                                                                                                                     |
+| `src/claim.ts`, `src/views/claim.ts`                    | Claiming through Double Espresso: the calls from what `earned` found, and the review.                                                                                                                            |
+| `src/views/review.ts`                                   | The review that shows each call before the wallet asks.                                                                                                                                                          |
+| `src/last-epoch.ts`, `src/earnings.ts`, `src/prices.ts` | What votes earned last epoch, and token prices.                                                                                                                                                                  |
+| `src/last-payout.ts`, `src/receipts.ts`                 | Payouts: up to when each account was paid, what waits, and its last receipt.                                                                                                                                     |
+| `src/claims.ts`                                         | Double Espresso's claims, read back from the last one.                                                                                                                                                           |
+| `src/hydrex.ts`                                         | Hydrex's contracts: reads, account statuses, the calls, and the checks.                                                                                                                                          |
+| `src/chain.ts`, `src/wallet.ts`                         | RPC requests, and wallets.                                                                                                                                                                                       |
+| `src/routes.ts`, `src/views/router.ts`                  | The page's addresses, and the view each shows.                                                                                                                                                                   |
+| `src/dom.ts`, `src/format.ts`, `src/read.ts`            | Page helpers; number and date formats; and what the page reads, kept with its state, retried when due.                                                                                                           |
+| `test/`, `fork/`                                        | Unit tests; the browser tests, which `fork/run.ts` runs at once, the harness they share in `fork/harness.ts`, and `fork/rpc-cache.ts`, which keeps the answers their forks read from Base.                       |
+| `fork/qa.ts`, `fork/qa.html`, `fork/scenarios.ts`       | `npm run qa`: the page against a fork, the QA wallet's window beside it, and the states it can start the fork in.                                                                                                |
+| `fork/fixtures/`                                        | Double Espresso's init code, for the browser tests to deploy it on the fork; and a token of the QA wallet's own, its source and init code.                                                                       |
+| `scripts/`                                              | The build; `fonts.py` makes `fonts/`, `icons.ts` draws the icons from `icon.svg`, and `tokens.ts` checks the list of tokens.                                                                                     |
 
 ## License
 
