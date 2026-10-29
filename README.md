@@ -383,8 +383,3 @@ security update comes at once, on its own.
 
 MIT, and REUSE compliant. The fonts in `fonts/` are under the SIL Open Font License 1.1. Klima Protocol's logo,
 `klima-protocol.svg`, belongs to Klima Protocol, all rights reserved, and is used with its permission.
-
-The built `main.js` and `style.css` each end with the license notices of what they bundle, which the build writes from
-what esbuild bundled: each npm package by the copyright lines of its LICENSE, or of its repository's when the package
-leaves it out, which `scripts/notices.ts` names, and each font by `REUSE.toml`; then each license's text, verbatim from
-`LICENSES/`. A bundled package under a license with no text or name there stops the build.
