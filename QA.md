@@ -5,8 +5,8 @@ run it: at `https://metadex.cafe`, its RPCs answered by the fork, its Content Se
 window, the QA wallet, signs as any address on Base, and holds the controls for the fork. Nothing reaches Base: every
 transaction stays on the fork, and Safe{Wallet} is a stand-in that only takes proposals.
 
-It needs what `npm run test:fork` needs: Node 26, [anvil](https://getfoundry.sh/), and Chromium (`CHROMIUM` names one,
-as for the tests). The fork reads Base's state through `BASE_RPC_URL`, or the page's first RPC, and keeps it in
+It needs what `npm run test:fork` needs: Node 26 LTS, [anvil](https://getfoundry.sh/), and Chromium (`CHROMIUM` names
+one, as for the tests). The fork reads Base's state through `BASE_RPC_URL`, or the page's first RPC, and keeps it in
 `FORK_CACHE`, which the browser tests share. The first time, a scenario can take many minutes to start, and the page's
 first reads can fail while anvil still fetches state: **run `npm run test:fork` once first**, and each scenario then
 starts in seconds. The `payout` scenario forks a block of its own, which the browser tests do not read: its first start

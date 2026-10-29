@@ -301,7 +301,7 @@ cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.c
 
 ## Development
 
-Needs Node 26.
+Needs Node 26 LTS, 26.13 or later.
 
 ```sh
 npm ci --ignore-scripts
