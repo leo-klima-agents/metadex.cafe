@@ -26,7 +26,7 @@ SPDX-FileCopyrightText = "Klima Protocol"
 SPDX-License-Identifier = "LicenseRef-KlimaProtocol"
 
 [[annotations]]
-path = "fork/fixtures/automaxi-init-code.hex"
+path = "fork/fixtures/double-espresso-init-code.hex"
 precedence = "override"
 SPDX-FileCopyrightText = "2026 Léo de Souza (https://github.com/ldeso/hydrex-conduit)"
 SPDX-License-Identifier = "MIT"

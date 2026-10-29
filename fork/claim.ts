@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import { AUTOMAXI } from "../src/config.ts";
+import { DOUBLE_ESPRESSO } from "../src/config.ts";
 import {
   PAYEE,
   RECENT,
@@ -8,7 +8,7 @@ import {
   SITE,
   approveConduit,
   app,
-  autoMaxiAbi,
+  doubleEspressoAbi,
   claimOpens,
   confirmEach,
   connected,
@@ -29,9 +29,9 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
   after(stop);
   hooks();
 
-  test("an overdue payout in AutoMaxi: the App and the account say so, and Claim now claims it as it is", async () => {
-    // #82774 moves to AutoMaxi, which now holds its claims, while what Carbon Impact's votes earned for it waits.
-    await approveConduit(PAYEE, AUTOMAXI.address, 82774n);
+  test("an overdue payout in Double Espresso: the App and the account say so, and Claim now claims it as it is", async () => {
+    // #82774 moves to Double Espresso, which now holds its claims, while what Matcha Latte's votes earned for it waits.
+    await approveConduit(PAYEE, DOUBLE_ESPRESSO.address, 82774n);
     await settle();
     await warmPayouts(PAYEE);
     const { page, sent, violations } = await connected(
@@ -73,7 +73,7 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
     assert.ok(says.length > 1);
     assert.ok(
       says.every((each) =>
-        /^Claims account #82774's rewards from \d+ reward contracts? through AutoMaxi, which pays them to you, less 1%\.$/.test(
+        /^Claims account #82774's rewards from \d+ reward contracts? through Double Espresso, which pays them to you, less 1%\.$/.test(
           each,
         ),
       ),
@@ -84,7 +84,7 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
     );
     assert.deepEqual(
       await review(page).locator(".to").allTextContents(),
-      says.map(() => AUTOMAXI.address),
+      says.map(() => DOUBLE_ESPRESSO.address),
     );
     // One prompt each goes without saying.
     assert.equal(await review(page).locator(".how").textContent(), "");
@@ -95,12 +95,12 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
     assert.match(await receipt.locator(".claim-receipt-fee").innerText(), /^−/);
     await review(page).getByRole("link", { name: "Swap these" }).waitFor();
     assert.equal(sent.length, says.length);
-    assert.ok((await readOn<bigint>(AUTOMAXI.address, autoMaxiAbi, "lastClaimBlock", [82774n])) > 0n);
+    assert.ok((await readOn<bigint>(DOUBLE_ESPRESSO.address, doubleEspressoAbi, "lastClaimBlock", [82774n])) > 0n);
     assert.deepEqual(violations, []);
   });
 
   test("inside Safe{Wallet}, a Safe proposes a claim too large for one transaction as several Safe transactions", async () => {
-    await approveConduit(PAYEE, AUTOMAXI.address, 82774n);
+    await approveConduit(PAYEE, DOUBLE_ESPRESSO.address, 82774n);
     await settle();
     await warmPayouts(PAYEE);
     const { page, violations } = await open(false, { url: `${SAFE_WALLET}/`, safe: PAYEE });
@@ -140,7 +140,7 @@ describe("an overdue claim against a fork after the swappers' deployment", { tim
     const datas = await dialog.locator(".data").allTextContents();
     assert.deepEqual(
       proposals.flat(),
-      datas.map((data) => ({ to: AUTOMAXI.address, data, value: "0" })),
+      datas.map((data) => ({ to: DOUBLE_ESPRESSO.address, data, value: "0" })),
     );
     assert.deepEqual(violations, []);
   });

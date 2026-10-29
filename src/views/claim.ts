@@ -1,6 +1,6 @@
 import { maxUint256, type Address } from "viem";
-import { same, type Receipt } from "./chain.ts";
-import { DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "./config.ts";
+import { same, type Receipt } from "../chain.ts";
+import { DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
 import {
   CLAIM_CALL_GAS,
   MAX_CLAIM_GAS,
@@ -14,22 +14,22 @@ import {
   paidBy,
   summed,
   type Claim,
-} from "./claim.ts";
-import { clone, fill, live, rewrite, show } from "./dom.ts";
-import { between, count, figure, list, money, moneyAt, type Money } from "./format.ts";
-import type { Entry } from "./last-payout.ts";
-import { pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
-import { valueAt, weightAt, type Amount } from "./receipts.ts";
+} from "../claim.ts";
+import { PENDING, clone, fill, live, rewrite, setText, show, type Text } from "../dom.ts";
+import { between, count, figure, list, money, moneyAt, type Money } from "../format.ts";
+import type { Entry } from "../last-payout.ts";
+import { pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
+import { valueAt, weightAt, type Amount } from "../receipts.ts";
 import { openReview, type Hooks } from "./review.ts";
-import { hrefOf } from "./routes.ts";
-import { APPROVAL_GAS, MIDDLES, findRoute, minimumOf, paidOf, partOf, routeResults, simulate } from "./swap.ts";
-import { costs, gasCost, gasWords } from "./swap-calls.ts";
-import { openSwapReview, planSteps, prefill, swapReceipt, swapsOff, type Plan } from "./swap-view.ts";
-import { describe } from "./tokens.ts";
-import { capabilities, type Connection } from "./wallet.ts";
+import { hrefOf } from "../routes.ts";
+import { APPROVAL_GAS, MIDDLES, findRoute, minimumOf, paidOf, partOf, routeResults, simulate } from "../swap.ts";
+import { costs, gasCost, gasWords } from "../swap-calls.ts";
+import { openSwapReview, planSteps, prefill, swapReceipt, swapsOff, type Plan } from "./swap.ts";
+import { describe } from "../tokens.ts";
+import { capabilities, type Connection } from "../wallet.ts";
 
-// The review of a claim through AutoMaxi, for the wallet's accounts whose payout is overdue: what waits, how to receive
-// it, then the calls; and its receipt.
+// The review of a claim through Double Espresso, for the wallet's accounts whose payout is overdue: what waits, how to
+// receive it, then the calls; and its receipt.
 
 const key = (address: string): string => address.toLowerCase();
 // The slippage of a swap after a claim: the swap's page's own default.
@@ -111,8 +111,8 @@ function tokenLines(
   more.querySelector(".claim-rest")!.replaceChildren(...rest.map(line));
 }
 
-// The review of a claim for the wallet's overdue accounts in AutoMaxi: what waits, then how to receive it, as it is or
-// swapped into one token, then the calls. "As they are" is the default, so that nothing is sold unasked.
+// The review of a claim for the wallet's overdue accounts in Double Espresso: what waits, then how to receive it, as it
+// is or swapped into one token, then the calls. "As they are" is the default, so that nothing is sold unasked.
 export async function openClaim(entries: Entry[], connection: Connection, hooks: Hooks): Promise<void> {
   const [{ claims, tokens }, found, caps, middles] = await Promise.all([
     owedOf(entries),
@@ -125,7 +125,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   const owing = claims.filter(({ owed }) => owed.length);
   const which = list(entries.map(({ account }) => `#${account.id}`));
   const name = `Claim for ${entries.length === 1 ? "Hydrex account" : "Hydrex accounts"} ${which}`;
-  const checkHref = hrefOf({ view: "product", kind: "automaxi", section: "check" });
+  const checkHref = hrefOf({ view: "product", kind: "double-espresso", section: "check" });
   // Nothing to send: the review says why, and asks nothing.
   const nothing = (words: string) => {
     const body = document.createElement("p");
@@ -165,9 +165,22 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   fill(body, { "claim-count": count(totals.length, "token", "tokens") });
   // What waits, and a swap of it, at prices now, as on the swap's page. The review opens at once, in tokens, and shows
   // them in money once read; without them, it stays in tokens, and swaps none.
-  const [earnedLine, feeLine, paidLine, gasLine] = [".claim-earned", ".claim-fee", ".claim-paid", ".claim-gas"].map(
-    (name) => body.querySelector(name)!,
-  ) as [Element, Element, Element, Element];
+  // Each found now: the review moves them out of `body` once it opens.
+  const [earnedLine, feeLine, paidLine, gasLine, swapGasLine, swapGasRow] = [
+    ".claim-earned",
+    ".claim-fee",
+    ".claim-paid",
+    ".claim-gas",
+    ".claim-gas-swap",
+    ".claim-gas-swap-line",
+  ].map((name) => body.querySelector<HTMLElement>(name)!) as [
+    HTMLElement,
+    HTMLElement,
+    HTMLElement,
+    HTMLElement,
+    HTMLElement,
+    HTMLElement,
+  ];
   const [tokenList, more] = [
     body.querySelector(".claim-tokens")!,
     body.querySelector<HTMLDetailsElement>(".claim-more")!,
@@ -176,19 +189,23 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   let prices: Prices | undefined;
   let settled = false;
   let withSwap: bigint | undefined;
-  const sayGas = () =>
-    live(gasLine, () => {
-      // Without prices, in the ETH that pays it.
-      const of = (gas: bigint) => (settled && found ? gasWords(gas * found.gasPrice, prices) : "…");
-      return `Gas ${simulated ? of(totalGas) : "…"}${withSwap === undefined ? "" : `, ${of(withSwap)} with the swap`}`;
-    });
+  // The claim's gas, as simulated or else as estimated, and with the swap: pending until the prices are read or failed;
+  // without them, in the ETH that pays it, and without the gas price, in gas.
+  const sayGas = () => {
+    const of = (gas: bigint) => (): Text =>
+      !settled ? PENDING : found ? gasWords(gas * found.gasPrice, prices) : `${gas.toLocaleString("en-GB")} gas`;
+    live(gasLine, of(totalGas));
+    swapGasRow.hidden = withSwap === undefined;
+    if (withSwap !== undefined) live(swapGasLine, of(withSwap));
+  };
   const drawPrices = () => {
-    // To the cent, so that the bill lines up at the point; the fee as what lies between the two around it, as they show,
-    // so that the bill adds up as it reads.
+    // To the cent, so that the bill lines up at the point; the fee as what lies between the two around it, as they
+    // show, so that the bill adds up as it reads.
     const [earned, reaches] = [totals.map(({ token, earned }) => ({ token, amount: earned })), paid].map(
       (amounts) => prices && moneyAt(valueAt(amounts, tokens, prices), prices),
     );
-    const worth = (sum: () => Money) => () => (prices ? money(sum(), { cents: true }) : settled ? "Not read" : "…");
+    const worth = (sum: () => Money) => (): Text =>
+      prices ? money(sum(), { cents: true }) : settled ? "Not read" : PENDING;
     live(
       earnedLine,
       worth(() => earned!),
@@ -279,14 +296,26 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   });
   // Swapped into one token: the claim brings exact amounts, known before, so the page approves each for exactly that,
   // and the swap sells "my balance, up to the allowance". With batching, or from a Safe, all in one prompt; otherwise
-  // the claim first, then the swap's own review.
-  // Only all or nothing: should the claim fail, a swap of "my balance" would sell tokens the wallet held before. And only
-  // if the claim leaves room in the transaction for the swap.
+  // the claim first, then the swap's own review. Only all or nothing: should the claim fail, a swap of "my balance"
+  // would sell tokens the wallet held before. And only if the claim leaves room in the transaction for the swap.
   const together = (caps.atomic || !!connection.wallet.propose) && !apart;
   let planned = 0;
-  const plan = async (swapper: Swapper): Promise<void> => {
+  const intoChosen = () => radios.find(({ checked }) => checked)?.value === "into";
+  // A swap into one token, planned anew for each token picked: pending until planned. One that fails says so, and the
+  // claim comes as it is.
+  const plan = (swapper: Swapper): void => {
     const id = ++planned;
-    into.textContent = "…";
+    planInto(swapper, id).catch((error: unknown) => {
+      console.error(error);
+      if (id !== planned) return;
+      setText(into, "Not read: they come as they are.");
+      withSwap = undefined;
+      sayGas();
+      opened.replace(claimSlips, { outcomeOf: asTheyAre });
+    });
+  };
+  const planInto = async (swapper: Swapper, id: number): Promise<void> => {
+    setText(into, PENDING);
     withSwap = undefined;
     sayGas();
     const gasValue = () => 0n;
@@ -334,12 +363,15 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       const out = kept + these.reduce((sum, { out }) => sum + paidOf(out), 0n);
       const least = kept + these.reduce((sum, { route }) => sum + route.minPaid, 0n);
       const swappedNames = these.map(({ token }) => token.symbol);
-      into.textContent = these.length
-        ? `${figure(out, swapper.decimals)} ${swapper.symbol}, at least ${figure(least, swapper.decimals)}, from ${list(swappedNames)}${left.length ? `; ${count(left.length, "token", "tokens")} kept` : ""}`
-        : `None worth swapping into ${swapper.symbol}`;
+      setText(
+        into,
+        these.length
+          ? `${figure(out, swapper.decimals)} ${swapper.symbol}, at least ${figure(least, swapper.decimals)}, from ${list(swappedNames)}${left.length ? `; ${count(left.length, "token", "tokens")} kept` : ""}`
+          : `None worth swapping into ${swapper.symbol}`,
+      );
     };
     sayInto(items);
-    const chosen = radios.find(({ checked }) => checked)?.value === "into";
+    const chosen = intoChosen();
     if (!items.length || !chosen) {
       if (chosen) opened.replace(claimSlips, { outcomeOf: asTheyAre });
       return;
@@ -410,9 +442,11 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     const run = await simulate(connection.address, all).catch(() => undefined);
     if (id !== planned) return;
     if (run?.some(({ ok }) => !ok) || (run?.reduce((sum, { gas }) => sum + gas, 0n) ?? 0n) > MAX_CLAIM_GAS) {
-      into.textContent = "Base refused both together: they come as they are.";
+      setText(into, "Base refused both together: they come as they are.");
       return opened.replace(claimSlips, { outcomeOf: asTheyAre });
     }
+    // Picked "As they are" meanwhile: the line says what the swap would fetch, and the claim stays as it is.
+    if (!intoChosen()) return;
     if (run) {
       withSwap = run.reduce((sum, { gas }) => sum + gas, 0n);
       sayGas();
@@ -426,11 +460,10 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       },
     });
   };
+  // "As they are" leaves a plan under way to say what the swap would fetch, without taking it.
   const choose = () => {
-    const chosen = radios.find(({ checked }) => checked)?.value;
-    if (chosen === "into") void plan(swapperOf(select.value)!);
+    if (intoChosen()) plan(swapperOf(select.value)!);
     else {
-      planned++;
       withSwap = undefined;
       sayGas();
       opened.replace(claimSlips, { outcomeOf: asTheyAre });
@@ -446,6 +479,6 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   const safeApart = apart && !!connection.wallet.propose;
   if (!select.options.length || safeApart) {
     radios.find(({ value }) => value === "into")!.disabled = select.disabled = true;
-    into.textContent = safeApart ? "Swap them once the claims go through." : "Swaps are off.";
-  } else void plan(swapperOf(select.value)!);
+    setText(into, safeApart ? "Swap them once the claims go through." : "Swaps are off.");
+  } else plan(swapperOf(select.value)!);
 }

@@ -1,11 +1,11 @@
 import { decodeEventLog, encodeEventTopics, numberToHex, parseAbi, type Address, type Hex } from "viem";
 import { readLater, required, rpc, same } from "./chain.ts";
-import { AUTOMAXI } from "./config.ts";
-import { autoMaxi } from "./hydrex.ts";
+import { DOUBLE_ESPRESSO } from "./config.ts";
+import { doubleEspresso } from "./hydrex.ts";
 import { order, positive, type Amount, type Log } from "./receipts.ts";
 
-// AutoMaxi pays each claim to the account's owner, in the tokens earned, less its fee. It records the block of each
-// account's last claim that received anything, and each claim's event carries the block recorded before it. So the
+// Double Espresso pays each claim to the account's owner, in the tokens earned, less its fee. It records the block of
+// each account's last claim that received anything, and each claim's event carries the block recorded before it. So the
 // page reads an account's claims newest first, one block of logs at a time, and the accounts claimed in the same block
 // share each read. Anyone can claim for an account, even dust through a contract of their own, which makes its history
 // as long as they like: the page stops after a few blocks.
@@ -108,9 +108,9 @@ export async function walkClaims(
 const CLAIMED = encodeEventTopics({ abi: claimedAbi, eventName: "Claimed" })[0];
 const topic = (id: bigint): Hex => numberToHex(id, { size: 32 });
 
-// AutoMaxi's claims for some accounts in a block, from one read of logs. Each account's claims in a block are read once.
-// The page reads a block only where AutoMaxi recorded a claim for each of the accounts, so an RPC whose logs lack one is
-// behind, or lost them, and the next is asked.
+// Double Espresso's claims for some accounts in a block, from one read of logs. Each account's claims in a block are
+// read once. The page reads a block only where Double Espresso recorded a claim for each of the accounts, so an RPC
+// whose logs lack one is behind, or lost them, and the next is asked.
 const claimsIn = new Map<string, Claim[]>();
 
 export const readClaimsAt: ClaimsAt = async (block, ids) => {
@@ -121,7 +121,7 @@ export const readClaimsAt: ClaimsAt = async (block, ids) => {
       "eth_getLogs",
       [
         {
-          address: AUTOMAXI.address,
+          address: DOUBLE_ESPRESSO.address,
           fromBlock: numberToHex(block),
           toBlock: numberToHex(block),
           topics: [CLAIMED, missing.map(topic)],
@@ -148,11 +148,11 @@ export const readClaimsAt: ClaimsAt = async (block, ids) => {
 // For tests: the claims read are kept for the rest of the session.
 export const forgetClaims = (): void => claimsIn.clear();
 
-// The block of each account's last claim through AutoMaxi that received anything, or 0.
+// The block of each account's last claim through Double Espresso that received anything, or 0.
 export async function lastClaimBlocks(ids: bigint[], block: number): Promise<Map<bigint, number>> {
   const found = required(
     await readLater(
-      ids.map((id) => autoMaxi("lastClaimBlock", id)),
+      ids.map((id) => doubleEspresso("lastClaimBlock", id)),
       block,
     ),
   ) as bigint[];

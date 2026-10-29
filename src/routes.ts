@@ -1,8 +1,8 @@
 import { DEFAULT_OUTPUT, byKind, swapperOf, type Kind, type Output } from "./config.ts";
 
 // The page's addresses. Each is a fragment, which never reaches a server: `#app`, `#about`, `#hydrex`,
-// `#hydrex/carbon-impact`, `#hydrex/9540`, `#swap`, `#swap/weth`. A page's section is one more part, such as
-// `#hydrex/carbon-impact/check` or `#swap/weth/check`. Anything else is Home.
+// `#hydrex/matcha-latte`, `#hydrex/9540`, `#swap`, `#swap/weth`. A page's section is one more part, such as
+// `#hydrex/matcha-latte/check` or `#swap/weth/check`. Anything else is Home.
 
 export type Route =
   | { view: "home" }
@@ -17,8 +17,8 @@ export type Route =
 // "check".
 export const APP_SECTIONS = ["allows"];
 export const PRODUCT_SECTIONS: Record<Kind, string[]> = {
-  "carbon-impact": ["fees", "record", "joining", "carbon", "check", "control"],
-  automaxi: ["fees", "record", "votes", "joining", "check", "control"],
+  "matcha-latte": ["fees", "record", "joining", "carbon", "check", "control"],
+  "double-espresso": ["fees", "record", "votes", "joining", "check", "control"],
 };
 export const SWAP_SECTIONS = ["fees", "check", "approvals"];
 

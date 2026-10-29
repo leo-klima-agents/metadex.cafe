@@ -11,7 +11,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { AUTOMAXI, CARBON_IMPACT, VOTING_ESCROW } from "../src/config.ts";
+import { DOUBLE_ESPRESSO, MATCHA_LATTE, VOTING_ESCROW } from "../src/config.ts";
 import { WEEK } from "../src/format.ts";
 import {
   canJoin,
@@ -21,6 +21,7 @@ import {
   join,
   leave,
   leaveOther,
+  paidBpsOf,
   readAccount,
   statusOf,
   type Account,
@@ -32,8 +33,8 @@ const LIQUID_HYDREX: Address = "0x809F8175b8F60960dF2bc7a78a7C4Eb04d138AF0";
 const LOCK_MAXI: Address = "0x53388a4E98Bb56F8571433F5461010Fc287929d3";
 const USDC: Address = "0xE57b3Ea02336B9b418cA523aB5aD6f479d93bD1D";
 const STRANGER: Address = "0x000000000000000000000000000000000000dEaD";
-const CONDUIT = CARBON_IMPACT.address;
-const MAXI = AUTOMAXI.address;
+const CONDUIT = MATCHA_LATTE.address;
+const MAXI = DOUBLE_ESPRESSO.address;
 const START = 1_792_022_400; // Thu 15 Oct 2026, 00:00 UTC
 const NOW = START + 86_400;
 const STOPPED = 1_788_955_299; // Wed 9 Sep 2026, 12:01 UTC, when USDC last voted
@@ -55,7 +56,7 @@ const account = (changes: Partial<Account> = {}): Account => ({
 });
 const statusWith = (changes: Partial<Account>) => statusOf(account(changes), OWNER, NOW, START);
 const groupWith = (changes: Partial<Account>) => groupOf(account(changes), statusWith(changes));
-const inCarbonImpact = { automation: CARBON_IMPACT };
+const inMatchaLatte = { automation: MATCHA_LATTE };
 
 // Written separately from src/hydrex.ts, from the verified source on Sourcify.
 const abi = parseAbi(["function setConduitApproval(address conduitAddress, uint256 tokenId, bool approve)"]);
@@ -64,26 +65,26 @@ const approval = (id: bigint, approve: boolean, conduit: Address = CONDUIT) => (
   data: encodeFunctionData({ abi, functionName: "setConduitApproval", args: [conduit, id, approve] }),
 });
 const txs = (steps: Step[]) => steps.map(({ to, data }) => ({ to, data }));
-const canJoinIt = (changes: Partial<Account>) => canJoin(account(changes), CARBON_IMPACT, NOW);
-const canLeaveIt = (changes: Partial<Account>) => canLeave(account(changes), CARBON_IMPACT);
+const canJoinIt = (changes: Partial<Account>) => canJoin(account(changes), MATCHA_LATTE, NOW);
+const canLeaveIt = (changes: Partial<Account>) => canLeave(account(changes), MATCHA_LATTE);
 
-test("in Carbon Impact, joined this epoch, and left this epoch", () => {
+test("in Matcha Latte, joined this epoch, and left this epoch", () => {
   assert.deepEqual(statusWith({ delegate: CONDUIT, delegateAtStart: CONDUIT, claimer: CONDUIT }), {
     kind: "in",
-    ...inCarbonImpact,
+    ...inMatchaLatte,
   });
   assert.deepEqual(statusWith({ delegate: CONDUIT, claimer: CONDUIT }), {
     kind: "joined",
-    ...inCarbonImpact,
+    ...inMatchaLatte,
     date: START + WEEK,
   });
-  assert.deepEqual(statusWith({ delegateAtStart: CONDUIT }), { kind: "left", ...inCarbonImpact, date: START + WEEK });
+  assert.deepEqual(statusWith({ delegateAtStart: CONDUIT }), { kind: "left", ...inMatchaLatte, date: START + WEEK });
 });
 
 test("votes without claims, or claims without votes, is only partly in", () => {
-  assert.deepEqual(statusWith({ delegate: CONDUIT, delegateAtStart: CONDUIT }), { kind: "partly", ...inCarbonImpact });
-  assert.deepEqual(statusWith({ claimer: CONDUIT }), { kind: "partly", ...inCarbonImpact });
-  assert.deepEqual(statusWith({ delegate: MAXI, claimer: CONDUIT }), { kind: "partly", automation: AUTOMAXI });
+  assert.deepEqual(statusWith({ delegate: CONDUIT, delegateAtStart: CONDUIT }), { kind: "partly", ...inMatchaLatte });
+  assert.deepEqual(statusWith({ claimer: CONDUIT }), { kind: "partly", ...inMatchaLatte });
+  assert.deepEqual(statusWith({ delegate: MAXI, claimer: CONDUIT }), { kind: "partly", automation: DOUBLE_ESPRESSO });
 });
 
 test("other delegates: the owner, nobody, another automation on Hydrex's list, any other address", () => {
@@ -122,9 +123,9 @@ test("an account that left another automation this epoch votes from the next", (
 test("accounts are grouped by what their owner can do with them", () => {
   assert.equal(groupWith({ delegate: USDC, delegateAtStart: USDC, delegateVoted: STOPPED }), "needs");
   assert.equal(groupWith({ claimer: CONDUIT }), "needs", "partly in");
-  assert.equal(groupWith({ delegate: CONDUIT, delegateAtStart: CONDUIT, claimer: CONDUIT }), "in:carbon-impact");
-  assert.equal(groupWith({ delegate: MAXI, delegateAtStart: MAXI, claimer: MAXI }), "in:automaxi");
-  assert.equal(groupWith({ delegate: CONDUIT, claimer: CONDUIT }), "in:carbon-impact", "joining");
+  assert.equal(groupWith({ delegate: CONDUIT, delegateAtStart: CONDUIT, claimer: CONDUIT }), "in:matcha-latte");
+  assert.equal(groupWith({ delegate: MAXI, delegateAtStart: MAXI, claimer: MAXI }), "in:double-espresso");
+  assert.equal(groupWith({ delegate: CONDUIT, claimer: CONDUIT }), "in:matcha-latte", "joining");
   assert.equal(groupWith({ delegateAtStart: CONDUIT }), "other", "leaving");
   assert.equal(groupWith({}), "other");
   assert.equal(groupWith({ delegate: USDC, delegateVoted: NOW }), "other", "in a running automation");
@@ -132,7 +133,7 @@ test("accounts are grouped by what their owner can do with them", () => {
   assert.equal(groupWith({ delegateAtStart: USDC }), "other", "left another automation");
   assert.equal(groupWith({ lockType: 0, end: NOW }), "closed");
   assert.equal(groupWith({ amount: 0n }), "closed");
-  assert.equal(groupWith({ amount: 0n, delegate: CONDUIT, claimer: CONDUIT }), "in:carbon-impact", "empty, but in");
+  assert.equal(groupWith({ amount: 0n, delegate: CONDUIT, claimer: CONDUIT }), "in:matcha-latte", "empty, but in");
 });
 
 test("an empty account or an ended lock says so first", () => {
@@ -145,34 +146,34 @@ test("an empty account or an ended lock says so first", () => {
 test("who can join and who can leave", () => {
   assert.ok(canJoinIt({}));
   assert.ok(canJoinIt({ delegate: USDC }), "in another automation");
-  assert.ok(canJoinIt({ delegate: MAXI, claimer: MAXI }), "in AutoMaxi");
+  assert.ok(canJoinIt({ delegate: MAXI, claimer: MAXI }), "in Double Espresso");
   assert.ok(canJoinIt({ claimer: CONDUIT }), "partly in");
   assert.ok(!canJoinIt({ delegate: CONDUIT, claimer: CONDUIT }), "already in");
   assert.ok(!canJoinIt({ amount: 0n }), "empty");
   assert.ok(!canJoinIt({ lockType: 0, end: NOW }), "lock ended");
   assert.ok(canJoinIt({ lockType: 0, end: NOW + 1 }), "lock not ended yet");
-  assert.ok(canJoin(account({ delegate: CONDUIT, claimer: CONDUIT }), AUTOMAXI, NOW), "in Carbon Impact");
+  assert.ok(canJoin(account({ delegate: CONDUIT, claimer: CONDUIT }), DOUBLE_ESPRESSO, NOW), "in Matcha Latte");
 
   assert.ok(canLeaveIt({ delegate: CONDUIT, claimer: CONDUIT }));
   assert.ok(canLeaveIt({ claimer: CONDUIT }), "partly in");
   assert.ok(canLeaveIt({ amount: 0n, delegate: CONDUIT, claimer: CONDUIT }), "empty but in");
   assert.ok(!canLeaveIt({ delegate: USDC, claimer: USDC }), "in another automation");
-  assert.ok(!canLeaveIt({ delegate: MAXI, claimer: MAXI }), "in AutoMaxi");
-  assert.ok(canLeave(account({ delegate: MAXI, claimer: MAXI }), AUTOMAXI));
+  assert.ok(!canLeaveIt({ delegate: MAXI, claimer: MAXI }), "in Double Espresso");
+  assert.ok(canLeave(account({ delegate: MAXI, claimer: MAXI }), DOUBLE_ESPRESSO));
 
   assert.ok(canLeaveOther(account({ delegate: USDC, claimer: USDC })));
-  assert.ok(!canLeaveOther(account({ delegate: CONDUIT, claimer: CONDUIT })), "in Carbon Impact");
+  assert.ok(!canLeaveOther(account({ delegate: CONDUIT, claimer: CONDUIT })), "in Matcha Latte");
   assert.ok(!canLeaveOther(account({ delegate: STRANGER })), "not a known automation");
   assert.ok(!canLeaveOther(account()), "its owner's");
 });
 
 test("joining sets the conduit's approval on the VotingEscrow", () => {
-  const [step] = join([account()], CARBON_IMPACT);
+  const [step] = join([account()], MATCHA_LATTE);
   assert.deepEqual(txs([step!]), [approval(141n, true)]);
-  assert.equal(step!.says, "Account #141 joins Carbon Impact.");
+  assert.equal(step!.says, "Account #141 joins Matcha Latte.");
   assert.deepEqual([step!.conduit, step!.id, step!.approve], [CONDUIT, 141n, true]);
   assert.equal(step!.on, "Hydrex's VotingEscrow");
-  assert.equal(step!.conduitName, "Carbon Impact");
+  assert.equal(step!.conduitName, "Matcha Latte");
 });
 
 test("an account in other automations joins directly, one call per account, naming what it leaves", () => {
@@ -182,15 +183,15 @@ test("an account in other automations joins directly, one call per account, nami
       account({ id: 42n, delegate: LOCK_MAXI, claimer: USDC }),
       account({ id: 7n, claimer: USDC }),
     ],
-    CARBON_IMPACT,
+    MATCHA_LATTE,
   );
   assert.deepEqual(txs(steps), [approval(141n, true), approval(42n, true), approval(7n, true)]);
   assert.deepEqual(
     steps.map(({ says }) => says),
     [
-      "Account #141 leaves the Liquid Hydrex automation and joins Carbon Impact.",
-      "Account #42 leaves the Hydrex Lock Maxi and USDC automations and joins Carbon Impact.",
-      "Account #7 leaves the USDC automation and joins Carbon Impact.",
+      "Account #141 leaves the Liquid Hydrex automation and joins Matcha Latte.",
+      "Account #42 leaves the Hydrex Lock Maxi and USDC automations and joins Matcha Latte.",
+      "Account #7 leaves the USDC automation and joins Matcha Latte.",
     ],
   );
 });
@@ -198,10 +199,10 @@ test("an account in other automations joins directly, one call per account, nami
 test("leaving clears the conduit's approval", () => {
   const steps = leave(
     [account({ delegate: CONDUIT, claimer: CONDUIT }), account({ id: 42n, claimer: CONDUIT })],
-    CARBON_IMPACT,
+    MATCHA_LATTE,
   );
   assert.deepEqual(txs(steps), [approval(141n, false), approval(42n, false)]);
-  assert.equal(steps[1]!.says, "Account #42 leaves Carbon Impact.");
+  assert.equal(steps[1]!.says, "Account #42 leaves Matcha Latte.");
 });
 
 test("leaving another automation clears its approval, named by its address", () => {
@@ -236,28 +237,30 @@ test("leaving another automation clears its approval, named by its address", () 
     ],
   );
   assert.deepEqual(leaveOther([account({ delegate: STRANGER })]), [], "not on Hydrex's list");
-  const [joining] = join([account({ delegate: USDC })], CARBON_IMPACT);
+  const [joining] = join([account({ delegate: USDC })], MATCHA_LATTE);
   assert.equal(joining!.conduit, CONDUIT);
-  assert.ok(!("automation" in joining!), "Carbon Impact's call names no other automation");
+  assert.ok(!("automation" in joining!), "Matcha Latte's call names no other automation");
 });
 
-test("AutoMaxi: in it, joining it, and moving between the two in one call, which takes the votes and the claims", () => {
-  const maxi = { automation: AUTOMAXI };
+test("Double Espresso: in it, joining it, and moving between the two in one call, which takes the votes and the claims", () => {
+  const maxi = { automation: DOUBLE_ESPRESSO };
   assert.deepEqual(statusWith({ delegate: MAXI, delegateAtStart: MAXI, claimer: MAXI }), { kind: "in", ...maxi });
   assert.deepEqual(statusWith({ delegate: MAXI, delegateAtStart: CONDUIT, claimer: MAXI }), {
     kind: "joined",
     ...maxi,
     date: START + WEEK,
   });
-  const [move] = join([account({ delegate: CONDUIT, delegateAtStart: CONDUIT, claimer: CONDUIT })], AUTOMAXI);
+  const [move] = join([account({ delegate: CONDUIT, delegateAtStart: CONDUIT, claimer: CONDUIT })], DOUBLE_ESPRESSO);
   assert.deepEqual(txs([move!]), [approval(141n, true, MAXI)]);
-  assert.equal(move!.says, "Account #141 leaves Carbon Impact and joins AutoMaxi.");
-  assert.equal(move!.conduitName, "AutoMaxi");
-  const [back] = join([account({ delegate: MAXI, claimer: MAXI })], CARBON_IMPACT);
-  assert.equal(back!.says, "Account #141 leaves AutoMaxi and joins Carbon Impact.");
-  const [both] = join([account({ delegate: USDC, claimer: CONDUIT })], AUTOMAXI);
-  assert.equal(both!.says, "Account #141 leaves Carbon Impact and the USDC automation and joins AutoMaxi.");
-  assert.deepEqual(txs(leave([account({ delegate: MAXI, claimer: MAXI })], AUTOMAXI)), [approval(141n, false, MAXI)]);
+  assert.equal(move!.says, "Account #141 leaves Matcha Latte and joins Double Espresso.");
+  assert.equal(move!.conduitName, "Double Espresso");
+  const [back] = join([account({ delegate: MAXI, claimer: MAXI })], MATCHA_LATTE);
+  assert.equal(back!.says, "Account #141 leaves Double Espresso and joins Matcha Latte.");
+  const [both] = join([account({ delegate: USDC, claimer: CONDUIT })], DOUBLE_ESPRESSO);
+  assert.equal(both!.says, "Account #141 leaves Matcha Latte and the USDC automation and joins Double Espresso.");
+  assert.deepEqual(txs(leave([account({ delegate: MAXI, claimer: MAXI })], DOUBLE_ESPRESSO)), [
+    approval(141n, false, MAXI),
+  ]);
 });
 
 test("an account whose ownerOf fails is asked again on its own before it is taken for gone", async () => {
@@ -297,4 +300,11 @@ test("an account whose ownerOf fails is asked again on its own before it is take
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test("what reaches the owner of Matcha Latte's payouts is not known until its fee is", () => {
+  const settings = { retireBps: 3_333n } as Parameters<typeof paidBpsOf>[0];
+  assert.equal(paidBpsOf(settings), undefined, "an unknown fee is not none");
+  assert.equal(paidBpsOf({ ...settings, feeBps: 0n }), 6_667n);
+  assert.equal(paidBpsOf({ ...settings, feeBps: 100n }), 6_600n);
 });

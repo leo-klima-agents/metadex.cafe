@@ -108,11 +108,55 @@ function recordStart(url: string, kind: Kind, time: number): void {
     started.set(key, [...(started.get(key) ?? []), time]);
 }
 
+// Once every RPC got no answer at all three times in a row, for two requests or more, over two seconds or more, as when
+// the device is offline: the requests under way, those waiting their turn, and those that follow fail at once for a
+// while, rather than each asking again for seconds, so that the page soon says that reading Base failed. A short loss of
+// the network does not, nor one request that the RPCs, or a proxy before them, cut off: it fails alone, as any other.
+// Then the next request is asked as usual, and any answer ends it. An RPC that is busy, or slow, can be reached. So can
+// one that answered within the while: a browser tells a refusal sent without the headers that let the page read it, as
+// some RPCs send when too many requests come at once, from no network at all.
+const CUT_OFF = 10_000;
+const UNANSWERED = 3;
+const UNANSWERED_FOR = 2_000;
+// Each RPC's run of requests with no answer: how many, since when, and which; and when it last answered.
+const unanswered = new Map<string, { count: number; since: number; bodies: Set<string> }>();
+const reachedAt = new Map<string, number>();
+let cutUntil = 0;
+const cutOff = (): boolean => performance.now() < cutUntil;
+
+function reachedOrNot(url: string, body: string, reached: boolean): void {
+  const time = performance.now();
+  if (reached) {
+    reachedAt.set(url, time);
+    unanswered.clear();
+    cutUntil = 0;
+    return;
+  }
+  if (time - (reachedAt.get(url) ?? -Infinity) < CUT_OFF) return;
+  const run = unanswered.get(url) ?? { count: 0, since: time, bodies: new Set() };
+  run.count++;
+  run.bodies.add(body);
+  unanswered.set(url, run);
+  const out = (each: string) => {
+    const { count = 0, since = time, bodies = new Set() } = unanswered.get(each) ?? {};
+    return count >= UNANSWERED && bodies.size >= 2 && time - since >= UNANSWERED_FOR;
+  };
+  if (RPCS.every(out)) cutUntil = time + CUT_OFF;
+}
+export class Unreachable extends Error {
+  constructor() {
+    super("No Base RPC can be reached.");
+  }
+}
+
 // For tests.
 export function resetRateLimits(): void {
   started.clear();
   restingUntil.clear();
   learnt.clear();
+  unanswered.clear();
+  reachedAt.clear();
+  cutUntil = 0;
 }
 
 let running = 0;
@@ -146,7 +190,8 @@ const notNull: Accept = (result) => result !== null;
 type Options = { later?: boolean; accept?: Accept; doubt?: Accept };
 type Doubted = { result: unknown } | undefined;
 
-async function askOne(url: string, body: string, accept: Accept): Promise<Answer | { answered: false; busy: boolean }> {
+type Unanswered = { answered: false; busy: boolean; reached: boolean };
+async function askOne(url: string, body: string, accept: Accept): Promise<Answer | Unanswered> {
   let busy = false;
   try {
     const response = await fetch(url, {
@@ -158,12 +203,15 @@ async function askOne(url: string, body: string, accept: Accept): Promise<Answer
     busy = response.status === 429 || response.status >= 500;
     const reply = (await response.json()) as Reply;
     const result = reply?.result;
-    if (result !== undefined) return accept(result) ? { answered: true, result } : { answered: false, busy: false };
+    if (result !== undefined)
+      return accept(result) ? { answered: true, result } : { answered: false, busy: false, reached: true };
     const { code = 0, message = "" } = reply?.error ?? {};
-    return { answered: false, busy: busy || BUSY_CODES.includes(code) || BUSY.test(message) };
+    return { answered: false, busy: busy || BUSY_CODES.includes(code) || BUSY.test(message), reached: true };
   } catch (error) {
-    // A network error is retried. A timeout, or a reply that is not JSON, is not.
-    return { answered: false, busy: busy || error instanceof TypeError };
+    // A network error is retried. A timeout, or a reply that is not JSON, is not. Only a network error with no answer
+    // at all leaves the RPC unreached.
+    const unreached = !busy && error instanceof TypeError;
+    return { answered: false, busy: busy || error instanceof TypeError, reached: !unreached };
   }
 }
 
@@ -181,6 +229,7 @@ async function askEach(
   await takeSlot(later);
   try {
     while (left.length) {
+      if (cutOff()) throw new Unreachable();
       const time = performance.now();
       const free = left.map((url) => freeAt(url, kind, time));
       const i = free.findIndex((at) => at <= time);
@@ -193,6 +242,7 @@ async function askEach(
       const [url] = left.splice(i, 1) as [string];
       recordStart(url, kind, time);
       const outcome = await askOne(url, body, accept);
+      reachedOrNot(url, body, outcome.answered || outcome.reached);
       if (outcome.answered) answered(url, kind);
       if (outcome.answered && doubt?.(outcome.result)) doubted ??= { result: outcome.result };
       else if (outcome.answered) return outcome;
@@ -208,6 +258,7 @@ async function askEach(
 }
 
 export async function rpc<T>(method: string, params: unknown[], options: Options = {}): Promise<T> {
+  if (cutOff()) throw new Unreachable();
   const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
   let urls = RPCS;
   let doubted: Doubted;

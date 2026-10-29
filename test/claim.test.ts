@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { decodeFunctionData, encodeAbiParameters, encodeEventTopics, parseAbi, type Address } from "viem";
-import { AUTOMAXI } from "../src/config.ts";
+import { DOUBLE_ESPRESSO } from "../src/config.ts";
 import {
   CLAIM_CALL_GAS,
   SAFE_CLAIM_CALL_GAS,
@@ -32,16 +32,16 @@ const owed: Owed[] = [
 
 test("a claim passes only the contracts and tokens that owe something", () => {
   assert.deepEqual(claimArgs({ id: 9540n, owed }), [9540n, [FEES], [BRIBES], [USDC, AVNT]]);
-  // Written separately from src/claim.ts, from AutoMaxi's verified source on Sourcify.
+  // Written separately from src/claim.ts, from Double Espresso's verified source on Sourcify.
   const abi = parseAbi([
     "function claim(uint256 tokenId, address[] feeAddresses, address[] bribeAddresses, address[] tokens) returns (uint256[] amounts)",
   ]);
   const slip = claimSlip({ id: 9540n, owed }, new Map());
-  assert.equal(slip.to, AUTOMAXI.address);
+  assert.equal(slip.to, DOUBLE_ESPRESSO.address);
   assert.deepEqual(decodeFunctionData({ abi, data: slip.data }).args, [9540n, [FEES], [BRIBES], [USDC, AVNT]]);
 });
 
-test("AutoMaxi takes 1% of what each token brings, rounded down, and pays the rest", () => {
+test("Double Espresso takes 1% of what each token brings, rounded down, and pays the rest", () => {
   assert.deepEqual(paidBy(owed), [
     { token: USDC, earned: 1_520_000n, fee: 15_200n, paid: 1_504_800n },
     { token: AVNT, earned: 2_400_000_000_000_000_000n, fee: 24_000_000_000_000_000n, paid: 2_376_000_000_000_000_000n },
@@ -56,7 +56,7 @@ test("a claim's receipt reads its Claimed event, and says so when the keeper's c
     "event Claimed(uint256 indexed tokenId, address indexed owner, address indexed caller, address[] tokens, uint256[] amounts, uint256[] fees, uint256 previousClaimBlock)",
   ]);
   const log = (amounts: bigint[], fees: bigint[], caller: Address = OWNER) => ({
-    address: AUTOMAXI.address,
+    address: DOUBLE_ESPRESSO.address,
     topics: encodeEventTopics({
       abi,
       eventName: "Claimed",
@@ -97,7 +97,7 @@ test("a claim that fits one call stays one, as claimArgs gives it", () => {
   assert.deepEqual(claimArgs(calls[0]!), claimArgs({ id: 9540n, owed }));
   assert.equal(
     claimSlip(calls[0]!, new Map()).says,
-    "Claims account #9540's rewards through AutoMaxi, which pays them to you, less 1%.",
+    "Claims account #9540's rewards through Double Espresso, which pays them to you, less 1%.",
   );
 });
 
@@ -119,7 +119,7 @@ test("a claim too large for one transaction is split into calls that each fit, e
     assert.equal(calls.filter(({ owed }) => owed.some((o) => o.contract === contract(i))).length, 1);
   assert.match(
     claimSlip(calls[0]!, new Map(), false).says,
-    /^Claims account #82774's rewards from \d+ reward contracts? through AutoMaxi/,
+    /^Claims account #82774's rewards from \d+ reward contracts? through Double Espresso/,
   );
 });
 
@@ -149,7 +149,7 @@ test("for a Safe, a claim splits into small calls that ask each contract only fo
   const calls = claimCalls({ id: 82774n, owed: many }, SAFE_CLAIM_CALL_GAS);
   const pairs = (list: Owed[]) => list.map(({ contract, token }) => `${contract} ${token}`).sort();
   assert.deepEqual(pairs(calls.flatMap(({ owed }) => owed)), pairs(many));
-  // AutoMaxi asks each contract of a call for each of its tokens: none of those pairs owes nothing.
+  // Double Espresso asks each contract of a call for each of its tokens: none of those pairs owes nothing.
   for (const { owed } of calls) {
     const contracts = new Set(owed.map(({ contract }) => contract));
     const tokens = new Set(owed.map(({ token }) => token));
@@ -173,7 +173,7 @@ test("the receipt of a claim split into calls sums their Claimed events", () => 
     "event Claimed(uint256 indexed tokenId, address indexed owner, address indexed caller, address[] tokens, uint256[] amounts, uint256[] fees, uint256 previousClaimBlock)",
   ]);
   const log = (tokens: Address[], amounts: bigint[], fees: bigint[]) => ({
-    address: AUTOMAXI.address,
+    address: DOUBLE_ESPRESSO.address,
     topics: encodeEventTopics({
       abi,
       eventName: "Claimed",

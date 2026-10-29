@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { encodeFunctionData, zeroAddress } from "viem";
-import { AUTOMAXI, VOTING_ESCROW } from "../src/config.ts";
+import { DOUBLE_ESPRESSO, VOTING_ESCROW } from "../src/config.ts";
 import { readEarnings } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
@@ -20,7 +20,7 @@ import {
   anvil,
   warm,
   approveConduit,
-  autoMaxiReceipts,
+  doubleEspressoReceipts,
   settle,
   claimOne,
   expectApprovals,
@@ -50,7 +50,7 @@ import {
   UNVOTED,
 } from "./harness.ts";
 
-describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", { timeout: 1_800_000 }, () => {
+describe("the page against a fork of Base: a Safe, Double Espresso, and a new epoch", { timeout: 1_800_000 }, () => {
   before(startAtBlock);
   after(stop);
   hooks();
@@ -59,7 +59,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     const { page } = await connected({ owner: NEWCOMER });
     await account(page, 141).getByText(UNVOTED).waitFor();
     await only(page, "needs", 141);
-    await group(page, "needs").getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
+    await group(page, "needs").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
     await toWallet(page);
     await anvil("evm_setAutomine", [false]);
     try {
@@ -73,7 +73,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     } finally {
       await anvil("evm_setAutomine", [true]);
     }
-    await account(page, 141).getByText("Joining Carbon Impact:").waitFor();
+    await account(page, 141).getByText("Joining Matcha Latte:").waitFor();
   });
 
   test("inside Safe{Wallet}, a Safe proposes leaving with two accounts as one Safe transaction", async () => {
@@ -87,25 +87,25 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await frame.getByRole("checkbox", { name: "Pick Hydrex account #53350" }).check();
     await frame.getByRole("checkbox", { name: "Pick Hydrex account #82206" }).check();
     await frame
-      .locator('.group[data-group="in:carbon-impact"] .picked')
+      .locator('.group[data-group="in:matcha-latte"] .picked')
       .getByText(/^2 of 2 · /)
       .waitFor();
     await frame
-      .locator('.group[data-group="in:carbon-impact"]')
+      .locator('.group[data-group="in:matcha-latte"]')
       .getByRole("button", { name: "Leave", exact: true })
       .click();
     await dialog.getByText(/^One Safe transaction, 2 calls$/).waitFor();
     // Co-signers compare each call's fields and calldata, shown in full, with Safe{Wallet}'s.
     const call = dialog.locator(".slip").first();
     assert.equal(await call.locator(".conduit").innerText(), CONDUIT, "co-signers see the address, not only its name");
-    assert.equal(await call.locator(".conduit-name").innerText(), "Carbon Impact");
+    assert.equal(await call.locator(".conduit-name").innerText(), "Matcha Latte");
     assert.equal(await call.locator(".call").innerText(), "100 bytes");
-    assert.equal(await call.locator(".count").textContent(), "Safe · Call 1 of 2 · Leave Carbon Impact");
+    assert.equal(await call.locator(".count").textContent(), "Safe · Call 1 of 2 · Leave Matcha Latte");
     assert.equal(await dialog.locator(".operation").first().isVisible(), false, "Safe{Wallet} sets the operation");
     await shoot(page, "safe-calls-1440-light");
     await dialog.getByRole("button", { name: "Propose in Safe{Wallet}" }).click();
     await dialog.getByText("Proposed.").waitFor();
-    await dialog.getByRole("link", { name: "https://metadex.cafe/#hydrex/carbon-impact/check" }).waitFor();
+    await dialog.getByRole("link", { name: "https://metadex.cafe/#hydrex/matcha-latte/check" }).waitFor();
     type Received = { method: string; params: { txs: { to: string; data: string; value: string }[] } };
     const received = await page.evaluate(() => (window as unknown as { received: Received[] }).received);
     const leave = (id: bigint) => ({
@@ -137,12 +137,12 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await account(page, 141).waitFor();
   });
 
-  test("join AutoMaxi, move between the two automations, and leave it", async () => {
+  test("join Double Espresso, move between the two automations, and leave it", async () => {
     // The pages read these at the latest block, which anvil reads from FORK_URL a slot at a time.
     await warm(() =>
       Promise.all([
         readEarnings(CONDUIT),
-        readEarnings(AUTOMAXI.address),
+        readEarnings(DOUBLE_ESPRESSO.address),
         readAccounts(NEWCOMER),
         readAccounts(LEAVER),
       ]),
@@ -150,8 +150,8 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     const { page, sent } = await connected({ owner: NEWCOMER });
     await account(page, 141).getByText(UNVOTED).waitFor();
     await only(page, "needs", 141);
-    await group(page, "needs").getByRole("button", { name: "Join AutoMaxi", exact: true }).click();
-    await review(page).getByText("Join AutoMaxi · 1 of 2").waitFor();
+    await group(page, "needs").getByRole("button", { name: "Join Double Espresso", exact: true }).click();
+    await review(page).getByText("Join Double Espresso · 1 of 2").waitFor();
     await review(page)
       .getByText("Rewards this Hydrex account has not claimed yet go to you through it too, less 1%.")
       .waitFor();
@@ -161,43 +161,43 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
       .getByText("No record yet", { exact: true })
       .waitFor({ timeout: 120_000 });
     assert.equal(await review(page).locator(".fee-facts").count(), 0, "the fee facts are on its page");
-    await shoot(page, "automaxi-join-1-1440-light");
+    await shoot(page, "double-espresso-join-1-1440-light");
     await review(page).getByRole("button", { name: "Continue" }).click();
-    assert.deepEqual(await review(page).locator(".says").allTextContents(), ["Account #141 joins AutoMaxi."]);
-    assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["AutoMaxi"]);
-    assert.equal(await review(page).locator(".conduit").textContent(), AUTOMAXI.address);
+    assert.deepEqual(await review(page).locator(".says").allTextContents(), ["Account #141 joins Double Espresso."]);
+    assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["Double Espresso"]);
+    assert.equal(await review(page).locator(".conduit").textContent(), DOUBLE_ESPRESSO.address);
     await confirm(page);
-    await expectApprovals([141n], AUTOMAXI.address, AUTOMAXI.address);
-    await group(page, "in:automaxi").getByText("Joining AutoMaxi:").waitFor();
+    await expectApprovals([141n], DOUBLE_ESPRESSO.address, DOUBLE_ESPRESSO.address);
+    await group(page, "in:double-espresso").getByText("Joining Double Espresso:").waitFor();
     assert.equal(sent.length, 1);
 
-    // An account in Carbon Impact moves in one call, and back the same way. LEAVER's were never paid, so the page has
+    // An account in Matcha Latte moves in one call, and back the same way. LEAVER's were never paid, so the page has
     // no receipt to price for them, which would keep anvil busy.
     const member = await connected({ owner: LEAVER });
     const own = member.page;
-    await group(own, "in:carbon-impact").getByText("#53350").waitFor();
+    await group(own, "in:matcha-latte").getByText("#53350").waitFor();
     await pick(own, 53350);
-    await group(own, "in:carbon-impact").getByRole("button", { name: "Move to AutoMaxi", exact: true }).click();
+    await group(own, "in:matcha-latte").getByRole("button", { name: "Move to Double Espresso", exact: true }).click();
     await toWallet(own);
     assert.deepEqual(await review(own).locator(".says").allTextContents(), [
-      "Account #53350 leaves Carbon Impact and joins AutoMaxi.",
+      "Account #53350 leaves Matcha Latte and joins Double Espresso.",
     ]);
     await confirm(own);
-    await expectApprovals([53350n], AUTOMAXI.address, AUTOMAXI.address);
-    await group(own, "in:automaxi").getByText("Joining AutoMaxi:").waitFor();
-    await group(own, "in:automaxi").getByRole("button", { name: "Move to Carbon Impact", exact: true }).click();
+    await expectApprovals([53350n], DOUBLE_ESPRESSO.address, DOUBLE_ESPRESSO.address);
+    await group(own, "in:double-espresso").getByText("Joining Double Espresso:").waitFor();
+    await group(own, "in:double-espresso").getByRole("button", { name: "Move to Matcha Latte", exact: true }).click();
     await toWallet(own);
     assert.deepEqual(await review(own).locator(".says").allTextContents(), [
-      "Account #53350 leaves AutoMaxi and joins Carbon Impact.",
+      "Account #53350 leaves Double Espresso and joins Matcha Latte.",
     ]);
     await confirm(own);
     await expectApprovals([53350n], CONDUIT, CONDUIT);
-    await group(own, "in:carbon-impact").locator("li").filter({ hasText: "#53350" }).waitFor();
-    assert.equal(await group(own, "in:automaxi").isVisible(), false);
+    await group(own, "in:matcha-latte").locator("li").filter({ hasText: "#53350" }).waitFor();
+    assert.equal(await group(own, "in:double-espresso").isVisible(), false);
 
-    // Leaving AutoMaxi gives the votes back to the owner.
-    await group(page, "in:automaxi").getByRole("button", { name: "Leave" }).click();
-    await review(page).getByRole("heading", { name: "Leave AutoMaxi" }).waitFor();
+    // Leaving Double Espresso gives the votes back to the owner.
+    await group(page, "in:double-espresso").getByRole("button", { name: "Leave" }).click();
+    await review(page).getByRole("heading", { name: "Leave Double Espresso" }).waitFor();
     await review(page).locator(".pages").getByText("Claims stop").waitFor();
     await confirm(page);
     await expectApprovals([141n], NEWCOMER, zeroAddress);
@@ -205,9 +205,9 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     assert.deepEqual([...sent, ...member.sent].length, 4);
   });
 
-  test("AutoMaxi's receipts: a claim by its keeper, a stranger's dust, and where the page stops reading", async () => {
-    // Its standing is read in the pools Carbon Impact voted for, last epoch and the one before, as test 7 reads them.
-    const rewards = await autoMaxiReceipts();
+  test("Double Espresso's receipts: a claim by its keeper, a stranger's dust, and where the page stops reading", async () => {
+    // Its standing is read in the pools Matcha Latte voted for, last epoch and the one before, as test 7 reads them.
+    const rewards = await doubleEspressoReceipts();
     const { page, violations } = await open(
       { owner: PAYEE },
       { width: 390, height: 844, url: `${SITE}/#hydrex/82774` },
@@ -215,20 +215,23 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     const standing = position(page).locator(".standing");
     const receipt = standing.locator(".receipt");
     await receipt.waitFor({ timeout: 120_000 });
-    await position(page).locator(".position-status").getByText("Joining AutoMaxi:").waitFor();
-    assert.equal(await receipt.locator(".label").first().textContent(), "Receipt · Account #82774 · AutoMaxi");
+    await position(page).locator(".position-status").getByText("Joining Double Espresso:").waitFor();
+    assert.equal(await receipt.locator(".label").first().textContent(), "Receipt · Account #82774 · Double Espresso");
     assert.match(await receipt.locator(".receipt-claimed").innerText(), /^(< )?[\d,.]+ USDC$/);
     assert.equal(await receipt.locator(".receipt-fee-share").innerText(), "1%");
     assert.match(await receipt.locator(".receipt-fee").innerText(), /^−[\d,.<\s]+ USDC$/);
     assert.match(await receipt.locator(".receipt-paid").innerText(), /^(< )?[\d,.]+ USDC$/);
-    assert.deepEqual(await receipt.locator(".claim-by").allTextContents(), ["sent by 0x0000…dEaD", "sent by AutoMaxi"]);
+    assert.deepEqual(await receipt.locator(".claim-by").allTextContents(), [
+      "sent by 0x0000…dEaD",
+      "sent by Double Espresso",
+    ]);
     assert.equal(await receipt.locator(".receipt-stopped").isVisible(), false);
     // USDC counts as a dollar.
     await receipt
       .locator(".receipt-paid-worth")
       .getByText(/^(≈|<)\s\$/)
       .waitFor({ timeout: 120_000 });
-    await shoot(page, "automaxi-receipt-390-light", position(page));
+    await shoot(page, "double-espresso-receipt-390-light", position(page));
 
     // Dust in many blocks: the page reads ten of them, and says it stopped.
     for (const reward of rewards.filter(({ token }) => token.symbol !== "USDC").slice(0, 10)) {
@@ -244,44 +247,46 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
   });
 
   test("the menu in the App, a page for each automation, and joining from it", async () => {
-    await warm(() => Promise.all([readEarnings(CONDUIT), readEarnings(AUTOMAXI.address), readAccounts(NEWCOMER)]));
+    await warm(() =>
+      Promise.all([readEarnings(CONDUIT), readEarnings(DOUBLE_ESPRESSO.address), readAccounts(NEWCOMER)]),
+    );
     const { page, violations } = await connected({ owner: NEWCOMER }, { width: 390, height: 844 });
     await account(page, 141).getByText(UNVOTED).waitFor();
     const menu = hydrex(page).locator("#menu");
-    assert.deepEqual(await menu.locator("h3").allInnerTexts(), ["Carbon Impact", "AutoMaxi"]);
-    await menu.locator(".automaxi-state").getByText("Not voted yet").waitFor();
+    assert.deepEqual(await menu.locator("h3").allInnerTexts(), ["Matcha Latte", "Double Espresso"]);
+    await menu.locator(".double-espresso-state").getByText("Not voted yet").waitFor();
     await menu
-      .locator('[data-choice="carbon-impact"] .record')
-      .getByText(/^≈\s\$0\.\d\d$/)
+      .locator('[data-choice="matcha-latte"] .record')
+      .getByText(/^≈\s\$\d+\.\d\d$/)
       .waitFor({ timeout: 120_000 });
-    assert.equal(await menu.locator('[data-choice="automaxi"] .record').innerText(), "No record yet");
-    // Carbon Impact against the average, in words; none of the wallet's accounts is in it.
+    assert.equal(await menu.locator('[data-choice="double-espresso"] .record').innerText(), "No record yet");
+    // Matcha Latte against the average, in words; none of the wallet's accounts is in it.
     await menu
-      .locator('[data-choice="carbon-impact"] .record-versus')
+      .locator('[data-choice="matcha-latte"] .record-versus')
       .getByText(/^(\d[\d.]*% (above|below) the average|About the average)$/)
       .waitFor({ timeout: 300_000 });
-    assert.equal(await menu.locator('[data-choice="carbon-impact"] .yours-count').isVisible(), false);
+    assert.equal(await menu.locator('[data-choice="matcha-latte"] .yours-count').isVisible(), false);
     // Voting yourself: Hydrex's average, and the wallet's own votes, which did not vote last epoch.
     const self = hydrex(page).locator("#vote-yourself");
     await self
       .locator(".average")
-      .getByText(/^≈\s\$0\.\d\d$/)
+      .getByText(/^≈\s\$\d+\.\d\d$/)
       .waitFor({ timeout: 300_000 });
     await self.locator(".yours-average").getByText("Didn't vote", { exact: true }).waitFor({ timeout: 120_000 });
-    assert.equal(await self.locator(".yours-versus").isVisible(), false, "no figure to compare");
+    assert.equal(await self.locator(".yours-versus").innerText(), "", "no figure to compare");
     await shoot(page, "menu-390-light", menu);
-    await menu.getByRole("link", { name: "AutoMaxi" }).click();
-    const maxi = product(page, "automaxi");
-    await maxi.getByRole("heading", { name: "AutoMaxi", level: 1 }).waitFor();
-    assert.equal(await page.title(), "AutoMaxi · metaDEX Café");
+    await menu.getByRole("link", { name: "Double Espresso" }).click();
+    const maxi = product(page, "double-espresso");
+    await maxi.getByRole("heading", { name: "Double Espresso", level: 1 }).waitFor();
+    assert.equal(await page.title(), "Double Espresso · metaDEX Café");
     assert.equal(await maxi.locator(".record").innerText(), "No record yet");
-    assert.equal(await maxi.locator(".record-unit").innerText(), "");
-    await shoot(page, "automaxi-390-light");
+    assert.equal(await maxi.locator(".record-unit").isVisible(), false);
+    await shoot(page, "double-espresso-390-light");
     // #141 and #42877 can join it, so its button waits for a tick.
-    assert.equal(await maxi.getByRole("button", { name: "Join AutoMaxi", exact: true }).isDisabled(), true);
+    assert.equal(await maxi.getByRole("button", { name: "Join Double Espresso", exact: true }).isDisabled(), true);
     await pick(page, 141);
-    await maxi.getByRole("button", { name: "Join AutoMaxi", exact: true }).click();
-    await review(page).getByText("Join AutoMaxi · 1 of 2").waitFor();
+    await maxi.getByRole("button", { name: "Join Double Espresso", exact: true }).click();
+    await review(page).getByText("Join Double Espresso · 1 of 2").waitFor();
     await page.keyboard.press("Escape");
     // It says what it does, beside Hydrex's average, and leads back to Hydrex, which leads back to the wallet.
     await maxi
@@ -290,7 +295,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
       .waitFor();
     await maxi
       .locator(".facts .average")
-      .getByText(/^≈\s\$0\.\d\d$/)
+      .getByText(/^≈\s\$\d+\.\d\d$/)
       .waitFor();
     const back = maxi.getByRole("navigation", { name: "Back" });
     assert.deepEqual(await back.getByRole("link").allInnerTexts(), ["Hydrex"]);
@@ -299,18 +304,18 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await hydrex(page).getByRole("navigation", { name: "Back" }).getByRole("link", { name: "Your wallet" }).click();
     await appTitle(page).waitFor();
 
-    await page.goto(`${SITE}/#hydrex/carbon-impact`);
-    const impact = product(page, "carbon-impact");
-    await impact.getByRole("heading", { name: "Carbon Impact", level: 1 }).waitFor();
-    await impact
+    await page.goto(`${SITE}/#hydrex/matcha-latte`);
+    const matcha = product(page, "matcha-latte");
+    await matcha.getByRole("heading", { name: "Matcha Latte", level: 1 }).waitFor();
+    await matcha
       .locator(".tonnes")
-      .getByText(/^\d[\d,]*$/)
+      .getByText(/^\d[\d,]* t$/)
       .waitFor();
     // Its popups start closed, its fee facts among them, and the address of one opens it.
     assert.equal(await page.locator(":popover-open").count(), 0);
-    await shoot(page, "carbon-impact-390-light");
-    await page.goto(`${SITE}/#hydrex/carbon-impact/fees`);
-    const facts = impact.locator(".fee-facts dd");
+    await shoot(page, "matcha-latte-390-light");
+    await page.goto(`${SITE}/#hydrex/matcha-latte/fees`);
+    const facts = matcha.locator(".fee-facts dd");
     await facts.first().getByText("33.33% retired, 0% fee").waitFor();
     assert.equal(await facts.nth(1).innerText(), "100% retired, 1% fee");
     const treasury = "0xd9e966a6Bfa2aE2113a34Bb4dd02ded921DA50aF";
@@ -318,8 +323,8 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
       await facts.nth(2).getByRole("link", { name: "its treasury" }).getAttribute("href"),
       `https://basescan.org/address/${treasury}`,
     );
-    await page.goto(`${SITE}/#hydrex/carbon-impact/check`);
-    const check = impact.locator('[data-section="check"]');
+    await page.goto(`${SITE}/#hydrex/matcha-latte/check`);
+    const check = matcha.locator('[data-section="check"]');
     assert.equal(await check.evaluate((pop) => pop.matches(":popover-open")), true);
     assert.match(await check.locator("a.treasury").innerText(), new RegExp(`^${treasury}$`));
     assert.equal(await check.locator(".check-failed").count(), 0, "every check passed");
@@ -328,7 +333,7 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await page.goto(`${SITE}/#hydrex/141`);
     await position(page).getByRole("heading", { name: "Account #141", level: 1 }).waitFor();
     await position(page).getByText(UNVOTED).waitFor();
-    await position(page).getByRole("button", { name: "Join AutoMaxi", exact: true }).waitFor();
+    await position(page).getByRole("button", { name: "Join Double Espresso", exact: true }).waitFor();
     await position(page)
       .getByRole("link", { name: /Vote on Hydrex/ })
       .waitFor();
@@ -354,14 +359,14 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
   test("in a new epoch, Join reads again before any review, and the page moves on by itself", async () => {
     await approveConduit(NEWCOMER, CONDUIT, 141n);
     const { page } = await connected({ owner: NEWCOMER }, { flowing: true });
-    await account(page, 141).getByText("Joining Carbon Impact:").waitFor();
+    await account(page, 141).getByText("Joining Matcha Latte:").waitFor();
     await anvil("evm_setNextBlockTimestamp", [FLIP + 60]);
     await anvil("evm_mine");
     await page.clock.setSystemTime((FLIP + 60) * 1000);
-    const joinStopped = group(page, "needs").getByRole("button", { name: "Join Carbon Impact" });
+    const joinStopped = group(page, "needs").getByRole("button", { name: "Join Matcha Latte" });
     await joinStopped.click();
-    await group(page, "in:carbon-impact").locator("li").filter({ hasText: "#141" }).waitFor();
-    await account(page, 141).getByText("Joining Carbon Impact:").waitFor({ state: "detached" });
+    await group(page, "in:matcha-latte").locator("li").filter({ hasText: "#141" }).waitFor();
+    await account(page, 141).getByText("Joining Matcha Latte:").waitFor({ state: "detached" });
     await nextEpoch(page, /Thu,? 29 Oct/);
     assert.equal(await review(page).isVisible(), false);
     await joinStopped.click();

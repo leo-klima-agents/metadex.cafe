@@ -1,8 +1,8 @@
-// Opens the page in a browser of its own against a fork of Base, to try its flows by hand: `npm run qa`, or
-// `npm run qa -- claim` to start from another scenario (scenarios.ts; QA.md says which flow each is for). The page runs
-// as in the browser tests, at https://metadex.cafe, its RPCs answered by anvil, with the test wallet, which signs as any
-// address. A second window, the QA wallet, picks that address and how the wallet answers, starts the scenarios, moves
-// Base's clock on, and makes Base fail as visitors may find it.
+// Opens the page in a browser of its own against a fork of Base, to try its flows by hand: `npm run qa`, or `npm run qa
+// -- claim` to start from another scenario (scenarios.ts; QA.md says which flow each is for). The page runs as in the
+// browser tests, at https://metadex.cafe, its RPCs answered by anvil, with the test wallet, which signs as any address.
+// A second window, the QA wallet, picks that address and how the wallet answers, starts the scenarios, moves Base's
+// clock on, and makes Base fail as visitors may find it.
 //
 // anvil forks through the same caches as the browser tests, in FORK_CACHE, from BASE_RPC_URL: after `npm run
 // test:fork`, each scenario starts in seconds. CHROMIUM names the browser, as for the tests.
@@ -31,8 +31,8 @@ import { multicall3Abi, same } from "../src/chain.ts";
 import {
   APPROVAL_LOGIC,
   AUTOMATIONS,
-  AUTOMAXI,
-  CARBON_IMPACT,
+  DOUBLE_ESPRESSO,
+  MATCHA_LATTE,
   CHAIN_ID,
   MULTICALL3,
   RPCS,
@@ -91,8 +91,8 @@ const PANEL_WIDTH = 520;
 // The windows that show the page: with the test wallet, with two wallets, or without any, as Safe{Wallet} shows it.
 type Kind = "wallet" | "wallets" | "none";
 type Prompt = { id: number; text: string; answer: (yes: boolean) => void };
-// A change to Base that the QA wallet can make and undo: a failure of Base, a check of the page's that fails, or a state
-// of Hydrex's.
+// A change to Base that the QA wallet can make and undo: a failure of Base, a check of the page's that fails, or a
+// state of Hydrex's.
 type Fault = { group: "base" | "check" | "hydrex"; label: string; on(): Promise<void>; off(): Promise<void> };
 // How the wallet sends several calls: one per prompt, in one prompt all or nothing, or in one prompt one by one.
 type Calls = "one" | "atomic" | "each";
@@ -120,9 +120,9 @@ const QA_ABI = parseAbi([
   "function external_bribes(address gauge) view returns (address)",
   "function notifyRewardAmount(address token, uint256 amount)",
 ]);
-// Carbon Impact's executor module, through which its keeper votes and pays: see the README of
+// Matcha Latte's executor module, through which its keeper votes and pays: see the README of
 // https://github.com/ldeso/hydrex-keeper.
-const CARBON_IMPACT_MODULE: Address = "0x750973E0CB728C3112561Bc8E9b235afA9B17E81";
+const MATCHA_LATTE_MODULE: Address = "0x750973E0CB728C3112561Bc8E9b235afA9B17E81";
 // A token of the QA wallet's own, deployed with a name and symbol: see fixtures/QaToken.sol.
 const QA_TOKEN_ABI = parseAbi(["constructor(string name, string symbol, uint8 decimals, uint256 supply)"]);
 const QA_TOKEN = readFileSync(new URL("fixtures/qa-token-init-code.hex", import.meta.url), "utf8").trim() as Hex;
@@ -165,8 +165,8 @@ const NAMES = new Map<string, string>([
   ...SWAPPERS.map(({ address, symbol }): [string, string] => [address.toLowerCase(), `the ${symbol} swapper`]),
   [VOTING_ESCROW.toLowerCase(), "Hydrex's VotingEscrow"],
   [VOTER.toLowerCase(), "Hydrex's Voter"],
-  [CARBON_IMPACT.address.toLowerCase(), "Carbon Impact"],
-  [AUTOMAXI.address.toLowerCase(), "AutoMaxi"],
+  [MATCHA_LATTE.address.toLowerCase(), "Matcha Latte"],
+  [DOUBLE_ESPRESSO.address.toLowerCase(), "Double Espresso"],
 ]);
 const CALLS = [...abi, ...erc20Abi, ...swapperAbi];
 
@@ -328,8 +328,8 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     ]);
     return { block: Number(number), time: Number(timestamp) };
   };
-  // A contract's answer on the fork, at its newest block. One without code there, as a failure ticked below may leave it,
-  // says so rather than that its empty answer cannot be decoded.
+  // A contract's answer on the fork, at its newest block. One without code there, as a failure ticked below may leave
+  // it, says so rather than that its empty answer cannot be decoded.
   const view = async <T>(to: Address, functionName: string, args: unknown[] = []): Promise<T> => {
     try {
       return await readOn<T>(to, QA_ABI, functionName, args);
@@ -526,16 +526,16 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       label: "Tokens' symbols cannot be read",
       ...fail((_, callData) => callData.startsWith(SYMBOL)),
     },
-    "carbon-impact-figures": {
+    "matcha-latte-figures": {
       group: "base",
-      label: "Carbon Impact's figures cannot be read",
-      // Its votes, read from the Voter for Carbon Impact's address: AutoMaxi's still read.
-      ...figuresOf(CARBON_IMPACT.address),
+      label: "Matcha Latte's figures cannot be read",
+      // Its votes, read from the Voter for Matcha Latte's address: Double Espresso's still read.
+      ...figuresOf(MATCHA_LATTE.address),
     },
-    "automaxi-figures": {
+    "double-espresso-figures": {
       group: "base",
-      label: "AutoMaxi's figures cannot be read",
-      ...figuresOf(AUTOMAXI.address),
+      label: "Double Espresso's figures cannot be read",
+      ...figuresOf(DOUBLE_ESPRESSO.address),
     },
     "quotes-under": {
       group: "base",
@@ -553,38 +553,38 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     // As the README's table names them, by the ids of their messages on the page.
     code: {
       group: "check",
-      label: "code: Carbon Impact's code",
-      ...code(CARBON_IMPACT.address, longer),
+      label: "code: Matcha Latte's code",
+      ...code(MATCHA_LATTE.address, longer),
     },
     contracts: {
       group: "check",
-      label: "contracts: Carbon Impact's VotingEscrow",
-      ...answered(CARBON_IMPACT.address, "veToken", [], another),
+      label: "contracts: Matcha Latte's VotingEscrow",
+      ...answered(MATCHA_LATTE.address, "veToken", [], another),
     },
     token: {
       group: "check",
-      label: "token: Carbon Impact's payout token",
-      ...answered(CARBON_IMPACT.address, "kvcm", [], another),
+      label: "token: Matcha Latte's payout token",
+      ...answered(MATCHA_LATTE.address, "kvcm", [], another),
     },
     approvals: {
       group: "check",
-      label: "approvals: what joining Carbon Impact approves",
-      ...answered(VOTING_ESCROW, "getConduitApprovalConfig", [CARBON_IMPACT.address], inactive),
+      label: "approvals: what joining Matcha Latte approves",
+      ...answered(VOTING_ESCROW, "getConduitApprovalConfig", [MATCHA_LATTE.address], inactive),
     },
-    "automaxi-code": {
+    "double-espresso-code": {
       group: "check",
-      label: "automaxi-code: AutoMaxi's code",
-      ...code(AUTOMAXI.address, longer),
+      label: "double-espresso-code: Double Espresso's code",
+      ...code(DOUBLE_ESPRESSO.address, longer),
     },
-    "automaxi-contracts": {
+    "double-espresso-contracts": {
       group: "check",
-      label: "automaxi-contracts: AutoMaxi's VotingEscrow",
-      ...answered(AUTOMAXI.address, "veToken", [], another),
+      label: "double-espresso-contracts: Double Espresso's VotingEscrow",
+      ...answered(DOUBLE_ESPRESSO.address, "veToken", [], another),
     },
-    "automaxi-approvals": {
+    "double-espresso-approvals": {
       group: "check",
-      label: "automaxi-approvals: what joining AutoMaxi approves",
-      ...answered(VOTING_ESCROW, "getConduitApprovalConfig", [AUTOMAXI.address], inactive),
+      label: "double-espresso-approvals: what joining Double Espresso approves",
+      ...answered(VOTING_ESCROW, "getConduitApprovalConfig", [DOUBLE_ESPRESSO.address], inactive),
     },
     upgrade: {
       group: "check",
@@ -608,9 +608,9 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   };
   const faults = new Set<string>();
 
-  // Never fails: what goes wrong shows in the QA wallet, which can start a scenario again. Each starts as the first did,
-  // with the wallet as it was then. Once the session closes, a start stops at its next step, and stops any anvil it
-  // started.
+  // Never fails: what goes wrong shows in the QA wallet, which can start a scenario again. Each starts as the first
+  // did, with the wallet as it was then. Once the session closes, a start stops at its next step, and stops any anvil
+  // it started.
   async function start(next: Scenario): Promise<void> {
     if (closing) return;
     failure = "";
@@ -794,7 +794,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     note(`#${id}'s owner claimed ${claimed.length} of its rewards on Hydrex`);
   }
 
-  // Carbon Impact pays an owner's accounts where the owner says, or Hydrex: setMyPayoutRecipient.
+  // Matcha Latte pays an owner's accounts where the owner says, or Hydrex: setMyPayoutRecipient.
   async function payTo(to: string): Promise<void> {
     const recipient = /^(its )?owner$|^$/i.test(to)
       ? wallet.owner
@@ -802,14 +802,14 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
         ? getAddress(to)
         : undefined;
     if (!recipient) throw new Error(`${to} is not an address.`);
-    await as(wallet.owner, CARBON_IMPACT.address, "setMyPayoutRecipient", [recipient]);
+    await as(wallet.owner, MATCHA_LATTE.address, "setMyPayoutRecipient", [recipient]);
     note(
-      `Carbon Impact pays ${short(wallet.owner)}'s accounts to ${same(recipient, wallet.owner) ? "it" : short(recipient)}`,
+      `Matcha Latte pays ${short(wallet.owner)}'s accounts to ${same(recipient, wallet.owner) ? "it" : short(recipient)}`,
     );
   }
 
-  // As anyone may once the epoch has flipped, and someone soon does on Base: Hydrex's Voter moves on to it, and what the
-  // epoch before earned is final.
+  // As anyone may once the epoch has flipped, and someone soon does on Base: Hydrex's Voter moves on to it, and what
+  // the epoch before earned is final.
   async function moveOn(): Promise<void> {
     const before = Number(await view<bigint>(VOTER, "_epochTimestamp"));
     await gas(STRANGER);
@@ -819,41 +819,41 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     note(`Hydrex moved on to the epoch from ${new Date(after * 1000).toUTCString()}`);
   }
 
-  // Carbon Impact's vote now, pool by pool: the Voter keeps it until it votes again.
+  // Matcha Latte's vote now, pool by pool: the Voter keeps it until it votes again.
   async function lastVote(): Promise<{ pools: Address[]; weights: bigint[] }> {
-    const length = await view<bigint>(VOTER, "poolVoteLength", [CARBON_IMPACT.address]);
+    const length = await view<bigint>(VOTER, "poolVoteLength", [MATCHA_LATTE.address]);
     const pools = await Promise.all(
       Array.from({ length: Number(length) }, (_, i) =>
-        view<Address>(VOTER, "poolVote", [CARBON_IMPACT.address, BigInt(i)]),
+        view<Address>(VOTER, "poolVote", [MATCHA_LATTE.address, BigInt(i)]),
       ),
     );
-    const weights = await Promise.all(pools.map((pool) => view<bigint>(VOTER, "votes", [CARBON_IMPACT.address, pool])));
+    const weights = await Promise.all(pools.map((pool) => view<bigint>(VOTER, "votes", [MATCHA_LATTE.address, pool])));
     return { pools, weights };
   }
 
   // As its keeper does each week, which it does not on the fork: the vote it cast last, in the epoch now.
   async function keeperVotes(): Promise<void> {
     const { pools, weights } = await lastVote();
-    if (!pools.length) throw new Error("Carbon Impact has no vote to cast again.");
-    const keeper = await view<Address>(CARBON_IMPACT_MODULE, "KEEPER");
+    if (!pools.length) throw new Error("Matcha Latte has no vote to cast again.");
+    const keeper = await view<Address>(MATCHA_LATTE_MODULE, "KEEPER");
     await gas(keeper);
-    await as(keeper, CARBON_IMPACT_MODULE, "vote", [pools, weights.map((weight) => (weight > 0n ? weight : 1n))]);
-    note(`Carbon Impact's keeper voted for ${pools.length} pools`);
+    await as(keeper, MATCHA_LATTE_MODULE, "vote", [pools, weights.map((weight) => (weight > 0n ? weight : 1n))]);
+    note(`Matcha Latte's keeper voted for ${pools.length} pools`);
   }
 
-  // As anyone may: 100 USDC of incentives, from Carbon Impact's treasury, for the votes of this epoch in the pool that
-  // Carbon Impact votes for most, so that its votes earn something on the fork.
+  // As anyone may: 100 USDC of incentives, from Matcha Latte's treasury, for the votes of this epoch in the pool that
+  // Matcha Latte votes for most, so that its votes earn something on the fork.
   async function incentive(): Promise<void> {
     const { pools, weights } = await lastVote();
-    if (!pools.length) throw new Error("Carbon Impact votes for no pool.");
+    if (!pools.length) throw new Error("Matcha Latte votes for no pool.");
     const top = pools[weights.indexOf(weights.reduce((a, b) => (b > a ? b : a)))]!;
     const contract = await view<Address>(VOTER, "external_bribes", [await view<Address>(VOTER, "gauges", [top])]);
     const amount = 100_000_000n;
-    if ((await balanceOf(USDC, HOLDER)) < amount) throw new Error("Carbon Impact's treasury holds too little USDC.");
+    if ((await balanceOf(USDC, HOLDER)) < amount) throw new Error("Matcha Latte's treasury holds too little USDC.");
     await gas(HOLDER);
     await mined(HOLDER, USDC, encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [contract, amount] }));
     await as(HOLDER, contract, "notifyRewardAmount", [USDC, amount]);
-    note(`Added 100 USDC of incentives to the pool ${short(top)}, which Carbon Impact votes for most`);
+    note(`Added 100 USDC of incentives to the pool ${short(top)}, which Matcha Latte votes for most`);
   }
 
   // Transactions that Base included after the fork's block, sent again in their order, as their senders.

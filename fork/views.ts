@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
+import type { Locator } from "playwright-core";
 import { toFunctionSelector } from "viem";
 import { blockTime, read } from "../src/chain.ts";
 import { KVCM, VOTER } from "../src/config.ts";
@@ -81,7 +82,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await page.title(), "Your wallet · metaDEX Café");
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Your wallet");
     // The App lists the products, each with what it is: Hydrex, and the swap.
-    assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), ["Hydrex", "Swap many tokens"]);
+    assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), ["Hydrex", "Swap"]);
     assert.deepEqual(await app(page).locator("#products .note").allInnerTexts(), [
       "Automations that vote with your Hydrex accounts.",
       "Sell many tokens for one.",
@@ -162,7 +163,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
   test("a link in the review opens its section, Back keeps the ticks, and an account's page says what stopped", async () => {
     const { page, violations } = await connected({ owner: ELSEWHERE }, { width: 390, height: 844 });
     await pick(page, 2435, 2439);
-    await group(page, "needs").getByRole("button", { name: "Join Carbon Impact", exact: true }).click();
+    await group(page, "needs").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
     await review(page).getByRole("heading", { name: "Before you join" }).waitFor();
     await review(page).getByRole("link", { name: "Can change" }).click();
     assert.equal(await review(page).isVisible(), false);
@@ -170,8 +171,8 @@ describe("the page against a fork of Base: its views, and each account's payouts
       .locator('.pop:popover-open [data-section="control"]')
       .getByText("Can change the share retired")
       .waitFor();
-    assert.equal(await page.title(), "Carbon Impact · metaDEX Café");
-    assert.equal(new URL(page.url()).hash, "#hydrex/carbon-impact/control");
+    assert.equal(await page.title(), "Matcha Latte · metaDEX Café");
+    assert.equal(new URL(page.url()).hash, "#hydrex/matcha-latte/control");
     assert.equal(await appTitle(page).isVisible(), false);
     await page.goBack();
     await hydrexTitle(page).waitFor();
@@ -189,7 +190,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
       .locator(".position-stopped")
       .getByText(/Earns nothing\s+since\s+Thu,? 10 Sept?\./)
       .waitFor();
-    await position(page).getByRole("button", { name: "Join Carbon Impact", exact: true }).waitFor();
+    await position(page).getByRole("button", { name: "Join Matcha Latte", exact: true }).waitFor();
     await position(page).getByRole("button", { name: "Vote yourself", exact: true }).waitFor();
     assert.equal(await position(page).locator(".position-owner-row").isVisible(), false, "its own account");
     await shoot(page, "stopped-account-390-light");
@@ -240,28 +241,29 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await account(page, 9540)
       .getByText(/≈\s\$6\.1\d last epoch/)
       .waitFor({ timeout: 120_000 });
-    assert.equal(await account(page, 14485).locator(".earned").isVisible(), false, "its owner did not vote");
+    // Its owner did not vote: once read, its line goes.
+    await account(page, 14485).locator(".earned").waitFor({ state: "hidden", timeout: 120_000 });
     await shoot(page, "member-earned-390-light");
-    // What the votes earned for each 1,000 Earning Power: what reached the owner is on the automation's page.
-    const menu = hydrex(page).locator('.choice[data-choice="carbon-impact"]');
-    assert.match(await menu.locator(".record").innerText(), /^≈\s\$0\.\d\d$/);
-    assert.equal(await menu.locator(".record-unit").innerText(), "/ 1k Earning Power");
+    // What the votes earned for each 1,000 votes: what reached the owner is on the automation's page.
+    const menu = hydrex(page).locator('.choice[data-choice="matcha-latte"]');
+    assert.match(await menu.locator(".record").innerText(), /^≈\s\$\d+\.\d\d$/);
+    assert.equal(await menu.locator(".record-unit").innerText(), "/ 1k votes");
     assert.equal(await menu.locator(".yours-count").innerText(), "Yours: 1 Hydrex account");
     // Beside it, Hydrex's average, which could not be read here.
-    await hydrex(page).locator("#vote-yourself .average").getByText("Not read", { exact: true }).waitFor();
+    await hydrex(page).locator("#vote-yourself .average").getByText("Not read yet", { exact: true }).waitFor();
     assert.equal(compared, true);
     assert.equal(await menu.locator(".record-versus").isVisible(), false, "nothing to compare with");
-    await page.goto(`${SITE}/#hydrex/carbon-impact`);
-    const impact = product(page, "carbon-impact");
-    assert.match(await impact.locator(".record").innerText(), /^≈\s\$0\.\d\d$/);
-    await page.goto(`${SITE}/#hydrex/carbon-impact/record`);
-    const table = impact.locator(".earnings");
-    assert.equal(await table.locator(".ours.earning-power").innerText(), "1.17M");
+    await page.goto(`${SITE}/#hydrex/matcha-latte`);
+    const matcha = product(page, "matcha-latte");
+    assert.match(await matcha.locator(".record").innerText(), /^≈\s\$\d+\.\d\d$/);
+    await page.goto(`${SITE}/#hydrex/matcha-latte/record`);
+    const table = matcha.locator(".earnings");
+    assert.equal(await table.locator(".ours.votes").innerText(), "897k");
     assert.equal(await table.locator(".ours.pools").innerText(), "27 pools");
-    assert.match(await table.locator(".ours.per-power").innerText(), /^≈\s\$0\.5\d$/);
-    await impact.locator(".all-failed").getByText("Reading all of Hydrex failed.").waitFor();
+    assert.match(await table.locator(".ours.per-thousand").innerText(), /^≈\s\$0\.[67]\d$/);
+    await matcha.locator(".all-failed").getByText("Reading all of Hydrex failed.").waitFor();
     assert.equal(await page.locator("#error").isVisible(), false, "the rest of the page is as it was");
-    await impact.locator(".earned-pools tr").filter({ hasText: "AVNT / USDC" }).waitFor();
+    await matcha.locator(".earned-pools tr").filter({ hasText: "AVNT / USDC" }).waitFor();
     await shoot(page, "record-390-light");
     // An account's page keeps what its votes earned once the wallet locks.
     await page.goto(`${SITE}/#hydrex/9540`);
@@ -283,7 +285,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await app(page).getByRole("button", { name: "Browser wallet" }).waitFor();
     await toHydrex(page);
     await hydrex(page)
-      .locator(".impact-state")
+      .locator(".matcha-latte-state")
       .getByText(/^(Running|Stopped)$/)
       .waitFor();
     assert.deepEqual(violations, []);
@@ -292,8 +294,8 @@ describe("the page against a fork of Base: its views, and each account's payouts
   test("each account's last payout, found through Hydrex's reward contracts, and its receipt on its page", async () => {
     // PAYEE has 93 accounts: anvil reads them from FORK_URL for most of a minute the first time. #82774 was not paid in
     // last epoch's pools, so the page also reads the pools of the epoch before, among every pool's reward contracts.
-    // MEMBER's #9540, whose page the test opens last, was paid weeks before, so the page looks further back for it. They
-    // are all read first, with no time limit, as the page reads them, then their receipts' names and tokens.
+    // MEMBER's #9540, whose page the test opens last, was paid weeks before, so the page looks further back for it.
+    // They are all read first, with no time limit, as the page reads them, then their receipts' names and tokens.
     const ids = [...PAID_IDS, 9540n];
     await warm(async () => {
       const [earnings] = await Promise.all([readEarnings(CONDUIT), readAccounts(PAYEE)]);
@@ -358,7 +360,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await receipt.first().waitFor({ timeout: 120_000 });
     assert.equal(await standing.count(), 1);
     assert.equal(await position(page).locator("h1").innerText(), "Account #82774");
-    // On Fri 16 Oct, Carbon Impact owed it the epoch from Thu 1 Oct, and had paid nothing since Wed 23 Sep.
+    // On Fri 16 Oct, Matcha Latte owed it the epoch from Thu 1 Oct, and had paid nothing since Wed 23 Sep.
     assert.match(await standing.locator(".standing-late").innerText(), /^Late · paid up to Thu,? 17 Sept?$/);
     assert.equal(await standing.locator(".standing-paid").isVisible(), false);
     // What waits shows in tokens at once, then at prices now.
@@ -401,8 +403,8 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await position(page).locator(".position-payout:popover-open").getByText("(the owner)").waitFor();
     await page.keyboard.press("Escape");
     await shoot(page, "receipt-390-dark", position(page));
-    // After the flip, the page reads Carbon Impact again and fills its figures, such as .tonnes, across the page. The
-    // receipts keep their own.
+    // After the flip, the page reads Matcha Latte again and fills its figures, such as .tonnes, again. The receipts
+    // keep their own.
     const entityName = toFunctionSelector("function retiringEntityName()").slice(2);
     const readAgain = page.waitForResponse((response) => !!response.request().postData()?.includes(entityName));
     await page.clock.setSystemTime((FLIP + 60) * 1000);
@@ -432,7 +434,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     // An account's page stays when the wallet moves to another address or locks: about its owner, without actions.
     await page.goto(`${SITE}/#hydrex/141`);
     const actions = position(page).locator(".position-actions");
-    await actions.getByRole("button", { name: "Join Carbon Impact", exact: true }).waitFor();
+    await actions.getByRole("button", { name: "Join Matcha Latte", exact: true }).waitFor();
     await page.evaluate((other) => (window as any).testWalletEmit("accountsChanged", [other]), MEMBER);
     await position(page).getByText(UNVOTED).waitFor();
     await position(page).locator(".position-owner-row").getByText(short(NEWCOMER)).waitFor();
@@ -464,12 +466,12 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await account(page, 123364).waitFor();
     // An automation's page lists those that can join it, and says when the wallet has none, as an address with no
     // account has.
-    await page.goto(`${SITE}/#hydrex/carbon-impact`);
-    const impact = product(page, "carbon-impact");
-    await impact.getByRole("button", { name: "Join Carbon Impact", exact: true }).waitFor();
-    assert.equal(await impact.locator(".mine-none").isVisible(), false);
+    await page.goto(`${SITE}/#hydrex/matcha-latte`);
+    const matcha = product(page, "matcha-latte");
+    await matcha.getByRole("button", { name: "Join Matcha Latte", exact: true }).waitFor();
+    assert.equal(await matcha.locator(".mine-none").isVisible(), false);
     await page.evaluate((other) => (window as any).testWalletEmit("accountsChanged", [other]), RECIPIENT);
-    await impact.getByText("No Hydrex account can join.").waitFor();
+    await matcha.getByText("No Hydrex account can join.").waitFor();
   });
 
   test("without a wallet in the browser, Browser wallet links to wallet apps", async () => {
@@ -499,5 +501,37 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await account(page, 2439).getByText("In USDC", { exact: true }).waitFor();
     await group(page, "other").getByText("#2435").waitFor();
     assert.equal(await page.locator("#error").isVisible(), false);
+  });
+
+  test("if the Voter cannot be read, nothing stays loading: what needs it says it could not be read", async () => {
+    await anvil("anvil_setCode", [VOTER, "0x"]);
+    const { page } = await connected({ owner: ELSEWHERE });
+    await account(page, 2439).getByText("In USDC", { exact: true }).waitFor();
+    // When Matcha Latte last voted, Double Espresso's state, and last epoch's figures, and so Hydrex's average and what
+    // the wallet's own votes earned, are all read through the Voter.
+    const notRead = (place: Locator) => place.getByText("Not read yet", { exact: true }).waitFor();
+    const menu = hydrex(page).locator("#menu");
+    await notRead(menu.locator(".matcha-latte-state"));
+    await notRead(menu.locator(".double-espresso-state"));
+    for (const kind of ["matcha-latte", "double-espresso"])
+      await notRead(menu.locator(`[data-choice="${kind}"] .record`));
+    await notRead(hydrex(page).locator("#vote-yourself .average"));
+    await notRead(hydrex(page).locator("#vote-yourself .yours-average"));
+    const loading = (place: Locator) => place.locator(".pending:visible").count();
+    assert.equal(await loading(hydrex(page)), 0);
+    // The App's Hydrex card has nothing left loading; each automation's page says its figures could not be read, and
+    // its record, with Try again.
+    await page.goto(`${SITE}/#app`);
+    const card = app(page).locator('.choice[data-choice="hydrex"]');
+    await card.locator(".hydrex-yours").waitFor();
+    assert.equal(await loading(card), 0);
+    for (const kind of ["matcha-latte", "double-espresso"]) {
+      await page.goto(`${SITE}/#hydrex/${kind}`);
+      await notRead(product(page, kind).locator(".facts .record"));
+      assert.equal(await loading(product(page, kind)), 0, kind);
+    }
+    await page.goto(`${SITE}/#hydrex/double-espresso/record`);
+    await product(page, "double-espresso").getByText("Reading last epoch failed.").waitFor();
+    await product(page, "double-espresso").getByRole("button", { name: "Try again" }).waitFor();
   });
 });

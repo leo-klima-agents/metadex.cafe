@@ -33,8 +33,8 @@ import {
 import { same } from "../src/chain.ts";
 import {
   AUTOMATIONS,
-  AUTOMAXI,
-  CARBON_IMPACT,
+  DOUBLE_ESPRESSO,
+  MATCHA_LATTE,
   DEFAULT_OUTPUT,
   HYDX,
   KEEPER,
@@ -61,10 +61,10 @@ import { describe as describeTokens, holdingsOf, known } from "../src/tokens.ts"
 import { SAFE_ORIGIN } from "../src/wallet.ts";
 import { runsCalls } from "./rpc-cache.ts";
 
-export const CONDUIT = CARBON_IMPACT.address;
+export const CONDUIT = MATCHA_LATTE.address;
 export const BLOCK = 52_694_000; // Fri 16 Oct 2026, 19:02 UTC
 export const FLIP = 1_792_627_200; // Thu 22 Oct 2026, 00:00 UTC, when the epoch after BLOCK's starts
-// After the swappers' deployment in block 52,894,916: Wed 21 Oct 2026, 15:42 UTC. Carbon Impact still owed #82774 the
+// After the swappers' deployment in block 52,894,916: Wed 21 Oct 2026, 15:42 UTC. Matcha Latte still owed #82774 the
 // epoch from Thu 1 Oct.
 export const RECENT = 52_904_000;
 // anvil's address, on a port free when it starts, so that no other run's anvil answers in its place; and that of the
@@ -76,8 +76,8 @@ export const SAFE_WALLET = SAFE_ORIGIN;
 const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 const SCREENSHOTS = process.env.SCREENSHOTS;
 export const RPC_ORIGINS = RPCS.map((url) => new URL(url).origin);
-// An answer for the page's RPCs as if they served another chain, Ethereum's: its id to eth_chainId, asked alone, with the
-// request's own id. Anything else goes to the fork.
+// An answer for the page's RPCs as if they served another chain, Ethereum's: its id to eth_chainId, asked alone, with
+// the request's own id. Anything else goes to the fork.
 export function elsewhere(body: string): string | undefined {
   let call: { id?: unknown; method?: string };
   try {
@@ -92,13 +92,13 @@ export function elsewhere(body: string): string | undefined {
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type" };
 
 // Owners at BLOCK.
-export const MEMBER = getAddress("0x388b2d29e7919d45b1b8f6e88b8a13a392f97b40"); // #9540 in Carbon Impact, #14485 its own
+export const MEMBER = getAddress("0x388b2d29e7919d45b1b8f6e88b8a13a392f97b40"); // #9540 in Matcha Latte, #14485 its own
 export const NEWCOMER = getAddress("0x0208ddbc05a91e1b937e8b3140b62ef22a274c95"); // #141 its own, #42877 in Liquid Hydrex
 export const ELSEWHERE = getAddress("0x69707a120ade8239f07595165e180c61395ea655"); // #2435 in Lock Maxi, #2439 in USDC
-export const LEAVER = getAddress("0x2573264b8e690ca6b2128c113890f42198840b16"); // #53350 and #82206 in Carbon Impact
+export const LEAVER = getAddress("0x2573264b8e690ca6b2128c113890f42198840b16"); // #53350 and #82206 in Matcha Latte
 export const ENDED = getAddress("0x2518820268e4079e90446b93020dfad7dd54e84d"); // #123351 ended with HYDX in it, #123364
-export const PAYEE = getAddress("0x60924601e73ebc5c2bd9244c788d93e0710a6c93"); // #82774 in Carbon Impact, paid Wed 23 Sep
-// Carbon Impact's last payout before BLOCK: one transaction, on Wed 23 Sep, that paid these accounts through Thu 17 Sep.
+export const PAYEE = getAddress("0x60924601e73ebc5c2bd9244c788d93e0710a6c93"); // #82774 in Matcha Latte, paid Wed 23 Sep
+// Matcha Latte's last payout before BLOCK: one transaction, on Wed 23 Sep, that paid these accounts through Thu 17 Sep.
 export const PAID = 51_698_051;
 export const PAID_THROUGH = 1_789_603_200;
 export const PAID_TX = "0x0932e5a24f24e45bfd1021764d94abc1d920754c4dc17128dd89f44bd086e899";
@@ -108,11 +108,14 @@ export const LOCK_MAXI = getAddress("0x53388a4E98Bb56F8571433F5461010Fc287929d3"
 export const USDC = getAddress("0xE57b3Ea02336B9b418cA523aB5aD6f479d93bD1D");
 export const RECIPIENT = getAddress("0x000000000000000000000000000000000000beef");
 export const STRANGER = getAddress("0x000000000000000000000000000000000000dead");
-// AutoMaxi deploys through the CREATE2 deployer, with the salt and init code of its script/Deploy.s.sol at tag v2,
-// commit 718c107. The init code was compiled from its verification/ input with solc 0.8.37.
+// Double Espresso deploys through the CREATE2 deployer, with the salt and init code of its script/Deploy.s.sol at tag
+// v2, commit 718c107. The init code was compiled from its verification/ input with solc 0.8.37.
 const CREATE2_DEPLOYER = getAddress("0x4e59b44847b379578588920cA78FbF26c0B4956C");
 const SALT = keccak256(toHex("metadex.cafe/ImmutableVeTokenConduit/v2"));
-const INIT_CODE = readFileSync(new URL("fixtures/automaxi-init-code.hex", import.meta.url), "utf8").trim() as Hex;
+const INIT_CODE = readFileSync(
+  new URL("fixtures/double-espresso-init-code.hex", import.meta.url),
+  "utf8",
+).trim() as Hex;
 // Tokens that Base runs natively, such as GOOGLc and cbZEC. Their code is the byte 0xef, which anvil cannot run: a call
 // to one uses all its gas and fails the whole batch of reads. Without their code, they read as tokens the page cannot
 // count.
@@ -232,28 +235,28 @@ export const approveConduit = (owner: Address, conduit: Address, id: bigint, app
     encodeFunctionData({ abi, functionName: "setConduitApproval", args: [conduit, id, approve] }),
   );
 
-// AutoMaxi on a fork of a block before its deployment, on Tue 20 Oct 2026, as the page takes it to be on Base; nothing
-// on a fork that has it already. Its constructor needs fresh Chainlink prices and Base's sequencer up. anvil's clock
-// runs on from the fork's, so it deploys a minute after BLOCK.
-export async function deployAutoMaxi(): Promise<void> {
-  if ((await anvil<Hex>("eth_getCode", [AUTOMAXI.address, "latest"])) !== "0x") return;
+// Double Espresso on a fork of a block before its deployment, on Tue 20 Oct 2026, as the page takes it to be on Base;
+// nothing on a fork that has it already. Its constructor needs fresh Chainlink prices and Base's sequencer up. anvil's
+// clock runs on from the fork's, so it deploys a minute after BLOCK.
+export async function deployDoubleEspresso(): Promise<void> {
+  if ((await anvil<Hex>("eth_getCode", [DOUBLE_ESPRESSO.address, "latest"])) !== "0x") return;
   const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", [toHex(BLOCK), false]);
   await anvil("evm_setNextBlockTimestamp", [Number(timestamp) + 60]);
   await anvil("anvil_setBalance", [KEEPER, toHex(FOR_GAS)]);
   await mined(KEEPER, CREATE2_DEPLOYER, concat([SALT, INIT_CODE]));
   const at = getContractAddress({ opcode: "CREATE2", from: CREATE2_DEPLOYER, salt: SALT, bytecode: INIT_CODE });
-  assert.equal(at, AUTOMAXI.address);
-  assert.equal(keccak256(await anvil<Hex>("eth_getCode", [at, "latest"])), AUTOMAXI.codeHash);
+  assert.equal(at, DOUBLE_ESPRESSO.address);
+  assert.equal(keccak256(await anvil<Hex>("eth_getCode", [at, "latest"])), DOUBLE_ESPRESSO.codeHash);
 }
 
 // The page reads a few blocks before the latest, which on the fork can be before the last transactions. Blocks after
 // BLOCK make anvil read the state it lacks a slot at a time, so only the tests that need them mine them.
 export const settle = () => anvil("anvil_mine", [toHex(SETTLED + 1)]);
 
-// A claim through AutoMaxi of one reward, from its fees or incentives contract.
+// A claim through Double Espresso of one reward, from its fees or incentives contract.
 export async function claimOne(from: Address, id: bigint, { contract, token, fee }: Reward): Promise<void> {
   const args = [id, fee ? [contract] : [], fee ? [] : [contract], [token.address]];
-  await mined(from, AUTOMAXI.address, encodeFunctionData({ abi, functionName: "claim", args } as never));
+  await mined(from, DOUBLE_ESPRESSO.address, encodeFunctionData({ abi, functionName: "claim", args } as never));
 }
 
 export async function expectApprovals(ids: bigint[], delegate: Address, claimer: Address): Promise<void> {
@@ -274,8 +277,8 @@ export type WalletOptions = {
   approval?: Promise<void>;
   // Holds back the answer to a transaction until it settles, as a wallet does while its window is open.
   sending?: Promise<void>;
-  // Sends several calls in one prompt, with EIP-5792, as Coinbase Wallet and MetaMask do: all or nothing, unless `atomic`
-  // is false.
+  // Sends several calls in one prompt, with EIP-5792, as Coinbase Wallet and MetaMask do: all or nothing, unless
+  // `atomic` is false.
   batch?: boolean;
   atomic?: boolean;
   // Asks before it connects, switches or sends, as a wallet's window asks its owner, and says no where the answer is
@@ -290,8 +293,8 @@ export type WalletOptions = {
 // Whether the wallet sends several calls in one prompt: as asked, or as a wallet that lists its tokens does.
 export const sendsBatches = (options: Pick<WalletOptions, "batch" | "assets">): boolean =>
   !!options.batch || !!options.assets;
-// Fails the reads of Base whose request body `refuse` matches, and gives those `answer` answers its own reply. `rewrite`
-// changes anvil's reply to a request, where it gives another.
+// Fails the reads of Base whose request body `refuse` matches, and gives those `answer` answers its own reply.
+// `rewrite` changes anvil's reply to a request, where it gives another.
 export type Rpc = {
   refuse?: ((body: string) => boolean) | undefined;
   answer?: ((body: string) => string | undefined) | undefined;
@@ -604,7 +607,7 @@ export const account = (page: Page, id: number) =>
   hydrex(page)
     .locator("#accounts li")
     .filter({ hasText: `#${id}` });
-// The Hydrex accounts' groups: "needs", "in:carbon-impact", "in:automaxi", "other" and "closed".
+// The Hydrex accounts' groups: "needs", "in:matcha-latte", "in:double-espresso", "other" and "closed".
 export const group = (page: Page, key: string) => hydrex(page).locator(`.group[data-group="${key}"]`);
 export const product = (page: Page, kind: string) => page.locator(`.view[data-kind="${kind}"]`);
 export const position = (page: Page) => page.locator('.view[data-view="position"]');
@@ -674,8 +677,8 @@ export async function confirm(page: Page): Promise<void> {
 }
 
 // Confirms the review's transactions one by one, each once the one before is included, until the last is. anvil first
-// runs them all at once, as `from`, with no time limit: so it reads the state they need in parallel, rather than for one
-// transaction after another, which on a first run can take minutes each.
+// runs them all at once, as `from`, with no time limit: so it reads the state they need in parallel, rather than for
+// one transaction after another, which on a first run can take minutes each.
 export async function confirmEach(page: Page, from: Address): Promise<void> {
   const hexes = (selector: string) =>
     review(page)
@@ -716,8 +719,8 @@ export async function start(block: number, owners: Address[]): Promise<void> {
   browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 }
 
-// Starts anvil on a fork of Base at `block`, through the cache at `cached`. Once `stopping` says so, as when the QA wallet
-// closes, it stops anvil rather than wait for it to listen.
+// Starts anvil on a fork of Base at `block`, through the cache at `cached`. Once `stopping` says so, as when the QA
+// wallet closes, it stops anvil rather than wait for it to listen.
 export async function startAnvil(block: number, cached: string, stopping = () => false): Promise<void> {
   CACHE_URL = cached;
   const port = await freePort();
@@ -725,10 +728,11 @@ export async function startAnvil(block: number, cached: string, stopping = () =>
   const child = (node = spawn(
     "anvil",
     // anvil keeps no answers of its own, so that the cache sees each request. Its gas price is the block's base fee, as
-    // on Base, where tips are next to nothing: anvil's own least tip, 1 gwei, would price gas 200 times higher. It waits
-    // for the cache as long as the cache waits for FORK_URL, up to 5 minutes for an answer, rather than its own 45 s.
-    // It keeps the state of its last 100 blocks in memory, and none on disk: otherwise it writes the whole state of each
-    // older block to ~/.foundry/anvil/tmp, as the QA wallet mines one every 2 seconds, and leaves it there once stopped.
+    // on Base, where tips are next to nothing: anvil's own least tip, 1 gwei, would price gas 200 times higher. It
+    // waits for the cache as long as the cache waits for FORK_URL, up to 5 minutes for an answer, rather than its own
+    // 45 s. It keeps the state of its last 100 blocks in memory, and none on disk: otherwise it writes the whole state
+    // of each older block to ~/.foundry/anvil/tmp, as the QA wallet mines one every 2 seconds, and leaves it there once
+    // stopped.
     [
       ...["--fork-url", CACHE_URL, "--fork-block-number", String(block), "--port", String(port), "--auto-impersonate"],
       ...["--no-storage-caching", "--disable-min-priority-fee", "--timeout", "600000", "--prune-history", "100"],
@@ -751,17 +755,17 @@ export async function startAnvil(block: number, cached: string, stopping = () =>
   for (const token of NATIVE) await anvil("anvil_setCode", [token, "0x"]);
 }
 
-// Starts a fork at BLOCK, for the owners there, with AutoMaxi on it, and reads what the page reads first.
+// Starts a fork at BLOCK, for the owners there, with Double Espresso on it, and reads what the page reads first.
 export async function startAtBlock(): Promise<void> {
   const owners = [MEMBER, NEWCOMER, ELSEWHERE, LEAVER, ENDED];
   await start(BLOCK, owners);
-  await deployAutoMaxi();
+  await deployDoubleEspresso();
   await warmAtBlock(owners);
 }
 
 // What Hydrex's page reads beside the accounts: all of Hydrex last epoch, for its average, and what the votes of each
-// owner's accounts earned through whoever held them, chosen as the page chooses them. Inside warm(), as each of these is
-// thousands of reads of state that anvil fetches from FORK_URL a slot at a time, longer than the page waits for an
+// owner's accounts earned through whoever held them, chosen as the page chooses them. Inside warm(), as each of these
+// is thousands of reads of state that anvil fetches from FORK_URL a slot at a time, longer than the page waits for an
 // answer.
 async function votesOf(owners: Address[]): Promise<void> {
   const { start } = (await readEarnings(CONDUIT))!;
@@ -779,7 +783,7 @@ async function votesOf(owners: Address[]): Promise<void> {
 }
 
 // Reads with no time limit what the page reads first at BLOCK, which a first run fetches from FORK_URL for minutes:
-// each owner's accounts, and what each automation earned last epoch. And as Carbon Impact paid nothing from Wed 23 Sep,
+// each owner's accounts, and what each automation earned last epoch. And as Matcha Latte paid nothing from Wed 23 Sep,
 // for any account in it the payouts also read the pools of the epoch from Thu 1 Oct, among every pool's reward
 // contracts.
 export const warmAtBlock = (owners: Address[]) =>
@@ -793,13 +797,13 @@ export const warmAtBlock = (owners: Address[]) =>
   );
 
 // Reads with no time limit what the page reads first of each automation and of `owners`, and what an account's page
-// reads of the payouts of `ids` in Carbon Impact's pools, last epoch's and the one before's. A revert drops what anvil
+// reads of the payouts of `ids` in Matcha Latte's pools, last epoch's and the one before's. A revert drops what anvil
 // fetched, so a test reads them again after its own transactions.
 export const warmStandings = (owners: Address[], ids: bigint[]) =>
   warm(async () => {
     const [earnings] = await Promise.all([
       readEarnings(CONDUIT),
-      readEarnings(AUTOMAXI.address),
+      readEarnings(DOUBLE_ESPRESSO.address),
       ...owners.map((owner) => readAccounts(owner)),
       votesOf(owners),
     ]);
@@ -809,11 +813,11 @@ export const warmStandings = (owners: Address[], ids: bigint[]) =>
     await Promise.all([readStamps(ids, last, top), readEarned(ids, last, top), readStamps(ids, before, top)]);
   });
 
-// AutoMaxi on Base, with #82774 in it, claimed by its keeper and then by a stranger, a USDC reward each; and what the
-// page reads of it, and of `owners`, read with no time limit. It answers Carbon Impact's rewards of last epoch, which
-// AutoMaxi's accounts earn in the same pools.
-export async function autoMaxiReceipts(owners: Address[] = []): Promise<Reward[]> {
-  await deployAutoMaxi();
+// Double Espresso on Base, with #82774 in it, claimed by its keeper and then by a stranger, a USDC reward each; and
+// what the page reads of it, and of `owners`, read with no time limit. It answers Matcha Latte's rewards of last epoch,
+// which Double Espresso's accounts earn in the same pools.
+export async function doubleEspressoReceipts(owners: Address[] = []): Promise<Reward[]> {
+  await deployDoubleEspresso();
   let rewards: Reward[] = [];
   await warm(async () => {
     rewards = (await readEarnings(CONDUIT))!.rewards;
@@ -821,7 +825,7 @@ export async function autoMaxiReceipts(owners: Address[] = []): Promise<Reward[]
   });
   await anvil("anvil_setBalance", [PAYEE, toHex(FOR_GAS)]);
   await anvil("anvil_setBalance", [STRANGER, toHex(FOR_GAS)]);
-  await approveConduit(PAYEE, AUTOMAXI.address, 82774n);
+  await approveConduit(PAYEE, DOUBLE_ESPRESSO.address, 82774n);
   const usdc = rewards.filter(({ token }) => token.symbol === "USDC");
   await claimOne(KEEPER, 82774n, usdc[0]!);
   await claimOne(STRANGER, 82774n, usdc[1]!);
@@ -876,7 +880,7 @@ export const tokenAbi = parseAbi([
   "function allowance(address owner, address spender) view returns (uint256)",
   "function transfer(address to, uint256 amount) returns (bool)",
 ]);
-export const autoMaxiAbi = parseAbi(["function lastClaimBlock(uint256 tokenId) view returns (uint256)"]);
+export const doubleEspressoAbi = parseAbi(["function lastClaimBlock(uint256 tokenId) view returns (uint256)"]);
 
 // A contract's answer on the fork, at its newest block.
 export async function readOn<T>(to: Address, abi: Abi, functionName: string, args: unknown[] = []): Promise<T> {
@@ -888,7 +892,7 @@ export const balanceOf = (token: Address, owner: Address) => readOn<bigint>(toke
 
 export const swapView = (page: Page) => page.locator('.view[data-view="swap"]');
 
-// Carbon Impact's treasury, a Safe that holds many of the tokens its fee took.
+// Matcha Latte's treasury, a Safe that holds many of the tokens its fee took.
 export const HOLDER = getAddress("0xd9e966a6bfa2ae2113a34bb4dd02ded921da50af");
 export const AVNT = getAddress("0x696f9436b67233384889472cd7cd58a6fb5df4f1");
 export const ZORA = getAddress("0x1111111111166b7fe7bd91427724b487980afc69");
@@ -924,7 +928,7 @@ export async function warmPayouts(owner: Address): Promise<void> {
     const ids = holdings.accounts
       .filter((account) =>
         [account.delegate, account.claimer, account.delegateAtStart].some(
-          (address) => same(address, CONDUIT) || same(address, AUTOMAXI.address),
+          (address) => same(address, CONDUIT) || same(address, DOUBLE_ESPRESSO.address),
         ),
       )
       .map(({ id }) => id);
@@ -963,8 +967,8 @@ export async function warmPayouts(owner: Address): Promise<void> {
   });
 }
 
-// A claim's review opens on what waits, unless the page found nothing to claim, or Base refused the claim: the test then
-// fails at once, with the page's words.
+// A claim's review opens on what waits, unless the page found nothing to claim, or Base refused the claim: the test
+// then fails at once, with the page's words.
 export async function claimOpens(page: Page | FrameLocator): Promise<void> {
   const waits = review(page).getByRole("heading", { name: "What waits" });
   const refused = review(page)

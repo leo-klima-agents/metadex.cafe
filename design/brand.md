@@ -27,8 +27,8 @@ layout of slips and receipts. `style.css` and `index.html` follow these rules. S
   decides what they pay for ([Aaker](https://www.gsb.stanford.edu/news/research/aaker_warm.html)).
 - No puns where money moves: no brewing, roasting or fresh cups of yield, and nothing "on the house" that is not free.
 - Independent, and says so: not Dromos's, not Hydrex's. Anonymous for now: the page names no operator, nobody behind
-  Carbon Impact's keeper, and links to no repository of the café's. Hydrex controls Carbon Impact's settings, and the
-  page says so.
+  Matcha Latte's keeper, and links to no repository of the café's. Hydrex controls Matcha Latte's settings, and the page
+  says so.
 - Say "Aero", not "Aerodrome", from 22 Oct 2026, and "Coinbase Wallet", its name again since 10 Sep 2026. Aerodrome's
   pools and its AERO keep their name where the swap names an exchange or a token.
 - "Small balances", not "dust", in the page's words: plain, and no pun.
@@ -47,7 +47,7 @@ the Dutch ACM say the same.
 - A claim is specific, and next to its proof: "Retired 75 kVCM, ≈ 19 t of carbon credits, in the name "Hydrex"", with
   the transaction.
 - Say "retired" and "your share of what was retired". Never "carbon neutral", "offset" or "your footprint".
-- "Carbon Impact" is a product name the law covers, so the page says what it does in the same place.
+- "Matcha Latte" is a product name the law covers, so the page says what it does in the same place.
 - Home's heading says what happens, which anyone can check: "Vote, claim and swap on Base".
 
 ## Trust
@@ -168,7 +168,20 @@ and works in one colour.
 - **Buttons look like buttons:** filled for the main action of a group, outlined for the others, compact inside a line
   or a notice. In a row, the main action comes first, a move between automations next, and Leave last. A link that does
   a button's job, such as a need's "Change", is drawn as a button.
-- **Empty and loading lines are quiet and small:** "Loading…", "No record yet.", "No tokens to sell.".
+- **Empty lines are quiet and small:** "No record yet.", "No tokens to sell.".
+- **What is being read keeps its place.** A figure shows as a quiet bar of about its width, in the line colour; a list
+  or a page, as cards of such bars where its items will show; a status, as a quiet ring and "Checking…", never a status
+  it may not have, such as "Running". They show a moment after the read starts, so that a quick read flashes nothing,
+  and pulse only where motion is welcome. Screen readers say "Loading" in their place. A read that takes long says so in
+  words after a few seconds: "Still loading. This can take a minute." Nothing moves once shown: a line that most reads
+  fill, such as "17.2% above the average", "to you", an account's "· ≈ $6.12 last epoch", or a quote's worth under it,
+  shows its bar meanwhile, and goes only once the read finds nothing to say; words that do not depend on the read, such
+  as "/ 1k votes", show from the start; a list that may hold nothing, as Needs you, keeps a line's place while read,
+  then says so: "Nothing right now". Only a part inside a line, such as "· voted Wed 21 Oct", waits hidden. A read that
+  fails never leaves a bar: the figure says "Not read" or "Not read yet", or its line hides. Figures read again, as each
+  hour or epoch, keep the ones shown until then, and so do the swap's tokens when more become known.
+- **A button whose action is being prepared** keeps its size and its name, shows a spinner over its words, and takes no
+  second click: never "Loading…" in its place.
 
 ## Slips and receipts
 
@@ -186,8 +199,8 @@ went badly too.
 - **Sizes:** 13 px for call slips, with a 96 px column for the labels on a phone as on a desktop, and 14 px for
   receipts.
 
-**A call** is a bill of its own: the name, then what it is, "Transaction 1 of 2 · Join Carbon Impact", or "Safe · Call 1
-of 2 · Join Carbon Impact" in a Safe, and the page's own words, such as "Account #9540 joins Carbon Impact.": an account
+**A call** is a bill of its own: the name, then what it is, "Transaction 1 of 2 · Join Matcha Latte", or "Safe · Call 1
+of 2 · Join Matcha Latte" in a Safe, and the page's own words, such as "Account #9540 joins Matcha Latte.": an account
 is always named as one, never by its number alone. Then a row per field, in full, with nothing to open: To, with the
 contract's name above it; Call; Conduit, with its name above it; Account; Approve; Value. What a field holds always goes
 above its value, as a token's symbol goes above its address. A list of addresses, such as a claim's reward contracts and
@@ -218,8 +231,8 @@ several calls through its MultiSend contract with operation 1: the page says so 
 dollars, with the tokens under it; swapped into kVCM; retired, with its share, the tonnes and Klima's mark; the fee,
 with its share; then "Paid to you", as large as its figure, with dollars under it, and the payout address only when it
 is not the owner's own; last, the time in UTC and the transaction. Dollars use the prices of the flip before the payout,
-and follow the tokens once read. The shares are of all the payout's kVCM: Carbon Impact retires up to its `retireBps`,
-as buying the credits may cost less. #82774's payout of 23 Sept retired 31.01%.
+and follow the tokens once read. The shares are of all the payout's kVCM: Matcha Latte retires up to its `retireBps`, as
+buying the credits may cost less. #82774's payout of 23 Sept retired 31.01%.
 
 ## Klima's mark
 
@@ -227,7 +240,7 @@ Klima Protocol agrees to the café using its logo where it makes sense. Placed b
 retires the credits, and nothing more. The Commission says a trade mark is generally unlikely to count as a
 sustainability label, unless it is a certification mark.
 
-- **Beside a retirement only:** beside "Retired so far" on Carbon Impact's page, and on each receipt's retirement line,
+- **Beside a retirement only:** beside "Retired so far" on Matcha Latte's page, and on each receipt's retirement line,
   as "through Klima Protocol", at 24 px. Never alone as a badge, in Home's heading, or next to "impact" without a
   figure.
 - **Unaltered:** Klima's own icon, the green mark on its black disc, which works in both themes. Its guidelines keep a

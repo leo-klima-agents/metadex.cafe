@@ -5,8 +5,8 @@ import {
   APPROVAL_LOGIC,
   APPROVAL_LOGIC_CODE_HASH,
   AUTOMATIONS,
-  AUTOMAXI,
-  CARBON_IMPACT,
+  DOUBLE_ESPRESSO,
+  MATCHA_LATTE,
   CHAIN_ID,
   KVCM,
   VOTER,
@@ -20,7 +20,7 @@ import { WEEK, clean, list, weekStart } from "./format.ts";
 import conduits from "./hydrex-conduits.json" with { type: "json" };
 import { anchorsNow, type Prices } from "./prices.ts";
 import { costs } from "./swap-calls.ts";
-import type { Slip } from "./review.ts";
+import type { Slip } from "./views/review.ts";
 import type { Tx } from "./wallet.ts";
 
 const votingEscrowAbi = parseAbi([
@@ -52,7 +52,7 @@ const voterAbi = parseAbi([
   "function totalWeightAt(uint256 time) view returns (uint256)",
 ]);
 
-const carbonImpactAbi = parseAbi([
+const matchaLatteAbi = parseAbi([
   "function veToken() view returns (address)",
   "function voter() view returns (address)",
   "function kvcm() view returns (address)",
@@ -68,7 +68,7 @@ const carbonImpactAbi = parseAbi([
   "function getEffectiveRecipientForOwner(address owner) view returns (address)",
 ]);
 
-const autoMaxiAbi = parseAbi([
+const doubleEspressoAbi = parseAbi([
   "function veToken() view returns (address)",
   "function voter() view returns (address)",
   "function lastClaimBlock(uint256 tokenId) view returns (uint256)",
@@ -83,10 +83,10 @@ const accountNamesAbi = parseAbi(["function getBulkNames(uint256[] tokenIds) vie
 export const escrow = (functionName: string, ...args: unknown[]) =>
   call(VOTING_ESCROW, votingEscrowAbi, functionName, ...args);
 export const voter = (functionName: string, ...args: unknown[]) => call(VOTER, voterAbi, functionName, ...args);
-export const carbonImpact = (functionName: string, ...args: unknown[]) =>
-  call(CARBON_IMPACT.address, carbonImpactAbi, functionName, ...args);
-export const autoMaxi = (functionName: string, ...args: unknown[]) =>
-  call(AUTOMAXI.address, autoMaxiAbi, functionName, ...args);
+export const matchaLatte = (functionName: string, ...args: unknown[]) =>
+  call(MATCHA_LATTE.address, matchaLatteAbi, functionName, ...args);
+export const doubleEspresso = (functionName: string, ...args: unknown[]) =>
+  call(DOUBLE_ESPRESSO.address, doubleEspressoAbi, functionName, ...args);
 
 // Hydrex's other automations. If Hydrex lists one of the page's own, the page still treats it as its own.
 export const others = conduits.filter(
@@ -95,7 +95,7 @@ export const others = conduits.filter(
 
 export const LockType = { timed: 0, rolling: 1, permanent: 2 } as const;
 
-export type CarbonImpact = {
+export type MatchaLatte = {
   time: number;
   epochStart: number;
   retireBps: bigint;
@@ -104,18 +104,18 @@ export type CarbonImpact = {
   beneficiary: string;
   beneficiaryAddress: Address;
   message: string;
-  // When it last voted, or 0.
-  voted: number;
-  // Its fee, the most the fee can become, and where it goes. Only its page shows them, so they may be unknown.
+  // When it last voted, or 0. It, its fee, the most the fee can become, and where the fee goes may be unknown, as
+  // their reads may fail apart from the others: the page then says so, and reads them again later.
+  voted?: number;
   feeBps?: bigint;
   maxFeeBps?: bigint;
   treasury?: Address;
 };
 
-// The share of a payout's kVCM that reaches the owner: Carbon Impact retires its share first, then takes its fee from
-// the rest. An unknown fee counts as none.
-export const paidBpsOf = ({ retireBps, feeBps = 0n }: CarbonImpact): bigint =>
-  ((10_000n - retireBps) * (10_000n - feeBps)) / 10_000n;
+// The share of a payout's kVCM that reaches the owner: Matcha Latte retires its share first, then takes its fee from
+// the rest. Unknown while the fee is: counting it as none would promise the owner too much.
+export const paidBpsOf = ({ retireBps, feeBps }: MatchaLatte): bigint | undefined =>
+  feeBps === undefined ? undefined : ((10_000n - retireBps) * (10_000n - feeBps)) / 10_000n;
 
 export type Account = {
   id: bigint;
@@ -133,7 +133,8 @@ export type Account = {
   claimer: Address;
 };
 
-// `payout` is where Carbon Impact pays the owner's accounts, unknown if its read failed: only an account's page shows it.
+// `payout` is where Matcha Latte pays the owner's accounts, unknown if its read failed: only an account's page shows
+// it.
 export type Holdings = {
   owner: Address;
   accounts: Account[];
@@ -165,19 +166,19 @@ export type Step = Slip & { id: bigint; approve: boolean; conduit: Address; cond
 // from the next Thursday either way.
 const epochAt = (time: unknown): number => weekStart(Number(time));
 
-export async function readCarbonImpact(): Promise<CarbonImpact> {
+export async function readMatchaLatte(): Promise<MatchaLatte> {
   const replies = await read([
     blockTime,
-    carbonImpact("retireBps"),
-    carbonImpact("totalTonnesRetired"),
-    carbonImpact("retiringEntityName"),
-    carbonImpact("beneficiaryString"),
-    carbonImpact("impactBeneficiaryAddress"),
-    carbonImpact("retirementMessage"),
-    voter("lastVoted", CARBON_IMPACT.address),
-    carbonImpact("treasuryFeeBps"),
-    carbonImpact("MAX_TREASURY_FEE_BPS"),
-    carbonImpact("treasury"),
+    matchaLatte("retireBps"),
+    matchaLatte("totalTonnesRetired"),
+    matchaLatte("retiringEntityName"),
+    matchaLatte("beneficiaryString"),
+    matchaLatte("impactBeneficiaryAddress"),
+    matchaLatte("retirementMessage"),
+    voter("lastVoted", MATCHA_LATTE.address),
+    matchaLatte("treasuryFeeBps"),
+    matchaLatte("MAX_TREASURY_FEE_BPS"),
+    matchaLatte("treasury"),
   ]);
   const [time, retireBps, tonnes, entity, beneficiary, beneficiaryAddress, message] = required(replies.slice(0, 7)) as [
     bigint,
@@ -188,7 +189,6 @@ export async function readCarbonImpact(): Promise<CarbonImpact> {
     Address,
     string,
   ];
-  // Only Home shows when it last voted, so a failed read just leaves it out. The same for the fee.
   const voted = replies[7] as bigint | undefined;
   const [feeBps, maxFeeBps, treasury] = replies.slice(8) as [bigint?, bigint?, Address?];
   return {
@@ -200,7 +200,7 @@ export async function readCarbonImpact(): Promise<CarbonImpact> {
     beneficiary: clean(beneficiary),
     beneficiaryAddress,
     message: clean(message),
-    voted: Number(voted ?? 0n),
+    ...(voted !== undefined && { voted: Number(voted) }),
     ...(feeBps !== undefined && { feeBps }),
     ...(maxFeeBps !== undefined && { maxFeeBps }),
     ...(treasury && { treasury }),
@@ -263,7 +263,7 @@ async function accountsOf(
 export async function readAccounts(owner: Address): Promise<Holdings> {
   const [count, payout, time, ...voted] = await withContext([
     escrow("balanceOf", owner),
-    carbonImpact("getEffectiveRecipientForOwner", owner),
+    matchaLatte("getEffectiveRecipientForOwner", owner),
   ]);
   required([count, time]);
   const epochStart = epochAt(time);
@@ -275,8 +275,8 @@ export async function readAccounts(owner: Address): Promise<Holdings> {
 }
 
 // One account, whoever owns it, as its owner's holdings of that account alone. Undefined if Hydrex has no account with
-// that number, as when it was never minted, or was merged or withdrawn: ownerOf then fails, as a call can that fails for
-// another reason, so a failed one is asked again on its own before the account is taken for gone.
+// that number, as when it was never minted, or was merged or withdrawn: ownerOf then fails, as a call can that fails
+// for another reason, so a failed one is asked again on its own before the account is taken for gone.
 export async function readAccount(id: bigint): Promise<Holdings | undefined> {
   const [first, time, ...voted] = await withContext([escrow("ownerOf", id)]);
   const owner = first ?? (await read([escrow("ownerOf", id)]))[0];
@@ -287,7 +287,7 @@ export async function readAccount(id: bigint): Promise<Holdings | undefined> {
     accounts,
     more: [payout],
   } = await accountsOf(owner as Address, [id], epochStart, othersVoted(voted), [
-    carbonImpact("getEffectiveRecipientForOwner", owner as Address),
+    matchaLatte("getEffectiveRecipientForOwner", owner as Address),
   ]);
   return { owner: owner as Address, accounts, payout: payout as Address | undefined, time: Number(time), epochStart };
 }
@@ -453,8 +453,8 @@ type Own = {
   checks(answers: unknown[], code: boolean, approvals: boolean): Record<string, boolean>;
 };
 const own: Record<Kind, Own> = {
-  "carbon-impact": {
-    calls: [carbonImpact("veToken"), carbonImpact("voter"), carbonImpact("kvcm")],
+  "matcha-latte": {
+    calls: [matchaLatte("veToken"), matchaLatte("voter"), matchaLatte("kvcm")],
     checks: ([veToken, voterOf, payoutToken], code, approvals) => ({
       code: !code,
       contracts: !points(veToken, voterOf),
@@ -462,12 +462,12 @@ const own: Record<Kind, Own> = {
       approvals: !approvals,
     }),
   },
-  automaxi: {
-    calls: [autoMaxi("veToken"), autoMaxi("voter")],
+  "double-espresso": {
+    calls: [doubleEspresso("veToken"), doubleEspresso("voter")],
     checks: ([veToken, voterOf], code, approvals) => ({
-      "automaxi-code": !code,
-      "automaxi-contracts": !points(veToken, voterOf),
-      "automaxi-approvals": !approvals,
+      "double-espresso-code": !code,
+      "double-espresso-contracts": !points(veToken, voterOf),
+      "double-espresso-approvals": !approvals,
     }),
   },
 };

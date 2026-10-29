@@ -1,18 +1,18 @@
 import { decodeEventLog, numberToHex, parseAbi, type Address, type Hex } from "viem";
 import { blockTime, call, read, readLater, required, rpc, type Call } from "./chain.ts";
-import { CARBON_IMPACT } from "./config.ts";
+import { MATCHA_LATTE } from "./config.ts";
 import { WEEK, count, money, moneyAt } from "./format.ts";
 import type { Reward } from "./earnings.ts";
 import { worthOf, type Prices, type Token } from "./prices.ts";
 
 // Hydrex's reward contracts record, for each account and token, the start of the epoch up to which they have paid the
-// account. Every claim sets it to the start of the current epoch, even when nothing was owed, and it only grows. A claim
-// can take any of the tokens, so one record says little: an epoch counts as paid once the records of more than half of
-// what its rewards were worth have moved past its end. A search through past blocks then finds the block in which the
-// payout's own record moved: the block of the last payout. Carbon Impact pays each account in one transaction: it
-// claims the account's rewards, swaps them to kVCM, retires a share, and sends the rest to the owner's payout address,
-// with one event for the retirement and one for the payout. The free RPCs give logs sparingly, so the page reads one
-// block of logs per payout, and no more.
+// account. Every claim sets it to the start of the current epoch, even when nothing was owed, and it only grows. A
+// claim can take any of the tokens, so one record says little: an epoch counts as paid once the records of more than
+// half of what its rewards were worth have moved past its end. A search through past blocks then finds the block in
+// which the payout's own record moved: the block of the last payout. Matcha Latte pays each account in one transaction:
+// it claims the account's rewards, swaps them to kVCM, retires a share, and sends the rest to the owner's payout
+// address, with one event for the retirement and one for the payout. The free RPCs give logs sparingly, so the page
+// reads one block of logs per payout, and no more.
 
 const eventsAbi = parseAbi([
   "event CarbonRetired(address indexed creditToken_, uint256 retireTonnes, uint256 kvcmSpent)",
@@ -143,8 +143,9 @@ function weights(pairs: Weighed[]): number[] {
 const sum = (values: number[]): number => values.reduce((total, value) => total + value, 0);
 
 // Whether claims since an epoch ended, at `end`, took more than half of what its rewards were worth: that is a payout
-// for the epoch. A claim of a few of the rewards is not, such as anyone may make through AutoMaxi; nor do the tokens a
-// keeper leaves out, such as those it cannot swap, keep a payout from counting. `stamps` are the account's records.
+// for the epoch. A claim of a few of the rewards is not, such as anyone may make through Double Espresso; nor do the
+// tokens a keeper leaves out, such as those it cannot swap, keep a payout from counting. `stamps` are the account's
+// records.
 export function paidFor(pairs: Weighed[], stamps: number[], end: number): boolean {
   if (!pairs.length) return true;
   const weight = weights(pairs);
@@ -256,8 +257,8 @@ export async function readEarned(
   return byAccount(values as (bigint | undefined)[], ids, pairs);
 }
 
-// What the amounts are worth at the given prices, in their unit. A token without a price, or whose decimals are unknown,
-// counts for nothing.
+// What the amounts are worth at the given prices, in their unit. A token without a price, or whose decimals are
+// unknown, counts for nothing.
 export function valueAt(found: Amount[], tokens: Map<string, Token>, prices: Prices): number {
   return worthIn(found, tokens, (token) => prices.of.get(token));
 }
@@ -398,10 +399,10 @@ export function payouts(logs: Log[]): Payout[] {
   return found;
 }
 
-// Carbon Impact's payouts in each block, from one read of the block's logs. Each block holds an account's last claim,
-// but the claim may have been made elsewhere, with no log of Carbon Impact's, and Hydrex's reward contracts log nothing
-// when they pay nothing. So no logs is taken only once no RPC has any, and is read again next time, in case the RPCs that
-// had them did not answer. A block with logs is read once.
+// Matcha Latte's payouts in each block, from one read of the block's logs. Each block holds an account's last claim,
+// but the claim may have been made elsewhere, with no log of Matcha Latte's, and Hydrex's reward contracts log nothing
+// when they pay nothing. So no logs is taken only once no RPC has any, and is read again next time, in case the RPCs
+// that had them did not answer. A block with logs is read once.
 const logsOf = new Map<number, Payout[]>();
 
 export async function payoutsIn(blocks: number[]): Promise<Payout[]> {
@@ -412,7 +413,7 @@ export async function payoutsIn(blocks: number[]): Promise<Payout[]> {
       if (kept) return kept;
       const logs = await rpc<Log[]>(
         "eth_getLogs",
-        [{ address: CARBON_IMPACT.address, fromBlock: numberToHex(block), toBlock: numberToHex(block) }],
+        [{ address: MATCHA_LATTE.address, fromBlock: numberToHex(block), toBlock: numberToHex(block) }],
         { later: true, doubt: (logs) => Array.isArray(logs) && !logs.length },
       );
       const paid = payouts(logs);

@@ -1,9 +1,9 @@
-import { isOpen } from "./dom.ts";
-import { parse, type Route } from "./routes.ts";
+import { isOpen } from "../dom.ts";
+import { parse, type Route } from "../routes.ts";
 
 // The page is one HTML file split into views, one for each kind of page. The hash says which, as a route: this shows
 // its view, sets the title, marks the header's link to the view shown, and opens the section asked for, in its popup.
-// Home shows until the script runs. A wallet connected on Home or About leads on to the App (see connectTo() in main.ts),
+// Home shows until the script runs. A wallet connected on Home or About leads on to the App (see connectTo() in connection.ts),
 // and the wallet's chip leads there too.
 
 const views = [...document.querySelectorAll<HTMLElement>(".view")];

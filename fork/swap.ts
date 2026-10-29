@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { type Locator, type Page } from "playwright-core";
 import { encodeFunctionData } from "viem";
-import { AUTOMAXI, SWAPPERS, WETH } from "../src/config.ts";
+import { DOUBLE_ESPRESSO, SWAPPERS, WETH } from "../src/config.ts";
 import {
   AVNT,
   HOLDER,
@@ -43,8 +43,8 @@ async function tickOnly(page: Page, symbols: string[]): Promise<void> {
   try {
     for (const symbol of symbols)
       await swap.getByRole("checkbox", { name: `Sell ${symbol}` }).waitFor({ timeout: 120_000 });
-    // Each row says "…" until its route is found.
-    await swap.locator(".swap-route").filter({ hasText: /^…$/ }).first().waitFor({ state: "hidden", timeout: 120_000 });
+    // Each row's quote is pending until its route is found.
+    await swap.locator(".swap-fetches.pending").first().waitFor({ state: "hidden", timeout: 120_000 });
   } catch (error) {
     throw new Error(`The swap's page shows: ${await swap.locator(".swap-tokens").innerText()}`, { cause: error });
   }
@@ -63,7 +63,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await fund([WETH, ZORA, AVNT]);
     const { page, sent, violations } = await connected({ owner: SELLER, batch: true }, { url: `${SITE}/#swap` });
     const swap = swapView(page);
-    await swap.getByRole("heading", { name: "Swap many tokens", level: 1 }).waitFor();
+    await swap.getByRole("heading", { name: "Swap", exact: true, level: 1 }).waitFor();
     assert.equal(
       await swap.getByRole("radio", { name: "USDC" }).isChecked(),
       true,
@@ -192,7 +192,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
   });
 
   test("claim, then swap what it brought into USDC in one prompt", async () => {
-    await approveConduit(PAYEE, AUTOMAXI.address, 82774n);
+    await approveConduit(PAYEE, DOUBLE_ESPRESSO.address, 82774n);
     await settle();
     await warmPayouts(PAYEE);
     const { page, sent } = await connected({ owner: PAYEE, batch: true }, { url: `${SITE}/#app` });
@@ -202,7 +202,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await review(page).getByRole("radio", { name: "Into" }).check();
     // Once every token's route is found, the quote, or why there is none.
     const into = review(page).locator(".claim-into");
-    await into.getByText(/^[^…]/).waitFor({ timeout: 600_000 });
+    await review(page).locator(".claim-into:not(.pending)").waitFor({ timeout: 600_000 });
     assert.match(await into.innerText(), /^[\d,.]+ USDC, at least [\d,.]+, from /);
     await shoot(page, "claim-into-390-light", review(page));
     await review(page).getByRole("button", { name: "Continue" }).click();

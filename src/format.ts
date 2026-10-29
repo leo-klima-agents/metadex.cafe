@@ -138,13 +138,10 @@ export function fixed(value: bigint, decimals: number, places: number): string {
   return `${sign}${shown(units)}`;
 }
 
-// Hydrex shows Earning Power as 1.3 times the votes.
-export const toEarningPower = (votes: bigint): bigint => (votes * 13n) / 10n;
-
-export function earningPower(votes: bigint): string {
-  const power = toEarningPower(votes);
-  return power > 0n && power < 10n ** 18n ? "< 1" : units(power);
-}
+// Votes, whole: "897,043", or "< 1" for a part of one; then with their word: "897,043 votes", "1 vote".
+export const voteFigure = (votes: bigint): string => (votes > 0n && votes < 10n ** 18n ? "< 1" : units(votes));
+export const voteWords = (votes: bigint): string =>
+  `${voteFigure(votes)} ${votes > 0n && votes < 2n * 10n ** 18n ? "vote" : "votes"}`;
 
 export const bps = (value: bigint): string => percent.format(Number(value) / 10_000);
 export const fraction = (value: number): string => roughPercent.format(value);
