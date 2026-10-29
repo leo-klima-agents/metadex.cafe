@@ -780,17 +780,9 @@ button img {
   display: grid;
   gap: 0.125rem;
 }
-/* "≈ $0.72 / 1k votes", then how it compares with Hydrex's average, under it. On the App, a line for each
-   automation, the comparison on the same line. */
+/* "≈ $0.72 / 1k votes", then how it compares with Hydrex's average, under it. */
 .choice .record-versus-line {
   display: block;
-}
-.records {
-  padding: 0;
-  list-style: none;
-}
-.records .record-versus-line {
-  display: inline;
 }
 .yours-count {
   color: var(--quiet);

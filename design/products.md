@@ -267,15 +267,14 @@ Swap                                                       →
   products under it do not move, then says "Nothing right now" when nothing needs you; a payout that is merely waiting
   for Thursday does not count, so that the group keeps its weight.
 - **The menu** has one entry per kind of product, Hydrex, for its automations together, and the swap, each with one line
-  of what it does, what it takes, and once connected, what you hold in it. Hydrex's says what each automation's votes
-  earned last epoch against Hydrex's average, for every visitor, as early as the page can: "Carbon Impact: ≈ $0.72 / 1k
-  votes last epoch · 13.5% above the average". An automation with no record yet is left out. Claiming is not on it: it
-  is an action on accounts in AutoMaxi.
-- **Reads:** the App reads only what its lines need: the accounts and their groups, which it reads today, and the
+  of what it does, what it takes, and once connected, what you hold in it. What each automation's votes earned last
+  epoch, against Hydrex's average, is on Hydrex's menu, one level down. Claiming is not on it: it is an action on
+  accounts in AutoMaxi.
+- **Reads:** the App's own reads are what its lines need: the accounts and their groups, which it reads today, and the
   balances of known tokens with their quotes for the swap line. The swap line can come last, pending, as the earnings
-  do, then says what it found so far: "3 tokens · ≈ $31 so far". Hydrex's average, thousands of reads, comes after all
-  of these have ended. Home starts the reads that need no wallet, the average among them, so that the App opens with
-  part of them done.
+  do, then says what it found so far: "3 tokens · ≈ $31 so far". Home starts those that need no wallet, so that the App
+  opens with part of them done. Both then read what Hydrex's menu shows, last epoch's figures and Hydrex's average,
+  thousands of reads, once the App's own have ended, so that Hydrex's menu opens with them.
 
 ### Hydrex, `#hydrex`
 

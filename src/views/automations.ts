@@ -78,16 +78,11 @@ export const traits: Record<Kind, Traits> = {
   automaxi: { templates: "automaxi-", settings: false, paid: () => Number(10_000n - AUTOMAXI_FEE_BPS) / 10_000 },
 };
 
-// Where an automation shows: its row on Hydrex's menu, its page, which holds its popups, and its line on the App. Its
-// figures are written there only, so that other views may use the same class names.
+// Where an automation shows: its row on Hydrex's menu, and its page, which holds its popups. Its figures are written
+// there only, so that other views may use the same class names.
 const placesOf = ({ kind }: Automation): HTMLElement[] => [
-  ...document.querySelectorAll<HTMLElement>(
-    `.choice[data-choice="${kind}"], .view[data-kind="${kind}"], [data-record="${kind}"]`,
-  ),
+  ...document.querySelectorAll<HTMLElement>(`.choice[data-choice="${kind}"], .view[data-kind="${kind}"]`),
 ];
-// Where an automation's place is, for what it shows there.
-const whereOf = (place: HTMLElement): "page" | "menu" | "app" =>
-  place.matches(".view") ? "page" : place.matches(".choice") ? "menu" : "app";
 // The sentence on Hydrex's page that says when a change takes effect; and voting yourself, beside the automations.
 const epochLine = document.getElementById("epoch")!;
 const voteYourself = document.getElementById("vote-yourself")!;
@@ -178,9 +173,9 @@ export function showCountdown(): void {
   fill(epochLine, { countdown: `in ${until(end - time)}` });
 }
 
-// Each automation's figures for last epoch, for each 1,000 votes: what its votes earned, beside Hydrex's average,
-// on the menu and on the App, how they compare; on its page, then what reached the owner after its cut. Each line keeps
-// its place while read, as most automations have a record: it goes only once the read finds none, or fails.
+// Each automation's figures for last epoch, for each 1,000 votes: what its votes earned, beside Hydrex's average, on
+// the menu, how they compare; on its page, then what reached the owner after its cut. Each line keeps its place while
+// read, as most automations have a record: it goes only once the read finds none, or fails.
 export function showRecords(): void {
   for (const automation of AUTOMATIONS) {
     const per = perThousandOf(automation);
@@ -204,18 +199,15 @@ export function showRecords(): void {
           : "";
     const versus = automationVersus(automation);
     for (const place of placesOf(automation)) {
-      // The menu and the App compare what the votes earned, as voting yourself does, and leave what reached the owner
-      // to the automation's page. The App, early on the way to them, says when, and leaves out an automation with no
-      // record, or none read.
-      const where = whereOf(place);
+      // The menu compares what the votes earned, as voting yourself does, and leaves what reached the owner to the
+      // automation's page.
       fill(place, { record });
       show(".record-unit", !none, place);
-      if (where === "page") fill(place, { "record-paid": toYou });
+      if (place.matches(".view")) fill(place, { "record-paid": toYou });
       else {
         show(".record-versus-line", versus !== null, place);
         fill(place, { "record-versus": versus === undefined ? PENDING : versus === null ? "" : versusWords(versus) });
       }
-      if (where === "app") place.hidden = none;
     }
   }
   // Beside them, Hydrex's average, on each automation's page and beside voting yourself, and, with a wallet, what its
@@ -252,9 +244,9 @@ const versusWords = (ratio: number): string =>
     ? "About the average"
     : `${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "above" : "below"} the average`;
 
-// All of Hydrex is thousands of reads, which only the pages that show its average start: Hydrex's and the automations'
-// pages at once; the App, which compares on its Hydrex card, and Home, on the way to it, only once the App's own reads
-// have ended, so that those come first: see showApp, which reads it `anyway` then.
+// All of Hydrex is thousands of reads: Hydrex's and the automations' pages, which show its average, start them at once.
+// Home and the App, on the way to them, start them too, only once the App's own reads have ended, so that those come
+// first, and Hydrex's page opens with them read: see showApp, which reads it `anyway` then.
 export function readAverage(anyway = false): void {
   if (anyway || ["hydrex", "product"].includes(route().view))
     void loadAverage().then((changed) => changed && showRecords());

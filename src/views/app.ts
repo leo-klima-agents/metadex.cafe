@@ -156,8 +156,8 @@ export function showApp(): void {
     );
   }
   void showAllows(holdings, left);
-  // Hydrex's average, which the Hydrex card compares with, once the App's own reads have ended, so that they come first:
-  // on the App, and on Home, so that it is read, or being read, once the App opens.
+  // Hydrex's average, which Hydrex's page compares with, once the App's own reads have ended, so that they come first:
+  // on the App and on Home, on the way to Hydrex's page, so that it is read, or being read, once that page opens.
   if (["home", "app"].includes(route().view) && ownReadsEnded()) readAverage(true);
   // A payout becomes overdue as time passes: the groups' Claim follows.
   const key = overdue()

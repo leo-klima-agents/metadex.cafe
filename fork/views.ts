@@ -518,12 +518,11 @@ describe("the page against a fork of Base: its views, and each account's payouts
     await notRead(hydrex(page).locator("#vote-yourself .yours-average"));
     const loading = (place: Locator) => place.locator(".pending:visible").count();
     assert.equal(await loading(hydrex(page)), 0);
-    // The App leaves out the automations' figures; each automation's page says they could not be read, and its record,
-    // with Try again.
+    // The App's Hydrex card has nothing left loading; each automation's page says its figures could not be read, and
+    // its record, with Try again.
     await page.goto(`${SITE}/#app`);
     const card = app(page).locator('.choice[data-choice="hydrex"]');
     await card.locator(".hydrex-yours").waitFor();
-    assert.equal(await card.locator("[data-record]:visible").count(), 0);
     assert.equal(await loading(card), 0);
     for (const kind of ["carbon-impact", "automaxi"]) {
       await page.goto(`${SITE}/#hydrex/${kind}`);

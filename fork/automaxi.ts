@@ -298,15 +298,6 @@ describe("the page against a fork of Base: a Safe, AutoMaxi, and a new epoch", {
     await hydrexTitle(page).waitFor();
     await hydrex(page).getByRole("navigation", { name: "Back" }).getByRole("link", { name: "Your wallet" }).click();
     await appTitle(page).waitFor();
-    // The App says what Carbon Impact's votes earned against the average, as the menu does, and leaves out AutoMaxi,
-    // which has no record yet.
-    const impactLine = app(page).locator('[data-record="carbon-impact"]');
-    await impactLine.locator(".record-versus:not(.pending)").waitFor();
-    assert.match(
-      await impactLine.innerText(),
-      /^Carbon Impact: ≈\s\$\d+\.\d\d \/ 1k votes last epoch · (\d[\d.]*% (above|below) the average|About the average)$/,
-    );
-    assert.equal(await app(page).locator('[data-record="automaxi"]').isVisible(), false, "no record yet");
 
     await page.goto(`${SITE}/#hydrex/carbon-impact`);
     const impact = product(page, "carbon-impact");

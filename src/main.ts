@@ -49,8 +49,8 @@ initPosition();
 initApp();
 initConnection();
 
-// The pages that show figures of last epoch read what they need: Hydrex's average, at once or, on Home and the App, once
-// the App's own reads have ended, and what the accounts' votes earned.
+// The pages that show figures of last epoch read what they need, Hydrex's average and what the accounts' votes earned;
+// Home and the App read the average too, once the App's own reads have ended, so that Hydrex's page opens with it.
 onRoute(() => {
   readAverage();
   showApp();
