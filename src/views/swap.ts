@@ -123,6 +123,8 @@ let prefilled: Map<string, bigint> | undefined;
 let rescan = false;
 let allowances: Allowance[] | undefined;
 let allowancesOwner: Address | undefined;
+let allowanceReads = 0;
+let allowancesPending = false;
 const listeners: (() => void)[] = [];
 
 // The ticked tokens' routes, found together, for the tokens and amounts `key` names: each token's parts, and what each
@@ -160,6 +162,8 @@ export function swapLine(): { count: number; worth: Money; reading: boolean; fai
 }
 
 export const allowancesLeft = (): Allowance[] | undefined => allowances;
+// Whether the wallet's approvals are being read.
+export const allowancesReading = (): boolean => allowancesPending;
 
 // The payout's tokens and amounts, to tick on the swap's page.
 export function prefill(amounts: Amount[]): void {
@@ -288,6 +292,11 @@ function judge(row: Row, scanned: Scan): void {
   const cost = scanned.costs ? (gasCost(gas, scanned.costs, scanned.prices)?.value ?? 0) : 0;
   row.reason = row.worth === undefined ? "No price" : row.worth < CLEARS * cost ? "Below gas" : undefined;
 }
+
+// Whether a quoted row ticks itself, unless ticked by hand: worth swapping, and among a payout's tokens when the page
+// opened for one.
+const ticksItself = (row: Row): boolean =>
+  !!row.found && !row.reason && (!prefilled || prefilled.has(key(row.token.address)));
 
 // A quoted row's rank in the list: by what its quote is worth, those not worth swapping last.
 const worthFirst = (row: Row): number => (row.reason || row.worth === undefined ? -1 : row.worth);
@@ -552,8 +561,10 @@ async function startScan(owner: Address, swapper: Swapper, quoted = false): Prom
         touched: !!keptRow?.touched,
       };
       if (quoted && keptRow && keptRow.found !== undefined && !keptRow.failed) {
-        const again: Row = { ...row, found: keptRow.found, ticked: keptRow.ticked, node: keptRow.node };
+        const again: Row = { ...row, found: keptRow.found, node: keptRow.node };
+        // Judged again at the new scan's prices and gas: one not ticked by hand ticks itself by them.
         judge(again, scanned);
+        if (!again.touched) again.ticked = ticksItself(again);
         scanned.done++;
         return [again];
       }
@@ -591,8 +602,7 @@ async function startScan(owner: Address, swapper: Swapper, quoted = false): Prom
           }
           if (!current()) return;
           judge(row, scanned);
-          const payout = prefilled?.has(key(row.token.address));
-          if (!row.touched) row.ticked = !!row.found && !row.reason && (!prefilled || !!payout);
+          if (!row.touched) row.ticked = ticksItself(row);
           scanned.done++;
           drawRow(row, scanned);
           drawAll();
@@ -627,6 +637,8 @@ async function readAllowances(): Promise<void> {
   const reading = view.querySelector<HTMLElement>(".allowances-reading")!;
   if (!connection) {
     allowances = undefined;
+    allowancesPending = false;
+    allowanceReads++;
     reading.hidden = true;
     statusLine.textContent = "Connect a wallet.";
     allowanceList.replaceChildren();
@@ -634,7 +646,11 @@ async function readAllowances(): Promise<void> {
     return tell();
   }
   // Until the wallet's are read, cards of bars where they will show; read again, as after a reset, they stay until then.
+  // Only the last read draws: one for a wallet let go since, or overtaken by another, draws nothing.
   const owner = connection.address;
+  const id = ++allowanceReads;
+  const current = () => id === allowanceReads && same(context.connection()?.address ?? "", owner);
+  allowancesPending = true;
   if (!allowances || !same(allowancesOwner ?? "", owner)) {
     statusLine.textContent = "";
     allowanceList.replaceChildren();
@@ -642,9 +658,10 @@ async function readAllowances(): Promise<void> {
   }
   try {
     const found = await allowancesOf(owner, [...new Set(known().map(key))] as Address[]);
-    if (!same(context.connection()?.address ?? "", owner)) return;
-    [allowances, allowancesOwner] = [found, owner];
+    if (!current()) return;
     const tokens = await describe(found.map(({ token }) => token));
+    if (!current()) return;
+    [allowances, allowancesOwner] = [found, owner];
     reading.hidden = true;
     statusLine.textContent = found.length ? "" : "None";
     allowanceList.replaceChildren(
@@ -664,10 +681,11 @@ async function readAllowances(): Promise<void> {
     show(".allowances-all", found.length > 1, view);
   } catch (error) {
     console.error(error);
-    if (!same(context.connection()?.address ?? "", owner)) return;
+    if (!current()) return;
     reading.hidden = true;
     statusLine.textContent = "Reading the approvals failed.";
   }
+  allowancesPending = false;
   tell();
 }
 

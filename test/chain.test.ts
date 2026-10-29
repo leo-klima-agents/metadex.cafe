@@ -257,6 +257,19 @@ test("once no RPC answers two requests or more for two seconds, requests fail at
   assert.equal(await rpc("eth_chainId", []), "0x1");
 });
 
+test("RPCs that answered within ten seconds are not cut off, as when they refuse a burst in a way the browser hides", async () => {
+  Math.random = () => 0;
+  answering(everywhere(result("0x1")));
+  await Promise.all(RPCS.map(() => rpc("eth_chainId", [])));
+  // A refusal sent without CORS headers reaches the page as a network error, as no network at all does.
+  const asked = answering(everywhere({ fail: new TypeError("Failed to fetch") }));
+  const both = await Promise.allSettled([rpc("eth_call", [1]), rpc("eth_call", [2])]);
+  assert.ok(both.every((each) => each.status === "rejected" && /No Base RPC answered/.test(String(each.reason))));
+  const before = asked.length;
+  await assert.rejects(rpc("eth_chainId", []), /No Base RPC answered eth_chainId\./);
+  assert.ok(asked.length > before, "still asked");
+});
+
 test("one request that no RPC answers fails alone, and the next is asked as usual", async () => {
   Math.random = () => 0;
   const asked = answering(everywhere({ fail: new TypeError("fetch failed") }));

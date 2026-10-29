@@ -112,22 +112,27 @@ function recordStart(url: string, kind: Kind, time: number): void {
 // the device is offline: the requests under way, those waiting their turn, and those that follow fail at once for a
 // while, rather than each asking again for seconds, so that the page soon says that reading Base failed. A short loss of
 // the network does not, nor one request that the RPCs, or a proxy before them, cut off: it fails alone, as any other.
-// Then the next request is asked as usual, and any answer ends it. An RPC that is busy, or slow, can be reached.
+// Then the next request is asked as usual, and any answer ends it. An RPC that is busy, or slow, can be reached. So can
+// one that answered within the while: a browser tells a refusal sent without the headers that let the page read it, as
+// some RPCs send when too many requests come at once, from no network at all.
 const CUT_OFF = 10_000;
 const UNANSWERED = 3;
 const UNANSWERED_FOR = 2_000;
-// Each RPC's run of requests with no answer: how many, since when, and which.
+// Each RPC's run of requests with no answer: how many, since when, and which; and when it last answered.
 const unanswered = new Map<string, { count: number; since: number; bodies: Set<string> }>();
+const reachedAt = new Map<string, number>();
 let cutUntil = 0;
 const cutOff = (): boolean => performance.now() < cutUntil;
 
 function reachedOrNot(url: string, body: string, reached: boolean): void {
+  const time = performance.now();
   if (reached) {
+    reachedAt.set(url, time);
     unanswered.clear();
     cutUntil = 0;
     return;
   }
-  const time = performance.now();
+  if (time - (reachedAt.get(url) ?? -Infinity) < CUT_OFF) return;
   const run = unanswered.get(url) ?? { count: 0, since: time, bodies: new Set() };
   run.count++;
   run.bodies.add(body);
@@ -150,6 +155,7 @@ export function resetRateLimits(): void {
   restingUntil.clear();
   learnt.clear();
   unanswered.clear();
+  reachedAt.clear();
   cutUntil = 0;
 }
 

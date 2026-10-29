@@ -22,7 +22,7 @@ import {
   ownVersus,
   perThousandOf,
 } from "../last-epoch.ts";
-import { RETRY, reader, type Reader } from "../read.ts";
+import { RETRY, SOON, reader, type Reader } from "../read.ts";
 import { session, shown, views } from "./page.ts";
 import { route } from "./router.ts";
 
@@ -30,9 +30,9 @@ import { route } from "./router.ts";
 // Hydrex's average and what the wallet's own votes earned.
 
 // Carbon Impact's settings: read again in each new epoch, and five minutes after a read that left some unread. Until one
-// succeeds, at each tick, its figures say they could not be read.
+// succeeds, read again at each tick, its figures say they could not be read.
 export const impact: Reader<CarbonImpact> = reader(readCarbonImpact, {
-  retry: 0,
+  retry: SOON,
   stale: (found, since) =>
     weekStart(now()) > found.epochStart ||
     ([found.voted, found.feeBps, found.maxFeeBps, found.treasury].includes(undefined) && since >= RETRY),
@@ -42,9 +42,12 @@ export const impact: Reader<CarbonImpact> = reader(readCarbonImpact, {
 // AutoMaxi's state, on the menu and its page: "Checking…" until read, and "Not read yet" while its reads fail, which
 // each tick tries again. Read again in each new epoch.
 export const autoMaxi: Reader<Freshness> = reader(() => readFreshness(AUTOMAXI), {
-  retry: 0,
+  retry: SOON,
   stale: (fresh) => weekStart(now()) > fresh.epochStart,
-  settled: () => showAutoMaxi(),
+  settled: () => {
+    showAutoMaxi();
+    views.app();
+  },
 });
 
 // The checks of each automation, before anyone can join it: until they have run, joining is off. They run again each
@@ -163,6 +166,7 @@ function carbonImpactFailed(): void {
   // Without the block's time, the epoch's end is only Thursday's.
   show(".countdown-line", false, epochLine);
   showRecords();
+  views.app();
 }
 
 // How long until the epoch ends, by Base's clock, once Carbon Impact's settings say when it began.
@@ -248,12 +252,13 @@ const versusWords = (ratio: number): string =>
     ? "About the average"
     : `${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "above" : "below"} the average`;
 
-// All of Hydrex is thousands of reads: only the pages that show its average read it, the App among them, early on the way
-// to the automations.
-const showsAverage = (): boolean => ["app", "hydrex", "product"].includes(route().view);
-export const readAverage = (): void => {
-  if (showsAverage()) void loadAverage().then((changed) => changed && showRecords());
-};
+// All of Hydrex is thousands of reads, which only the pages that show its average start: Hydrex's and the automations'
+// pages at once; the App, which compares on its Hydrex card, and Home, on the way to it, only once the App's own reads
+// have ended, so that those come first: see showApp, which reads it `anyway` then.
+export function readAverage(anyway = false): void {
+  if (anyway || ["hydrex", "product"].includes(route().view))
+    void loadAverage().then((changed) => changed && showRecords());
+}
 
 // AutoMaxi's state, on the menu and its page.
 export function showAutoMaxi(): void {

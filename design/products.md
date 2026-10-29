@@ -273,7 +273,9 @@ Swap many tokens into one                                  →
   it: it is an action on accounts in AutoMaxi.
 - **Reads:** the App reads only what its lines need: the accounts and their groups, which it reads today, and the
   balances of known tokens with their quotes for the swap line. The swap line can come last, pending, as the earnings
-  do, then says what it found so far: "3 tokens · ≈ $31 so far".
+  do, then says what it found so far: "3 tokens · ≈ $31 so far". Hydrex's average, thousands of reads, comes after all
+  of these have ended. Home starts the reads that need no wallet, the average among them, so that the App opens with
+  part of them done.
 
 ### Hydrex, `#hydrex`
 

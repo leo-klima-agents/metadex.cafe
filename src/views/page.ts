@@ -12,8 +12,11 @@ export const session: { connection?: Connection | undefined; accounts?: Reader<H
 export const shown = (): Holdings | undefined => session.accounts?.value;
 export const viewerOwns = (owner: Address): boolean => !!session.connection && same(owner, session.connection.address);
 
-// How each view is drawn again, and what the page does as a whole: each view sets its own when it starts, so that a view
-// can have another drawn again without importing it, and no two views import each other.
+// How each view is drawn again, and what the page does as a whole. The views stand in layers, so that no two import each
+// other: each imports those under it and draws them itself, and has one above it drawn again only through `views`, which
+// that one sets as it starts, before anything is read. From the bottom: the router and the review; the swap, the
+// payouts and the automations; the claim; the accounts; an account's page; the App; the connection; then main.ts, which
+// sets `catchUp`.
 export const views = {
   // The groups of the wallet's accounts, keeping what was ticked when `keepTicked`.
   accounts: (_keepTicked?: boolean): void => {},

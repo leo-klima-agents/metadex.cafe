@@ -4,13 +4,17 @@ import { AUTOMATIONS, SWAPPERS } from "../config.ts";
 import { PENDING, clone, fill, live, setText, show, type Text } from "../dom.ts";
 import { count, figure, money } from "../format.ts";
 import { automationName, canLeave, statusOf, type Holdings } from "../hydrex.ts";
+import { earningsEnded } from "../last-epoch.ts";
+import type { Reader } from "../read.ts";
 import { hrefOf } from "../routes.ts";
 import { describe } from "../tokens.ts";
 import { claim, inYear, review, showAccounts, type Action } from "./accounts.ts";
+import { autoMaxi, impact, readAverage } from "./automations.ts";
 import { session, shown, views } from "./page.ts";
-import { overdue, owed, waitsLine } from "./payouts.ts";
+import { appPayouts, overdue, owed, waitsLine } from "./payouts.ts";
 import { showPosition } from "./position.ts";
-import { allowancesLeft, onSwapChange, resetReview, swapLine } from "./swap.ts";
+import { route } from "./router.ts";
+import { allowancesLeft, allowancesReading, onSwapChange, resetReview, swapLine } from "./swap.ts";
 
 // The App: what needs you across the products, each with one action, then the products, each with what you hold in it,
 // and what this wallet allows the café's contracts to do.
@@ -33,6 +37,18 @@ function need(
     button.addEventListener("click", act.button);
   }
   return item;
+}
+
+// Whether the App's own reads have ended, found or failed: Carbon Impact's settings, AutoMaxi's state and last epoch's
+// figures; with a wallet, its accounts and their payouts, its tokens and its approvals too. Each, as it ends, draws the
+// App again.
+function ownReadsEnded(): boolean {
+  const ended = (read: Reader<unknown>) => !read.reading && (read.value !== undefined || read.failed);
+  if (!ended(impact) || !ended(autoMaxi) || !earningsEnded(AUTOMATIONS)) return false;
+  const { connection, accounts } = session;
+  if (!connection) return true;
+  const line = swapLine();
+  return !!accounts && ended(accounts) && !appPayouts.reading && !!line && !line.reading && !allowancesReading();
 }
 
 let overdueShown = "";
@@ -140,6 +156,9 @@ export function showApp(): void {
     );
   }
   void showAllows(holdings, left);
+  // Hydrex's average, which the Hydrex card compares with, once the App's own reads have ended, so that they come first:
+  // on the App, and on Home, so that it is read, or being read, once the App opens.
+  if (["home", "app"].includes(route().view) && ownReadsEnded()) readAverage(true);
   // A payout becomes overdue as time passes: the groups' Claim follows.
   const key = overdue()
     .map(({ account }) => account.id)

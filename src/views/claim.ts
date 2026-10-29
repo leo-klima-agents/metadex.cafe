@@ -165,13 +165,22 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   fill(body, { "claim-count": count(totals.length, "token", "tokens") });
   // What waits, and a swap of it, at prices now, as on the swap's page. The review opens at once, in tokens, and shows
   // them in money once read; without them, it stays in tokens, and swaps none.
-  const [earnedLine, feeLine, paidLine, gasLine, swapGasLine] = [
+  // Each found now: the review moves them out of `body` once it opens.
+  const [earnedLine, feeLine, paidLine, gasLine, swapGasLine, swapGasRow] = [
     ".claim-earned",
     ".claim-fee",
     ".claim-paid",
     ".claim-gas",
     ".claim-gas-swap",
-  ].map((name) => body.querySelector(name)!) as [Element, Element, Element, Element, Element];
+    ".claim-gas-swap-line",
+  ].map((name) => body.querySelector<HTMLElement>(name)!) as [
+    HTMLElement,
+    HTMLElement,
+    HTMLElement,
+    HTMLElement,
+    HTMLElement,
+    HTMLElement,
+  ];
   const [tokenList, more] = [
     body.querySelector(".claim-tokens")!,
     body.querySelector<HTMLDetailsElement>(".claim-more")!,
@@ -186,7 +195,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
     const of = (gas: bigint) => (): Text =>
       !settled ? PENDING : found ? gasWords(gas * found.gasPrice, prices) : `${gas.toLocaleString("en-GB")} gas`;
     live(gasLine, of(totalGas));
-    show(".claim-gas-swap-line", withSwap !== undefined, body);
+    swapGasRow.hidden = withSwap === undefined;
     if (withSwap !== undefined) live(swapGasLine, of(withSwap));
   };
   const drawPrices = () => {
@@ -292,6 +301,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
   // if the claim leaves room in the transaction for the swap.
   const together = (caps.atomic || !!connection.wallet.propose) && !apart;
   let planned = 0;
+  const intoChosen = () => radios.find(({ checked }) => checked)?.value === "into";
   // A swap into one token, planned anew for each token picked: pending until planned. One that fails says so, and the
   // claim comes as it is.
   const plan = (swapper: Swapper): void => {
@@ -362,7 +372,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       );
     };
     sayInto(items);
-    const chosen = radios.find(({ checked }) => checked)?.value === "into";
+    const chosen = intoChosen();
     if (!items.length || !chosen) {
       if (chosen) opened.replace(claimSlips, { outcomeOf: asTheyAre });
       return;
@@ -436,6 +446,8 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       setText(into, "Base refused both together: they come as they are.");
       return opened.replace(claimSlips, { outcomeOf: asTheyAre });
     }
+    // Picked "As they are" meanwhile: the line says what the swap would fetch, and the claim stays as it is.
+    if (!intoChosen()) return;
     if (run) {
       withSwap = run.reduce((sum, { gas }) => sum + gas, 0n);
       sayGas();
@@ -449,11 +461,10 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
       },
     });
   };
+  // "As they are" leaves a plan under way to say what the swap would fetch, without taking it.
   const choose = () => {
-    const chosen = radios.find(({ checked }) => checked)?.value;
-    if (chosen === "into") plan(swapperOf(select.value)!);
+    if (intoChosen()) plan(swapperOf(select.value)!);
     else {
-      planned++;
       withSwap = undefined;
       sayGas();
       opened.replace(claimSlips, { outcomeOf: asTheyAre });

@@ -2,7 +2,7 @@ import { AUTOMATIONS } from "./config.ts";
 import { clone, groupAllHex, pendAll } from "./dom.ts";
 import { setCurrency, type Currency } from "./format.ts";
 import { earningsDue, onEarnings } from "./last-epoch.ts";
-import { initAccounts } from "./views/accounts.ts";
+import { initAccounts, showAccounts } from "./views/accounts.ts";
 import { initApp, showApp } from "./views/app.ts";
 import {
   autoMaxi,
@@ -17,7 +17,7 @@ import {
 import { initConnection, loadAccounts } from "./views/connection.ts";
 import { failed, hooks, session, views } from "./views/page.ts";
 import { appPayouts } from "./views/payouts.ts";
-import { catchUpPosition, initPosition, showShares } from "./views/position.ts";
+import { catchUpPosition, initPosition, showPosition, showShares } from "./views/position.ts";
 import { onRoute } from "./views/router.ts";
 import { initSwap } from "./views/swap.ts";
 
@@ -41,30 +41,32 @@ currencySelect.addEventListener("change", () => setCurrency(currencySelect.value
 // A reload keeps the hash, and so the view.
 document.querySelector("#error .again")!.addEventListener("click", () => location.reload());
 
+// Each view sets how it is drawn again as it starts, before anything is read.
+views.catchUp = catchUp;
 initSwap({ connection: () => session.connection, hooks });
 initAccounts();
 initPosition();
 initApp();
 initConnection();
-views.catchUp = catchUp;
 
-// The pages that show figures of last epoch read what they need: Hydrex's average, and what the accounts' votes earned.
+// The pages that show figures of last epoch read what they need: Hydrex's average, at once or, on Home and the App, once
+// the App's own reads have ended, and what the accounts' votes earned.
 onRoute(() => {
   readAverage();
+  showApp();
   void showShares();
 });
-// Each read of figures, whoever started it, shows on the menu, on the automations' pages and in the accounts' shares. A
-// read that failed is news to the accounts too: what each earned, pending until then, says nothing once no epoch can be
-// read.
+// Each read of figures, whoever started it, shows on the menu, on the automations' pages and in the accounts' shares:
+// what an account in that automation earned, pending until then, or nothing once no epoch can be read.
 onEarnings((_, outcome) => {
   void showShares();
   readAverage();
   showAutoMaxi();
   showRecords();
-  if (outcome === "failed") {
-    views.accounts(true);
-    views.position();
-  }
+  showApp();
+  if (outcome === "same") return;
+  showAccounts(true);
+  showPosition();
 });
 
 // Reads again whatever is missing or from an epoch that has ended, so that the page moves on by itself.

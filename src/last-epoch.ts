@@ -67,8 +67,13 @@ const foldOf = ({ kind }: Automation): HTMLElement =>
   document.querySelector<HTMLElement>(`.view[data-kind="${kind}"] [data-section="record"]`)!;
 const part = (fold: HTMLElement, name: string): HTMLElement => fold.querySelector<HTMLElement>(`.${name}`)!;
 
-// Whether any of the automations' figures are due to be read.
+// Whether any of the automations' figures are due to be read; and whether each one's read has ended, found or failed.
 export const earningsDue = (automations: Automation[]): boolean => automations.some((each) => figuresOf(each).due());
+export const earningsEnded = (automations: Automation[]): boolean =>
+  automations.every((each) => {
+    const figures = figuresOf(each);
+    return !figures.reading && (figures.value !== undefined || figures.failed);
+  });
 
 // Resolves to true once new figures are shown for any of the automations. Callers share a read under way.
 export const loadEarnings = (automations: Automation[]): Promise<boolean> =>

@@ -144,6 +144,9 @@ export function showPosition(): void {
   const view = positionView;
   const own = ownHoldings(target.id);
   const read = target.account;
+  // Not the wallet's, or no longer, as once it is let go or another is connected, and never read by its number: read
+  // now, so that it never shows as read with no read under way.
+  if (!own && read.value === undefined && !read.reading && !read.failed) read.read().catch(() => {});
   const holdings = holdingsOf(target);
   target.held = holdings;
   // A read under way shows as one, even after one that failed, as when Try again was clicked.
