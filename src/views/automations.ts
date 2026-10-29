@@ -7,8 +7,8 @@ import {
   type Automation,
   type Kind,
 } from "../config.ts";
-import { PENDING, clone, fill, fillAddress, fillTime, show, type Text } from "../dom.ts";
-import { WEEK, bps, fraction, money, moneyAt, short, units, until, utc, weekStart, when } from "../format.ts";
+import { PENDING, fill, fillAddress, fillTime, show } from "../dom.ts";
+import { WEEK, bps, fraction, money, short, units, until, utc, weekStart, when } from "../format.ts";
 import {
   failedChecks,
   hasStopped,
@@ -109,10 +109,13 @@ function showState(automation: Automation, prefix: string, shape: string, state:
   }
 }
 
-// What Matcha Latte takes: "33.33% retired, 1% fee", the fee said to be unread when its read failed. The page says
-// "Not read yet" of what it reads again by itself, and "Not read" of what it does not.
-export const feeWords = (feeBps: bigint | undefined): string =>
-  feeBps === undefined ? "fee not read yet" : `${bps(feeBps)} fee`;
+// What Matcha Latte takes: "33.33% retired, 1% fee", without its fee when it is none, and with it said to be unread
+// when its read failed. The page says "Not read yet" of what it reads again by itself, and "Not read" of what it does
+// not.
+const feeWords = (feeBps: bigint | undefined): string =>
+  feeBps === 0n ? "" : feeBps === undefined ? ", fee not read yet" : `, ${bps(feeBps)} fee`;
+export const takesWords = (retireBps: bigint, feeBps: bigint | undefined): string =>
+  `${bps(retireBps)} retired${feeWords(feeBps)}`;
 
 function showMatchaLatte(): void {
   const found = matchaLatte.value;
@@ -129,14 +132,14 @@ function showMatchaLatte(): void {
       "matcha-latte-voted-words": stopped ? " since " : " · voted ",
       tonnes: `${units(tonnes)} t`,
       retired: bps(retireBps),
-      takes: `${bps(retireBps)} retired, ${feeWords(feeBps)}`,
-      "takes-sub": `retired, ${feeWords(feeBps)}`,
+      takes: takesWords(retireBps, feeBps),
+      "takes-sub": `retired${feeWords(feeBps)}`,
       // Its costs and who can change them, in its popup: the most the fee can become, once read.
       "retire-cost": `Up to ${bps(retireBps)} of each payout`,
       "fee-cost": feeBps === undefined ? "Not read yet" : bps(feeBps),
       "max-fee": maxFeeBps === undefined ? "" : ` (up to ${bps(maxFeeBps)})`,
     });
-    // Its treasury, short, as the swap's contracts are, in full on hover.
+    // Its fee recipient, short, as the swap's contracts are, in full on hover.
     for (const link of place.querySelectorAll<HTMLAnchorElement>("a.treasury")) {
       if (treasury) link.title = treasury;
       else {
@@ -182,13 +185,12 @@ export function showCountdown(): void {
   fill(epochLine, { countdown: `in ${until(end - time)}` });
 }
 
-// Each automation's figures for last epoch, for each 1,000 votes: what its votes earned, beside Hydrex's average, on
-// the menu, how they compare; on its page, then what reached the owner after its cut. Each line keeps its place while
-// read, as most automations have a record: it goes only once the read finds none, or fails.
+// Each automation's figures for last epoch, for each 1,000 votes, on the menu and on its page: what its votes earned,
+// and how that compares with Hydrex's average. Each line keeps its place while read, as most automations have a record:
+// it goes only once the read finds none, or fails.
 export function showRecords(): void {
   for (const automation of AUTOMATIONS) {
     const per = perThousandOf(automation);
-    const paid = traits[automation.kind].paid();
     const failed = per === undefined && earningsFailed(automation);
     const none = per === null || failed;
     const record = failed
@@ -198,33 +200,20 @@ export function showRecords(): void {
         : per === null
           ? "No record yet"
           : () => money(per);
-    // What reached the owner, once what the automation takes is read too; if that read failed, the line goes.
-    const waits = automation === MATCHA_LATTE && !matchaLatte.value && !matchaLatte.failed;
-    const toYou: Text | (() => Text) =
-      per && paid !== undefined
-        ? () => `${money(moneyAt(per.value * paid, per))} to you`
-        : !none && (per === undefined || waits)
-          ? PENDING
-          : "";
     const versus = automationVersus(automation);
     for (const place of placesOf(automation)) {
-      // The menu compares what the votes earned, as voting yourself does, and leaves what reached the owner to the
-      // automation's page.
       fill(place, { record });
       show(".record-unit", !none, place);
-      if (place.matches(".view")) fill(place, { "record-paid": toYou });
-      else {
-        show(".record-versus-line", versus !== null, place);
-        fill(place, { "record-versus": versus === undefined ? PENDING : versus === null ? "" : versusWords(versus) });
-      }
+      show(".record-versus-line", versus !== null, place);
+      fill(place, { "record-versus": versus === undefined ? PENDING : versus === null ? "" : versusWords(versus) });
     }
   }
-  // Beside them, Hydrex's average, on each automation's page and beside voting yourself, and, with a wallet, what its
-  // own votes earned, and how they compare: pending while its accounts are read, and its comparison's line kept for it
-  // whether or not it shows one, as the wallet may not have voted with its own.
+  // Beside voting yourself, Hydrex's average, and, with a wallet, what its own votes earned, and how they compare:
+  // pending while its accounts are read, and its comparison's line kept for it whether or not it shows one, as the
+  // wallet may not have voted with its own.
   const average = averagePerThousand();
   const averageWords = average === undefined ? PENDING : average === null ? "Not read yet" : () => money(average);
-  for (const place of [voteYourself, ...AUTOMATIONS.flatMap(placesOf)]) fill(place, { average: averageWords });
+  fill(voteYourself, { average: averageWords });
   show(".average-unit", average !== null, voteYourself);
   const { connection, accounts } = session;
   const holdings = connection ? shown() : undefined;
@@ -285,29 +274,25 @@ export function showDoubleEspresso(): void {
 // Each read of figures, whoever started it, shows on the menu, on the automations' pages and in the accounts' shares.
 export const loadAllEarnings = (): void => void loadEarnings(AUTOMATIONS).catch(console.error);
 
-// Each automation whose checks failed: joining it is off, its rows and pages say so, and its page marks the checks.
+// Each automation whose checks failed: joining it is off, and its rows and pages say so. Hydrex's page says why, for a
+// check it names.
 export function showChecks(): void {
   const found = checks.value;
   if (!found) return;
   for (const automation of AUTOMATIONS) {
-    const failing = found.failed.get(automation.kind)!;
-    const off = failing.length > 0;
+    const off = found.failed.get(automation.kind)!.length > 0;
     show(`.checks-failed[data-kind="${automation.kind}"]`, off);
     for (const place of placesOf(automation)) {
       show(".state-normal", !off, place);
       show(".state-failed", off, place);
-      for (const item of place.querySelectorAll<HTMLElement>("[data-check]")) markCheck(item, failing);
     }
   }
+  const failing = new Set([...found.failed.values()].flat());
+  for (const notice of document.querySelectorAll<HTMLElement>(".check-notice"))
+    notice.hidden = !failing.has(notice.dataset.check!);
   showDoubleEspresso();
   showRecords();
   // A read of the accounts that is under way shows the result when it ends.
   if (!session.accounts?.reading) views.accounts(true);
   views.position();
-}
-
-// A check that failed says so, with the square and words, before what it checks.
-function markCheck(item: HTMLElement, failing: string[]): void {
-  item.querySelector(".check-failed")?.remove();
-  if (failing.includes(item.dataset.check!)) item.prepend(clone("check-failed"));
 }

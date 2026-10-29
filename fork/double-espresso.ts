@@ -288,15 +288,12 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     await maxi.getByRole("button", { name: "Join Double Espresso", exact: true }).click();
     await review(page).getByText("Join Double Espresso · 1 of 2").waitFor();
     await page.keyboard.press("Escape");
-    // It says what it does, beside Hydrex's average, and leads back to Hydrex, which leads back to the wallet.
+    // It says what it does, with no record to compare, and leads back to Hydrex, which leads back to the wallet.
     await maxi
       .locator(".lead")
       .getByText(/most rewards/)
       .waitFor();
-    await maxi
-      .locator(".facts .average")
-      .getByText(/^≈\s\$\d+\.\d\d$/)
-      .waitFor();
+    assert.equal(await maxi.locator(".facts .record-versus-line").isVisible(), false, "no record to compare");
     const back = maxi.getByRole("navigation", { name: "Back" });
     assert.deepEqual(await back.getByRole("link").allInnerTexts(), ["Hydrex"]);
     await back.getByRole("link", { name: "Hydrex" }).click();
@@ -318,23 +315,17 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     const info = matcha.locator(".pop:popover-open");
     const costs = info.locator(".fee-facts dd");
     await costs.first().getByText("Up to 33.33% of each payout").waitFor();
-    assert.deepEqual(await costs.allInnerTexts(), [
-      "Up to 33.33% of each payout",
-      "0%",
-      "Paid during payout",
-      "Paid separately, in ETH",
-    ]);
-    // Who can change what, with the most the fee can become, as read; then its treasury, short, in full on hover.
-    await info.locator('[data-section="control"]').getByText("the fee (up to 1%)").waitFor();
-    const treasury = "0xd9e966a6Bfa2aE2113a34Bb4dd02ded921DA50aF";
-    const treasuryLink = info.locator("a.treasury");
-    assert.equal(await treasuryLink.innerText(), "0xd9e9…50aF");
-    assert.equal(await treasuryLink.getAttribute("href"), `https://basescan.org/address/${treasury}`);
-    assert.equal(await treasuryLink.getAttribute("title"), treasury);
+    assert.deepEqual(await costs.allInnerTexts(), ["Up to 33.33% of each payout", "0%", "Part of the payout"]);
+    // Who can change what, with the most the fee can become, as read; then where the fee goes, short, in full on hover.
+    await info.locator('[data-section="control"]').getByText("the payout fee (up to 1%)").waitFor();
+    const recipient = "0xd9e966a6Bfa2aE2113a34Bb4dd02ded921DA50aF";
+    const recipientLink = info.locator("a.treasury");
+    assert.equal(await recipientLink.innerText(), "0xd9e9…50aF");
+    assert.equal(await recipientLink.getAttribute("href"), `https://basescan.org/address/${recipient}`);
+    assert.equal(await recipientLink.getAttribute("title"), recipient);
+    // Its contracts, as co-signers' links lead to them.
     await page.goto(`${SITE}/#hydrex/matcha-latte/check`);
-    const check = matcha.locator('.pop:popover-open [data-section="check"]');
-    await check.waitFor();
-    assert.equal(await check.locator(".check-failed").count(), 0, "every check passed");
+    await matcha.locator('.pop:popover-open [data-section="check"]').getByText("Fee recipient").waitFor();
 
     // An account's page: the wallet's own has its actions; another's names its owner.
     await page.goto(`${SITE}/#hydrex/141`);

@@ -231,13 +231,13 @@ One template for every product, in this order. Visible:
    come back on Thu 22 Oct, 00:00 UTC."
 4. With a wallet: your accounts in it, which lead to their pages, and Join for those that can join, with boxes to tick
    when there are several. Without a wallet: the wallet buttons. They are the App's parts, not copies.
-5. **Last epoch:** the menu's line, with the epoch's dates. Matcha Latte adds "Retired so far: 5,691 tonnes of carbon
-   credits", with Klima's mark and "through Klima Protocol".
+5. **Last epoch:** the menu's line, as Hydrex's page has it: per 1,000 votes, against Hydrex's average. Matcha Latte
+   adds "Retired so far: 5,691 tonnes of carbon credits", with Klima's mark and "through Klima Protocol".
 6. **Costs and contracts** (`fees`), from the info button beside its name, as the swap's popup: its costs (for Matcha
-   Latte, up to its share retired, its fee, the swap costs and the gas; for Double Espresso, its fee and the gas); who
-   can change it (`control`): for Matcha Latte, Hydrex and its operator, without naming who that is; for Double
-   Espresso, nobody, and anybody its votes; then its contract and its treasury, short, and what the page checks, with
-   any check that failed marked by the square and its words (`check`).
+   Latte, up to its share retired, its payout fee and the swap costs; for Double Espresso, its fee on claims); who can
+   change it (`control`): for Matcha Latte, Hydrex and its operator, without naming who that is; for Double Espresso,
+   nothing, as it is immutable, while anyone can propose its votes; then its contract and its fee recipient, short
+   (`check`). The checks are not listed: Hydrex's page says why joining is off when one fails.
 
 Then one fold, closed:
 

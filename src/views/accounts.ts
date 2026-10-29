@@ -22,7 +22,7 @@ import {
 import { earnedByAccount, lastEarnings, perThousandOf } from "../last-epoch.ts";
 import { hrefOf } from "../routes.ts";
 import { gasWords } from "../swap-calls.ts";
-import { checks, feeWords, matchaLatte, traits } from "./automations.ts";
+import { checks, matchaLatte, takesWords, traits } from "./automations.ts";
 import { openClaim } from "./claim.ts";
 import { failed, hooks, session, shown, views } from "./page.ts";
 import { overdueEntry, owed } from "./payouts.ts";
@@ -343,7 +343,7 @@ export function review(accounts: Account[], action: Action, automation?: Automat
       // any fee while it is not read.
       const { retireBps, feeBps } = settings;
       const fee = feeBps === 0n ? "" : feeBps === undefined ? " and any fee" : ` and the ${bps(feeBps)} fee`;
-      fill(part, { takes: `${bps(retireBps)} retired, ${feeWords(feeBps)}`, "takes-fee": fee });
+      fill(part, { takes: takesWords(retireBps, feeBps), "takes-fee": fee });
     }
     return part;
   };

@@ -56,7 +56,7 @@ test("Matcha Latte is Hydrex's Carbon Impact automation, as its popup says, with
   const html = read("index.html");
   assert.match(
     productOf(html, "matcha-latte"),
-    /Matcha Latte is the "Carbon Impact" automation from Hydrex, also known as KlimaVeTokenConduit\./,
+    /Matcha Latte is the "Carbon Impact" automation from Klima, also known as KlimaVeTokenConduit\./,
   );
   assert.match(productOf(html, "double-espresso"), /Double Espresso is also known as ImmutableVeTokenConduit\./);
   assert.ok(html.includes(`<html lang="${LANG}">`), "the page and its numbers and dates use one language");
@@ -73,18 +73,23 @@ test("each automation has a kind, a name and its costs, Double Espresso's as its
   const html = read("index.html");
   const rows = (part: string) => [...part.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row);
   const factsOf = (kind: string) => /<dl class="fee-facts">[\s\S]*?<\/dl>/.exec(productOf(html, kind))?.[0] ?? "";
-  // Each one's costs, as the swap's: what it takes, then the gas.
-  assert.deepEqual(rows(factsOf("matcha-latte")), ["Retirements", "Fee", "Swap costs", "Gas"]);
-  assert.deepEqual(rows(factsOf("double-espresso")), ["Fee", "Gas"]);
+  // Each one's costs: what it takes of the rewards.
+  assert.deepEqual(rows(factsOf("matcha-latte")), ["Retirements", "Payout fee", "Swap costs"]);
+  assert.deepEqual(rows(factsOf("double-espresso")), ["Fee on claims"]);
   assert.equal(bps(DOUBLE_ESPRESSO_FEE_BPS), "1%");
-  assert.match(factsOf("double-espresso"), /<dd>1% of each claim<\/dd>/);
-  // Who can change it: Hydrex and the operator Matcha Latte; nobody Double Espresso, whose votes are anybody's.
+  assert.match(factsOf("double-espresso"), /<dd>1%<\/dd>/);
+  // Who can change it: Hydrex and the operator Matcha Latte; nobody Double Espresso, whose votes are anyone's.
   const controlOf = (kind: string) =>
     /<div data-section="control">[\s\S]*?<\/dl>/.exec(productOf(html, kind))?.[0] ?? "";
-  assert.deepEqual(rows(controlOf("matcha-latte")), ["Hydrex", "Operator"]);
-  assert.deepEqual(rows(controlOf("double-espresso")), ["Nobody", "Anybody"]);
-  assert.match(controlOf("double-espresso"), /Immutable: it cannot be changed or upgraded/);
-  assert.ok(productOf(html, "double-espresso").includes(`/address/${DOUBLE_ESPRESSO_TREASURY}"`));
+  assert.deepEqual(rows(controlOf("matcha-latte")), ["Hydrex", "The operator"]);
+  assert.deepEqual(rows(controlOf("double-espresso")), ["Immutable", "Democratic"]);
+  assert.match(controlOf("double-espresso"), /It cannot be changed or upgraded/);
+  // Then its contract and where its fee goes.
+  const contractsOf = (kind: string) =>
+    /<div data-section="check">[\s\S]*?<\/dl>/.exec(productOf(html, kind))?.[0] ?? "";
+  assert.deepEqual(rows(contractsOf("matcha-latte")), ["Matcha Latte", "Fee recipient"]);
+  assert.deepEqual(rows(contractsOf("double-espresso")), ["Double Espresso", "Fee recipient"]);
+  assert.ok(contractsOf("double-espresso").includes(`/address/${DOUBLE_ESPRESSO_TREASURY}"`));
   // Each automation's address leads to its code, verified on Basescan.
   for (const { kind, address } of AUTOMATIONS) {
     assert.ok(productOf(html, kind).includes(`/address/${address}#code"`), `${kind}'s page links its code`);
@@ -92,10 +97,15 @@ test("each automation has a kind, a name and its costs, Double Espresso's as its
   assert.equal(DOUBLE_ESPRESSO.address, getAddress(DOUBLE_ESPRESSO.address));
 });
 
-test("each automation's page has the same parts, in the same order, and lists every check that can fail", () => {
+test("each automation's page has the same parts, in the same order, and Hydrex's names the check that can fail", () => {
   const html = read("index.html");
   // Every check that can fail but the RPC's, which the page runs without naming: that the VotingEscrow is not upgraded.
-  const failing: Record<string, string[]> = { "matcha-latte": ["upgrade"], "double-espresso": ["upgrade"] };
+  // Hydrex's page says so, and an automation's page only that joining it is off.
+  const hydrex = viewOf(html, 'data-view="hydrex"');
+  assert.deepEqual(
+    [...hydrex.matchAll(/data-check="([^"]+)"/g)].map(([, check]) => check),
+    ["upgrade"],
+  );
   for (const { kind } of AUTOMATIONS) {
     const page = productOf(html, kind);
     const sections = [...page.matchAll(/data-section="([^"]+)"/g)].map(([, section]) => section);
@@ -111,8 +121,8 @@ test("each automation's page has the same parts, in the same order, and lists ev
       return [...pop.matchAll(/data-section="([^"]+)"/g)].map(([, section]) => section);
     });
     assert.deepEqual(inPops, PRODUCT_SECTIONS[kind], `${kind}'s sections are in its popups`);
-    const checks = [...page.matchAll(/data-check="([^"]+)"/g)].map(([, check]) => check);
-    assert.deepEqual([...checks].sort(), [...failing[kind]!].sort(), kind);
+    assert.doesNotMatch(page, /data-check=/, kind);
+    assert.match(page, /is off\.\s*<a href="#hydrex">Why<\/a>/, `${kind}'s page leads to why`);
   }
   // About is its rows alone, with no popup, and the footer leads to it, without the version, beside the currency picked
   // for the visit.
@@ -219,7 +229,7 @@ test("each swapper has its output and a checksummed address, and the swap's page
   );
   assert.deepEqual(
     listed,
-    SWAPPERS.map(({ symbol, address }) => `${symbol} swapper ${address}`),
+    SWAPPERS.map(({ symbol, address }) => `Swap ${symbol} ${address}`),
   );
   // The page's list of tokens: checksummed, each once.
   for (const { address } of tokens) assert.equal(getAddress(address), address);
@@ -240,7 +250,7 @@ test("each swapper has its output and a checksummed address, and the swap's page
   const slippage = /<h4 class="label">Slippage<\/h4>\s*<dl class="rows">[\s\S]*?<\/dl>/.exec(swap)?.[0] ?? "";
   assert.deepEqual(
     [...slippage.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
-    ["Meaning", "When unmet"],
+    ["What it is", "When unmet"],
   );
   assert.match(slippage, /How much less than quoted you accept/);
   assert.match(slippage, /The token isn't swapped/);

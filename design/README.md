@@ -31,7 +31,7 @@ technical parts open from an info button, as popups.
   popups: its costs, what the slippage is, and the six swappers' contracts; approvals you gave the swappers.
 - **An automation's page** (`#hydrex/matcha-latte`, `#hydrex/double-espresso`): its status, its key figures, and your
   accounts in it and Join. An info button beside its name opens Costs and contracts, as the swap's: its costs, who can
-  change it, its contracts and the checks. Another, beside last epoch, opens how it did against all of Hydrex.
+  change it, and its contract and fee recipient. Another, beside last epoch, opens how it did against all of Hydrex.
 - **An account's page** (`#hydrex/` and its number): its status, its lock, what it earned, what its owner can do, and
   its last payout as a receipt.
 - **The review:** a dialog in two steps: before you join, claim or swap, with what it costs, the swap as a bill, then
@@ -206,9 +206,9 @@ for the record. Then the status Safe{Wallet} reports, and a monthly statement fo
 
 ## Patterns
 
-**Costs.** Every product's, in its Costs and contracts popup, as the swap's: what it takes, then the gas; then who can
-change it, and its contracts. The review gives what it takes and who can change it. They are read from the contract each
-time, with the block. A product that cannot fill a row does not go on the menu.
+**Costs.** Every product's, in its Costs and contracts popup, as the swap's: what it takes; then who can change it, and
+its contracts. The review gives what it takes and who can change it. They are read from the contract each time, with the
+block. A product that cannot fill a row does not go on the menu.
 
 1. **Taken:** each cut, with its base, such as "of the rewards".
 2. **The most it can become:** the cap in the contract, or "no cap" in words.

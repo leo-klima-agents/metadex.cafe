@@ -730,9 +730,6 @@ button img {
 .notice > :is(button, .button, .buttons) {
   margin-inline-start: auto;
 }
-.checks .check-failed {
-  color: var(--danger);
-}
 
 /* Cards: the menu's choices, the accounts, the tokens, what needs you, and approvals. Every card has the same edge and
    padding. */

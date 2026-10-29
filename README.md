@@ -23,8 +23,8 @@ This README is for whoever runs the site. The design and the plan are in [design
   those that stopped voting in September 2026: same call, with that automation's address.
 - **Before anyone can join, the page checks** that its RPCs serve Base, and that Hydrex's VotingEscrow has not been
   upgraded: that its implementation is still the one in `src/config.ts`. If a check fails, joining that automation is
-  turned off, and the page marks the check on that automation's page, under Costs and contracts. Leaving always works.
-  The checks run again every hour.
+  turned off, its page and its row say so, and Hydrex's page says why. Leaving always works. The checks run again every
+  hour.
 - **Claiming** is `claim(tokenId, feeAddresses, bribeAddresses, tokens)` on Double Espresso, which anyone can call for
   any account in it, and which pays the owner, less 1%. Double Espresso's operator claims for every member right after
   each epoch, so the page offers it only for the wallet's own accounts, once a payout is overdue: half a day after the
@@ -91,10 +91,10 @@ This README is for whoever runs the site. The design and the plan are in [design
   a bill: each token, or each part of one, with its route by tokens and pools, under the gas, then the least, with the
   slippage that set it.
 - Each automation has a page, `#hydrex/matcha-latte` and `#hydrex/double-espresso`: what it does in one sentence, that
-  the account stays in the wallet, its key figures (what it takes, what it pays in, what it paid last epoch beside
-  Hydrex's average, and what it retired or who controls it), and a way to join, or the wallet buttons. Everything else
-  is in two popups. Costs and contracts, beside its name, as the swap's: its costs, who can change it, its contracts and
-  the checks. And how it did against all of Hydrex, beside last epoch.
+  the account stays in the wallet, its key figures (what it takes, what it pays in, what its votes earned last epoch
+  against Hydrex's average, as Hydrex's page shows it, and what it retired or who controls it), and a way to join, or
+  the wallet buttons. Everything else is in two popups. Costs and contracts, beside its name, as the swap's: its costs,
+  who can change it, and its contract and fee recipient. And how it did against all of Hydrex, beside last epoch.
 - Each account has a page, `#hydrex/` and its number, which anyone can open: its status, what its votes earned, what its
   owner can do with it, with the gas of a change when it earns nothing, and, in an automation, up to when it has been
   paid, what waits to be claimed, and the receipt of its last payout. The App marks the accounts paid late.
@@ -155,13 +155,13 @@ them, because their hashes no longer match, so the page may not work for that vi
 
 ## When a contract changes
 
-The App and the automation's page say that joining it is off, and its Costs and contracts marks each check that failed,
-by its id in `src/hydrex.ts`:
+Each automation's page and its row on Hydrex's page say that joining it is off, and Hydrex's page says why, for the
+check it names, by its id in `src/hydrex.ts`:
 
-| Check                        | Marked on  | What changed                                                               |
-| ---------------------------- | ---------- | -------------------------------------------------------------------------- |
-| `chain`: the RPC serves Base | Not shown  | An RPC answered for another chain. Joining both, and every swap, turn off. |
-| `upgrade`: the VotingEscrow  | Both pages | The VotingEscrow's implementation: Hydrex upgraded it.                     |
+| Check                        | Marked on | What changed                                                               |
+| ---------------------------- | --------- | -------------------------------------------------------------------------- |
+| `chain`: the RPC serves Base | Not shown | An RPC answered for another chain. Joining both, and every swap, turn off. |
+| `upgrade`: the VotingEscrow  | Hydrex's  | The VotingEscrow's implementation: Hydrex upgraded it.                     |
 
 The rest cannot change while the VotingEscrow is not upgraded, as the contracts' verified sources show: each
 automation's VotingEscrow, Voter and Matcha Latte's kVCM are immutable; what joining an automation approves is set once,

@@ -177,7 +177,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await review(page).isVisible(), false);
     await page
       .locator('.pop:popover-open [data-section="control"]')
-      .getByText("The share retired (up to 100%)")
+      .getByText("the share retired (up to 100%)")
       .waitFor();
     assert.equal(await page.title(), "Matcha Latte · metaDEX Café");
     assert.equal(new URL(page.url()).hash, "#hydrex/matcha-latte/control");
@@ -252,7 +252,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     // Its owner did not vote: once read, its line goes.
     await account(page, 14485).locator(".earned").waitFor({ state: "hidden", timeout: 120_000 });
     await shoot(page, "member-earned-390-light");
-    // What the votes earned for each 1,000 votes: what reached the owner is on the automation's page.
+    // What the votes earned for each 1,000 votes, as each automation's page shows it too.
     const menu = hydrex(page).locator('.choice[data-choice="matcha-latte"]');
     assert.match(await menu.locator(".record").innerText(), /^≈\s\$\d+\.\d\d$/);
     assert.equal(await menu.locator(".record-unit").innerText(), "/ 1k votes");

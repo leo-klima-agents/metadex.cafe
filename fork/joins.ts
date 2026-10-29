@@ -180,11 +180,11 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     assert.equal(sent.length, 1);
     await expectApprovals([141n], CONDUIT, CONDUIT);
     await account(page, 141).getByText("Joining Matcha Latte:").waitFor();
-    // Double Espresso's page, before it ever voted, has no record, and marks none of its checks failed.
+    // Double Espresso's page, before it ever voted, has no record, and joining it is on.
     await page.goto(`${SITE}/#hydrex/double-espresso/check`);
     const maxi = product(page, "double-espresso");
     await maxi.locator(".record").getByText("No record yet").waitFor();
-    assert.equal(await maxi.locator(".check-failed").count(), 0);
+    assert.equal(await maxi.locator(".checks-failed").isVisible(), false);
   });
 
   test("closing between transactions stops there; a link then opens in a new tab", async () => {

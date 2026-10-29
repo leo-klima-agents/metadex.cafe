@@ -125,13 +125,10 @@
           <nav class="trail" aria-label="Back"><a href="#app">Your wallet</a></nav>
           <h1 tabindex="-1">Hydrex</h1>
         </div>
-        <p class="notice checks-failed" data-kind="matcha-latte" role="alert" hidden>
-          <span class="shape failed" aria-hidden="true"></span>Joining Matcha Latte is off.
-          <a href="#hydrex/matcha-latte/check">Why</a>
-        </p>
-        <p class="notice checks-failed" data-kind="double-espresso" role="alert" hidden>
-          <span class="shape failed" aria-hidden="true"></span>Joining Double Espresso is off.
-          <a href="#hydrex/double-espresso/check">Why</a>
+        <!-- A check that failed, which turns joining off: the only one the page names. -->
+        <p class="notice check-notice" data-check="upgrade" role="alert" hidden>
+          <span class="shape failed" aria-hidden="true"></span>Joining is off: Hydrex upgraded its VotingEscrow, which
+          this page has not checked yet.
         </p>
         <p class="wrong-chain notice" role="alert" hidden>
           <span class="to-switch">Wrong network.<span class="switch-failed" hidden> Switch in your wallet.</span></span>
@@ -395,7 +392,7 @@
         <p class="custody small">Your Hydrex account stays in your wallet. Leave with one call, at any time.</p>
         <p class="notice checks-failed" data-kind="matcha-latte" role="alert" hidden>
           <span class="shape failed" aria-hidden="true"></span>Joining Matcha Latte is off.
-          <a href="#hydrex/matcha-latte/check">Why</a>
+          <a href="#hydrex">Why</a>
         </p>
         <dl class="facts tiles">
           <div>
@@ -414,10 +411,8 @@
                 <span aria-hidden="true">i</span>
               </button>
             </dt>
-            <dd class="record pending"></dd>
-            <dd class="sub record-unit">earned, per 1,000 votes</dd>
-            <dd class="sub record-paid pending"></dd>
-            <dd class="sub">Hydrex average <span class="average pending"></span></dd>
+            <dd><span class="record pending"></span> <span class="record-unit small">/ 1k votes</span></dd>
+            <dd class="sub record-versus-line"><span class="record-versus pending"></span></dd>
           </div>
           <div>
             <dt>Retired</dt>
@@ -462,7 +457,7 @@
             </button>
           </div>
           <p class="small">
-            Matcha Latte is the "Carbon Impact" automation from Hydrex, also known as KlimaVeTokenConduit.
+            Matcha Latte is the "Carbon Impact" automation from Klima, also known as KlimaVeTokenConduit.
           </p>
           <h4 class="label">Costs</h4>
           <dl class="fee-facts">
@@ -471,16 +466,12 @@
               <dd class="retire-cost pending"></dd>
             </div>
             <div>
-              <dt>Fee</dt>
+              <dt>Payout fee</dt>
               <dd class="fee-cost pending"></dd>
             </div>
             <div>
               <dt>Swap costs</dt>
-              <dd>Paid during payout</dd>
-            </div>
-            <div>
-              <dt>Gas</dt>
-              <dd>Paid separately, in ETH</dd>
+              <dd>Part of the payout</dd>
             </div>
           </dl>
           <div data-section="control">
@@ -489,12 +480,14 @@
               <div>
                 <dt>Hydrex</dt>
                 <dd>
-                  The share retired (up to 100%), the fee<span class="max-fee"></span>, the payout tokens and recipient,
-                  and the allowed routers
+                  The payout tokens, the routers, the share retired (up to 100%), the payout fee<span
+                    class="max-fee"
+                  ></span
+                  >, and its recipient
                 </dd>
               </div>
               <div>
-                <dt>Operator</dt>
+                <dt>The operator</dt>
                 <dd>What it votes for, how rewards are swapped, and how much is retired (down to 0%)</dd>
               </div>
             </dl>
@@ -515,16 +508,12 @@
                 </dd>
               </div>
               <div>
-                <dt>Its treasury</dt>
+                <dt>Fee recipient</dt>
                 <dd>
                   <code translate="no"><a class="treasury pending"></a></code>
                 </dd>
               </div>
             </dl>
-            <h4 class="label">Checks</h4>
-            <ul class="checks">
-              <li data-check="upgrade">The VotingEscrow is not upgraded</li>
-            </ul>
           </div>
         </div>
 
@@ -654,7 +643,7 @@
         <p class="custody small">Your Hydrex account stays in your wallet. Leave with one call, at any time.</p>
         <p class="notice checks-failed" data-kind="double-espresso" role="alert" hidden>
           <span class="shape failed" aria-hidden="true"></span>Joining Double Espresso is off.
-          <a href="#hydrex/double-espresso/check">Why</a>
+          <a href="#hydrex">Why</a>
         </p>
         <dl class="facts tiles">
           <div>
@@ -672,10 +661,8 @@
                 <span aria-hidden="true">i</span>
               </button>
             </dt>
-            <dd class="record pending"></dd>
-            <dd class="sub record-unit">earned, per 1,000 votes</dd>
-            <dd class="sub record-paid pending"></dd>
-            <dd class="sub">Hydrex average <span class="average pending"></span></dd>
+            <dd><span class="record pending"></span> <span class="record-unit small">/ 1k votes</span></dd>
+            <dd class="sub record-versus-line"><span class="record-versus pending"></span></dd>
           </div>
           <div>
             <dt>Owner</dt>
@@ -727,24 +714,20 @@
           <h4 class="label">Costs</h4>
           <dl class="fee-facts">
             <div>
-              <dt>Fee</dt>
-              <dd>1% of each claim</dd>
-            </div>
-            <div>
-              <dt>Gas</dt>
-              <dd>Paid separately, in ETH</dd>
+              <dt>Fee on claims</dt>
+              <dd>1%</dd>
             </div>
           </dl>
           <div data-section="control">
             <h4 class="label">Who can change it</h4>
             <dl class="rows">
               <div>
-                <dt>Nobody</dt>
-                <dd>Immutable: it cannot be changed or upgraded</dd>
+                <dt>Immutable</dt>
+                <dd>It cannot be changed or upgraded</dd>
               </div>
               <div>
-                <dt>Anybody</dt>
-                <dd>What it votes for: it takes the one that earns most</dd>
+                <dt>Democratic</dt>
+                <dd>Anyone can propose votes that earn at least $1 more rewards based on Chainlink prices</dd>
               </div>
             </dl>
           </div>
@@ -764,7 +747,7 @@
                 </dd>
               </div>
               <div>
-                <dt>Its treasury</dt>
+                <dt>Fee recipient</dt>
                 <dd>
                   <code translate="no"
                     ><a
@@ -776,10 +759,6 @@
                 </dd>
               </div>
             </dl>
-            <h4 class="label">Checks</h4>
-            <ul class="checks">
-              <li data-check="upgrade">The VotingEscrow is not upgraded</li>
-            </ul>
           </div>
         </div>
 
@@ -1103,7 +1082,7 @@
           <h4 class="label">Slippage</h4>
           <dl class="rows">
             <div>
-              <dt>Meaning</dt>
+              <dt>What it is</dt>
               <dd>How much less than quoted you accept</dd>
             </div>
             <div>
@@ -1115,7 +1094,7 @@
             <h4 class="label">Contracts</h4>
             <dl class="rows">
               <div>
-                <dt>USDC swapper</dt>
+                <dt>Swap USDC</dt>
                 <dd>
                   <code translate="no"
                     ><a
@@ -1127,7 +1106,7 @@
                 </dd>
               </div>
               <div>
-                <dt>EURC swapper</dt>
+                <dt>Swap EURC</dt>
                 <dd>
                   <code translate="no"
                     ><a
@@ -1139,7 +1118,7 @@
                 </dd>
               </div>
               <div>
-                <dt>WETH swapper</dt>
+                <dt>Swap WETH</dt>
                 <dd>
                   <code translate="no"
                     ><a
@@ -1151,7 +1130,7 @@
                 </dd>
               </div>
               <div>
-                <dt>cbBTC swapper</dt>
+                <dt>Swap cbBTC</dt>
                 <dd>
                   <code translate="no"
                     ><a
@@ -1163,7 +1142,7 @@
                 </dd>
               </div>
               <div>
-                <dt>AERO swapper</dt>
+                <dt>Swap AERO</dt>
                 <dd>
                   <code translate="no"
                     ><a
@@ -1175,7 +1154,7 @@
                 </dd>
               </div>
               <div>
-                <dt>HYDX swapper</dt>
+                <dt>Swap HYDX</dt>
                 <dd>
                   <code translate="no"
                     ><a
@@ -1831,10 +1810,6 @@
       </p>
       <p class="claim-swap-failed notice" role="alert" hidden></p>
     </template>
-
-    <template id="check-failed"
-      ><span class="check-failed"><span class="shape failed" aria-hidden="true"></span><b>Failed:</b> </span></template
-    >
 
     <!-- An account's status: what holds its votes and its claims, in words to its owner or about it. -->
     <template id="in">
