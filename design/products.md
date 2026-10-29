@@ -1,8 +1,8 @@
 # Products
 
 How the page grows from one kind of product to two: the Hydrex automations it has, and a swap of many tokens into one.
-On the way, it gains a way to claim Double Espresso's rewards when its operator is late. It is UX research and a plan,
-written for the owner, who has decisions to take, and for whoever implements it. [Brackets] mark those decisions;
+On the way, it gains a way to claim Double Espresso's rewards when they are late. It is UX research and a plan, written
+for the owner, who has decisions to take, and for whoever implements it. [Brackets] mark those decisions;
 [Decisions](#decisions) lists them with a recommendation each. Where this file disagrees with [audit.md](audit.md), this
 file wins for the parts it covers.
 
@@ -19,9 +19,9 @@ Implemented in version 0.6.0, with each open decision as recommended below.
   products, after what needs you across all of them: the swap, and Hydrex as one entry, for its automations. Today's
   App, the wallet's Hydrex accounts and who votes for them, moves one level down to `#hydrex`. A new `#swap` sits beside
   it.
-- **Claiming is a fallback, not a product.** Double Espresso's operator claims for every member right after each epoch
-  ends, so a Claim button shows only when an account's payout is overdue: on its page, in the Double Espresso group, and
-  in the App's Needs you.
+- **Claiming is a fallback, not a product.** Claims for every member usually come right after each epoch ends, so a
+  Claim button shows only when an account's payout is overdue: on its page, in the Double Espresso group, and in the
+  App's Needs you.
 - **Payouts and the swap meet.** Every Double Espresso receipt offers to swap the payout into one token, and the claim's
   review offers the rewards "as they are" or "into one token". That gives the hands-off holder what they want, "paid
   weekly in one token", without a new contract.
@@ -44,17 +44,16 @@ and bribe contracts given. Of each token received, 1% goes to the 2-of-3 Safe
 
 - **Anyone can call it, for any account in Double Espresso,** and it always pays the owner. Whoever calls pays the gas.
   The fee is the same whoever calls.
-- **Double Espresso's operator claims for every member right after each epoch ends.** Claiming earlier gains nothing: an
-  epoch's rewards can be claimed only once it has ended. The page already reads when the last payout came, and calls an
-  account late a full epoch after a missed payout, which is too late for the fallback: see
-  [Where it shows](#where-it-shows).
+- **Claims for every member usually come right after each epoch ends.** Claiming earlier gains nothing: an epoch's
+  rewards can be claimed only once it has ended. The page already reads when the last payout came, and calls an account
+  late a full epoch after a missed payout, which is too late for the fallback: see [Where it shows](#where-it-shows).
 - **It asks every contract for every token.** A bribe walks back up to 50 epochs for a token it has not paid recently,
   so a first claim, or one after a long gap, should pass only the contracts and tokens that owe something. The page
   already reads `earned(tokenId, token)` for last epoch's pools, so it knows which.
 - **Owners can also claim on Hydrex directly, without the fee,** for rewards nobody has claimed through Double Espresso
-  yet. The page does not say so: the operator claims right after each epoch, so there is almost never anything left to
+  yet. The page does not say so: claims usually come right after each epoch, so there is almost never anything left to
   claim that way. Settled by the owner on 21 Oct 2026.
-- **A claim that receives nothing does not revert.** If the operator claims first, the tokens still reach the owner.
+- **A claim that receives nothing does not revert.** If someone else claims first, the tokens still reach the owner.
 
 ### The swapper
 
@@ -304,14 +303,14 @@ later, when the next flip finds the epoch still unpaid, so the fallback needs th
   overdue accounts, with boxes to tick when there are more than one.
 - **The App's Needs you,** with the same line.
 
-Never in a normal week. Right after each epoch, something always waits until the operator's payout arrives, up to half a
-day later, and a button then would only spend the member's gas on what the operator is about to do. Nor for others'
+Never in a normal week. Right after each epoch, something always waits until the usual claim arrives, up to half a day
+later, and a button then would only spend the member's gas on what someone else is about to do. Nor for others'
 accounts: anyone may claim for anyone, and it pays the owner, but a button on a stranger's account invites confusion
 about who gets paid. [Claim for others]
 
-The button says what it costs before anyone presses it: "Double Espresso's operator usually claims right after each
-epoch, and has not for this account yet. Claiming now costs the gas, ≈ $0.01, and Double Espresso takes 1%, as from the
-operator's claim."
+The button says what it costs before anyone presses it: "Double Espresso's payouts are usually claimed right after each
+epoch, and this account's has not been yet. Claiming now costs the gas, ≈ $0.01, and Double Espresso takes 1%, as from
+any claim."
 
 ### Its review
 
@@ -342,30 +341,30 @@ other pools.
 ```
 
 - **Step 1, what waits,** as earned, then taken, then yours, as every money figure on the page. It reads `earned` in the
-  pools the automation voted for in each epoch not yet paid: last epoch's, and the one before when the operator missed
-  it too, which today the page reads only for its records. It is still a floor: pools from further back are not read.
+  pools the automation voted for in each epoch not yet paid: last epoch's, and the one before when nobody claimed for it
+  either, which today the page reads only for its records. It is still a floor: pools from further back are not read.
 - **"Receive them" is the one dial** that [README.md](README.md#principles) asks for: the payout token, by the owner's
   choice, without a contract that swaps. "As they are" is the default, so that nothing is sold unasked.
 - **Step 2, what your wallet will ask:** one `claim` per account, as slips, with only the contracts and tokens that owe
   something. Double Espresso asks each contract for every token, so an account owed by many contracts in many tokens, as
-  one the operator missed for weeks, would need more gas than Base allows a transaction: its claim splits into calls
-  that each fit one, the most valuable first. Calls that need more than one transaction's gas together go one at a time,
-  even from a wallet that sends several in one prompt. A Safe sends many calls in one Safe transaction, so its claim
-  splits into small calls instead, none asking a contract for a token it does not owe, which together use the least gas:
+  one nobody claimed for in weeks, would need more gas than Base allows a transaction: its claim splits into calls that
+  each fit one, the most valuable first. Calls that need more than one transaction's gas together go one at a time, even
+  from a wallet that sends several in one prompt. A Safe sends many calls in one Safe transaction, so its claim splits
+  into small calls instead, none asking a contract for a token it does not owe, which together use the least gas:
   #82774's take 55 calls and 41 million gas, where the 12 calls a wallet sends one by one take 79 million. It proposes
   them as several Safe transactions, as few as their simulated gas allows, one after the other from one click, for its
   owners to sign each. With "Swapped into", the approvals and the swap follow, as in the swap's review, or in a review
   of their own after split calls; a Safe whose claim takes several Safe transactions swaps later, on the swap page, as
   the swap follows the claim's receipts.
-- **Done:** a receipt from the `Claimed` events: what was received, the 1%, what reached you. If the operator claimed
-  first, the receipt says the tokens came in its claim, not this one, which still cost its gas.
+- **Done:** a receipt from the `Claimed` events: what was received, the 1%, what reached you. If someone else claimed
+  first, the receipt says the tokens came in their claim, not this one, which still cost its gas.
 
 ### Claim and swap in one prompt
 
 The amounts are known before the claim: `earned` gives them, and Double Espresso's 1% is rounded down. So the page can
 approve each token for exactly what the claim will bring, and swap with the amount `type(uint256).max`, which the
 swapper reads as "my balance, up to the allowance". It sells what the claim brought and no more, even when the wallet
-held some of the token before. If the operator's claim lands first, the tokens are in the wallet all the same, and the
+held some of the token before. If someone else's claim lands first, the tokens are in the wallet all the same, and the
 swap still sells them.
 
 - **With EIP-5792 and atomic batching:** claims, approvals and swap in one prompt, all or nothing.
@@ -568,8 +567,8 @@ The refactor touches every level, so these come cheaply with it:
 
 ## How to know it works
 
-From Base, with nothing collected: claims through Double Espresso by callers other than its operator; swaps through the
-six swappers, with the tokens and outputs; leftover approvals to the swappers.
+From Base, with nothing collected: claims through Double Espresso by its members themselves; swaps through the six
+swappers, with the tokens and outputs; leftover approvals to the swappers.
 
 From people, five sessions per new persona, with four tasks: "Your payout is late: get it", "Turn last week's rewards
 into USDC", "What did that cost you?", and "Make sure nothing is still approved". After each, ask what was sold, what
@@ -578,7 +577,7 @@ stayed, and why.
 ## Decisions
 
 Settled by the owner on 21 Oct 2026: the page does not say that owners can claim Double Espresso's rewards on Hydrex
-without the fee, as the operator claims right after each epoch. Double Espresso's page no longer says it under "Joining
+without the fee, as claims usually come right after each epoch. Double Espresso's page no longer says it under "Joining
 and leaving". It still says, under leaving, that what nobody has claimed through Double Espresso is the owner's to claim
 on Hydrex: after leaving, that is the only way.
 

@@ -37,7 +37,6 @@ import {
   MATCHA_LATTE,
   DEFAULT_OUTPUT,
   HYDX,
-  OPERATOR,
   RPCS,
   SWAPPERS,
   VOTING_ESCROW,
@@ -108,6 +107,8 @@ export const LOCK_MAXI = getAddress("0x53388a4E98Bb56F8571433F5461010Fc287929d3"
 export const USDC = getAddress("0xE57b3Ea02336B9b418cA523aB5aD6f479d93bD1D");
 export const RECIPIENT = getAddress("0x000000000000000000000000000000000000beef");
 export const STRANGER = getAddress("0x000000000000000000000000000000000000dead");
+// Anyone may deploy Double Espresso, and claim through it: this address does, on the forks.
+const SOMEONE = getAddress("0x0000000000000000000000000000000000001234");
 // Double Espresso deploys through the CREATE2 deployer, with the salt and init code of its script/Deploy.s.sol at tag
 // v2, commit 718c107. The init code was compiled from its verification/ input with solc 0.8.37.
 const CREATE2_DEPLOYER = getAddress("0x4e59b44847b379578588920cA78FbF26c0B4956C");
@@ -242,8 +243,8 @@ export async function deployDoubleEspresso(): Promise<void> {
   if ((await anvil<Hex>("eth_getCode", [DOUBLE_ESPRESSO.address, "latest"])) !== "0x") return;
   const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", [toHex(BLOCK), false]);
   await anvil("evm_setNextBlockTimestamp", [Number(timestamp) + 60]);
-  await anvil("anvil_setBalance", [OPERATOR, toHex(FOR_GAS)]);
-  await mined(OPERATOR, CREATE2_DEPLOYER, concat([SALT, INIT_CODE]));
+  await anvil("anvil_setBalance", [SOMEONE, toHex(FOR_GAS)]);
+  await mined(SOMEONE, CREATE2_DEPLOYER, concat([SALT, INIT_CODE]));
   const at = getContractAddress({ opcode: "CREATE2", from: CREATE2_DEPLOYER, salt: SALT, bytecode: INIT_CODE });
   assert.equal(at, DOUBLE_ESPRESSO.address);
 }
@@ -813,7 +814,7 @@ export const warmStandings = (owners: Address[], ids: bigint[]) =>
     await Promise.all([readStamps(ids, last, top), readEarned(ids, last, top), readStamps(ids, before, top)]);
   });
 
-// Double Espresso on Base, with #82774 in it, claimed by its operator and then by a stranger, a USDC reward each; and
+// Double Espresso on Base, with #82774 in it, claimed by someone and then by a stranger, a USDC reward each; and
 // what the page reads of it, and of `owners`, read with no time limit. It answers Matcha Latte's rewards of last epoch,
 // which Double Espresso's accounts earn in the same pools.
 export async function doubleEspressoReceipts(owners: Address[] = []): Promise<Reward[]> {
@@ -825,9 +826,10 @@ export async function doubleEspressoReceipts(owners: Address[] = []): Promise<Re
   });
   await anvil("anvil_setBalance", [PAYEE, toHex(FOR_GAS)]);
   await anvil("anvil_setBalance", [STRANGER, toHex(FOR_GAS)]);
+  await anvil("anvil_setBalance", [SOMEONE, toHex(FOR_GAS)]);
   await approveConduit(PAYEE, DOUBLE_ESPRESSO.address, 82774n);
   const usdc = rewards.filter(({ token }) => token.symbol === "USDC");
-  await claimOne(OPERATOR, 82774n, usdc[0]!);
+  await claimOne(SOMEONE, 82774n, usdc[0]!);
   await claimOne(STRANGER, 82774n, usdc[1]!);
   await settle();
   await warmStandings(owners, [82774n]);

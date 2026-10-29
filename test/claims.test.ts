@@ -9,13 +9,13 @@ const abi = parseAbi([
   "event Claimed(uint256 indexed tokenId, address indexed owner, address indexed caller, address[] tokens, uint256[] amounts, uint256[] fees, uint256 previousClaimBlock)",
 ]);
 const OWNER: Address = "0x60924601E73EBc5C2Bd9244c788d93e0710a6c93";
-const OPERATOR: Address = "0x40FBFe5312330f278824ddbB7521ab77409192f0";
+const SOMEONE: Address = "0x0000000000000000000000000000000000001234";
 const STRANGER: Address = "0x000000000000000000000000000000000000dEaD";
 const USDC: Address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const WETH: Address = "0x4200000000000000000000000000000000000006";
 
 let index = 0;
-function claimed(id: bigint, block: number, previous: number, amounts: [Address, bigint][], caller = OPERATOR): Log {
+function claimed(id: bigint, block: number, previous: number, amounts: [Address, bigint][], caller = SOMEONE): Log {
   return {
     topics: encodeEventTopics({ abi, eventName: "Claimed", args: { tokenId: id, owner: OWNER, caller } }) as [
       Hex,
@@ -47,7 +47,7 @@ function doubleEspresso(logs: Log[]) {
 const blocks = (claims: Claim[]) => claims.map(({ block }) => block);
 
 test("an account's claims, newest first, back to the start of the epoch of its last one", async () => {
-  // The operator's claim at 1,000, after one at 400 in the epoch before; then a stranger's dust at 1,500.
+  // Someone's claim at 1,000, after one at 400 in the epoch before; then a stranger's dust at 1,500.
   const { claimsAt, reads } = doubleEspresso([
     claimed(1n, 400, 0, [[USDC, 5_000_000n]]),
     claimed(1n, 1_000, 400, [
@@ -67,7 +67,7 @@ test("an account's claims, newest first, back to the start of the epoch of its l
   );
   assert.deepEqual(
     walk.claims.map(({ caller }) => caller),
-    [STRANGER, OPERATOR],
+    [STRANGER, SOMEONE],
   );
 });
 
