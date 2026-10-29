@@ -71,9 +71,9 @@ not have those yet: reload the page, and it shows the change.
 - **Failures:** Base's RPCs fail, or serve another chain; Hydrex's Voter cannot be read; tokens' symbols cannot be read,
   each such read failing on its own, as a token's would; Matcha Latte's figures cannot be read, while Double Espresso's
   can, or the other way round; or the swappers' quotes come in a tenth under what their pools give.
-- **Checks that fail:** each of the page's checks, by the id the README's table gives it, fails on its own. A code check
-  fails as the contract's code changes; the others, as the fork answers that one read otherwise. The page checks
-  contracts as it opens, then every hour: reload it after a change.
+- **Checks that fail:** each of the page's checks, by the id the README's table gives it, fails on its own. The
+  VotingEscrow's and its approval logic's fail as their code changes; the others, as the fork answers that one read
+  otherwise. The page checks contracts as it opens, then every hour: reload it after a change.
 - **What the wallet was asked:** each connection, switch and transaction, and its answer, and each change to the fork.
 
 Links out of the page, such as to Basescan, open the real site, which knows nothing of the fork.
@@ -139,7 +139,7 @@ the wallet's own failures. Start the scenario again to try a flow from its start
 | Back while the wallet asks                                    | `0x0208…4C95` | Tick Asks you, Sign transaction on the page, then Back. Confirm in the QA wallet: the account still updates.                                                                 |
 | Two clicks while the wallet asks to connect                   | any           | Tick Asks you, reload, click Test Wallet in the App twice: the second did not connect. Confirm: the first still does.                                                        |
 | Reading Base failed                                           | any           | Tick Base's RPCs fail, reload: Reading Base failed. Untick, then Try again.                                                                                                  |
-| A check that fails                                            | any           | Tick one under Checks that fail, reload: joining Matcha Latte is off, and its Check it, `#hydrex/matcha-latte/check`, marks that check alone.                                |
+| A check that fails                                            | any           | Tick one under Checks that fail, reload: joining Matcha Latte is off, and its Costs and contracts, `#hydrex/matcha-latte/check`, marks that check alone.                     |
 | The Voter cannot be read                                      | `0x6970…a655` | Tick Hydrex's Voter cannot be read, reload: the accounts still show.                                                                                                         |
 | A new epoch                                                   | `0x0208…4C95` | Join with #141, then Next epoch: the page moves on to the next one, and #141 is in Matcha Latte. Nobody votes on the fork: Matcha Latte reads as stopped.                    |
 
@@ -153,7 +153,7 @@ the wallet's own failures. Start the scenario again to try a flow from its start
 | Leave Double Espresso                     | `0x0208…4C95` | Once #141 is in, Leave: claims stop.                                                                                                                                                               |
 | Its receipts: its operator and a stranger | `0x6092…6c93` | In `double-espresso`, `#hydrex/82774`: Receipt · #82774 · Double Espresso, claims sent by `0x0000…dEaD` and by Double Espresso, each paid to the owner, less 1%.                                   |
 | One automation's payouts that fail        | `0x0208…4C95` | #141 joins Double Espresso, #42877 Matcha Latte; twice, Next epoch and Hydrex moves on; tick Double Espresso's figures cannot be read: `#hydrex/141` cannot read its payouts, `#hydrex/42877` can. |
-| A check of Double Espresso's that fails   | any           | Tick double-espresso-code, double-espresso-contracts or double-espresso-approvals, reload: `#hydrex/double-espresso/check` marks it alone.                                                         |
+| A check of Double Espresso's that fails   | any           | Tick double-espresso-contracts or double-espresso-approvals, reload: `#hydrex/double-espresso/check` marks it alone.                                                                               |
 
 ### The swap: `swap`
 

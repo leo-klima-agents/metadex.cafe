@@ -50,9 +50,9 @@ page led back to "App", which Home already is once a wallet is connected; and th
 - **A call's fields** in the review open from the same button, at the corner of its slip.
 - **Home is the App once a wallet is connected,** so the name in the header leads there. The breadcrumb is gone: a page
   within Hydrex has one link back to it, "‹ Hydrex", and the others have none.
-- **Addresses, not code hashes.** A contract shows by its address, linked to Basescan; the page still checks its code
-  hash, but no longer shows it. An address is "0x", then groups of four. It stays on one line where it fits; otherwise
-  it breaks once, in the middle, its second half's groups under the first's, both halves ending flush.
+- **Addresses, not code hashes.** A contract shows by its address, linked to its code, verified on Basescan; the page
+  shows no code hash. An address is "0x", then groups of four. It stays on one line where it fits; otherwise it breaks
+  once, in the middle, its second half's groups under the first's, both halves ending flush.
 - **The swap's costs, each as one row:** its fee, pools' fees, price impact, slippage and gas. Its fee is in its code,
   so no row says who can change it. Its contracts are listed by name, without numbers, in the order the page checks
   them: the swappers, then the exchanges, from Aero's to Hydrex's.

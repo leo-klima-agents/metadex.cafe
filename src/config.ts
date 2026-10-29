@@ -13,7 +13,6 @@ export type Automation = {
   kind: Kind;
   name: string;
   address: Address;
-  codeHash: Hex;
   // What joining approves: 3 sends the account's claims to the automation, 5 delegates its votes.
   actions: number[];
 };
@@ -23,7 +22,6 @@ export const MATCHA_LATTE: Automation = {
   kind: "matcha-latte",
   name: "Matcha Latte",
   address: "0xdE91885cF35ac57DF0c4A75c16862127dBe8317c",
-  codeHash: "0x0d67cd335e3ae9cde256cf399f819a3ea2b9c248b0336840a3b20a2ee82c192e",
   actions: [3, 5],
 };
 // ImmutableVeTokenConduit version 2, from https://github.com/ldeso/hydrex-conduit at tag v2, commit 718c107. It has no
@@ -33,7 +31,6 @@ export const DOUBLE_ESPRESSO: Automation = {
   kind: "double-espresso",
   name: "Double Espresso",
   address: "0x692c323B425A9DfeebE302F56168a7798D93EAC5",
-  codeHash: "0x4872932431e0d175fb1213e9ffec2b8f0ebd1d9d490643d6df5b2c6d0b379847",
   actions: [3, 5],
 };
 export const AUTOMATIONS = [MATCHA_LATTE, DOUBLE_ESPRESSO];

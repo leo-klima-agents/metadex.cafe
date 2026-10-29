@@ -53,8 +53,7 @@ test("addresses are checksummed, and code hashes are 32 bytes", () => {
   const prices = [ALGEBRA_FACTORY, PAIR_FACTORY, ...ANCHORS.flatMap(({ address, feed }) => [address, feed.address])];
   const addresses = [...contracts, ACCOUNT_NAMES, ...prices, ...conduits.map(({ address }) => address)];
   for (const address of addresses) assert.equal(getAddress(address), address);
-  const hashes = [...AUTOMATIONS.map(({ codeHash }) => codeHash), VOTING_ESCROW_IMPLEMENTATION_CODE_HASH];
-  for (const hash of [...hashes, APPROVAL_LOGIC_CODE_HASH]) {
+  for (const hash of [VOTING_ESCROW_IMPLEMENTATION_CODE_HASH, APPROVAL_LOGIC_CODE_HASH]) {
     assert.match(hash, /^0x[0-9a-f]{64}$/);
   }
 });
@@ -93,10 +92,8 @@ test("each automation has a kind, a name, its approvals and its costs, Double Es
   assert.deepEqual(rows(controlOf("double-espresso")), ["Nobody", "Anybody"]);
   assert.match(controlOf("double-espresso"), /Immutable: it cannot be changed or upgraded/);
   assert.ok(productOf(html, "double-espresso").includes(`/address/${DOUBLE_ESPRESSO_TREASURY}"`));
-  // The page checks each automation's code hash, and shows only its address, which leads to its code: the hash is no
-  // use to read.
-  for (const { kind, codeHash, address } of AUTOMATIONS) {
-    assert.ok(!html.includes(codeHash), `${kind}'s code hash is not on the page`);
+  // Each automation's address leads to its code, verified on Basescan.
+  for (const { kind, address } of AUTOMATIONS) {
     assert.ok(productOf(html, kind).includes(`/address/${address}#code"`), `${kind}'s page links its code`);
   }
   assert.equal(DOUBLE_ESPRESSO.address, getAddress(DOUBLE_ESPRESSO.address));
@@ -106,14 +103,8 @@ test("each automation's page has the same parts, in the same order, and lists ev
   const html = read("index.html");
   // Every check that can fail but the RPC's, which the page runs without naming.
   const failing: Record<string, string[]> = {
-    "matcha-latte": ["code", "contracts", "token", "approvals", "upgrade", "logic"],
-    "double-espresso": [
-      "double-espresso-code",
-      "double-espresso-contracts",
-      "double-espresso-approvals",
-      "upgrade",
-      "logic",
-    ],
+    "matcha-latte": ["contracts", "token", "approvals", "upgrade", "logic"],
+    "double-espresso": ["double-espresso-contracts", "double-espresso-approvals", "upgrade", "logic"],
   };
   for (const { kind } of AUTOMATIONS) {
     const page = productOf(html, kind);

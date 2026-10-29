@@ -416,17 +416,16 @@ export type Checks = {
 const points = (escrowAddress: unknown, voterOf: unknown) =>
   same(String(escrowAddress), VOTING_ESCROW) && same(String(voterOf), VOTER);
 
-// Each automation's own checks: what its code must hash to and what joining it must approve, which every automation
-// has, then the reads of its own and what they must answer. Each check is named by the id of its message on the page.
+// Each automation's own checks: what joining it must approve, which every automation has, then the reads of its own and
+// what they must answer. Each check is named by the id of its message on the page.
 type Own = {
   calls: Call[];
-  checks(answers: unknown[], code: boolean, approvals: boolean): Record<string, boolean>;
+  checks(answers: unknown[], approvals: boolean): Record<string, boolean>;
 };
 const own: Record<Kind, Own> = {
   "matcha-latte": {
     calls: [matchaLatte("veToken"), matchaLatte("voter"), matchaLatte("kvcm")],
-    checks: ([veToken, voterOf, payoutToken], code, approvals) => ({
-      code: !code,
+    checks: ([veToken, voterOf, payoutToken], approvals) => ({
       contracts: !points(veToken, voterOf),
       token: !same(String(payoutToken), KVCM),
       approvals: !approvals,
@@ -434,8 +433,7 @@ const own: Record<Kind, Own> = {
   },
   "double-espresso": {
     calls: [doubleEspresso("veToken"), doubleEspresso("voter")],
-    checks: ([veToken, voterOf], code, approvals) => ({
-      "double-espresso-code": !code,
+    checks: ([veToken, voterOf], approvals) => ({
       "double-espresso-contracts": !points(veToken, voterOf),
       "double-espresso-approvals": !approvals,
     }),
@@ -447,9 +445,8 @@ export async function failedChecks(): Promise<Checks> {
     escrow("getConduitApprovalConfig", address),
     ...own[kind].calls,
   ]);
-  const [chainId, hashes, impl, [logic, ...answers]] = await Promise.all([
+  const [chainId, impl, [logic, ...answers]] = await Promise.all([
     rpc<string>("eth_chainId", []),
-    Promise.all(AUTOMATIONS.map(({ address }) => codeHash(address))),
     implementation(VOTING_ESCROW),
     read([escrow("approvalLogic"), ...reads.flat()]),
   ]);
@@ -466,7 +463,7 @@ export async function failedChecks(): Promise<Checks> {
     const [config, ...mine] = answers.slice(at, (at += reads[i]!.length));
     const [actions, active] = (config ?? [[], false]) as [number[], boolean];
     const approvals = active && actions.join() === automation.actions.join();
-    const checks = own[automation.kind].checks(mine, hashes[i] === automation.codeHash, approvals);
+    const checks = own[automation.kind].checks(mine, approvals);
     return { automation, failed: [...all, ...failing(checks)] };
   });
   return { failed: new Map(found.map(({ automation, failed }) => [automation.kind, failed])) };

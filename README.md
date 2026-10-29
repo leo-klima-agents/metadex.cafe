@@ -21,10 +21,10 @@ This README is for whoever runs the site. The design and the plan are in [design
   takes the votes and the claims from the other, in one call.
 - **Leaving** is the same call with `false`. The page can also take accounts out of Hydrex's other automations, such as
   those that stopped voting in September 2026: same call, with that automation's address.
-- **Before anyone can join, the page checks** the chain, each automation's code, Matcha Latte's settings, and the code
-  of Hydrex's VotingEscrow against `src/config.ts`. If a check fails, joining that automation is turned off, and the
-  page marks the check on that automation's page, under Costs and contracts. Leaving always works. The checks run again
-  every hour.
+- **Before anyone can join, the page checks** the chain, the contracts each automation points to, what joining it
+  approves, Matcha Latte's payout token, and Hydrex's VotingEscrow and its approval logic against `src/config.ts`. If a
+  check fails, joining that automation is turned off, and the page marks the check on that automation's page, under
+  Costs and contracts. Leaving always works. The checks run again every hour.
 - **Claiming** is `claim(tokenId, feeAddresses, bribeAddresses, tokens)` on Double Espresso, which anyone can call for
   any account in it, and which pays the owner, less 1%. Double Espresso's operator claims for every member right after
   each epoch, so the page offers it only for the wallet's own accounts, once a payout is overdue: half a day after the
@@ -161,11 +161,9 @@ by its id in `src/hydrex.ts`:
 | Check                                                | Marked on         | What changed                                                                              |
 | ---------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------- |
 | `chain`: the RPC serves Base                         | Not shown         | An RPC answered for another chain. Joining both, and every swap, turn off.                |
-| `code`: Matcha Latte's code                          | Matcha Latte's    | Matcha Latte's code.                                                                      |
 | `contracts`: its VotingEscrow and Voter              | Matcha Latte's    | `veToken()` or `voter()` on Matcha Latte.                                                 |
 | `token`: it pays in kVCM                             | Matcha Latte's    | `kvcm()` on Matcha Latte.                                                                 |
 | `approvals`: what joining approves                   | Matcha Latte's    | `getConduitApprovalConfig` on the VotingEscrow: no longer active, or other than `[3, 5]`. |
-| `double-espresso-code`: Double Espresso's code       | Double Espresso's | Double Espresso's code.                                                                   |
 | `double-espresso-contracts`: its VotingEscrow, Voter | Double Espresso's | `veToken()` or `voter()` on Double Espresso.                                              |
 | `double-espresso-approvals`: what joining approves   | Double Espresso's | `getConduitApprovalConfig` on the VotingEscrow, for Double Espresso.                      |
 | `upgrade`: the VotingEscrow                          | Both pages        | The VotingEscrow's implementation, or its code.                                           |
@@ -182,8 +180,6 @@ ESCROW=0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1
 IMPLEMENTATION=$(cast to-check-sum-address $(cast implementation $ESCROW --rpc-url $RPC))
 LOGIC=$(cast call $ESCROW "approvalLogic()(address)" --rpc-url $RPC)
 
-cast keccak $(cast code $MATCHA_LATTE --rpc-url $RPC)   # MATCHA_LATTE's codeHash
-cast keccak $(cast code $DOUBLE_ESPRESSO --rpc-url $RPC)        # DOUBLE_ESPRESSO's codeHash
 echo $IMPLEMENTATION                                    # VOTING_ESCROW_IMPLEMENTATION
 cast keccak $(cast code $IMPLEMENTATION --rpc-url $RPC)  # VOTING_ESCROW_IMPLEMENTATION_CODE_HASH
 echo $LOGIC                                             # APPROVAL_LOGIC
@@ -204,9 +200,7 @@ kept by hand. `node scripts/tokens.ts` checks each token's symbol and decimals a
 `--write` writes Base's answers back.
 
 Double Espresso is version 2 of `ImmutableVeTokenConduit`, from <https://github.com/ldeso/hydrex-conduit> at tag `v2`,
-commit `718c107`. It was deployed on 20 Oct 2026, in block 52,854,750, through the CREATE2 deployer. The command above
-prints the code hash in that commit's `verification/bytecode-hashes.json`,
-`0x4872932431e0d175fb1213e9ffec2b8f0ebd1d9d490643d6df5b2c6d0b379847`. Version 1, at
+commit `718c107`. It was deployed on 20 Oct 2026, in block 52,854,750, through the CREATE2 deployer. Version 1, at
 `0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B`, still works, and nobody had joined it when version 2 was deployed. The
 page offers only version 2. Its source is verified, with an exact match, on Basescan and Sourcify; the page links to
 Basescan's.

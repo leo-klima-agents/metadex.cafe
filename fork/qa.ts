@@ -551,11 +551,6 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     },
     "voter-gone": { group: "base", label: "Hydrex's Voter cannot be read", ...code(VOTER, () => "0x") },
     // As the README's table names them, by the ids of their messages on the page.
-    code: {
-      group: "check",
-      label: "code: Matcha Latte's code",
-      ...code(MATCHA_LATTE.address, longer),
-    },
     contracts: {
       group: "check",
       label: "contracts: Matcha Latte's VotingEscrow",
@@ -570,11 +565,6 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       group: "check",
       label: "approvals: what joining Matcha Latte approves",
       ...answered(VOTING_ESCROW, "getConduitApprovalConfig", [MATCHA_LATTE.address], inactive),
-    },
-    "double-espresso-code": {
-      group: "check",
-      label: "double-espresso-code: Double Espresso's code",
-      ...code(DOUBLE_ESPRESSO.address, longer),
     },
     "double-espresso-contracts": {
       group: "check",

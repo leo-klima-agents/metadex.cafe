@@ -246,7 +246,6 @@ export async function deployDoubleEspresso(): Promise<void> {
   await mined(OPERATOR, CREATE2_DEPLOYER, concat([SALT, INIT_CODE]));
   const at = getContractAddress({ opcode: "CREATE2", from: CREATE2_DEPLOYER, salt: SALT, bytecode: INIT_CODE });
   assert.equal(at, DOUBLE_ESPRESSO.address);
-  assert.equal(keccak256(await anvil<Hex>("eth_getCode", [at, "latest"])), DOUBLE_ESPRESSO.codeHash);
 }
 
 // The page reads a few blocks before the latest, which on the fork can be before the last transactions. Blocks after
