@@ -81,13 +81,13 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await homeTitle(page).isVisible(), false);
     assert.equal(await page.title(), "Your wallet · metaDEX Café");
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Your wallet");
-    // The App lists the products, each with what it is: Aero, still to come, with no link; Hydrex; and the swap.
-    assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), ["Aero", "Hydrex", "Swap"]);
+    // The App lists the products, each with what it is: the swap; Hydrex; and Aero, still to come, with no link.
+    assert.deepEqual(await app(page).locator("#products h3").allInnerTexts(), ["Swap", "Hydrex", "Aero"]);
     assert.equal(await app(page).locator('#products [data-choice="aero"] a').count(), 0);
     assert.deepEqual(await app(page).locator("#products .note").allInnerTexts(), [
-      "Coming soon",
-      "Automations that vote with your Hydrex accounts.",
       "Sell many tokens for one.",
+      "Automations that vote with your Hydrex accounts.",
+      "Coming soon.",
     ]);
     assert.equal(await page.locator("header .to-app").getAttribute("aria-current"), "page");
     await app(page).getByRole("button", { name: "Test Wallet" }).waitFor();
