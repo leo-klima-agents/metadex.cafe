@@ -3,20 +3,29 @@ import * as dagPb from "@ipld/dag-pb";
 import type { CID } from "multiformats/cid";
 import { sha256 } from "multiformats/hashes/sha2";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { pack } from "../scripts/car.ts";
+import { carOf, zipOf } from "../scripts/release.ts";
 
 // A folder with a file of two chunks, one of one, and a folder within. Its CID was recorded once with Kubo 0.43.1, from
-// the repository's root: ipfs add -r --cid-version=1 test/fixtures/car
-const FIXTURE = fileURLToPath(new URL("fixtures/car", import.meta.url));
+// the repository's root: ipfs add -r --cid-version=1 test/fixtures/release
+const FIXTURE = fileURLToPath(new URL("fixtures/release", import.meta.url));
 const RECORDED = "bafybeigmzca45gv2dy34w5gfnkqtquwixzlcfusid55faiobbow6bfpcou";
+// Its zip's SHA-256, recorded once unzip -t and Python's zipfile found the zip sound, and unzip gave back the folder.
+const ZIPPED = "2272ca9f3fb60db545edf7bc041b2f292212c0d49aee63c23a8aaf9b2a905576";
 
-const { root, car } = await pack(FIXTURE);
+const { root, car } = await carOf(FIXTURE);
 
 test("a folder packs to the CID that ipfs add -r --cid-version=1 gives it, the same bytes each time", async () => {
   assert.equal(root.toString(), RECORDED);
-  assert.deepEqual((await pack(FIXTURE)).car, car);
+  assert.deepEqual((await carOf(FIXTURE)).car, car);
+});
+
+test("a folder zips to the bytes recorded, the same each time", () => {
+  const zip = zipOf(FIXTURE, "release");
+  assert.equal(createHash("sha256").update(zip).digest("hex"), ZIPPED);
+  assert.deepEqual(zipOf(FIXTURE, "release"), zip);
 });
 
 test("the CAR file has that one root, and each block under it once, each matching its CID", async () => {

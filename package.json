@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build": "node scripts/build.ts",
-    "car": "node scripts/car.ts",
+    "release": "node scripts/release.ts",
     "format": "prettier --write .",
     "test": "node --test",
     "test:fork": "npm run build && node fork/run.ts",
