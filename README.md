@@ -62,7 +62,7 @@ This README is for whoever runs the site. The design and the plan are in [design
   products, each with one action: the Hydrex accounts with a vote or more whose owner did not vote last epoch, those in
   stopped automations, each one partly in an automation, an overdue payout, token approvals to the swappers that haven't
   been used. Then the products, each with what you hold in it: the swap (`#swap`); Hydrex (`#hydrex`), its automations
-  and voting yourself; and Aero, greyed out, "Coming soon." Its Approvals button lists every approval this wallet gave
+  and voting yourself; and Aero, greyed out, "Coming soon". Its Approvals button lists every approval this wallet gave
   the café's contracts, with the call that undoes it. The pages under it lead one level back, above their title: "‹ Your
   wallet" from Hydrex and the swap, "‹ Hydrex" from the pages below; Home and About do not.
 - The page always says "Hydrex account", as "account" alone means an address in crypto: "8 Hydrex accounts", "Hydrex

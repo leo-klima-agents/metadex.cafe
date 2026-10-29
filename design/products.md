@@ -253,14 +253,14 @@ NEEDS YOU · 3
 
 THE MENU
 Swap                                                       →
-  Sell many tokens for one.
-  Takes 1% of what each fetches.
+  Sell many tokens for one
+  Takes 1% of what each fetches
   Yours: 11 tokens worth swapping, ≈ $31
 Hydrex                                                     →
-  Automations that vote with your Hydrex accounts.
+  Automations that vote with your Hydrex accounts
   Yours: 5 accounts, 2 in Matcha Latte, 1 in Double Espresso
 Aero                                     (greyed out, no link)
-  Coming soon.
+  Coming soon
 ```
 
 - **Without a wallet:** the wallet picker, then the menu, without the "Yours" lines.
@@ -271,7 +271,7 @@ Aero                                     (greyed out, no link)
   weight.
 - **The menu** has one entry per kind of product: the swap, then Hydrex, for its automations together, each with one
   line of what it does, what it takes, and once connected, what you hold in it; and last Aero, greyed out and leading
-  nowhere: "Coming soon." What each automation's votes earned last epoch, against Hydrex's average, is on Hydrex's menu,
+  nowhere: "Coming soon". What each automation's votes earned last epoch, against Hydrex's average, is on Hydrex's menu,
   one level down. Claiming is not on it: it is an action on accounts in Double Espresso.
 - **Reads:** the App's own reads are what its lines need: the accounts and their groups, which it reads today, and the
   balances of known tokens with their quotes for the swap line. The swap line can come last, pending, as the earnings
