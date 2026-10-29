@@ -6,8 +6,6 @@ import {
   ACCOUNT_NAMES,
   ALGEBRA_FACTORY,
   ANCHORS,
-  APPROVAL_LOGIC,
-  APPROVAL_LOGIC_CODE_HASH,
   AUTOMATIONS,
   DOUBLE_ESPRESSO,
   DOUBLE_ESPRESSO_FEE_BPS,
@@ -21,7 +19,6 @@ import {
   VOTER,
   VOTING_ESCROW,
   VOTING_ESCROW_IMPLEMENTATION,
-  VOTING_ESCROW_IMPLEMENTATION_CODE_HASH,
 } from "../src/config.ts";
 import { LANG, bps } from "../src/format.ts";
 import conduits from "../src/hydrex-conduits.json" with { type: "json" };
@@ -38,7 +35,7 @@ function viewOf(html: string, ...attributes: string[]): string {
 }
 const productOf = (html: string, kind: string) => viewOf(html, 'data-view="product"', `data-kind="${kind}"`);
 
-test("addresses are checksummed, and code hashes are 32 bytes", () => {
+test("addresses are checksummed", () => {
   const contracts = [
     MULTICALL3,
     ...AUTOMATIONS.map(({ address }) => address),
@@ -47,15 +44,11 @@ test("addresses are checksummed, and code hashes are 32 bytes", () => {
     KVCM,
     VOTING_ESCROW,
     VOTING_ESCROW_IMPLEMENTATION,
-    APPROVAL_LOGIC,
     VOTER,
   ];
   const prices = [ALGEBRA_FACTORY, PAIR_FACTORY, ...ANCHORS.flatMap(({ address, feed }) => [address, feed.address])];
   const addresses = [...contracts, ACCOUNT_NAMES, ...prices, ...conduits.map(({ address }) => address)];
   for (const address of addresses) assert.equal(getAddress(address), address);
-  for (const hash of [VOTING_ESCROW_IMPLEMENTATION_CODE_HASH, APPROVAL_LOGIC_CODE_HASH]) {
-    assert.match(hash, /^0x[0-9a-f]{64}$/);
-  }
 });
 
 test("Matcha Latte is Hydrex's Carbon Impact automation, as its popup says, with each contract's name", () => {
@@ -69,12 +62,12 @@ test("Matcha Latte is Hydrex's Carbon Impact automation, as its popup says, with
   assert.ok(html.includes(`<html lang="${LANG}">`), "the page and its numbers and dates use one language");
 });
 
-test("each automation has a kind, a name, its approvals and its costs, Double Espresso's as its code", () => {
+test("each automation has a kind, a name and its costs, Double Espresso's as its code", () => {
   assert.deepEqual(
-    AUTOMATIONS.map(({ kind, name, actions }) => [kind, name, actions]),
+    AUTOMATIONS.map(({ kind, name }) => [kind, name]),
     [
-      ["matcha-latte", "Matcha Latte", [3, 5]],
-      ["double-espresso", "Double Espresso", [3, 5]],
+      ["matcha-latte", "Matcha Latte"],
+      ["double-espresso", "Double Espresso"],
     ],
   );
   const html = read("index.html");
@@ -101,11 +94,8 @@ test("each automation has a kind, a name, its approvals and its costs, Double Es
 
 test("each automation's page has the same parts, in the same order, and lists every check that can fail", () => {
   const html = read("index.html");
-  // Every check that can fail but the RPC's, which the page runs without naming.
-  const failing: Record<string, string[]> = {
-    "matcha-latte": ["contracts", "token", "approvals", "upgrade", "logic"],
-    "double-espresso": ["double-espresso-contracts", "double-espresso-approvals", "upgrade", "logic"],
-  };
+  // Every check that can fail but the RPC's, which the page runs without naming: that the VotingEscrow is not upgraded.
+  const failing: Record<string, string[]> = { "matcha-latte": ["upgrade"], "double-espresso": ["upgrade"] };
   for (const { kind } of AUTOMATIONS) {
     const page = productOf(html, kind);
     const sections = [...page.matchAll(/data-section="([^"]+)"/g)].map(([, section]) => section);

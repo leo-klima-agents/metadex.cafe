@@ -1,7 +1,6 @@
 import {
   decodeFunctionResult,
   encodeFunctionData,
-  keccak256,
   numberToHex,
   parseAbi,
   type Abi,
@@ -16,7 +15,7 @@ export const multicall3Abi = parseAbi([
   "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
   "function getCurrentBlockTimestamp() view returns (uint256 timestamp)",
 ]);
-const EIP1967_IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
+export const EIP1967_IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 const CALLS_PER_BATCH = 200;
 
 // Unlike viem's isAddressEqual, this never throws, even on the undefined of a failed read.
@@ -312,9 +311,6 @@ async function aggregate(calls: Call[], block: number | "latest", later: boolean
     }
   });
 }
-
-export const codeHash = async (address: Address): Promise<Hex> =>
-  keccak256(await rpc<Hex>("eth_getCode", [address, "latest"]));
 
 export const implementation = async (proxy: Address): Promise<Address> =>
   `0x${(await rpc<Hex>("eth_getStorageAt", [proxy, EIP1967_IMPLEMENTATION_SLOT, "latest"])).slice(-40)}`;

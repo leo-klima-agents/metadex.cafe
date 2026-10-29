@@ -27,9 +27,8 @@ import {
   type Hex,
 } from "viem";
 import tokens from "../src/base-tokens.json" with { type: "json" };
-import { multicall3Abi, same } from "../src/chain.ts";
+import { EIP1967_IMPLEMENTATION_SLOT, multicall3Abi, same } from "../src/chain.ts";
 import {
-  APPROVAL_LOGIC,
   AUTOMATIONS,
   DOUBLE_ESPRESSO,
   MATCHA_LATTE,
@@ -40,7 +39,6 @@ import {
   USDC,
   VOTER,
   VOTING_ESCROW,
-  VOTING_ESCROW_IMPLEMENTATION,
 } from "../src/config.ts";
 import conduits from "../src/hydrex-conduits.json" with { type: "json" };
 import { forgetClaims } from "../src/claims.ts";
@@ -98,9 +96,6 @@ type Fault = { group: "base" | "check" | "hydrex"; label: string; on(): Promise<
 type Calls = "one" | "atomic" | "each";
 
 const QA_ABI = parseAbi([
-  "function veToken() view returns (address)",
-  "function kvcm() view returns (address)",
-  "function getConduitApprovalConfig(address conduit) view returns (uint8[] actions, bool active, string name)",
   "function lastVoted(address voter) view returns (uint256)",
   "function ownerOf(uint256 tokenId) view returns (address)",
   "function delegate(uint256 tokenId, address delegatee)",
@@ -410,25 +405,20 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       await anvil("anvil_setCode", [address, codes.get(address)!]);
     },
   });
-  // A byte after the code changes its hash, not what it does.
-  const longer = (code: Hex): Hex => `${code}00`;
 
-  // Reads whose answer is changed, by the contract and calldata of each, inside the page's Multicall3 batches: so one
-  // read answers otherwise, and Base stays as it is. Those that `failing` matches fail on their own, as a call that
-  // reverts, and the batch's other reads still answer.
-  const answers = new Map<string, (data: Hex) => Hex>();
+  // Reads changed inside the page's Multicall3 batches, so that Base stays as it is: those that `failing` matches fail on
+  // their own, as a call that reverts, while the batch's other reads still answer; and the swappers' quotes, when they
+  // come in under.
   const failing = new Set<(target: Address, callData: Hex) => boolean>();
-  const callKey = (target: string, data: string) => `${target} ${data}`.toLowerCase();
   type Result = { success: boolean; returnData: Hex };
   function changeOf(target: Address, callData: Hex): ((result: Result) => Result) | undefined {
     if ([...failing].some((fails) => fails(target, callData))) return () => ({ success: false, returnData: "0x" });
     const change =
-      answers.get(callKey(target, callData)) ??
-      (quotesUnder && SWAPPER_ADDRESSES.has(target.toLowerCase()) && callData.startsWith(QUOTE) ? under : undefined);
+      quotesUnder && SWAPPER_ADDRESSES.has(target.toLowerCase()) && callData.startsWith(QUOTE) ? under : undefined;
     return change && ((result) => (result.success ? { ...result, returnData: change(result.returnData) } : result));
   }
   function rewrite(body: string, reply: string): string | undefined {
-    if (!answers.size && !failing.size && !quotesUnder) return undefined;
+    if (!failing.size && !quotesUnder) return undefined;
     const { method, params = [] } = JSON.parse(body) as { method: string; params?: { to?: string; data?: Hex }[] };
     const [{ to = "", data = "0x" } = {}] = params;
     if (method !== "eth_call" || !same(to, MULTICALL3)) return undefined;
@@ -444,13 +434,6 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       result: encodeFunctionResult({ abi: multicall3Abi, functionName: "aggregate3", result }),
     });
   }
-  const answered = (target: Address, functionName: string, args: unknown[], change: (data: Hex) => Hex) => {
-    const key = callKey(target, encodeFunctionData({ abi: QA_ABI, functionName, args } as never));
-    return {
-      on: async () => void answers.set(key, change),
-      off: async () => void answers.delete(key),
-    };
-  };
   const another = (): Hex => encodeAbiParameters([{ type: "address" }], [STRANGER]);
   // Each swapper's quotes, a tenth under what its pools give: far under the page's own prices, which it says.
   let quotesUnder = false;
@@ -466,6 +449,28 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     on: async () => void refusing.add(refuses),
     off: async () => void refusing.delete(refuses),
   });
+  // Answers in place of the fork's, each to the requests it knows: the first that answers does.
+  const answering = new Set<(body: string) => string | undefined>();
+  rpc.answer = (body) =>
+    [...answering].reduce<string | undefined>((reply, answers) => reply ?? answers(body), undefined);
+  const answer = (answers: (body: string) => string | undefined) => ({
+    on: async () => void answering.add(answers),
+    off: async () => void answering.delete(answers),
+  });
+  // The VotingEscrow's implementation, as if Hydrex had upgraded it: another address in its EIP-1967 slot, told to the
+  // page alone, so that the fork's VotingEscrow still works.
+  const upgraded = (body: string): string | undefined => {
+    let call: { id?: unknown; method?: string; params?: unknown[] };
+    try {
+      call = JSON.parse(body);
+    } catch {
+      return undefined;
+    }
+    const [to, slot] = (call.params ?? []) as string[];
+    if (call.method !== "eth_getStorageAt" || !same(String(to), VOTING_ESCROW)) return undefined;
+    if (slot?.toLowerCase() !== EIP1967_IMPLEMENTATION_SLOT) return undefined;
+    return JSON.stringify({ jsonrpc: "2.0", id: call.id ?? 1, result: another() });
+  };
   // The reads that fail on their own.
   const fail = (fails: (target: Address, callData: Hex) => boolean) => ({
     on: async () => void failing.add(fails),
@@ -475,14 +480,6 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   const figuresOf = (automation: Address) => {
     const word = automation.slice(2).toLowerCase();
     return fail((target, callData) => same(target, VOTER) && callData.toLowerCase().includes(word));
-  };
-  const inactive = (data: Hex): Hex => {
-    const [actions, , name] = decodeFunctionResult({ abi: QA_ABI, functionName: "getConduitApprovalConfig", data });
-    return encodeFunctionResult({
-      abi: QA_ABI,
-      functionName: "getConduitApprovalConfig",
-      result: [actions, false, name],
-    });
   };
 
   // When each of Hydrex's other automations last voted, kept in the Voter's storage, by the slot that holds it.
@@ -546,45 +543,14 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     chain: {
       group: "base",
       label: "Base's RPCs serve another chain",
-      on: async () => void (rpc.answer = elsewhere),
-      off: async () => void (rpc.answer = undefined),
+      ...answer(elsewhere),
     },
     "voter-gone": { group: "base", label: "Hydrex's Voter cannot be read", ...code(VOTER, () => "0x") },
-    // As the README's table names them, by the ids of their messages on the page.
-    contracts: {
-      group: "check",
-      label: "contracts: Matcha Latte's VotingEscrow",
-      ...answered(MATCHA_LATTE.address, "veToken", [], another),
-    },
-    token: {
-      group: "check",
-      label: "token: Matcha Latte's payout token",
-      ...answered(MATCHA_LATTE.address, "kvcm", [], another),
-    },
-    approvals: {
-      group: "check",
-      label: "approvals: what joining Matcha Latte approves",
-      ...answered(VOTING_ESCROW, "getConduitApprovalConfig", [MATCHA_LATTE.address], inactive),
-    },
-    "double-espresso-contracts": {
-      group: "check",
-      label: "double-espresso-contracts: Double Espresso's VotingEscrow",
-      ...answered(DOUBLE_ESPRESSO.address, "veToken", [], another),
-    },
-    "double-espresso-approvals": {
-      group: "check",
-      label: "double-espresso-approvals: what joining Double Espresso approves",
-      ...answered(VOTING_ESCROW, "getConduitApprovalConfig", [DOUBLE_ESPRESSO.address], inactive),
-    },
+    // As the README's table names it, by the id of its message on the page.
     upgrade: {
       group: "check",
-      label: "upgrade: the VotingEscrow's code",
-      ...code(VOTING_ESCROW_IMPLEMENTATION, longer),
-    },
-    logic: {
-      group: "check",
-      label: "logic: the VotingEscrow's approval logic",
-      ...code(APPROVAL_LOGIC, longer),
+      label: "upgrade: the VotingEscrow's implementation",
+      ...answer(upgraded),
     },
     "others-vote": {
       group: "hydrex",
@@ -611,12 +577,11 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     current = next;
     faults.clear();
     codes.clear();
-    answers.clear();
     failing.clear();
     voted.clear();
     refusing.clear();
     quotesUnder = false;
-    rpc.answer = undefined;
+    answering.clear();
     replayed = 0;
     created.length = 0;
     typed.length = 0;

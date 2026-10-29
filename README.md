@@ -21,10 +21,10 @@ This README is for whoever runs the site. The design and the plan are in [design
   takes the votes and the claims from the other, in one call.
 - **Leaving** is the same call with `false`. The page can also take accounts out of Hydrex's other automations, such as
   those that stopped voting in September 2026: same call, with that automation's address.
-- **Before anyone can join, the page checks** the chain, the contracts each automation points to, what joining it
-  approves, Matcha Latte's payout token, and Hydrex's VotingEscrow and its approval logic against `src/config.ts`. If a
-  check fails, joining that automation is turned off, and the page marks the check on that automation's page, under
-  Costs and contracts. Leaving always works. The checks run again every hour.
+- **Before anyone can join, the page checks** that its RPCs serve Base, and that Hydrex's VotingEscrow has not been
+  upgraded: that its implementation is still the one in `src/config.ts`. If a check fails, joining that automation is
+  turned off, and the page marks the check on that automation's page, under Costs and contracts. Leaving always works.
+  The checks run again every hour.
 - **Claiming** is `claim(tokenId, feeAddresses, bribeAddresses, tokens)` on Double Espresso, which anyone can call for
   any account in it, and which pays the owner, less 1%. Double Espresso's operator claims for every member right after
   each epoch, so the page offers it only for the wallet's own accounts, once a payout is overdue: half a day after the
@@ -158,35 +158,23 @@ them, because their hashes no longer match, so the page may not work for that vi
 The App and the automation's page say that joining it is off, and its Costs and contracts marks each check that failed,
 by its id in `src/hydrex.ts`:
 
-| Check                                                | Marked on         | What changed                                                                              |
-| ---------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------- |
-| `chain`: the RPC serves Base                         | Not shown         | An RPC answered for another chain. Joining both, and every swap, turn off.                |
-| `contracts`: its VotingEscrow and Voter              | Matcha Latte's    | `veToken()` or `voter()` on Matcha Latte.                                                 |
-| `token`: it pays in kVCM                             | Matcha Latte's    | `kvcm()` on Matcha Latte.                                                                 |
-| `approvals`: what joining approves                   | Matcha Latte's    | `getConduitApprovalConfig` on the VotingEscrow: no longer active, or other than `[3, 5]`. |
-| `double-espresso-contracts`: its VotingEscrow, Voter | Double Espresso's | `veToken()` or `voter()` on Double Espresso.                                              |
-| `double-espresso-approvals`: what joining approves   | Double Espresso's | `getConduitApprovalConfig` on the VotingEscrow, for Double Espresso.                      |
-| `upgrade`: the VotingEscrow                          | Both pages        | The VotingEscrow's implementation, or its code.                                           |
-| `logic`: its approval logic                          | Both pages        | `approvalLogic()` on the VotingEscrow, or its code.                                       |
+| Check                        | Marked on  | What changed                                                               |
+| ---------------------------- | ---------- | -------------------------------------------------------------------------- |
+| `chain`: the RPC serves Base | Not shown  | An RPC answered for another chain. Joining both, and every swap, turn off. |
+| `upgrade`: the VotingEscrow  | Both pages | The VotingEscrow's implementation: Hydrex upgraded it.                     |
 
-Read what changed, and decide whether the page should trust it. If it should, update `src/config.ts`, run the tests and
-release. These [Foundry](https://getfoundry.sh/) commands print the values that `src/config.ts` holds:
+The rest cannot change while the VotingEscrow is not upgraded, as the contracts' verified sources show: each
+automation's VotingEscrow, Voter and Matcha Latte's kVCM are immutable; what joining an automation approves is set once,
+and no call sets it again; and the VotingEscrow's approval logic is set only as it is initialized. Code at an address
+cannot change on Base, so the implementation's address is enough to know its code.
+
+After an upgrade, read the new implementation's verified source, and decide whether the page should trust it. If it
+should, update `VOTING_ESCROW_IMPLEMENTATION` in `src/config.ts`, run the tests and release. This
+[Foundry](https://getfoundry.sh/) command prints it:
 
 ```sh
-RPC=https://mainnet.base.org
-MATCHA_LATTE=0xdE91885cF35ac57DF0c4A75c16862127dBe8317c
-DOUBLE_ESPRESSO=0x692c323B425A9DfeebE302F56168a7798D93EAC5
 ESCROW=0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1
-IMPLEMENTATION=$(cast to-check-sum-address $(cast implementation $ESCROW --rpc-url $RPC))
-LOGIC=$(cast call $ESCROW "approvalLogic()(address)" --rpc-url $RPC)
-
-echo $IMPLEMENTATION                                    # VOTING_ESCROW_IMPLEMENTATION
-cast keccak $(cast code $IMPLEMENTATION --rpc-url $RPC)  # VOTING_ESCROW_IMPLEMENTATION_CODE_HASH
-echo $LOGIC                                             # APPROVAL_LOGIC
-cast keccak $(cast code $LOGIC --rpc-url $RPC)           # APPROVAL_LOGIC_CODE_HASH
-for AUTOMATION in $MATCHA_LATTE $DOUBLE_ESPRESSO; do           # each automation's actions
-  cast call $ESCROW "getConduitApprovalConfig(address)(uint8[],bool,string)" $AUTOMATION --rpc-url $RPC
-done
+cast to-check-sum-address $(cast implementation $ESCROW --rpc-url https://mainnet.base.org)
 ```
 
 When Hydrex adds or removes automations, update `src/hydrex-conduits.json` from <https://api.hydrex.fi/conduits>. If
@@ -352,7 +340,7 @@ security update comes at once, on its own.
 | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `index.html`                                            | The page. Its views are Home, the App (`#app`), the Hydrex accounts (`#hydrex`), a page per automation (`#hydrex/double-espresso`), an account's page (`#hydrex/9540`), the swap (`#swap`) and About (`#about`). |
 | `style.css`, `fonts/`                                   | Styles and fonts.                                                                                                                                                                                                |
-| `src/config.ts`                                         | What the page trusts: contract addresses and code hashes, the RPCs, and the price anchors.                                                                                                                       |
+| `src/config.ts`                                         | What the page trusts: contract addresses, the RPCs, and the price anchors.                                                                                                                                       |
 | `src/hydrex-conduits.json`                              | Hydrex's automations, as <https://api.hydrex.fi/conduits> lists them.                                                                                                                                            |
 | `src/main.ts`                                           | Startup: each view set up, then the reads, and again every half a minute what is due.                                                                                                                            |
 | `src/views/page.ts`                                     | What the views share: the wallet connected, its Hydrex accounts, and how each view is drawn again.                                                                                                               |

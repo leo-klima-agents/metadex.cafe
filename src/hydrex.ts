@@ -1,18 +1,14 @@
 import { encodeFunctionData, parseAbi, zeroAddress, type Address, type Hex } from "viem";
-import { blockTime, call, codeHash, implementation, read, required, rpc, same, type Call } from "./chain.ts";
+import { blockTime, call, implementation, read, required, rpc, same, type Call } from "./chain.ts";
 import {
   ACCOUNT_NAMES,
-  APPROVAL_LOGIC,
-  APPROVAL_LOGIC_CODE_HASH,
   AUTOMATIONS,
   DOUBLE_ESPRESSO,
   MATCHA_LATTE,
   CHAIN_ID,
-  KVCM,
   VOTER,
   VOTING_ESCROW,
   VOTING_ESCROW_IMPLEMENTATION,
-  VOTING_ESCROW_IMPLEMENTATION_CODE_HASH,
   type Automation,
   type Kind,
 } from "./config.ts";
@@ -34,8 +30,6 @@ const votingEscrowAbi = parseAbi([
   "function delegates(uint256 tokenId, uint48 timestamp) view returns (address)",
   "function getClaimRedirectApproved(uint256 tokenId) view returns (address)",
   "function getPastVotes(address account, uint256 timepoint) view returns (uint256)",
-  "function getConduitApprovalConfig(address conduit) view returns (uint8[] actions, bool active, string description)",
-  "function approvalLogic() view returns (address)",
   "function setConduitApproval(address conduit, uint256 tokenId, bool approve)",
 ]);
 
@@ -53,9 +47,6 @@ const voterAbi = parseAbi([
 ]);
 
 const matchaLatteAbi = parseAbi([
-  "function veToken() view returns (address)",
-  "function voter() view returns (address)",
-  "function kvcm() view returns (address)",
   "function retireBps() view returns (uint256)",
   "function treasuryFeeBps() view returns (uint256)",
   "function MAX_TREASURY_FEE_BPS() view returns (uint256)",
@@ -63,11 +54,7 @@ const matchaLatteAbi = parseAbi([
   "function totalTonnesRetired() view returns (uint256)",
 ]);
 
-const doubleEspressoAbi = parseAbi([
-  "function veToken() view returns (address)",
-  "function voter() view returns (address)",
-  "function lastClaimBlock(uint256 tokenId) view returns (uint256)",
-]);
+const doubleEspressoAbi = parseAbi(["function lastClaimBlock(uint256 tokenId) view returns (uint256)"]);
 
 // Base's predeploy that prices posting a transaction's data to Ethereum.
 const GAS_PRICE_ORACLE: Address = "0x420000000000000000000000000000000000000F";
@@ -413,60 +400,15 @@ export type Checks = {
   failed: Map<Kind, string[]>;
 };
 
-const points = (escrowAddress: unknown, voterOf: unknown) =>
-  same(String(escrowAddress), VOTING_ESCROW) && same(String(voterOf), VOTER);
-
-// Each automation's own checks: what joining it must approve, which every automation has, then the reads of its own and
-// what they must answer. Each check is named by the id of its message on the page.
-type Own = {
-  calls: Call[];
-  checks(answers: unknown[], approvals: boolean): Record<string, boolean>;
-};
-const own: Record<Kind, Own> = {
-  "matcha-latte": {
-    calls: [matchaLatte("veToken"), matchaLatte("voter"), matchaLatte("kvcm")],
-    checks: ([veToken, voterOf, payoutToken], approvals) => ({
-      contracts: !points(veToken, voterOf),
-      token: !same(String(payoutToken), KVCM),
-      approvals: !approvals,
-    }),
-  },
-  "double-espresso": {
-    calls: [doubleEspresso("veToken"), doubleEspresso("voter")],
-    checks: ([veToken, voterOf], approvals) => ({
-      "double-espresso-contracts": !points(veToken, voterOf),
-      "double-espresso-approvals": !approvals,
-    }),
-  },
-};
-
+// Base, through the page's RPCs, and Hydrex's VotingEscrow as the page knows it: an upgrade points it at other code, and
+// with it what joining allows. Each check is named by the id of its message on the page, and fails for every automation.
 export async function failedChecks(): Promise<Checks> {
-  const reads = AUTOMATIONS.map(({ kind, address }) => [
-    escrow("getConduitApprovalConfig", address),
-    ...own[kind].calls,
-  ]);
-  const [chainId, impl, [logic, ...answers]] = await Promise.all([
-    rpc<string>("eth_chainId", []),
-    implementation(VOTING_ESCROW),
-    read([escrow("approvalLogic"), ...reads.flat()]),
-  ]);
-  const [implHash, logicHash] = await Promise.all([codeHash(impl), logic ? codeHash(logic as Address) : undefined]);
-  const failing = (checks: Record<string, boolean>) =>
-    Object.entries(checks).flatMap(([id, fails]) => (fails ? [id] : []));
-  const all = failing({
+  const [chainId, impl] = await Promise.all([rpc<string>("eth_chainId", []), implementation(VOTING_ESCROW)]);
+  const failed = Object.entries({
     chain: Number(chainId) !== CHAIN_ID,
-    upgrade: !same(impl, VOTING_ESCROW_IMPLEMENTATION) || implHash !== VOTING_ESCROW_IMPLEMENTATION_CODE_HASH,
-    logic: !same(String(logic), APPROVAL_LOGIC) || logicHash !== APPROVAL_LOGIC_CODE_HASH,
-  });
-  let at = 0;
-  const found = AUTOMATIONS.map((automation, i) => {
-    const [config, ...mine] = answers.slice(at, (at += reads[i]!.length));
-    const [actions, active] = (config ?? [[], false]) as [number[], boolean];
-    const approvals = active && actions.join() === automation.actions.join();
-    const checks = own[automation.kind].checks(mine, approvals);
-    return { automation, failed: [...all, ...failing(checks)] };
-  });
-  return { failed: new Map(found.map(({ automation, failed }) => [automation.kind, failed])) };
+    upgrade: !same(impl, VOTING_ESCROW_IMPLEMENTATION),
+  }).flatMap(([id, fails]) => (fails ? [id] : []));
+  return { failed: new Map(AUTOMATIONS.map(({ kind }) => [kind, failed])) };
 }
 
 // What gas costs for some calls from `from`, in wei, with today's prices to show it at: each costs about what the first
