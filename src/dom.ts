@@ -32,11 +32,11 @@ export function clone(id: string): DocumentFragment {
 export const PENDING: unique symbol = Symbol("pending");
 export type Text = string | typeof PENDING;
 
-// Writes text, or marks the element pending. Text may go to an element that is no more than its text, as in tests.
+// Writes text, or marks the element pending.
 function put(element: Element, text: Text): void {
   if (text !== PENDING) {
     element.textContent = text;
-    element.classList?.remove("pending");
+    element.classList.remove("pending");
   } else if (!element.classList.contains("pending")) {
     const words = Object.assign(document.createElement("span"), {
       className: "visually-hidden",

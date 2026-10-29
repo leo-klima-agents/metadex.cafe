@@ -241,9 +241,9 @@ One template for every product, in this order. Visible:
 
 Then one fold, closed:
 
-7. **Against all of Hydrex** (`record`): the table of today's `#last-epoch`, read only once the fold opens, as it costs
-   about 10,000 reads; the sentence that compares; "Earned by its votes, not paid to you"; then the pools it voted for.
-   Every product has it. Double Espresso's ends with how it picks its votes (`votes`).
+7. **Performance** (`record`): the table of today's `#last-epoch`, read only once the fold opens, as it costs about
+   10,000 reads; the sentence that compares; "Earned by its votes, not paid to you"; then the pools it voted for. Every
+   product has it. Double Espresso's ends with how it picks its votes (`votes`).
 
 Joining and leaving, the carbon credits, Hydrex's contracts and the calls are no longer popups of their own: the line on
 custody and the review say when joining counts and what happens to the rewards not claimed yet, and the review shows

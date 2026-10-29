@@ -254,7 +254,9 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     await account(page, 141).getByText(UNVOTED).waitFor();
     const menu = hydrex(page).locator("#menu");
     assert.deepEqual(await menu.locator("h3").allInnerTexts(), ["Matcha Latte", "Double Espresso"]);
-    await menu.locator(".double-espresso-state").getByText("Not voted yet").waitFor();
+    // Double Espresso, deployed on the fork, has not voted there yet: as Matcha Latte would, it shows as running.
+    await menu.locator(".double-espresso-state").getByText("Running").waitFor();
+    assert.equal(await menu.locator(".double-espresso-voted-line").isVisible(), false);
     await menu
       .locator('[data-choice="matcha-latte"] .record')
       .getByText(/^≈\s\$\d+\.\d\d$/)

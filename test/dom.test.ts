@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import { PENDING, fill, fillTime, live, rewrite, setText, showWorth, showWorthIn } from "../src/dom.ts";
 import { money, moneyAt, setCurrency } from "../src/format.ts";
 
-// An element as far as text goes, and a root that holds it under one class.
-const element = () => ({ textContent: "" }) as unknown as Element;
+// An element as far as text and its classes go, and a root that holds it under one class.
+const element = () => pendable() as unknown as Element;
 const rootOf = (name: string, held: Element) =>
   ({ querySelectorAll: (selector: string) => (selector === `.${name}` ? [held] : []) }) as unknown as ParentNode;
 
@@ -44,6 +44,7 @@ test("an element switched between money and plain text is written once a rewrite
     set textContent(_: string) {
       writes++;
     },
+    classList: { remove: () => {} },
   } as unknown as Element;
   const root = rootOf("line", counted);
   for (let i = 0; i < 3; i++) {
@@ -57,7 +58,7 @@ test("an element switched between money and plain text is written once a rewrite
 });
 
 // An element as far as a pending figure goes: its text, its classes and attributes, and how often its children were
-// replaced. A document that makes the words screen readers say in its place.
+// replaced.
 function pendable() {
   const classes = new Set<string>();
   const attributes = new Map<string, string>();
@@ -79,7 +80,13 @@ function pendable() {
   };
   return element;
 }
+// A document that makes the words screen readers say in a pending figure's place, until the tests end.
+const documentBefore = Object.getOwnPropertyDescriptor(globalThis, "document");
 globalThis.document = { createElement: () => ({ className: "", textContent: "" }) } as unknown as Document;
+after(() => {
+  if (documentBefore) Object.defineProperty(globalThis, "document", documentBefore);
+  else delete (globalThis as { document?: Document }).document;
+});
 
 test("a figure being read is pending, with words for screen readers, until text is written over it", () => {
   const figure = pendable();

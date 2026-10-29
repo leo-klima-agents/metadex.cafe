@@ -14,6 +14,8 @@ export type Reader<T> = {
   readonly value: T | undefined;
   readonly reading: boolean;
   readonly failed: boolean;
+  // Whether a read has ended, found or failed, with none under way.
+  readonly ended: boolean;
   // Reads now, or joins the read under way: resolves to what it found, or rejects as it failed.
   read(): Promise<T>;
   // Reads anew, dropping a read under way, as after a transaction it may not see: what was read stays until then.
@@ -52,6 +54,9 @@ export function reader<T>(read: (before: T | undefined) => Promise<T>, options: 
     },
     get failed() {
       return failed;
+    },
+    get ended() {
+      return !pending && (value !== undefined || failed);
     },
     read() {
       if (pending) return pending;

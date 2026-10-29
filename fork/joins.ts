@@ -320,7 +320,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await expectApprovals([141n], CONDUIT, CONDUIT);
   });
 
-  test("when the automation cannot be read, leaving does not wait, the page reads again, and Try again keeps the view", async () => {
+  test("when the automation cannot be read, leaving does not wait, Try again keeps the view, and the page reads again", async () => {
     const tonnes = toFunctionSelector("function totalTonnesRetired()").slice(2);
     const opened = await open(
       { owner: MEMBER },
@@ -337,16 +337,21 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
     await page.keyboard.press("Escape");
     // Without the block's time, the epoch's end is only Thursday's, with no countdown.
     assert.equal(await page.locator("#epoch .countdown-line").isVisible(), false);
+    await page.getByRole("button", { name: "Try again" }).click();
+    await connectButton(page).waitFor();
+    await hydrexTitle(page).waitFor();
+    assert.equal(new URL(page.url()).hash, "#hydrex");
+    await page.locator("#error").getByText("Reading Base failed.").waitFor();
+    // Once Base answers, the page reads it again by itself, and no longer says that reading it failed.
+    await connectButton(page).click();
+    await group(page, "in:matcha-latte").getByText("#9540").waitFor();
     opened.rpc.refuse = undefined;
     await page.clock.runFor(30_000);
     await page
       .locator("#epoch .countdown")
       .getByText(/^in \d/)
       .waitFor();
-    await page.getByRole("button", { name: "Try again" }).click();
-    await connectButton(page).waitFor();
-    await hydrexTitle(page).waitFor();
-    assert.equal(new URL(page.url()).hash, "#hydrex");
+    await page.locator("#error").waitFor({ state: "hidden" });
   });
 
   test("a wallet that cannot switch to Base says so", async () => {

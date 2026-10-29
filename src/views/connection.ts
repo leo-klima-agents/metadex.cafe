@@ -60,8 +60,9 @@ export async function loadAccounts(quietly = false): Promise<void> {
     if (!current() || these.value !== found) return;
     sawBlock(found.time);
     showAccounts();
-    showApp();
+    // The payouts start before the App is drawn, which waits for them before it reads Hydrex's average.
     appPayouts.show(found);
+    showApp();
     views.catchUp();
     void showShares();
     syncPosition();

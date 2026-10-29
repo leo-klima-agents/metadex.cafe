@@ -96,6 +96,8 @@ type Fault = { group: "base" | "check" | "hydrex"; label: string; on(): Promise<
 type Calls = "one" | "atomic" | "each";
 
 const QA_ABI = parseAbi([
+  "function getConduitApprovalConfig(address conduit) view returns (uint8[] actions, bool active, string name)",
+  "function approvalLogic() view returns (address)",
   "function lastVoted(address voter) view returns (uint256)",
   "function ownerOf(uint256 tokenId) view returns (address)",
   "function delegate(uint256 tokenId, address delegatee)",
@@ -406,19 +408,22 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     },
   });
 
-  // Reads changed inside the page's Multicall3 batches, so that Base stays as it is: those that `failing` matches fail on
-  // their own, as a call that reverts, while the batch's other reads still answer; and the swappers' quotes, when they
-  // come in under.
+  // Reads whose answer is changed, by the contract and calldata of each, inside the page's Multicall3 batches: so one
+  // read answers otherwise, and Base stays as it is. Those that `failing` matches fail on their own, as a call that
+  // reverts, while the batch's other reads still answer; and the swappers' quotes come in under, when they do.
+  const answers = new Map<string, (data: Hex) => Hex>();
   const failing = new Set<(target: Address, callData: Hex) => boolean>();
+  const callKey = (target: string, data: string) => `${target} ${data}`.toLowerCase();
   type Result = { success: boolean; returnData: Hex };
   function changeOf(target: Address, callData: Hex): ((result: Result) => Result) | undefined {
     if ([...failing].some((fails) => fails(target, callData))) return () => ({ success: false, returnData: "0x" });
     const change =
-      quotesUnder && SWAPPER_ADDRESSES.has(target.toLowerCase()) && callData.startsWith(QUOTE) ? under : undefined;
+      answers.get(callKey(target, callData)) ??
+      (quotesUnder && SWAPPER_ADDRESSES.has(target.toLowerCase()) && callData.startsWith(QUOTE) ? under : undefined);
     return change && ((result) => (result.success ? { ...result, returnData: change(result.returnData) } : result));
   }
   function rewrite(body: string, reply: string): string | undefined {
-    if (!failing.size && !quotesUnder) return undefined;
+    if (!answers.size && !failing.size && !quotesUnder) return undefined;
     const { method, params = [] } = JSON.parse(body) as { method: string; params?: { to?: string; data?: Hex }[] };
     const [{ to = "", data = "0x" } = {}] = params;
     if (method !== "eth_call" || !same(to, MULTICALL3)) return undefined;
@@ -434,7 +439,23 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       result: encodeFunctionResult({ abi: multicall3Abi, functionName: "aggregate3", result }),
     });
   }
+  const answered = (target: Address, functionName: string, args: unknown[], change: (data: Hex) => Hex) => {
+    const key = callKey(target, encodeFunctionData({ abi: QA_ABI, functionName, args } as never));
+    return {
+      on: async () => void answers.set(key, change),
+      off: async () => void answers.delete(key),
+    };
+  };
   const another = (): Hex => encodeAbiParameters([{ type: "address" }], [STRANGER]);
+  // What joining an automation approves, no longer active.
+  const inactive = (data: Hex): Hex => {
+    const [actions, , name] = decodeFunctionResult({ abi: QA_ABI, functionName: "getConduitApprovalConfig", data });
+    return encodeFunctionResult({
+      abi: QA_ABI,
+      functionName: "getConduitApprovalConfig",
+      result: [actions, false, name],
+    });
+  };
   // Each swapper's quotes, a tenth under what its pools give: far under the page's own prices, which it says.
   let quotesUnder = false;
   const under = (data: Hex): Hex => {
@@ -546,11 +567,26 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       ...answer(elsewhere),
     },
     "voter-gone": { group: "base", label: "Hydrex's Voter cannot be read", ...code(VOTER, () => "0x") },
-    // As the README's table names it, by the id of its message on the page.
+    // As the README's table names them, by the ids of their messages on the page.
     upgrade: {
       group: "check",
       label: "upgrade: the VotingEscrow's implementation",
       ...answer(upgraded),
+    },
+    logic: {
+      group: "check",
+      label: "logic: the VotingEscrow's approval logic",
+      ...answered(VOTING_ESCROW, "approvalLogic", [], another),
+    },
+    approvals: {
+      group: "check",
+      label: "approvals: what joining Matcha Latte approves",
+      ...answered(VOTING_ESCROW, "getConduitApprovalConfig", [MATCHA_LATTE.address], inactive),
+    },
+    "double-espresso-approvals": {
+      group: "check",
+      label: "double-espresso-approvals: what joining Double Espresso approves",
+      ...answered(VOTING_ESCROW, "getConduitApprovalConfig", [DOUBLE_ESPRESSO.address], inactive),
     },
     "others-vote": {
       group: "hydrex",
@@ -577,6 +613,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     current = next;
     faults.clear();
     codes.clear();
+    answers.clear();
     failing.clear();
     voted.clear();
     refusing.clear();

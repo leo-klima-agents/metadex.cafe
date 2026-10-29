@@ -21,10 +21,10 @@ This README is for whoever runs the site. The design and the plan are in [design
   takes the votes and the claims from the other, in one call.
 - **Leaving** is the same call with `false`. The page can also take accounts out of Hydrex's other automations, such as
   those that stopped voting in September 2026: same call, with that automation's address.
-- **Before anyone can join, the page checks** that its RPCs serve Base, and that Hydrex's VotingEscrow has not been
-  upgraded: that its implementation is still the one in `src/config.ts`. If a check fails, joining that automation is
-  turned off, its page and its row say so, and Hydrex's page says why. Leaving always works. The checks run again every
-  hour.
+- **Before anyone can join, the page checks** that its RPCs serve Base; that Hydrex's VotingEscrow and its approval
+  logic are still the ones in `src/config.ts`; and that joining each automation is on, and approves its claims and votes
+  only. If a check fails, joining that automation is turned off, its page and its row say so, and Hydrex's page says
+  why. Leaving always works. The checks run again every hour.
 - **Claiming** is `claim(tokenId, feeAddresses, bribeAddresses, tokens)` on Double Espresso, which anyone can call for
   any account in it, and which pays the owner, less 1%. Double Espresso's operator claims for every member right after
   each epoch, so the page offers it only for the wallet's own accounts, once a payout is overdue: half a day after the
@@ -94,7 +94,7 @@ This README is for whoever runs the site. The design and the plan are in [design
   the account stays in the wallet, its key figures (what it takes, what it pays in, what its votes earned last epoch
   against Hydrex's average, as Hydrex's page shows it, and what it retired or who controls it), and a way to join, or
   the wallet buttons. Everything else is in two popups. Costs and contracts, beside its name, as the swap's: its costs,
-  who can change it, and its contract and fee recipient. And how it did against all of Hydrex, beside last epoch.
+  who can change it, and its contracts. And Performance, beside last epoch: how it did against all of Hydrex.
 - Each account has a page, `#hydrex/` and its number, which anyone can open: its status, what its votes earned, what its
   owner can do with it, with the gas of a change when it earns nothing, and, in an automation, up to when it has been
   paid, what waits to be claimed, and the receipt of its last payout. The App marks the accounts paid late.
@@ -158,23 +158,34 @@ them, because their hashes no longer match, so the page may not work for that vi
 Each automation's page and its row on Hydrex's page say that joining it is off, and Hydrex's page says why, for the
 check it names, by its id in `src/hydrex.ts`:
 
-| Check                        | Marked on | What changed                                                               |
-| ---------------------------- | --------- | -------------------------------------------------------------------------- |
-| `chain`: the RPC serves Base | Not shown | An RPC answered for another chain. Joining both, and every swap, turn off. |
-| `upgrade`: the VotingEscrow  | Hydrex's  | The VotingEscrow's implementation: Hydrex upgraded it.                     |
+| Check                                              | Turns off                    | What changed                                                                                      |
+| -------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
+| `chain`: the RPC serves Base                       | Joining both, and every swap | An RPC answered for another chain.                                                                |
+| `upgrade`: the VotingEscrow                        | Joining both                 | The VotingEscrow's implementation: Hydrex upgraded it.                                            |
+| `logic`: its approval logic                        | Joining both                 | `approvalLogic()` on the VotingEscrow.                                                            |
+| `approvals`: what joining approves                 | Joining Matcha Latte         | `getConduitApprovalConfig` on the VotingEscrow, for Matcha Latte: off, or other than `[3, 5]`.    |
+| `double-espresso-approvals`: what joining approves | Joining Double Espresso      | `getConduitApprovalConfig` on the VotingEscrow, for Double Espresso: off, or other than `[3, 5]`. |
 
-The rest cannot change while the VotingEscrow is not upgraded, as the contracts' verified sources show: each
-automation's VotingEscrow, Voter and Matcha Latte's kVCM are immutable; what joining an automation approves is set once,
-and no call sets it again; and the VotingEscrow's approval logic is set only as it is initialized. Code at an address
-cannot change on Base, so the implementation's address is enough to know its code.
+The verified sources show that the last three cannot change unless the VotingEscrow is upgraded: what joining an
+automation approves is set once, and no call sets it again; and the approval logic is set only as the VotingEscrow is
+initialized. The page checks them all the same, should code it has not read, such as the VotingEscrow's lock logic,
+change them. Each automation's VotingEscrow, Voter and Matcha Latte's kVCM are immutable, and code at an address cannot
+change on Base, so an address is enough to know its code.
 
-After an upgrade, read the new implementation's verified source, and decide whether the page should trust it. If it
-should, update `VOTING_ESCROW_IMPLEMENTATION` in `src/config.ts`, run the tests and release. This
-[Foundry](https://getfoundry.sh/) command prints it:
+After a change, read the new code's verified source, and decide whether the page should trust it. If it should, update
+`src/config.ts`, run the tests and release. These [Foundry](https://getfoundry.sh/) commands print what it holds:
 
 ```sh
+RPC=https://mainnet.base.org
 ESCROW=0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1
-cast to-check-sum-address $(cast implementation $ESCROW --rpc-url https://mainnet.base.org)
+MATCHA_LATTE=0xdE91885cF35ac57DF0c4A75c16862127dBe8317c
+DOUBLE_ESPRESSO=0x692c323B425A9DfeebE302F56168a7798D93EAC5
+
+cast to-check-sum-address $(cast implementation $ESCROW --rpc-url $RPC)  # VOTING_ESCROW_IMPLEMENTATION
+cast call $ESCROW "approvalLogic()(address)" --rpc-url $RPC                # APPROVAL_LOGIC
+for AUTOMATION in $MATCHA_LATTE $DOUBLE_ESPRESSO; do                        # each automation's actions
+  cast call $ESCROW "getConduitApprovalConfig(address)(uint8[],bool,string)" $AUTOMATION --rpc-url $RPC
+done
 ```
 
 When Hydrex adds or removes automations, update `src/hydrex-conduits.json` from <https://api.hydrex.fi/conduits>. If

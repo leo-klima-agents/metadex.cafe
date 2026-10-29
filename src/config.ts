@@ -12,9 +12,11 @@ export type Kind = "matcha-latte" | "double-espresso";
 export type Automation = {
   kind: Kind;
   name: string;
-  // Its contract's name, which the page gives beside its address.
+  // Its smart contract's name, which a review gives beside its address.
   contract: string;
   address: Address;
+  // What joining approves: 3 sends the account's claims to the automation, 5 delegates its votes.
+  actions: number[];
 };
 // Hydrex's automation, whose votes and payouts an operator now sends. Hydrex controls its settings, which the page
 // reads from Base.
@@ -23,6 +25,7 @@ export const MATCHA_LATTE: Automation = {
   name: "Matcha Latte",
   contract: "KlimaVeTokenConduit",
   address: "0xdE91885cF35ac57DF0c4A75c16862127dBe8317c",
+  actions: [3, 5],
 };
 // ImmutableVeTokenConduit version 2, from https://github.com/ldeso/hydrex-conduit at tag v2, commit 718c107. It has no
 // owner and no settings: its fee and where the fee goes are immutable in its code. It deployed through CREATE2, on Tue
@@ -32,6 +35,7 @@ export const DOUBLE_ESPRESSO: Automation = {
   name: "Double Espresso",
   contract: "ImmutableVeTokenConduit",
   address: "0x692c323B425A9DfeebE302F56168a7798D93EAC5",
+  actions: [3, 5],
 };
 export const AUTOMATIONS = [MATCHA_LATTE, DOUBLE_ESPRESSO];
 export const byKind = (kind: string): Automation | undefined =>
@@ -42,9 +46,13 @@ export const DOUBLE_ESPRESSO_FEE_RECIPIENT: Address = "0x450c72de8c0079B49AcedF2
 // The address whose claims through Double Espresso the receipts show as Double Espresso's own, made for its members
 // after each epoch. It holds Matcha Latte's EXECUTOR_ROLE. Anyone may claim through Double Espresso.
 export const OPERATOR: Address = "0x40FBFe5312330f278824ddbB7521ab77409192f0";
+// Matcha Latte's operator, as its popup gives it: a 2-of-3 Safe that holds its EXECUTOR_ROLE too, whose module votes
+// and sends payouts for it.
+export const MATCHA_LATTE_OPERATOR: Address = "0x17f513C024C1C67db050258ba569c714a9CF1B12";
 export const KVCM: Address = "0x00fBAC94Fec8D4089d3fe979F39454F48c71A65d";
 export const VOTING_ESCROW: Address = "0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1";
 export const VOTING_ESCROW_IMPLEMENTATION: Address = "0x0FC68cE53Be957a1AA779f553AD49f6068fFf231";
+export const APPROVAL_LOGIC: Address = "0x4B0BC0889EB524Dbae36d409fF733851E9B4f63D";
 export const VOTER: Address = "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b";
 export const ACCOUNT_NAMES: Address = "0x998cf40a742460b4eBbFB569A0D23eA91976c0d3";
 

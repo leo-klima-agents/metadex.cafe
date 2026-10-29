@@ -161,7 +161,11 @@ export function swapLine(): { count: number; worth: Money; reading: boolean; fai
   return { count: worth.length, worth: moneyAt(value, scan.prices), reading: scan.reading, failed: scan.failed };
 }
 
-export const allowancesLeft = (): Allowance[] | undefined => allowances;
+// The wallet's approvals left, once read: none while those read are another account's, as after the wallet switched.
+export const allowancesLeft = (): Allowance[] | undefined => {
+  const owner = context.connection()?.address;
+  return owner && same(allowancesOwner ?? "", owner) ? allowances : undefined;
+};
 // Whether the wallet's approvals are being read.
 export const allowancesReading = (): boolean => allowancesPending;
 

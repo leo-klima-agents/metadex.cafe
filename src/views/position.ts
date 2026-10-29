@@ -195,8 +195,8 @@ export function showPosition(): void {
 const actions = positionView.querySelector<HTMLElement>(".position-actions")!;
 
 // The gas of a change for an account that earns nothing: what moving it would cost, without projecting what it would
-// earn. Read again after a minute, as the gas price is, or for another automation or wallet. Pending until read for the
-// account shown, rather than another account's.
+// earn. Read again after a minute, as the gas price is, found or failed, or for another automation or wallet. Pending
+// until read for the account shown, rather than another account's.
 const changeGas = new Map<string, { at: number; words: Promise<() => string> }>();
 let changeGasShown: string | undefined;
 
@@ -216,10 +216,7 @@ function showChangeGas(account: Account | undefined, status: Status | undefined)
           gasWords(wei, prices),
     );
     changeGas.set(key, (found = { at: Date.now(), words }));
-    words.catch((error) => {
-      console.error(error);
-      changeGas.delete(key);
-    });
+    words.catch((error) => console.error(error));
   }
   const { words } = found;
   const id = account.id;

@@ -5,7 +5,6 @@ import { PENDING, clone, fill, live, setText, show, type Text } from "../dom.ts"
 import { count, figure, money } from "../format.ts";
 import { automationName, canLeave, hasVotes, statusOf, type Holdings } from "../hydrex.ts";
 import { earningsEnded } from "../last-epoch.ts";
-import type { Reader } from "../read.ts";
 import { hrefOf } from "../routes.ts";
 import { describe } from "../tokens.ts";
 import { claim, review, showAccounts, type Action } from "./accounts.ts";
@@ -43,12 +42,11 @@ function need(
 // epoch's figures; with a wallet, its accounts and their payouts, its tokens and its approvals too. Each, as it ends,
 // draws the App again.
 function ownReadsEnded(): boolean {
-  const ended = (read: Reader<unknown>) => !read.reading && (read.value !== undefined || read.failed);
-  if (!ended(matchaLatte) || !ended(doubleEspresso) || !earningsEnded(AUTOMATIONS)) return false;
+  if (!matchaLatte.ended || !doubleEspresso.ended || !earningsEnded(AUTOMATIONS)) return false;
   const { connection, accounts } = session;
   if (!connection) return true;
   const line = swapLine();
-  return !!accounts && ended(accounts) && !appPayouts.reading && !!line && !line.reading && !allowancesReading();
+  return !!accounts?.ended && !appPayouts.reading && !!line && !line.reading && !allowancesReading();
 }
 
 let overdueShown = "";

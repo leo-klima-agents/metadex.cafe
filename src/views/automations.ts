@@ -43,7 +43,10 @@ export const matchaLatte: Reader<MatchaLatte> = reader(readMatchaLatte, {
   stale: (found, since) =>
     weekStart(now()) > found.epochStart ||
     ([found.voted, found.feeBps, found.maxFeeBps, found.feeRecipient].includes(undefined) && since >= RETRY),
-  settled: () => showMatchaLatte(),
+  settled: () => {
+    showMatchaLatte();
+    recovered();
+  },
 });
 
 // Double Espresso's state, on the menu and its page: "Checking…" until read, and "Not read yet" while its reads fail,
@@ -61,8 +64,17 @@ export const doubleEspresso: Reader<Freshness> = reader(() => readFreshness(DOUB
 // hour.
 export const checks: Reader<Checks> = reader(failedChecks, {
   stale: (_, since) => since >= 3_600_000,
-  settled: () => showChecks(),
+  settled: () => {
+    showChecks();
+    recovered();
+  },
 });
+
+// The page's first reads, which say that reading Base failed when they fail: once neither's last read failed, it no
+// longer says so, as each reads again by itself.
+function recovered(): void {
+  if (!matchaLatte.failed && !checks.failed) show("#error", false);
+}
 
 // What differs between the page's automations, kind by kind.
 type Traits = {
@@ -258,11 +270,9 @@ export function showDoubleEspresso(): void {
     ? doubleEspresso.failed
       ? ["idle", "Not read yet"]
       : ["checking", "Checking…"]
-    : !fresh.voted
-      ? ["idle", "Not voted yet"]
-      : stopped
-        ? ["stopped", "Stopped"]
-        : ["running", "Running"];
+    : stopped
+      ? ["stopped", "Stopped"]
+      : ["running", "Running"];
   showState(DOUBLE_ESPRESSO, "double-espresso", shape, state);
   for (const place of placesOf(DOUBLE_ESPRESSO)) {
     fill(place, { "double-espresso-voted-words": stopped ? " since " : " · voted " });

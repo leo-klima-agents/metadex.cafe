@@ -31,7 +31,7 @@ technical parts open from an info button, as popups.
   popups: its costs, what the slippage is, and the six swappers' contracts; approvals you gave the swappers.
 - **An automation's page** (`#hydrex/matcha-latte`, `#hydrex/double-espresso`): its status, its key figures, and your
   accounts in it and Join. An info button beside its name opens Costs and contracts, as the swap's: its costs, who can
-  change it, and its contract and fee recipient. Another, beside last epoch, opens how it did against all of Hydrex.
+  change it, and its contracts. Another, beside last epoch, opens Performance: how it did against all of Hydrex.
 - **An account's page** (`#hydrex/` and its number): its status, its lock, what it earned, what its owner can do, and
   its last payout as a receipt.
 - **The review:** a dialog in two steps: before you join, claim or swap, with what it costs, the swap as a bill, then
