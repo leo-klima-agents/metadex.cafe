@@ -69,41 +69,62 @@ export function parentOrigin(ancestor: string | undefined, referrer: string, own
 }
 
 type SafeAnswer = { id: string; success: boolean; data?: unknown; error?: string };
+// A question to Safe{Wallet}, and `stop`, which stops listening for its answers and drops the questions unanswered.
+export type AskSafe = ((method: string, params?: unknown) => Promise<unknown>) & { stop(): void };
 
 // Asks Safe{Wallet}, the page's parent, as a Safe App does: a message of an id, a method, its params and the SDK's
 // version, sent to Safe{Wallet}'s origin only, which it answers with the same id. An answer counts only from the parent,
-// at that origin, to a question the page asked.
+// at that origin, to a question the page asked. Each id is random, as the SDK's were, so that an answer to a question
+// asked before the page loaded again cannot pass for the answer to one asked since.
 export function askSafe(
   parent: { postMessage(message: unknown, targetOrigin: string): void },
   events: Pick<EventTarget, "addEventListener"> = window,
-): (method: string, params?: unknown) => Promise<unknown> {
+): AskSafe {
   const waiting = new Map<string, (answer: SafeAnswer) => void>();
-  events.addEventListener("message", (event) => {
-    const { origin, source, data } = event as MessageEvent<SafeAnswer | undefined>;
-    if (origin !== SAFE_ORIGIN || source !== parent || !data) return;
-    const answered = waiting.get(data.id);
-    if (!answered) return;
-    waiting.delete(data.id);
-    answered(data);
-  });
-  let asked = 0;
-  return (method, params) =>
+  const listening = new AbortController();
+  events.addEventListener(
+    "message",
+    (event) => {
+      const { origin, source, data } = event as MessageEvent<SafeAnswer | undefined>;
+      if (origin !== SAFE_ORIGIN || source !== parent || !data) return;
+      const answered = waiting.get(data.id);
+      if (!answered) return;
+      waiting.delete(data.id);
+      answered(data);
+    },
+    { signal: listening.signal },
+  );
+  const ask = (method: string, params?: unknown) =>
     new Promise((resolve, reject) => {
-      const id = `${++asked}`;
+      const id = crypto.randomUUID();
       waiting.set(id, ({ success, data, error }) => (success ? resolve(data) : reject(new Error(error))));
       parent.postMessage({ id, method, params, env: { sdkVersion: SAFE_APPS_VERSION } }, SAFE_ORIGIN);
     });
+  return Object.assign(ask, {
+    stop() {
+      listening.abort();
+      waiting.clear();
+    },
+  });
 }
 
 export async function safeWallet(): Promise<Wallet | undefined> {
   if (window.parent === window) return undefined;
   const parent = parentOrigin(location.ancestorOrigins?.[0], document.referrer, location.origin);
   if (parent && parent !== SAFE_ORIGIN) return undefined;
-  const ask = askSafe(window.parent);
-  const timeout = new Promise<undefined>((resolve) => setTimeout(resolve, parent ? 10_000 : 1_000));
+  return safeFrom(askSafe(window.parent), parent ? 10_000 : 1_000);
+}
+
+// Safe{Wallet} as a wallet, once it says which Safe it holds, within `wait` milliseconds. If it does not, the page stops
+// listening for it.
+export async function safeFrom(ask: AskSafe, wait: number): Promise<Wallet | undefined> {
+  const timeout = new Promise<undefined>((resolve) => setTimeout(resolve, wait));
   const info = (await Promise.race([ask("getSafeInfo"), timeout]).catch(() => undefined)) as
     { safeAddress: string; chainId: number } | undefined;
-  if (!info) return undefined;
+  if (!info) {
+    ask.stop();
+    return undefined;
+  }
   const provider: Provider = {
     async request({ method }) {
       if (method === "eth_requestAccounts") return [info.safeAddress];
@@ -115,6 +136,8 @@ export async function safeWallet(): Promise<Wallet | undefined> {
     name: "Safe{Wallet}",
     provider: async () => provider,
     async propose(txs) {
+      // Nothing to propose is refused before Safe{Wallet} is asked, as the SDK did.
+      if (!txs.length) throw new Error("There is no transaction to propose.");
       // Safe{Wallet} says "Transaction was rejected" when its window is closed.
       await ask("sendTransactions", { txs: txs.map(({ to, data }) => ({ to, data, value: "0" })) }).catch(
         (error: Error) => {
