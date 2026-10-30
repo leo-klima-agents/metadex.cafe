@@ -17,7 +17,7 @@ jobs:
   node:
     runs-on: ubuntu-26.04
     outputs:
-      cid: ${{ steps.car.outputs.cid }}
+      cid: ${{ steps.release.outputs.cid }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -29,22 +29,25 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      # dist/ as a CAR file for IPFS, in release/, and its root CID.
-      - id: car
+      # dist/ as a release's files, in release/: a CAR file, whose root CID it prints, and a zip, which unzip must unpack
+      # to dist/'s files.
+      - id: release
         run: |
-          cid=$(npm run --silent car)
+          cid=$(npm run --silent release)
           echo "cid=$cid" >> "$GITHUB_OUTPUT"
-      # A second build, from a fresh clone elsewhere, must give the same files, CAR file and CID.
+          unzip -q release/*.zip -d "$RUNNER_TEMP/unzipped"
+          diff -r dist "$RUNNER_TEMP"/unzipped/*/
+      # A second build, from a fresh clone elsewhere, must give the same files, release files and CID.
       - env:
-          CID: ${{ steps.car.outputs.cid }}
+          CID: ${{ steps.release.outputs.cid }}
         run: |
           git clone --quiet . "$RUNNER_TEMP/second"
           cd "$RUNNER_TEMP/second"
           npm ci --ignore-scripts
           npm run build
-          cid=$(npm run --silent car)
+          cid=$(npm run --silent release)
           diff -r "$GITHUB_WORKSPACE/dist" dist
-          cmp "$GITHUB_WORKSPACE"/release/*.car release/*.car
+          diff -r "$GITHUB_WORKSPACE/release" release
           test "$cid" = "$CID"
       # A release tag must match the version the page shows on its About.
       - if: startsWith(github.ref, 'refs/tags/v')
@@ -56,7 +59,7 @@ jobs:
       - if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: car
+          name: release
           path: release/
           if-no-files-found: error
 
@@ -130,7 +133,7 @@ jobs:
             curl -fsS --retry 5 "$URL${file#./}?$GITHUB_SHA" | cmp - "$file"
           done
 
-  # A tag v… also makes a GitHub Release of it, with the CAR file of dist/ and its CID, for IPFS and ENS.
+  # A tag v… also makes a GitHub Release of it, with dist/ as a CAR file, for IPFS and ENS, and as a zip, and the CID.
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [lint, node, fork]
@@ -140,11 +143,11 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: car
+          name: release
           path: release
       - env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           CID: ${{ needs.node.outputs.cid }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release/*.car --notes "CID: ipfs://$CID"
+          gh release create "$GITHUB_REF_NAME" release/*.car release/*.zip --notes "CID: ipfs://$CID"

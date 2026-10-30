@@ -148,9 +148,7 @@ Once, on GitHub and at the DNS provider:
 4. Tag the commit with `v` and the version, for example `v0.5.0`, and push the tag. Any other tag fails.
 5. Copy the CID from the Release.
 6. In Pinata's web app, upload `dist/`, built from the tag, as a folder.
-7. Check that the CID Pinata shows is the Release's. If it shows one that starts with `Qm…`, pin the Release's CID
-   instead, with "Import from IPFS". Pinata fetches it from the IPFS network, so a node must serve it meanwhile: for
-   example Kubo, with its daemon running, after `ipfs dag import` of the Release's CAR file.
+7. Check that the CID Pinata shows is the Release's.
 8. Set `metadexcafe.eth`'s content hash to `ipfs://` and the CID.
 9. Open <https://metadexcafe.eth.limo/> and check that its About shows the new version.
 
@@ -225,7 +223,7 @@ npm run build
 cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.cafe/${file#./}?$(date +%s)" | cmp - "$file"; done
 ```
 
-Then `npm run car` prints the CID that the tag's Release names, and `metadexcafe.eth`'s content hash should hold.
+Then `npm run release` prints the CID that the tag's Release names, and `metadexcafe.eth`'s content hash should hold.
 
 ## What visitors may run into
 
@@ -349,11 +347,12 @@ address and steers the fork: the states the browser tests start from, Base's clo
 can be tried there without a wallet or funds of your own: [QA.md](QA.md) says which scenario each needs, and which few
 states the fork cannot show.
 
-CI runs Prettier, the type check, the unit tests, `reuse lint` and the build, and packs the build as a CAR file. It then
-builds and packs again from a fresh clone and checks that both give the same files, CAR file and CID. It also runs the
-browser tests, in the runner's Chrome, with the forks' answers kept in GitHub's cache from one run, or attempt, to the
-next, one run of a branch at a time. Dependabot updates the pinned Actions and npm packages every week, in one pull
-request for each, with releases a week old or more; a security update comes at once, on its own.
+CI runs Prettier, the type check, the unit tests, `reuse lint` and the build, packs the build as a CAR file and a zip,
+and checks that the zip unpacks to it. It then builds and packs again from a fresh clone and checks that both give the
+same files, CAR file, zip and CID. It also runs the browser tests, in the runner's Chrome, with the forks' answers kept
+in GitHub's cache from one run, or attempt, to the next, one run of a branch at a time. Dependabot updates the pinned
+Actions and npm packages every week, in one pull request for each, with releases a week old or more; a security update
+comes at once, on its own.
 
 | Path                                                    | What it holds                                                                                                                                                                                                    |
 | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -385,9 +384,9 @@ request for each, with releases a week old or more; a security update comes at o
 | `test/`, `fork/`                                        | Unit tests; the browser tests, which `fork/run.ts` runs at once, the harness they share in `fork/harness.ts`, and `fork/rpc-cache.ts`, which keeps the answers their forks read from Base.                       |
 | `fork/qa.ts`, `fork/qa.html`, `fork/scenarios.ts`       | `npm run qa`: the page against a fork, the QA wallet's window beside it, and the states it can start the fork in.                                                                                                |
 | `fork/fixtures/`                                        | Double Espresso's init code, for the browser tests to deploy it on the fork; and a token of the QA wallet's own, its source and init code.                                                                       |
-| `test/fixtures/`                                        | A folder for `test/car.test.ts` to pack as a CAR file, with the CID that Kubo gives it.                                                                                                                          |
+| `test/fixtures/`                                        | A folder for `test/release.test.ts` to pack, with the CID that Kubo gives it.                                                                                                                                    |
 | `scripts/`                                              | The build, and `notices.ts`, the license notices it appends to each built file; `fonts.py` makes `fonts/`, `icons.ts` draws the icons from `icon.svg`, and `tokens.ts` checks the list of tokens.                |
-| `scripts/car.ts`                                        | `npm run car`: `dist/` as a CAR file, in `release/`, for IPFS and ENS, and its CID.                                                                                                                              |
+| `scripts/release.ts`                                    | `npm run release`: `dist/` as a CAR file, for IPFS and ENS, and as a zip, in `release/`, and its CID.                                                                                                            |
 
 ## License
 

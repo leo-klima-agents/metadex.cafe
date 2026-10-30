@@ -104,6 +104,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     assert.equal(await page.getByRole("navigation", { name: "Back" }).count(), 0, "About is the page's own");
     assert.deepEqual(await page.locator('.view[data-view="about"] > .rows dt').allInnerTexts(), [
       "Official address",
+      "ENS address",
       "Cookies stored",
       "Version",
     ]);

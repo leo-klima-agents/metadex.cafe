@@ -140,7 +140,7 @@ test("each automation's page has the same parts, in the same order, and Hydrex's
   assert.doesNotMatch(about, /data-section=|popover/);
   assert.deepEqual(
     [...about.matchAll(/<dt>([^<]+)<\/dt>/g)].map(([, row]) => row),
-    ["Official address", "Cookies stored", "Version"],
+    ["Official address", "ENS address", "Cookies stored", "Version"],
   );
   const footer = /<footer>([\s\S]*?)<\/footer>/.exec(html)?.[1] ?? "";
   assert.match(footer, /<a href="#about">About<\/a>/);

@@ -27,24 +27,14 @@ const withoutVersion = (name: string) => name.replace(/@[^@]+$/, "");
 
 test("the script's notices name each npm package it bundles, by its LICENSE, under the MIT License", () => {
   const parts = partsOf(ROOT, bundled(metafile, "main.js"));
-  assert.deepEqual(parts.map(({ name }) => withoutVersion(name)).sort(), [
-    "@noble/hashes",
-    "@safe-global/safe-apps-sdk",
-    "@safe-global/safe-gateway-typescript-sdk",
-    "abitype",
-    "viem",
-  ]);
+  assert.deepEqual(parts.map(({ name }) => withoutVersion(name)).sort(), ["@noble/hashes", "abitype", "viem"]);
   for (const { name, copyright, license } of parts) {
     assert.equal(license, "MIT", name);
     assert.ok(copyright.length && copyright.every((line) => line.startsWith("Copyright ")), name);
   }
   // The café's own code is not among them.
   assert.ok(!parts.some(({ name }) => name.startsWith("src/")));
-  // A package whose npm package leaves its LICENSE out goes by its repository's; one the build knows no line for stops
-  // it.
-  assert.deepEqual(packagePart(ROOT, "node_modules/@safe-global/safe-apps-sdk").copyright, [
-    "Copyright (c) 2018-2023 Safe Ecosystem Foundation",
-  ]);
+  // A package that ships no LICENSE with a copyright line stops it.
   const elsewhere = mkdtempSync(join(tmpdir(), "notices-"));
   mkdirSync(join(elsewhere, "node_modules/unknown"), { recursive: true });
   writeFileSync(

@@ -276,7 +276,7 @@ plain-language decoding raised how many risky transactions they caught.
 | Look up an address           | The same reads, without a wallet                                               | None                                                         |
 | Brief for co-signers         | The accounts and the automation in the fragment                                | Check everything read from it                                |
 | Calendar file, CSV, image    | Made in the browser                                                            | In-app browsers on iOS may not download: offer a copy too    |
-| Safe status                  | Safe{Wallet} reports it through the Safe Apps SDK                              | None                                                         |
+| Safe status                  | Safe{Wallet} reports it, as it does to any Safe App                            | None                                                         |
 | Aero and liquidity           | More contracts in `src/config.ts`                                              | More checks to keep up to date                               |
 | Alerts                       | A calendar file; Basescan's Watch List e-mails activity on a payout address    | Push, a bot or our own e-mail needs a server: a decision     |
 | A feed of settings changes   | An Atom file built by CI from the automations' events                          | A scheduled job; the page itself still reaches only the RPCs |

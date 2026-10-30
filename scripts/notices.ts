@@ -26,14 +26,8 @@ export function bundled(metafile: Metafile, output: string): string[] {
   return [...new Set([...inputs, ...embedded])];
 }
 
-// The copyright lines of the packages whose npm package leaves their LICENSE out, from their repository's own.
-const UNSHIPPED: Record<string, string[]> = {
-  // LICENSE.md, at the root of https://github.com/safe-global/safe-apps-sdk, a monorepo.
-  "@safe-global/safe-apps-sdk": ["Copyright (c) 2018-2023 Safe Ecosystem Foundation"],
-};
-
-// An npm package's notice: its LICENSE's copyright lines, or, if it ships none, its repository's. A package with
-// neither stops the build, rather than its notice being guessed.
+// An npm package's notice: its LICENSE's copyright lines. A package that ships none stops the build, rather than its
+// notice being guessed.
 export function packagePart(root: string, dir: string): Part {
   const pkg = JSON.parse(readFileSync(`${root}/${dir}/package.json`, "utf8")) as {
     name: string;
@@ -44,8 +38,7 @@ export function packagePart(root: string, dir: string): Part {
   const file = readdirSync(`${root}/${dir}`).find((each) => /^licen[cs]e(\.(md|txt))?$/i.test(each));
   const lines = file ? readFileSync(`${root}/${dir}/${file}`, "utf8").split("\n") : [];
   const copyright = lines.map((line) => line.trim()).filter((line) => /^copyright\b/i.test(line));
-  if (!copyright.length) copyright.push(...(UNSHIPPED[pkg.name] ?? []));
-  if (!copyright.length) throw new Error(`${name} ships no LICENSE with a copyright line, and the build knows none.`);
+  if (!copyright.length) throw new Error(`${name} ships no LICENSE with a copyright line.`);
   if (typeof pkg.license !== "string") throw new Error(`${name} has no license the build can read.`);
   return { name, copyright, license: pkg.license };
 }
