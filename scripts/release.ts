@@ -136,7 +136,7 @@ export const contenthashOf = (cid: CID): string => `0x${Buffer.from([0xe3, 0x01,
 
 // The Release's notes, in Markdown: its CID, and below, the same as the content hash ENS stores.
 export const notesOf = (root: CID): string =>
-  `CID: ipfs://${root.toString(base32)}\n\nContent hash (EIP-1577): ${contenthashOf(root)}\n`;
+  `CID: ipfs://${root.toString(base32)}\n\nEIP-1577: ${contenthashOf(root)}\n`;
 
 if (import.meta.main) {
   const { root, car } = await carOf(`${ROOT}/dist`);

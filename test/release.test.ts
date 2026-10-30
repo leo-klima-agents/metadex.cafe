@@ -39,7 +39,7 @@ test("the notes give the CID, and below it the content hash as EIP-1577 encodes 
   );
   assert.equal(
     notesOf(root),
-    `CID: ipfs://${RECORDED}\n\nContent hash (EIP-1577): 0xe301${Buffer.from(root.bytes).toString("hex")}\n`,
+    `CID: ipfs://${RECORDED}\n\nEIP-1577: 0xe301${Buffer.from(root.bytes).toString("hex")}\n`,
   );
 });
 
