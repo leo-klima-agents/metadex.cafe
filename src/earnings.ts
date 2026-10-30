@@ -42,21 +42,38 @@ export async function lastEpoch(): Promise<{ start: number; now: number }> {
   return { start: Number(active) - WEEK, now: Number(now) };
 }
 
-async function allPools(reader: typeof read = read): Promise<Address[]> {
-  const [length] = required(await reader([voter("length")])) as bigint[];
-  return required(
-    await reader(Array.from({ length: Number(length) }, (_, i) => voter("pools", BigInt(i)))),
-  ) as Address[];
+// A pool's reward contracts: its fees contract and its incentives contract.
+type Contract = { pool: Address; address: Address; fee: boolean };
+
+// Every pool's reward contracts, which every voter's figures and Hydrex's average start from: thousands of reads, made
+// once, and again for a newer epoch than they were read for, as Hydrex only ever adds pools. They are read first on the
+// pages that show what votes earned.
+let kept: { start: number; read: Promise<Contract[]> } | undefined;
+
+function contractsFor(start: number): Promise<Contract[]> {
+  if (!kept || kept.start < start) {
+    const these = { start, read: readContracts(readFor("earnings")) };
+    kept = these;
+    these.read.catch(() => {
+      if (kept === these) kept = undefined;
+    });
+  }
+  return kept.read;
 }
 
-type Bribes = { pool: Address; fees: Address; incentives: Address };
-
-async function bribesOf(pools: Address[], reader: typeof read = read): Promise<Bribes[]> {
+async function readContracts(reader: typeof read): Promise<Contract[]> {
+  const [length] = required(await reader([voter("length")])) as bigint[];
+  const pools = required(
+    await reader(Array.from({ length: Number(length) }, (_, i) => voter("pools", BigInt(i)))),
+  ) as Address[];
   const gauges = required(await reader(pools.map((pool) => voter("gauges", pool)))) as Address[];
   const bribes = required(
     await reader(gauges.flatMap((gauge) => [voter("internal_bribes", gauge), voter("external_bribes", gauge)])),
   ) as Address[];
-  return pools.map((pool, i) => ({ pool, fees: bribes[2 * i]!, incentives: bribes[2 * i + 1]! }));
+  return pools.flatMap((pool, i) => [
+    { pool, address: bribes[2 * i]!, fee: true },
+    { pool, address: bribes[2 * i + 1]!, fee: false },
+  ]);
 }
 
 // A voter's share of a reward contract's rewards for an epoch, rounded as the contract rounds it.
@@ -68,27 +85,33 @@ type Found = {
   votes: Map<Address, bigint>;
 };
 
-// What one voter's votes, or all votes, earned in the epoch from `start`, and the votes for each pool. Pools without
-// its votes are left out.
-async function rewardsOf(all: Bribes[], start: number, holder?: Address, reader: typeof read = read): Promise<Found> {
-  const contracts = all.flatMap(({ pool, fees, incentives }) => [
-    { pool, address: fees, fee: true },
-    { pool, address: incentives, fee: false },
-  ]);
+// What one voter's votes, or all votes, earned in the epoch from `start`, and the votes for each pool. A voter's votes
+// in each reward contract come first, as its rewards go to the votes standing when the epoch starts, whichever pools
+// Hydrex's Voter holds for it now: only the contracts it voted in are read further. Pools without its votes are left
+// out.
+async function rewardsOf(start: number, holder: Address | undefined, reader: typeof read): Promise<Found> {
+  const all = await contractsFor(start);
+  const balances = holder
+    ? (required(
+        await reader(all.map(({ address }) => call(address, rewardsAbi, "balanceOfOwnerAt", holder, start))),
+      ) as bigint[])
+    : undefined;
+  // A voter's votes in each contract, or, for all votes, each contract's whole supply.
+  const asked = all
+    .map((contract, i) => ({ ...contract, balance: balances?.[i] }))
+    .filter(({ balance }) => balance !== 0n);
   const totals = required(
     await reader(
-      contracts.flatMap(({ address }) => [
+      asked.flatMap(({ address }) => [
         call(address, rewardsAbi, "totalSupplyAt", start),
         call(address, rewardsAbi, "rewardsListLength"),
-        ...(holder ? [call(address, rewardsAbi, "balanceOfOwnerAt", holder, start)] : []),
       ]),
     ),
   ) as bigint[];
-  const width = holder ? 3 : 2;
-  const voted = contracts
+  const voted = asked
     .map((contract, i) => {
-      const [supply, length, balance = supply] = totals.slice(width * i, width * i + width) as bigint[];
-      return { ...contract, supply: supply!, length: Number(length), balance: balance! };
+      const [supply, length] = totals.slice(2 * i, 2 * i + 2) as bigint[];
+      return { ...contract, supply: supply!, length: Number(length), balance: contract.balance ?? supply! };
     })
     .filter(({ supply, balance }) => supply > 0n && balance > 0n);
   const tokens = required(
@@ -170,27 +193,14 @@ export const readVoterEarnings = (holder: Address, start: number): Promise<Earni
 // What a voter's votes earned in the epoch from `start`: an automation's, or an owner's. Its rewards go to the votes
 // standing when it starts, which a vote in the epoch before may have cast. A voter that has not voted since the epoch
 // before began, as an automation that stopped (hasStopped), or that had no votes when it started, earned nothing in it:
-// no pools, and no rewards. Hydrex's Voter keeps only each voter's latest votes. Between its vote just before an
-// epoch ends and the flip, those are already the next epoch's, so the pools are then found from every pool's reward
-// contracts instead. `named` names each pool by its tokens, as an automation's page lists them.
+// no pools, and no rewards. `named` names each pool by its tokens, as an automation's page lists them.
 async function votesEarned(holder: Address, start: number, reader: typeof read, named: boolean): Promise<Earnings> {
-  const [now, voted, length, votes] = required(
-    await reader([
-      blockTime,
-      voter("lastVoted", holder),
-      voter("poolVoteLength", holder),
-      escrow("getPastVotes", holder, start),
-    ]),
+  const [now, voted, votes] = required(
+    await reader([blockTime, voter("lastVoted", holder), escrow("getPastVotes", holder, start)]),
   ) as bigint[];
   if (!votes || Number(voted) < start - WEEK)
     return { start, votes: votes!, pools: [], rewards: [], prices: pricesIn("USD") };
-  const pools =
-    Number(voted) >= start + WEEK
-      ? await allPools(reader)
-      : (required(
-          await reader(Array.from({ length: Number(length) }, (_, i) => voter("poolVote", holder, BigInt(i)))),
-        ) as Address[]);
-  const found = await rewardsOf(await bribesOf(pools, reader), start, holder, reader);
+  const found = await rewardsOf(start, holder, reader);
   const used = [...found.votes];
   const parts = named
     ? await reader(used.flatMap(([pool]) => ["token0", "token1", "symbol"].map((name) => call(pool, poolAbi, name))))
@@ -219,9 +229,8 @@ async function votesEarned(holder: Address, start: number, reader: typeof read, 
   return priced(start, Number(now), votes!, poolsOf, found, tokens, reader);
 }
 
-// What an automation's votes earned in the epoch from `start`, reward by reward, unpriced. By then, Hydrex's Voter holds
-// its later votes, so the rewards are found from every pool's reward contracts: thousands of reads, for the payouts,
-// unless it had no votes then. An ended epoch's never change, so each is read once.
+// What an automation's votes earned in the epoch from `start`, reward by reward, unpriced, for the payouts: unless it had
+// no votes then. An ended epoch's never change, so each is read once.
 const paidBy = new Map<string, Promise<Reward[]>>();
 
 export function rewardsFor(automation: Address, start: number): Promise<Reward[]> {
@@ -230,8 +239,7 @@ export function rewardsFor(automation: Address, start: number): Promise<Reward[]
   if (!found) {
     found = readFor("payouts")([escrow("getPastVotes", automation, start)]).then(async ([votes]) => {
       if (required([votes])[0] === 0n) return [];
-      const bribes = await bribesOf(await allPools(readFor("payouts")), readFor("payouts"));
-      const { rewards } = await rewardsOf(bribes, start, automation, readFor("payouts"));
+      const { rewards } = await rewardsOf(start, automation, readFor("payouts"));
       const tokens = await tokensOf(
         rewards.map(({ token }) => token),
         readFor("payouts"),
@@ -244,16 +252,18 @@ export function rewardsFor(automation: Address, start: number): Promise<Reward[]
   return found;
 }
 
-// For tests: the rewards read are kept for the rest of the session.
-export const forgetRewards = (): void => paidBy.clear();
+// For tests: the rewards read are kept for the rest of the session, and the reward contracts for the epoch.
+export function forgetRewards(): void {
+  paidBy.clear();
+  kept = undefined;
+}
 
 // What all votes on Hydrex earned in the same epoch, for the average. Thousands of reads.
 export async function readAllEarnings(start: number): Promise<Earnings> {
-  const [[now, votes], pools] = await Promise.all([
+  const [[now, votes], found] = await Promise.all([
     readFor("average")([blockTime, voter("totalWeightAt", start)]).then((values) => required(values) as bigint[]),
-    allPools(readFor("average")),
+    rewardsOf(start, undefined, readFor("average")),
   ]);
-  const found = await rewardsOf(await bribesOf(pools, readFor("average")), start, undefined, readFor("average"));
   const voted = [...found.votes].map(([address, poolVotes]) => ({ address, name: "", votes: poolVotes }));
   const tokens = await tokensOf(
     found.rewards.map(({ token }) => token),

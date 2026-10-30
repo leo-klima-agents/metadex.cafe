@@ -39,8 +39,6 @@ const votingEscrowAbi = parseAbi([
 const voterAbi = parseAbi([
   "function _epochTimestamp() view returns (uint256)",
   "function lastVoted(address voter) view returns (uint256)",
-  "function poolVoteLength(address voter) view returns (uint256)",
-  "function poolVote(address voter, uint256 index) view returns (address)",
   "function length() view returns (uint256)",
   "function pools(uint256 index) view returns (address)",
   "function gauges(address pool) view returns (address)",

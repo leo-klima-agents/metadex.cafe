@@ -284,19 +284,19 @@ hold.
   up to ten blocks of them: anyone can claim dust for an account through a contract of their own, as often as they like.
 - What waits to be claimed is a floor: the page reads each account's rewards in the pools its automation voted for last
   epoch, and no others. If some of those reads fail, it says "at least".
-- Whether an account was paid for the epoch before last needs that epoch's rewards. Hydrex's Voter no longer holds those
-  votes, so the page finds them among every pool's reward contracts: thousands of reads, about two seconds on Base, made
-  once per session, and only if one of the owner's accounts voted with the automation then. They are weighed at last
-  epoch's prices.
+- Whether an account was paid for the epoch before last needs that epoch's rewards. The page finds them as it finds
+  every voter's: by its votes in every pool's reward contracts. It reads them once per session, and only if one of the
+  owner's accounts voted with the automation then. They are weighed at last epoch's prices.
 - The page finds an account's last payout through Hydrex's reward contracts, which record up to when they have paid it,
   through the record of the reward worth the most that the payout claimed. Anyone allowed to claim for the account moves
   that record, such as its owner on Hydrex. The page then says that the account was last claimed outside Matcha Latte,
   and shows no receipt.
-- What votes earned is for the last epoch only. Hydrex's average needs every pool's reward contracts, thousands of reads
-  made once a session, on every page, once Hydrex's last epoch is read: first on `#hydrex` and the automations' pages,
-  and elsewhere as slots free, so that `#hydrex` opens with it read, or under way. So is what the votes of a wallet's
-  accounts in no automation earned, through whoever held them: as many reads when that holder voted during this epoch,
-  as Hydrex's Voter then holds only the new votes.
+- What votes earned is for the last epoch only. Every voter's figures start from every pool's reward contracts,
+  thousands of reads made once a session, on every page, once Hydrex's last epoch is read. A voter's rewards go to the
+  votes standing when the epoch began, whichever pools Hydrex's Voter holds for it now, so the page reads its votes in
+  each contract, one read of each, then only the contracts it voted in. Hydrex's average reads them all. It is read
+  first on `#hydrex` and the automations' pages, and elsewhere as slots free, so that `#hydrex` opens with it read, or
+  under way. So is what the votes of a wallet's accounts in no automation earned, through whoever held them.
 - Prices are approximate. USDC, WETH, cbBTC and EURC take Chainlink's; other tokens, and one of those four whose feed
   does not answer, a half-hour average in their deepest pool against one of those priced. Prices now, for swaps, gas and
   what waits to be claimed, come from Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools and Hydrex Integral,
