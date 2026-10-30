@@ -2,8 +2,8 @@
 
 metaDEX Café is a static web page at <https://metadex.cafe/>. It lets owners of Hydrex accounts on Base join or leave
 Matcha Latte, Hydrex's automation, and Double Espresso, an automation nobody controls, and claim Double Espresso's
-rewards when its operator is late. It also swaps many tokens on Base into one, through ImmutableSwapper. Hydrex's
-contracts call automations "conduits".
+rewards when they are late. It also swaps many tokens on Base into one, through ImmutableSwapper. Hydrex's contracts
+call automations "conduits".
 
 The page has no server. It reads Base through public RPCs and asks the visitor's wallet to send transactions. It holds
 no keys and stores nothing.
@@ -26,17 +26,16 @@ This README is for whoever runs the site. The design and the plan are in [design
   only. If a check fails, joining that automation is turned off, its page and its row say so, and Hydrex's page says
   why. Leaving always works. The checks run again every hour.
 - **Claiming** is `claim(tokenId, feeAddresses, bribeAddresses, tokens)` on Double Espresso, which anyone can call for
-  any account in it, and which pays the owner, less 1%. Double Espresso's operator claims for every member right after
-  each epoch, so the page offers it only for the wallet's own accounts, once a payout is overdue: half a day after the
-  flip with something waiting, or a full epoch late. It passes only the contracts and tokens that `earned()` finds
-  owing, in last epoch's pools, and the epoch before's when the operator missed it too. Double Espresso asks each
-  contract for every token passed, and each answer reads the account's past epochs, so a claim of many contracts and
-  tokens splits into calls that each fit a transaction, the most valuable first; calls that need more gas together than
-  one transaction may use go one at a time. A Safe, which sends many calls in one Safe transaction, gets small calls
-  instead, none asking a contract for a token it does not owe, which together use the least gas; it proposes them in as
-  few Safe transactions as their simulated gas allows, each under 15 million. The review offers the rewards as they are,
-  or swapped into one token, but not from a Safe whose claim takes several Safe transactions: the swap follows the
-  claim's receipts.
+  any account in it, and which pays the owner, less 1%. Claims usually come right after each epoch, so the page offers
+  it only for the wallet's own accounts, once a payout is overdue: half a day after the flip with something waiting, or
+  a full epoch late. It passes only the contracts and tokens that `earned()` finds owing, in last epoch's pools, and the
+  epoch before's when nobody claimed for it either. Double Espresso asks each contract for every token passed, and each
+  answer reads the account's past epochs, so a claim of many contracts and tokens splits into calls that each fit a
+  transaction, the most valuable first; calls that need more gas together than one transaction may use go one at a time.
+  A Safe, which sends many calls in one Safe transaction, gets small calls instead, none asking a contract for a token
+  it does not owe, which together use the least gas; it proposes them in as few Safe transactions as their simulated gas
+  allows, each under 15 million. The review offers the rewards as they are, or swapped into one token, but not from a
+  Safe whose claim takes several Safe transactions: the swap follows the claim's receipts.
 - **Swapping** goes through `ImmutableSwapper`, deployed once per output token: USDC, EURC, WETH, cbBTC, AERO and HYDX.
   Each `swap(routes, deadline, skipFailed)` sells the tokens named, each along a route of one to three hops the caller
   picks, through pools of Hydrex, Aero, Aerodrome and Uniswap that it checks against each exchange's factory, and sends
@@ -147,17 +146,11 @@ Once, on GitHub and at the DNS provider:
    wallet. Check that joining is on. To try a flow without funds, as [QA.md](QA.md) lists them, run `npm run qa`.
 3. Run the browser tests with `npm run test:fork`. CI runs them too.
 4. Tag the commit with `v` and the version, for example `v0.5.0`, and push the tag. Any other tag fails.
-
-CI then runs every check, publishes `dist/` on GitHub Pages, and downloads each file back from Pages to compare it. It
-also makes a GitHub Release of the tag, with `dist/` as a CAR file and as a zip, such as `metadex.cafe_v0.5.0.car` and
-`metadex.cafe_v0.5.0.zip`. Its notes give `dist/`'s CID, `ipfs://bafy…`, the one Pinata gives `dist/` too.
-`npm run release` writes the same files into `release/`, and prints the CID.
-
-Then, for the copy at `metadexcafe.eth`:
-
-5. In Pinata's web app, upload `dist/` as a folder, and check that it shows the Release's CID.
-6. Through the Safe, set `metadexcafe.eth`'s content hash to `ipfs://` and the CID.
-7. Open <https://metadexcafe.eth.limo/> and check that its About shows the new version.
+5. Copy the CID from the Release.
+6. In Pinata's web app, upload `dist/`, built from the tag, as a folder.
+7. Check that the CID Pinata shows is the Release's.
+8. Set `metadexcafe.eth`'s content hash to `ipfs://` and the CID.
+9. Open <https://metadexcafe.eth.limo/> and check that its About shows the new version.
 
 The copy on ENS is not a Safe app: in Safe{Wallet}, the custom app stays `https://metadex.cafe/`.
 
@@ -261,8 +254,8 @@ Then `npm run release` prints the CID that the tag's Release names, and `metadex
 - **A late payout.** An account is late when it voted with an automation two epochs ago and has not been paid for that
   epoch yet. Its rewards wait in Hydrex's reward contracts until someone claims them, for up to 50 epochs.
 - **An overdue payout in Double Espresso.** Half a day after the flip, an account whose payout has not come and that has
-  something waiting is overdue: its page, the Double Espresso group and the App's Needs you offer to claim it. If the
-  operator's claim lands first, the page's claim receives nothing, and its receipt says so; it still costs its gas.
+  something waiting is overdue: its page, the Double Espresso group and the App's Needs you offer to claim it. If
+  someone else's claim lands first, the page's claim receives nothing, and its receipt says so; it still costs its gas.
 - **A token the swap skipped.** Its route would have fetched less than its minimum, or its token refused the transfer.
   It stays in the wallet with its approval; the receipt, Needs you and the swap's Approvals offer to reset it. A route
   that Base finds would not go through even with no minimum is left out before the wallet asks, and the bill says why.

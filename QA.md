@@ -146,14 +146,14 @@ the wallet's own failures. Start the scenario again to try a flow from its start
 
 ### Double Espresso: `hydrex`, and `double-espresso` for its receipts
 
-| Flow                                      | Sign as       | What to do                                                                                                                                                                                         |
-| ----------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The menu, and Double Espresso's page      | `0x0208…4C95` | `#hydrex`: Matcha Latte, Double Espresso and Vote yourself. Double Espresso has no record yet. Its page: `#hydrex/double-espresso`.                                                                |
-| Join Double Espresso                      | `0x0208…4C95` | Needs you: untick #42877, Join Double Espresso.                                                                                                                                                    |
-| Move between the two automations          | `0x2573…0b16` | Tick #53350, Move to Double Espresso; then Move to Matcha Latte.                                                                                                                                   |
-| Leave Double Espresso                     | `0x0208…4C95` | Once #141 is in, Leave: claims stop.                                                                                                                                                               |
-| Its receipts: its operator and a stranger | `0x6092…6c93` | In `double-espresso`, `#hydrex/82774`: Receipt · #82774 · Double Espresso, claims sent by `0x0000…dEaD` and by Double Espresso, each paid to the owner, less 1%.                                   |
-| One automation's payouts that fail        | `0x0208…4C95` | #141 joins Double Espresso, #42877 Matcha Latte; twice, Next epoch and Hydrex moves on; tick Double Espresso's figures cannot be read: `#hydrex/141` cannot read its payouts, `#hydrex/42877` can. |
+| Flow                                 | Sign as       | What to do                                                                                                                                                                                         |
+| ------------------------------------ | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The menu, and Double Espresso's page | `0x0208…4C95` | `#hydrex`: Matcha Latte, Double Espresso and Vote yourself. Double Espresso has no record yet. Its page: `#hydrex/double-espresso`.                                                                |
+| Join Double Espresso                 | `0x0208…4C95` | Needs you: untick #42877, Join Double Espresso.                                                                                                                                                    |
+| Move between the two automations     | `0x2573…0b16` | Tick #53350, Move to Double Espresso; then Move to Matcha Latte.                                                                                                                                   |
+| Leave Double Espresso                | `0x0208…4C95` | Once #141 is in, Leave: claims stop.                                                                                                                                                               |
+| Its receipts: anyone's claims        | `0x6092…6c93` | In `double-espresso`, `#hydrex/82774`: Receipt · #82774 · Double Espresso, claims sent by `0x0000…dEaD` and by `0x0000…1234`, each paid to the owner, less 1%.                                     |
+| One automation's payouts that fail   | `0x0208…4C95` | #141 joins Double Espresso, #42877 Matcha Latte; twice, Next epoch and Hydrex moves on; tick Double Espresso's figures cannot be read: `#hydrex/141` cannot read its payouts, `#hydrex/42877` can. |
 
 ### The swap: `swap`
 

@@ -387,7 +387,7 @@ export async function openClaim(entries: Entry[], connection: Connection, hooks:
           const button = next.querySelector<HTMLButtonElement>(".claim-swap-next")!;
           const refused = next.querySelector<HTMLElement>(".claim-swap-failed")!;
           button.textContent = `Review the swap into ${swapper.symbol}`;
-          // For what the claims brought, as their events say, not what the page expected: the operator may have
+          // For what the claims brought, as their events say, not what the page expected: someone else may have
           // claimed some first, of a token from some of its reward contracts and not others.
           const came = brought(receipts);
           const exact: Plan = {

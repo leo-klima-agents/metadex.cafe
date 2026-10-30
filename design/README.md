@@ -2,8 +2,8 @@
 
 What metaDEX Café is today, what it should become, and why. The brand, from type and colour to the layout of receipts,
 is in [brand.md](brand.md). The redesign towards minimalism is in [audit.md](audit.md): where the two disagree, it wins.
-The next product, a swap of many tokens into one, and a way to claim Double Espresso's rewards when its operator is
-late, are in [products.md](products.md).
+The next product, a swap of many tokens into one, and a way to claim Double Espresso's rewards when they are late, are
+in [products.md](products.md).
 
 Figures were read from Base on 17 Oct 2026, unless marked. [Brackets] mark decisions not yet taken, such as "[cap]".
 Mockups of the planned screens are on a design canvas, private to its owner:
@@ -129,8 +129,8 @@ wallet's browser, so every export also offers a copy.
   Choose for one or many accounts, with the gas cost, since replaced by the menu and the review; fee facts for Carbon
   Impact; the redesign towards minimalism, in [audit.md](audit.md), with positions first in the App.
 - **Done, the products:** a level for the products in the App; the swap of many tokens into one, with each route, its
-  minimum and a simulation before the wallet asks; claiming Double Espresso's rewards when its operator is late, as they
-  are or swapped into one token; one prompt with batching, for joining and leaving too; What this wallet allows. See
+  minimum and a simulation before the wallet asks; claiming Double Espresso's rewards when they are late, as they are or
+  swapped into one token; one prompt with batching, for joining and leaving too; What this wallet allows. See
   [products.md](products.md).
 - **Next, the rescue:** change watch; ERC-7730 metadata for `setConduitApproval`, `claim` and `swap`.
 - **Then, a second Hydrex automation, Double Espresso:** on Base since 20 Oct 2026, in its version 2. It votes for the
