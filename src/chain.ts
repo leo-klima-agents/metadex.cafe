@@ -167,12 +167,16 @@ export function resetRateLimits(): void {
 // own. A read with no topic always goes first: the statuses and checks, the epoch, the wallet's accounts, and whatever a
 // review or a click asks for.
 export type Topic = "earnings" | "average" | "shares" | "payouts" | "swap";
+// A read's topic; or, for a read that several share, the topics of all that wait on it: it goes first as soon as the
+// page shows one of them.
+type For = Topic | ReadonlySet<Topic> | undefined;
 let shown = new Set<Topic>();
 export function showTopics(topics: Topic[]): void {
   shown = new Set(topics);
   startWaiting();
 }
-const first = (topic: Topic | undefined): boolean => topic === undefined || shown.has(topic);
+const first = (topic: For): boolean =>
+  topic === undefined || (typeof topic === "string" ? shown.has(topic) : [...topic].some((each) => shown.has(each)));
 
 // A request in flight cannot be called back, so the others never hold more than BEHIND of the slots: the page's own
 // reads, which come one round after another, find the rest free.
@@ -180,16 +184,16 @@ const BEHIND = 3;
 let running = 0;
 let behind = 0;
 type Slot = { behind: boolean };
-const waiting: { topic: Topic | undefined; go: (slot: Slot) => void }[] = [];
+const waiting: { topic: For; go: (slot: Slot) => void }[] = [];
 
-function start(topic: Topic | undefined): Slot {
+function start(topic: For): Slot {
   const slot = { behind: !first(topic) };
   running++;
   if (slot.behind) behind++;
   return slot;
 }
 
-async function takeSlot(topic: Topic | undefined): Promise<Slot> {
+async function takeSlot(topic: For): Promise<Slot> {
   if (running < MAX_IN_FLIGHT && (first(topic) || behind < BEHIND)) return start(topic);
   return new Promise((go) => waiting.push({ topic, go }));
 }
@@ -226,7 +230,7 @@ type Accept = (result: unknown) => boolean;
 const notNull: Accept = (result) => result !== null;
 // A doubtful answer, such as no logs where some are expected but not certain, is taken only once no RPC answers
 // otherwise: an RPC that is behind, or that lost some logs, answers the same.
-type Options = { topic?: Topic | undefined; accept?: Accept; doubt?: Accept };
+type Options = { topic?: For; accept?: Accept; doubt?: Accept };
 type Doubted = { result: unknown } | undefined;
 
 type Unanswered = { answered: false; busy: boolean; reached: boolean };
@@ -320,7 +324,7 @@ export async function rpc<T>(method: string, params: unknown[], options: Options
 export async function read(
   calls: Call[],
   block: number | "latest" = "latest",
-  topic?: Topic,
+  topic?: For,
   perBatch = CALLS_PER_BATCH,
 ): Promise<unknown[]> {
   const batches: Promise<unknown[]>[] = [];
@@ -341,7 +345,20 @@ export function readFor(topic: Topic): typeof read {
   return found;
 }
 
-async function aggregate(calls: Call[], block: number | "latest", topic: Topic | undefined): Promise<unknown[]> {
+// A read that several share, as every pool's reward contracts: it goes first while the page shows the topic of any that
+// joined it, including those that join while it waits.
+export function sharedRead(): { read: typeof read; join(topic: Topic): void } {
+  const topics = new Set<Topic>();
+  return {
+    read: (calls, block = "latest", _topic, perBatch) => read(calls, block, topics, perBatch),
+    join(topic) {
+      topics.add(topic);
+      startWaiting();
+    },
+  };
+}
+
+async function aggregate(calls: Call[], block: number | "latest", topic: For): Promise<unknown[]> {
   const data = encodeFunctionData({
     abi: multicall3Abi,
     functionName: "aggregate3",

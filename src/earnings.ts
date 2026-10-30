@@ -1,5 +1,5 @@
 import { getAddress, parseAbi, type Address } from "viem";
-import { blockTime, call, read, readFor, required, same } from "./chain.ts";
+import { blockTime, call, read, readFor, required, same, sharedRead, type Topic } from "./chain.ts";
 import { AUTOMATIONS } from "./config.ts";
 import { WEEK, clean } from "./format.ts";
 import { escrow, voter } from "./hydrex.ts";
@@ -46,28 +46,38 @@ export async function lastEpoch(): Promise<{ start: number; now: number }> {
 type Contract = { pool: Address; address: Address; fee: boolean };
 
 // Every pool's reward contracts, for Hydrex's average and for whoever voted again since an epoch began: thousands of
-// reads, made once, and again for a newer epoch than they were read for, as Hydrex only ever adds pools. They are read
-// first on the pages that show what votes earned.
-let kept: { start: number; read: Promise<Contract[]> } | undefined;
+// reads, made once, and shared, at the priority of the reads that wait on them. As Hydrex only ever adds pools, they
+// hold every epoch Hydrex had ended when they were read, `through` the one then under way: they are read again only
+// for a later epoch.
+type Contracts = { through: number; contracts: Contract[] };
+let kept: { read: Promise<Contracts>; join(topic: Topic): void } | undefined;
 
-function allContracts(start: number): Promise<Contract[]> {
-  if (!kept || kept.start < start) {
-    const these = { start, read: readContracts() };
-    kept = these;
-    these.read.catch(() => {
-      if (kept === these) kept = undefined;
-    });
-  }
-  return kept.read;
+async function allContracts(start: number, topic: Topic): Promise<Contract[]> {
+  kept ??= keep();
+  const these = kept;
+  these.join(topic);
+  const found = await these.read;
+  if (start < found.through) return found.contracts;
+  if (kept === these) kept = keep();
+  kept.join(topic);
+  return (await kept.read).contracts;
 }
 
-async function readContracts(): Promise<Contract[]> {
-  const reader = readFor("earnings");
-  const [length] = required(await reader([voter("length")])) as bigint[];
+function keep(): NonNullable<typeof kept> {
+  const shared = sharedRead();
+  const these = { read: readContracts(shared.read), join: shared.join };
+  these.read.catch(() => {
+    if (kept === these) kept = undefined;
+  });
+  return these;
+}
+
+async function readContracts(reader: typeof read): Promise<Contracts> {
+  const [length, active] = required(await reader([voter("length"), voter("_epochTimestamp")])) as bigint[];
   const pools = required(
     await reader(Array.from({ length: Number(length) }, (_, i) => voter("pools", BigInt(i)))),
   ) as Address[];
-  return contractsOf(pools, reader);
+  return { through: Number(active), contracts: await contractsOf(pools, reader) };
 }
 
 async function contractsOf(pools: Address[], reader: typeof read): Promise<Contract[]> {
@@ -183,12 +193,12 @@ async function priced(
 
 // What an automation's votes earned in the epoch from `start`, its pools named.
 export const readEarnings = (automation: Address, start: number): Promise<Earnings> =>
-  votesEarned(automation, start, readFor("earnings"), true);
+  votesEarned(automation, start, "earnings", true);
 
 // What one voter's votes earned in the epoch from `start`, such as an owner who votes with their accounts themselves;
 // its pools go unnamed.
 export const readVoterEarnings = (holder: Address, start: number): Promise<Earnings> =>
-  votesEarned(holder, start, readFor("shares"), false);
+  votesEarned(holder, start, "shares", false);
 
 // What a voter's votes earned in the epoch from `start`: an automation's, or an owner's. Its rewards go to the votes
 // standing when it starts, which a vote in the epoch before may have cast. A voter that has not voted since the epoch
@@ -196,7 +206,8 @@ export const readVoterEarnings = (holder: Address, start: number): Promise<Earni
 // no pools, and no rewards. Hydrex's Voter keeps only each voter's latest votes: its few pools, until it votes again,
 // as the automations do just before each flip. From then on, its rewards are found among every pool's reward
 // contracts. `named` names each pool by its tokens, as an automation's page lists them.
-async function votesEarned(holder: Address, start: number, reader: typeof read, named: boolean): Promise<Earnings> {
+async function votesEarned(holder: Address, start: number, topic: Topic, named: boolean): Promise<Earnings> {
+  const reader = readFor(topic);
   const [now, voted, length, votes] = required(
     await reader([
       blockTime,
@@ -209,7 +220,7 @@ async function votesEarned(holder: Address, start: number, reader: typeof read, 
     return { start, votes: votes!, pools: [], rewards: [], prices: pricesIn("USD") };
   const contracts =
     Number(voted) >= start + WEEK
-      ? await allContracts(start)
+      ? await allContracts(start, topic)
       : await contractsOf(
           required(
             await reader(Array.from({ length: Number(length) }, (_, i) => voter("poolVote", holder, BigInt(i)))),
@@ -255,7 +266,7 @@ export function rewardsFor(automation: Address, start: number): Promise<Reward[]
   if (!found) {
     found = readFor("payouts")([escrow("getPastVotes", automation, start)]).then(async ([votes]) => {
       if (required([votes])[0] === 0n) return [];
-      const { rewards } = await rewardsOf(await allContracts(start), start, automation, readFor("payouts"));
+      const { rewards } = await rewardsOf(await allContracts(start, "payouts"), start, automation, readFor("payouts"));
       const tokens = await tokensOf(
         rewards.map(({ token }) => token),
         readFor("payouts"),
@@ -278,7 +289,7 @@ export function forgetRewards(): void {
 export async function readAllEarnings(start: number): Promise<Earnings> {
   const [[now, votes], found] = await Promise.all([
     readFor("average")([blockTime, voter("totalWeightAt", start)]).then((values) => required(values) as bigint[]),
-    allContracts(start).then((all) => rewardsOf(all, start, undefined, readFor("average"))),
+    allContracts(start, "average").then((all) => rewardsOf(all, start, undefined, readFor("average"))),
   ]);
   const voted = [...found.votes].map(([address, poolVotes]) => ({ address, name: "", votes: poolVotes }));
   const tokens = await tokensOf(

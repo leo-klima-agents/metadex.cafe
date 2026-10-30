@@ -30,7 +30,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { same } from "../src/chain.ts";
+import { same, showTopics } from "../src/chain.ts";
 import {
   AUTOMATIONS,
   DOUBLE_ESPRESSO,
@@ -199,6 +199,8 @@ export async function view(to: Address, functionName: string, args: unknown[]): 
 // The page gives each request five seconds, but anvil fetches the state it lacks from FORK_URL one slot at a time. So
 // Node makes the slow first reads with no time limit, and the page then finds them cached.
 export async function warm(reads: () => Promise<unknown>): Promise<void> {
+  // No page shows here: every read is Node's own, and may use every slot.
+  showTopics(["earnings", "average", "shares", "payouts", "swap"]);
   globalThis.fetch = (_, init) => {
     prefetch(String(init?.body));
     return nodeFetch(ANVIL, { ...init, signal: null });

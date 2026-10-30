@@ -35,9 +35,10 @@ const listeners: ((kind: Kind, outcome: Outcome) => void)[] = [];
 const STALE = (start: number, since: number): boolean => start < weekStart(now()) - WEEK && since > RETRY;
 const epoch: Reader<number> = reader(async () => (await lastEpoch()).start, { stale: STALE });
 
-// The epoch's start, read first unless it is read already or failed within five minutes: undefined if it is not known.
+// The epoch's start: as a read under way finds it, or read first if none is known yet, or once due. Undefined if it
+// cannot be read.
 async function epochStart(): Promise<number | undefined> {
-  if (epoch.due() || (epoch.value === undefined && !epoch.ended)) await epoch.read().catch(() => {});
+  if (epoch.reading || epoch.value === undefined || epoch.due()) await epoch.read().catch(() => {});
   return epoch.value;
 }
 
@@ -109,10 +110,11 @@ export const earningsFailed = (automation: Automation): boolean => {
   return figures.failed && !figures.value;
 };
 
-// An automation's figures, read first if there are none yet, or none from the epoch from `start`. The receipts read
-// each account's rewards in its pools. Just after a flip, until Hydrex moves on to the new epoch, they are still the
-// epoch before's.
+// An automation's figures, read first if there are none yet, or none from the epoch from `start`, for which Hydrex is
+// asked again. The receipts read each account's rewards in its pools. Just after a flip, until Hydrex moves on to the
+// new epoch, they are still the epoch before's.
 export async function lastEarnings(automation: Automation, start = 0): Promise<Earnings> {
+  if ((epoch.value ?? -1) < start) await epoch.read().catch(() => {});
   if ((figuresOf(automation).value?.found.start ?? -1) < start) await loadOne(automation);
   const found = figuresOf(automation).value?.found;
   if (!found) throw new Error(`What ${automation.name}'s votes earned last epoch could not be read.`);

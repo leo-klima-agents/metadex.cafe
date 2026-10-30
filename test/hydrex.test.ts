@@ -315,7 +315,7 @@ test("an account whose ownerOf fails is asked again on its own before it is take
   }
 });
 
-test("every automation's checks fail once an RPC answers for another chain, which turns the swaps off too", async () => {
+test("every automation's checks fail once an RPC answers for another chain", async () => {
   const multicall = parseAbi([
     "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
   ]);

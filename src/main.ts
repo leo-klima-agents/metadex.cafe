@@ -35,7 +35,8 @@ const TOPICS: Record<Route["view"], Topic[]> = {
   // The payouts need what the automations earned; so do the swap's rows, which list Hydrex's rewards.
   app: ["earnings", "payouts", "swap"],
   hydrex: ["earnings", "average", "shares", "payouts"],
-  product: ["earnings", "average", "shares"],
+  // Each automation's page lists the wallet's accounts in it, with their late payouts and Double Espresso's claims.
+  product: ["earnings", "average", "shares", "payouts"],
   position: ["earnings", "shares", "payouts"],
   swap: ["earnings", "swap"],
 };

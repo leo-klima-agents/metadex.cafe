@@ -520,7 +520,7 @@ export function payouts(
 ): Payouts {
   // The accounts given, and those whose payouts were read.
   let shown: Holdings | undefined;
-  let readFor: string | undefined;
+  let readKey: string | undefined;
   // The owner whose payouts the section shows.
   let showing: string | undefined;
   // Whether some payouts could not be read, or were read against an older epoch's figures; and when a payout under
@@ -543,10 +543,10 @@ export function payouts(
     const holdings = shown;
     if (!holdings) return;
     const key = keyOf(holdings);
-    if (quietly && readFor === key) return;
+    if (quietly && readKey === key) return;
     const members = holdings.accounts.filter((account) => automationOf(account));
     if (section) section.hidden = !members.length;
-    readFor = key;
+    readKey = key;
     if (!members.length) {
       reset();
       return found({ epochStart: holdings.epochStart, entries: [] }, undefined);
@@ -556,7 +556,7 @@ export function payouts(
     const kept = quietly && showing === owner;
     if (!kept) setState("reading");
     // False once other accounts, or a newer read, took over.
-    const current = () => readFor === key && !!shown && keyOf(shown) === key;
+    const current = () => readKey === key && !!shown && keyOf(shown) === key;
     // A read that fails is read again by the next check, or by the section's button, and not by showing the same
     // accounts again. A quiet one keeps what is shown.
     const fail = (error: unknown) => {
@@ -634,7 +634,7 @@ export function payouts(
       void load(true);
     },
     forget() {
-      shown = readFor = showing = latest = undefined;
+      shown = readKey = showing = latest = undefined;
       reset();
       // Another account's receipts never show under this one's heading.
       if (section) {
@@ -643,15 +643,15 @@ export function payouts(
       }
     },
     check() {
-      if (!readFor || checking || Date.now() - checked < RETRY) return;
+      if (!readKey || checking || Date.now() - checked < RETRY) return;
       if (!signals.length && !missed && now() < underUntil) return;
-      const key = readFor;
+      const key = readKey;
       checked = Date.now();
       checking = true;
       void moved()
         .then((again) => {
-          if (!again || readFor !== key) return;
-          readFor = undefined;
+          if (!again || readKey !== key) return;
+          readKey = undefined;
           return load(true);
         })
         .finally(() => (checking = false));

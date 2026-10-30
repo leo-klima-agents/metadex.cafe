@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
-import { rate, resetRateLimits, rpc, showTopics } from "../src/chain.ts";
+import { encodeFunctionResult } from "viem";
+import { blockTime, multicall3Abi, rate, resetRateLimits, rpc, sharedRead, showTopics } from "../src/chain.ts";
 import { RPCS } from "../src/config.ts";
 
 type Answer = { status?: number; body?: unknown; fail?: Error };
@@ -189,6 +190,31 @@ test("the reads of what the page shown draws go first, as the page changes while
   showTopics(["average"]);
   await Promise.all([...busy, swap, average, own]);
   assert.deepEqual(order.slice(6), ["average", "own", "swap"]);
+});
+
+test("a read that several share goes first once one that waits on it is of a topic the page shows", async () => {
+  const order: string[] = [];
+  const none = encodeFunctionResult({
+    abi: multicall3Abi,
+    functionName: "aggregate3",
+    result: [{ success: false, returnData: "0x" }],
+  });
+  globalThis.fetch = async (_, init) => {
+    const { method } = JSON.parse(String(init?.body));
+    order.push(method);
+    await new Promise((done) => original.setTimeout(done, 100));
+    return new Response(JSON.stringify(result(method === "eth_call" ? none : "0x1").body));
+  };
+  showTopics(["payouts"]);
+  const busy = Array.from({ length: 6 }, () => rpc("first", []));
+  const swap = rpc("swap", [], { topic: "swap" });
+  const shared = sharedRead();
+  shared.join("average");
+  const map = shared.read([blockTime]);
+  // The payouts, which the page shows, come to wait on it too.
+  shared.join("payouts");
+  await Promise.all([...busy, swap, map]);
+  assert.deepEqual(order.slice(6), ["eth_call", "swap"]);
 });
 
 test("reads in the background hold three slots at most, so that the page's own start at once", async () => {

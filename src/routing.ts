@@ -187,7 +187,7 @@ export async function routeTogether(
       paths.flat().flatMap((path) => path.slice(1).map((b, i) => [pairKey(path[i]!, b), [path[i]!, b]] as const)),
     ).values(),
   ] as [Address, Address][];
-  const ways = await waysFor(pairs);
+  const ways = await waysFor(pairs, undefined, readFor("swap"));
   const poolsOf = (a: Address, b: Address) => ways.get(pairKey(a, b)) ?? [];
   const all = pairs.reduce((sum, [a, b]) => sum + poolsOf(a, b).length, 0);
   // Two requests left for running both plans through Base.
