@@ -5,23 +5,26 @@ import { balanced } from "ipfs-unixfs-importer/layout";
 import { base32 } from "multiformats/bases/base32";
 import type { CID } from "multiformats/cid";
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { sep } from "node:path";
 import { buffer } from "node:stream/consumers";
 import { fileURLToPath } from "node:url";
 import { crc32 } from "node:zlib";
 
-// dist/ as the files of a GitHub Release, in release/: metadex.cafe_v<version>.car, for IPFS and ENS, whose root CID it
-// prints, and metadex.cafe_v<version>.zip, the same files for anyone to unpack. Both come out the same, byte for byte,
-// from the same dist/.
+// dist/ as the files of a GitHub Release, in release/: metadex.cafe_v<version>.car, for IPFS and ENS, and
+// metadex.cafe_v<version>.zip, the same files for anyone to unpack. Both come out the same, byte for byte, from the same
+// dist/. With them, notes.md holds the Release's notes, which it prints: the CID, and the content hash it makes ENS's.
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUT = `${ROOT}/release`;
 const { version } = JSON.parse(readFileSync(`${ROOT}/package.json`, "utf8")) as { version: string };
 const NAME = `metadex.cafe_v${version}`;
 
-// A folder's files, by their paths within it, sorted.
+// A folder's files, by their paths within it, with "/" between folders on any system, sorted. Hidden files and folders,
+// whose names start with a dot, are left out, as `ipfs add -r` leaves them out: a .DS_Store does not change the CID.
 const filesOf = (dir: string): string[] =>
   readdirSync(dir, { recursive: true, encoding: "utf8" })
-    .filter((path) => statSync(`${dir}/${path}`).isFile())
+    .map((path) => path.split(sep).join("/"))
+    .filter((path) => !path.split("/").some((part) => part.startsWith(".")) && statSync(`${dir}/${path}`).isFile())
     .sort();
 
 // A folder as a CAR file, and its root: the CID Pinata gives the folder when it uploads it as `v1`, which its docs
@@ -87,12 +90,14 @@ export function zipOf(dir: string, folder: string): Uint8Array {
   const listed: Buffer[] = [];
   let offset = 0;
   for (const path of files) {
-    const name = Buffer.from(`${folder}/${path}`);
+    // In ASCII, which version 1.0 has: a name in UTF-8 would need version 6.3.
+    if (!/^[\x20-\x7e]+$/.test(`${folder}/${path}`)) throw new Error(`${folder}/${path} is not in ASCII.`);
+    const name = Buffer.from(`${folder}/${path}`, "ascii");
     const data = readFileSync(`${dir}/${path}`);
     // What both of the file's headers say.
     const fields = le(
       [2, 10], // the version needed to read it: 1.0
-      [2, 0x800], // its name is in UTF-8
+      [2, 0], // no flags
       [2, 0], // stored
       [2, 0], // 00:00
       [2, 0x21], // 1 Jan 1980
@@ -126,11 +131,21 @@ export function zipOf(dir: string, folder: string): Uint8Array {
   return Buffer.concat([...entries, directory, end]);
 }
 
+// A CID as an ENS content hash, as EIP-1577 encodes it: the code of IPFS's namespace, 0xe3, as a varint, then the CID.
+export const contenthashOf = (cid: CID): string => `0x${Buffer.from([0xe3, 0x01, ...cid.bytes]).toString("hex")}`;
+
+// The Release's notes, in Markdown: its CID, and below, the same as the content hash ENS stores.
+export const notesOf = (root: CID): string =>
+  `CID: ipfs://${root.toString(base32)}\n\nContent hash (EIP-1577): ${contenthashOf(root)}\n`;
+
 if (import.meta.main) {
   const { root, car } = await carOf(`${ROOT}/dist`);
+  const zip = zipOf(`${ROOT}/dist`, NAME);
+  const notes = notesOf(root);
   rmSync(OUT, { recursive: true, force: true });
   mkdirSync(OUT);
   writeFileSync(`${OUT}/${NAME}.car`, car);
-  writeFileSync(`${OUT}/${NAME}.zip`, zipOf(`${ROOT}/dist`, NAME));
-  console.log(root.toString(base32));
+  writeFileSync(`${OUT}/${NAME}.zip`, zip);
+  writeFileSync(`${OUT}/notes.md`, notes);
+  process.stdout.write(notes);
 }

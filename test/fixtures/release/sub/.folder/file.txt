@@ -1,0 +1,1 @@
+A file in a hidden folder, which the release leaves out too.

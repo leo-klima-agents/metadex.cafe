@@ -149,7 +149,7 @@ Once, on GitHub and at the DNS provider:
 5. Copy the CID from the Release.
 6. In Pinata's web app, upload `dist/`, built from the tag, as a folder.
 7. Check that the CID Pinata shows is the Release's.
-8. Set `metadexcafe.eth`'s content hash to `ipfs://` and the CID.
+8. Set `metadexcafe.eth`'s content hash to `ipfs://` and the CID. The Release also gives it encoded, as EIP-1577 does.
 9. Open <https://metadexcafe.eth.limo/> and check that its About shows the new version.
 
 The copy on ENS is not a Safe app: in Safe{Wallet}, the custom app stays `https://metadex.cafe/`.
@@ -223,7 +223,8 @@ npm run build
 cd dist && for file in $(find . -type f | sort); do curl -fsS "https://metadex.cafe/${file#./}?$(date +%s)" | cmp - "$file"; done
 ```
 
-Then `npm run release` prints the CID that the tag's Release names, and `metadexcafe.eth`'s content hash should hold.
+Then `npm run release` prints the notes of the tag's Release: the CID, and the content hash `metadexcafe.eth` should
+hold.
 
 ## What visitors may run into
 
@@ -349,10 +350,10 @@ states the fork cannot show.
 
 CI runs Prettier, the type check, the unit tests, `reuse lint` and the build, packs the build as a CAR file and a zip,
 and checks that the zip unpacks to it. It then builds and packs again from a fresh clone and checks that both give the
-same files, CAR file, zip and CID. It also runs the browser tests, in the runner's Chrome, with the forks' answers kept
-in GitHub's cache from one run, or attempt, to the next, one run of a branch at a time. Dependabot updates the pinned
-Actions and npm packages every week, in one pull request for each, with releases a week old or more; a security update
-comes at once, on its own.
+same files, CAR file, zip, CID and content hash. It also runs the browser tests, in the runner's Chrome, with the forks'
+answers kept in GitHub's cache from one run, or attempt, to the next, one run of a branch at a time. Dependabot updates
+the pinned Actions and npm packages every week, in one pull request for each, with releases a week old or more; a
+security update comes at once, on its own.
 
 | Path                                                    | What it holds                                                                                                                                                                                                    |
 | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -386,7 +387,7 @@ comes at once, on its own.
 | `fork/fixtures/`                                        | Double Espresso's init code, for the browser tests to deploy it on the fork; and a token of the QA wallet's own, its source and init code.                                                                       |
 | `test/fixtures/`                                        | A folder for `test/release.test.ts` to pack, with the CID that Kubo gives it.                                                                                                                                    |
 | `scripts/`                                              | The build, and `notices.ts`, the license notices it appends to each built file; `fonts.py` makes `fonts/`, `icons.ts` draws the icons from `icon.svg`, and `tokens.ts` checks the list of tokens.                |
-| `scripts/release.ts`                                    | `npm run release`: `dist/` as a CAR file, for IPFS and ENS, and as a zip, in `release/`, and its CID.                                                                                                            |
+| `scripts/release.ts`                                    | `npm run release`: `dist/` as a CAR file, for IPFS and ENS, and as a zip, in `release/`, with the Release's notes: the CID and content hash.                                                                     |
 
 ## License
 
