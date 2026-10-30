@@ -191,6 +191,24 @@ test("the reads of what the page shown draws go first, as the page changes while
   assert.deepEqual(order.slice(6), ["average", "own", "swap"]);
 });
 
+test("reads in the background hold three slots at most, so that the page's own start at once", async () => {
+  let behind = 0;
+  let most = 0;
+  globalThis.fetch = async (_, init) => {
+    const away = JSON.parse(String(init?.body)).method === "behind";
+    if (away) most = Math.max(most, ++behind);
+    await new Promise((done) => original.setTimeout(done, 100));
+    if (away) behind--;
+    return new Response(JSON.stringify(result("0x1").body));
+  };
+  const others = Array.from({ length: 9 }, () => rpc("behind", [], { topic: "average" }));
+  const before = performance.now();
+  await rpc("own", []);
+  assert.ok(performance.now() - before < 150, "the page's own read did not wait for a slot");
+  await Promise.all(others);
+  assert.equal(most, 3);
+});
+
 test("an answer the caller does not take goes to the next RPC; a pending receipt's null is one it takes", async () => {
   const asked = answering({ [first]: [result([])], [second]: [result([{ topics: ["0x1"] }])] });
   const logs = await rpc<unknown[]>("eth_getLogs", [], { accept: (found) => (found as unknown[]).length > 0 });

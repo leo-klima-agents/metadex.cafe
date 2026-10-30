@@ -168,23 +168,48 @@ export function resetRateLimits(): void {
 // review or a click asks for.
 export type Topic = "earnings" | "average" | "shares" | "payouts" | "swap";
 let shown = new Set<Topic>();
-export const showTopics = (topics: Topic[]): void => void (shown = new Set(topics));
+export function showTopics(topics: Topic[]): void {
+  shown = new Set(topics);
+  startWaiting();
+}
 const first = (topic: Topic | undefined): boolean => topic === undefined || shown.has(topic);
 
+// A request in flight cannot be called back, so the others never hold more than BEHIND of the slots: the page's own
+// reads, which come one round after another, find the rest free.
+const BEHIND = 3;
 let running = 0;
-const waiting: { topic: Topic | undefined; go: () => void }[] = [];
+let behind = 0;
+type Slot = { behind: boolean };
+const waiting: { topic: Topic | undefined; go: (slot: Slot) => void }[] = [];
 
-async function takeSlot(topic: Topic | undefined): Promise<void> {
-  if (running < MAX_IN_FLIGHT) running++;
-  else await new Promise<void>((go) => waiting.push({ topic, go }));
+function start(topic: Topic | undefined): Slot {
+  const slot = { behind: !first(topic) };
+  running++;
+  if (slot.behind) behind++;
+  return slot;
 }
 
-// The oldest request waiting of those the page shown draws, or else the oldest: the page can change while they wait.
-function freeSlot(): void {
-  const firstOfPage = waiting.findIndex(({ topic }) => first(topic));
-  const [next] = waiting.splice(Math.max(0, firstOfPage), 1);
-  if (next) next.go();
-  else running--;
+async function takeSlot(topic: Topic | undefined): Promise<Slot> {
+  if (running < MAX_IN_FLIGHT && (first(topic) || behind < BEHIND)) return start(topic);
+  return new Promise((go) => waiting.push({ topic, go }));
+}
+
+// The oldest request waiting of those the page shown draws, or else the oldest, while the others hold fewer than BEHIND
+// slots: the page can change while they wait.
+function startWaiting(): void {
+  while (running < MAX_IN_FLIGHT) {
+    const ownFirst = waiting.findIndex(({ topic }) => first(topic));
+    const i = ownFirst >= 0 ? ownFirst : behind < BEHIND && waiting.length ? 0 : -1;
+    if (i < 0) return;
+    const [next] = waiting.splice(i, 1);
+    next!.go(start(next!.topic));
+  }
+}
+
+function freeSlot(slot: Slot): void {
+  running--;
+  if (slot.behind) behind--;
+  startWaiting();
 }
 
 // When no RPC answers, those that were busy or out of reach are asked again, up to RETRIES times, after a random wait
@@ -240,7 +265,7 @@ async function askEach(
   const left = [...urls];
   const busy: string[] = [];
   let doubted: Doubted;
-  await takeSlot(topic);
+  let slot = await takeSlot(topic);
   try {
     while (left.length) {
       if (cutOff()) throw new Unreachable();
@@ -248,9 +273,9 @@ async function askEach(
       const free = left.map((url) => freeAt(url, kind, time));
       const i = free.findIndex((at) => at <= time);
       if (i < 0) {
-        freeSlot();
+        freeSlot(slot);
         await sleep(Math.min(...free) - time);
-        await takeSlot(topic);
+        slot = await takeSlot(topic);
         continue;
       }
       const [url] = left.splice(i, 1) as [string];
@@ -266,7 +291,7 @@ async function askEach(
       }
     }
   } finally {
-    freeSlot();
+    freeSlot(slot);
   }
   return { answered: false, busy, doubted };
 }
