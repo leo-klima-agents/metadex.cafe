@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { encodeFunctionData, toFunctionSelector, zeroAddress } from "viem";
 import { VOTING_ESCROW } from "../src/config.ts";
-import { readEarnings } from "../src/earnings.ts";
 import {
   CONDUIT,
   SITE,
@@ -41,6 +40,7 @@ import {
   hooks,
   startAtBlock,
   UNVOTED,
+  earnedLastEpoch,
 } from "./harness.ts";
 
 describe("the page against a fork of Base: joining and leaving, and what can fail", { timeout: 1_800_000 }, () => {
@@ -50,7 +50,7 @@ describe("the page against a fork of Base: joining and leaving, and what can fai
 
   test("join with two accounts from automations that stopped, one transaction at a time", async () => {
     // The review's estimate needs last epoch's figures.
-    await warm(() => readEarnings(CONDUIT));
+    await warm(() => earnedLastEpoch(CONDUIT));
     const { page, sent, asked, origins, violations } = await open({ owner: ELSEWHERE }, { url: `${SITE}/#hydrex` });
     await hydrex(page).locator("time.matcha-latte-voted").getByText(/Wed/).waitFor();
     assert.deepEqual(asked, [], "the page asks a wallet nothing until it is picked");

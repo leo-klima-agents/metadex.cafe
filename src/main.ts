@@ -1,6 +1,8 @@
+import { showTopics, type Topic } from "./chain.ts";
 import { AUTOMATIONS } from "./config.ts";
 import { clone, groupAllHex, pendAll } from "./dom.ts";
 import { setCurrency, type Currency } from "./format.ts";
+import type { Route } from "./routes.ts";
 import { earningsDue, onEarnings } from "./last-epoch.ts";
 import { initAccounts, showAccounts } from "./views/accounts.ts";
 import { initApp, showApp } from "./views/app.ts";
@@ -23,6 +25,22 @@ import { initSwap } from "./views/swap.ts";
 
 // The page starts here: it marks pending what it will read, sets up each view, then reads Base, and again every half a
 // minute whatever is due. Each view is in src/views/.
+
+// Every page reads the same: what each view shows, as soon as what it needs is read. Only the order differs: the reads
+// of what the page shown draws go first, and the others as slots free, so that each page opens with what the others
+// show read, or under way. Home and About draw none.
+const TOPICS: Record<Route["view"], Topic[]> = {
+  home: [],
+  about: [],
+  // The payouts need what the automations earned; so do the swap's rows, which list Hydrex's rewards.
+  app: ["earnings", "payouts", "swap"],
+  hydrex: ["earnings", "average", "shares", "payouts"],
+  // Each automation's page lists the wallet's accounts in it, with their late payouts and Double Espresso's claims.
+  product: ["earnings", "average", "shares", "payouts"],
+  position: ["earnings", "shares", "payouts"],
+  swap: ["earnings", "swap"],
+};
+onRoute((route) => showTopics(TOPICS[route.view]));
 
 // Where a list or a page is read, cards of bars where its items will show, three, or as many as the slot says, or the
 // tiles of a page's key figures.
@@ -49,13 +67,6 @@ initPosition();
 initApp();
 initConnection();
 
-// The pages that show figures of last epoch read what they need, Hydrex's average and what the accounts' votes earned;
-// Home and the App read the average too, once the App's own reads have ended, so that Hydrex's page opens with it.
-onRoute(() => {
-  readAverage();
-  showApp();
-  void showShares();
-});
 // Each read of figures, whoever started it, shows on the menu, on the automations' pages and in the accounts' shares:
 // what an account in that automation earned, pending until then, or nothing once no epoch can be read.
 onEarnings((_, outcome) => {
@@ -94,4 +105,5 @@ matchaLatte.read().catch(failed);
 checks.read().catch(failed);
 doubleEspresso.check();
 loadAllEarnings();
+readAverage();
 setInterval(tick, 30_000);

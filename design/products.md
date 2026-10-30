@@ -274,9 +274,9 @@ Aero                                     (greyed out, no link)
   one level down. Claiming is not on it: it is an action on accounts in Double Espresso.
 - **Reads:** the App's own reads are what its lines need: the accounts and their groups, which it reads today, and the
   balances of known tokens with their quotes for the swap line. The swap line can come last, pending, as the earnings
-  do, then says what it found so far: "3 tokens · ≈ $31 so far". Home starts those that need no wallet, so that the App
-  opens with part of them done. Both then read what Hydrex's menu shows, last epoch's figures and Hydrex's average,
-  thousands of reads, once the App's own have ended, so that Hydrex's menu opens with them.
+  do, then says what it found so far: "3 tokens · ≈ $31 so far". Every page starts all the reads the page needs, Home
+  included, so that the App opens with part of them done; what Hydrex's menu shows, last epoch's figures and Hydrex's
+  average, thousands of reads, waits behind the App's own while the App shows, so that Hydrex's menu opens with them.
 
 ### Hydrex, `#hydrex`
 

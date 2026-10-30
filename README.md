@@ -125,6 +125,10 @@ The Content Security Policy in `index.html` lets the page reach three RPCs only.
 The page sends each RPC at most 25 requests a second, 5 of them for logs, and has at most 6 requests in flight. When an
 RPC is busy or fails, the next one is asked. When none answers, the busy ones are asked again up to four times.
 
+Every page reads the same, as soon as what each read needs is known: what the other pages show is read too, so that they
+open with it. Only the order differs. Requests for what the page shown draws go first, and the others as slots free,
+whichever page started them; changing page changes which go first. Home and About draw none.
+
 The browser checks the script and the stylesheet against SHA-384 hashes in `index.html`. The fonts are inside the
 stylesheet.
 
@@ -281,18 +285,18 @@ hold.
 - What waits to be claimed is a floor: the page reads each account's rewards in the pools its automation voted for last
   epoch, and no others. If some of those reads fail, it says "at least".
 - Whether an account was paid for the epoch before last needs that epoch's rewards. Hydrex's Voter no longer holds those
-  votes, so the page finds them among every pool's reward contracts: thousands of reads, about two seconds on Base, made
-  once per session, and only if one of the owner's accounts voted with the automation then. They are weighed at last
-  epoch's prices.
+  votes, so the page finds them among every pool's reward contracts, which it reads once a session for all that need
+  them, and only if one of the owner's accounts voted with the automation then. They are weighed at last epoch's prices.
 - The page finds an account's last payout through Hydrex's reward contracts, which record up to when they have paid it,
   through the record of the reward worth the most that the payout claimed. Anyone allowed to claim for the account moves
   that record, such as its owner on Hydrex. The page then says that the account was last claimed outside Matcha Latte,
   and shows no receipt.
-- What votes earned is for the last epoch only. Hydrex's average needs every pool's reward contracts, thousands of reads
-  made once a session: at once on `#hydrex` and the automations' pages, and on Home and the App only once the App's own
-  reads have ended, so that `#hydrex` opens with it read, or under way. What the votes of accounts in no automation
-  earned is read only there and on an account's page, through whoever held them: as many reads when that holder voted
-  during this epoch, as Hydrex's Voter then holds only the new votes.
+- What votes earned is for the last epoch only. A voter's pools are those Hydrex's Voter holds for it, until it votes
+  again, as the automations do just before each flip. Then, and for Hydrex's average, they are found among every pool's
+  reward contracts: thousands of reads, made once a session and shared. The average is read on every page once Hydrex's
+  last epoch is read: first on `#hydrex` and the automations' pages, and elsewhere as slots free, so that `#hydrex`
+  opens with it read, or under way. So is what the votes of a wallet's accounts in no automation earned, through whoever
+  held them.
 - Prices are approximate. USDC, WETH, cbBTC and EURC take Chainlink's; other tokens, and one of those four whose feed
   does not answer, a half-hour average in their deepest pool against one of those priced. Prices now, for swaps, gas and
   what waits to be claimed, come from Aero Basic Pools, Aerodrome Basic Pools, Hydrex Classic Pools and Hydrex Integral,
@@ -361,7 +365,7 @@ security update comes at once, on its own.
 | `style.css`, `fonts/`                                   | Styles and fonts.                                                                                                                                                                                                |
 | `src/config.ts`                                         | What the page trusts: contract addresses, the RPCs, and the price anchors.                                                                                                                                       |
 | `src/hydrex-conduits.json`                              | Hydrex's automations, as <https://api.hydrex.fi/conduits> lists them.                                                                                                                                            |
-| `src/main.ts`                                           | Startup: each view set up, then the reads, and again every half a minute what is due.                                                                                                                            |
+| `src/main.ts`                                           | Startup: each view set up, then the reads, and again every half a minute what is due; and which reads go first on each page.                                                                                     |
 | `src/views/page.ts`                                     | What the views share: the wallet connected, its Hydrex accounts, and how each view is drawn again.                                                                                                               |
 | `src/views/automations.ts`                              | The automations' state and figures, on Hydrex's menu and their pages, beside Hydrex's average; and the checks.                                                                                                   |
 | `src/views/accounts.ts`                                 | The wallet's Hydrex accounts in groups, their boxes and buttons, and the reviews of joining, leaving and claiming.                                                                                               |

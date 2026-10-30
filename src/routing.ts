@@ -1,5 +1,5 @@
 import type { Address } from "viem";
-import { rate } from "./chain.ts";
+import { rate, readFor } from "./chain.ts";
 import type { Swapper } from "./config.ts";
 import { pairKey, waysFor, type Hop, type Way } from "./pools.ts";
 import {
@@ -170,6 +170,7 @@ export async function routeTogether(
       swapper: output,
       route: { ...found.route, amount: amount / PROBE, minPaid: 0n },
     })),
+    readFor("swap"),
   );
   const heavy = sales
     .map((sale, i) => ({ sale, i, probe: probes[i] }))
@@ -186,7 +187,7 @@ export async function routeTogether(
       paths.flat().flatMap((path) => path.slice(1).map((b, i) => [pairKey(path[i]!, b), [path[i]!, b]] as const)),
     ).values(),
   ] as [Address, Address][];
-  const ways = await waysFor(pairs);
+  const ways = await waysFor(pairs, undefined, readFor("swap"));
   const poolsOf = (a: Address, b: Address) => ways.get(pairKey(a, b)) ?? [];
   const all = pairs.reduce((sum, [a, b]) => sum + poolsOf(a, b).length, 0);
   // Two requests left for running both plans through Base.
@@ -214,6 +215,7 @@ export async function routeTogether(
         swapper: swapperFor(way.tokenOut)!,
         route: { token: way.tokenIn, amount, minPaid: 0n, hops: [hopOf(way)] },
       })),
+      readFor("swap"),
     );
     items.forEach(({ way, amount }, i) => {
       const at = read.get(poolKey(way)) ?? new Map();

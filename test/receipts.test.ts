@@ -448,7 +448,7 @@ test("each reward weighed at last epoch's prices, or its stand-in, today's; none
 
 test("what waits is read in small batches, as each earned() can take a million gas; a failed one is unknown", async () => {
   const batches: { name: string; perBatch: number | undefined }[] = [];
-  const reader = async (calls: Call[], _block?: number | "latest", _later?: boolean, perBatch?: number) => {
+  const reader = async (calls: Call[], _block?: number | "latest", _topic?: unknown, perBatch?: number) => {
     batches.push({ name: calls[0]!.functionName, perBatch });
     return calls.map((call, i) => (call.functionName === "earned" ? (i === 1 ? undefined : 5n) : BigInt(SEP_17)));
   };

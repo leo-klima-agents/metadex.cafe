@@ -1,5 +1,5 @@
 import { decodeEventLog, numberToHex, parseAbi, type Address, type Hex } from "viem";
-import { blockTime, call, read, readLater, required, rpc, type Call } from "./chain.ts";
+import { blockTime, call, read, readFor, required, rpc, type Call } from "./chain.ts";
 import { MATCHA_LATTE } from "./config.ts";
 import { WEEK, count, money, moneyAt } from "./format.ts";
 import type { Reward } from "./earnings.ts";
@@ -240,7 +240,7 @@ export async function readStamps(
   ids: bigint[],
   pairs: Pair[],
   block: number,
-  reader: typeof read = readLater,
+  reader: typeof read = readFor("payouts"),
 ): Promise<number[][]> {
   const values = required(await reader(reads(ids, pairs, "tokenTimestamp"), block)) as bigint[];
   return byAccount(values.map(Number), ids, pairs);
@@ -251,9 +251,9 @@ export async function readEarned(
   ids: bigint[],
   pairs: Pair[],
   block: number | "latest",
-  reader: typeof read = readLater,
+  reader: typeof read = readFor("payouts"),
 ): Promise<(bigint | undefined)[][]> {
-  const values = await reader(reads(ids, pairs, "earned"), block, true, EARNED_PER_BATCH);
+  const values = await reader(reads(ids, pairs, "earned"), block, undefined, EARNED_PER_BATCH);
   return byAccount(values as (bigint | undefined)[], ids, pairs);
 }
 
@@ -282,7 +282,7 @@ export async function firstBlockAt(
   time: number,
   top: number,
   topTime: number,
-  reader: typeof read = readLater,
+  reader: typeof read = readFor("payouts"),
 ): Promise<number> {
   let [lo, loTime] = [-1, 0];
   let [hi, hiTime] = [top, topTime];
@@ -305,7 +305,7 @@ export function epochBlock(
   epoch: number,
   top: number,
   topTime: number,
-  reader: typeof read = readLater,
+  reader: typeof read = readFor("payouts"),
 ): Promise<number> {
   const kept = firsts.get(epoch);
   if (kept) return kept;
@@ -326,7 +326,7 @@ export async function payoutBlocks(
   standings: Standing[],
   top: number,
   time: number,
-  reader: typeof read = readLater,
+  reader: typeof read = readFor("payouts"),
 ): Promise<Map<bigint, number>> {
   const blocks = new Map<bigint, number>();
   const key = ({ id, through, pair }: Standing) => `${id} ${through} ${pair?.contract} ${pair?.token}`;
@@ -414,7 +414,7 @@ export async function payoutsIn(blocks: number[]): Promise<Payout[]> {
       const logs = await rpc<Log[]>(
         "eth_getLogs",
         [{ address: MATCHA_LATTE.address, fromBlock: numberToHex(block), toBlock: numberToHex(block) }],
-        { later: true, doubt: (logs) => Array.isArray(logs) && !logs.length },
+        { topic: "payouts", doubt: (logs) => Array.isArray(logs) && !logs.length },
       );
       const paid = payouts(logs);
       if (logs.length) logsOf.set(block, paid);
@@ -431,7 +431,7 @@ export async function blockTimes(blocks: number[]): Promise<Map<number, number>>
   const missing = [...new Set(blocks)].filter((block) => !times.has(block));
   const found = await Promise.all(
     missing.map((block) =>
-      rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [numberToHex(block), false], { later: true }).then(
+      rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [numberToHex(block), false], { topic: "payouts" }).then(
         ({ timestamp }) => Number(timestamp),
       ),
     ),

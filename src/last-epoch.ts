@@ -4,6 +4,7 @@ import { zeroAddress, type Address } from "viem";
 import { now, same } from "./chain.ts";
 import {
   holdersOf,
+  lastEpoch,
   readAllEarnings,
   readEarnings,
   readVoterEarnings,
@@ -27,18 +28,34 @@ type Read = { found: Earnings; value: Value };
 // not be read, or are as they were.
 type Outcome = "read" | "failed" | "same";
 const listeners: ((kind: Kind, outcome: Outcome) => void)[] = [];
-// Each automation's figures, read again once an epoch has ended, and then each five minutes until Hydrex moves on to the
-// new epoch, as it does once someone calls its minter. A read that fails keeps those of an earlier epoch.
+// The epoch whose figures the page shows: the last to have ended on Hydrex, in one read, which every read of its figures
+// waits for, and only that: each automation's, Hydrex's average, and what the wallet's accounts' votes earned. Read again
+// once an epoch has ended, and then each five minutes until Hydrex moves on to the new epoch, as it does once someone
+// calls its minter.
+const STALE = (start: number, since: number): boolean => start < weekStart(now()) - WEEK && since > RETRY;
+const epoch: Reader<number> = reader(async () => (await lastEpoch()).start, { stale: STALE });
+
+// The epoch's start: as a read under way finds it, or read first if none is known yet, or once due. Undefined if it
+// cannot be read.
+async function epochStart(): Promise<number | undefined> {
+  if (epoch.reading || epoch.value === undefined || epoch.due()) await epoch.read().catch(() => {});
+  return epoch.value;
+}
+
+// Each automation's figures, read again with the epoch. A read that fails keeps those of an earlier epoch.
 const earned = new Map<Kind, Reader<Read>>(
   AUTOMATIONS.map(({ kind, address }) => {
     let heard: Read | undefined;
     const figures: Reader<Read> = reader(
       async (before) => {
-        const found = await readEarnings(address, before?.found.start);
-        return found ? { found, value: valueOf(found) } : before!;
+        const start = await epochStart();
+        if (start === undefined) throw new Error("Hydrex's last epoch could not be read.");
+        if (before?.found.start === start) return before;
+        const found = await readEarnings(address, start);
+        return { found, value: valueOf(found) };
       },
       {
-        stale: ({ found }, since) => found.start < weekStart(now()) - WEEK && since > RETRY,
+        stale: ({ found }, since) => STALE(found.start, since),
         settled: () => {
           const outcome = figures.failed ? "failed" : figures.value !== heard ? "read" : "same";
           heard = figures.value;
@@ -68,9 +85,8 @@ const foldOf = ({ kind }: Automation): HTMLElement =>
   document.querySelector<HTMLElement>(`.view[data-kind="${kind}"] [data-section="record"]`)!;
 const part = (fold: HTMLElement, name: string): HTMLElement => fold.querySelector<HTMLElement>(`.${name}`)!;
 
-// Whether any of the automations' figures are due to be read; and whether each one's read has ended, found or failed.
+// Whether any of the automations' figures are due to be read.
 export const earningsDue = (automations: Automation[]): boolean => automations.some((each) => figuresOf(each).due());
-export const earningsEnded = (automations: Automation[]): boolean => automations.every((each) => figuresOf(each).ended);
 
 // Resolves to true once new figures are shown for any of the automations. Callers share a read under way.
 export const loadEarnings = (automations: Automation[]): Promise<boolean> =>
@@ -94,30 +110,28 @@ export const earningsFailed = (automation: Automation): boolean => {
   return figures.failed && !figures.value;
 };
 
-// An automation's figures, read first if there are none yet, or none from the epoch from `start`. The receipts read
-// each account's rewards in its pools. Just after a flip, until Hydrex moves on to the new epoch, they are still the
-// epoch before's.
+// An automation's figures, read first if there are none yet, or none from the epoch from `start`, for which Hydrex is
+// asked again. The receipts read each account's rewards in its pools. Just after a flip, until Hydrex moves on to the
+// new epoch, they are still the epoch before's.
 export async function lastEarnings(automation: Automation, start = 0): Promise<Earnings> {
+  if ((epoch.value ?? -1) < start) await epoch.read().catch(() => {});
   if ((figuresOf(automation).value?.found.start ?? -1) < start) await loadOne(automation);
   const found = figuresOf(automation).value?.found;
   if (!found) throw new Error(`What ${automation.name}'s votes earned last epoch could not be read.`);
   return found;
 }
 
-// The epoch the automations' figures are of, once one is read.
-const shownStart = (): number | undefined =>
-  Math.max(0, ...[...earned.values()].map(({ value }) => value?.found.start ?? 0)) || undefined;
-// Whether no epoch can be shown: every automation's figures failed, and none were read before. What waits for them, as
-// the average and the wallet's own votes, says it could not be read rather than stay pending, until a read succeeds.
-const noEpoch = (): boolean => !shownStart() && [...earned.values()].every(({ failed }) => failed);
+// Whether no epoch can be shown: its read failed, and none was read before. What waits for it, as the average and the
+// wallet's own votes, says it could not be read rather than stay pending, until a read succeeds.
+const noEpoch = (): boolean => epoch.value === undefined && epoch.failed;
 
 // Resolves to true once what the accounts' votes earned in the epoch shown is newly read: each account's holder and
 // votes, read once an epoch, then what each holder that is none of the page's automations earned, read once. Calls that
 // overlap read each account and each holder only once; a read that failed is tried again at a call five minutes after,
 // and resolves to true too, so that what waited for it says it could not be read.
 export async function loadShares(holdings: Holdings): Promise<boolean> {
-  const start = shownStart();
-  if (!start) return false;
+  const start = await epochStart();
+  if (start === undefined) return false;
   if (stakes?.start !== start) {
     stakes = { start, of: new Map(), asked: new Set(), failed: new Map() };
     voters.clear();
@@ -164,7 +178,7 @@ export async function loadShares(holdings: Holdings): Promise<boolean> {
 }
 
 const voterOf = (holder: Address): Reader<Read> | undefined =>
-  stakes?.start === shownStart() ? voters.get(holder.toLowerCase()) : undefined;
+  stakes?.start === epoch.value ? voters.get(holder.toLowerCase()) : undefined;
 
 // What an owner's own votes earned in the epoch shown per 1,000 votes: undefined until read, and null if it
 // could not be, until read again; "none" if none of their accounts' votes were theirs when it began, as when all were
@@ -172,7 +186,7 @@ const voterOf = (holder: Address): Reader<Read> | undefined =>
 export function ownPerThousand({ owner, accounts }: Holdings): Money | "none" | "unvoted" | null | undefined {
   const ids = accounts.filter(({ amount }) => amount > 0n).map(({ id }) => id);
   if (noEpoch()) return null;
-  if (!stakes || stakes.start !== shownStart()) return undefined;
+  if (!stakes || stakes.start !== epoch.value) return undefined;
   const unread = ids.filter((id) => !stakes!.of.has(id));
   if (unread.length) return unread.some((id) => stakes!.failed.has(id)) ? null : undefined;
   if (!ids.some((id) => same(stakes!.of.get(id)?.delegate ?? zeroAddress, owner))) return "none";
@@ -197,7 +211,7 @@ export function ownVersus(holdings: Holdings): number | null | undefined {
 // votes, or none then, a holder that did not vote, or a read that failed.
 export function earnedByAccount({ id, amount }: { id: bigint; amount: bigint }): Money | null | undefined {
   if (amount === 0n || noEpoch()) return null;
-  if (!stakes || stakes.start !== shownStart()) return undefined;
+  if (!stakes || stakes.start !== epoch.value) return undefined;
   if (!stakes.of.has(id)) return stakes.failed.has(id) ? null : undefined;
   const stake: Stake | undefined = stakes.of.get(id);
   if (!stake) return null;
@@ -205,16 +219,18 @@ export function earnedByAccount({ id, amount }: { id: bigint; amount: bigint }):
   const figures = automation ? figuresOf(automation) : voterOf(stake.delegate);
   const read = figures?.value;
   if (!read) return figures?.failed ? null : undefined;
+  // An automation's figures of the epoch before, as just after Hydrex moved on, are read again with the epoch.
+  if (automation && read.found.start < stakes.start && !figures.failed) return undefined;
   if (read.found.start !== stakes.start || !read.found.votes) return null;
   if (!automation && !read.found.pools.length) return null;
   return moneyAt((Number(stake.votes) / Number(read.found.votes)) * read.value.total, read.value);
 }
 
-// Hydrex's average, per 1,000 votes, in the epoch the automations' figures are of: read once, after the page's
-// own reads, and five minutes after a read that failed. Resolves to true once newly read, or failed.
+// Hydrex's average, per 1,000 votes, in the epoch shown: read once, and five minutes after a read that failed. Resolves
+// to true once newly read, or failed.
 export async function loadAverage(): Promise<boolean> {
-  const start = shownStart();
-  if (!start) return false;
+  const start = await epochStart();
+  if (start === undefined) return false;
   if (average?.start !== start) {
     const figures = reader(async () => {
       const all = await readAll(start);
@@ -232,7 +248,7 @@ export async function loadAverage(): Promise<boolean> {
 // Hydrex's average: undefined until read, and null if it, or the epoch it is of, could not be.
 export function averagePerThousand(): Money | null | undefined {
   if (noEpoch()) return null;
-  const figures = average?.start === shownStart() ? average?.figures : undefined;
+  const figures = average?.start === epoch.value ? average?.figures : undefined;
   return figures?.failed ? null : figures?.value?.per;
 }
 
@@ -241,7 +257,7 @@ export function averagePerThousand(): Money | null | undefined {
 // if it could not be, or if it is of another epoch than the one shown, which the page does not read.
 function versusAverage(found: Earnings): number | null | undefined {
   const figures = average?.start === found.start ? average.figures : undefined;
-  if (!figures) return found.start === shownStart() ? undefined : null;
+  if (!figures) return found.start === epoch.value ? undefined : null;
   if (figures.failed) return null;
   const all = figures.value?.all;
   if (!all) return undefined;

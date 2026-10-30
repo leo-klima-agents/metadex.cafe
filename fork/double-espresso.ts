@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { encodeFunctionData, zeroAddress } from "viem";
 import { DOUBLE_ESPRESSO, VOTING_ESCROW } from "../src/config.ts";
-import { readEarnings } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
 import {
@@ -48,6 +47,7 @@ import {
   hooks,
   startAtBlock,
   UNVOTED,
+  earnedLastEpoch,
 } from "./harness.ts";
 
 describe("the page against a fork of Base: a Safe, Double Espresso, and a new epoch", { timeout: 1_800_000 }, () => {
@@ -141,8 +141,8 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
     // The pages read these at the latest block, which anvil reads from FORK_URL a slot at a time.
     await warm(() =>
       Promise.all([
-        readEarnings(CONDUIT),
-        readEarnings(DOUBLE_ESPRESSO.address),
+        earnedLastEpoch(CONDUIT),
+        earnedLastEpoch(DOUBLE_ESPRESSO.address),
         readAccounts(NEWCOMER),
         readAccounts(LEAVER),
       ]),
@@ -248,7 +248,7 @@ describe("the page against a fork of Base: a Safe, Double Espresso, and a new ep
 
   test("the menu in the App, a page for each automation, and joining from it", async () => {
     await warm(() =>
-      Promise.all([readEarnings(CONDUIT), readEarnings(DOUBLE_ESPRESSO.address), readAccounts(NEWCOMER)]),
+      Promise.all([earnedLastEpoch(CONDUIT), earnedLastEpoch(DOUBLE_ESPRESSO.address), readAccounts(NEWCOMER)]),
     );
     const { page, violations } = await connected({ owner: NEWCOMER }, { width: 390, height: 844 });
     await account(page, 141).getByText(UNVOTED).waitFor();

@@ -11,12 +11,19 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { DOUBLE_ESPRESSO, MATCHA_LATTE, VOTING_ESCROW } from "../src/config.ts";
+import {
+  APPROVAL_LOGIC,
+  DOUBLE_ESPRESSO,
+  MATCHA_LATTE,
+  VOTING_ESCROW,
+  VOTING_ESCROW_IMPLEMENTATION,
+} from "../src/config.ts";
 import { WEEK } from "../src/format.ts";
 import {
   canJoin,
   canLeave,
   canLeaveOther,
+  failedChecks,
   groupOf,
   join,
   leave,
@@ -303,6 +310,38 @@ test("an account whose ownerOf fails is asked again on its own before it is take
     [owners, asked] = [[undefined, OWNER], 0];
     await assert.rejects(readAccount(9540n), /A read from Base failed/);
     assert.equal(asked, 2);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("every automation's checks fail once an RPC answers for another chain", async () => {
+  const multicall = parseAbi([
+    "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
+  ]);
+  const logic = toFunctionSelector("function approvalLogic()");
+  let chainId = "0x2105";
+  const original = globalThis.fetch;
+  // The VotingEscrow as the page knows it, and joining each automation on, for its claims and votes only.
+  globalThis.fetch = async (_, init) => {
+    const { method, params } = JSON.parse(String(init?.body)) as { method: string; params: [{ data: Hex }] };
+    const reply = (result: unknown) => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }));
+    if (method === "eth_chainId") return reply(chainId);
+    if (method === "eth_getStorageAt") return reply(`0x${VOTING_ESCROW_IMPLEMENTATION.slice(2).padStart(64, "0")}`);
+    const { args } = decodeFunctionData({ abi: multicall, data: params[0].data });
+    const replies = args[0].map(({ callData }) => ({
+      success: true,
+      returnData: callData.startsWith(logic)
+        ? encodeAbiParameters([{ type: "address" }], [APPROVAL_LOGIC])
+        : encodeAbiParameters([{ type: "uint8[]" }, { type: "bool" }, { type: "string" }], [[3, 5], true, ""]),
+    }));
+    return reply(encodeFunctionResult({ abi: multicall, functionName: "aggregate3", result: replies }));
+  };
+  try {
+    const failing = async () => [...(await failedChecks()).failed.values()];
+    assert.deepEqual(await failing(), [[], []]);
+    chainId = "0x1";
+    assert.deepEqual(await failing(), [["chain"], ["chain"]]);
   } finally {
     globalThis.fetch = original;
   }

@@ -1,5 +1,5 @@
 import { maxUint256, type Address } from "viem";
-import { gasPaid, includedAt, now, same, type Receipt } from "../chain.ts";
+import { gasPaid, includedAt, now, readFor, same, type Receipt } from "../chain.ts";
 import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
 import { PENDING, busy, clone, fill, fillAddress, pendWorth, setText, show, showWorth, showWorthIn } from "../dom.ts";
 import { tokensOf } from "../earnings.ts";
@@ -20,6 +20,8 @@ import {
 import { earningsOf, onEarnings } from "../last-epoch.ts";
 import { pricesIn, pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
 import type { Amount } from "../receipts.ts";
+import { checks } from "./automations.ts";
+import { views } from "./page.ts";
 import { openReview, type Hooks, type ReviewPage, type Slip } from "./review.ts";
 import { routeTogether, type Sale } from "../routing.ts";
 import { hrefOf, type Route as PageRoute } from "../routes.ts";
@@ -38,7 +40,6 @@ import {
   simulate,
   soldOf,
   split,
-  onBase,
   swapCall,
   swapGas,
   swappedIn,
@@ -114,17 +115,17 @@ type Scan = {
 
 export type SwapContext = { connection(): Connection | undefined; hooks: Hooks };
 let context: SwapContext;
+// The swap's own reads, which go first on its page and wait their turn elsewhere. A review's are always the page's own.
+const swapReads = readFor("swap");
 let scans = 0;
 let scan: Scan | undefined;
-// Whether the page's RPCs serve Base, once read, and the payout's tokens and amounts to tick, for the visit.
-let base: boolean | undefined;
+// The payout's tokens and amounts to tick, for the visit.
 let prefilled: Map<string, bigint> | undefined;
 // Whether a scan under way should be followed by another, as when new tokens became known meanwhile.
 let rescan = false;
 let allowances: Allowance[] | undefined;
 let allowancesOwner: Address | undefined;
 let allowanceReads = 0;
-let allowancesPending = false;
 const listeners: (() => void)[] = [];
 
 // The ticked tokens' routes, found together, for the tokens and amounts `key` names: each token's parts, and what each
@@ -146,8 +147,11 @@ const swapperShown = (): Swapper => {
   const shown = route();
   return swapperOf(shown.view === "swap" ? shown.output : DEFAULT_OUTPUT)!;
 };
-// Until the page has read that its RPCs serve Base, and unless they do, no swap is offered.
-export const swapsOff = (): boolean => base !== true;
+// Whether the page's RPCs serve Base, once the checks have read it. The swappers are immutable, so nothing else about
+// them can change: until this is read, and unless it holds, no swap is offered.
+const onBase = (): boolean | undefined =>
+  checks.value && ![...checks.value.failed.values()].some((failed) => failed.includes("chain"));
+export const swapsOff = (): boolean => onBase() !== true;
 const tell = (): void => listeners.forEach((listener) => listener());
 
 // Called once something the App shows from here changes: the swap's line, or the approvals left.
@@ -166,8 +170,6 @@ export const allowancesLeft = (): Allowance[] | undefined => {
   const owner = context.connection()?.address;
   return owner && same(allowancesOwner ?? "", owner) ? allowances : undefined;
 };
-// Whether the wallet's approvals are being read.
-export const allowancesReading = (): boolean => allowancesPending;
 
 // The payout's tokens and amounts, to tick on the swap's page.
 export function prefill(amounts: Amount[]): void {
@@ -342,10 +344,10 @@ function drawAll(): void {
   const swapper = swapperShown();
   for (const input of view.querySelectorAll<HTMLInputElement>('input[name="output"]')) {
     input.checked = swapperOf(input.value) === swapper;
-    input.disabled = base === false;
+    input.disabled = onBase() === false;
     show(".output-off", input.disabled, input.closest("label")!);
   }
-  show(".swap-off", base === false, view);
+  show(".swap-off", onBase() === false, view);
   if (!scan || !signedIn) {
     status.hidden = summary.hidden = true;
     show(".swap-failed, .swap-none, .add-token", false, view);
@@ -378,7 +380,7 @@ function summarise(scanned: Scan, ticked: Row[]): void {
   const splitLine = view.querySelector<HTMLElement>(".swap-split")!;
   reviewButton.disabled = !ticked.length || swapsOff() || reviewing;
   // Until the page has read that its RPCs serve Base, which is soon, the button waits, and says why.
-  show(".swap-checking", !!ticked.length && base === undefined, view);
+  show(".swap-checking", !!ticked.length && onBase() === undefined, view);
   // While the wallet's tokens are quoted, those worth swapping tick themselves: until one does, the bill keeps its place,
   // unless the owner ticked or unticked one already.
   const waiting = !ticked.length && scanned.reading && !scanned.failed && !scanned.rows.some((row) => row.touched);
@@ -530,7 +532,7 @@ async function startScan(owner: Address, swapper: Swapper, quoted = false): Prom
     const connection = context.connection();
     if (connection) know(await walletAssets(connection));
     const tokens = [...new Set(known().map(key))] as Address[];
-    const holdings = await holdingsOf(owner, tokens, swapper.address);
+    const holdings = await holdingsOf(owner, tokens, swapper.address, swapReads);
     const held = tokens.filter((token) => holdings.get(token)!.balance > 0n && !same(token, swapper.token));
     // The tokens routes pass through are named in them, held or not.
     const [described, found] = await Promise.all([
@@ -541,7 +543,7 @@ async function startScan(owner: Address, swapper: Swapper, quoted = false): Prom
     scanned.tokens = described;
     scanned.costs = found;
     const amounts = new Map(held.map((token) => [token, holdings.get(token)!.balance]));
-    scanned.prices = await pricesNow([...described.values()], amounts).catch((error: unknown) => {
+    scanned.prices = await pricesNow([...described.values()], amounts, swapReads).catch((error: unknown) => {
       console.error(error);
       return pricesIn("USD");
     });
@@ -599,7 +601,14 @@ async function startScan(owner: Address, swapper: Swapper, quoted = false): Prom
           const row = queue[next++]!;
           try {
             row.found =
-              (await findRoute(row.token.address, row.amount, swapper, isHydrex(row.token.address), gasValue)) ?? null;
+              (await findRoute(
+                row.token.address,
+                row.amount,
+                swapper,
+                isHydrex(row.token.address),
+                gasValue,
+                swapReads,
+              )) ?? null;
           } catch (error) {
             console.error(error);
             row.failed = true;
@@ -641,7 +650,6 @@ async function readAllowances(): Promise<void> {
   const reading = view.querySelector<HTMLElement>(".allowances-reading")!;
   if (!connection) {
     allowances = undefined;
-    allowancesPending = false;
     allowanceReads++;
     reading.hidden = true;
     statusLine.textContent = "Connect a wallet.";
@@ -654,14 +662,13 @@ async function readAllowances(): Promise<void> {
   const owner = connection.address;
   const id = ++allowanceReads;
   const current = () => id === allowanceReads && same(context.connection()?.address ?? "", owner);
-  allowancesPending = true;
   if (!allowances || !same(allowancesOwner ?? "", owner)) {
     statusLine.textContent = "";
     allowanceList.replaceChildren();
     reading.hidden = false;
   }
   try {
-    const found = await allowancesOf(owner, [...new Set(known().map(key))] as Address[]);
+    const found = await allowancesOf(owner, [...new Set(known().map(key))] as Address[], swapReads);
     if (!current()) return;
     const tokens = await describe(found.map(({ token }) => token));
     if (!current()) return;
@@ -689,7 +696,6 @@ async function readAllowances(): Promise<void> {
     reading.hidden = true;
     statusLine.textContent = "Reading the approvals failed.";
   }
-  allowancesPending = false;
   tell();
 }
 
@@ -1093,13 +1099,9 @@ export function walletChanged(): void {
   void readAllowances();
 }
 
-async function checkBase(): Promise<void> {
-  base = await onBase();
-  drawAll();
-}
-
 export function initSwap(given: SwapContext): void {
   context = given;
+  views.swap = drawAll;
   view.querySelector(".output-choices")!.replaceChildren(
     ...SWAPPERS.map((swapper) => {
       const choice = clone("output-choice");
@@ -1152,18 +1154,4 @@ export function initSwap(given: SwapContext): void {
     if (scan?.reading) rescan = true;
     else rescanNow();
   });
-  // Until the page has read once that its RPCs serve Base, a failed read is tried again within a minute, by one retry at
-  // a time however many reads failed meanwhile, as the hourly one.
-  let retry: ReturnType<typeof setTimeout> | undefined;
-  const check = (): void => {
-    clearTimeout(retry);
-    retry = undefined;
-    void checkBase().catch((error: unknown) => {
-      console.error(error);
-      drawAll();
-      if (base === undefined) retry ??= setTimeout(check, 60_000);
-    });
-  };
-  check();
-  setInterval(check, 3_600_000);
 }

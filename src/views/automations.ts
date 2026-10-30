@@ -31,7 +31,6 @@ import {
 } from "../last-epoch.ts";
 import { RETRY, SOON, reader, type Reader } from "../read.ts";
 import { session, shown, views } from "./page.ts";
-import { route } from "./router.ts";
 
 // The automations' state and figures, wherever they show: on Hydrex's menu, on their own pages, and beside them,
 // Hydrex's average and what the wallet's own votes earned.
@@ -60,13 +59,15 @@ export const doubleEspresso: Reader<Freshness> = reader(() => readFreshness(DOUB
   },
 });
 
-// The checks of each automation, before anyone can join it: until they have run, joining is off. They run again each
-// hour.
+// The checks of each automation, before anyone can join it, and of Base, before any swap: until they have run, joining
+// and swaps are off. They run again each hour, and at each tick until a read succeeds.
 export const checks: Reader<Checks> = reader(failedChecks, {
+  retry: SOON,
   stale: (_, since) => since >= 3_600_000,
   settled: () => {
     showChecks();
     recovered();
+    views.swap();
   },
 });
 
@@ -254,12 +255,11 @@ const versusWords = (ratio: number): string =>
     ? "About the average"
     : `${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "above" : "below"} the average`;
 
-// All of Hydrex is thousands of reads: Hydrex's and the automations' pages, which show its average, start them at once.
-// Home and the App, on the way to them, start them too, only once the App's own reads have ended, so that those come
-// first, and Hydrex's page opens with them read: see showApp, which reads it `anyway` then.
-export function readAverage(anyway = false): void {
-  if (anyway || ["hydrex", "product"].includes(route().view))
-    void loadAverage().then((changed) => changed && showRecords());
+// All of Hydrex is thousands of reads, which every page starts once the epoch is read: Hydrex's and the automations'
+// pages, which show its average, before their other reads, and the others as slots free, so that those pages open with
+// it read.
+export function readAverage(): void {
+  void loadAverage().then((changed) => changed && showRecords());
 }
 
 // Double Espresso's state, on the menu and its page.
