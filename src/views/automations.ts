@@ -59,13 +59,15 @@ export const doubleEspresso: Reader<Freshness> = reader(() => readFreshness(DOUB
   },
 });
 
-// The checks of each automation, before anyone can join it: until they have run, joining is off. They run again each
-// hour.
+// The checks of each automation, before anyone can join it, and of Base, before any swap: until they have run, joining
+// and swaps are off. They run again each hour, and at each tick until a read succeeds.
 export const checks: Reader<Checks> = reader(failedChecks, {
+  retry: SOON,
   stale: (_, since) => since >= 3_600_000,
   settled: () => {
     showChecks();
     recovered();
+    views.swap();
   },
 });
 

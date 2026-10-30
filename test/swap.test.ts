@@ -20,7 +20,6 @@ import {
   feeOf,
   findRoute,
   minimumOf,
-  onBase,
   paidOf,
   partOf,
   quoteAll,
@@ -341,19 +340,6 @@ test("a route of one hop is quoted once, as its hop, and not again as a whole", 
     assert.equal(found?.out, 2_000n);
     assert.equal(found?.route.hops.length, 1);
     assert.equal(quoted, 1);
-  } finally {
-    globalThis.fetch = original;
-  }
-});
-
-test("swaps are offered only while the page's RPCs serve Base", async () => {
-  const original = globalThis.fetch;
-  let chainId = "0x2105";
-  globalThis.fetch = async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: chainId }));
-  try {
-    assert.equal(await onBase(), true);
-    chainId = "0x1";
-    assert.equal(await onBase(), false);
   } finally {
     globalThis.fetch = original;
   }

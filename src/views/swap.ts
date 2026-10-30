@@ -20,6 +20,8 @@ import {
 import { earningsOf, onEarnings } from "../last-epoch.ts";
 import { pricesIn, pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
 import type { Amount } from "../receipts.ts";
+import { checks } from "./automations.ts";
+import { views } from "./page.ts";
 import { openReview, type Hooks, type ReviewPage, type Slip } from "./review.ts";
 import { routeTogether, type Sale } from "../routing.ts";
 import { hrefOf, type Route as PageRoute } from "../routes.ts";
@@ -38,7 +40,6 @@ import {
   simulate,
   soldOf,
   split,
-  onBase,
   swapCall,
   swapGas,
   swappedIn,
@@ -118,8 +119,7 @@ let context: SwapContext;
 const swapReads = readFor("swap");
 let scans = 0;
 let scan: Scan | undefined;
-// Whether the page's RPCs serve Base, once read, and the payout's tokens and amounts to tick, for the visit.
-let base: boolean | undefined;
+// The payout's tokens and amounts to tick, for the visit.
 let prefilled: Map<string, bigint> | undefined;
 // Whether a scan under way should be followed by another, as when new tokens became known meanwhile.
 let rescan = false;
@@ -147,8 +147,11 @@ const swapperShown = (): Swapper => {
   const shown = route();
   return swapperOf(shown.view === "swap" ? shown.output : DEFAULT_OUTPUT)!;
 };
-// Until the page has read that its RPCs serve Base, and unless they do, no swap is offered.
-export const swapsOff = (): boolean => base !== true;
+// Whether the page's RPCs serve Base, once the checks have read it. The swappers are immutable, so nothing else about
+// them can change: until this is read, and unless it holds, no swap is offered.
+const onBase = (): boolean | undefined =>
+  checks.value && ![...checks.value.failed.values()].some((failed) => failed.includes("chain"));
+export const swapsOff = (): boolean => onBase() !== true;
 const tell = (): void => listeners.forEach((listener) => listener());
 
 // Called once something the App shows from here changes: the swap's line, or the approvals left.
@@ -341,10 +344,10 @@ function drawAll(): void {
   const swapper = swapperShown();
   for (const input of view.querySelectorAll<HTMLInputElement>('input[name="output"]')) {
     input.checked = swapperOf(input.value) === swapper;
-    input.disabled = base === false;
+    input.disabled = onBase() === false;
     show(".output-off", input.disabled, input.closest("label")!);
   }
-  show(".swap-off", base === false, view);
+  show(".swap-off", onBase() === false, view);
   if (!scan || !signedIn) {
     status.hidden = summary.hidden = true;
     show(".swap-failed, .swap-none, .add-token", false, view);
@@ -377,7 +380,7 @@ function summarise(scanned: Scan, ticked: Row[]): void {
   const splitLine = view.querySelector<HTMLElement>(".swap-split")!;
   reviewButton.disabled = !ticked.length || swapsOff() || reviewing;
   // Until the page has read that its RPCs serve Base, which is soon, the button waits, and says why.
-  show(".swap-checking", !!ticked.length && base === undefined, view);
+  show(".swap-checking", !!ticked.length && onBase() === undefined, view);
   // While the wallet's tokens are quoted, those worth swapping tick themselves: until one does, the bill keeps its place,
   // unless the owner ticked or unticked one already.
   const waiting = !ticked.length && scanned.reading && !scanned.failed && !scanned.rows.some((row) => row.touched);
@@ -1096,13 +1099,9 @@ export function walletChanged(): void {
   void readAllowances();
 }
 
-async function checkBase(): Promise<void> {
-  base = await onBase();
-  drawAll();
-}
-
 export function initSwap(given: SwapContext): void {
   context = given;
+  views.swap = drawAll;
   view.querySelector(".output-choices")!.replaceChildren(
     ...SWAPPERS.map((swapper) => {
       const choice = clone("output-choice");
@@ -1155,18 +1154,4 @@ export function initSwap(given: SwapContext): void {
     if (scan?.reading) rescan = true;
     else rescanNow();
   });
-  // Until the page has read once that its RPCs serve Base, a failed read is tried again within a minute, by one retry at
-  // a time however many reads failed meanwhile, as the hourly one.
-  let retry: ReturnType<typeof setTimeout> | undefined;
-  const check = (): void => {
-    clearTimeout(retry);
-    retry = undefined;
-    void checkBase().catch((error: unknown) => {
-      console.error(error);
-      drawAll();
-      if (base === undefined) retry ??= setTimeout(check, 60_000);
-    });
-  };
-  check();
-  setInterval(check, 3_600_000);
 }

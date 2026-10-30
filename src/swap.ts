@@ -8,7 +8,7 @@ import {
   type Hex,
 } from "viem";
 import { call, now, read, rpc, same, type Call, type Receipt } from "./chain.ts";
-import { CBBTC, CHAIN_ID, HYDX, SWAPPERS, SWAP_FEE_BPS, USDC, WETH, type Swapper } from "./config.ts";
+import { CBBTC, HYDX, SWAPPERS, SWAP_FEE_BPS, USDC, WETH, type Swapper } from "./config.ts";
 import { exchangeOf, pairKey, waysFor, type Hop, type Way } from "./pools.ts";
 import type { Tx } from "./wallet.ts";
 
@@ -422,10 +422,4 @@ export function swappedIn(receipts: Receipt[], swapper: Swapper, caller: Address
     }
   }
   return outcome;
-}
-
-// Whether the page's RPCs serve Base. The swappers are immutable, so nothing else about them can change: until this is
-// read, and unless it holds, no swap is offered.
-export async function onBase(): Promise<boolean> {
-  return Number(await rpc<string>("eth_chainId", [])) === CHAIN_ID;
 }
