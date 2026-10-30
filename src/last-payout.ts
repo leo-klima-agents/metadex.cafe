@@ -1,5 +1,5 @@
 import type { Address, Hex } from "viem";
-import { blockTime, now, readLater, required, rpc, same, type Call } from "./chain.ts";
+import { blockTime, now, readFor, required, rpc, same, type Call } from "./chain.ts";
 import { lastClaimBlocks, readClaimsAt, totals, walkClaims, WALK_LIMIT, type Walk } from "./claims.ts";
 import { AUTOMATIONS, DOUBLE_ESPRESSO_FEE_BPS, KVCM, type Automation, type Kind } from "./config.ts";
 import { clone, fill, fillAddress, fillOwn, fillTime, rewrite, show, showHex, txUrl } from "./dom.ts";
@@ -29,6 +29,9 @@ import {
   type Waiting,
 } from "./receipts.ts";
 import { RETRY } from "./read.ts";
+
+// The payouts are read first on the pages that show them, and as slots free elsewhere.
+const payoutReads = readFor("payouts");
 
 // The payouts of accounts in the page's automations: for each, up to when it has been paid and what waits to be
 // claimed, then the receipt of its last payout. The App reads them for all of an owner's accounts, to mark those paid
@@ -271,8 +274,8 @@ function waitingFor(entries: Entry[]): Promise<Waiting | undefined> {
     at: time,
     amounts,
     waiting: (async () => {
-      const tokens = await tokensOf([...amounts.keys()] as Address[], readLater);
-      return { tokens, prices: await pricesNow([...tokens.values()], amounts, readLater) };
+      const tokens = await tokensOf([...amounts.keys()] as Address[], payoutReads);
+      return { tokens, prices: await pricesNow([...tokens.values()], amounts, payoutReads) };
     })().catch((error: unknown) => {
       // A failed read is not kept: the next asks again.
       console.error(error);
@@ -418,8 +421,8 @@ const readers: Record<Kind, Reader> = { "matcha-latte": matchaLattePayouts, "dou
 async function readPayouts(holdings: Holdings, members: Account[]): Promise<Found> {
   const { epochStart } = holdings;
   const ids = members.map(({ id }) => id);
-  const top = Number(await rpc<Hex>("eth_blockNumber", [], { later: true })) - SETTLED;
-  const [time, ...delegates] = await readLater(
+  const top = Number(await rpc<Hex>("eth_blockNumber", [], { topic: "payouts" })) - SETTLED;
+  const [time, ...delegates] = await payoutReads(
     [
       blockTime,
       ...ids.flatMap((id) => [epochStart - WEEK, epochStart - 2 * WEEK].map((at) => escrow("delegates", id, at))),
@@ -497,8 +500,6 @@ export type Payouts = {
   // Reads the payouts of the holdings' accounts that are in one of the page's automations, or were when this epoch
   // started. A read of the same accounts in the same epoch keeps what is shown until there is something new.
   show(holdings: Holdings): void;
-  // Whether a read of the payouts is under way: what is drawn after, as prices, is not.
-  readonly reading: boolean;
   forget(): void;
   // A payout goes on for hours, so the page may have read it half done. Every five minutes, while a payout due since
   // the flip has not reached every account, one cheap read per account shows whether it has since, and only then are
@@ -508,7 +509,7 @@ export type Payouts = {
 };
 
 // `section`, if any, shows the payouts and draws their receipts, in words to their owner when `ownedBy` says the
-// account's owner is the viewer; `found` hears of each read, even one of no accounts, and `failed` of each that failed.
+// account's owner is the viewer; `found` hears of each read, even one of no accounts.
 // Where what waits shows, in the section or by `priced`, it is shown in tokens at once, then priced: `priced` hears
 // once the read's `waiting` is set.
 export function payouts(
@@ -516,7 +517,6 @@ export function payouts(
   found: (found: Found, under: UnderWay | undefined) => void = () => {},
   ownedBy: (owner: Address) => boolean = () => true,
   priced?: (found: Found) => void,
-  failed: () => void = () => {},
 ): Payouts {
   // The accounts given, and those whose payouts were read.
   let shown: Holdings | undefined;
@@ -530,7 +530,6 @@ export function payouts(
   let underUntil = Infinity;
   let checked = 0;
   let checking = false;
-  let reading = 0;
   // The last read shown: prices read for an older one are dropped.
   let latest: Found | undefined;
   const reset = (): void => void ([signals, missed, underUntil] = [[], false, Infinity]);
@@ -567,15 +566,11 @@ export function payouts(
       if (!kept) setState("failed");
     };
     let read: Found;
-    reading++;
     try {
       read = await readPayouts(holdings, members);
     } catch (error) {
-      reading--;
-      fail(error);
-      return failed();
+      return fail(error);
     }
-    reading--;
     if (!current()) return;
     // What waits keeps the prices last read for the same owner until new ones come, if they cover each of its tokens,
     // and is priced while the receipts are drawn. Prices of other tokens would show a part of it as all of it.
@@ -624,7 +619,7 @@ export function payouts(
   async function moved(): Promise<boolean> {
     if (missed || now() >= underUntil) return true;
     const watched = signals;
-    const answers = await readLater(watched.map(({ call }) => call)).catch((error: unknown) => {
+    const answers = await payoutReads(watched.map(({ call }) => call)).catch((error: unknown) => {
       console.error(error);
       return [];
     });
@@ -637,9 +632,6 @@ export function payouts(
     show(holdings) {
       shown = holdings;
       void load(true);
-    },
-    get reading() {
-      return reading > 0;
     },
     forget() {
       shown = readFor = showing = latest = undefined;
@@ -684,7 +676,7 @@ async function draw(
         ...payouts.flatMap(({ earned, paid, fees }) => [...earned, ...paid, ...fees]),
         ...claims.flatMap(({ received }) => received),
       ].map(({ token }) => token),
-      readLater,
+      payoutReads,
     ),
     blockTimes(claims.map(({ block }) => block)),
   ]);
@@ -734,7 +726,7 @@ async function draw(
       const amounts = largestAmounts(these.flatMap((receipt) => receipt.amounts));
       // Other accounts, or a newer read, may have taken over by then.
       if (!current()) return;
-      const prices = await pricesAtFlip([...tokens.values()], amounts, flip, now(), readLater).catch((error) => {
+      const prices = await pricesAtFlip([...tokens.values()], amounts, flip, now(), payoutReads).catch((error) => {
         console.error(error);
         return undefined;
       });

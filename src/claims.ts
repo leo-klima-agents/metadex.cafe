@@ -1,5 +1,5 @@
 import { decodeEventLog, encodeEventTopics, numberToHex, parseAbi, type Address, type Hex } from "viem";
-import { readLater, required, rpc, same } from "./chain.ts";
+import { readFor, required, rpc, same } from "./chain.ts";
 import { DOUBLE_ESPRESSO } from "./config.ts";
 import { doubleEspresso } from "./hydrex.ts";
 import { order, positive, type Amount, type Log } from "./receipts.ts";
@@ -128,7 +128,7 @@ export const readClaimsAt: ClaimsAt = async (block, ids) => {
         },
       ],
       {
-        later: true,
+        topic: "payouts",
         accept: (found) => {
           const claimed = Array.isArray(found) ? claimsOf(found as Log[]) : [];
           return missing.every((id) => claimed.some((claim) => claim.id === id));
@@ -151,7 +151,7 @@ export const forgetClaims = (): void => claimsIn.clear();
 // The block of each account's last claim through Double Espresso that received anything, or 0.
 export async function lastClaimBlocks(ids: bigint[], block: number): Promise<Map<bigint, number>> {
   const found = required(
-    await readLater(
+    await readFor("payouts")(
       ids.map((id) => doubleEspresso("lastClaimBlock", id)),
       block,
     ),

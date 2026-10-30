@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { encodeAbiParameters, encodeEventTopics, parseAbi, parseAbiParameters, type Address, type Hex } from "viem";
-import { blockTime, resetRateLimits, type Call } from "../src/chain.ts";
+import { blockTime, resetRateLimits, type Call, type Topic } from "../src/chain.ts";
 import { WEEK } from "../src/format.ts";
 import { pricesIn, type Token } from "../src/prices.ts";
 import {
@@ -448,7 +448,7 @@ test("each reward weighed at last epoch's prices, or its stand-in, today's; none
 
 test("what waits is read in small batches, as each earned() can take a million gas; a failed one is unknown", async () => {
   const batches: { name: string; perBatch: number | undefined }[] = [];
-  const reader = async (calls: Call[], _block?: number | "latest", _later?: boolean, perBatch?: number) => {
+  const reader = async (calls: Call[], _block?: number | "latest", _topic?: Topic, perBatch?: number) => {
     batches.push({ name: calls[0]!.functionName, perBatch });
     return calls.map((call, i) => (call.functionName === "earned" ? (i === 1 ? undefined : 5n) : BigInt(SEP_17)));
   };

@@ -143,7 +143,10 @@ const ROUTES_PER_QUOTE = 6;
 const QUOTES_PER_READ = 3;
 export const QUOTES_PER_REQUEST = ROUTES_PER_QUOTE * QUOTES_PER_READ;
 
-export async function quoteAll(items: { swapper: Swapper; route: Route }[]): Promise<(Result | undefined)[]> {
+export async function quoteAll(
+  items: { swapper: Swapper; route: Route }[],
+  reader: typeof read = read,
+): Promise<(Result | undefined)[]> {
   const calls: { call: Call; at: number[] }[] = [];
   const bySwapper = new Map<Swapper, number[]>();
   items.forEach(({ swapper }, i) => bySwapper.set(swapper, [...(bySwapper.get(swapper) ?? []), i]));
@@ -159,10 +162,10 @@ export async function quoteAll(items: { swapper: Swapper; route: Route }[]): Pro
       });
     }
   }
-  const replies = await read(
+  const replies = await reader(
     calls.map(({ call }) => call),
     "latest",
-    true,
+    undefined,
     QUOTES_PER_READ,
   );
   const results: (Result | undefined)[] = items.map(() => undefined);
@@ -187,6 +190,7 @@ export async function findRoute(
   output: Swapper,
   hydrex: boolean,
   gasValue: (gas: bigint) => bigint = () => 0n,
+  reader: typeof read = read,
 ): Promise<Found | undefined> {
   const paths = candidatePaths(token, output.token, hydrex);
   type Partial = { path: Address[]; hops: Hop[]; amount: bigint };
@@ -194,7 +198,7 @@ export async function findRoute(
   const complete: Partial[] = [];
   while (open.length) {
     const legs = open.map(({ path, hops }) => [path[hops.length]!, path[hops.length + 1]!] as [Address, Address]);
-    const ways = await waysFor(legs);
+    const ways = await waysFor(legs, undefined, reader);
     // One quote per pool of each leg, for what the hop before paid. Legs that share their pair and amount share quotes.
     const asked = new Map<string, { way: Way; index: number }[]>();
     const items: { swapper: Swapper; route: Route }[] = [];
@@ -211,7 +215,7 @@ export async function findRoute(
       });
       asked.set(id, these);
     });
-    const results = await quoteAll(items);
+    const results = await quoteAll(items, reader);
     const next: Partial[] = [];
     open.forEach((partial, i) => {
       const [a, b] = legs[i]!;
@@ -230,7 +234,10 @@ export async function findRoute(
   // A route of one hop was quoted whole already, as its hop. Longer ones are quoted again, as their hops' pools may meet.
   const longer = complete.filter(({ hops }) => hops.length > 1);
   const whole = longer.length
-    ? await quoteAll(longer.map(({ hops }) => ({ swapper: output, route: { token, amount, minPaid: 0n, hops } })))
+    ? await quoteAll(
+        longer.map(({ hops }) => ({ swapper: output, route: { token, amount, minPaid: 0n, hops } })),
+        reader,
+      )
     : [];
   const options = complete.flatMap((partial) => {
     const route = { token, amount, minPaid: 0n, hops: partial.hops };
@@ -271,17 +278,13 @@ export const swapCall = (swapper: Swapper, routes: Route[], deadline: bigint): T
 export type Simulated = { ok: boolean; returnData: Hex; gas: bigint }[];
 
 export async function simulate(from: Address, txs: Tx[]): Promise<Simulated> {
-  const [block] = await rpc<{ calls: { status: Hex; returnData: Hex; gasUsed: Hex }[] }[]>(
-    "eth_simulateV1",
-    [
-      {
-        blockStateCalls: [{ calls: txs.map(({ to, data }) => ({ from, to, data })) }],
-        validation: false,
-      },
-      "latest",
-    ],
-    { later: false },
-  );
+  const [block] = await rpc<{ calls: { status: Hex; returnData: Hex; gasUsed: Hex }[] }[]>("eth_simulateV1", [
+    {
+      blockStateCalls: [{ calls: txs.map(({ to, data }) => ({ from, to, data })) }],
+      validation: false,
+    },
+    "latest",
+  ]);
   return (block?.calls ?? []).map(({ status, returnData, gasUsed }) => ({
     ok: status === "0x1",
     returnData,

@@ -28,8 +28,6 @@ export const appPayouts = payouts(
   // An overdue payout says what waits in tokens, then at prices now, once read: rewrite() writes its lines again, in
   // the App and on the account's page, with nothing to draw anew.
   () => {},
-  // The App waits for them, read or not, before it reads Hydrex's average.
-  () => views.app(),
 );
 
 // Forgets the wallet's payouts, as when another wallet is connected, or none.

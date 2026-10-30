@@ -4,7 +4,7 @@ import type { Locator } from "playwright-core";
 import { toFunctionSelector } from "viem";
 import { blockTime, read } from "../src/chain.ts";
 import { KVCM, VOTER } from "../src/config.ts";
-import { readEarnings, rewardsFor, stakesOf, tokensOf } from "../src/earnings.ts";
+import { rewardsFor, stakesOf, tokensOf } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
 import { readAccounts } from "../src/hydrex.ts";
 import {
@@ -55,6 +55,7 @@ import {
   hooks,
   startAtBlock,
   UNVOTED,
+  earnedLastEpoch,
 } from "./harness.ts";
 
 describe("the page against a fork of Base: its views, and each account's payouts", { timeout: 1_800_000 }, () => {
@@ -234,7 +235,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
 
   test("what the votes earned last epoch: on the menu, for a member's account, and when all of Hydrex cannot be read", async () => {
     await warm(async () => {
-      const found = (await readEarnings(CONDUIT))!;
+      const found = await earnedLastEpoch(CONDUIT);
       await stakesOf([9540n, 14485n], found.start);
     });
     // All of Hydrex, for its average and the record's popup, is refused, and noted: the rest of the page still shows.
@@ -307,7 +308,7 @@ describe("the page against a fork of Base: its views, and each account's payouts
     // They are all read first, with no time limit, as the page reads them, then their receipts' names and tokens.
     const ids = [...PAID_IDS, 9540n];
     await warm(async () => {
-      const [earnings] = await Promise.all([readEarnings(CONDUIT), readAccounts(PAYEE)]);
+      const [earnings] = await Promise.all([earnedLastEpoch(CONDUIT), readAccounts(PAYEE)]);
       const last = { start: earnings!.start, pairs: weighed(earnings!.rewards, earnings!.prices) };
       const top = BLOCK - SETTLED;
       const [[time], stamps, earned, rewards] = await Promise.all([

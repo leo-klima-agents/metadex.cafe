@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
-import { rate, resetRateLimits, rpc } from "../src/chain.ts";
+import { rate, resetRateLimits, rpc, showTopics } from "../src/chain.ts";
 import { RPCS } from "../src/config.ts";
 
 type Answer = { status?: number; body?: unknown; fail?: Error };
@@ -166,11 +166,29 @@ test("six requests at a time at most, the page's own before those in the backgro
     return new Response(JSON.stringify(result("0x1").body));
   };
   const busy = Array.from({ length: 6 }, () => rpc("first", []));
-  const later = rpc("later", [], { later: true });
+  const later = rpc("later", [], { topic: "average" });
   const now = rpc("now", []);
   await Promise.all([...busy, later, now]);
   assert.equal(most, 6);
   assert.deepEqual(order.slice(6), ["now", "later"]);
+});
+
+test("the reads of what the page shown draws go first, as the page changes while they wait", async () => {
+  const order: string[] = [];
+  globalThis.fetch = async (_, init) => {
+    order.push(JSON.parse(String(init?.body)).method);
+    await new Promise((done) => original.setTimeout(done, 100));
+    return new Response(JSON.stringify(result("0x1").body));
+  };
+  showTopics(["swap"]);
+  const busy = Array.from({ length: 6 }, () => rpc("first", []));
+  const swap = rpc("swap", [], { topic: "swap" });
+  const average = rpc("average", [], { topic: "average" });
+  const own = rpc("own", []);
+  // Hydrex's page opens while they wait.
+  showTopics(["average"]);
+  await Promise.all([...busy, swap, average, own]);
+  assert.deepEqual(order.slice(6), ["average", "own", "swap"]);
 });
 
 test("an answer the caller does not take goes to the next RPC; a pending receipt's null is one it takes", async () => {
@@ -200,8 +218,8 @@ test("a doubtful answer is taken only once no RPC answers otherwise", async () =
 test("a request waiting for room gives its turn to others", async () => {
   const asked = answering(everywhere(result("0x1")));
   // This uses up all three RPCs' limits for logs for a second.
-  await Promise.all(Array.from({ length: 15 }, () => rpc("eth_getLogs", [], { later: true })));
-  const waiting = Array.from({ length: 6 }, () => rpc("eth_getLogs", [], { later: true }));
+  await Promise.all(Array.from({ length: 15 }, () => rpc("eth_getLogs", [], { topic: "payouts" })));
+  const waiting = Array.from({ length: 6 }, () => rpc("eth_getLogs", [], { topic: "payouts" }));
   const before = performance.now();
   await rpc("eth_chainId", []);
   assert.ok(performance.now() - before < 200, "the page's read did not wait for the six");

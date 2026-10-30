@@ -77,12 +77,9 @@ const positionPayouts = payouts(
 
 // What each account's votes earned last epoch: the wallet's, and that of the account whose page is shown, in an
 // automation or through whoever voted with it, mostly its owner. Then the wallet's own votes beside Hydrex's average.
-// Only the pages that show them read them: a holder that voted this epoch takes thousands of reads.
-function showsShares(): boolean {
-  return ["hydrex", "product", "position"].includes(route().view);
-}
+// Every page reads them once the epoch and the accounts are: a holder that voted this epoch takes thousands of reads,
+// which the pages that show them make first, and the others as slots free.
 export async function showShares(): Promise<void> {
-  if (!showsShares()) return;
   const page = onPage();
   const read = [shown(), page && holdingsOf(page)].flatMap((holdings) => (holdings ? [loadShares(holdings)] : []));
   if (!(await Promise.all(read)).includes(true)) return;

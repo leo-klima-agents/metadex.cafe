@@ -158,19 +158,32 @@ export function resetRateLimits(): void {
   unanswered.clear();
   reachedAt.clear();
   cutUntil = 0;
+  shown = new Set();
 }
+
+// What a read is for: what each automation's votes earned last epoch, Hydrex's average, what the votes of the wallet's
+// accounts earned, their payouts, and the swap. The page shown draws some of these: their reads go first, and the
+// others as slots free, whatever page started them, so that every page reads what the others show without delaying its
+// own. A read with no topic always goes first: the statuses and checks, the epoch, the wallet's accounts, and whatever a
+// review or a click asks for.
+export type Topic = "earnings" | "average" | "shares" | "payouts" | "swap";
+let shown = new Set<Topic>();
+export const showTopics = (topics: Topic[]): void => void (shown = new Set(topics));
+const first = (topic: Topic | undefined): boolean => topic === undefined || shown.has(topic);
 
 let running = 0;
-const waiting = { now: [] as (() => void)[], later: [] as (() => void)[] };
+const waiting: { topic: Topic | undefined; go: () => void }[] = [];
 
-async function takeSlot(later: boolean): Promise<void> {
+async function takeSlot(topic: Topic | undefined): Promise<void> {
   if (running < MAX_IN_FLIGHT) running++;
-  else await new Promise<void>((go) => waiting[later ? "later" : "now"].push(go));
+  else await new Promise<void>((go) => waiting.push({ topic, go }));
 }
 
+// The oldest request waiting of those the page shown draws, or else the oldest: the page can change while they wait.
 function freeSlot(): void {
-  const next = waiting.now.shift() ?? waiting.later.shift();
-  if (next) next();
+  const firstOfPage = waiting.findIndex(({ topic }) => first(topic));
+  const [next] = waiting.splice(Math.max(0, firstOfPage), 1);
+  if (next) next.go();
   else running--;
 }
 
@@ -188,7 +201,7 @@ type Accept = (result: unknown) => boolean;
 const notNull: Accept = (result) => result !== null;
 // A doubtful answer, such as no logs where some are expected but not certain, is taken only once no RPC answers
 // otherwise: an RPC that is behind, or that lost some logs, answers the same.
-type Options = { later?: boolean; accept?: Accept; doubt?: Accept };
+type Options = { topic?: Topic | undefined; accept?: Accept; doubt?: Accept };
 type Doubted = { result: unknown } | undefined;
 
 type Unanswered = { answered: false; busy: boolean; reached: boolean };
@@ -221,13 +234,13 @@ async function askEach(
   urls: string[],
   method: string,
   body: string,
-  { later = false, accept = notNull, doubt }: Options,
+  { topic, accept = notNull, doubt }: Options,
 ): Promise<Answer | { answered: false; busy: string[]; doubted: Doubted }> {
   const kind: Kind = method === "eth_getLogs" ? "logs" : "all";
   const left = [...urls];
   const busy: string[] = [];
   let doubted: Doubted;
-  await takeSlot(later);
+  await takeSlot(topic);
   try {
     while (left.length) {
       if (cutOff()) throw new Unreachable();
@@ -237,7 +250,7 @@ async function askEach(
       if (i < 0) {
         freeSlot();
         await sleep(Math.min(...free) - time);
-        await takeSlot(later);
+        await takeSlot(topic);
         continue;
       }
       const [url] = left.splice(i, 1) as [string];
@@ -282,27 +295,35 @@ export async function rpc<T>(method: string, params: unknown[], options: Options
 export async function read(
   calls: Call[],
   block: number | "latest" = "latest",
-  later = false,
+  topic?: Topic,
   perBatch = CALLS_PER_BATCH,
 ): Promise<unknown[]> {
   const batches: Promise<unknown[]>[] = [];
   for (let i = 0; i < calls.length; i += perBatch) {
-    batches.push(aggregate(calls.slice(i, i + perBatch), block, later));
+    batches.push(aggregate(calls.slice(i, i + perBatch), block, topic));
   }
   return (await Promise.all(batches)).flat();
 }
 
-// The same, after the page's own reads.
-export const readLater: typeof read = (calls, block = "latest", _later, perBatch) => read(calls, block, true, perBatch);
+// The same, for a topic: one reader for each, as some reads are kept for each reader.
+const readers = new Map<Topic, typeof read>();
+export function readFor(topic: Topic): typeof read {
+  let found = readers.get(topic);
+  if (!found) {
+    found = (calls, block = "latest", _topic, perBatch) => read(calls, block, topic, perBatch);
+    readers.set(topic, found);
+  }
+  return found;
+}
 
-async function aggregate(calls: Call[], block: number | "latest", later: boolean): Promise<unknown[]> {
+async function aggregate(calls: Call[], block: number | "latest", topic: Topic | undefined): Promise<unknown[]> {
   const data = encodeFunctionData({
     abi: multicall3Abi,
     functionName: "aggregate3",
     args: [calls.map((c) => ({ target: c.address, allowFailure: true, callData: encodeFunctionData(c as never) }))],
   });
   const tag = block === "latest" ? block : numberToHex(block);
-  const reply = await rpc<Hex>("eth_call", [{ to: MULTICALL3, data }, tag], { later });
+  const reply = await rpc<Hex>("eth_call", [{ to: MULTICALL3, data }, tag], { topic });
   const results = decodeFunctionResult({ abi: multicall3Abi, functionName: "aggregate3", data: reply });
   return results.map(({ success, returnData }, i) => {
     if (!success || returnData === "0x") return undefined;

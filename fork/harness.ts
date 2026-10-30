@@ -44,11 +44,13 @@ import {
 } from "../src/config.ts";
 import {
   holdersOf,
+  lastEpoch,
   readAllEarnings,
   readEarnings,
   readVoterEarnings,
   rewardsFor,
   stakesOf,
+  type Earnings,
   type Reward,
 } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
@@ -764,12 +766,16 @@ export async function startAtBlock(): Promise<void> {
   await warmAtBlock(owners);
 }
 
+// What an automation's votes earned in the last epoch to have ended on Hydrex, as the page reads it.
+export const earnedLastEpoch = async (automation: Address): Promise<Earnings> =>
+  readEarnings(automation, (await lastEpoch()).start);
+
 // What Hydrex's page reads beside the accounts: all of Hydrex last epoch, for its average, and what the votes of each
 // owner's accounts earned through whoever held them, chosen as the page chooses them. Inside warm(), as each of these
 // is thousands of reads of state that anvil fetches from FORK_URL a slot at a time, longer than the page waits for an
 // answer.
 async function votesOf(owners: Address[]): Promise<void> {
-  const { start } = (await readEarnings(CONDUIT))!;
+  const { start } = await earnedLastEpoch(CONDUIT);
   const stakes = await Promise.all(
     owners.map(async (owner) => {
       const { accounts } = await readAccounts(owner);
@@ -791,7 +797,7 @@ export const warmAtBlock = (owners: Address[]) =>
   warm(() =>
     Promise.all([
       ...owners.map((owner) => readAccounts(owner)),
-      ...AUTOMATIONS.map(({ address }) => readEarnings(address)),
+      ...AUTOMATIONS.map(({ address }) => earnedLastEpoch(address)),
       rewardsFor(CONDUIT, FLIP - 3 * WEEK),
       votesOf(owners),
     ]),
@@ -803,8 +809,8 @@ export const warmAtBlock = (owners: Address[]) =>
 export const warmStandings = (owners: Address[], ids: bigint[]) =>
   warm(async () => {
     const [earnings] = await Promise.all([
-      readEarnings(CONDUIT),
-      readEarnings(DOUBLE_ESPRESSO.address),
+      earnedLastEpoch(CONDUIT),
+      earnedLastEpoch(DOUBLE_ESPRESSO.address),
       ...owners.map((owner) => readAccounts(owner)),
       votesOf(owners),
     ]);
@@ -821,7 +827,7 @@ export async function doubleEspressoReceipts(owners: Address[] = []): Promise<Re
   await deployDoubleEspresso();
   let rewards: Reward[] = [];
   await warm(async () => {
-    rewards = (await readEarnings(CONDUIT))!.rewards;
+    rewards = (await earnedLastEpoch(CONDUIT)).rewards;
     await readAccounts(PAYEE);
   });
   await anvil("anvil_setBalance", [PAYEE, toHex(FOR_GAS)]);
@@ -912,7 +918,7 @@ export async function fund(tokens: Address[]): Promise<void> {
   await warm(async () => {
     // The page reads the balance of every token it knows, and adds last epoch's rewards, such as AVNT, once it has read
     // each automation's.
-    await Promise.all(AUTOMATIONS.map(({ address }) => readEarnings(address)));
+    await Promise.all(AUTOMATIONS.map(({ address }) => earnedLastEpoch(address)));
     const held = await holdingsOf(SELLER, [...known(), ...tokens], into.address);
     // The page prices the tokens its routes name too.
     const described = await describeTokens([...tokens, into.token, ...MIDDLES, HYDX]);
@@ -934,7 +940,7 @@ export async function warmPayouts(owner: Address): Promise<void> {
         ),
       )
       .map(({ id }) => id);
-    const earnings = (await readEarnings(CONDUIT))!;
+    const earnings = await earnedLastEpoch(CONDUIT);
     const top = Number(await anvil<Hex>("eth_blockNumber")) - SETTLED;
     const last = weighed(earnings.rewards, earnings.prices);
     const earlier = await rewardsFor(CONDUIT, earnings.start - WEEK);

@@ -1,5 +1,5 @@
 import { maxUint256, type Address } from "viem";
-import { gasPaid, includedAt, now, same, type Receipt } from "../chain.ts";
+import { gasPaid, includedAt, now, readFor, same, type Receipt } from "../chain.ts";
 import { AUTOMATIONS, DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
 import { PENDING, busy, clone, fill, fillAddress, pendWorth, setText, show, showWorth, showWorthIn } from "../dom.ts";
 import { tokensOf } from "../earnings.ts";
@@ -114,6 +114,8 @@ type Scan = {
 
 export type SwapContext = { connection(): Connection | undefined; hooks: Hooks };
 let context: SwapContext;
+// The swap's own reads, which go first on its page and wait their turn elsewhere. A review's are always the page's own.
+const swapReads = readFor("swap");
 let scans = 0;
 let scan: Scan | undefined;
 // Whether the page's RPCs serve Base, once read, and the payout's tokens and amounts to tick, for the visit.
@@ -124,7 +126,6 @@ let rescan = false;
 let allowances: Allowance[] | undefined;
 let allowancesOwner: Address | undefined;
 let allowanceReads = 0;
-let allowancesPending = false;
 const listeners: (() => void)[] = [];
 
 // The ticked tokens' routes, found together, for the tokens and amounts `key` names: each token's parts, and what each
@@ -166,8 +167,6 @@ export const allowancesLeft = (): Allowance[] | undefined => {
   const owner = context.connection()?.address;
   return owner && same(allowancesOwner ?? "", owner) ? allowances : undefined;
 };
-// Whether the wallet's approvals are being read.
-export const allowancesReading = (): boolean => allowancesPending;
 
 // The payout's tokens and amounts, to tick on the swap's page.
 export function prefill(amounts: Amount[]): void {
@@ -530,7 +529,7 @@ async function startScan(owner: Address, swapper: Swapper, quoted = false): Prom
     const connection = context.connection();
     if (connection) know(await walletAssets(connection));
     const tokens = [...new Set(known().map(key))] as Address[];
-    const holdings = await holdingsOf(owner, tokens, swapper.address);
+    const holdings = await holdingsOf(owner, tokens, swapper.address, swapReads);
     const held = tokens.filter((token) => holdings.get(token)!.balance > 0n && !same(token, swapper.token));
     // The tokens routes pass through are named in them, held or not.
     const [described, found] = await Promise.all([
@@ -541,7 +540,7 @@ async function startScan(owner: Address, swapper: Swapper, quoted = false): Prom
     scanned.tokens = described;
     scanned.costs = found;
     const amounts = new Map(held.map((token) => [token, holdings.get(token)!.balance]));
-    scanned.prices = await pricesNow([...described.values()], amounts).catch((error: unknown) => {
+    scanned.prices = await pricesNow([...described.values()], amounts, swapReads).catch((error: unknown) => {
       console.error(error);
       return pricesIn("USD");
     });
@@ -599,7 +598,14 @@ async function startScan(owner: Address, swapper: Swapper, quoted = false): Prom
           const row = queue[next++]!;
           try {
             row.found =
-              (await findRoute(row.token.address, row.amount, swapper, isHydrex(row.token.address), gasValue)) ?? null;
+              (await findRoute(
+                row.token.address,
+                row.amount,
+                swapper,
+                isHydrex(row.token.address),
+                gasValue,
+                swapReads,
+              )) ?? null;
           } catch (error) {
             console.error(error);
             row.failed = true;
@@ -641,7 +647,6 @@ async function readAllowances(): Promise<void> {
   const reading = view.querySelector<HTMLElement>(".allowances-reading")!;
   if (!connection) {
     allowances = undefined;
-    allowancesPending = false;
     allowanceReads++;
     reading.hidden = true;
     statusLine.textContent = "Connect a wallet.";
@@ -654,14 +659,13 @@ async function readAllowances(): Promise<void> {
   const owner = connection.address;
   const id = ++allowanceReads;
   const current = () => id === allowanceReads && same(context.connection()?.address ?? "", owner);
-  allowancesPending = true;
   if (!allowances || !same(allowancesOwner ?? "", owner)) {
     statusLine.textContent = "";
     allowanceList.replaceChildren();
     reading.hidden = false;
   }
   try {
-    const found = await allowancesOf(owner, [...new Set(known().map(key))] as Address[]);
+    const found = await allowancesOf(owner, [...new Set(known().map(key))] as Address[], swapReads);
     if (!current()) return;
     const tokens = await describe(found.map(({ token }) => token));
     if (!current()) return;
@@ -689,7 +693,6 @@ async function readAllowances(): Promise<void> {
     reading.hidden = true;
     statusLine.textContent = "Reading the approvals failed.";
   }
-  allowancesPending = false;
   tell();
 }
 

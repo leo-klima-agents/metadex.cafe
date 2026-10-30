@@ -61,8 +61,9 @@ export async function holdingsOf(
   owner: Address,
   tokens: Address[],
   spender?: Address,
+  reader: typeof read = read,
 ): Promise<Map<string, { balance: bigint; allowance: bigint }>> {
-  const replies = await read(
+  const replies = await reader(
     tokens.flatMap((token) => [
       call(token, erc20Abi, "balanceOf", owner),
       ...(spender ? [call(token, erc20Abi, "allowance", owner, spender)] : []),
@@ -80,9 +81,13 @@ export async function holdingsOf(
 // What the wallet allows each swapper to take of each token, where it is more than nothing.
 export type Allowance = { token: Address; spender: Address; amount: bigint };
 
-export async function allowancesOf(owner: Address, tokens: Address[]): Promise<Allowance[]> {
+export async function allowancesOf(
+  owner: Address,
+  tokens: Address[],
+  reader: typeof read = read,
+): Promise<Allowance[]> {
   const pairs = tokens.flatMap((token) => SWAPPERS.map(({ address }) => ({ token, spender: address })));
-  const replies = await read(pairs.map(({ token, spender }) => call(token, erc20Abi, "allowance", owner, spender)));
+  const replies = await reader(pairs.map(({ token, spender }) => call(token, erc20Abi, "allowance", owner, spender)));
   return pairs.flatMap((pair, i) => {
     const amount = replies[i] as bigint | undefined;
     return amount ? [{ ...pair, amount }] : [];

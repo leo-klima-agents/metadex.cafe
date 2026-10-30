@@ -42,7 +42,7 @@ import {
 } from "../src/config.ts";
 import conduits from "../src/hydrex-conduits.json" with { type: "json" };
 import { forgetClaims } from "../src/claims.ts";
-import { forgetRewards, readEarnings, rewardsFor } from "../src/earnings.ts";
+import { forgetRewards, rewardsFor } from "../src/earnings.ts";
 import { WEEK, short } from "../src/format.ts";
 import { others } from "../src/hydrex.ts";
 import { forgetReads, readEarned, weighed } from "../src/receipts.ts";
@@ -76,6 +76,7 @@ import {
   type Rpc,
   type Sendable,
   type WalletOptions,
+  earnedLastEpoch,
 } from "./harness.ts";
 import { cacheFileOf, forkUrl, serveCached, upstreamOf, type Cache } from "./rpc-cache.ts";
 import { SCENARIOS, scenario as named, type Owner, type Scenario } from "./scenarios.ts";
@@ -750,7 +751,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     await warm(() =>
       Promise.all(
         AUTOMATIONS.map(async ({ address }) => {
-          const earnings = await readEarnings(address).catch(() => undefined);
+          const earnings = await earnedLastEpoch(address).catch(() => undefined);
           if (!earnings) return;
           const both = [earnings.rewards, await rewardsFor(address, earnings.start - WEEK)];
           await Promise.all(

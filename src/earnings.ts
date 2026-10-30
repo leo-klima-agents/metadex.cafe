@@ -1,5 +1,5 @@
 import { getAddress, parseAbi, type Address } from "viem";
-import { blockTime, call, read, readLater, required, same } from "./chain.ts";
+import { blockTime, call, read, readFor, required, same } from "./chain.ts";
 import { AUTOMATIONS } from "./config.ts";
 import { WEEK, clean } from "./format.ts";
 import { escrow, voter } from "./hydrex.ts";
@@ -36,8 +36,8 @@ const poolAbi = parseAbi([
 const tokenAbi = parseAbi(["function symbol() view returns (string)", "function decimals() view returns (uint8)"]);
 
 // An epoch's rewards are final only once Hydrex's own epoch has moved on: until someone calls its minter after the flip,
-// rewards can still be added to the epoch that just ended.
-async function lastEpoch(): Promise<{ start: number; now: number }> {
+// rewards can still be added to the epoch that just ended. So the last epoch to have ended is Hydrex's own word.
+export async function lastEpoch(): Promise<{ start: number; now: number }> {
   const [now, active] = required(await read([blockTime, voter("_epochTimestamp")])) as bigint[];
   return { start: Number(active) - WEEK, now: Number(now) };
 }
@@ -158,17 +158,14 @@ async function priced(
   return { start, votes, pools, rewards, prices };
 }
 
-// What an automation's votes earned in the last epoch that has ended, or undefined if that is still the epoch `known`.
-export async function readEarnings(automation: Address, known?: number): Promise<Earnings | undefined> {
-  const { start } = await lastEpoch();
-  if (start === known) return undefined;
-  return votesEarned(automation, start, read, true);
-}
+// What an automation's votes earned in the epoch from `start`, its pools named.
+export const readEarnings = (automation: Address, start: number): Promise<Earnings> =>
+  votesEarned(automation, start, readFor("earnings"), true);
 
-// What one voter's votes earned in the epoch from `start`, such as an owner who votes with their accounts themselves,
-// after the page's own reads; its pools go unnamed.
+// What one voter's votes earned in the epoch from `start`, such as an owner who votes with their accounts themselves;
+// its pools go unnamed.
 export const readVoterEarnings = (holder: Address, start: number): Promise<Earnings> =>
-  votesEarned(holder, start, readLater, false);
+  votesEarned(holder, start, readFor("shares"), false);
 
 // What a voter's votes earned in the epoch from `start`: an automation's, or an owner's. Its rewards go to the votes
 // standing when it starts, which a vote in the epoch before may have cast. A voter that has not voted since the epoch
@@ -223,21 +220,21 @@ async function votesEarned(holder: Address, start: number, reader: typeof read, 
 }
 
 // What an automation's votes earned in the epoch from `start`, reward by reward, unpriced. By then, Hydrex's Voter holds
-// its later votes, so the rewards are found from every pool's reward contracts: thousands of reads, after the page's
-// own, unless it had no votes then. An ended epoch's never change, so each is read once.
+// its later votes, so the rewards are found from every pool's reward contracts: thousands of reads, for the payouts,
+// unless it had no votes then. An ended epoch's never change, so each is read once.
 const paidBy = new Map<string, Promise<Reward[]>>();
 
 export function rewardsFor(automation: Address, start: number): Promise<Reward[]> {
   const key = `${automation.toLowerCase()} ${start}`;
   let found = paidBy.get(key);
   if (!found) {
-    found = readLater([escrow("getPastVotes", automation, start)]).then(async ([votes]) => {
+    found = readFor("payouts")([escrow("getPastVotes", automation, start)]).then(async ([votes]) => {
       if (required([votes])[0] === 0n) return [];
-      const bribes = await bribesOf(await allPools(readLater), readLater);
-      const { rewards } = await rewardsOf(bribes, start, automation, readLater);
+      const bribes = await bribesOf(await allPools(readFor("payouts")), readFor("payouts"));
+      const { rewards } = await rewardsOf(bribes, start, automation, readFor("payouts"));
       const tokens = await tokensOf(
         rewards.map(({ token }) => token),
-        readLater,
+        readFor("payouts"),
       );
       return withTokens(rewards, tokens);
     });
@@ -250,25 +247,27 @@ export function rewardsFor(automation: Address, start: number): Promise<Reward[]
 // For tests: the rewards read are kept for the rest of the session.
 export const forgetRewards = (): void => paidBy.clear();
 
-// What all votes on Hydrex earned in the same epoch, for the average. Thousands of reads, after the page's own.
+// What all votes on Hydrex earned in the same epoch, for the average. Thousands of reads.
 export async function readAllEarnings(start: number): Promise<Earnings> {
   const [[now, votes], pools] = await Promise.all([
-    readLater([blockTime, voter("totalWeightAt", start)]).then((values) => required(values) as bigint[]),
-    allPools(readLater),
+    readFor("average")([blockTime, voter("totalWeightAt", start)]).then((values) => required(values) as bigint[]),
+    allPools(readFor("average")),
   ]);
-  const found = await rewardsOf(await bribesOf(pools, readLater), start, undefined, readLater);
+  const found = await rewardsOf(await bribesOf(pools, readFor("average")), start, undefined, readFor("average"));
   const voted = [...found.votes].map(([address, poolVotes]) => ({ address, name: "", votes: poolVotes }));
   const tokens = await tokensOf(
     found.rewards.map(({ token }) => token),
-    readLater,
+    readFor("average"),
   );
-  return priced(start, Number(now), votes!, voted, found, tokens, readLater);
+  return priced(start, Number(now), votes!, voted, found, tokens, readFor("average"));
 }
 
 // Who held each account's votes when the epoch from `start` began, and how many: an account counts for whoever held them.
 export type Stake = { delegate: Address; votes: bigint };
 export async function stakesOf(ids: bigint[], start: number): Promise<Map<bigint, Stake>> {
-  const found = await read(ids.flatMap((id) => [escrow("delegates", id, start), escrow("balanceOfNFTAt", id, start)]));
+  const found = await readFor("shares")(
+    ids.flatMap((id) => [escrow("delegates", id, start), escrow("balanceOfNFTAt", id, start)]),
+  );
   return new Map(
     ids.flatMap((id, i) => {
       const [delegate, votes] = found.slice(2 * i, 2 * i + 2) as [Address | undefined, bigint | undefined];
