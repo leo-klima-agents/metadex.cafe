@@ -5,7 +5,6 @@
     "lib": ["es2025", "dom", "dom.iterable"],
     "types": ["node"],
     "strict": true,
-    "exactOptionalPropertyTypes": true,
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "erasableSyntaxOnly": true,

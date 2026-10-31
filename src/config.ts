@@ -1,25 +1,14 @@
 import type { Address } from "viem";
-import type { Fiat } from "./format.ts";
 
 export const CHAIN_ID = 8453;
 // Asked in this order. drpc serves old blocks for free; publicnode needs a paid token for them.
 export const RPCS = ["https://mainnet.base.org", "https://base.drpc.org", "https://base-rpc.publicnode.com"];
 export const MULTICALL3: Address = "0xcA11bde05977b3631167028862bE2a173976CA11";
 
-// The automations the page offers, and the Hydrex contracts the page checks before it lets anyone join. The kind picks
-// an automation's reads and its receipts.
 export type Kind = "matcha-latte" | "double-espresso";
-export type Automation = {
-  kind: Kind;
-  name: string;
-  // Its smart contract's name, which a review gives beside its address.
-  contract: string;
-  address: Address;
-  // What joining approves: 3 sends the account's claims to the automation, 5 delegates its votes.
-  actions: number[];
-};
-// Hydrex's automation, whose votes and payouts an operator now sends. Hydrex controls its settings, which the page
-// reads from Base.
+// `actions` is what joining approves: 3 sends the account's claims to the automation, 5 delegates its votes.
+export type Automation = { kind: Kind; name: string; contract: string; address: Address; actions: number[] };
+// Hydrex's automation; Hydrex controls its settings.
 export const MATCHA_LATTE: Automation = {
   kind: "matcha-latte",
   name: "Matcha Latte",
@@ -27,9 +16,7 @@ export const MATCHA_LATTE: Automation = {
   address: "0xdE91885cF35ac57DF0c4A75c16862127dBe8317c",
   actions: [3, 5],
 };
-// ImmutableVeTokenConduit version 2, from https://github.com/ldeso/hydrex-conduit at tag v2, commit 718c107. It has no
-// owner and no settings: its fee and where the fee goes are immutable in its code. It deployed through CREATE2, on Tue
-// 20 Oct 2026. Version 1, at 0x8B79159681aEbeC096D06F3d996fCd2f72e54f8B, still works, but the page does not offer it.
+// ImmutableVeTokenConduit v2 (github.com/ldeso/hydrex-conduit, tag v2): no owner, no settings.
 export const DOUBLE_ESPRESSO: Automation = {
   kind: "double-espresso",
   name: "Double Espresso",
@@ -38,13 +25,11 @@ export const DOUBLE_ESPRESSO: Automation = {
   actions: [3, 5],
 };
 export const AUTOMATIONS = [MATCHA_LATTE, DOUBLE_ESPRESSO];
-export const byKind = (kind: string): Automation | undefined =>
-  AUTOMATIONS.find((automation) => automation.kind === kind);
-// Double Espresso's fee, FEE_BPS in its code, of each claim, and its recipient, TREASURY in its code, a 2-of-3 Safe.
-export const DOUBLE_ESPRESSO_FEE_BPS = 100n;
-export const DOUBLE_ESPRESSO_FEE_RECIPIENT: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
-// Matcha Latte's operator, as its popup gives it: a 2-of-3 Safe that holds its EXECUTOR_ROLE, whose module votes and
-// sends payouts for it.
+export const byKind = (kind: string): Automation | undefined => AUTOMATIONS.find((each) => each.kind === kind);
+// Double Espresso's fee of each claim and the swappers' fee of each route, and the 2-of-3 Safe both go to.
+export const FEE_BPS = 100n;
+export const FEE_RECIPIENT: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
+// The 2-of-3 Safe that holds Matcha Latte's EXECUTOR_ROLE.
 export const MATCHA_LATTE_OPERATOR: Address = "0x17f513C024C1C67db050258ba569c714a9CF1B12";
 export const KVCM: Address = "0x00fBAC94Fec8D4089d3fe979F39454F48c71A65d";
 export const VOTING_ESCROW: Address = "0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1";
@@ -53,113 +38,63 @@ export const APPROVAL_LOGIC: Address = "0x4B0BC0889EB524Dbae36d409fF733851E9B4f6
 export const VOTER: Address = "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b";
 export const ACCOUNT_NAMES: Address = "0x998cf40a742460b4eBbFB569A0D23eA91976c0d3";
 
-// Hydrex's pool factories.
-export const ALGEBRA_FACTORY: Address = "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E";
-export const PAIR_FACTORY: Address = "0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0";
-// The tokens others are priced against, each priced by its Chainlink feed.
-export type Feed = { address: Address; decimals: number };
-export type Anchor = { address: Address; decimals: number; feed: Feed };
 export const WETH: Address = "0x4200000000000000000000000000000000000006";
 export const USDC: Address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 export const CBBTC: Address = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
 export const EURC: Address = "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42";
 export const HYDX: Address = "0x00000e7efa313F4E11Bfff432471eD9423AC6B30";
-const anchor = (address: Address, decimals: number, feed: Address): Anchor => ({
-  address,
-  decimals,
-  feed: { address: feed, decimals: 8 },
-});
-// Each currency's price in dollars, to show prices in it: not anchors, as no token priced here is the currency itself.
-// Chainlink's on Base: EUR / USD, GBP / USD, CHF / USD, AUD / USD and CAD / USD.
-export const FIAT_FEEDS: Record<Fiat, Feed> = {
-  EUR: { address: "0xc91D87E81faB8f93699ECf7Ee9B44D11e1D53F0F", decimals: 8 },
-  GBP: { address: "0xCceA6576904C118037695eB71195a5425E69Fa15", decimals: 8 },
-  CHF: { address: "0x3A1d6444fb6a402470098E23DaD0B7E86E14252F", decimals: 8 },
-  AUD: { address: "0x46e51B8cA41d709928EdA9Ae43e42193E6CDf229", decimals: 8 },
-  CAD: { address: "0xA840145F87572E82519d578b1F36340368a25D5d", decimals: 8 },
+
+export const CURRENCIES = ["USD", "EUR", "GBP", "CHF", "AUD", "CAD"] as const;
+export type Currency = (typeof CURRENCIES)[number];
+export type Fiat = Exclude<Currency, "USD">;
+// Chainlink feeds on Base, all with 8 decimals: each currency's price in dollars, and the anchors others are priced by.
+export const FIAT_FEEDS: Record<Fiat, Address> = {
+  EUR: "0xc91D87E81faB8f93699ECf7Ee9B44D11e1D53F0F",
+  GBP: "0xCceA6576904C118037695eB71195a5425E69Fa15",
+  CHF: "0x3A1d6444fb6a402470098E23DaD0B7E86E14252F",
+  AUD: "0x46e51B8cA41d709928EdA9Ae43e42193E6CDf229",
+  CAD: "0xA840145F87572E82519d578b1F36340368a25D5d",
 };
+export type Anchor = { address: Address; decimals: number; feed: Address };
 export const ANCHORS: Anchor[] = [
-  // USDC / USD
-  anchor(USDC, 6, "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B"),
-  // ETH / USD
-  anchor(WETH, 18, "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70"),
-  // BTC / USD
-  anchor(CBBTC, 8, "0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F"),
-  // EURC / USD
-  anchor(EURC, 6, "0xDAe398520e2B67cd3f27aeF9Cf14D93D927f8250"),
+  { address: USDC, decimals: 6, feed: "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B" },
+  { address: WETH, decimals: 18, feed: "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70" },
+  { address: CBBTC, decimals: 8, feed: "0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F" },
+  { address: EURC, decimals: 6, feed: "0xDAe398520e2B67cd3f27aeF9Cf14D93D927f8250" },
 ];
 
-// The swap: ImmutableSwapper, deployed once per output token on 21 Oct 2026. Each sells the tokens its caller names for
-// its output, along the routes its caller picks, through pools it checks against the twelve factories below, and sends
-// 1% of each route's output to Double Espresso's fee recipient. It has no owner and no settings. Its sources are verified,
-// with an exact match, on Basescan and Sourcify.
+// ImmutableSwapper, one per output: no owner, no settings. `places` shows about a cent at its usual price.
 export type Output = "usdc" | "eurc" | "weth" | "cbbtc" | "aero" | "hydx";
 export type Swapper = {
   output: Output;
   symbol: string;
   token: Address;
   decimals: number;
-  // The decimal places its amounts show to without its price: about a cent at its usual price.
   places: number;
   address: Address;
 };
+const swapper = (output: Output, symbol: string, token: Address, decimals: number, places: number, address: Address) =>
+  ({ output, symbol, token, decimals, places, address }) as Swapper;
 export const SWAPPERS: Swapper[] = [
-  {
-    output: "usdc",
-    symbol: "USDC",
-    token: USDC,
-    decimals: 6,
-    places: 2,
-    address: "0x31791f453d2100e728E012c9e189C0828adf4b6F",
-  },
-  {
-    output: "eurc",
-    symbol: "EURC",
-    token: EURC,
-    decimals: 6,
-    places: 2,
-    address: "0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E",
-  },
-  {
-    output: "weth",
-    symbol: "WETH",
-    token: WETH,
-    decimals: 18,
-    places: 6,
-    address: "0xe5cbD828c2227E17f7FF8BD54C7A1e6012694Ff2",
-  },
-  {
-    output: "cbbtc",
-    symbol: "cbBTC",
-    token: CBBTC,
-    decimals: 8,
-    places: 7,
-    address: "0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0",
-  },
-  {
-    output: "aero",
-    symbol: "AERO",
-    token: "0x3f5bF3EdAc59d650D8fDf9657a71F2f904A3a4Ee",
-    decimals: 18,
-    places: 2,
-    address: "0xdd575A498C625AF96ac89efE578Dc68f4c9aB963",
-  },
-  {
-    output: "hydx",
-    symbol: "HYDX",
-    token: HYDX,
-    decimals: 18,
-    places: 2,
-    address: "0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC",
-  },
+  swapper("usdc", "USDC", USDC, 6, 2, "0x31791f453d2100e728E012c9e189C0828adf4b6F"),
+  swapper("eurc", "EURC", EURC, 6, 2, "0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E"),
+  swapper("weth", "WETH", WETH, 18, 6, "0xe5cbD828c2227E17f7FF8BD54C7A1e6012694Ff2"),
+  swapper("cbbtc", "cbBTC", CBBTC, 8, 7, "0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0"),
+  swapper(
+    "aero",
+    "AERO",
+    "0x3f5bF3EdAc59d650D8fDf9657a71F2f904A3a4Ee",
+    18,
+    2,
+    "0xdd575A498C625AF96ac89efE578Dc68f4c9aB963",
+  ),
+  swapper("hydx", "HYDX", HYDX, 18, 2, "0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC"),
 ];
 export const DEFAULT_OUTPUT: Output = "usdc";
 export const swapperOf = (output: string): Swapper | undefined => SWAPPERS.find((each) => each.output === output);
-// FEE_BPS in its code.
-export const SWAP_FEE_BPS = 100n;
 
-// The swappers' exchanges, in the page's order. `id` is the swapper's Exchange enum and exchanges() index. Aero's basic
-// pools have a factory per curve; Uniswap v4's is its PoolManager.
+// The swappers' exchanges, in the page's order. `id` is the swapper's Exchange enum. Uniswap v4's factory is its
+// PoolManager.
 export type ExchangeKind = "algebra" | "pair" | "solidly" | "slipstream" | "aerodrome" | "v2" | "v3" | "v4";
 export type Exchange = { id: number; name: string; kind: ExchangeKind; factory: Address; stable?: boolean };
 export const EXCHANGES: Exchange[] = [
@@ -179,12 +114,11 @@ export const EXCHANGES: Exchange[] = [
   { id: 11, name: "Uniswap v4", kind: "v4", factory: "0x498581fF718922c3f8e6A244956aF099B2652b2b" },
   { id: 10, name: "Uniswap v3", kind: "v3", factory: "0x33128a8fC17869897dcE68Ed026d694621f6FDfD" },
   { id: 9, name: "Uniswap v2", kind: "v2", factory: "0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6" },
-  { id: 1, name: "Hydrex Classic Pools", kind: "pair", factory: PAIR_FACTORY },
-  { id: 0, name: "Hydrex Integral", kind: "algebra", factory: ALGEBRA_FACTORY },
+  { id: 1, name: "Hydrex Classic Pools", kind: "pair", factory: "0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0" },
+  { id: 0, name: "Hydrex Integral", kind: "algebra", factory: "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E" },
 ];
-
-// Where tokens are priced against the anchors, in order: prices now in Aero Basic Pools, Aerodrome Basic Pools, Hydrex
-// Classic Pools and Hydrex Integral; prices at an epoch's end in Hydrex's two.
-const exchangesOf = (kind: ExchangeKind): Exchange[] => EXCHANGES.filter((exchange) => exchange.kind === kind);
-export const HYDREX_PRICING: Exchange[] = [...exchangesOf("pair"), ...exchangesOf("algebra")];
-export const SWAP_PRICING: Exchange[] = [...exchangesOf("solidly"), ...exchangesOf("aerodrome"), ...HYDREX_PRICING];
+const exchangesOf = (...kinds: ExchangeKind[]) =>
+  kinds.flatMap((kind) => EXCHANGES.filter((each) => each.kind === kind));
+// Prices at an epoch's end come from Hydrex's pools; prices now from the basic pools too, the first of two as deep.
+export const HYDREX_PRICING = exchangesOf("pair", "algebra");
+export const SWAP_PRICING = exchangesOf("solidly", "aerodrome", "pair", "algebra");
