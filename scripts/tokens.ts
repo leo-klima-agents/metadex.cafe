@@ -1,44 +1,26 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { getAddress, type Address } from "viem";
-import { tokensOf } from "../src/earnings.ts";
+import { ABI, type Token } from "../src/config.ts";
+import { call, read } from "../src/rpc.ts";
 
-// Checks the page's list of tokens, src/base-tokens.json, against Base: each address's symbol and decimals, as its
-// contract answers them now. `node scripts/tokens.ts` prints what differs; with --write, it writes the list back with
-// Base's answers, and `node scripts/tokens.ts --add 0x…` adds a token. A token that no longer answers is left as it is,
-// for its maintainer to remove by hand.
-
-const PATH = fileURLToPath(new URL("../src/base-tokens.json", import.meta.url));
-type Entry = { symbol: string; name?: string; address: string; decimals: number };
-
-const list = JSON.parse(readFileSync(PATH, "utf8")) as Entry[];
-const added = process.argv.flatMap((arg, i) => (process.argv[i - 1] === "--add" ? [getAddress(arg)] : []));
-for (const address of added) {
-  if (!list.some((entry) => entry.address.toLowerCase() === address.toLowerCase()))
-    list.push({ symbol: "", address, decimals: 0 });
-}
-const found = await tokensOf(list.map(({ address }) => address as Address));
-let differs = 0;
-const checked = list.map((entry) => {
-  const token = found.get(entry.address.toLowerCase());
-  if (!token) {
-    console.log(`${entry.address} (${entry.symbol}) does not answer as a token.`);
-    differs++;
-    return entry;
+// Checks src/tokens.json against Base: `--add 0x…` adds a token, `--write` writes Base's answers back.
+const PATH = new URL("../src/tokens.json", import.meta.url);
+const list = JSON.parse(readFileSync(PATH, "utf8")) as Token[];
+for (const [i, arg] of process.argv.entries())
+  if (process.argv[i - 1] === "--add" && !list.some(({ address }) => address.toLowerCase() === arg.toLowerCase()))
+    list.push({ symbol: "", address: getAddress(arg), decimals: 0 });
+const found = await read(
+  list.flatMap(({ address }) => ["symbol", "decimals"].map((name) => call(address as Address, ABI.erc20, name))),
+);
+const checked = list.flatMap((token, i) => {
+  const [symbol, decimals] = found.slice(2 * i, 2 * i + 2) as [string | undefined, number | undefined];
+  if (symbol === undefined || decimals === undefined) {
+    console.log(`${token.address} (${token.symbol}) does not answer as a token.`);
+    return token.symbol ? [token] : [];
   }
-  if (
-    token.symbol !== entry.symbol ||
-    token.decimals !== entry.decimals ||
-    getAddress(entry.address) !== entry.address
-  ) {
-    console.log(
-      `${entry.address}: ${entry.symbol} ${entry.decimals} on the list, ${token.symbol} ${token.decimals} on Base.`,
-    );
-    differs++;
-  }
-  return { ...entry, symbol: token.symbol, address: getAddress(entry.address), decimals: token.decimals };
+  const answer = { ...token, symbol, decimals, address: getAddress(token.address) };
+  if (JSON.stringify(answer) !== JSON.stringify(token))
+    console.log(`${token.address}: ${token.symbol} ${token.decimals} listed, ${symbol} ${decimals} on Base.`);
+  return [answer];
 });
-// A token added that does not answer is not written: only those already on the list stay for their maintainer.
-const kept = checked.filter(({ address }) => found.has(address.toLowerCase()) || !added.includes(getAddress(address)));
-if (process.argv.includes("--write")) writeFileSync(PATH, `${JSON.stringify(kept, null, 2)}\n`);
-else if (!differs) console.log(`All ${list.length} tokens are as Base says.`);
+if (process.argv.includes("--write")) writeFileSync(PATH, `${JSON.stringify(checked, null, 2)}\n`);

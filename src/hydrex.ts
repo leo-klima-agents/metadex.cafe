@@ -1,149 +1,47 @@
-import { encodeFunctionData, parseAbi, zeroAddress, type Address, type Hex } from "viem";
-import { blockTime, call, implementation, read, required, rpc, same, type Call } from "./chain.ts";
+import { encodeFunctionData, zeroAddress, type Address, type Hex } from "viem";
 import {
+  ABI,
   ACCOUNT_NAMES,
   APPROVAL_LOGIC,
   AUTOMATIONS,
-  DOUBLE_ESPRESSO,
-  MATCHA_LATTE,
   CHAIN_ID,
+  GAS_PRICE_ORACLE,
+  MATCHA_LATTE,
+  DOUBLE_ESPRESSO,
   VOTER,
   VOTING_ESCROW,
   VOTING_ESCROW_IMPLEMENTATION,
   type Automation,
   type Kind,
 } from "./config.ts";
-import { WEEK, clean, list, weekStart } from "./format.ts";
-import conduits from "./hydrex-conduits.json" with { type: "json" };
-import { anchorsNow, type Prices } from "./prices.ts";
-import { costs } from "./swap-calls.ts";
-import type { Slip } from "./views/review.ts";
+import conduits from "./conduits.json" with { type: "json" };
+import { WEEK, clean, weekStart } from "./format.ts";
+import { anchorsNow, costs, type Prices } from "./prices.ts";
+import { blockTime, call, implementation, read, required, rpc, type Call } from "./rpc.ts";
+import { memo, same } from "./util.ts";
 import type { Tx } from "./wallet.ts";
 
-const votingEscrowAbi = parseAbi([
-  "function balanceOf(address owner) view returns (uint256)",
-  "function ownerOf(uint256 tokenId) view returns (address)",
-  "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
-  "function lockDetails(uint256 tokenId) view returns ((uint256 amount, uint256 startTime, uint256 endTime, uint8 lockType))",
-  "function balanceOfNFT(uint256 tokenId) view returns (uint256)",
-  "function balanceOfNFTAt(uint256 tokenId, uint256 timestamp) view returns (uint256)",
-  "function getLockDelegatee(uint256 tokenId) view returns (address)",
-  "function delegates(uint256 tokenId, uint48 timestamp) view returns (address)",
-  "function getClaimRedirectApproved(uint256 tokenId) view returns (address)",
-  "function getPastVotes(address account, uint256 timepoint) view returns (uint256)",
-  "function getConduitApprovalConfig(address conduit) view returns (uint8[] actions, bool active, string description)",
-  "function approvalLogic() view returns (address)",
-  "function setConduitApproval(address conduit, uint256 tokenId, bool approve)",
-]);
-
-const voterAbi = parseAbi([
-  "function _epochTimestamp() view returns (uint256)",
-  "function lastVoted(address voter) view returns (uint256)",
-  "function poolVoteLength(address voter) view returns (uint256)",
-  "function poolVote(address voter, uint256 index) view returns (address)",
-  "function length() view returns (uint256)",
-  "function pools(uint256 index) view returns (address)",
-  "function gauges(address pool) view returns (address)",
-  "function internal_bribes(address gauge) view returns (address)",
-  "function external_bribes(address gauge) view returns (address)",
-  "function totalWeightAt(uint256 time) view returns (uint256)",
-]);
-
-const matchaLatteAbi = parseAbi([
-  "function retireBps() view returns (uint256)",
-  "function treasuryFeeBps() view returns (uint256)",
-  "function MAX_TREASURY_FEE_BPS() view returns (uint256)",
-  "function treasury() view returns (address)",
-  "function totalTonnesRetired() view returns (uint256)",
-]);
-
-const doubleEspressoAbi = parseAbi(["function lastClaimBlock(uint256 tokenId) view returns (uint256)"]);
-
-// Base's predeploy that prices posting a transaction's data to Ethereum.
-const GAS_PRICE_ORACLE: Address = "0x420000000000000000000000000000000000000F";
-const gasPriceOracleAbi = parseAbi(["function getL1FeeUpperBound(uint256 unsignedTxSize) view returns (uint256)"]);
-
-const accountNamesAbi = parseAbi(["function getBulkNames(uint256[] tokenIds) view returns (string[])"]);
-
-export const escrow = (functionName: string, ...args: unknown[]) =>
-  call(VOTING_ESCROW, votingEscrowAbi, functionName, ...args);
-export const voter = (functionName: string, ...args: unknown[]) => call(VOTER, voterAbi, functionName, ...args);
-export const matchaLatte = (functionName: string, ...args: unknown[]) =>
-  call(MATCHA_LATTE.address, matchaLatteAbi, functionName, ...args);
-export const doubleEspresso = (functionName: string, ...args: unknown[]) =>
-  call(DOUBLE_ESPRESSO.address, doubleEspressoAbi, functionName, ...args);
-
-// Hydrex's other automations. If Hydrex lists one of the page's own, the page still treats it as its own.
-export const others = conduits.filter(
-  ({ address }) => !AUTOMATIONS.some((automation) => same(address, automation.address)),
-);
-
-export const LockType = { timed: 0, rolling: 1, permanent: 2 } as const;
+export const escrow = (name: string, ...args: unknown[]) => call(VOTING_ESCROW, ABI.escrow, name, ...args);
+export const voter = (name: string, ...args: unknown[]) => call(VOTER, ABI.voter, name, ...args);
+const matchaLatte = (name: string) => call(MATCHA_LATTE.address, ABI.matchaLatte, name);
+// Hydrex's other automations, as api.hydrex.fi/conduits lists them.
+export const OTHERS = conduits as { name: string; address: Address }[];
+export const otherName = (address: Address) => OTHERS.find((other) => same(other.address, address))?.name;
+const ours = (address: Address) => AUTOMATIONS.find((automation) => same(address, automation.address));
 
 export type MatchaLatte = {
-  time: number;
   epochStart: number;
   retireBps: bigint;
   tonnes: bigint;
-  // When it last voted, or 0. It, its fee, the most the fee can become, and where the fee goes may be unknown, as
-  // their reads may fail apart from the others: the page then says so, and reads them again later.
+  // Each may fail on its own.
   voted?: number;
   feeBps?: bigint;
   maxFeeBps?: bigint;
   feeRecipient?: Address;
 };
-
-// The share of a payout's kVCM that reaches the owner: Matcha Latte retires its share first, then takes its fee from
-// the rest. Unknown while the fee is: counting it as none would promise the owner too much.
+// What reaches the owner: the share retired first, then the fee from the rest; unknown with the fee.
 export const paidBpsOf = ({ retireBps, feeBps }: MatchaLatte): bigint | undefined =>
   feeBps === undefined ? undefined : ((10_000n - retireBps) * (10_000n - feeBps)) / 10_000n;
-
-export type Account = {
-  id: bigint;
-  name: string;
-  amount: bigint;
-  end: number;
-  lockType: number;
-  votes: bigint;
-  delegate: Address;
-  delegateAtStart: Address;
-  // When the automation that holds its votes last voted, or 0.
-  delegateVoted: number;
-  // When its owner last voted, or 0: an account they vote with themselves earns only in an epoch they voted in.
-  ownerVoted: number;
-  claimer: Address;
-};
-
-export type Holdings = {
-  owner: Address;
-  accounts: Account[];
-  time: number;
-  epochStart: number;
-};
-
-// "in", "partly", "joined" and "left" are about the page's own automations.
-export type Status =
-  | { kind: "in" | "partly"; automation: Automation }
-  | { kind: "joined" | "left"; automation: Automation; date: number }
-  | { kind: "self" | "ended" | "empty" }
-  | { kind: "other"; name: string }
-  | { kind: "left-other"; name: string; date: number }
-  | { kind: "stopped"; name: string; voted: number; since: number }
-  // Its owner votes with it, but has not voted since before last epoch, or ever: 0.
-  | { kind: "unvoted"; voted: number }
-  | { kind: "delegated"; to: Address };
-
-// The App's groups: accounts that need their owner, by what each needs, as each takes its own remedy (in one of Hydrex's
-// automations that stopped, partly in one of the page's, or not voted with), those in each of the page's automations or
-// joining it, the others, and those with nothing to vote with.
-export type Group = "needs:stopped" | "needs:partly" | "needs:unvoted" | `in:${Kind}` | "other" | "closed";
-
-// `automation` is set only when the call is about another of Hydrex's automations.
-export type Step = Slip & { id: bigint; approve: boolean; conduit: Address; conduitName: string; automation?: string };
-
-// Epochs follow the calendar. Hydrex's Voter moves its own epoch only once someone calls the minter, but joins count
-// from the next Thursday either way.
-const epochAt = (time: unknown): number => weekStart(Number(time));
 
 export async function readMatchaLatte(): Promise<MatchaLatte> {
   const replies = await read([
@@ -155,14 +53,12 @@ export async function readMatchaLatte(): Promise<MatchaLatte> {
     matchaLatte("MAX_TREASURY_FEE_BPS"),
     matchaLatte("treasury"),
   ]);
-  const [time, retireBps, tonnes] = required(replies.slice(0, 3)) as [bigint, bigint, bigint];
-  const voted = replies[3] as bigint | undefined;
-  const [feeBps, maxFeeBps, feeRecipient] = replies.slice(4) as [bigint?, bigint?, Address?];
+  const [time, retireBps, tonnes] = required(replies.slice(0, 3)) as bigint[];
+  const [voted, feeBps, maxFeeBps, feeRecipient] = replies.slice(3) as [bigint?, bigint?, bigint?, Address?];
   return {
-    time: Number(time),
-    epochStart: epochAt(time),
-    retireBps,
-    tonnes,
+    epochStart: weekStart(Number(time)),
+    retireBps: retireBps!,
+    tonnes: tonnes!,
     ...(voted !== undefined && { voted: Number(voted) }),
     ...(feeBps !== undefined && { feeBps }),
     ...(maxFeeBps !== undefined && { maxFeeBps }),
@@ -170,24 +66,47 @@ export async function readMatchaLatte(): Promise<MatchaLatte> {
   };
 }
 
-// When each of Hydrex's other automations last voted. If the Voter cannot be read, they are just not known to have
-// stopped.
-const othersVoted = (replies: unknown[]): Map<string, number> =>
-  new Map(others.map(({ address }, i) => [address.toLowerCase(), Number((replies[i] as bigint | undefined) ?? 0n)]));
+// When an automation last voted, or 0, as of the epoch now.
+export type Freshness = { epochStart: number; voted: number };
+export async function readFreshness({ address }: Automation): Promise<Freshness> {
+  const [time, voted] = required(await read([blockTime, voter("lastVoted", address)])) as bigint[];
+  return { epochStart: weekStart(Number(time)), voted: Number(voted) };
+}
 
-// The block's time, and when each of Hydrex's other automations last voted, read after the calls given.
-const withContext = (calls: Call[]): Promise<unknown[]> =>
-  read([...calls, blockTime, ...others.map(({ address }) => voter("lastVoted", address))]);
+export const LockType = { timed: 0, rolling: 1, permanent: 2 } as const;
+export type Account = {
+  id: bigint;
+  name: string;
+  amount: bigint;
+  end: number;
+  lockType: number;
+  votes: bigint;
+  delegate: Address;
+  delegateAtStart: Address;
+  // When whoever holds its votes, or its owner, last voted, or 0.
+  delegateVoted: number;
+  ownerVoted: number;
+  claimer: Address;
+};
+export type Holdings = { owner: Address; accounts: Account[]; time: number; epochStart: number };
 
-// The accounts, as read for their owner.
-async function accountsOf(
-  owner: Address,
-  ids: bigint[],
-  epochStart: number,
-  lastVoted: Map<string, number>,
-): Promise<Account[]> {
+// The block's time and when each other automation last voted, after `calls`; if the Voter fails, nobody stopped.
+async function context(calls: Call[]) {
+  const [time, ...replies] = await read([
+    blockTime,
+    ...OTHERS.map(({ address }) => voter("lastVoted", address)),
+    ...calls,
+  ]);
+  const voted = replies.splice(0, OTHERS.length) as (bigint | undefined)[];
+  const lastVoted = (address: Address) => Number(voted[OTHERS.findIndex((o) => same(o.address, address))] ?? 0n);
+  return { time: Number(required([time])[0]), lastVoted, replies };
+}
+
+async function holdings(owner: Address, ids: bigint[], { time, lastVoted }: Awaited<ReturnType<typeof context>>) {
+  const epochStart = weekStart(time);
   const details = await read([
     voter("lastVoted", owner),
+    call(ACCOUNT_NAMES, ABI.accountNames, "getBulkNames", ids),
     ...ids.flatMap((id) => [
       escrow("lockDetails", id),
       escrow("balanceOfNFT", id),
@@ -195,93 +114,81 @@ async function accountsOf(
       escrow("delegates", id, epochStart),
       escrow("getClaimRedirectApproved", id),
     ]),
-    call(ACCOUNT_NAMES, accountNamesAbi, "getBulkNames", ids),
   ]);
-  // If the Voter cannot be read, the owner is just not known to have stopped voting.
-  const ownerVoted = Number((details.shift() as bigint | undefined) ?? BigInt(epochStart));
-  const names = (details[5 * ids.length] as readonly string[] | undefined) ?? [];
+  const [voted, names = []] = details.splice(0, 2) as [bigint | undefined, readonly string[] | undefined];
   const accounts = ids.map((id, i): Account => {
-    const [{ amount, endTime, lockType }, votes, delegate, delegateAtStart, claimer] = required(
-      details.slice(5 * i, 5 * i + 5),
-    ) as [{ amount: bigint; endTime: bigint; lockType: number }, bigint, Address, Address, Address];
+    const [lock, votes, delegate, delegateAtStart, claimer] = required(details.slice(5 * i, 5 * i + 5)) as [
+      { amount: bigint; endTime: bigint; lockType: number },
+      bigint,
+      Address,
+      Address,
+      Address,
+    ];
     return {
       id,
       name: clean(names[i]),
-      amount,
-      end: Number(endTime),
-      lockType,
+      amount: lock.amount,
+      end: Number(lock.endTime),
+      lockType: lock.lockType,
       votes,
       delegate,
       delegateAtStart,
-      delegateVoted: lastVoted.get(delegate.toLowerCase()) ?? 0,
-      ownerVoted,
+      delegateVoted: lastVoted(delegate),
+      ownerVoted: Number(voted ?? BigInt(epochStart)),
       claimer,
     };
   });
-  return accounts;
+  return { owner, accounts, time, epochStart };
 }
 
 export async function readAccounts(owner: Address): Promise<Holdings> {
-  const [count, time, ...voted] = await withContext([escrow("balanceOf", owner)]);
-  required([count, time]);
-  const epochStart = epochAt(time);
-  const indexes = Array.from({ length: Number(count) }, (_, i) => BigInt(i));
-  const ids = required(await read(indexes.map((i) => escrow("tokenOfOwnerByIndex", owner, i)))) as bigint[];
-  const accounts = await accountsOf(owner, ids, epochStart, othersVoted(voted));
-  accounts.sort((a, b) => (a.votes === b.votes ? Number(a.id - b.id) : a.votes > b.votes ? -1 : 1));
-  return { owner, accounts, time: Number(time), epochStart };
+  const found = await context([escrow("balanceOf", owner)]);
+  const [count] = required(found.replies) as [bigint];
+  const indexes = Array.from({ length: Number(count) }, (_, i) => escrow("tokenOfOwnerByIndex", owner, BigInt(i)));
+  const result = await holdings(owner, required(await read(indexes)) as bigint[], found);
+  result.accounts.sort((a, b) => (a.votes === b.votes ? Number(a.id - b.id) : a.votes > b.votes ? -1 : 1));
+  return result;
 }
 
-// One account, whoever owns it, as its owner's holdings of that account alone. Undefined if Hydrex has no account with
-// that number, as when it was never minted, or was merged or withdrawn: ownerOf then fails, as a call can that fails
-// for another reason, so a failed one is asked again on its own before the account is taken for gone.
+// Anyone's account; undefined if none has that number. ownerOf fails then, as it can for other reasons, so it is asked
+// once more on its own before the account is taken for gone.
 export async function readAccount(id: bigint): Promise<Holdings | undefined> {
-  const [first, time, ...voted] = await withContext([escrow("ownerOf", id)]);
-  const owner = first ?? (await read([escrow("ownerOf", id)]))[0];
-  if (owner === undefined) return undefined;
-  required([time]);
-  const epochStart = epochAt(time);
-  const accounts = await accountsOf(owner as Address, [id], epochStart, othersVoted(voted));
-  return { owner: owner as Address, accounts, time: Number(time), epochStart };
+  const found = await context([escrow("ownerOf", id)]);
+  const owner = (found.replies[0] ?? (await read([escrow("ownerOf", id)]))[0]) as Address | undefined;
+  return owner && holdings(owner, [id], found);
 }
 
-const ended = (account: Account, now: number): boolean => account.lockType === LockType.timed && account.end <= now;
-
-const held = (account: Account, { address }: Automation) => ({
-  votes: same(account.delegate, address),
-  claims: same(account.claimer, address),
-});
-
-export const automationName = (address: Address): string | undefined =>
-  others.find((other) => same(other.address, address))?.name;
-
-const pageAutomation = (address: Address): Automation | undefined =>
-  AUTOMATIONS.find((automation) => same(address, automation.address));
-
-// Hydrex counts a vote only in the epoch it is cast. An automation that has not voted since the previous epoch began
-// earns its accounts nothing. One that has never voted may be new.
+// Hydrex counts a vote only in the epoch it is cast: one not cast since before last epoch earns nothing.
 export const hasStopped = (voted: number, epochStart: number): boolean => voted > 0 && voted < epochStart - WEEK;
-// An owner who votes with their accounts themselves: whether they voted last epoch or since. Never is not.
-const hasVoted = (voted: number, epochStart: number): boolean => voted >= epochStart - WEEK;
+const ended = (account: Account, now: number) => account.lockType === LockType.timed && account.end <= now;
+export const hasVotes = ({ votes }: Account): boolean => votes >= 10n ** 18n;
 
-// Hydrex counts votes for whoever held them when the epoch started, so joins and leaves count from the next epoch.
+// "in", "partly", "joined" and "left" are about the page's own automations; joins and leaves count from the next epoch.
+export type Status =
+  | { kind: "in" | "partly"; automation: Automation }
+  | { kind: "joined" | "left"; automation: Automation; date: number }
+  | { kind: "self" | "ended" | "empty" }
+  | { kind: "other"; name: string }
+  | { kind: "left-other"; name: string; date: number }
+  | { kind: "stopped"; name: string; voted: number; since: number }
+  | { kind: "unvoted"; voted: number }
+  | { kind: "delegated"; to: Address };
+
 export function statusOf(account: Account, owner: Address, now: number, epochStart: number): Status {
   if (account.amount === 0n) return { kind: "empty" };
   if (ended(account, now)) return { kind: "ended" };
-  const [votes, claims, atStart] = [account.delegate, account.claimer, account.delegateAtStart].map(pageAutomation);
-  if (votes && votes === claims) {
-    return votes === atStart
-      ? { kind: "in", automation: votes }
-      : { kind: "joined", automation: votes, date: epochStart + WEEK };
-  }
+  const next = epochStart + WEEK;
+  const [votes, claims, atStart] = [account.delegate, account.claimer, account.delegateAtStart].map(ours);
+  if (votes && votes === claims)
+    return votes === atStart ? { kind: "in", automation: votes } : { kind: "joined", automation: votes, date: next };
   if (votes || claims) return { kind: "partly", automation: (votes ?? claims)! };
-  if (atStart) return { kind: "left", automation: atStart, date: epochStart + WEEK };
+  if (atStart) return { kind: "left", automation: atStart, date: next };
   if (same(account.delegate, owner) || same(account.delegate, zeroAddress)) {
-    const before = automationName(account.delegateAtStart);
-    if (before) return { kind: "left-other", name: before, date: epochStart + WEEK };
-    return hasVoted(account.ownerVoted, epochStart) ? { kind: "self" } : { kind: "unvoted", voted: account.ownerVoted };
+    const before = otherName(account.delegateAtStart);
+    if (before) return { kind: "left-other", name: before, date: next };
+    return account.ownerVoted >= epochStart - WEEK ? { kind: "self" } : { kind: "unvoted", voted: account.ownerVoted };
   }
-  const name = automationName(account.delegate);
+  const name = otherName(account.delegate);
   if (!name) return { kind: "delegated", to: account.delegate };
   const voted = account.delegateVoted;
   return hasStopped(voted, epochStart)
@@ -289,181 +196,109 @@ export function statusOf(account: Account, owner: Address, now: number, epochSta
     : { kind: "other", name };
 }
 
-export function canJoin(account: Account, automation: Automation, now: number): boolean {
-  const { votes, claims } = held(account, automation);
-  return account.amount > 0n && !ended(account, now) && !(votes && claims);
-}
+const holds = (account: Account, { address }: Automation) =>
+  [same(account.delegate, address), same(account.claimer, address)] as const;
+export const canJoin = (account: Account, automation: Automation, now: number): boolean =>
+  account.amount > 0n && !ended(account, now) && !holds(account, automation).every(Boolean);
+export const canLeave = (account: Account, automation: Automation): boolean => holds(account, automation).some(Boolean);
+export const canLeaveOther = (account: Account): boolean => otherName(account.delegate) !== undefined;
+// The automation it is in or joining, or else leaving.
+export const automationOf = (account: Account): Automation | undefined =>
+  AUTOMATIONS.find((automation) => canLeave(account, automation)) ?? ours(account.delegateAtStart);
 
-export function canLeave(account: Account, automation: Automation): boolean {
-  const { votes, claims } = held(account, automation);
-  return votes || claims;
-}
-
-export const canLeaveOther = (account: Account): boolean => automationName(account.delegate) !== undefined;
-
-// Whether an account has a vote or more: one with less needs nothing of its owner.
-export const hasVotes = ({ votes }: Account): boolean => votes >= 10n ** 18n;
-
+// Accounts that need their owner, by remedy; those in each of the page's automations; the others; those with nothing
+// to vote with, unless one of the page's automations still holds their approvals.
+export type Group = "needs:stopped" | "needs:partly" | "needs:unvoted" | `in:${Kind}` | "other" | "closed";
 export function groupOf(account: Account, status: Status): Group {
-  switch (status.kind) {
-    case "stopped":
-    case "partly":
-    case "unvoted":
-      return hasVotes(account) ? `needs:${status.kind}` : withoutVotes(account);
-    case "in":
-    case "joined":
-      return `in:${status.automation.kind}`;
-    case "ended":
-    case "empty":
-      return withoutVotes(account);
-    default:
-      return "other";
-  }
-}
-
-// An account with nothing, or less than a vote, to vote with is folded away; but one of the page's automations may
-// still hold its approvals, which its group can take back.
-function withoutVotes(account: Account): Group {
   const holder = AUTOMATIONS.find((automation) => canLeave(account, automation));
-  return holder ? `in:${holder.kind}` : "closed";
+  const idle: Group = holder ? `in:${holder.kind}` : "closed";
+  if (status.kind === "stopped" || status.kind === "partly" || status.kind === "unvoted")
+    return hasVotes(account) ? `needs:${status.kind}` : idle;
+  if (status.kind === "in" || status.kind === "joined") return `in:${status.automation.kind}`;
+  return status.kind === "ended" || status.kind === "empty" ? idle : "other";
 }
 
-type Target = { address: Address; name: string };
+// setConduitApproval: `other` for Hydrex's own automations; `leaving` names those a join takes over from.
+export type Step = Tx & {
+  id: bigint;
+  approve: boolean;
+  conduit: Address;
+  name: string;
+  other: boolean;
+  leaving: string[];
+};
+const step = (
+  id: bigint,
+  approve: boolean,
+  conduit: Address,
+  name: string,
+  other: boolean,
+  leaving: string[] = [],
+) => ({
+  to: VOTING_ESCROW,
+  data: encodeFunctionData({ abi: ABI.escrow, functionName: "setConduitApproval", args: [conduit, id, approve] }),
+  id,
+  approve,
+  conduit,
+  name,
+  other,
+  leaving,
+});
 
-function approval({ id }: Account, approve: boolean, says: string, target: Target, other = false): Step {
-  // Beside its address, the page's own automations go by their contract's name.
-  const ours = AUTOMATIONS.find(({ address }) => same(address, target.address));
-  const conduitName = other ? `The ${target.name} automation` : (ours?.contract ?? target.name);
-  return {
-    to: VOTING_ESCROW,
-    data: encodeFunctionData({
-      abi: votingEscrowAbi,
-      functionName: "setConduitApproval",
-      args: [target.address, id, approve],
-    }),
-    id,
-    approve,
-    conduit: target.address,
-    conduitName,
-    title: approve ? `Join ${target.name}` : `Leave ${other ? `the ${target.name} automation` : target.name}`,
-    says: `Account #${id} ${says}`,
-    on: "Hydrex's VotingEscrow",
-    call: "setConduitApproval",
-    fields: [
-      {
-        label: "Conduit",
-        name: "conduit",
-        code: target.address,
-        description: conduitName,
-      },
-      { label: "Account", name: "account", code: String(id) },
-      { label: "Approve", name: "approve", code: String(approve) },
-    ],
-    ...(other && { automation: target.name }),
-  };
-}
-
-// A join takes over the votes and the claims, which other automations may hold, the page's own included.
 export const join = (accounts: Account[], automation: Automation): Step[] =>
   accounts.map((account) => {
     const holders = [account.delegate, account.claimer];
     const own = AUTOMATIONS.filter(
-      (other) => other !== automation && holders.some((address) => same(address, other.address)),
+      (each) => each !== automation && holders.some((address) => same(address, each.address)),
     );
-    const names = [...new Set(holders.map(automationName).filter((name) => name !== undefined))];
-    const parts = [
-      ...own.map(({ name }) => name),
-      ...(names.length ? [`the ${list(names)} automation${names.length > 1 ? "s" : ""}`] : []),
-    ];
-    const leaving = parts.length ? `leaves ${list(parts)} and ` : "";
-    return approval(account, true, `${leaving}joins ${automation.name}.`, automation);
+    const names = [...new Set(holders.map(otherName).filter((name) => name !== undefined))];
+    const leaving = [...own.map(({ name }) => name), ...names.map((name) => `the ${name} automation`)];
+    return step(account.id, true, automation.address, automation.name, false, leaving);
   });
-
 export const leave = (accounts: Account[], automation: Automation): Step[] =>
-  accounts.map((account) => approval(account, false, `leaves ${automation.name}.`, automation));
-
-// The same call as leaving the page's automations, with the other automation's address. Only automations on Hydrex's
-// list, so that each call names the one it leaves.
+  accounts.map(({ id }) => step(id, false, automation.address, automation.name, false));
 export const leaveOther = (accounts: Account[]): Step[] =>
-  accounts.flatMap((account) => {
-    const name = automationName(account.delegate);
-    if (!name) return [];
-    return [approval(account, false, `leaves the ${name} automation.`, { address: account.delegate, name }, true)];
+  accounts.flatMap(({ id, delegate }) => {
+    const name = otherName(delegate);
+    return name ? [step(id, false, delegate, name, true)] : [];
   });
 
-// Freshness: when an automation last voted, or 0, as of an epoch.
-export type Freshness = { epochStart: number; voted: number };
-
-export async function readFreshness({ address }: Automation): Promise<Freshness> {
-  const [time, voted] = required(await read([blockTime, voter("lastVoted", address)])) as bigint[];
-  return { epochStart: epochAt(time), voted: Number(voted) };
-}
-
-export type Checks = {
-  // The checks that fail for each automation, each named by the id of its message on the page. A check of Base or of
-  // Hydrex fails for all of them.
-  failed: Map<Kind, string[]>;
-};
-
-// Each automation's own check, by the id of its message: what joining it approves. Matcha Latte's was the page's first.
-const approvalsCheck: Record<Kind, string> = {
-  "matcha-latte": "approvals",
-  "double-espresso": "double-espresso-approvals",
-};
-
-// Base, through the page's RPCs; Hydrex's VotingEscrow as the page knows it, and its approval logic: an upgrade or
-// other logic changes what joining allows; and what joining each automation approves, which must be on, and its claims
-// and votes only. Each check is named by the id of its message on the page.
-export async function failedChecks(): Promise<Checks> {
+// Ids of the checks that fail for each automation: Base, Hydrex's VotingEscrow and its approval logic for both, and what
+// joining each approves, which must be on, and its claims and votes only.
+export async function failedChecks(): Promise<Map<Kind, string[]>> {
   const [chainId, impl, [logic, ...configs]] = await Promise.all([
     rpc<string>("eth_chainId", []),
     implementation(VOTING_ESCROW),
     read([escrow("approvalLogic"), ...AUTOMATIONS.map(({ address }) => escrow("getConduitApprovalConfig", address))]),
   ]);
-  const failing = (checks: Record<string, boolean>) =>
-    Object.entries(checks).flatMap(([id, fails]) => (fails ? [id] : []));
+  const failing = (checks: Record<string, boolean>) => Object.keys(checks).filter((id) => checks[id]);
   const all = failing({
     chain: Number(chainId) !== CHAIN_ID,
     upgrade: !same(impl, VOTING_ESCROW_IMPLEMENTATION),
     logic: !same(String(logic), APPROVAL_LOGIC),
   });
-  const found = AUTOMATIONS.map(({ kind, actions }, i): [Kind, string[]] => {
-    const [approved, active] = (configs[i] ?? [[], false]) as [number[], boolean];
-    return [kind, [...all, ...failing({ [approvalsCheck[kind]]: !active || approved.join() !== actions.join() })]];
-  });
-  return { failed: new Map(found) };
+  return new Map(
+    AUTOMATIONS.map(({ kind, actions }, i) => {
+      const [approved, active] = (configs[i] ?? [[], false]) as [number[], boolean];
+      const id = kind === DOUBLE_ESPRESSO.kind ? "double-espresso-approvals" : "approvals";
+      return [kind, [...all, ...failing({ [id]: !active || approved.join() !== actions.join() })]];
+    }),
+  );
 }
 
-// What gas costs for some calls from `from`, in wei, with today's prices to show it at: each costs about what the first
-// does, as they differ only by account, plus the most Base charges to post it to Ethereum. The gas price and the prices
-// are read at most once a minute, for all of the page; what posting costs for each size of call, once for all the calls
-// priced.
-export type GasCost = (steps: Tx[], from: Address) => Promise<{ wei: bigint; prices: Prices | undefined }>;
-
-export function gasCosts(): GasCost {
-  const posting = new Map<bigint, Promise<bigint>>();
-  const postingOf = (size: bigint): Promise<bigint> => {
-    if (!posting.has(size)) {
-      const fee = read([call(GAS_PRICE_ORACLE, gasPriceOracleAbi, "getL1FeeUpperBound", size)]);
-      posting.set(
-        size,
-        fee.then(([found]) => (found as bigint | undefined) ?? 0n),
-      );
-    }
-    return posting.get(size)!;
-  };
-  return async (steps, from) => {
-    const [first] = steps;
-    // Nothing to send costs nothing, in any currency: no prices are read for it.
-    if (!first) return { wei: 0n, prices: undefined };
-    // The call's data, and about as much again for the transaction's other fields.
-    const size = BigInt((first.data.length - 2) / 2 + 100);
-    const [{ gasPrice }, gas, l1, prices] = await Promise.all([
-      costs(),
-      rpc<Hex>("eth_estimateGas", [{ from, to: first.to, data: first.data }]),
-      postingOf(size),
-      anchorsNow(),
-    ]);
-    return { wei: (BigInt(gas) * gasPrice + l1) * BigInt(steps.length), prices };
-  };
+// What the steps cost from `from`, in wei: each about what the first does, plus the most Base charges to post it.
+const l1Fee = memo(async (size: bigint) => {
+  const [fee] = await read([call(GAS_PRICE_ORACLE, ABI.gasPriceOracle, "getL1FeeUpperBound", size)]);
+  return (fee as bigint | undefined) ?? 0n;
+});
+export async function gasCost(steps: Tx[], from: Address): Promise<{ wei: bigint; prices: Prices | undefined }> {
+  const [first] = steps;
+  if (!first) return { wei: 0n, prices: undefined };
+  const [{ gasPrice }, gas, l1, prices] = await Promise.all([
+    costs(),
+    rpc<Hex>("eth_estimateGas", [{ from, to: first.to, data: first.data }]),
+    l1Fee(BigInt((first.data.length - 2) / 2 + 100)),
+    anchorsNow(),
+  ]);
+  return { wei: (BigInt(gas) * gasPrice + l1) * BigInt(steps.length), prices };
 }
