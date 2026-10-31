@@ -19,6 +19,7 @@ import {
 import * as hydrex from "../hydrex.ts";
 import type { Holdings } from "../hydrex.ts";
 import {
+  automationOf,
   overdue,
   totals,
   underWay,
@@ -124,7 +125,7 @@ export function drawAccount(): void {
       own && payouts.value && underWay(payouts.value)?.left.some((each) => each.account.id === id)
         ? "Payout under way."
         : null,
-    payouts: entry || !payouts.value ? stateOf(payouts) : null,
+    payouts: automationOf(account) && (entry || !payouts.value) ? stateOf(payouts) : null,
   });
   drawActions(own ? found : undefined, st);
   if (payouts.value) drawStandings(payouts.value, found.owner, own);

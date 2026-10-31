@@ -475,6 +475,12 @@ export async function open(wallet: Partial<WalletOptions> | false, options: Open
     safe,
   };
   await context.route("**/*", (route) => serve(route, opened));
+  // The clock fakes AbortSignal.timeout too: PAGE_SCRIPT, added after it, undoes that.
+  const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false]);
+  if (script)
+    await (flowing
+      ? context.clock.install({ time: Number(timestamp) * 1000 })
+      : context.clock.setFixedTime(Number(timestamp) * 1000));
   await context.addInitScript(PAGE_SCRIPT);
   if (wallet) {
     await context.exposeFunction("testWallet", testWallet(settings, opened.sent, opened.asked));
@@ -487,11 +493,6 @@ export async function open(wallet: Partial<WalletOptions> | false, options: Open
     (message) => /Content Security Policy|^\w*Error\b/.test(message.text()) && opened.violations.push(message.text()),
   );
   page.on("pageerror", (error) => opened.violations.push(String(error)));
-  const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false]);
-  if (script)
-    await (flowing
-      ? page.clock.install({ time: Number(timestamp) * 1000 })
-      : page.clock.setFixedTime(Number(timestamp) * 1000));
   await page.goto(url);
   return { page, ...opened };
 }

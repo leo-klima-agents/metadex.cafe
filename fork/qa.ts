@@ -193,12 +193,12 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
     if (open) return open;
     const context = await browser.newContext(WINDOW);
     await context.route("**/*", routeSite);
+    await context.clock.install({ time: (await latest()).time * 1000 });
     await context.addInitScript(PAGE_SCRIPT);
     if (kind === "wallet") {
       await context.exposeFunction("testWallet", walletRequest);
       await context.addInitScript(walletScript(["Test Wallet"]));
     }
-    await context.clock.install({ time: (await latest()).time * 1000 });
     sites.set(kind, context);
     return context;
   }
