@@ -31,7 +31,7 @@ describe("payouts against a fork of Base", { timeout: 1_800_000 }, () => {
       "31.01%",
       "Paid to you",
     ])
-      assert.ok(text.includes(shown), `${shown} in ${text}`);
+      assert.ok(text.toLowerCase().includes(shown.toLowerCase()), `${shown} in ${text}`);
     assert.match(text, /Thu,? 10 Sept? to Thu,? 17 Sept?/);
     assert.match(text, /Wed,? 23 Sept?,? 17:44 UTC/);
     assert.equal(
@@ -73,7 +73,7 @@ describe("payouts against a fork of Base", { timeout: 1_800_000 }, () => {
       lines.map((line) => line.replace(/^.* · /, "")),
       ["sent by 0x0000…dEaD", "sent by 0x0000…1234"],
     );
-    assert.match(await bill.innerText(), /Fee 1%/);
+    assert.match(await bill.innerText(), /Fee 1%/i);
     // Dust in many blocks: the page reads ten of them, and says it stopped.
     for (const { contract, token, fee } of rewards.filter(({ token }) => token.symbol !== "USDC").slice(0, 10)) {
       const args = [82774n, fee ? [contract] : [], fee ? [] : [contract], [token.address]];

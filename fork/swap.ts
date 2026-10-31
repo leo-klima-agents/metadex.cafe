@@ -172,7 +172,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     const how = (await dialog.locator("[data-text=how]").textContent()) ?? "";
     const [, safeTxs = "", calls = ""] = /^(\d+) Safe transactions, (\d+) calls$/.exec(how) ?? [];
     assert.ok(Number(safeTxs) > 1 && Number(calls) > Number(safeTxs), how);
-    const counts = await dialog.locator("[data-text=count]").allTextContents();
+    const counts = await dialog.locator("[data-list=slip] [data-text=count]").allTextContents();
     assert.equal(counts[0], `Safe 1 of ${safeTxs} · Call 1 of ${calls} · Claim`);
     await dialog.getByRole("button", { name: "Propose in Safe{Wallet}" }).click();
     await dialog.getByText(`Proposed ${safeTxs} Safe transactions. Sign them in Safe{Wallet}.`).waitFor();

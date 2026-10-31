@@ -153,6 +153,18 @@ export async function serveCached(upstream: Upstream, file: string, block: numbe
   const at = `0x${block.toString(16)}`;
   let closing = false;
 
+  // anvil names the fork's block by its hash in some requests (EIP-1898): kept, and asked, as its number.
+  const byNumber = (call: Call): Call => {
+    const params = call.params ?? [];
+    const i = params.findIndex((param) => typeof (param as { blockHash?: unknown } | null)?.blockHash === "string");
+    if (i < 0) return call;
+    const { blockHash } = params[i] as { blockHash: string };
+    const forked = [false, true].some(
+      (full) => (answers.get(keyOf(ask("eth_getBlockByNumber", [at, full]))) as { hash?: string })?.hash === blockHash,
+    );
+    return forked ? { ...call, params: params.map((param, j) => (j === i ? at : param)) } : call;
+  };
+
   async function answer(call: Call, later = false): Promise<Reply> {
     const key = keyOf(call);
     const keep = fixed(call);
@@ -227,7 +239,7 @@ export async function serveCached(upstream: Upstream, file: string, block: numbe
       if (request.url === "/sent") return void (sent.add(body.trim().toLowerCase()), response.writeHead(204).end());
       try {
         const calls = JSON.parse(body) as Call | Call[];
-        const replies = await Promise.all([calls].flat().map((call) => answer(call)));
+        const replies = await Promise.all([calls].flat().map((call) => answer(byNumber(call))));
         response.writeHead(200, { "content-type": "application/json" });
         response.end(JSON.stringify(Array.isArray(calls) ? replies : replies[0]));
       } catch (error) {

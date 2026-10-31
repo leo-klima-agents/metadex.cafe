@@ -58,9 +58,10 @@ export function put(el: HTMLElement, value: Value): void {
   el.replaceChildren(link);
 }
 
-// Fills what `root` holds, but not its lists' rows, which their own fill() fills.
+// Fills `root` and what it holds, but not its lists' rows, which their own fill() fills.
 export function fill(root: ParentNode, values: Record<string, Value>): void {
-  for (const el of root.querySelectorAll<HTMLElement>("[data-text]")) {
+  const all = [...root.querySelectorAll<HTMLElement>("[data-text]")];
+  for (const el of root instanceof HTMLElement && root.dataset.text ? [root, ...all] : all) {
     const list = el.parentElement?.closest("[data-list]");
     if (list && list !== root && root.contains(list)) continue;
     const key = el.dataset.text!;
