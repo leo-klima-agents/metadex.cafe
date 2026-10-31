@@ -118,6 +118,7 @@ a:not([href]) {
   outline: none;
 }
 [hidden],
+[data-v]:empty,
 .wrong-chain,
 html:not([data-wallet]) .with-wallet,
 html[data-wallet] .without-wallet,

@@ -97,7 +97,7 @@ function drawSlips(state: Review): void {
     slips,
     "slip",
     steps,
-    (_, i = steps.indexOf(_)) => `${i}`,
+    (step) => `${steps.indexOf(step)}`,
     (row, step) => {
       const i = steps.indexOf(step);
       const g = group[i] ?? 0;
@@ -119,7 +119,7 @@ function drawSlips(state: Review): void {
         ({ label }) => label,
         (line, { label, code, tags, words, description }) => {
           fill(line, { label, description: description ?? "" });
-          const value = $("[data-v=code]", line).parentElement!;
+          const value = $("dd", line);
           const codes = (Array.isArray(code) ? code : code === undefined ? [] : [code]).map((each, k) => {
             const item = codeOf(each);
             if (tags?.[k])
