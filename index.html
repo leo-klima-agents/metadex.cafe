@@ -18,7 +18,7 @@
     <script type="module" src="main.js" integrity="%MAIN_INTEGRITY%"></script>
   </head>
   <body>
-    <a class="skip" href="#app" data-action="skip">Skip to content</a>
+    <a class="skip" href="#main" data-action="skip">Skip to content</a>
     <header class="spread">
       <a class="name" href="#"><img src="icon.svg" alt="" width="28" height="28" /> metaDEX Café</a>
       <button type="button" data-if="no-wallet" data-action="connect">Connect a wallet</button>
@@ -46,7 +46,7 @@
       </dialog>
     </header>
 
-    <main class="stack">
+    <main id="main" class="stack">
       <noscript><p class="notice">This page needs JavaScript.</p></noscript>
       <div class="visually-hidden" role="status" id="status"></div>
       <p class="notice spread" data-text="failed" hidden>

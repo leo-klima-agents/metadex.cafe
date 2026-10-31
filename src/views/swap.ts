@@ -276,7 +276,7 @@ export function drawSwap(): void {
       fill(li, {
         symbol: row.token.symbol,
         amount: figure(row.amount, row.token.decimals),
-        fetches: row.found.value ? (quote?.exact ?? "") : row.found.failed ? "" : undefined,
+        fetches: row.found.value === undefined && !row.found.failed ? undefined : (quote?.exact ?? ""),
         worth: quote?.worth ? money(quote.worth) : "",
         note: row.reason ?? (skipped ? "Base would skip it" : null),
         warning: like

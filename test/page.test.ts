@@ -22,7 +22,7 @@ test("ids are unique, every address in the page is one of its routes, and each v
   const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(([, id]) => id);
   assert.deepEqual(ids, [...new Set(ids)]);
   for (const [, href = ""] of html.matchAll(/href="(#[^"]*)"/g))
-    if (href !== "#") assert.notEqual(parse(href).view, "home", href);
+    if (href !== "#" && href !== "#main") assert.notEqual(parse(href).view, "home", href);
   for (const [section] of html.matchAll(/<section data-view="[^"]+"[^>]*>/g))
     assert.match(section!, /data-title="[^"]+"/);
 });
