@@ -13,9 +13,8 @@
     "build": "node scripts/build.ts",
     "release": "node scripts/release.ts",
     "format": "prettier --write .",
-    "test": "node --test",
-    "test:fork": "npm run build && node fork/run.ts",
-    "qa": "npm run build && node fork/qa.ts",
+    "test": "node --test test/*.test.ts",
+    "test:fork": "npm run build && node --test --test-timeout=1800000 fork/*.test.ts",
     "typecheck": "tsc"
   },
   "dependencies": {
@@ -23,8 +22,8 @@
   },
   "devDependencies": {
     "@ipld/car": "5.4.7",
-    "@ipld/dag-pb": "4.2.0",
     "@types/node": "26.6.6",
+    "axe-core": "4.14.0",
     "esbuild": "0.28.2",
     "ipfs-unixfs-importer": "17.1.1",
     "multiformats": "14.0.5",

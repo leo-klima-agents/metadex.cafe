@@ -1,26 +1,15 @@
 import * as esbuild from "esbuild";
 import { createHash } from "node:crypto";
-import { appendFileSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { bundled, noticeOf, partsOf } from "./notices.ts";
+import { appendFileSync, copyFileSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const OUT = `${ROOT}/dist`;
-const { version } = JSON.parse(readFileSync(`${ROOT}/package.json`, "utf8")) as { version: string };
+process.chdir(new URL("..", import.meta.url).pathname);
+const read = (path: string) => readFileSync(path, "utf8");
+const { version } = JSON.parse(read("package.json")) as { version: string };
 
-function integrity(file: string): string {
-  const digest = createHash("sha384")
-    .update(readFileSync(`${OUT}/${file}`))
-    .digest("base64");
-  return `sha384-${digest}`;
-}
-
-rmSync(OUT, { recursive: true, force: true });
-mkdirSync(OUT);
+rmSync("dist", { recursive: true, force: true });
 const { metafile } = await esbuild.build({
-  absWorkingDir: ROOT,
   entryPoints: { main: "src/main.ts", style: "style.css" },
-  outdir: OUT,
+  outdir: "dist",
   bundle: true,
   format: "esm",
   target: "es2022",
@@ -31,23 +20,44 @@ const { metafile } = await esbuild.build({
   metafile: true,
   logLevel: "warning",
 });
-// Each built file ends with the license notices of what it bundles, before its integrity is taken.
-for (const file of ["main.js", "style.css"]) {
-  const built = readFileSync(`${OUT}/${file}`, "utf8");
-  appendFileSync(
-    `${OUT}/${file}`,
-    `${built.endsWith("\n") ? "" : "\n"}${noticeOf(ROOT, partsOf(ROOT, bundled(metafile, file)))}`,
-  );
+
+// Each bundled npm package's LICENSE, and the fonts', travel at the end of the file that bundles them.
+const packages = Object.entries(metafile.outputs["dist/main.js"]!.inputs)
+  .filter(([, { bytesInOutput }]) => bytesInOutput > 0)
+  .flatMap(([path]) => /^(.*node_modules\/(?:@[^/]+\/)?[^/]+)\//.exec(path)?.[1] ?? []);
+const licenseOf = (dir: string): string => {
+  const { name, version } = JSON.parse(read(`${dir}/package.json`)) as { name: string; version: string };
+  const file = readdirSync(dir).find((each) => /^licen[cs]e/i.test(each));
+  if (!file) throw new Error(`${name} ships no LICENSE.`);
+  return `${name}@${version}:\n\n${read(`${dir}/${file}`).trim()}`;
+};
+const notices = {
+  "main.js": [...new Set(packages)].sort().map(licenseOf),
+  "style.css": [
+    `Atkinson Hyperlegible Next, Atkinson Hyperlegible Mono and Young Serif:\n\n${read("fonts/OFL.txt").trim()}`,
+  ],
+};
+for (const [file, texts] of Object.entries(notices)) {
+  const comment = `/*! Bundled license information:\n\n${texts.join("\n\n")}\n*/\n`;
+  if (comment.slice(2, -3).includes("*/")) throw new Error(`A notice would end ${file}'s comment early.`);
+  appendFileSync(`dist/${file}`, `\n${comment}`);
 }
+
 for (const file of ["icon.svg", "favicon.ico", "apple-touch-icon.png", "klima-protocol.svg", "manifest.json"])
-  copyFileSync(`${ROOT}/${file}`, `${OUT}/${file}`);
+  copyFileSync(file, `dist/${file}`);
+const integrity = (file: string) =>
+  `sha384-${createHash("sha384")
+    .update(readFileSync(`dist/${file}`))
+    .digest("base64")}`;
 const values: Record<string, string> = {
   VERSION: version,
   MAIN_INTEGRITY: integrity("main.js"),
   STYLE_INTEGRITY: integrity("style.css"),
 };
-const html = readFileSync(`${ROOT}/index.html`, "utf8").replace(/%([A-Z_]+)%/g, (_, key: string) => {
-  if (!(key in values)) throw new Error(`index.html has no value for %${key}%.`);
-  return values[key]!;
-});
-writeFileSync(`${OUT}/index.html`, html);
+writeFileSync(
+  "dist/index.html",
+  read("index.html").replace(/%([A-Z_]+)%/g, (_, key: string) => {
+    if (!(key in values)) throw new Error(`index.html has no value for %${key}%.`);
+    return values[key]!;
+  }),
+);
