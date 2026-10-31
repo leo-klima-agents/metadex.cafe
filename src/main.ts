@@ -10,7 +10,7 @@ import { drawApp } from "./views/app.ts";
 import { drawAccount } from "./views/account.ts";
 import { drawHydrex, drawProduct } from "./views/hydrex.ts";
 import { drawReview } from "./views/review.ts";
-import { drawSwap } from "./views/swap.ts";
+import { drawSwap, preloadSwap } from "./views/swap.ts";
 import { drawWallets, startWallets } from "./views/wallet.ts";
 
 // The page is one HTML file of views; the hash picks the one shown. Each view's reads go first, the others' after.
@@ -113,6 +113,7 @@ onRender(() => {
   DRAW[state.route.view]?.();
   drawReview();
   preload();
+  preloadSwap();
 });
 
 // Safe{Wallet} shows the page in a frame: it starts on the App there.

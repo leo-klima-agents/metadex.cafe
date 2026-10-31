@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, before, describe, test } from "node:test";
+import { describe, test } from "node:test";
 import { encodeFunctionData, zeroAddress } from "viem";
 import { DOUBLE_ESPRESSO, VOTING_ESCROW } from "../src/config.ts";
 import { short } from "../src/format.ts";
@@ -25,11 +25,7 @@ const UNVOTED = /Not voted since/;
 const says = (page: h.Opened["page"]) => review(page).locator("[data-text=says]").allTextContents();
 
 describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, () => {
-  before(async () => {
-    await h.start(BLOCK, [MEMBER, NEWCOMER, ELSEWHERE, LEAVER]);
-    await h.deployDoubleEspresso();
-  });
-  after(h.stop);
+  h.fork(BLOCK, [MEMBER, NEWCOMER, ELSEWHERE, LEAVER], h.deployDoubleEspresso);
 
   test("join Matcha Latte with two accounts from stopped automations, one transaction at a time", async () => {
     const { page, sent, asked, violations } = await connected({ owner: ELSEWHERE });

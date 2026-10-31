@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, before, describe, test } from "node:test";
+import { describe, test } from "node:test";
 import { toFunctionSelector } from "viem";
 import { VOTER } from "../src/config.ts";
 import { short } from "../src/format.ts";
@@ -20,11 +20,7 @@ import {
 } from "./harness.ts";
 
 describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () => {
-  before(async () => {
-    await h.start(BLOCK, [MEMBER, NEWCOMER, ELSEWHERE, LEAVER, ENDED]);
-    await h.deployDoubleEspresso();
-  });
-  after(h.stop);
+  h.fork(BLOCK, [MEMBER, NEWCOMER, ELSEWHERE, LEAVER, ENDED], h.deployDoubleEspresso);
 
   test("Home, the App, Back and Forward, About, an unknown address; and the page without its script", async () => {
     const { page, asked, violations } = await open({ owner: NEWCOMER }, { width: 390, height: 844 });

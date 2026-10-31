@@ -44,7 +44,7 @@ export const CBBTC: Address = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
 export const EURC: Address = "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42";
 export const HYDX: Address = "0x00000e7efa313F4E11Bfff432471eD9423AC6B30";
 
-export const CURRENCIES = ["USD", "EUR", "GBP", "CHF", "AUD", "CAD"] as const;
+const CURRENCIES = ["USD", "EUR", "GBP", "CHF", "AUD", "CAD"] as const;
 export type Currency = (typeof CURRENCIES)[number];
 export type Fiat = Exclude<Currency, "USD">;
 // Chainlink feeds on Base, all with 8 decimals: each currency's price in dollars, and the anchors others are priced by.

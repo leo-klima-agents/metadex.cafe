@@ -9,7 +9,7 @@ export { erc20Abi };
 // The tokens the page knows, whose balances it reads, as no RPC lists a wallet's tokens: Base's common tokens, and
 // for the visit, Hydrex's reward tokens, those added by address, those the wallet lists, and those of a payout. `name`
 // tells apart two listed tokens of one symbol.
-export type Listed = Token & { name?: string };
+type Listed = Token & { name?: string };
 const LISTED = list as Listed[];
 const more = new Map<string, Address>();
 const hydrex = new Set<string>();

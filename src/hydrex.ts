@@ -52,7 +52,7 @@ const matchaLatte = (name: string): Call => call(MATCHA_LATTE.address, matchaLat
 export const others = conduits.filter(({ address }) => !AUTOMATIONS.some((each) => same(address, each.address)));
 export const otherName = (address: Address): string | undefined =>
   others.find((other) => same(other.address, address))?.name;
-export const automationAt = (address: Address): Automation | undefined =>
+const automationAt = (address: Address): Automation | undefined =>
   AUTOMATIONS.find((each) => same(address, each.address));
 
 // Epochs follow the calendar: joins count from the next Thursday, whenever Hydrex's Voter moves on.
@@ -97,7 +97,7 @@ export const paidBpsOf = ({ retireBps, feeBps }: MatchaLatte): bigint | undefine
   feeBps === undefined ? undefined : ((10_000n - retireBps) * (10_000n - feeBps)) / 10_000n;
 
 // When an automation last voted, or 0, as of an epoch.
-export type Freshness = { epochStart: number; voted: number };
+type Freshness = { epochStart: number; voted: number };
 export async function readFreshness({ address }: Automation): Promise<Freshness> {
   const [time, voted] = required(await read([blockTime, voter("lastVoted", address)])) as bigint[];
   return { epochStart: weekStart(Number(time)), voted: Number(voted) };

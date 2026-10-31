@@ -231,7 +231,7 @@ export async function gasPaid(hashes: Hex[], from: Address): Promise<bigint | un
 }
 
 // The gas price, and the tip the page asks for, at most 1 gwei: above it, Aero's classic pools tax a swap.
-export const MAX_TIP = 1_000_000_000n;
+const MAX_TIP = 1_000_000_000n;
 export type Costs = { gasPrice: bigint; tip?: bigint | undefined };
 export const costs = (): Promise<Costs> =>
   memo(

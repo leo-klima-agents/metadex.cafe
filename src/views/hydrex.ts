@@ -56,7 +56,7 @@ export const lockWords = ({ lockType, end }: Account): string =>
         : "Flex";
 const inYear = (time: number): string =>
   new Date(time * 1000).getUTCFullYear() === new Date(now() * 1000).getUTCFullYear() ? day(time) : date(time);
-export const versusWords = (ratio: number | null | undefined): Value =>
+const versusWords = (ratio: number | null | undefined): Value =>
   ratio === undefined || ratio === null
     ? null
     : Math.abs(ratio - 1) < 0.005

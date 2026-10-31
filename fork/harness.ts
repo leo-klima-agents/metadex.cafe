@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
-import { afterEach, beforeEach } from "node:test";
+import { after, afterEach, before, beforeEach } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   chromium,
@@ -484,7 +484,7 @@ export async function open(wallet: Partial<WalletOptions> | false, options: Open
   page.setDefaultTimeout(Number(process.env.FORK_TIMEOUT ?? 300_000));
   page.on(
     "console",
-    (message) => /Content Security Policy/i.test(message.text()) && opened.violations.push(message.text()),
+    (message) => /Content Security Policy|^\w*Error\b/.test(message.text()) && opened.violations.push(message.text()),
   );
   page.on("pageerror", (error) => opened.violations.push(String(error)));
   const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false]);
@@ -555,15 +555,22 @@ export async function shoot(page: Page, name: string): Promise<void> {
   });
 }
 
-// Starts anvil on a fork of Base at `block`, through the cache fork/run.ts serves for it, and Chromium; and the hooks
-// that put anvil back after each test.
-export async function start(block: number, owners: Address[]): Promise<void> {
-  const cached = (JSON.parse(process.env.FORK_CACHES ?? "{}") as Record<string, string>)[block];
-  if (!cached)
-    throw new Error("Run the browser tests through fork/run.ts, which serves the caches anvil forks through.");
-  await startAnvil(block, cached);
-  for (const owner of owners) await anvil("anvil_setBalance", [owner, toHex(FOR_GAS)]);
-  browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
+// A suite's fork of Base at `block`, through the cache fork/run.ts serves for it, and Chromium; each test's changes are
+// undone after it.
+export function fork(block: number, owners: Address[], setup?: () => Promise<unknown>): void {
+  before(async () => {
+    const cached = (JSON.parse(process.env.FORK_CACHES ?? "{}") as Record<string, string>)[block];
+    if (!cached)
+      throw new Error("Run the browser tests through fork/run.ts, which serves the caches anvil forks through.");
+    await startAnvil(block, cached);
+    for (const owner of owners) await anvil("anvil_setBalance", [owner, toHex(FOR_GAS)]);
+    browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
+    await setup?.();
+  });
+  after(async () => {
+    await browser?.close();
+    await stopAnvil();
+  });
   beforeEach(async () => void (snapshot = await anvil<Hex>("evm_snapshot")));
   afterEach(async () => {
     for (const context of contexts.splice(0)) await context.close();
@@ -603,10 +610,6 @@ export async function startAnvil(block: number, cached: string, stopping = () =>
     }
   }
   for (const token of NATIVE) await anvil("anvil_setCode", [token, "0x"]);
-}
-export async function stop(): Promise<void> {
-  await browser?.close();
-  await stopAnvil();
 }
 export async function stopAnvil(drain = true): Promise<void> {
   if (drain) await Promise.allSettled(forwarding);

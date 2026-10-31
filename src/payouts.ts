@@ -28,7 +28,7 @@ const eventsAbi = parseAbi([
 const BLOCK_TIME = 2;
 const SETTLED = 5;
 // A payout takes up to half a day after each flip.
-export const UNDER_WAY = 12 * 3600;
+const UNDER_WAY = 12 * 3600;
 // The most blocks of Double Espresso's claims read for one account: anyone can claim dust for it, as often as they like.
 export const WALK_LIMIT = 10;
 
@@ -37,8 +37,8 @@ export type Pair = { contract: Address; token: Address };
 export type Owed = Amount & { contract: Address };
 // A pair of an epoch's rewards, with what it paid the automation's votes, or 0 if unknown.
 export type Weighed = Pair & { value: number };
-export type Rewards = { start: number; pairs: Weighed[] };
-export type Standing = {
+type Rewards = { start: number; pairs: Weighed[] };
+type Standing = {
   id: bigint;
   // The start of the epoch up to which it has been paid, or 0, and a pair whose record reached it in its last payout.
   through: number;

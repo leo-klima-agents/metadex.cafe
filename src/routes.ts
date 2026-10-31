@@ -12,7 +12,7 @@ export type Route =
   | { view: "swap"; output: Output; section?: string };
 export type View = Route["view"];
 
-export const SECTIONS = {
+const SECTIONS = {
   app: ["allows"],
   product: ["fees", "control", "check", "record"],
   swap: ["fees", "check", "approvals"],

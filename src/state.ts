@@ -20,7 +20,12 @@ export function render(): void {
   due = true;
   requestAnimationFrame(() => {
     due = false;
-    for (const draw of drawers) draw();
+    for (const draw of drawers)
+      try {
+        draw();
+      } catch (error) {
+        console.error(error);
+      }
   });
 }
 onSettle(render);

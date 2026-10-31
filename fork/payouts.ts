@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, before, describe, test } from "node:test";
+import { describe, test } from "node:test";
 import { encodeFunctionData } from "viem";
 import { DOUBLE_ESPRESSO } from "../src/config.ts";
 import { short } from "../src/format.ts";
@@ -9,8 +9,7 @@ import { BLOCK, MEMBER, PAID_TX, PAYEE, SITE, STRANGER, connected, heading, open
 const standing = (page: h.Opened["page"]) => view(page, "account").locator("[data-list=standing] > article");
 
 describe("payouts against a fork of Base", { timeout: 1_800_000 }, () => {
-  before(() => h.start(BLOCK, [MEMBER, PAYEE]));
-  after(h.stop);
+  h.fork(BLOCK, [MEMBER, PAYEE]);
 
   test("an account paid late: the App marks it, and its page shows its standing and its last receipt", async () => {
     const { page, violations } = await connected({ owner: PAYEE }, { width: 390, height: 844, dark: true });

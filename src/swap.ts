@@ -86,7 +86,7 @@ export function best<T extends { way: Hop; out: bigint }>(quotes: T[]): T | unde
 // million a hop. A transaction may use 16.7 million on Base; the page keeps each swap under 15.
 export const APPROVAL_GAS = 46_000n;
 export const MAX_SWAP_GAS = 15_000_000n;
-export function hopGas({ exchange }: Hop): bigint {
+function hopGas({ exchange }: Hop): bigint {
   const { kind } = exchangeOf(exchange);
   return kind === "algebra" ? 1_000_000n : ["pair", "solidly", "aerodrome", "v2"].includes(kind) ? 50_000n : 110_000n;
 }
@@ -282,7 +282,7 @@ export function swapSlip(
 // sets it, as after a claim, where the allowance is not yet known.
 export type Item = { token: Token; route: Route; out: bigint; allowance: bigint; approve?: bigint | undefined };
 export type Plan = { swapper: Swapper; items: Item[]; margin: bigint };
-export type Steps = { approvals: Slip[]; swaps: Route[][]; slips: Slip[] };
+type Steps = { approvals: Slip[]; swaps: Route[][]; slips: Slip[] };
 export function planSteps(
   { swapper, items }: Plan,
   tokens: Map<string, Token>,

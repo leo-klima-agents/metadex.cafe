@@ -104,7 +104,10 @@ export function drawAccount(): void {
     lock: account.amount === 0n ? "Empty" : lockWords(account),
     votes: voteFigure(account.votes),
     "earned-row": earned.value !== null,
-    earned: shown(earned, (share) => money(moneyAt(share!.share * valueOf(share!.of).total, share!.of.prices))),
+    earned:
+      earned.value === null
+        ? null
+        : shown(earned, (e) => money(moneyAt(e!.share * valueOf(e!.of).total, e!.of.prices))),
     "owner-row": !own,
     owner: { address: found.owner, text: short(found.owner) },
     overdue:

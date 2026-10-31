@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, before, describe, test } from "node:test";
+import { describe, test } from "node:test";
 import { encodeFunctionData } from "viem";
 import { DOUBLE_ESPRESSO, SWAPPERS, WETH } from "../src/config.ts";
 import { SAFE_ORIGIN } from "../src/wallet.ts";
@@ -43,8 +43,7 @@ async function tickOnly(page: h.Opened["page"], symbols: string[]): Promise<void
 }
 
 describe("the swap and the claim against a fork after the swappers' deployment", { timeout: 2_400_000 }, () => {
-  before(() => h.start(RECENT, [HOLDER, PAYEE, SELLER]));
-  after(h.stop);
+  h.fork(RECENT, [HOLDER, PAYEE, SELLER]);
 
   test("swap three tokens into USDC in one prompt; one is skipped, and its approval is reset", async () => {
     await h.fund([WETH, ZORA, AVNT]);

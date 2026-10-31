@@ -1,6 +1,6 @@
 import type { Currency, Fiat } from "./config.ts";
 
-export const LANG = "en-GB";
+const LANG = "en-GB";
 export const WEEK = 604_800;
 // Hydrex's epochs start on Thursday at 00:00 UTC, as did the Unix epoch.
 export const weekStart = (time: number): number => time - (time % WEEK);
@@ -65,7 +65,7 @@ export const bps = (value: bigint): string => percent.format(Number(value) / 10_
 export const fraction = (value: number): string => roughPercent.format(value);
 
 // What prices are in (USDC when no dollar price was found), with each currency's price in dollars at their time.
-export type Unit = "USD" | "USDC";
+type Unit = "USD" | "USDC";
 export type Rates = Partial<Record<Fiat, number>>;
 export type Basis = { unit: Unit; rates?: Rates | undefined };
 export type Money = Basis & { value: number };

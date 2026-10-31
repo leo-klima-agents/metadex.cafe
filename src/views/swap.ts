@@ -606,7 +606,7 @@ actions.reset = (el) => {
     el.dataset.arg === "all" ? all : all.filter(({ token, spender }) => `${token} ${spender}` === row?.dataset.key),
   );
 };
-export async function openReset(these: Allowance[]): Promise<void> {
+async function openReset(these: Allowance[]): Promise<void> {
   if (!these.length) return;
   const tokens = await describe(these.map(({ token }) => token));
   const slips = these.map(({ token, spender }) =>

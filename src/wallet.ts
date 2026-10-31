@@ -73,7 +73,7 @@ export function parentOrigin(ancestor: string | undefined, referrer: string, own
 
 type SafeAnswer = { id: string; success: boolean; data?: unknown; error?: string };
 // A question to Safe{Wallet}, and `stop`, which stops listening for its answers and drops the questions unanswered.
-export type AskSafe = ((method: string, params?: unknown) => Promise<unknown>) & { stop(): void };
+type AskSafe = ((method: string, params?: unknown) => Promise<unknown>) & { stop(): void };
 
 // Asks Safe{Wallet}, the page's parent, as a Safe App does: a message of an id, a method, its params and the SDK's
 // version, sent to Safe{Wallet}'s origin only, which it answers with the same id. An answer counts only from the parent,
@@ -256,13 +256,13 @@ export async function sendCalls({ provider, address }: Connection, txs: Tx[], at
   return typeof reply === "string" ? reply : String((reply as { id: string }).id);
 }
 
-export type CallsReceipt = {
+type CallsReceipt = {
   transactionHash: Hex;
   status: Hex;
   logs: { address: Address; data: Hex; topics: Hex[] }[];
 };
 // A batch is pending, included (with each transaction's receipt), or failed. Wallets of the first drafts answer in words.
-export type CallsStatus = { state: "pending" | "done" | "failed"; receipts: CallsReceipt[] };
+type CallsStatus = { state: "pending" | "done" | "failed"; receipts: CallsReceipt[] };
 
 export async function callsStatus({ provider }: Connection, id: string): Promise<CallsStatus> {
   const reply = (await provider.request({ method: "wallet_getCallsStatus", params: [id] })) as {
