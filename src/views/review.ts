@@ -215,7 +215,6 @@ export function refreshReview(): void {
     how: howText(state),
     progress: state.message,
   });
-  $("#calls-title").textContent = callsName(state);
   calls.hidden = !showCalls;
   pages.hidden = !state.intro || page !== 0 || isDone;
   confirm.textContent = safe(state)

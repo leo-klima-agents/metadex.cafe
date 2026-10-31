@@ -22,6 +22,8 @@ test("the page reaches its RPCs and nothing else, and checks its script and styl
   assert.deepEqual(/connect-src ([^;]+)/.exec(csp)![1]!.split(" "), config.RPCS);
   assert.match(html, /<script type="module" src="main.js" integrity="%MAIN_INTEGRITY%"><\/script>/);
   assert.doesNotMatch(page, /<script>|style="/);
+  // The page is anonymous for now: it names nobody who runs it.
+  assert.doesNotMatch(html, /ldeso|leo-klima|github\.com\/(?!hydrexfi)/i);
 });
 
 test("ids are unique, and every reference points to one", () => {

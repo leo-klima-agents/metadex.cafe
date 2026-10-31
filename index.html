@@ -834,7 +834,7 @@
     </footer>
 
     <!-- What a review shows before the calls: the page of its kind, set by data-state. -->
-    <dialog class="sheet stack" id="review" aria-labelledby="review-title">
+    <dialog class="sheet" id="review" aria-labelledby="review-title">
       <p class="label" data-v="step"></p>
       <h2 id="review-title" tabindex="-1" data-v="title"></h2>
       <div class="stack" id="pages" data-state="join">
@@ -939,8 +939,7 @@
           <p class="notice" data-v-row="simulated"><span data-v="simulated"></span></p>
         </article>
       </div>
-      <section class="stack" id="calls" aria-labelledby="calls-title">
-        <h3 id="calls-title">Transactions</h3>
+      <section class="stack" id="calls" aria-labelledby="review-title">
         <p class="quiet" data-v="how"></p>
         <ol class="list" id="slips"></ol>
       </section>

@@ -1,6 +1,6 @@
 import type { Address, Hex } from "viem";
 import { ADDRESSES, BASESCAN } from "../config.ts";
-import { day, hexLines, short, walletLines } from "../format.ts";
+import { day, hexLines, walletLines } from "../format.ts";
 
 export const $ = <T extends Element = HTMLElement>(selector: string, root: ParentNode = document): T =>
   root.querySelector<T>(selector)!;
@@ -88,11 +88,10 @@ export function showHex(element: Element, hex: string, wallet = false): void {
   const lines = wallet ? walletLines(hex) : hexLines(hex);
   element.classList.add("hex");
   element.replaceChildren(
-    ...lines.flatMap((line, i) =>
-      line.map((group, j) =>
-        Object.assign(document.createElement("span"), { textContent: group, className: i && !j ? "line" : "" }),
-      ),
-    ),
+    ...lines.flatMap((line, i) => [
+      ...(i ? [document.createElement("br")] : []),
+      ...line.map((group) => Object.assign(document.createElement("span"), { textContent: group })),
+    ]),
   );
 }
 
@@ -101,8 +100,8 @@ export function linkAddresses(): void {
   for (const element of $$<HTMLAnchorElement>("[data-address]")) {
     const address = ADDRESSES[element.dataset.address!]!;
     element.href = `${addressUrl(address)}${"code" in element.dataset ? "#code" : ""}`;
-    element.setAttribute("aria-label", `${short(address)} on Basescan`);
     element.translate = false;
     showHex(element, address);
+    element.append(Object.assign(document.createElement("span"), { className: "sr", textContent: " on Basescan" }));
   }
 }
