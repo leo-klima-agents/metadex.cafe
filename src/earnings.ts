@@ -4,7 +4,7 @@ import { WEEK, weekStart, type Money } from "./format.ts";
 import { escrow, voter, type Account, type Holdings } from "./hydrex.ts";
 import { pricesNow, worthOf, type Prices } from "./prices.ts";
 import { blockTime, call, now, readFor, required, type Read } from "./rpc.ts";
-import { RETRY, reader, type Reader } from "./state.ts";
+import { RETRY, reader, update, type Reader } from "./state.ts";
 import { tokensOf } from "./tokens.ts";
 import { memo, same } from "./util.ts";
 
@@ -233,6 +233,7 @@ export async function loadShares({ accounts }: Holdings): Promise<void> {
       const [delegate, votes] = found.slice(2 * i, 2 * i + 2) as [Address | undefined, bigint | undefined];
       known.of.set(id, delegate && votes ? { delegate, votes } : undefined);
     }
+    update();
   }
   const holders = new Set(
     [...known.of.values()].flatMap((stake) =>

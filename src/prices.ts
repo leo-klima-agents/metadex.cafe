@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 import { ABI, ANCHORS, FIAT_FEEDS, PRICING, USDC, WETH, type Exchange, type Token } from "./config.ts";
-import { setRates, type Money, type Unit } from "./format.ts";
+import { figure, money, setRates, type Money, type Unit } from "./format.ts";
 import { exchangeOf, pairKey, waysFor } from "./pools.ts";
 import { call, read, rpc, type Call, type Read } from "./rpc.ts";
 import { key, memo } from "./util.ts";
@@ -234,4 +234,10 @@ export const costs = memo<void, Costs>(
 export function ethCost(wei: bigint, prices: Prices | undefined): Money | undefined {
   const eth = prices?.of.get(key(WETH));
   return eth === undefined ? undefined : { value: (Number(wei) / 1e18) * eth, unit: prices!.unit };
+}
+
+// Gas as money to the cent, or else in the ETH that pays it.
+export function gasWords(wei: bigint, prices: Prices | undefined): string {
+  const cost = ethCost(wei, prices);
+  return cost ? money(cost, true) : `${figure(wei, 18)} ETH`;
 }

@@ -1,87 +1,98 @@
-import { isOpen } from "../dom.ts";
-import { parse, type Route } from "../routes.ts";
+import { byKind, swapperOf, type Kind } from "../config.ts";
+import { $, $$ } from "./dom.ts";
 
-// The page is one HTML file split into views, one for each kind of page. The hash says which, as a route: this shows
-// its view, sets the title, marks the header's link to the view shown, and opens the section asked for, in its popup.
-// Home shows until the script runs. A wallet connected on Home or About leads on to the App (see connectTo() in connection.ts),
-// and the wallet's chip leads there too.
+// The page's address is its fragment, which never reaches a server: `#app`, `#hydrex`, `#hydrex/matcha-latte`,
+// `#hydrex/9540`, `#swap/weth`, `#about`; one more part opens a popup's section, as `#swap/weth/check`. Else Home.
+export type View = "home" | "app" | "hydrex" | "automation" | "account" | "swap" | "about";
+export type Route = { view: View; kind?: Kind; id?: bigint; output?: string; section?: string };
 
-const views = [...document.querySelectorAll<HTMLElement>(".view")];
-const home = views.find(({ dataset }) => dataset.view === "home")!;
-const pops = [...document.querySelectorAll<HTMLElement>(".pop[popover]")];
-const listeners: ((route: Route) => void)[] = [];
-let current: Route = { view: "home" };
-let currentView: HTMLElement | undefined;
+export function parse(hash: string): Route {
+  let fragment = hash.replace(/^#/, "");
+  try {
+    fragment = decodeURIComponent(fragment);
+  } catch {}
+  const [first = "", second, third, ...rest] = fragment.split("/");
+  const at = (route: Route, section?: string): Route => (section ? { ...route, section } : route);
+  if (rest.length) return { view: "home" };
+  if (first === "app" && third === undefined) return at({ view: "app" }, second);
+  if (first === "about" && second === undefined) return { view: "about" };
+  if (first === "swap") {
+    const output = second && swapperOf(second) ? second : "usdc";
+    if (output === second) return at({ view: "swap", output }, third);
+    if (third === undefined) return at({ view: "swap", output }, second);
+  }
+  if (first === "hydrex") {
+    if (second === undefined) return { view: "hydrex" };
+    // An account number, as a uint256 has at most 78 digits.
+    if (/^[1-9]\d{0,77}$/.test(second) && third === undefined) return { view: "account", id: BigInt(second) };
+    const kind = byKind(second)?.kind;
+    if (kind) return at({ view: "automation", kind }, third);
+  }
+  return { view: "home" };
+}
 
+export const hrefOf = ({ view, kind, id, output, section }: Route): string =>
+  `#${[
+    view === "home" ? "" : view === "automation" || view === "account" ? "hydrex" : view,
+    kind ?? (id === undefined ? undefined : `${id}`),
+    output === "usdc" && !section ? undefined : output,
+    section,
+  ]
+    .filter((part) => part !== undefined)
+    .join("/")}`;
+
+const TITLES: Partial<Record<View, string>> = { app: "Your wallet", hydrex: "Hydrex", swap: "Swap", about: "About" };
+const titleOf = ({ view, kind, id }: Route): string => {
+  const name =
+    view === "automation" ? byKind(kind!)!.name : view === "account" ? `Hydrex account #${id}` : TITLES[view];
+  return name ? `${name} · metaDEX Café` : "metaDEX Café";
+};
+
+let current = parse(location.hash);
 export const route = (): Route => current;
-
-// Called with each route shown, after its view shows, and at once with the one shown now.
+const listeners: ((route: Route) => void)[] = [];
 export function onRoute(listener: (route: Route) => void): void {
   listeners.push(listener);
   listener(current);
 }
 
-function closePops(): void {
-  for (const pop of pops) if (isOpen(pop)) pop.hidePopover?.();
-}
-
-function viewOf(route: Route): HTMLElement {
-  const found = views.find(
-    ({ dataset }) => dataset.view === route.view && (route.view !== "product" || dataset.kind === route.kind),
-  );
-  return found ?? home;
-}
-
-const titleOf = (route: Route, view: HTMLElement): string =>
-  route.view === "position" ? `Hydrex account #${route.id} · metaDEX Café` : (view.dataset.title ?? document.title);
+const html = document.documentElement;
+const viewOf = (route: Route) => $(`.view[data-view="${route.view}"]`);
+const pops = $$("[popover]");
+const isOpen = (pop: HTMLElement) => pop.matches(":popover-open");
 
 function showRoute(moved: boolean): void {
   const next = parse(location.hash);
-  const view = viewOf(next);
-  const changed =
-    view !== currentView || (next.view === "position" && current.view === "position" && next.id !== current.id);
-  closePops();
-  for (const each of views) each.hidden = each !== view;
-  document.title = titleOf(next, view);
-  // The wallet's chip in the header reads as where you are on the App itself.
-  document.documentElement.dataset.view = next.view;
-  const toApp = document.querySelector("header.site .to-app")!;
-  if (next.view === "app") toApp.setAttribute("aria-current", "page");
-  else toApp.removeAttribute("aria-current");
+  const changed = next.view !== current.view || next.kind !== current.kind || next.id !== current.id;
   current = next;
-  currentView = view;
+  for (const pop of pops) if (isOpen(pop)) pop.hidePopover();
+  html.dataset.view = next.view;
+  if (next.kind) html.dataset.kind = next.kind;
+  document.title = titleOf(next);
+  const chip = $("#chip");
+  if (next.view === "app") chip.setAttribute("aria-current", "page");
+  else chip.removeAttribute("aria-current");
   for (const listener of listeners) listener(next);
-  const section =
-    "section" in next && next.section ? view.querySelector<HTMLElement>(`[data-section="${next.section}"]`) : null;
+  const section = next.section && viewOf(next).querySelector<HTMLElement>(`[data-section="${next.section}"]`);
+  if (changed) scrollTo(0, 0);
   if (section) {
-    const pop = section.closest<HTMLElement>(".pop[popover]");
-    if (pop?.showPopover) {
-      if (changed) scrollTo(0, 0);
-      pop.showPopover();
-      if (pop !== section) section.scrollIntoView();
-      pop.focus({ preventScroll: true });
-      return;
-    }
+    const pop = section.closest<HTMLElement>("[popover]");
+    pop?.showPopover();
     section.scrollIntoView();
-    if (moved) section.querySelector<HTMLElement>("h2, h3")?.focus({ preventScroll: true });
-    return;
-  }
-  if (!changed) return;
-  // A new view starts at the top, with its heading focused so that screen readers announce it.
-  scrollTo(0, 0);
-  if (moved) view.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
+    $("h2", pop ?? section).focus({ preventScroll: !pop });
+  } else if (changed && moved) $("h1", viewOf(next)).focus({ preventScroll: true });
 }
 
-// A popup takes focus when an address opens it, and its address goes once it closes, so that the same one opens it
-// again.
+// A popup opened by an address takes focus, and its section leaves the address as it closes.
+const holds = (pop: HTMLElement, section: string) =>
+  pop.matches(`[data-section="${section}"]`) || !!pop.querySelector(`[data-section="${section}"]`);
 for (const pop of pops) {
-  pop.tabIndex = -1;
+  $("h2", pop).tabIndex = -1;
   pop.addEventListener("toggle", () => {
-    if (isOpen(pop) || !currentView?.contains(pop) || !("section" in current) || !current.section) return;
-    if (!pop.matches(`[data-section="${current.section}"], :has([data-section="${current.section}"])`)) return;
-    // A section is always the address's last part.
-    history.replaceState(null, "", location.hash.replace(/\/[^/]*$/, "") || "#");
-    current = parse(location.hash);
+    if (isOpen(pop) || !current.section || !holds(pop, current.section)) return;
+    const { section: _, ...rest } = current;
+    history.replaceState(null, "", hrefOf(rest));
+    current = rest;
   });
 }
 

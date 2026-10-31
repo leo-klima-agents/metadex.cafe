@@ -6,6 +6,7 @@ import {
   encodeAbiParameters,
   parseAbiParameters,
   zeroAddress,
+  type Address,
   type Hex,
 } from "viem";
 import { ABI, CBBTC, HYDX, SWAPPERS, USDC, WETH } from "../src/config.ts";
@@ -80,8 +81,8 @@ test("why a route failed, and what a swap did for its caller", () => {
   assert.equal(reasonOf(tooLittle), "it would have fetched less than its minimum");
   assert.deepEqual([refusedTransfer(refused), refusedTransfer(tooLittle)], [true, false]);
   const swapper = SWAPPERS[0]!;
-  const caller = "0x0000000000000000000000000000000000000001";
-  const log = (eventName: "RouteSwapped" | "Swapped", types: string, values: unknown[], who = caller) => ({
+  const caller = "0x0000000000000000000000000000000000000001" as const;
+  const log = (eventName: "RouteSwapped" | "Swapped", types: string, values: unknown[], who: Address = caller) => ({
     address: swapper.address,
     topics: encodeEventTopics({ abi: ABI.swapper, eventName, args: { caller: who } }) as Hex[],
     data: encodeAbiParameters(parseAbiParameters(types), values),

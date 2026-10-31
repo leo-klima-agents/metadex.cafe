@@ -30,9 +30,9 @@ test("ids are unique, and every reference points to one", () => {
     ids.filter((id, i) => ids.indexOf(id) !== i),
     [],
   );
-  for (const id of all(/(?:aria-labelledby|aria-describedby|for|popovertarget)="([^"]+)"/g))
+  for (const id of all(/\s(?:aria-labelledby|aria-describedby|for|popovertarget)="([^"]+)"/g))
     for (const each of id.split(" ")) assert.ok(ids.includes(each), each);
-  for (const id of all(/clone\("([a-z-]+)"\)/g, readSources())) assert.ok(ids.includes(id), id);
+  for (const id of all(/(?:clone\(|list\([^,]+,\s*)"([a-z-]+)"/g, readSources())) assert.ok(ids.includes(id), id);
 });
 
 test("every view has one h1; every popup and dialog a name; every control a name; new tabs say so", () => {
@@ -40,7 +40,7 @@ test("every view has one h1; every popup and dialog a name; every control a name
   for (const tag of page.match(/<(div|dialog)[^>]*\b(popover|<dialog)\b[^>]*>/g) ?? [])
     assert.match(tag, /aria-labelledby=/);
   for (const [, attributes, text] of html.matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g))
-    assert.ok(/aria-label=|data-v=/.test(attributes! + text!) || text!.replace(/<[^>]+>/g, "").trim(), attributes);
+    assert.ok(/aria-label=|data-v=/.test(attributes! + text!) || text!.replace(/<[^>]+>/g, "").trim(), attributes!);
   for (const [control, at] of page
     .matchAll(/<(?:input|select)\b[^>]*>/g)
     .map((match) => [match[0], match.index] as const)) {
