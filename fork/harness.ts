@@ -260,7 +260,7 @@ export const walletScript = (names: string[]) => `(() => {
 })();`;
 // The page waits for anvil as long as it takes, which on a first run reads Base a slot at a time; and says what
 // breaks its Content Security Policy.
-const PAGE_SCRIPT = `AbortSignal.timeout = () => new AbortController().signal;
+export const PAGE_SCRIPT = `AbortSignal.timeout = () => new AbortController().signal;
 document.addEventListener("securitypolicyviolation", (event) => console.error("Content Security Policy: " + event.violatedDirective + " " + event.blockedURI));`;
 const safePage = (safe: Address) => `<!doctype html><meta charset="utf-8"><title>Safe{Wallet}</title>
 <iframe src="${SITE}/" style="inline-size: 100%; block-size: 95vh; border: 0"></iframe>
@@ -481,7 +481,7 @@ export async function open(wallet: Partial<WalletOptions> | false, options: Open
     await context.addInitScript(walletScript(names));
   }
   const page = await context.newPage();
-  page.setDefaultTimeout(300_000);
+  page.setDefaultTimeout(Number(process.env.FORK_TIMEOUT ?? 300_000));
   page.on(
     "console",
     (message) => /Content Security Policy/i.test(message.text()) && opened.violations.push(message.text()),
@@ -517,7 +517,9 @@ export const pick = async (page: Page, ...ids: number[]) => {
 };
 // Ticks these accounts of a group, and only these: what needs its owner starts ticked.
 export async function only(page: Page, key: string, ...ids: number[]): Promise<void> {
-  for (const li of await group(page, key).locator("[data-list=account] > li").all()) {
+  const rows = group(page, key).locator("[data-list=account] > li");
+  await rows.first().waitFor();
+  for (const li of await rows.all()) {
     const box = li.locator("input");
     if (await box.isVisible()) await box.setChecked(ids.includes(Number(await li.getAttribute("data-key"))));
   }

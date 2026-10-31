@@ -54,7 +54,9 @@
         <button type="button" class="secondary compact" data-action="retry">Try again</button>
       </p>
       <p class="notice spread" data-if="wrong-chain">
-        <span data-if="not-safe">Wrong network.</span>
+        <span data-if="not-safe"
+          >Wrong network.<span data-text="switch-failed"> Switch to Base in your wallet.</span></span
+        >
         <span data-if="safe">This Safe isn't on Base.</span>
         <button type="button" class="secondary compact" data-if="not-safe" data-action="switch">Switch to Base</button>
       </p>

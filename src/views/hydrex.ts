@@ -517,7 +517,7 @@ export function change(accounts: Account[], action: "join" | "leave" | "self", a
     );
     return openReview({
       name: `Join ${automation.name}`,
-      pages: [{ title: "Before you join", body }],
+      pages: [{ title: "Before you join", body }, {}],
       steps: () => steps,
       checkHref: hrefOf({ view: "product", kind: automation.kind, section: "check" }),
       outcome: async () => doneNode(`Joined. Votes from ${next}.`),

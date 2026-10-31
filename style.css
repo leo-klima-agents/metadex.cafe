@@ -176,8 +176,8 @@ select {
 }
 input[type="checkbox"],
 input[type="radio"] {
-  inline-size: 1.25rem;
-  block-size: 1.25rem;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
   margin: 0;
   accent-color: var(--accent);
 }

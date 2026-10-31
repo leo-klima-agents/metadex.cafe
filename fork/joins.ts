@@ -41,18 +41,18 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     await row(page, 2439)
       .getByText(/In USDC · stopped since Wed,? 9 Sept?/)
       .waitFor();
+    await needs.getByText(/^2 of 2 · [\d,]+ votes$/).waitFor();
     assert.equal(
       await page.getByRole("checkbox", { name: "Pick Hydrex account #2439" }).isChecked(),
       true,
       "what needs its owner starts ticked",
     );
-    await needs.getByText(/^2 of 2 · [\d,]+ votes$/).waitFor();
     await needs.getByRole("checkbox", { name: "All" }).uncheck();
-    assert.equal(await needs.getByRole("button", { name: "Join Matcha Latte" }).isDisabled(), true);
+    await needs.getByRole("button", { name: "Join Matcha Latte", disabled: true }).waitFor();
     await h.pick(page, 2435, 2439);
     await needs.getByRole("button", { name: "Join Matcha Latte" }).click();
     await review(page).getByText("Join Matcha Latte · 1 of 2").waitFor();
-    assert.match(await review(page).innerText(), /Votes from\s+Thu,? 22 Oct,? 00:00 UTC/);
+    assert.match(await review(page).innerText(), /Votes from\s+Thu,? 22 Oct,? 00:00 UTC/i);
     await review(page)
       .getByText(/^(≈|<)\s\$[\d.]+$/)
       .first()
@@ -113,7 +113,7 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     await expectApprovals([141n], CONDUIT, CONDUIT);
     await group(page, "in:matcha-latte").getByRole("button", { name: "Leave" }).click();
     await heading(review(page), "Leave Matcha Latte", 2).waitFor();
-    assert.match(await review(page).innerText(), /Claims stop\s+Now\s+Votes return\s+Thu,? 22 Oct/);
+    assert.match(await review(page).innerText(), /Claims stop\s+Now\s+Votes return\s+Thu,? 22 Oct/i);
     await review(page).getByRole("button", { name: "Sign transaction" }).click();
     await review(page)
       .getByText(/^Left\./)
@@ -194,7 +194,7 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     // A wallet that cannot switch to Base says so.
     const stuck = await connected({ owner: NEWCOMER, chainId: 1, switches: false });
     await stuck.page.getByRole("button", { name: "Switch to Base" }).first().click();
-    await stuck.page.getByText("Switch to Base in your wallet.").waitFor();
+    await stuck.page.getByText("Switch to Base in your wallet.").first().waitFor();
   });
 
   test("inside Safe{Wallet}, a Safe proposes leaving with two accounts as one Safe transaction", async () => {

@@ -19,6 +19,7 @@ let wallets: Wallet[] = [];
 let message = "";
 let missing = false;
 let attempt = 0;
+let switchFailed = false;
 const popup = $("#connect");
 const listening = new WeakSet<Provider>();
 
@@ -35,6 +36,7 @@ export function drawWallets(): void {
     },
   );
   fill(popup, { connecting: message, "no-wallet": missing });
+  fill(document.body, { "switch-failed": switchFailed });
 }
 
 export function startWallets(): void {
@@ -54,7 +56,11 @@ actions["pick-wallet"] = (el) =>
 actions.switch = async () => {
   const connection = state.connection;
   if (!connection) return;
-  await switchToBase(connection).catch(() => announce("Switch to Base in your wallet."));
+  switchFailed = !(await switchToBase(connection).then(
+    () => true,
+    () => false,
+  ));
+  if (switchFailed) announce("Switch to Base in your wallet.");
   render();
 };
 

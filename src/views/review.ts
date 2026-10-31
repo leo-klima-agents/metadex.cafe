@@ -21,7 +21,8 @@ import {
 // wallet signs them, in one prompt where it can, one at a time where not, or as Safe transactions.
 export type Review = {
   name: string;
-  pages: { title: string; body: Node }[];
+  // The last page shows the calls too; one without a title is the calls'.
+  pages: { title?: string; body?: Node }[];
   // The calls; those `sending` are encoded then, with a fresh deadline.
   steps: (sending?: boolean) => Slip[];
   atomic?: boolean;
@@ -97,7 +98,9 @@ function draw(): void {
   const review = current!;
   const { connection } = state;
   const steps = review.steps();
-  const last = review.page === review.pages.length;
+  const pages = review.pages.length ? review.pages : [{}];
+  const last = review.page === pages.length - 1;
+  const shown = pages[review.page]!;
   const safe = !!connection?.wallet.propose;
   const wrongChain = connection?.chainId !== CHAIN_ID;
   const groups = review.groups ?? [steps.length];
@@ -106,11 +109,11 @@ function draw(): void {
   const callsName = steps.length === 1 ? "Transaction" : "Transactions";
   const atomic = !!review.atomic && !!review.capabilities?.atomic;
   fill(dialog, {
-    step: `${review.name}${review.pages.length ? ` · ${Math.min(review.page + 1, review.pages.length + 1)} of ${review.pages.length + 1}` : ""}`,
-    title: review.outcome_ ? "Done" : (review.pages[review.page]?.title ?? callsName),
-    page: review.outcome_ || last ? null : review.pages[review.page]!.body,
+    step: `${review.name}${pages.length > 1 ? ` · ${review.page + 1} of ${pages.length}` : ""}`,
+    title: review.outcome_ ? "Done" : (shown.title ?? callsName),
+    page: review.outcome_ ? null : (shown.body ?? null),
     calls: !review.outcome_ && last && steps.length > 0,
-    "calls-title": review.pages.length ? null : callsName,
+    "calls-title": shown.title ? callsName : null,
     how: safe
       ? apart(review)
         ? `${count(groups.length, "Safe transaction", "Safe transactions")}, ${steps.length} calls`
@@ -183,7 +186,7 @@ function hashes(review: Sending): (Node | string)[] {
 }
 function say(review: Sending, words: string): void {
   review.progress = words;
-  render();
+  if (review === current) draw();
 }
 const wentThrough = ({ done, batch, proposed, groups, steps }: Sending): string =>
   proposed
@@ -293,7 +296,7 @@ actions.confirm = () => {
           ? sendBatch(review)
           : sendNext(review);
   review.sending = true;
-  render();
+  draw();
   sending
     .catch((error: unknown) => {
       if (!declined(error)) console.error(error);

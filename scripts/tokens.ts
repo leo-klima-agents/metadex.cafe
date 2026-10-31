@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getAddress, type Address } from "viem";
-import { tokensOf } from "../src/earnings.ts";
+import { tokensOf } from "../src/tokens.ts";
 
 // Checks the page's list of tokens, src/base-tokens.json, against Base: each address's symbol and decimals, as its
 // contract answers them now. `node scripts/tokens.ts` prints what differs; with --write, it writes the list back with

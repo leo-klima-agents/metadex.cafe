@@ -450,7 +450,7 @@ export async function reviewSwap(
     quoted.set(key(token.address), (quoted.get(key(token.address)) ?? 0n) + out);
   openReview({
     name: `Swap into ${plan.swapper.symbol}`,
-    pages: [{ title: "Quote", body }],
+    pages: [{ title: "Quote", body }, {}],
     steps: (sending) =>
       swap.planSteps(going, tokens, sending ? (at = deadline()) : at, safe ? undefined : gasCosts?.tip).slips,
     atomic: true,

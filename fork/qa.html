@@ -1,0 +1,229 @@
+<!doctype html>
+<!-- The QA wallet's window, beside the page: each control calls qa(), which qa.ts answers with the state. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>QA wallet</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --faint: color-mix(in srgb, currentColor 60%, transparent);
+        --accent: #2f6f4f;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        font: 14px/1.4 system-ui, sans-serif;
+        background: Canvas;
+        color: CanvasText;
+      }
+      h1 {
+        margin: 0;
+        font-size: 18px;
+      }
+      h2 {
+        margin: 0 0 8px;
+        font-size: 13px;
+        text-transform: uppercase;
+        color: var(--faint);
+      }
+      section {
+        border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+        padding: 12px 0;
+      }
+      label {
+        display: block;
+        margin: 6px 0;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        max-inline-size: 100%;
+      }
+      form {
+        display: flex;
+        gap: 4px;
+      }
+      form input {
+        flex: 1;
+      }
+      .hint {
+        color: var(--faint);
+        font-size: 12px;
+        margin: 4px 0;
+      }
+      #status {
+        min-block-size: 1.4em;
+        &.busy {
+          color: var(--accent);
+        }
+        &.failed {
+          color: #b3261e;
+        }
+      }
+      #prompts {
+        padding: 0;
+        list-style: none;
+        & li {
+          border: 2px solid var(--accent);
+          border-radius: 6px;
+          padding: 8px;
+          margin: 8px 0;
+          overflow-wrap: anywhere;
+        }
+      }
+      #log {
+        padding-inline-start: 18px;
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>QA wallet</h1>
+    <p id="status" role="status"></p>
+
+    <section>
+      <h2>Scenario</h2>
+      <select id="scenarios" aria-label="Scenario"></select>
+      <button id="start">Start</button>
+      <p class="hint" id="title"></p>
+      <p class="hint">Starting one, even the same, forks Base again: it undoes every change.</p>
+    </section>
+
+    <section>
+      <h2>Wallet</h2>
+      <ol id="prompts" aria-label="Waiting for you"></ol>
+      <label>Signs as <select id="owner"></select></label>
+      <p class="hint" id="holds"></p>
+      <form id="other">
+        <input id="address" placeholder="Or any address, 0x…" aria-label="Address" />
+        <button>Sign as it</button>
+      </form>
+      <label>
+        Network
+        <select id="chain">
+          <option value="8453">Base</option>
+          <option value="1">Ethereum</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="asks" /> Asks you before it connects, switches or sends</label>
+      <label>
+        Calls
+        <select id="calls">
+          <option value="one">One per prompt</option>
+          <option value="atomic">Several in one prompt, all or nothing</option>
+          <option value="each">Several in one prompt, one by one</option>
+        </select>
+      </label>
+      <p class="hint">The page asks how a wallet sends calls once per address: reload it after a change.</p>
+    </section>
+
+    <section>
+      <h2>Open the page</h2>
+      <button data-open="wallet">With this wallet</button>
+      <button data-open="safe">In Safe{Wallet}, as a Safe</button>
+      <button data-open="none">Without a wallet</button>
+    </section>
+
+    <section>
+      <h2>Base</h2>
+      <p id="time"></p>
+      <button id="travel">Next epoch</button>
+      <button id="replay" hidden></button>
+      <p class="hint">Nobody votes or pays on the fork unasked.</p>
+    </section>
+
+    <section>
+      <h2>What the wallet was asked</h2>
+      <ol id="log" reversed></ol>
+    </section>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const date = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
+      const item = (...children) => Object.assign(document.createElement("li")).appendChild(new Text("")).parentNode;
+      let shown = {};
+      let refused = "";
+
+      // Whether a part shows something new: a select is drawn again only then, so that it stays as picked.
+      function changed(key, value) {
+        const text = JSON.stringify(value);
+        if (shown[key] === text) return false;
+        shown[key] = text;
+        return true;
+      }
+      function fill(select, items, value) {
+        if (document.activeElement === select) return;
+        if (changed(select.id, items)) select.replaceChildren(...items.map(([value, text]) => new Option(text, value)));
+        else if (!changed(`${select.id}=`, value)) return;
+        select.value = value;
+      }
+
+      function render(state) {
+        $("status").textContent = state.busy || state.failure || refused;
+        $("status").className = state.busy ? "busy" : state.failure || refused ? "failed" : "";
+        for (const control of document.querySelectorAll("button, select, input")) control.disabled = !!state.busy;
+        fill($("scenarios"), state.scenarios.map(({ name }) => [name, name]), state.scenario);
+        $("title").textContent = state.scenarios.find(({ name }) => name === $("scenarios").value)?.title ?? "";
+        fill($("owner"), state.owners.map(({ address, short, holds }) => [address, `${short} · ${holds}`]), state.owner);
+        $("holds").textContent = state.owners.find(({ address }) => address === state.owner)?.holds ?? "";
+        fill($("chain"), [["8453", "Base"], ["1", "Ethereum"]], String(state.chainId));
+        fill($("calls"), [...$("calls").options].map(({ value, text }) => [value, text]), state.calls);
+        if (changed("asks", state.asks)) $("asks").checked = state.asks;
+        $("time").textContent = state.time ? `${date.format(state.time * 1000)} UTC · block ${state.block}` : "";
+        $("replay").hidden = !state.replays;
+        if (state.replays) {
+          $("replay").textContent = `The operator ${state.replays.next ?? "is done"} (${state.replays.sent} of ${state.replays.total} sent)`;
+          $("replay").disabled ||= !state.replays.next;
+        }
+        if (changed("prompts", state.prompts))
+          $("prompts").replaceChildren(
+            ...state.prompts.map(({ id, text }) => {
+              const li = document.createElement("li");
+              const yes = Object.assign(document.createElement("button"), { textContent: "Approve" });
+              const no = Object.assign(document.createElement("button"), { textContent: "Decline" });
+              yes.onclick = () => run("answer", id, true);
+              no.onclick = () => run("answer", id, false);
+              li.append(text, document.createElement("br"), yes, no);
+              return li;
+            }),
+          );
+        if (changed("log", state.log))
+          $("log").replaceChildren(...state.log.map((line) => Object.assign(document.createElement("li"), { textContent: line })));
+      }
+
+      async function run(command, ...args) {
+        try {
+          const state = await window.qa(command, ...args);
+          if (command !== "state") refused = "";
+          render(state);
+        } catch (error) {
+          const why = String(error.message ?? error).replace(/^Error: /, "");
+          if (command !== "state") refused = why;
+          $("status").textContent = why;
+          $("status").className = "failed";
+          // What was picked for a change that failed is drawn again as it is.
+          shown = {};
+        }
+      }
+
+      $("start").onclick = () => run("start", $("scenarios").value);
+      $("scenarios").onchange = () => run("state");
+      $("owner").onchange = () => run("owner", $("owner").value);
+      $("other").onsubmit = (event) => {
+        event.preventDefault();
+        run("owner", $("address").value);
+      };
+      $("chain").onchange = () => run("chain", $("chain").value);
+      $("asks").onchange = () => run("asks", $("asks").checked);
+      $("calls").onchange = () => run("calls", $("calls").value);
+      $("travel").onclick = () => run("travel");
+      $("replay").onclick = () => run("replay");
+      for (const button of document.querySelectorAll("[data-open]")) button.onclick = () => run("open", button.dataset.open);
+      run("state");
+      setInterval(() => run("state"), 1000);
+    </script>
+  </body>
+</html>

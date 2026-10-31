@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
+import { toFunctionSelector } from "viem";
+import { VOTER } from "../src/config.ts";
 import { short } from "../src/format.ts";
 import * as h from "./harness.ts";
 import {
   BLOCK,
   ELSEWHERE,
+  FLIP,
   ENDED,
   LEAVER,
   MEMBER,
@@ -82,5 +85,62 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
       .click();
     await none.page.getByRole("link", { name: "MetaMask" }).waitFor();
     for (const each of [violations, hydrexFirst.violations, none.violations]) assert.deepEqual(each, []);
+  });
+
+  test("what votes earned last epoch: on the menu, for each account, and when all of Hydrex cannot be read", async () => {
+    // All of Hydrex, for its average, is refused: the rest of the page still shows.
+    const everyPool = toFunctionSelector("function totalWeightAt(uint256)").slice(2);
+    const { page, violations } = await h.connected(
+      { owner: MEMBER },
+      { width: 390, height: 844, refuse: (body) => body.includes(everyPool) },
+    );
+    await h
+      .row(page, 9540)
+      .getByText(/≈\s\$6\.1\d last epoch/)
+      .waitFor();
+    const menu = view(page, "hydrex").locator('[data-kind="matcha-latte"]');
+    await menu.getByText(/^≈\s\$\d+\.\d\d \/ 1k votes$/).waitFor();
+    await menu.getByText("Yours: 1 Hydrex account").waitFor();
+    await h.text(view(page, "hydrex"), "average").getByText("Not read", { exact: true }).waitFor();
+    assert.equal(await h.text(menu, "versus").isVisible(), false, "nothing to compare with");
+    await page.getByText("Some figures could not be read.").waitFor();
+    await h.shoot(page, "member-390");
+    await page.goto(`${SITE}/#hydrex/matcha-latte/record`);
+    const popup = page.getByRole("dialog", { name: "Performance" });
+    await popup.getByText("897k").waitFor();
+    await popup.getByText("27 pools").waitFor();
+    await popup.getByText("All of Hydrex could not be read.").waitFor();
+    await popup.getByRole("row").filter({ hasText: "AVNT / USDC" }).waitFor();
+    await h.shoot(page, "record-390");
+    assert.deepEqual(violations, []);
+  });
+
+  test("if the Voter cannot be read, the accounts still show, and nothing stays loading", async () => {
+    await h.anvil("anvil_setCode", [VOTER, "0x"]);
+    const { page } = await h.connected({ owner: ELSEWHERE });
+    await h.row(page, 2439).getByText("In USDC", { exact: true }).waitFor();
+    const hydrex = view(page, "hydrex");
+    await hydrex.locator('[data-kind="matcha-latte"]').getByText("Not read yet").waitFor();
+    await h.text(hydrex, "average").getByText("Not read", { exact: true }).waitFor();
+    await page.getByText("Some figures could not be read.").waitFor();
+    assert.equal(await hydrex.locator("[data-loading]:visible").count(), 0);
+    await page.goto(`${SITE}/#hydrex/double-espresso/record`);
+    await page.getByRole("dialog", { name: "Performance" }).getByText("Last epoch could not be read.").waitFor();
+    assert.equal(await view(page, "product").locator("[data-loading]:visible").count(), 0);
+  });
+
+  test("in a new epoch, the page moves on by itself", async () => {
+    await h.approveConduit(NEWCOMER, h.CONDUIT, 141n);
+    const { page } = await h.connected({ owner: NEWCOMER }, { flowing: true });
+    await h.row(page, 141).getByText("Joining Matcha Latte:").waitFor();
+    await page.getByText(/moves the votes from Thu,? 22 Oct/).waitFor();
+    await Promise.allSettled(h.forwarding);
+    await h.anvil("evm_setNextBlockTimestamp", [FLIP + 60]);
+    await h.anvil("evm_mine");
+    await page.clock.setSystemTime((FLIP + 60) * 1000);
+    await page.clock.runFor(30_000);
+    await page.getByText(/moves the votes from Thu,? 29 Oct/).waitFor();
+    await h.group(page, "in:matcha-latte").getByRole("link", { name: "Hydrex account #141" }).waitFor();
+    assert.equal(await h.row(page, 141).getByText("Joining Matcha Latte:").count(), 0);
   });
 });

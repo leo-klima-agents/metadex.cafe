@@ -45,8 +45,9 @@ function show(first: boolean): void {
   toggle("view", true, route.view);
   toggle("kind", route.view === "product", route.view === "product" ? route.kind : "");
   document.title = route.view === "account" ? `Hydrex account #${route.id} · metaDEX Café` : view.dataset.title!;
-  $("header [data-text=chip]").toggleAttribute("aria-current", route.view === "app");
-  if (route.view === "app") $("header [data-text=chip]").setAttribute("aria-current", "page");
+  const chip = $("header [data-text=chip]");
+  if (route.view === "app") chip.setAttribute("aria-current", "page");
+  else chip.removeAttribute("aria-current");
   showTags(TAGS[route.view]);
   for (const popup of popups) if (popup.matches(":popover-open")) popup.hidePopover();
   render();

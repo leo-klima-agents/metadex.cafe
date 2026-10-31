@@ -171,9 +171,9 @@ export async function openClaim(entries: Entry[]): Promise<void> {
             : undefined;
       const cost =
         gasCosts && route ? (ethCost((route.gas + swap.APPROVAL_GAS) * gasCosts.gasPrice, prices)?.value ?? 0) : 0;
-      if (!route || worth === undefined || worth < 2 * cost) return void left.push(known?.symbol ?? token);
+      if (!route || !known || worth === undefined || worth < 2 * cost) return void left.push(known?.symbol ?? token);
       items.push({
-        token: known!,
+        token: known,
         route: { ...route.route, amount: maxUint256, minPaid: swap.minimumOf(route.out, MARGIN) },
         out: route.out,
         allowance: 0n,
@@ -284,7 +284,7 @@ export async function openClaim(entries: Entry[]): Promise<void> {
   draw();
   openReview({
     name,
-    pages: [{ title: "What waits", body }],
+    pages: [{ title: "What waits", body }, {}],
     steps: () => current.steps,
     atomic: true,
     groups: apart ? groups : undefined,
