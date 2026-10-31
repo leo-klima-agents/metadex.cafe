@@ -7,6 +7,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
+import { memo } from "./cache.ts";
 import { MULTICALL3, RPCS } from "./config.ts";
 
 export type Call = { address: Address; abi: Abi; functionName: string; args: unknown[] };
@@ -132,6 +133,7 @@ export function rpc<T>(method: string, params: unknown[], { tag, want = (r) => r
 }
 
 type ReadOptions = { block?: number | "latest"; tag?: Tag | undefined; perBatch?: number };
+export type Read = (calls: Call[], options?: ReadOptions) => Promise<unknown[]>;
 // Reads contracts through Multicall3, in batches of `perBatch`, as each eth_call runs within its own gas limit. A call
 // that fails reads as undefined.
 export async function read(
@@ -161,6 +163,10 @@ async function aggregate(calls: Call[], block: number | "latest", tag: Tag | und
     },
   );
 }
+export const tagged =
+  (tag: Tag): Read =>
+  (calls, options) =>
+    read(calls, { ...options, tag });
 // Throws unless every call was read.
 export function required<T>(values: (T | undefined)[]): T[] {
   if (values.includes(undefined)) throw new Error("A read from Base failed.");
@@ -223,3 +229,22 @@ export async function gasPaid(hashes: Hex[], from: Address): Promise<bigint | un
   }
   return receipts.length ? wei : undefined;
 }
+
+// The gas price, and the tip the page asks for, at most 1 gwei: above it, Aero's classic pools tax a swap.
+export const MAX_TIP = 1_000_000_000n;
+export type Costs = { gasPrice: bigint; tip?: bigint | undefined };
+export const costs = (): Promise<Costs> =>
+  memo(
+    "costs",
+    async () => {
+      const [gasPrice, tip] = await Promise.all([
+        rpc<Hex>("eth_gasPrice", []),
+        rpc<Hex>("eth_maxPriorityFeePerGas", []).catch(() => undefined),
+      ]);
+      return {
+        gasPrice: BigInt(gasPrice),
+        tip: tip === undefined ? undefined : BigInt(tip) < MAX_TIP ? BigInt(tip) : MAX_TIP,
+      };
+    },
+    60_000,
+  );

@@ -1,0 +1,122 @@
+import { failures, retry } from "./cache.ts";
+import { CHAIN_ID, type Currency } from "./config.ts";
+import { preload } from "./data.ts";
+import { setCurrency, short } from "./format.ts";
+import { parse, type View } from "./routes.ts";
+import { showTags, type Tag } from "./rpc.ts";
+import { actions, onRender, render, state } from "./state.ts";
+import { $, fill, toggle } from "./ui.ts";
+import { drawApp } from "./views/app.ts";
+import { drawAccount } from "./views/account.ts";
+import { drawHydrex, drawProduct } from "./views/hydrex.ts";
+import { drawReview } from "./views/review.ts";
+import { drawSwap } from "./views/swap.ts";
+import { drawWallets, startWallets } from "./views/wallet.ts";
+
+// The page is one HTML file of views; the hash picks the one shown. Each view's reads go first, the others' after.
+const TAGS: Record<View, Tag[]> = {
+  home: [],
+  about: [],
+  app: ["earnings", "payouts", "swap"],
+  hydrex: ["earnings", "average", "shares", "payouts"],
+  product: ["earnings", "average", "shares", "payouts"],
+  account: ["earnings", "shares", "payouts"],
+  swap: ["earnings", "swap"],
+};
+const DRAW: Partial<Record<View, () => void>> = {
+  app: drawApp,
+  hydrex: drawHydrex,
+  product: drawProduct,
+  account: drawAccount,
+  swap: drawSwap,
+};
+const views = [...document.querySelectorAll<HTMLElement>("main > [data-view]")];
+const popups = [...document.querySelectorAll<HTMLElement>("[popover]")];
+
+function show(first: boolean): void {
+  const before = state.route;
+  const route = (state.route = parse(location.hash));
+  const moved =
+    route.view !== before.view ||
+    (route.view === "account" && before.view === "account" && route.id !== before.id) ||
+    first;
+  const view = views.find(({ dataset }) => dataset.view === route.view)!;
+  for (const each of views) each.hidden = each !== view;
+  toggle("view", true, route.view);
+  toggle("kind", route.view === "product", route.view === "product" ? route.kind : "");
+  document.title = route.view === "account" ? `Hydrex account #${route.id} · metaDEX Café` : view.dataset.title!;
+  $("header [data-text=chip]").toggleAttribute("aria-current", route.view === "app");
+  if (route.view === "app") $("header [data-text=chip]").setAttribute("aria-current", "page");
+  showTags(TAGS[route.view]);
+  for (const popup of popups) if (popup.matches(":popover-open")) popup.hidePopover();
+  render();
+  const section =
+    "section" in route && route.section ? view.querySelector<HTMLElement>(`[data-section="${route.section}"]`) : null;
+  const popup = section?.closest<HTMLElement>("[popover]");
+  if (popup && section) {
+    popup.showPopover();
+    section.scrollIntoView();
+    popup.querySelector<HTMLElement>("h2")!.focus({ preventScroll: true });
+  } else if (moved) {
+    scrollTo(0, 0);
+    if (!first) view.querySelector<HTMLElement>("h1")!.focus({ preventScroll: true });
+  }
+}
+// A popup's address goes once it closes, so that the same address opens it again.
+for (const popup of popups) {
+  popup.querySelector("h2")?.setAttribute("tabindex", "-1");
+  popup.addEventListener("toggle", () => {
+    if (popup.matches(":popover-open") || !("section" in state.route) || !state.route.section) return;
+    if (!popup.matches(`[data-section="${state.route.section}"], :has([data-section="${state.route.section}"])`))
+      return;
+    history.replaceState(null, "", location.hash.replace(/\/[^/]*$/, ""));
+    state.route = parse(location.hash);
+  });
+}
+
+// One listener for each kind of event dispatches to the action an element names.
+document.addEventListener("click", (event) => {
+  const el = (event.target as Element).closest<HTMLElement>("button[data-action], a[data-action]");
+  if (el) actions[el.dataset.action!]?.(el, event);
+});
+document.addEventListener("change", (event) => {
+  const el = event.target as HTMLElement;
+  if (el.dataset.action) actions[el.dataset.action]?.(el, event);
+});
+document.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const el = event.target as HTMLElement;
+  if (el.dataset.action) actions[el.dataset.action]?.(el, event);
+});
+actions.skip = (_, event) => {
+  event.preventDefault();
+  $("main > [data-view]:not([hidden]) h1").focus();
+};
+actions.retry = () => retry();
+actions.currency = (el) => {
+  setCurrency((el as HTMLSelectElement).value as Currency);
+  render();
+};
+
+onRender(() => {
+  const connection = state.connection;
+  toggle("wallet", !!connection);
+  toggle("wrong-chain", !!connection && connection.chainId !== CHAIN_ID);
+  toggle("safe", !!connection?.wallet.propose);
+  fill(document.body, { chip: connection ? short(connection.address) : "", failed: failures() > 0 });
+  $("header [data-text=chip]").setAttribute(
+    "aria-label",
+    connection ? `Your wallet, connected as ${short(connection.address)}` : "",
+  );
+  drawWallets();
+  DRAW[state.route.view]?.();
+  drawReview();
+  preload();
+});
+
+// Safe{Wallet} shows the page in a frame: it starts on the App there.
+if (window.parent !== window && !location.hash) location.replace("#app");
+addEventListener("hashchange", () => show(false));
+show(true);
+startWallets();
+setInterval(render, 30_000);

@@ -1,16 +1,19 @@
 // Every read from Base the page keeps, by key: its value, or why it failed, and the read under way. A failed read
 // stays failed until retry(). One past its time to live is read again, and shows its last value meanwhile.
-type Entry = { value?: unknown; error?: unknown; reading?: Promise<unknown>; at: number; ttl: number };
+type TTL<T> = number | ((value: T) => number);
+type Entry = { value?: unknown; error?: unknown; reading?: Promise<unknown>; at: number; ttl: TTL<never> };
 const entries = new Map<string, Entry>();
 let settled = (): void => {};
 export const onSettle = (listener: () => void): void => void (settled = listener);
 
-export function memo<T>(key: string, read: () => Promise<T>, ttl = Infinity): Promise<T> {
+export function memo<T>(key: string, read: () => Promise<T>, ttl: TTL<T> = Infinity): Promise<T> {
   const entry = entries.get(key);
   if (entry?.reading) return entry.reading as Promise<T>;
   if (entry && "error" in entry) return Promise.reject(entry.error);
-  if (entry && "value" in entry && performance.now() - entry.at < entry.ttl) return Promise.resolve(entry.value as T);
-  const next: Entry = { ...entry, at: performance.now(), ttl };
+  const fresh = (entry: Entry) =>
+    performance.now() - entry.at < (typeof entry.ttl === "number" ? entry.ttl : entry.ttl(entry.value as never));
+  if (entry && "value" in entry && fresh(entry)) return Promise.resolve(entry.value as T);
+  const next: Entry = { ...entry, at: performance.now(), ttl: ttl as TTL<never> };
   const reading = read().then(
     (value) => {
       if (entries.get(key) === next) [next.value, next.reading] = [value, undefined];
@@ -30,7 +33,7 @@ export function memo<T>(key: string, read: () => Promise<T>, ttl = Infinity): Pr
 
 // What a view shows of a read: its value, if any, and whether it failed. Starts the read if due.
 export type Got<T> = { value?: T; failed?: true };
-export function use<T>(key: string, read: () => Promise<T>, ttl?: number): Got<T> {
+export function use<T>(key: string, read: () => Promise<T>, ttl?: TTL<T>): Got<T> {
   memo(key, read, ttl).catch(() => {});
   const entry = entries.get(key)!;
   return "value" in entry ? { value: entry.value as T } : "error" in entry ? { failed: true } : {};

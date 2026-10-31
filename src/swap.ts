@@ -1,0 +1,398 @@
+import {
+  decodeErrorResult,
+  decodeEventLog,
+  decodeFunctionResult,
+  encodeFunctionData,
+  parseAbi,
+  type Address,
+  type Hex,
+} from "viem";
+import { CBBTC, FEE_BPS, HYDX, SWAPPERS, USDC, WETH, type Swapper } from "./config.ts";
+import { figure, utc } from "./format.ts";
+import { exchangeOf, key, pairKey, waysFor, type Hop, type Read, type Token, type Way } from "./prices.ts";
+import { call, read, same, simulate, type Call, type Receipt, type Tx } from "./rpc.ts";
+import { erc20Abi } from "./tokens.ts";
+import type { Slip } from "./wallet.ts";
+
+// ImmutableSwapper sells the tokens its caller names for its output, each along the route its caller picks, and takes
+// 1% of each route's output. It picks no route and sets no minimum: the page does, from the pools of the twelve
+// exchanges it checks against, and the swapper's own quote().
+
+export const swapperAbi = parseAbi([
+  "struct Hop { uint8 exchange; address pool; address tokenOut; uint24 fee; int24 tickSpacing; }",
+  "struct Route { address token; uint256 amount; uint256 minPaid; Hop[] hops; }",
+  "struct Result { bool done; uint256 amountIn; uint256 amountOut; bytes reason; }",
+  "function swap(Route[] routes, uint256 deadline, bool skipFailed) returns (Result[] results, uint256 paid, uint256 fee)",
+  "function quote(Route[] routes) returns (Result[] results)",
+  "event RouteSwapped(address indexed caller, uint256 index, address token, uint256 amountIn, uint256 amountOut)",
+  "event RouteFailed(address indexed caller, uint256 index, address token, bytes reason)",
+  "event Swapped(address indexed caller, uint256 paid, uint256 fee)",
+  "error Expired()",
+  "error BadHopCount(uint256 route)",
+  "error BadPath(uint256 route, uint256 hop)",
+  "error NotExchangePool(uint8 exchange, address pool)",
+  "error NativeOutsideV4(uint256 route, uint256 hop)",
+  "error NoOutput(uint256 route, uint256 hop)",
+  "error PartialFill(address pool)",
+  "error NotExpectedCaller(address caller)",
+  "error TooLittle(uint256 route, uint256 paid, uint256 minPaid)",
+  "error Quoted(uint256 amountOut)",
+  "error TokenCallFailed(address token)",
+  "error OnlySelf()",
+  "error Reentrancy()",
+  "error ZeroAddress()",
+]);
+// `amount` maxUint256 sells the whole balance, up to the approval: as after a claim.
+export type Route = { token: Address; amount: bigint; minPaid: bigint; hops: Hop[] };
+export type Result = { done: boolean; amountIn: bigint; amountOut: bigint; reason: Hex };
+export const swapperFor = (token: Address): Swapper | undefined =>
+  SWAPPERS.find((swapper) => same(swapper.token, token));
+export const hopOf = ({ exchange, pool, tokenOut, fee, tickSpacing }: Hop): Hop => ({
+  exchange,
+  pool,
+  tokenOut,
+  fee,
+  tickSpacing,
+});
+
+// The tokens a route may pass through: WETH, USDC or cbBTC, and HYDX for Hydrex's tokens, which often trade only
+// against HYDX, which then trades against WETH or USDC. At most three hops.
+export const MIDDLES: Address[] = [WETH, USDC, CBBTC];
+export function candidatePaths(token: Address, output: Address, hydrex = false): Address[][] {
+  if (same(token, output)) return [];
+  const middles = [...MIDDLES, ...(hydrex ? [HYDX] : [])].filter(
+    (middle) => !same(middle, token) && !same(middle, output),
+  );
+  const paths = [[token, output], ...middles.map((middle) => [token, middle, output])];
+  if (hydrex && !same(token, HYDX) && !same(output, HYDX))
+    for (const middle of [WETH, USDC])
+      if (!same(middle, output) && !same(middle, token)) paths.push([token, HYDX, middle, output]);
+  return paths;
+}
+
+// Aero's classic pools add an MEV tax above a tip of 1 gwei, which a quote does not see: one wins a hop only by more
+// than 1%.
+export const taxed = ({ exchange }: Hop): boolean => exchangeOf(exchange).kind === "solidly";
+export const venueOf = ({ exchange }: Hop): string => exchangeOf(exchange).name.split(" ")[0]!;
+const top = <T extends { out: bigint }>(list: T[]): T | undefined =>
+  list.reduce<T | undefined>((found, each) => (!found || each.out > found.out ? each : found), undefined);
+export function best<T extends { way: Hop; out: bigint }>(quotes: T[]): T | undefined {
+  const paid = quotes.filter(({ out }) => out > 0n);
+  const [plain, aero] = [top(paid.filter(({ way }) => !taxed(way))), top(paid.filter(({ way }) => taxed(way)))];
+  return !aero ? plain : !plain ? aero : aero.out * 100n > plain.out * 101n ? aero : plain;
+}
+
+// Gas, as the swapper's tests measure it: Hydrex's Algebra pools look for an arbitrage after each swap, about a
+// million a hop. A transaction may use 16.7 million on Base; the page keeps each swap under 15.
+export const APPROVAL_GAS = 46_000n;
+export const MAX_SWAP_GAS = 15_000_000n;
+export function hopGas({ exchange }: Hop): bigint {
+  const { kind } = exchangeOf(exchange);
+  return kind === "algebra" ? 1_000_000n : ["pair", "solidly", "aerodrome", "v2"].includes(kind) ? 50_000n : 110_000n;
+}
+export const routeGas = ({ hops }: { hops: Hop[] }): bigint => hops.reduce((sum, hop) => sum + hopGas(hop), 50_000n);
+export const swapGas = (routes: { hops: Hop[] }[]): bigint =>
+  routes.reduce((sum, route) => sum + routeGas(route), 150_000n);
+// The routes, in order, in as few swaps as keep each under the limit.
+export function split<T extends { hops: Hop[] }>(routes: T[], limit = MAX_SWAP_GAS): T[][] {
+  const swaps: T[][] = [];
+  for (const route of routes) {
+    const last = swaps.at(-1);
+    if (last && swapGas([...last, route]) <= limit) last.push(route);
+    else swaps.push([route]);
+  }
+  return swaps;
+}
+
+// The fee of a route's output, rounded down as the swapper rounds it; and the least it may pay: less the fee and the
+// slippage.
+export const feeOf = (out: bigint): bigint => (out * FEE_BPS) / 10_000n;
+export const paidOf = (out: bigint): bigint => out - feeOf(out);
+export const minimumOf = (out: bigint, marginBps: bigint): bigint => (paidOf(out) * (10_000n - marginBps)) / 10_000n;
+// A route for part of what it was quoted for, as when a claim brings less than expected: its quote and minimum shrink
+// in proportion.
+export function partOf<T extends { route: Route; out: bigint }>(item: T, amount: bigint, expected: bigint): T {
+  if (amount >= expected) return { ...item, route: { ...item.route, amount } };
+  const share = (value: bigint) => (value * amount) / expected;
+  return { ...item, out: share(item.out), route: { ...item.route, amount, minPaid: share(item.route.minPaid) } };
+}
+
+// Quotes routes on each output's swapper, six routes a call and three calls a read, as a hop through Hydrex's Algebra
+// pools takes about a million gas and an RPC gives an eth_call up to 50 million.
+export const QUOTES_PER_REQUEST = 18;
+export async function quoteAll(
+  items: { swapper: Swapper; route: Route }[],
+  rd: Read = read,
+): Promise<(Result | undefined)[]> {
+  const calls: { call: Call; at: number[] }[] = [];
+  for (const swapper of new Set(items.map(({ swapper }) => swapper))) {
+    const indexes = items.flatMap((item, i) => (item.swapper === swapper ? [i] : []));
+    for (let i = 0; i < indexes.length; i += 6) {
+      const at = indexes.slice(i, i + 6);
+      calls.push({
+        call: call(
+          swapper.address,
+          swapperAbi as never,
+          "quote",
+          at.map((index) => items[index]!.route),
+        ),
+        at,
+      });
+    }
+  }
+  const replies = await rd(
+    calls.map(({ call }) => call),
+    { perBatch: 3 },
+  );
+  const results: (Result | undefined)[] = items.map(() => undefined);
+  calls.forEach(({ at }, i) => at.forEach((index, j) => (results[index] = (replies[i] as Result[] | undefined)?.[j])));
+  return results;
+}
+
+// A token's best route to the output, net of its gas in the output. Each hop takes the best of its pools for what the
+// hop before paid; then routes of several hops are quoted whole, as their pools may meet.
+export type Found = { route: Route; out: bigint; gas: bigint };
+export async function findRoute(
+  token: Address,
+  amount: bigint,
+  output: Swapper,
+  hydrex: boolean,
+  gasValue: (gas: bigint) => bigint = () => 0n,
+  rd: Read = read,
+): Promise<Found | undefined> {
+  type Partial = { path: Address[]; hops: Hop[]; amount: bigint };
+  let open: Partial[] = candidatePaths(token, output.token, hydrex).map((path) => ({ path, hops: [], amount }));
+  const complete: Partial[] = [];
+  while (open.length) {
+    const legs = open.map(({ path, hops }) => [path[hops.length]!, path[hops.length + 1]!] as [Address, Address]);
+    const ways = await waysFor(legs, undefined, rd);
+    // Legs that share their pair and amount share quotes.
+    const asked = new Map<string, { way: Way; index: number }[]>();
+    const items: { swapper: Swapper; route: Route }[] = [];
+    open.forEach((partial, i) => {
+      const [a, b] = legs[i]!;
+      const id = `${pairKey(a, b)} ${partial.amount}`;
+      if (asked.has(id)) return;
+      asked.set(
+        id,
+        (ways.get(pairKey(a, b)) ?? []).map((way) => ({
+          way,
+          index:
+            items.push({
+              swapper: swapperFor(b)!,
+              route: { token: a, amount: partial.amount, minPaid: 0n, hops: [hopOf(way)] },
+            }) - 1,
+        })),
+      );
+    });
+    const results = await quoteAll(items, rd);
+    const next: Partial[] = [];
+    open.forEach((partial, i) => {
+      const [a, b] = legs[i]!;
+      const quoted = asked
+        .get(`${pairKey(a, b)} ${partial.amount}`)!
+        .map(({ way, index }) => ({ way: hopOf(way), out: results[index]?.done ? results[index].amountOut : 0n }));
+      const chosen = best(quoted);
+      if (!chosen) return;
+      const moved = { path: partial.path, hops: [...partial.hops, chosen.way], amount: chosen.out };
+      (moved.hops.length === partial.path.length - 1 ? complete : next).push(moved);
+    });
+    open = next;
+  }
+  const longer = complete.filter(({ hops }) => hops.length > 1);
+  const whole = longer.length
+    ? await quoteAll(
+        longer.map(({ hops }) => ({ swapper: output, route: { token, amount, minPaid: 0n, hops } })),
+        rd,
+      )
+    : [];
+  const options = complete.flatMap((partial) => {
+    const route = { token, amount, minPaid: 0n, hops: partial.hops };
+    const i = longer.indexOf(partial);
+    const out = i < 0 ? partial.amount : whole[i]?.done ? whole[i].amountOut : 0n;
+    const gas = routeGas(route);
+    return out ? [{ route, out, gas, net: out - gasValue(gas) }] : [];
+  });
+  const chosen = options.reduce<(typeof options)[number] | undefined>(
+    (found, each) => (!found || each.net > found.net ? each : found),
+    undefined,
+  );
+  return chosen && { route: chosen.route, out: chosen.out, gas: chosen.gas };
+}
+
+// The calls, as the review shows them.
+const symbolOf = (tokens: Map<string, Token>, address: Address): string => tokens.get(key(address))?.symbol ?? address;
+// "ZORA → WETH → USDC via Aerodrome, Uniswap": the wallet shows no pool's address, so neither does the page.
+export function hopsWords(route: Route, tokens: Map<string, Token>): string {
+  const path = [route.token, ...route.hops.map(({ tokenOut }) => tokenOut)].map((token) => symbolOf(tokens, token));
+  return `${path.join(" → ")} via ${[...new Set(route.hops.map(venueOf))].join(", ")}`;
+}
+export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Slip {
+  const words = `${figure(amount, token.decimals)} ${token.symbol}`;
+  return {
+    to: token.address,
+    data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [swapper.address, amount] }),
+    title: amount ? "Token approval" : "Token approval reset",
+    says: amount
+      ? `Let the ${swapper.symbol} swapper take ${words} from you`
+      : `Reset ${token.symbol}'s approval of the ${swapper.symbol} swapper`,
+    on: `The ${token.symbol} token contract`,
+    call: "approve",
+    fields: [
+      { label: "Spender", code: swapper.address, description: `The ${swapper.symbol} swapper` },
+      { label: "Amount", code: String(amount), description: amount ? words : "Nothing" },
+    ],
+  };
+}
+// The swap, with skipFailed: a route under its minimum is skipped, and its token stays in the wallet.
+export function swapSlip(
+  swapper: Swapper,
+  routes: Route[],
+  deadline: bigint,
+  tokens: Map<string, Token>,
+  tip?: bigint,
+  whole = false,
+): Slip {
+  const least = routes.reduce((sum, { minPaid }) => sum + minPaid, 0n);
+  const sold = new Set(routes.map(({ token }) => key(token))).size;
+  const amountOf = (route: Route) =>
+    whole
+      ? `All your ${symbolOf(tokens, route.token)} (up to what this approves)`
+      : `${figure(route.amount, tokens.get(key(route.token))?.decimals ?? 0)} ${symbolOf(tokens, route.token)}`;
+  return {
+    to: swapper.address,
+    data: encodeFunctionData({ abi: swapperAbi, functionName: "swap", args: [routes, deadline, true] }),
+    tip,
+    title: `Swap into ${swapper.symbol}`,
+    says: `Sell ${sold === 1 ? "1 token" : `${sold} tokens`} for at least ${figure(least, swapper.decimals)} ${swapper.symbol}`,
+    on: `The ${swapper.symbol} swapper`,
+    call: "swap",
+    fields: [
+      ...routes.map((route, i) => ({
+        label: routes.length === 1 ? "Route" : `Route ${i + 1}`,
+        words: `${[amountOf(route), ...route.hops.slice(0, -1).map(({ tokenOut }) => symbolOf(tokens, tokenOut)), `${figure(route.minPaid, swapper.decimals)}+ ${swapper.symbol}`].join(" → ")} via ${[...new Set(route.hops.map(venueOf))].join(", ")}`,
+      })),
+      { label: "Deadline", code: String(deadline), description: utc(Number(deadline)) },
+      { label: "Skip failed", code: "true", description: "A route under its minimum is skipped." },
+    ],
+  };
+}
+
+// A swap to review: each item a route, or a part of a token's. One approval a token, exact, for all its parts; `approve`
+// sets it, as after a claim, where the allowance is not yet known.
+export type Item = { token: Token; route: Route; out: bigint; allowance: bigint; approve?: bigint | undefined };
+export type Plan = { swapper: Swapper; items: Item[]; margin: bigint };
+export type Steps = { approvals: Slip[]; swaps: Route[][]; slips: Slip[] };
+export function planSteps(
+  { swapper, items }: Plan,
+  tokens: Map<string, Token>,
+  deadline: bigint,
+  tip?: bigint,
+  whole = false,
+): Steps {
+  const sold = new Map<string, { item: Item; total: bigint }>();
+  for (const item of items) {
+    const each = sold.get(key(item.token.address));
+    if (each) each.total += item.route.amount;
+    else sold.set(key(item.token.address), { item, total: item.route.amount });
+  }
+  const approvals = [...sold.values()]
+    .filter(({ item, total }) => item.approve !== undefined || item.allowance < total)
+    .map(({ item, total }) => approveSlip(item.token, swapper, item.approve ?? total));
+  const swaps = split(items.map(({ route }) => route));
+  return {
+    approvals,
+    swaps,
+    slips: [...approvals, ...swaps.map((group) => swapSlip(swapper, group, deadline, tokens, tip, whole))],
+  };
+}
+
+// Runs `before`, then the plan's approvals and swaps, through Base in order, each route with no minimum: so each fetches
+// what the pools those before it moved pay. Undefined if Base cannot say; else which call it refused, if any, or what
+// each item fetched, and the gas of all.
+export type Simulated = { refused?: number; results: (Result | undefined)[]; gas: bigint; steps: Steps };
+export async function simulatePlan(
+  from: Address,
+  before: Tx[],
+  plan: Plan,
+  tokens: Map<string, Token>,
+  deadline: bigint,
+  whole = false,
+): Promise<Simulated | undefined> {
+  const steps = planSteps(
+    { ...plan, items: plan.items.map((item) => ({ ...item, route: { ...item.route, minPaid: 0n } })) },
+    tokens,
+    deadline,
+    undefined,
+    whole,
+  );
+  const run = await simulate(from, [...before, ...steps.slips]).catch(() => undefined);
+  if (!run || run.length !== before.length + steps.slips.length) return undefined;
+  const gas = run.reduce((sum, { gas }) => sum + gas, 0n);
+  const refused = run.findIndex(({ ok }) => !ok);
+  if (refused >= 0) return { refused, results: [], gas, steps };
+  const first = before.length + steps.approvals.length;
+  const results = steps.swaps.flatMap((group, g) => {
+    try {
+      return [
+        ...decodeFunctionResult({ abi: swapperAbi, functionName: "swap", data: run[first + g]!.returnData })[0],
+      ].slice(0, group.length);
+    } catch {
+      return group.map(() => undefined);
+    }
+  });
+  return { results, gas, steps };
+}
+// Each item's quote and minimum from what Base found, or, without it, as quoted; and why Base would skip it.
+export function withMinimums(
+  plan: Plan,
+  results?: (Result | undefined)[],
+): { item: Item; reason?: string | undefined }[] {
+  return plan.items.map((item, i) => {
+    const result = results?.[i];
+    if (!result) return { item };
+    const out = result.done ? result.amountOut : 0n;
+    const reason = out ? undefined : result.done ? "a pool gave nothing for it" : reasonOf(result.reason);
+    return { item: { ...item, out, route: { ...item.route, minPaid: minimumOf(out, plan.margin) } }, reason };
+  });
+}
+
+// Why a route failed, in words.
+export function reasonOf(reason: Hex): string {
+  try {
+    const name = decodeErrorResult({ abi: swapperAbi, data: reason }).errorName;
+    const words: Record<string, string> = {
+      TooLittle: "it would have fetched less than its minimum",
+      NoOutput: "a pool gave nothing for it",
+      TokenCallFailed: "its token refused the transfer",
+      PartialFill: "a pool could not take all of it",
+      Expired: "the swap's deadline had passed",
+    };
+    return words[name] ?? "a pool refused it";
+  } catch {
+    return "a pool or its token refused it";
+  }
+}
+
+// What a swap did for `caller`, from its receipts' logs, which a batch may share with others' swaps.
+export type Swapped = {
+  swapped: { index: number; token: Address; amountIn: bigint; amountOut: bigint }[];
+  failed: { index: number; token: Address; reason: Hex }[];
+  paid: bigint;
+  fee: bigint;
+};
+export function swappedIn(receipts: Pick<Receipt, "logs">[], swapper: Swapper, caller: Address): Swapped {
+  const outcome: Swapped = { swapped: [], failed: [], paid: 0n, fee: 0n };
+  for (const log of receipts.flatMap(({ logs }) => logs)) {
+    if (!same(log.address, swapper.address)) continue;
+    try {
+      const event = decodeEventLog({ abi: swapperAbi, data: log.data, topics: log.topics as [Hex, ...Hex[]] });
+      if (!same(event.args.caller, caller)) continue;
+      if (event.eventName === "RouteSwapped") outcome.swapped.push({ ...event.args, index: Number(event.args.index) });
+      if (event.eventName === "RouteFailed") outcome.failed.push({ ...event.args, index: Number(event.args.index) });
+      if (event.eventName === "Swapped")
+        [outcome.paid, outcome.fee] = [outcome.paid + event.args.paid, outcome.fee + event.args.fee];
+    } catch {}
+  }
+  return outcome;
+}
