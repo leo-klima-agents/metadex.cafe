@@ -14,7 +14,7 @@
     "release": "node scripts/release.ts",
     "format": "prettier --write .",
     "test": "node --test test/*.test.ts",
-    "test:fork": "npm run build && node --test --test-timeout=1800000 fork/*.test.ts",
+    "test:fork": "npm run build && node --test --test-timeout=3600000 fork/*.test.ts",
     "typecheck": "tsc"
   },
   "dependencies": {

@@ -5,6 +5,7 @@ import { DOUBLE_ESPRESSO, MATCHA_LATTE, VOTING_ESCROW, WETH } from "../src/confi
 import {
   AVNT,
   ELSEWHERE,
+  HOLDER,
   LEAVER,
   PAYEE,
   SELLER,
@@ -19,7 +20,8 @@ import {
   violations,
 } from "./harness.ts";
 
-const LONG = { timeout: 900_000 };
+// A first run reads the fork's state from Base, slot by slot; later ones find it cached.
+const LONG = { timeout: 1_500_000 };
 const dialog = (page: Page) => page.getByRole("dialog");
 const connect = (page: Page) => page.getByRole("banner").getByRole("button", { name: "Connect a wallet" }).click();
 // Signs each transaction the review asks for, until it is done.
@@ -36,8 +38,8 @@ const approved = async (id: bigint) => [
   await view(VOTING_ESCROW, "getClaimRedirectApproved", [id]),
 ];
 
-describe("the page against a fork of Base", { timeout: 3_600_000 }, () => {
-  useFork([ELSEWHERE, LEAVER, PAYEE, SELLER]);
+describe("the page against a fork of Base", { timeout: 7_200_000 }, () => {
+  useFork([ELSEWHERE, LEAVER, PAYEE, SELLER, HOLDER]);
 
   test("join two accounts from stopped automations, by keyboard alone, one transaction at a time", async () => {
     const { page, sent, errors } = await open({ owner: ELSEWHERE }, "#hydrex");
@@ -154,11 +156,14 @@ describe("the page against a fork of Base", { timeout: 3_600_000 }, () => {
         assert.deepEqual(await violations(page), [], `${route} at ${width}px${dark ? ", dark" : ""}`);
       }
       await page.evaluate(() => (location.hash = "#hydrex/double-espresso"));
-      const join = page.getByRole("button", { name: "Join Double Espresso" });
-      if (await join.isVisible()) {
-        await join.click();
+      const can = page.getByRole("region", { name: /^Can join/ });
+      if (await can.isVisible()) {
+        const all = can.getByRole("checkbox", { name: "All" });
+        if (await all.isVisible()) await all.check();
+        await can.getByRole("button", { name: "Join Double Espresso" }).click();
         await dialog(page).getByRole("heading", { name: "Before you join" }).waitFor();
         assert.deepEqual(await violations(page), [], "the review");
+        await page.keyboard.press("Escape");
       }
     }
   });
