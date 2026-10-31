@@ -378,7 +378,6 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       await stopAnvil(false);
       await starting;
       for (const cache of caches.values()) await cache.then((each) => each.close()).catch(console.error);
-      console.log(`${upstream.fetched} requests asked of FORK_URL, ${upstream.busy} of them over its limit.`);
     })());
   const closed = new Promise<void>((resolve) => {
     browser.on("disconnected", () => resolve());

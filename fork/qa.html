@@ -7,15 +7,11 @@
     <style>
       :root {
         color-scheme: light dark;
-        --faint: color-mix(in srgb, currentColor 60%, transparent);
-        --accent: #2f6f4f;
       }
       body {
         margin: 0;
         padding: 16px;
-        font: 14px/1.4 system-ui, sans-serif;
-        background: Canvas;
-        color: CanvasText;
+        font: 14px system-ui;
       }
       h1 {
         margin: 0;
@@ -24,58 +20,31 @@
       h2 {
         margin: 0 0 8px;
         font-size: 13px;
-        text-transform: uppercase;
-        color: var(--faint);
+        color: GrayText;
       }
       section {
-        border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-        padding: 12px 0;
+        border-top: 1px solid GrayText;
+        padding: 8px 0;
       }
       label {
         display: block;
         margin: 6px 0;
       }
-      button,
-      input,
-      select {
-        font: inherit;
-        max-inline-size: 100%;
-      }
-      form {
-        display: flex;
-        gap: 4px;
-      }
-      form input {
-        flex: 1;
-      }
       .hint {
-        color: var(--faint);
+        color: GrayText;
         font-size: 12px;
-        margin: 4px 0;
       }
-      #status {
-        min-block-size: 1.4em;
-        &.busy {
-          color: var(--accent);
-        }
-        &.failed {
-          color: #b3261e;
-        }
+      .failed {
+        color: #b3261e;
       }
-      #prompts {
-        padding: 0;
-        list-style: none;
-        & li {
-          border: 2px solid var(--accent);
-          border-radius: 6px;
-          padding: 8px;
-          margin: 8px 0;
-          overflow-wrap: anywhere;
-        }
+      #prompts li {
+        border: 2px solid;
+        padding: 8px;
+        margin: 8px 0;
       }
+      #prompts,
       #log {
-        padding-inline-start: 18px;
-        font-size: 12px;
+        padding-inline-start: 16px;
         overflow-wrap: anywhere;
       }
     </style>
@@ -86,8 +55,8 @@
 
     <section>
       <h2>Scenario</h2>
-      <select id="scenarios" aria-label="Scenario"></select>
-      <button id="start">Start</button>
+      <select id="scenarios" aria-label="Scenario" onchange="run('state')"></select>
+      <button onclick="run('start', scenarios.value)">Start</button>
       <p class="hint" id="title"></p>
       <p class="hint">Starting one, even the same, forks Base again: it undoes every change.</p>
     </section>
@@ -95,23 +64,29 @@
     <section>
       <h2>Wallet</h2>
       <ol id="prompts" aria-label="Waiting for you"></ol>
-      <label>Signs as <select id="owner"></select></label>
+      <label
+        >Signs as
+        <select id="owner" onchange="run('owner', owner.value)"></select
+      ></label>
       <p class="hint" id="holds"></p>
-      <form id="other">
-        <input id="address" placeholder="Or any address, 0x…" aria-label="Address" />
+      <form onsubmit="(event.preventDefault(), run('owner', address.value))">
+        <input id="address" placeholder="Or any address, 0x…" aria-label="Address" size="44" />
         <button>Sign as it</button>
       </form>
       <label>
         Network
-        <select id="chain">
+        <select id="chain" onchange="run('chain', chain.value)">
           <option value="8453">Base</option>
           <option value="1">Ethereum</option>
         </select>
       </label>
-      <label><input type="checkbox" id="asks" /> Asks you before it connects, switches or sends</label>
+      <label>
+        <input type="checkbox" id="asks" onchange="run('asks', asks.checked)" />
+        Asks you before it connects, switches or sends
+      </label>
       <label>
         Calls
-        <select id="calls">
+        <select id="calls" onchange="run('calls', calls.value)">
           <option value="one">One per prompt</option>
           <option value="atomic">Several in one prompt, all or nothing</option>
           <option value="each">Several in one prompt, one by one</option>
@@ -122,16 +97,16 @@
 
     <section>
       <h2>Open the page</h2>
-      <button data-open="wallet">With this wallet</button>
-      <button data-open="safe">In Safe{Wallet}, as a Safe</button>
-      <button data-open="none">Without a wallet</button>
+      <button onclick="run('open', 'wallet')">With this wallet</button>
+      <button onclick="run('open', 'safe')">In Safe{Wallet}, as a Safe</button>
+      <button onclick="run('open', 'none')">Without a wallet</button>
     </section>
 
     <section>
       <h2>Base</h2>
       <p id="time"></p>
-      <button id="travel">Next epoch</button>
-      <button id="replay" hidden></button>
+      <button onclick="run('travel')">Next epoch</button>
+      <button id="replay" onclick="run('replay')" hidden></button>
       <p class="hint">Nobody votes or pays on the fork unasked.</p>
     </section>
 
@@ -143,55 +118,57 @@
     <script>
       const $ = (id) => document.getElementById(id);
       const date = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
-      const item = (...children) => Object.assign(document.createElement("li")).appendChild(new Text("")).parentNode;
       let shown = {};
       let refused = "";
 
-      // Whether a part shows something new: a select is drawn again only then, so that it stays as picked.
+      // Whether a part shows something new: a select is set only then, so that it stays as picked meanwhile.
       function changed(key, value) {
         const text = JSON.stringify(value);
         if (shown[key] === text) return false;
         shown[key] = text;
         return true;
       }
-      function fill(select, items, value) {
+      function fill(select, value, items) {
         if (document.activeElement === select) return;
-        if (changed(select.id, items)) select.replaceChildren(...items.map(([value, text]) => new Option(text, value)));
+        if (items && changed(select.id, items))
+          select.replaceChildren(...items.map(([value, text]) => new Option(text, value)));
         else if (!changed(`${select.id}=`, value)) return;
         select.value = value;
       }
+      function li(...children) {
+        const item = document.createElement("li");
+        item.append(...children);
+        return item;
+      }
+      const button = (textContent, onclick) =>
+        Object.assign(document.createElement("button"), { textContent, onclick });
+      const answer = (id, yes) => button(yes ? "Approve" : "Decline", () => run("answer", id, yes));
 
       function render(state) {
         $("status").textContent = state.busy || state.failure || refused;
-        $("status").className = state.busy ? "busy" : state.failure || refused ? "failed" : "";
+        $("status").className = !state.busy && (state.failure || refused) ? "failed" : "";
         for (const control of document.querySelectorAll("button, select, input")) control.disabled = !!state.busy;
-        fill($("scenarios"), state.scenarios.map(({ name }) => [name, name]), state.scenario);
+        const names = state.scenarios.map(({ name }) => [name, name]);
+        fill($("scenarios"), state.scenario, names);
         $("title").textContent = state.scenarios.find(({ name }) => name === $("scenarios").value)?.title ?? "";
-        fill($("owner"), state.owners.map(({ address, short, holds }) => [address, `${short} · ${holds}`]), state.owner);
+        const owners = state.owners.map(({ address, short, holds }) => [address, `${short} · ${holds}`]);
+        fill($("owner"), state.owner, owners);
         $("holds").textContent = state.owners.find(({ address }) => address === state.owner)?.holds ?? "";
-        fill($("chain"), [["8453", "Base"], ["1", "Ethereum"]], String(state.chainId));
-        fill($("calls"), [...$("calls").options].map(({ value, text }) => [value, text]), state.calls);
+        fill($("chain"), String(state.chainId));
+        fill($("calls"), state.calls);
         if (changed("asks", state.asks)) $("asks").checked = state.asks;
         $("time").textContent = state.time ? `${date.format(state.time * 1000)} UTC · block ${state.block}` : "";
         $("replay").hidden = !state.replays;
         if (state.replays) {
-          $("replay").textContent = `The operator ${state.replays.next ?? "is done"} (${state.replays.sent} of ${state.replays.total} sent)`;
-          $("replay").disabled ||= !state.replays.next;
+          const { next, sent, total } = state.replays;
+          $("replay").textContent = `The operator ${next ?? "is done"} (${sent} of ${total} sent)`;
+          $("replay").disabled ||= !next;
         }
         if (changed("prompts", state.prompts))
           $("prompts").replaceChildren(
-            ...state.prompts.map(({ id, text }) => {
-              const li = document.createElement("li");
-              const yes = Object.assign(document.createElement("button"), { textContent: "Approve" });
-              const no = Object.assign(document.createElement("button"), { textContent: "Decline" });
-              yes.onclick = () => run("answer", id, true);
-              no.onclick = () => run("answer", id, false);
-              li.append(text, document.createElement("br"), yes, no);
-              return li;
-            }),
+            ...state.prompts.map(({ id, text }) => li(text, " ", answer(id, true), " ", answer(id, false))),
           );
-        if (changed("log", state.log))
-          $("log").replaceChildren(...state.log.map((line) => Object.assign(document.createElement("li"), { textContent: line })));
+        if (changed("log", state.log)) $("log").replaceChildren(...state.log.map((line) => li(line)));
       }
 
       async function run(command, ...args) {
@@ -204,24 +181,10 @@
           if (command !== "state") refused = why;
           $("status").textContent = why;
           $("status").className = "failed";
-          // What was picked for a change that failed is drawn again as it is.
+          // What was picked for a change that failed is set again as it is.
           shown = {};
         }
       }
-
-      $("start").onclick = () => run("start", $("scenarios").value);
-      $("scenarios").onchange = () => run("state");
-      $("owner").onchange = () => run("owner", $("owner").value);
-      $("other").onsubmit = (event) => {
-        event.preventDefault();
-        run("owner", $("address").value);
-      };
-      $("chain").onchange = () => run("chain", $("chain").value);
-      $("asks").onchange = () => run("asks", $("asks").checked);
-      $("calls").onchange = () => run("calls", $("calls").value);
-      $("travel").onclick = () => run("travel");
-      $("replay").onclick = () => run("replay");
-      for (const button of document.querySelectorAll("[data-open]")) button.onclick = () => run("open", button.dataset.open);
       run("state");
       setInterval(() => run("state"), 1000);
     </script>

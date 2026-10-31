@@ -141,6 +141,6 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
     await page.clock.runFor(30_000);
     await page.getByText(/moves the votes from Thu,? 29 Oct/).waitFor();
     await h.group(page, "in:matcha-latte").getByRole("link", { name: "Hydrex account #141" }).waitFor();
-    assert.equal(await h.row(page, 141).getByText("Joining Matcha Latte:").count(), 0);
+    await h.row(page, 141).getByText("Joining Matcha Latte:").waitFor({ state: "detached" });
   });
 });

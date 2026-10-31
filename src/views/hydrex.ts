@@ -56,8 +56,8 @@ export const lockWords = ({ lockType, end }: Account): string =>
         : "Flex";
 const inYear = (time: number): string =>
   new Date(time * 1000).getUTCFullYear() === new Date(now() * 1000).getUTCFullYear() ? day(time) : date(time);
-export const versusWords = (ratio: number | undefined): Value =>
-  ratio === undefined
+export const versusWords = (ratio: number | null | undefined): Value =>
+  ratio === undefined || ratio === null
     ? null
     : Math.abs(ratio - 1) < 0.005
       ? "About the average"
@@ -108,14 +108,16 @@ const record = (automation: Automation): Value =>
         )
       : "No record yet",
   );
-const recordVersus = (automation: Automation): Value => {
-  const earnings = data.earnings(automation).value;
-  if (earnings && (!earnings.votes || !earnings.pools.length)) return null;
-  return shown(
-    data.then(data.earnings(automation), (mine) => data.then(data.average(), (all) => ({ value: versus(mine, all) }))),
-    versusWords,
+// How some votes compare with Hydrex's average: hidden when there is nothing to compare, or it could not be read.
+const compared = (mine: Got<Earnings | "none">): Value => {
+  const got = data.then(mine, (earnings) =>
+    earnings === "none" || !earnings.votes || !earnings.pools.length
+      ? { value: null }
+      : data.then(data.average(), (all) => ({ value: versus(earnings, all) ?? null })),
   );
+  return got.failed || got.value === null ? null : shown(got, versusWords);
 };
+const recordVersus = (automation: Automation): Value => compared(data.earnings(automation));
 // The automation's state: whether joining is on, whether it voted in the epoch.
 function stateNode(automation: Automation): Value {
   const off = data.checks().value?.get(automation.kind)?.length;
@@ -293,16 +295,7 @@ function ownWords(holdings: Holdings): Value {
         : `${money(perThousandOf(own))} / 1k votes, last epoch`,
   );
 }
-function ownVersus(holdings: Holdings): Value {
-  const own = ownEarnings(holdings).value;
-  if (own === "none" || (own && !own.pools.length)) return null;
-  return shown(
-    data.then(ownEarnings(holdings), (mine) =>
-      data.then(data.average(), (all) => ({ value: versus(mine as Earnings, all) })),
-    ),
-    versusWords,
-  );
-}
+const ownVersus = (holdings: Holdings): Value => compared(ownEarnings(holdings));
 
 export function drawProduct(): void {
   const automation = automationOf(state.route.view === "product" ? state.route.kind : "")!;
