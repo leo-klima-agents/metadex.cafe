@@ -1,6 +1,6 @@
-// `npm run qa [-- scenario]`, or `node fork/qa.ts --list`: the page against a fork of Base, as in the browser tests,
+// `npm run qa [-- scenario]`, or `node qa/qa.ts --list`: the page against a fork of Base, as in the browser tests,
 // beside the QA wallet (qa.html), which signs as any address, asks before it acts if told to, and moves the fork on.
-// anvil forks through the browser tests' caches (rpc-cache.ts), from BASE_RPC_URL; CHROMIUM names the browser.
+// anvil forks through the browser tests' caches (fork/rpc-cache.ts), from BASE_RPC_URL; CHROMIUM names the browser.
 import { readFileSync } from "node:fs";
 import { chromium, type BrowserContext, type Page, type Route } from "playwright-core";
 import { decodeFunctionData, erc20Abi, getAddress, isAddress, toHex, type Address, type Hex } from "viem";
@@ -25,8 +25,8 @@ import {
   testWallet,
   walletScript,
   type WalletOptions,
-} from "./harness.ts";
-import { cacheFileOf, forkUrl, serveCached, upstreamOf, type Cache } from "./rpc-cache.ts";
+} from "../fork/harness.ts";
+import { cacheFileOf, forkUrl, serveCached, upstreamOf, type Cache } from "../fork/rpc-cache.ts";
 import { SCENARIOS, type Owner, type Scenario } from "./scenarios.ts";
 
 const PANEL = readFileSync(new URL("qa.html", import.meta.url), "utf8");

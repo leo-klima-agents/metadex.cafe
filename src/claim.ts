@@ -1,7 +1,9 @@
-import { decodeEventLog, encodeFunctionData, parseAbi, type Address, type Hex } from "viem";
+import { decodeEventLog, encodeFunctionData, type Address, type Hex } from "viem";
+import { doubleEspressoAbi as abi } from "./abi.ts";
 import { DOUBLE_ESPRESSO, FEE_BPS } from "./config.ts";
 import { WEEK, count } from "./format.ts";
-import { less, readOwed, summed, type Amount, type Entry, type Owed } from "./payouts.ts";
+import { less, readOwed, summed, type Entry, type Owed } from "./payouts.ts";
+import type { Amount } from "./tokens.ts";
 import { key, type Token } from "./prices.ts";
 import { rewardsFor, type Reward } from "./rewards.ts";
 import { same, type Receipt } from "./rpc.ts";
@@ -11,10 +13,6 @@ import type { Slip } from "./wallet.ts";
 // tokens) for any account in it, and it pays the owner, less 1%. A claim asks every contract given for every token
 // given, each walking back up to 50 epochs, so the page passes only what earned() finds owed, split into calls that fit.
 
-const abi = parseAbi([
-  "function claim(uint256 tokenId, address[] feeAddresses, address[] bribeAddresses, address[] tokens) returns (uint256[] amounts)",
-  "event Claimed(uint256 indexed tokenId, address indexed owner, address indexed caller, address[] tokens, uint256[] amounts, uint256[] fees, uint256 previousClaimBlock)",
-]);
 export type Claim = { id: bigint; owed: (Owed & { fee: boolean })[] };
 const unique = (addresses: Address[]): Address[] => [
   ...new Map(addresses.map((address) => [key(address), address])).values(),

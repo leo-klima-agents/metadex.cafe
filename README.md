@@ -20,6 +20,7 @@ Needs Node 26 LTS. [anvil](https://getfoundry.sh/) and Chromium for the browser 
 npm ci --ignore-scripts
 npm run typecheck && npm test && npx prettier --check .
 npm run build      # dist/
+npm run dev        # dist/ at http://localhost:8000, built again on each change
 npm run test:fork  # the page in Chromium against forks of Base in anvil
 npm run qa         # the page by hand against a fork, beside a wallet that signs as any address
 ```
@@ -28,24 +29,29 @@ The browser tests and the QA wallet fork through `fork/rpc-cache.ts`, which asks
 the page's first RPC) once for each answer and keeps it in `~/.cache/metadex.cafe/fork`. `CHROMIUM` names a browser
 binary; `SCREENSHOTS` a folder for screenshots.
 
-| Path                        | What it holds                                                                |
-| --------------------------- | ---------------------------------------------------------------------------- |
-| `index.html`, `style.css`   | Every view, popup and row template; the styles. Fonts are in `fonts/`.       |
-| `src/config.ts`             | What the page trusts: contracts, RPCs, price feeds, swappers and exchanges.  |
-| `src/rpc.ts`, `cache.ts`    | RPC requests (failover, pacing, the shown view's reads first) and one cache. |
-| `src/prices.ts`             | Pools on twelve exchanges, Chainlink, and prices now and at an epoch's end.  |
-| `src/rewards.ts`            | What votes earned in an epoch, and Hydrex's average.                         |
-| `src/hydrex.ts`             | Hydrex accounts, their statuses, joining and leaving, and the checks.        |
-| `src/payouts.ts`            | Up to when each account was paid, what waits, and its last receipt.          |
-| `src/claim.ts`              | Claims through Double Espresso, split to fit transactions.                   |
-| `src/swap.ts`, `routing.ts` | Routes, quotes, simulation and minimums; routing ticked tokens together.     |
-| `src/data.ts`, `views/`     | What each view reads, and how it fills the page.                             |
-| `test/`, `fork/`            | Unit tests; browser tests (`fork/run.ts`) and the QA wallet (`fork/qa.ts`).  |
-| `scripts/`                  | The build, license notices, the release, fonts and the token list's check.   |
+| Path                        | What it holds                                                                 |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| `site/`                     | What the site serves: every view, popup and row template, the styles, icons.  |
+| `src/config.ts`, `abi.ts`   | What the page trusts: contracts, RPCs, feeds, swappers; and Hydrex's ABIs.    |
+| `src/checks.ts`             | The checks of Base before joining or swapping.                                |
+| `src/rpc.ts`, `cache.ts`    | RPC requests (failover, pacing, the shown view's reads first) and one cache.  |
+| `src/prices.ts`             | Pools on twelve exchanges, Chainlink, and prices now and at an epoch's end.   |
+| `src/rewards.ts`            | What votes earned in an epoch, and Hydrex's average.                          |
+| `src/hydrex.ts`             | Hydrex accounts, their statuses, joining and leaving.                         |
+| `src/payouts.ts`            | Up to when each account was paid, what waits, and its last receipt.           |
+| `src/claim.ts`              | Claims through Double Espresso, split to fit transactions.                    |
+| `src/swap.ts`, `routing.ts` | Routes, quotes, simulation and minimums; routing ticked tokens together.      |
+| `src/data.ts`, `views/`     | What each view reads, and how it fills the page.                              |
+| `test/`, `fork/`, `qa/`     | Unit tests; browser tests (`fork/run.ts`); the QA wallet (`qa/qa.ts`).        |
+| `scripts/`                  | The build, `dev`, license notices, the release, fonts, icons, the token list. |
+
+The build bundles `src/main.ts` and `site/style.css`, with the fonts of `site/fonts/` inside it, and copies the rest of
+`site/` as it is. `node scripts/icons.ts` draws the icons from `site/icon.svg`; `python3 scripts/fonts.py` makes the
+fonts.
 
 ## When a contract changes
 
-Each check is named by its id in `src/hydrex.ts`: `chain` (an RPC serves another chain: joining and swaps off),
+Each check is named by its id in `src/checks.ts`: `chain` (an RPC serves another chain: joining and swaps off),
 `upgrade` (Hydrex upgraded its VotingEscrow), `logic` (its approval logic), `approvals` and `double-espresso-approvals`
 (what joining each automation approves is off, or other than `[3, 5]`). Read the new code's verified source, update
 `src/config.ts` if the page should trust it, and release. To see what Base holds:
@@ -77,4 +83,4 @@ what the site serves. In Safe{Wallet}, the custom app is `https://metadex.cafe/`
 ## License
 
 MIT, and REUSE compliant. The fonts are under the SIL Open Font License 1.1. Klima Protocol's logo,
-`klima-protocol.svg`, belongs to Klima Protocol and is used with its permission.
+`site/klima-protocol.svg`, belongs to Klima Protocol and is used with its permission.

@@ -1,6 +1,6 @@
 import type { Address, Hex } from "viem";
 import { DOUBLE_ESPRESSO, WETH } from "../src/config.ts";
-import * as h from "./harness.ts";
+import * as h from "../fork/harness.ts";
 
 // The states `npm run qa` forks Base into. Each owner gets 0.1 ETH for gas; the first is signed as.
 export type Owner = { address: Address; holds: string };

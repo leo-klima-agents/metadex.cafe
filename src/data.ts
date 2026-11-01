@@ -1,8 +1,9 @@
 import type { Address } from "viem";
 import { memo, use, type Got } from "./cache.ts";
+import { checks } from "./checks.ts";
 import { AUTOMATIONS, type Automation } from "./config.ts";
 import { WEEK, weekStart } from "./format.ts";
-import { failedChecks, readAccount, readAccounts, readFreshness, readMatchaLatte, type Holdings } from "./hydrex.ts";
+import { readAccount, readAccounts, readFreshness, readMatchaLatte, type Holdings } from "./hydrex.ts";
 import { awaited, readPayouts, readTime, type Found } from "./payouts.ts";
 import { allEarnings, holdersOf, lastEpoch, stakesOf, votesEarned, type Earnings, type Stake } from "./rewards.ts";
 import { now, same, tagged } from "./rpc.ts";
@@ -18,8 +19,6 @@ export const owner = (): Address | undefined => state.connection?.address;
 export const then = <T, U>(got: Got<T>, next: (value: T) => Got<U>): Got<U> =>
   got.value !== undefined ? next(got.value) : got.failed ? { failed: true } : {};
 
-export const checksRead = () => memo("checks", failedChecks, HOUR);
-export const checks = () => use("checks", failedChecks, HOUR);
 export const matchaLatte = () => use(`matcha-latte ${week()}`, readMatchaLatte, HOUR);
 export const freshness = (automation: Automation) =>
   use(`voted ${automation.kind} ${week()}`, () => readFreshness(automation), HOUR);

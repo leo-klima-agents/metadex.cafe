@@ -29,6 +29,9 @@ export const known = (): Address[] => [...LISTED.map(({ address }) => address), 
 export const lookalike = (token: Token): Listed | undefined =>
   listed(token.address) ? undefined : LISTED.find((each) => each.symbol.toLowerCase() === token.symbol.toLowerCase());
 
+// An amount of a token, in its smallest units.
+export type Amount = { token: Address; amount: bigint };
+
 // Each token's symbol and decimals, by lower-case address, as its contract answers. Those without decimals are left out.
 export async function tokensOf(addresses: Address[], rd: Read = read): Promise<Map<string, Token>> {
   const unique = [...new Set(addresses.map(key))] as Address[];

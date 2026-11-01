@@ -1,49 +1,13 @@
 import { encodeFunctionData, parseAbi, zeroAddress, type Address, type Hex } from "viem";
+import { escrowAbi, matchaLatteAbi, namesAbi, voterAbi } from "./abi.ts";
 import * as config from "./config.ts";
 import { AUTOMATIONS, MATCHA_LATTE, type Automation, type Kind } from "./config.ts";
 import { WEEK, clean, list, weekStart } from "./format.ts";
 import conduits from "./hydrex-conduits.json" with { type: "json" };
 import { anchorsNow, type Prices } from "./prices.ts";
-import { blockTime, call, costs, implementation, read, required, rpc, same, sawBlock, type Call } from "./rpc.ts";
+import { blockTime, call, costs, read, required, rpc, same, sawBlock, type Call } from "./rpc.ts";
 import type { Slip, Tx } from "./wallet.ts";
 
-const escrowAbi = parseAbi([
-  "function balanceOf(address owner) view returns (uint256)",
-  "function ownerOf(uint256 tokenId) view returns (address)",
-  "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
-  "function lockDetails(uint256 tokenId) view returns ((uint256 amount, uint256 startTime, uint256 endTime, uint8 lockType))",
-  "function balanceOfNFT(uint256 tokenId) view returns (uint256)",
-  "function balanceOfNFTAt(uint256 tokenId, uint256 timestamp) view returns (uint256)",
-  "function getLockDelegatee(uint256 tokenId) view returns (address)",
-  "function delegates(uint256 tokenId, uint48 timestamp) view returns (address)",
-  "function getClaimRedirectApproved(uint256 tokenId) view returns (address)",
-  "function getPastVotes(address account, uint256 timepoint) view returns (uint256)",
-  "function getConduitApprovalConfig(address conduit) view returns (uint8[] actions, bool active, string description)",
-  "function approvalLogic() view returns (address)",
-  "function setConduitApproval(address conduit, uint256 tokenId, bool approve)",
-  "struct Point { int128 bias; int128 slope; int128 permanent; }",
-  "function getFirstEscrowPoint(uint256 tokenId) view returns (Point point, uint48 timestamp)",
-]);
-const voterAbi = parseAbi([
-  "function _epochTimestamp() view returns (uint256)",
-  "function lastVoted(address voter) view returns (uint256)",
-  "function poolVoteLength(address voter) view returns (uint256)",
-  "function poolVote(address voter, uint256 index) view returns (address)",
-  "function length() view returns (uint256)",
-  "function pools(uint256 index) view returns (address)",
-  "function gauges(address pool) view returns (address)",
-  "function internal_bribes(address gauge) view returns (address)",
-  "function external_bribes(address gauge) view returns (address)",
-  "function totalWeightAt(uint256 time) view returns (uint256)",
-]);
-const matchaLatteAbi = parseAbi([
-  "function retireBps() view returns (uint256)",
-  "function treasuryFeeBps() view returns (uint256)",
-  "function MAX_TREASURY_FEE_BPS() view returns (uint256)",
-  "function treasury() view returns (address)",
-  "function totalTonnesRetired() view returns (uint256)",
-]);
-const namesAbi = parseAbi(["function getBulkNames(uint256[] tokenIds) view returns (string[])"]);
 const l1Abi = parseAbi(["function getL1FeeUpperBound(uint256 unsignedTxSize) view returns (uint256)"]);
 
 export const escrow = (name: string, ...args: unknown[]): Call => call(config.VOTING_ESCROW, escrowAbi, name, ...args);
@@ -326,35 +290,6 @@ export const leaveOther = (accounts: Account[]): Step[] =>
       ? [approval(account, false, `leaves the ${name} automation.`, { address: account.delegate, name }, true)]
       : [];
   });
-
-// The checks that fail, by the id of their message on the page, for each automation: whether the RPCs serve Base;
-// whether Hydrex's VotingEscrow and its approval logic are those the page knows, as an upgrade could change what
-// joining allows; and whether joining each automation is on, and approves its claims and votes only. A read that fails
-// fails them all, as not read, rather than as a check.
-export async function failedChecks(): Promise<Map<Kind, string[]>> {
-  const [chainId, impl, [logic, ...configs]] = await Promise.all([
-    rpc<string>("eth_chainId", []),
-    implementation(config.VOTING_ESCROW),
-    read([
-      escrow("approvalLogic"),
-      ...AUTOMATIONS.map(({ address }) => escrow("getConduitApprovalConfig", address)),
-    ]).then(required),
-  ]);
-  const failing = (checks: Record<string, boolean>) =>
-    Object.entries(checks).flatMap(([id, fails]) => (fails ? [id] : []));
-  const all = failing({
-    chain: Number(chainId) !== config.CHAIN_ID,
-    upgrade: !same(impl, config.VOTING_ESCROW_IMPLEMENTATION),
-    logic: !same(String(logic), config.APPROVAL_LOGIC),
-  });
-  return new Map(
-    AUTOMATIONS.map(({ kind, actions }, i) => {
-      const [approved, active] = configs[i] as [number[], boolean];
-      const id = kind === "matcha-latte" ? "approvals" : `${kind}-approvals`;
-      return [kind, [...all, ...failing({ [id]: !active || approved.join() !== actions.join() })]];
-    }),
-  );
-}
 
 // What gas costs for calls that differ only by account, from `from`: the first's estimate, plus the most Base charges
 // to post it to Ethereum, for each. With today's prices, to show it at.

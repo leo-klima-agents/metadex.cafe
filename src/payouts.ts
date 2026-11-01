@@ -1,4 +1,6 @@
-import { decodeEventLog, encodeEventTopics, numberToHex, parseAbi, type Address, type Hex } from "viem";
+import { decodeEventLog, encodeEventTopics, numberToHex, type Abi, type Address, type Hex } from "viem";
+import { doubleEspressoAbi, matchaLatteAbi, rewardsAbi } from "./abi.ts";
+import type { Amount } from "./tokens.ts";
 import { memo } from "./cache.ts";
 import { AUTOMATIONS, DOUBLE_ESPRESSO, MATCHA_LATTE, type Automation } from "./config.ts";
 import { WEEK, weekStart } from "./format.ts";
@@ -13,19 +15,6 @@ import { blockTime, call, now, read, required, rpc, same, type Call } from "./rp
 // last payout, whose logs make its receipt. Matcha Latte pays each account in one transaction, which logs its payout
 // and its retirement. Double Espresso records each account's last claim block, and each claim the one before.
 
-const rewardsAbi = parseAbi([
-  "function tokenTimestamp(uint256 tokenId, address token) view returns (uint256)",
-  "function earned(uint256 tokenId, address token) view returns (uint256)",
-  "function earnedTokenId(uint256 tokenId, address token, uint48 timestamp) view returns (uint256)",
-  "function firstBribeTimestamp() view returns (uint256)",
-]);
-const eventsAbi = parseAbi([
-  "event CarbonRetired(address indexed creditToken_, uint256 retireTonnes, uint256 kvcmSpent)",
-  "event ClaimSwapAndDistributeCompleted(uint256 indexed tokenId, address indexed owner, address indexed recipient, address[] claimedTokens, uint256[] claimedAmounts, address[] distributedTokens, uint256[] distributedAmounts, uint256[] treasuryFees)",
-  "event Claimed(uint256 indexed tokenId, address indexed owner, address indexed caller, address[] tokens, uint256[] amounts, uint256[] fees, uint256 previousClaimBlock)",
-  "function lastClaimBlock(uint256 tokenId) view returns (uint256)",
-]);
-
 // Base makes a block every two seconds. The newest blocks are skipped: an RPC a little behind may not have them.
 const BLOCK_TIME = 2;
 const SETTLED = 5;
@@ -34,7 +23,6 @@ const UNDER_WAY = 12 * 3600;
 // The most blocks of Double Espresso's claims read for one account: anyone can claim dust for it, as often as they like.
 export const WALK_LIMIT = 10;
 
-export type Amount = { token: Address; amount: bigint };
 export type Pair = { contract: Address; token: Address };
 // `passes`: how many times a claim asks the contract, to reach past the 50 epochs each asking reads: see readOwed.
 export type Owed = Amount & { contract: Address; passes?: number | undefined };
@@ -341,10 +329,10 @@ type Log = {
   blockNumber: Hex;
 };
 const order = (log: Log): bigint => BigInt(log.blockNumber) * 1_000_000n + BigInt(log.logIndex);
-function decoded(logs: Log[]) {
+function decoded<A extends Abi>(abi: A, logs: Log[]) {
   return logs.flatMap((log) => {
     try {
-      return [{ log, event: decodeEventLog({ abi: eventsAbi, data: log.data, topics: log.topics }) }];
+      return [{ log, event: decodeEventLog({ abi, data: log.data, topics: log.topics }) }];
     } catch {
       return [];
     }
@@ -367,7 +355,10 @@ export type Payout = {
 export function payoutsOf(logs: Log[]): Payout[] {
   const found: Payout[] = [];
   const retired = new Map<Hex, { tonnes: bigint; kvcm: bigint }>();
-  for (const { log, event } of decoded([...logs].sort((a, b) => Number(order(a) - order(b))))) {
+  for (const { log, event } of decoded(
+    matchaLatteAbi,
+    [...logs].sort((a, b) => Number(order(a) - order(b))),
+  )) {
     if (event.eventName === "CarbonRetired")
       retired.set(log.transactionHash, { tonnes: event.args.retireTonnes, kvcm: event.args.kvcmSpent });
     if (event.eventName !== "ClaimSwapAndDistributeCompleted") continue;
@@ -428,7 +419,10 @@ export type Claim = {
 };
 export type Walk = { claims: Claim[]; stopped: boolean };
 export function claimsOf(logs: Log[]): Claim[] {
-  return decoded([...logs].sort((a, b) => Number(order(b) - order(a)))).flatMap(({ log, event }) =>
+  return decoded(
+    doubleEspressoAbi,
+    [...logs].sort((a, b) => Number(order(b) - order(a))),
+  ).flatMap(({ log, event }) =>
     event.eventName === "Claimed"
       ? [
           {
@@ -494,7 +488,7 @@ async function claimsAt(block: number, ids: bigint[]): Promise<Claim[]> {
   let found: Claim[] = [];
   if (missing.length) {
     const topics = [
-      encodeEventTopics({ abi: eventsAbi, eventName: "Claimed" })[0],
+      encodeEventTopics({ abi: doubleEspressoAbi, eventName: "Claimed" })[0],
       missing.map((id) => numberToHex(id, { size: 32 })),
     ];
     const filter = {
@@ -570,7 +564,7 @@ async function doubleEspressoParts(ids: bigint[], top: number): Promise<Part[]> 
   const last = (
     required(
       await read(
-        ids.map((id) => call(DOUBLE_ESPRESSO.address, eventsAbi, "lastClaimBlock", id)),
+        ids.map((id) => call(DOUBLE_ESPRESSO.address, doubleEspressoAbi, "lastClaimBlock", id)),
         { block: top, tag: "payouts" },
       ),
     ) as bigint[]

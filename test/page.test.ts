@@ -5,8 +5,8 @@ import { getAddress } from "viem";
 import { RPCS } from "../src/config.ts";
 import { parse } from "../src/routes.ts";
 
-const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
-const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+const html = readFileSync(new URL("../site/index.html", import.meta.url), "utf8");
+const css = readFileSync(new URL("../site/style.css", import.meta.url), "utf8");
 
 test("the page reaches its RPCs and nothing else, checks its script and stylesheet, and has nothing inline", () => {
   const csp = /http-equiv="Content-Security-Policy"\s+content="([^"]+)"/.exec(html)?.[1] ?? "";

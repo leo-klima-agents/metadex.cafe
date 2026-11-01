@@ -1,19 +1,19 @@
 import { maxUint256 } from "viem";
 import * as claim from "../claim.ts";
 import { DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
-import * as data from "../data.ts";
+import { checksRead, swapsOff } from "../checks.ts";
 import { count, figure, list as listWords, money, moneyAt } from "../format.ts";
-import { summed, valueAt, type Amount, type Entry } from "../payouts.ts";
+import { summed, valueAt, type Entry } from "../payouts.ts";
 import { ethCost, gasWords, key, pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
 import { hrefOf } from "../routes.ts";
 import { costs, now, same, simulate, type Costs, type Receipt } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import * as swap from "../swap.ts";
-import { describe } from "../tokens.ts";
+import { describe, type Amount } from "../tokens.ts";
 import { $, fill, frag, list, type Value } from "../ui.ts";
 import { capabilities, type Slip } from "../wallet.ts";
 import { openReview } from "./review.ts";
-import { billNode, prefill, reviewSwap, swapReceipt, swapsOff } from "./swap.ts";
+import { billNode, prefill, reviewSwap, swapReceipt } from "./swap.ts";
 
 // Claiming an overdue payout through Double Espresso, as it is or swapped into one token: in one prompt, all or
 // nothing, where the wallet can; else the claim first, then the swap of what it brought.
@@ -36,7 +36,7 @@ export async function openClaim(entries: Entry[]): Promise<void> {
     costs().catch(() => undefined),
     capabilities(connection),
     describe([...swap.MIDDLES, HYDX]).catch(() => new Map<string, Token>()),
-    data.checksRead().catch(() => undefined),
+    checksRead().catch(() => undefined),
   ]);
   const deadline = () => BigInt(now() + (connection.wallet.propose ? 86_400 : 1_800));
   for (const [address, token] of middles) if (!tokens.has(address)) tokens.set(address, token);

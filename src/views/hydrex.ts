@@ -8,6 +8,7 @@ import {
   type Automation,
 } from "../config.ts";
 import { type Got } from "../cache.ts";
+import { checks } from "../checks.ts";
 import * as data from "../data.ts";
 import {
   WEEK,
@@ -120,7 +121,7 @@ const compared = (mine: Got<Earnings | "none">): Value => {
 const recordVersus = (automation: Automation): Value => compared(data.earnings(automation));
 // The automation's state: whether joining is on, whether it voted in the epoch.
 function stateNode(automation: Automation): Value {
-  const off = data.checks().value?.get(automation.kind)?.length;
+  const off = checks().value?.get(automation.kind)?.length;
   if (off) return status("failed", "Joining off");
   const fresh: Got<{ voted?: number | undefined; epochStart: number }> =
     automation === MATCHA_LATTE ? data.matchaLatte() : data.freshness(automation);
@@ -143,8 +144,7 @@ const members = ({ owner, accounts, epochStart }: Holdings): Member[] =>
     const status = hydrex.statusOf(account, owner, now(), epochStart);
     return { account, status, group: hydrex.groupOf(account, status) };
   });
-const open = (automation: Automation): boolean =>
-  !!data.checks().value && !data.checks().value!.get(automation.kind)!.length;
+const open = (automation: Automation): boolean => !!checks().value && !checks().value!.get(automation.kind)!.length;
 const overdueOf = (holdings: Holdings) => {
   const found = data.payouts(holdings).value;
   return found ? overdue(found) : [];
@@ -247,7 +247,7 @@ export function drawHydrex(): void {
       versus: recordVersus(automation),
     });
   }
-  const failed = new Set([...(data.checks().value?.values() ?? [])].flat());
+  const failed = new Set([...(checks().value?.values() ?? [])].flat());
   const reasons: Record<string, string> = {
     chain: "Joining is off: the page reached another network than Base.",
     upgrade: "Joining is off: Hydrex upgraded its VotingEscrow, which this page has not checked yet.",
@@ -300,7 +300,7 @@ const ownVersus = (holdings: Holdings): Value => compared(ownEarnings(holdings))
 export function drawProduct(): void {
   const automation = automationOf(state.route.view === "product" ? state.route.kind : "")!;
   const earnings = data.earnings(automation);
-  const off = !open(automation) && data.checks().value;
+  const off = !open(automation) && checks().value;
   fill(productView, {
     name: automation.name,
     state: stateNode(automation),

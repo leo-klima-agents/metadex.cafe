@@ -1,6 +1,7 @@
 import type { Address } from "viem";
 import { use, type Got } from "../cache.ts";
 import { AUTOMATIONS, KVCM } from "../config.ts";
+import { checks } from "../checks.ts";
 import * as data from "../data.ts";
 import {
   WEEK,
@@ -25,7 +26,6 @@ import {
   underWay,
   valueAt,
   WALK_LIMIT,
-  type Amount,
   type Entry,
   type Found,
   type Payout,
@@ -36,7 +36,7 @@ import { valueOf } from "../rewards.ts";
 import { hrefOf } from "../routes.ts";
 import { now, same, tagged } from "../rpc.ts";
 import { state } from "../state.ts";
-import { tokensOf } from "../tokens.ts";
+import { tokensOf, type Amount } from "../tokens.ts";
 import { $, code, fill, frag, link, list, shown, stateOf, status, BASESCAN, type Value } from "../ui.ts";
 import { accountName, lockWords, statusNode } from "./hydrex.ts";
 import { prefill } from "./swap.ts";
@@ -134,8 +134,8 @@ function drawActions(own: Holdings | undefined, st: hydrex.Status): void {
         ? !!late && overdue(late).some((each) => each.account.id === account.id)
         : action === "join"
           ? !!automation &&
-            !data.checks().value?.get(automation.kind)?.length &&
-            !!data.checks().value &&
+            !checks().value?.get(automation.kind)?.length &&
+            !!checks().value &&
             hydrex.canJoin(account, automation, now())
           : AUTOMATIONS.some((each) => hydrex.canLeave(account, each)) || hydrex.canLeaveOther(account));
     if (automation) {

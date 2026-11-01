@@ -1,9 +1,9 @@
 import { maxUint256, type Address } from "viem";
 import { use, type Got } from "../cache.ts";
+import { swapsOff } from "../checks.ts";
 import { AUTOMATIONS, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
 import * as data from "../data.ts";
 import { fixed, figure, fraction, money, moneyAt, utc, type Money } from "../format.ts";
-import { type Amount } from "../payouts.ts";
 import { ethCost, gasWords, key, pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
 import { hrefOf, parse } from "../routes.ts";
 import { routeTogether, type Sale } from "../routing.ts";
@@ -21,6 +21,7 @@ import {
   lookalike,
   tokensOf,
   type Allowance,
+  type Amount,
 } from "../tokens.ts";
 import { $, busy, code, fill, frag, list, shown, stateOf, type Value } from "../ui.ts";
 import { walletAssets } from "../wallet.ts";
@@ -39,10 +40,6 @@ let reviewing = false;
 let failedReview = "";
 
 const swapperShown = (): Swapper => swapperOf(state.route.view === "swap" ? state.route.output : "usdc")!;
-export const swapsOff = (): boolean | undefined => {
-  const checks = data.checks().value;
-  return checks && [...checks.values()].some((failed) => failed.includes("chain"));
-};
 // The amounts a receipt's "Swap these" brings to the swap, until the visitor leaves it.
 export function prefill(amounts: Amount[]): void {
   prefilled = new Map(amounts.map(({ token, amount }) => [key(token), amount]));

@@ -12,7 +12,7 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 // What the build bundles, as it does, without writing it.
 const { metafile } = await esbuild.build({
   absWorkingDir: ROOT,
-  entryPoints: { main: "src/main.ts", style: "style.css" },
+  entryPoints: { main: "src/main.ts", style: "site/style.css" },
   outdir: `${ROOT}/dist-notices`,
   write: false,
   bundle: true,
@@ -47,11 +47,11 @@ test("the script's notices name each npm package it bundles, by its LICENSE, und
 test("the stylesheet's notices name each font it embeds, by REUSE.toml, under the OFL", () => {
   const parts = partsOf(ROOT, bundled(metafile, "style.css"));
   assert.deepEqual(parts.map(({ name }) => name).sort(), [
-    "fonts/atkinson-hyperlegible-mono-400.woff2",
-    "fonts/atkinson-hyperlegible-mono-600.woff2",
-    "fonts/atkinson-hyperlegible-next-400.woff2",
-    "fonts/atkinson-hyperlegible-next-700.woff2",
-    "fonts/young-serif-400.woff2",
+    "site/fonts/atkinson-hyperlegible-mono-400.woff2",
+    "site/fonts/atkinson-hyperlegible-mono-600.woff2",
+    "site/fonts/atkinson-hyperlegible-next-400.woff2",
+    "site/fonts/atkinson-hyperlegible-next-700.woff2",
+    "site/fonts/young-serif-400.woff2",
   ]);
   for (const { name, license } of parts) assert.equal(license, "OFL-1.1", name);
 });

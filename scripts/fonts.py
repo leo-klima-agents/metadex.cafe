@@ -1,4 +1,4 @@
-# Makes the fonts in fonts/ from Google Fonts' sources at a pinned commit: Latin subsets, as WOFF2, without hinting.
+# Makes the fonts in site/fonts/ from Google Fonts' sources at a pinned commit: Latin subsets, as WOFF2, without hinting.
 # Needs Python 3 with fonttools 4.68.0 and brotli 1.2.1. Run it from the repository's root: python3 scripts/fonts.py
 # It gives the same files on every run.
 
@@ -72,7 +72,7 @@ def source(name: str) -> bytes:
 
 
 def main() -> None:
-    out = Path("fonts")
+    out = Path("site/fonts")
     out.mkdir(exist_ok=True)
     sources = {name: source(name) for name in SOURCES}
     for file, (name, weight) in FONTS.items():

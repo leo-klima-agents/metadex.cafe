@@ -18,7 +18,6 @@ import {
   canJoin,
   canLeave,
   canLeaveOther,
-  failedChecks,
   groupOf,
   join,
   leave,
@@ -29,6 +28,7 @@ import {
   type Account,
   type Step,
 } from "../src/hydrex.ts";
+import { failedChecks } from "../src/checks.ts";
 
 const OWNER: Address = "0x0208DdBc05a91e1B937E8B3140B62ef22A274C95";
 const LIQUID_HYDREX: Address = "0x809F8175b8F60960dF2bc7a78a7C4Eb04d138AF0";

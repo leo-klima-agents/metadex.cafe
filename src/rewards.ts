@@ -1,4 +1,5 @@
 import { getAddress, parseAbi, type Address } from "viem";
+import { rewardsAbi } from "./abi.ts";
 import { memo } from "./cache.ts";
 import { AUTOMATIONS } from "./config.ts";
 import { WEEK, clean, moneyAt, type Money } from "./format.ts";
@@ -15,13 +16,6 @@ export type Reward = { pool: Address; contract: Address; token: Token; amount: b
 // The epoch runs from start to start + WEEK; its prices are those at the flip that ended it.
 export type Earnings = { start: number; votes: bigint; pools: Pool[]; rewards: Reward[]; prices: Prices };
 
-const rewardsAbi = parseAbi([
-  "function totalSupplyAt(uint256 time) view returns (uint256)",
-  "function balanceOfOwnerAt(address owner, uint256 time) view returns (uint256)",
-  "function rewardsListLength() view returns (uint256)",
-  "function rewardTokens(uint256 index) view returns (address)",
-  "function rewardData(address token, uint256 time) view returns (uint256 periodFinish, uint256 rewardsPerEpoch, uint256 lastUpdateTime)",
-]);
 const poolAbi = parseAbi([
   "function token0() view returns (address)",
   "function token1() view returns (address)",
