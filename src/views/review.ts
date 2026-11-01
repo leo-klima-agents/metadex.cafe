@@ -35,7 +35,8 @@ export type Review = {
 type Sending = Review & {
   page: number;
   capabilities?: Capabilities;
-  batch: boolean;
+  // Whether the calls go in one prompt: decided as the first is sent, from the wallet and the calls then.
+  batch?: boolean;
   done: Hex[];
   receipts: Receipt[];
   proposed: number;
@@ -50,12 +51,15 @@ const dialog = $<HTMLDialogElement>("#review");
 const refreshAfter = (): void => ["account", "held", "allowances", "payouts"].forEach(refresh);
 let current: Sending | undefined;
 const apart = (review: Sending): boolean => (review.groups?.length ?? 1) > 1;
+const batched = (review: Sending): boolean =>
+  review.batch ?? (!!review.capabilities?.batch && !apart(review) && review.steps().length > 1);
 
 export function openReview(review: Review): void {
+  // One opened from another, as the swap after a claim: what the other sent is read again.
+  if (current?.submitted && !current.sending) refreshAfter();
   const opened: Sending = {
     ...review,
     page: 0,
-    batch: false,
     done: [],
     receipts: [],
     proposed: 0,
@@ -71,7 +75,6 @@ export function openReview(review: Review): void {
   if (state.connection)
     void capabilities(state.connection).then((found) => {
       opened.capabilities = found;
-      opened.batch = found.batch && opened.steps().length > 1 && !apart(opened);
       render();
     });
 }
@@ -98,6 +101,7 @@ function draw(): void {
   const review = current!;
   const { connection } = state;
   const steps = review.steps();
+  const batch = batched(review);
   const pages = review.pages.length ? review.pages : [{}];
   const last = review.page === pages.length - 1;
   const shown = pages[review.page]!;
@@ -105,7 +109,7 @@ function draw(): void {
   const wrongChain = connection?.chainId !== CHAIN_ID;
   const groups = review.groups ?? [steps.length];
   const groupOf = groups.flatMap((size, g) => Array.from({ length: size }, () => g));
-  const next = safe || review.batch || review.finished || steps.length < 2 ? -1 : review.done.length;
+  const next = safe || batch || review.finished || steps.length < 2 ? -1 : review.done.length;
   const callsName = steps.length === 1 ? "Transaction" : "Transactions";
   const atomic = !!review.atomic && !!review.capabilities?.atomic;
   fill(dialog, {
@@ -120,7 +124,7 @@ function draw(): void {
         : steps.length === 1
           ? "One Safe transaction"
           : `One Safe transaction, ${steps.length} calls`
-      : review.batch
+      : batch
         ? `All ${steps.length} in one prompt${atomic ? ", all or nothing" : ""}`
         : null,
     done:
@@ -137,7 +141,7 @@ function draw(): void {
             ? "Switch to Base"
             : steps.length === 1
               ? "Sign transaction"
-              : review.batch
+              : batch
                 ? `Sign ${steps.length} transactions`
                 : `Sign transaction ${review.done.length + 1} of ${steps.length}`
         : null,
@@ -201,7 +205,8 @@ async function finish(review: Sending): Promise<void> {
   announce(review.progress);
   review.outcome_ =
     (await review.outcome?.(review.receipts).catch((error: unknown) => void console.error(error))) ?? undefined;
-  render();
+  if (review !== current) return;
+  draw();
   if (review.outcome_) $("#review-title").focus();
 }
 
@@ -292,7 +297,7 @@ actions.confirm = () => {
       ? switchToBase(connection)
       : connection.wallet.propose
         ? proposeAll(review)
-        : review.batch
+        : (review.batch ??= batched(review))
           ? sendBatch(review)
           : sendNext(review);
   review.sending = true;
@@ -316,13 +321,13 @@ actions.confirm = () => {
 actions.next = () => {
   if (!current) return;
   current.page++;
-  render();
+  draw();
   $("#review-title").focus();
 };
 actions.back = () => {
   if (current && !current.sending && !current.submitted && current.page > 0) {
     current.page--;
-    render();
+    draw();
     $("#review-title").focus();
   } else closeReview();
 };

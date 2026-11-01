@@ -130,7 +130,8 @@ h3 {
   font-size: 1rem;
 }
 h1:focus,
-h2:focus {
+h2:focus,
+h3:focus {
   outline: none;
 }
 a {

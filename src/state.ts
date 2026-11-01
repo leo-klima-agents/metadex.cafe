@@ -6,10 +6,9 @@ import type { Connection } from "./wallet.ts";
 export const state: {
   route: Route;
   connection?: Connection | undefined;
-  // Hydrex accounts ticked in each group, by the group's place, and those the visitor ticked or unticked.
+  // The Hydrex accounts the visitor ticked in each group, by the group's view and name.
   picks: Map<string, Set<bigint>>;
-  touched: Set<string>;
-} = { route: { view: "home" }, picks: new Map(), touched: new Set() };
+} = { route: { view: "home" }, picks: new Map() };
 
 // Everything shown is drawn again from what is known, at most once a frame, whenever anything changes.
 const drawers: (() => void)[] = [];

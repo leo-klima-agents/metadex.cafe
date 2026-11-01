@@ -43,17 +43,6 @@ import { prefill } from "./swap.ts";
 
 const view = $('[data-view="account"]');
 
-// The account shown: the wallet's own, if it is, or read on its own.
-function shownHoldings(id: bigint): { holdings: Got<Holdings | null>; own: boolean } {
-  const own = data.accounts().value;
-  if (own?.accounts.some((account) => account.id === id))
-    return {
-      holdings: { value: { ...own, accounts: own.accounts.filter((account) => account.id === id) } },
-      own: true,
-    };
-  return { holdings: data.account(id), own: false };
-}
-
 // What waits for some accounts, at prices now, read again every five minutes.
 export function waiting(found: Found): Got<{ tokens: Map<string, Token>; prices: Prices }> {
   const amounts = new Map<string, bigint>();
@@ -85,7 +74,7 @@ export function waitsWords({ standing }: Entry, found: Found): string {
 export function drawAccount(): void {
   if (state.route.view !== "account") return;
   const id = state.route.id;
-  const { holdings, own } = shownHoldings(id);
+  const { holdings, own } = data.accountShown(id);
   const found = holdings.value;
   const account = found?.accounts[0];
   document.title = `${account ? accountName(account) : `Hydrex account #${id}`} · metaDEX Café`;
@@ -154,9 +143,10 @@ function drawActions(own: Holdings | undefined, st: hydrex.Status): void {
       button.textContent = `${moves ? "Move to" : "Join"} ${automation.name}`;
       button.classList.toggle("secondary", moves);
     }
-    if (action === "leave") {
+    // Leaving one of Hydrex's other automations is "self": it leaves the page's own too.
+    if (action === "leave" || action === "self") {
       button.textContent = st.kind === "stopped" ? "Leave automation" : "Leave";
-      button.dataset.action = "leave";
+      button.dataset.action = account && hydrex.canLeaveOther(account) ? "self" : "leave";
     }
     button.hidden = !allowed;
     any ||= allowed;
@@ -173,10 +163,7 @@ function drawActions(own: Holdings | undefined, st: hydrex.Status): void {
   fill(section, {
     actions: any || (!!own && st.kind === "unvoted"),
     vote: !!own && st.kind === "unvoted",
-    gas:
-      gas && !gas.failed
-        ? frag("A change costs ", shown(gas, ({ wei, prices }) => gasWords(wei, prices)) as string, " in gas.")
-        : null,
+    gas: !gas || gas.failed ? null : gas.value && `A change costs ${gasWords(gas.value.wei, gas.value.prices)} in gas.`,
   });
 }
 

@@ -428,10 +428,12 @@ export async function walkClaims(
   }
   return walks;
 }
-// Some accounts' claims in a block, each read once. An RPC whose logs lack one is behind, and the next is asked.
+// Some accounts' claims in a block, each kept once read. An RPC whose logs lack one is behind, and the next is asked;
+// if none has it, it is read again next time.
 const claimsIn = new Map<string, Claim[]>();
 async function claimsAt(block: number, ids: bigint[]): Promise<Claim[]> {
   const missing = ids.filter((id) => !claimsIn.has(`${block} ${id}`));
+  let found: Claim[] = [];
   if (missing.length) {
     const topics = [
       encodeEventTopics({ abi: eventsAbi, eventName: "Claimed" })[0],
@@ -447,14 +449,13 @@ async function claimsAt(block: number, ids: bigint[]): Promise<Claim[]> {
       tag: "payouts",
       want: (found) => missing.every((id) => claimsOf(found as Log[]).some((claim) => claim.id === id)),
     });
-    const found = claimsOf(logs);
-    for (const id of missing)
-      claimsIn.set(
-        `${block} ${id}`,
-        found.filter((claim) => claim.id === id),
-      );
+    found = claimsOf(logs);
+    for (const id of missing) {
+      const mine = found.filter((claim) => claim.id === id);
+      if (mine.length) claimsIn.set(`${block} ${id}`, mine);
+    }
   }
-  return ids.flatMap((id) => claimsIn.get(`${block} ${id}`)!);
+  return ids.flatMap((id) => claimsIn.get(`${block} ${id}`) ?? found.filter((claim) => claim.id === id));
 }
 
 // An account's payouts through the automation it is in, joining or leaving; its standing in the pools of the one it
@@ -551,11 +552,9 @@ export async function readPayouts(
   const top = Number(await rpc<Hex>("eth_blockNumber", [], { tag: "payouts" })) - SETTLED;
   const [time, ...delegates] = await read(
     [blockTime, ...ids.flatMap((id) => [1, 2].map((ago) => escrow("delegates", id, epochStart - ago * WEEK)))],
-    {
-      block: top,
-      tag: "payouts",
-    },
+    { block: top, tag: "payouts" },
   );
+  required([time]);
   const votedWith = (automation: Automation, id: bigint, ago: 1 | 2): boolean =>
     same(String(delegates[2 * ids.indexOf(id) + ago - 1]), automation.address);
   const voterOf = (account: Account): Automation =>

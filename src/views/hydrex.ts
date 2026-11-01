@@ -423,10 +423,8 @@ actions["pick-all"] = (el) => {
 function chosen(el: HTMLElement): Account[] {
   const holdings = data.accounts().value;
   const view = el.closest<HTMLElement>("[data-view]")!;
-  if (view.dataset.view === "account" && state.route.view === "account") {
-    const id = state.route.id;
-    return (data.account(id).value?.accounts ?? []).filter((account) => account.id === id);
-  }
+  if (view.dataset.view === "account" && state.route.view === "account")
+    return data.accountShown(state.route.id).holdings.value?.accounts ?? [];
   const section = el.closest<HTMLElement>("[data-group]")!;
   if (!holdings) return [];
   const rows = [...section.querySelectorAll<HTMLElement>("[data-list=account] > [data-key]")];
@@ -454,7 +452,7 @@ actions.claim = (el) => {
 export function change(accounts: Account[], action: "join" | "leave" | "self", automation?: Automation): void {
   const connection = state.connection;
   const holdings =
-    data.accounts().value ?? (state.route.view === "account" ? data.account(state.route.id).value : undefined);
+    data.accounts().value ?? (state.route.view === "account" ? data.accountShown(state.route.id).holdings.value : null);
   if (!connection || !holdings || !accounts.length) return;
   const can = accounts.filter((account) =>
     action === "join" ? automation && hydrex.canJoin(account, automation, now()) : true,

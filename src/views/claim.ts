@@ -1,6 +1,7 @@
 import { maxUint256 } from "viem";
 import * as claim from "../claim.ts";
 import { DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
+import * as data from "../data.ts";
 import { count, figure, list as listWords, money, moneyAt } from "../format.ts";
 import { summed, valueAt, type Amount, type Entry } from "../payouts.ts";
 import { ethCost, gasWords, key, pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
@@ -17,8 +18,8 @@ import { billNode, prefill, reviewSwap, swapReceipt, swapsOff } from "./swap.ts"
 // Claiming an overdue payout through Double Espresso, as it is or swapped into one token: in one prompt, all or
 // nothing, where the wallet can; else the claim first, then the swap of what it brought.
 type Claiming = {
-  claimSlips: Slip[];
-  steps: Slip[];
+  // The calls; those `sending` are encoded then, with a fresh deadline.
+  steps: (sending?: boolean) => Slip[];
   outcome: (receipts: Receipt[]) => Promise<Node | undefined>;
   into: Value;
   gasWithSwap?: bigint | undefined;
@@ -29,12 +30,15 @@ const MARGIN = 50n;
 
 export async function openClaim(entries: Entry[]): Promise<void> {
   const connection = state.connection!;
+  // Swaps wait for the checks, which say whether the RPCs serve Base.
   const [{ claims, tokens }, gasCosts, caps, middles] = await Promise.all([
     claim.owedOf(entries),
     costs().catch(() => undefined),
     capabilities(connection),
     describe([...swap.MIDDLES, HYDX]).catch(() => new Map<string, Token>()),
+    data.checksRead().catch(() => undefined),
   ]);
+  const deadline = () => BigInt(now() + (connection.wallet.propose ? 86_400 : 1_800));
   for (const [address, token] of middles) if (!tokens.has(address)) tokens.set(address, token);
   const owing = claims.filter(({ owed }) => owed.length);
   const name = `Claim for ${entries.length === 1 ? "Hydrex account" : "Hydrex accounts"} ${listWords(entries.map(({ account }) => `#${account.id}`))}`;
@@ -76,7 +80,7 @@ export async function openClaim(entries: Entry[]): Promise<void> {
     summed(claim.claimedIn(receipts, ids, connection.address).flatMap(({ paid }) => paid));
   const asTheyAre = async (receipts: Receipt[]) =>
     frag(...claimReceipts(receipts, ids, tokens, prices), swapThese(brought(receipts)));
-  const current: Claiming = { claimSlips: calls, steps: calls, outcome: asTheyAre, into: "", planned: 0 };
+  const current: Claiming = { steps: () => calls, outcome: asTheyAre, into: "", planned: 0 };
   open = current;
 
   const draw = () => {
@@ -191,43 +195,44 @@ export async function openClaim(entries: Entry[]): Promise<void> {
     sayInto(items);
     const swapPlan: swap.Plan = { swapper, items, margin: MARGIN };
     if (!items.length) return draw();
+    // Apart, the claim goes first; once it has, its Done page offers the swap of what it brought, if asked.
     if (!together) {
-      current.steps = calls;
-      current.outcome = async (receipts) => {
-        const came = brought(receipts);
-        const exact = {
-          ...swapPlan,
-          items: items.flatMap(({ approve = 0n, ...item }) => {
-            const amount = came.find(({ token }) => same(token, item.token.address))?.amount;
-            return amount ? [swap.partOf(item, amount, approve)] : [];
-          }),
+      if (into.checked)
+        current.outcome = async (receipts) => {
+          const came = brought(receipts);
+          const exact = {
+            ...swapPlan,
+            items: items.flatMap(({ approve = 0n, ...item }) => {
+              const amount = came.find(({ token }) => same(token, item.token.address))?.amount;
+              return amount ? [swap.partOf(item, amount, approve)] : [];
+            }),
+          };
+          const next = Object.assign(document.createElement("p"), { className: "row" });
+          if (exact.items.length) {
+            const button = Object.assign(document.createElement("button"), {
+              type: "button",
+              textContent: `Review the swap into ${swapper.symbol}`,
+            });
+            button.addEventListener(
+              "click",
+              () =>
+                void reviewSwap(exact, tokens, prices, gasCosts as Costs | undefined).then(
+                  (reason) => reason && (next.textContent = reason),
+                ),
+            );
+            next.append(button);
+          }
+          return frag(...claimReceipts(receipts, ids, tokens, prices), next);
         };
-        const next = Object.assign(document.createElement("p"), { className: "row" });
-        if (exact.items.length) {
-          const button = Object.assign(document.createElement("button"), {
-            type: "button",
-            textContent: `Review the swap into ${swapper.symbol}`,
-          });
-          button.addEventListener(
-            "click",
-            () =>
-              void reviewSwap(exact, tokens, prices, gasCosts as Costs | undefined).then(
-                (reason) => reason && (next.textContent = reason),
-              ),
-          );
-          next.append(button);
-        }
-        return frag(...claimReceipts(receipts, ids, tokens, prices), next);
-      };
       return draw();
     }
     // Run through Base after the claims, with no minimums: each route then sets its own.
-    const deadline = BigInt(now() + (connection.wallet.propose ? 86_400 : 1_800));
-    const run = await swap.simulatePlan(connection.address, calls, swapPlan, tokens, deadline, true);
+    let at = deadline();
+    const run = await swap.simulatePlan(connection.address, calls, swapPlan, tokens, at, true);
     if (id !== current.planned) return;
     if (!run || run.refused !== undefined || run.gas > claim.MAX_CLAIM_GAS) {
       current.into = "Base refused both together: they come as they are.";
-      current.steps = calls;
+      current.steps = () => calls;
       current.outcome = asTheyAre;
       return draw();
     }
@@ -240,7 +245,10 @@ export async function openClaim(entries: Entry[]): Promise<void> {
     sayInto(going.items);
     if (!going.items.length) return draw();
     if (body.querySelector<HTMLInputElement>('input[value="into"]')!.checked) {
-      current.steps = [...calls, ...swap.planSteps(going, tokens, deadline, undefined, true).slips];
+      current.steps = (sending) => [
+        ...calls,
+        ...swap.planSteps(going, tokens, sending ? (at = deadline()) : at, undefined, true).slips,
+      ];
       current.gasWithSwap = run.gas;
       current.outcome = async (receipts) =>
         frag(...claimReceipts(receipts, ids, tokens, prices), swapReceipt(receipts, going, tokens, prices, new Map()));
@@ -250,7 +258,7 @@ export async function openClaim(entries: Entry[]): Promise<void> {
   const choose = () => {
     if (open !== current) return;
     const chosen = body.querySelector<HTMLInputElement>('input[value="into"]')!.checked;
-    current.steps = calls;
+    current.steps = () => calls;
     current.outcome = asTheyAre;
     current.gasWithSwap = undefined;
     if (chosen && !into.disabled)
@@ -285,7 +293,7 @@ export async function openClaim(entries: Entry[]): Promise<void> {
   openReview({
     name,
     pages: [{ title: "What waits", body }, {}],
-    steps: () => current.steps,
+    steps: (sending) => current.steps(sending),
     atomic: true,
     groups: apart ? groups : undefined,
     checkHref,

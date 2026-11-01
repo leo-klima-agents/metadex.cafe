@@ -71,12 +71,12 @@ async function connectTo(wallet: Wallet, picked = true): Promise<void> {
   render();
   try {
     const connected = await connect(wallet);
-    if (mine !== attempt || !connected) return;
+    if (mine !== attempt) return;
+    if (!connected) throw new Error("No account.");
     message = "";
     listen(connected.provider);
     state.connection = connected;
     state.picks.clear();
-    state.touched.clear();
     if (popup.matches(":popover-open")) popup.hidePopover();
     announce(`Connected to ${wallet.name}.`);
     if (picked && fromHome) location.hash = "#app";
@@ -114,6 +114,7 @@ function listen(provider: Provider): void {
     const connection = ours();
     if (!connection) return;
     connection.chainId = Number(chainId);
+    switchFailed = false;
     refresh("accounts");
     render();
   });

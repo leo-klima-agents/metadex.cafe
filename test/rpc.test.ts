@@ -60,3 +60,15 @@ test("reads for the page shown go first; the others never hold more than four sl
   await Promise.all(all);
   assert.equal(started.length, 7);
 });
+
+test("an RPC that answers other than JSON-RPC, or does not answer, is asked again", async () => {
+  let asked = 0;
+  serve(() => {
+    asked++;
+    if (asked <= 3)
+      return asked % 2 ? new Response("<html>") : Promise.reject(new DOMException("Slow.", "TimeoutError"));
+    return reply("0x2");
+  });
+  assert.equal(await rpc("eth_chainId", []), "0x2");
+  assert.equal(asked, 4);
+});

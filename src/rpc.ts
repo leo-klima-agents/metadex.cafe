@@ -113,10 +113,11 @@ export function rpc<T>(method: string, params: unknown[], { tag, want = (r) => r
             body,
             signal: AbortSignal.timeout(5_000),
           });
-          if (response.status === 429 || response.status >= 500) throw new TypeError("Busy.");
+          if (response.status === 429 || response.status >= 500) throw new Error("Busy.");
           reply = (await response.json()) as Reply;
-        } catch (error) {
-          if (error instanceof TypeError) busy.push(url);
+        } catch {
+          // Busy, out of reach, too slow, or answering other than JSON-RPC.
+          busy.push(url);
           continue;
         }
         if ("result" in reply && want(reply.result)) return reply.result as T;
@@ -233,18 +234,14 @@ export async function gasPaid(hashes: Hex[], from: Address): Promise<bigint | un
 // The gas price, and the tip the page asks for, at most 1 gwei: above it, Aero's classic pools tax a swap.
 const MAX_TIP = 1_000_000_000n;
 export type Costs = { gasPrice: bigint; tip?: bigint | undefined };
-export const costs = (): Promise<Costs> =>
-  memo(
-    "costs",
-    async () => {
-      const [gasPrice, tip] = await Promise.all([
-        rpc<Hex>("eth_gasPrice", []),
-        rpc<Hex>("eth_maxPriorityFeePerGas", []).catch(() => undefined),
-      ]);
-      return {
-        gasPrice: BigInt(gasPrice),
-        tip: tip === undefined ? undefined : BigInt(tip) < MAX_TIP ? BigInt(tip) : MAX_TIP,
-      };
-    },
-    60_000,
-  );
+export async function readCosts(): Promise<Costs> {
+  const [gasPrice, tip] = await Promise.all([
+    rpc<Hex>("eth_gasPrice", []),
+    rpc<Hex>("eth_maxPriorityFeePerGas", []).catch(() => undefined),
+  ]);
+  return {
+    gasPrice: BigInt(gasPrice),
+    tip: tip === undefined ? undefined : BigInt(tip) < MAX_TIP ? BigInt(tip) : MAX_TIP,
+  };
+}
+export const costs = (): Promise<Costs> => memo("costs", readCosts, 60_000);

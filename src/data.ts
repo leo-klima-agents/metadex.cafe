@@ -18,7 +18,8 @@ export const owner = (): Address | undefined => state.connection?.address;
 export const then = <T, U>(got: Got<T>, next: (value: T) => Got<U>): Got<U> =>
   got.value !== undefined ? next(got.value) : got.failed ? { failed: true } : {};
 
-export const checks = () => use(`checks`, failedChecks, HOUR);
+export const checksRead = () => memo("checks", failedChecks, HOUR);
+export const checks = () => use("checks", failedChecks, HOUR);
 export const matchaLatte = () => use(`matcha-latte ${week()}`, readMatchaLatte, HOUR);
 export const freshness = (automation: Automation) =>
   use(`voted ${automation.kind} ${week()}`, () => readFreshness(automation), HOUR);
@@ -28,11 +29,16 @@ export const accounts = (): Got<Holdings> => {
 };
 export const blockTime = (block: number) => use(`time ${block}`, () => readTime(block));
 export const account = (id: bigint) => use(`account ${id} ${week()}`, async () => (await readAccount(id)) ?? null);
+// The account a page shows: from the wallet's own, if it is one, else read on its own.
+export function accountShown(id: bigint): { holdings: Got<Holdings | null>; own: boolean } {
+  const own = accounts().value;
+  if (!own?.accounts.some((each) => each.id === id)) return { holdings: account(id), own: false };
+  return { holdings: { value: { ...own, accounts: own.accounts.filter((each) => each.id === id) } }, own: true };
+}
 
 // The last epoch Hydrex has ended: until it moves on after a flip, the epoch before's, read again every five minutes.
-const epochKey = () => `epoch ${week()}`;
 export const epoch = () =>
-  use(epochKey(), lastEpoch, (start: number) => (start < week() - WEEK ? 5 * MINUTE : Infinity));
+  use(`epoch ${week()}`, lastEpoch, (start: number) => (start < week() - WEEK ? 5 * MINUTE : Infinity));
 const earningsKey = (automation: Automation, start: number) => `earnings ${automation.kind} ${start}`;
 const readEarnings = (automation: Automation, start: number) => () =>
   votesEarned(automation.address, start, true, tagged("earnings"));
@@ -61,15 +67,17 @@ export function earnedBy(holdings: Holdings, id: bigint): Got<{ share: number; o
 }
 export const holders = (holdings: Holdings) => then(stakes(holdings), (all) => ({ value: holdersOf(all.values()) }));
 
-// The payouts of the accounts in the automations, read again every five minutes while one due has not come.
+// The payouts of the accounts in the automations, as of the last epoch Hydrex has ended: read again once it moves on,
+// and every five minutes while one due has not come.
 export function payouts(holdings: Holdings): Got<Found> {
   const key = holdings.accounts.map(({ id, delegate, claimer }) => `${id}:${delegate}:${claimer}`).join(" ");
-  const earningsOf = (automation: Automation) =>
-    memo(epochKey(), lastEpoch).then((start) => memo(earningsKey(automation, start), readEarnings(automation, start)));
-  return use(
-    `payouts ${holdings.owner} ${holdings.epochStart} ${key}`,
-    () => readPayouts(holdings, earningsOf),
-    (found: Found) => (awaited(found) ? 5 * MINUTE : Infinity),
+  return then(epoch(), (start) =>
+    use(
+      `payouts ${holdings.owner} ${holdings.epochStart} ${start} ${key}`,
+      () =>
+        readPayouts(holdings, (automation) => memo(earningsKey(automation, start), readEarnings(automation, start))),
+      (found: Found) => (awaited(found) ? 5 * MINUTE : Infinity),
+    ),
   );
 }
 

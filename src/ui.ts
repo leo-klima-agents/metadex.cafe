@@ -30,13 +30,22 @@ function setText(el: Element, text: string): void {
     el.textContent = text;
 }
 
+// Puts a node, or a fragment's nodes, in `el`, unless it holds the same already: a redraw then leaves focus where it was,
+// and a live region quiet.
+function replace(el: Element, value: Node): void {
+  const nodes = value instanceof DocumentFragment ? [...value.childNodes] : [value];
+  const held = el.childNodes;
+  if (held.length !== nodes.length || nodes.some((node, i) => node !== held[i] && !node.isEqualNode(held[i]!)))
+    el.replaceChildren(...nodes);
+}
+
 export function put(el: HTMLElement, value: Value): void {
   el.hidden = value === null || value === false;
   setAttr(el, "data-loading", value === undefined ? "" : null);
   if (value === null || value === false || value === true) return;
   if (value === undefined) return setText(el, "Loading…");
   if (typeof value === "string") return setText(el, value);
-  if (value instanceof Node) return void (el.firstChild !== value && el.replaceChildren(value));
+  if (value instanceof Node) return replace(el, value);
   if ("state" in value) return setAttr(el, "data-state", value.state);
   if ("wallet" in value) return hex(el, value.wallet, true);
   if ("address" in value) {
@@ -45,8 +54,7 @@ export function put(el: HTMLElement, value: Value): void {
     });
     if (value.text === undefined) hex(link, value.address);
     else link.textContent = value.text;
-    el.replaceChildren(link);
-    return;
+    return replace(el, link);
   }
   if (el instanceof HTMLAnchorElement) {
     setAttr(el, "href", value.href);
@@ -54,8 +62,7 @@ export function put(el: HTMLElement, value: Value): void {
     setAttr(el, "rel", value.external ? "noopener" : null);
     return setText(el, value.text);
   }
-  const link = Object.assign(document.createElement("a"), { href: value.href, textContent: value.text });
-  el.replaceChildren(link);
+  replace(el, Object.assign(document.createElement("a"), { href: value.href, textContent: value.text }));
 }
 
 // Fills `root` and what it holds, but not its lists' rows, which their own fill() fills.
@@ -94,7 +101,12 @@ export function list<T>(
   const focused = [...old.values()].some((row) => row.contains(document.activeElement));
   rows.forEach((row, i) => el.children[i] !== row && el.insertBefore(row, el.children[i] ?? null));
   for (const row of old.values()) row.remove();
-  if (focused) el.closest("section, dialog")?.querySelector<HTMLElement>("h1, h2, h3")?.focus();
+  // Focus in a row that went goes to the heading of its section.
+  const heading = focused ? el.closest("section, dialog")?.querySelector<HTMLElement>("h1, h2, h3") : undefined;
+  if (heading) {
+    heading.tabIndex = -1;
+    heading.focus();
+  }
 }
 
 // A read's value as text: loading while read, "Not read" once failed.

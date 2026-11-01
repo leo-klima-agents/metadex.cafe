@@ -136,6 +136,21 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     await expectApprovals([2435n], LOCK_MAXI, LOCK_MAXI);
   });
 
+  test("on an account's own page, its buttons act at once, and it leaves a stopped automation", async () => {
+    const { page, violations } = await connected({ owner: ELSEWHERE }, { url: `${SITE}/#hydrex/2439` });
+    const account = h.view(page, "account");
+    await account.getByRole("button", { name: "Join Matcha Latte" }).click();
+    await heading(review(page), "Before you join", 2).waitFor();
+    await review(page).getByRole("button", { name: "Back" }).click();
+    await account.getByRole("button", { name: "Leave automation" }).click();
+    await heading(review(page), "Leave USDC", 2).waitFor();
+    assert.deepEqual(await says(page), ["Account #2439 leaves the USDC automation."]);
+    await h.confirm(page);
+    await review(page).getByRole("button", { name: "Close" }).click();
+    await account.getByText(/Left USDC: your votes from Thu,? 22 Oct/).waitFor();
+    assert.deepEqual(violations, []);
+  });
+
   test("the wrong network, a refusal, a failing transaction, Back while the wallet asks, and closing between two", async () => {
     const { page, wallet, sent } = await connected({ owner: NEWCOMER, chainId: 1, decline: true });
     await page.getByText("Wrong network.").waitFor();

@@ -33,3 +33,22 @@ test("what is read again shows its last value meanwhile", async () => {
   await tick();
   assert.deepEqual(use("c", read), { value: 3 });
 });
+
+test("a read given no time to live keeps its key's; one that fails again is failed, and refresh reads it again", async () => {
+  let n = 0;
+  const read = async () => ++n;
+  await memo("d", read, 0);
+  await memo("d", read);
+  await memo("d", read);
+  assert.equal(n, 3, "each read again at once: its time to live stayed 0");
+  let fail = false;
+  const flaky = async () => (fail ? Promise.reject(new Error("no")) : "ok");
+  await memo("e", flaky, 0);
+  fail = true;
+  await memo("e", flaky).catch(() => {});
+  assert.deepEqual(use("e", flaky), { failed: true }, "no stale value shown as read");
+  fail = false;
+  refresh("e");
+  await memo("e", flaky);
+  assert.deepEqual(use("e", flaky, 1e9), { value: "ok" });
+});

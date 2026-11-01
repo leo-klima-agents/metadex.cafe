@@ -5,9 +5,9 @@ import * as data from "../data.ts";
 import { fixed, figure, fraction, money, moneyAt, utc, type Money } from "../format.ts";
 import { type Amount } from "../payouts.ts";
 import { ethCost, gasWords, key, pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
-import { hrefOf } from "../routes.ts";
+import { hrefOf, parse } from "../routes.ts";
 import { routeTogether, type Sale } from "../routing.ts";
-import { costs, gasPaid, includedAt, now, same, tagged, type Costs, type Receipt } from "../rpc.ts";
+import { gasPaid, includedAt, now, readCosts, same, tagged, type Costs, type Receipt } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import * as swap from "../swap.ts";
 import type { Found, Item, Plan, Route } from "../swap.ts";
@@ -43,13 +43,20 @@ export const swapsOff = (): boolean | undefined => {
   const checks = data.checks().value;
   return checks && [...checks.values()].some((failed) => failed.includes("chain"));
 };
+// The amounts a receipt's "Swap these" brings to the swap, until the visitor leaves it.
 export function prefill(amounts: Amount[]): void {
   prefilled = new Map(amounts.map(({ token, amount }) => [key(token), amount]));
   know(amounts.map(({ token }) => token));
   ticks.clear();
 }
+addEventListener("hashchange", () => {
+  if (!prefilled || parse(location.hash).view === "swap") return;
+  prefilled = undefined;
+  ticks.clear();
+});
 
-// What the scan reads: the wallet's tokens and their allowances to the swapper, their names, gas and prices now.
+// What the scan reads: the wallet's tokens and their allowances to the swapper, their names, gas and prices now. Each
+// token's route is read again every five minutes, those ticked routed together again every minute.
 type Scan = { rows: Row[]; tokens: Map<string, Token>; prices: Prices; costs?: Costs | undefined; reading: boolean };
 type Row = {
   token: Token;
@@ -84,7 +91,7 @@ function scan(): Got<Scan> {
           () => pricesNow([...tokens.values()], amounts, rd),
           60_000,
         );
-        const gas = use("costs", costs, 60_000);
+        const gas = use("costs", readCosts, 60_000);
         if (prices.value === undefined && !prices.failed) return {};
         const pricing = prices.value ?? { unit: "USD", of: new Map(), standIns: new Map() };
         const value = (amount: bigint) => {
@@ -105,6 +112,7 @@ function scan(): Got<Scan> {
           const found = use(
             `route ${address} ${capped} ${swapper.output}`,
             async () => (await swap.findRoute(address, capped, swapper, isHydrex(address), gasValue, rd)) ?? null,
+            5 * 60_000,
           );
           const row: Row = { token, amount: capped, allowance, found, ticked: false };
           if (found.failed) row.reason = "Not read";
@@ -155,45 +163,50 @@ function together(found: Scan): Got<Together> {
     setTimeout(render, 400);
     return {};
   }
-  return use(`together ${connection.address} ${id}`, async () => {
-    const plan = (routes: Route[][]): Plan => ({
-      swapper,
-      margin,
-      items: rows.flatMap((row, i) =>
-        routes[i]!.map((route) => ({ token: row.token, route, out: 0n, allowance: row.allowance })),
-      ),
-    });
-    const own = rows.map((row) => [{ ...row.found.value!.route, amount: row.amount }]);
-    const sales: Sale[] = rows.map((row) => ({
-      token: row.token.address,
-      amount: row.amount,
-      found: row.found.value!,
-      hydrex: isHydrex(row.token.address),
-    }));
-    const deadline = BigInt(now() + 1800);
-    const run = (routes: Route[][]) => swap.simulatePlan(connection.address, [], plan(routes), found.tokens, deadline);
-    const [ownRun, parted] = await Promise.all([
-      run(own),
-      routeTogether(sales, swapper, () => 0n).catch(() => undefined),
-    ]);
-    const partedRun = parted && (await run(parted));
-    const net = (simulated: swap.Simulated | undefined) =>
-      simulated && simulated.refused === undefined
-        ? simulated.results.reduce((sum, r) => sum + (r?.done ? r.amountOut : 0n), 0n)
-        : undefined;
-    const better = net(partedRun) !== undefined && (net(ownRun) === undefined || net(partedRun)! > net(ownRun)!);
-    const [routes, simulated] = better ? [parted!, partedRun] : [own, ownRun];
-    let next = 0;
-    const results = simulated?.refused === undefined ? simulated?.results : undefined;
-    const outOf = (row: Row) => {
-      const result = results?.[next++];
-      return results ? (result?.done ? result.amountOut : undefined) : row.found.value!.out;
-    };
-    const parts = new Map(
-      rows.map((row, i) => [key(row.token.address), routes[i]!.map((route) => ({ route, out: outOf(row) }))]),
-    );
-    return { parts, gas: results && simulated!.gas, swaps: swap.split(routes.flat()).length };
-  });
+  return use(
+    `together ${connection.address} ${id}`,
+    async () => {
+      const plan = (routes: Route[][]): Plan => ({
+        swapper,
+        margin,
+        items: rows.flatMap((row, i) =>
+          routes[i]!.map((route) => ({ token: row.token, route, out: 0n, allowance: row.allowance })),
+        ),
+      });
+      const own = rows.map((row) => [{ ...row.found.value!.route, amount: row.amount }]);
+      const sales: Sale[] = rows.map((row) => ({
+        token: row.token.address,
+        amount: row.amount,
+        found: row.found.value!,
+        hydrex: isHydrex(row.token.address),
+      }));
+      const deadline = BigInt(now() + 1800);
+      const run = (routes: Route[][]) =>
+        swap.simulatePlan(connection.address, [], plan(routes), found.tokens, deadline);
+      const [ownRun, parted] = await Promise.all([
+        run(own),
+        routeTogether(sales, swapper, () => 0n).catch(() => undefined),
+      ]);
+      const partedRun = parted && (await run(parted));
+      const net = (simulated: swap.Simulated | undefined) =>
+        simulated && simulated.refused === undefined
+          ? simulated.results.reduce((sum, r) => sum + (r?.done ? r.amountOut : 0n), 0n)
+          : undefined;
+      const better = net(partedRun) !== undefined && (net(ownRun) === undefined || net(partedRun)! > net(ownRun)!);
+      const [routes, simulated] = better ? [parted!, partedRun] : [own, ownRun];
+      let next = 0;
+      const results = simulated?.refused === undefined ? simulated?.results : undefined;
+      const outOf = (row: Row) => {
+        const result = results?.[next++];
+        return results ? (result?.done ? result.amountOut : undefined) : row.found.value!.out;
+      };
+      const parts = new Map(
+        rows.map((row, i) => [key(row.token.address), routes[i]!.map((route) => ({ route, out: outOf(row) }))]),
+      );
+      return { parts, gas: results && simulated!.gas, swaps: swap.split(routes.flat()).length };
+    },
+    60_000,
+  );
 }
 
 // The output's amounts, to as many places as a cent of it needs, with what they are worth.
@@ -373,12 +386,16 @@ actions["review-swap"] = async (el) => {
     .filter((row) => row.ticked && row.found.value)
     .flatMap((row) =>
       (routed?.parts.get(key(row.token.address)) ?? [{ route: row.found.value!.route, out: row.found.value!.out }]).map(
-        ({ route, out }) => ({
-          token: row.token,
-          route: { ...route, minPaid: swap.minimumOf(out ?? row.found.value!.out, margin) },
-          out: out ?? (row.found.value!.out * route.amount) / row.amount,
-          allowance: row.allowance,
-        }),
+        ({ route, out }) => {
+          // A part without its own quote takes its share of the token's.
+          const quote = out ?? (row.found.value!.out * route.amount) / row.amount;
+          return {
+            token: row.token,
+            route: { ...route, minPaid: swap.minimumOf(quote, margin) },
+            out: quote,
+            allowance: row.allowance,
+          };
+        },
       ),
     );
   failedReview = (await reviewSwap({ swapper, items, margin }, found.tokens, found.prices, found.costs)) ?? "";

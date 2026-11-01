@@ -327,12 +327,16 @@ export const leaveOther = (accounts: Account[]): Step[] =>
 
 // The checks that fail, by the id of their message on the page, for each automation: whether the RPCs serve Base;
 // whether Hydrex's VotingEscrow and its approval logic are those the page knows, as an upgrade could change what
-// joining allows; and whether joining each automation is on, and approves its claims and votes only.
+// joining allows; and whether joining each automation is on, and approves its claims and votes only. A read that fails
+// fails them all, as not read, rather than as a check.
 export async function failedChecks(): Promise<Map<Kind, string[]>> {
   const [chainId, impl, [logic, ...configs]] = await Promise.all([
     rpc<string>("eth_chainId", []),
     implementation(config.VOTING_ESCROW),
-    read([escrow("approvalLogic"), ...AUTOMATIONS.map(({ address }) => escrow("getConduitApprovalConfig", address))]),
+    read([
+      escrow("approvalLogic"),
+      ...AUTOMATIONS.map(({ address }) => escrow("getConduitApprovalConfig", address)),
+    ]).then(required),
   ]);
   const failing = (checks: Record<string, boolean>) =>
     Object.entries(checks).flatMap(([id, fails]) => (fails ? [id] : []));
@@ -343,7 +347,7 @@ export async function failedChecks(): Promise<Map<Kind, string[]>> {
   });
   return new Map(
     AUTOMATIONS.map(({ kind, actions }, i) => {
-      const [approved, active] = (configs[i] ?? [[], false]) as [number[], boolean];
+      const [approved, active] = configs[i] as [number[], boolean];
       const id = kind === "matcha-latte" ? "approvals" : `${kind}-approvals`;
       return [kind, [...all, ...failing({ [id]: !active || approved.join() !== actions.join() })]];
     }),
