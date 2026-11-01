@@ -203,8 +203,13 @@ async function finish(review: Sending): Promise<void> {
   const n = review.steps().length;
   say(review, n === 1 ? "It went through." : `All ${n} went through.`);
   announce(review.progress);
-  review.outcome_ =
-    (await review.outcome?.(review.receipts).catch((error: unknown) => void console.error(error))) ?? undefined;
+  const outcome = await review.outcome?.(review.receipts).catch((error: unknown) => void console.error(error));
+  // Kept in an element of its own: a fragment empties once shown, and would be shown empty the next time.
+  if (outcome) {
+    const box = Object.assign(document.createElement("div"), { className: "stack" });
+    box.append(outcome);
+    review.outcome_ = box;
+  }
   if (review !== current) return;
   draw();
   if (review.outcome_) $("#review-title").focus();
