@@ -15,7 +15,6 @@ const TYPES: Record<string, string> = {
   ".css": "text/css",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
-  ".png": "image/png",
   ".json": "application/json",
 };
 

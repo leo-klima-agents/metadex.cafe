@@ -46,8 +46,8 @@ binary; `SCREENSHOTS` a folder for screenshots.
 | `scripts/`                  | The build, `dev`, license notices, the release, fonts, icons, the token list. |
 
 The build bundles `src/main.ts` and `site/style.css`, with the fonts of `site/fonts/` inside it, and copies the rest of
-`site/` as it is. `node scripts/icons.ts` draws the icons from `site/icon.svg`; `python3 scripts/fonts.py` makes the
-fonts.
+`site/` as it is. `node scripts/icons.ts` draws `site/favicon.ico` from `site/icon.svg`; `python3 scripts/fonts.py`
+makes the fonts.
 
 ## When a contract changes
 
