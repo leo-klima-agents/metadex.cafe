@@ -10,10 +10,10 @@ import { costs, now, same, simulate, type Costs, type Receipt } from "../rpc.ts"
 import { actions, render, state } from "../state.ts";
 import * as swap from "../swap.ts";
 import { describe, type Amount } from "../tokens.ts";
-import { $, fill, frag, list, type Value } from "../ui.ts";
+import { $, bill, fill, frag, list, type Value } from "../ui.ts";
 import { capabilities, type Slip } from "../wallet.ts";
 import { openReview } from "./review.ts";
-import { billNode, prefill, reviewSwap, swapReceipt } from "./swap.ts";
+import { prefill, reviewSwap, swapReceipt } from "./swap.ts";
 
 // Claiming an overdue payout through Double Espresso, as it is or swapped into one token: in one prompt, all or
 // nothing, where the wallet can; else the claim first, then the swap of what it brought.
@@ -32,17 +32,6 @@ const MARGIN = 50n;
 
 export async function openClaim(entries: Entry[]): Promise<void> {
   const connection = state.connection!;
-  // Swaps wait for the checks, which say whether the RPCs serve Base.
-  const [{ claims, tokens, unread }, gasCosts, caps, middles] = await Promise.all([
-    claim.owedOf(entries),
-    costs().catch(() => undefined),
-    capabilities(connection),
-    describe([...swap.MIDDLES, HYDX]).catch(() => new Map<string, Token>()),
-    checksRead().catch(() => undefined),
-  ]);
-  const deadline = () => BigInt(now() + (connection.wallet.propose ? 86_400 : 1_800));
-  for (const [address, token] of middles) if (!tokens.has(address)) tokens.set(address, token);
-  const owing = claims.filter(({ owed }) => owed.length);
   const name = `Claim for ${entries.length === 1 ? "Hydrex account" : "Hydrex accounts"} ${listWords(entries.map(({ account }) => `#${account.id}`))}`;
   const checkHref = hrefOf({ view: "product", kind: "double-espresso", section: "check" });
   const nothing = (words: string) =>
@@ -52,12 +41,22 @@ export async function openClaim(entries: Entry[]): Promise<void> {
       steps: () => [],
       checkHref,
     });
+  const unanswered = "Base did not say what waits: try again in a moment.";
+  // Swaps wait for the checks, which say whether the RPCs serve Base.
+  const [owed, gasCosts, caps, middles] = await Promise.all([
+    claim.owedOf(entries).catch((error: unknown) => void console.error(error)),
+    costs().catch(() => undefined),
+    capabilities(connection),
+    describe([...swap.MIDDLES, HYDX]).catch(() => new Map<string, Token>()),
+    checksRead().catch(() => undefined),
+  ]);
+  if (!owed) return nothing(unanswered);
+  const { claims, tokens, unread } = owed;
+  const deadline = () => BigInt(now() + (connection.wallet.propose ? 86_400 : 1_800));
+  for (const [address, token] of middles) if (!tokens.has(address)) tokens.set(address, token);
+  const owing = claims.filter(({ owed }) => owed.length);
   if (!owing.length)
-    return nothing(
-      unread
-        ? "Base did not say what waits: try again in a moment."
-        : "Nothing to claim: someone else may have just claimed it for you.",
-    );
+    return nothing(unread ? unanswered : "Nothing to claim: someone else may have just claimed it for you.");
 
   const totals = claim.paidBy(owing.flatMap(({ owed }) => owed));
   const paid = totals.map(({ token, paid }) => ({ token, amount: paid }));
@@ -350,7 +349,7 @@ function claimReceipts(
       : "Nothing";
   return claim.claimedIn(receipts, ids, caller).map(({ id, received, fees, paid }) => {
     const worth = prices ? valueAt(received, tokens, prices) : 0;
-    const node = billNode(
+    const node = bill(
       `Receipt · Account #${id} · Double Espresso`,
       "",
       [],

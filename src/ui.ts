@@ -116,6 +116,34 @@ export const stateOf = (got: Got<unknown>, empty?: boolean): Value => ({
   state: got.value !== undefined ? (empty ? "empty" : "ready") : got.failed ? "failed" : "loading",
 });
 
+// A bill, from the page's template: its lines, its sums, its total, and what goes under it.
+export type Line = { symbol: string; amount: string; value: string; worth: string; route: string; note: Value };
+export function bill(
+  label: Value,
+  day: Value,
+  lines: Line[],
+  sums: [string, Value, Value?][],
+  [total, value, worth, detail = null]: [Value, Value, Value, Value?],
+  foot: Value = null,
+  after: Value = null,
+): HTMLElement {
+  const node = $<HTMLTemplateElement>("#bill").content.firstElementChild!.cloneNode(true) as HTMLElement;
+  fill(node, { label, day, total, "total-value": value, "total-worth": worth, "total-detail": detail, foot, after });
+  list(
+    $("[data-list=line]", node),
+    lines,
+    (_, i) => String(i),
+    (li, line) => fill(li, { ...line }),
+  );
+  list(
+    $("[data-list=sum]", node),
+    sums,
+    (_, i) => String(i),
+    (row, [label, value, detail]) => fill(row, { label, value, detail: detail || null }),
+  );
+  return node;
+}
+
 // A status: a shape before the words, so that it never depends on colour alone.
 export function status(shape: string, strong: string, ...rest: (string | Node)[]): HTMLElement {
   const span = document.createElement("span");

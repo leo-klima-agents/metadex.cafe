@@ -23,7 +23,7 @@ import {
   type Allowance,
   type Amount,
 } from "../tokens.ts";
-import { $, busy, code, fill, frag, list, shown, stateOf, type Value } from "../ui.ts";
+import { $, bill, busy, code, fill, frag, list, shown, stateOf, type Value } from "../ui.ts";
 import { walletAssets } from "../wallet.ts";
 import { openReview } from "./review.ts";
 
@@ -436,7 +436,7 @@ export async function reviewSwap(
     BigInt(simulated?.steps.approvals.length ?? 0) * swap.APPROVAL_GAS +
       swap.swapGas(going.items.map(({ route }) => route));
   const value = (amount: bigint) => output(amount, plan.swapper, prices);
-  const body = billNode(
+  const body = bill(
     frag("Quote · swap into ", code(plan.swapper.symbol)),
     gasCosts ? `Estimated gas ${gasWords(gas * gasCosts.gasPrice, prices)}` : "",
     lines.map(({ item, reason }) => {
@@ -492,42 +492,6 @@ export async function reviewSwap(
   });
 }
 
-// A bill: its lines, then its sums, then its total.
-type Line = { symbol: string; amount: string; value: string; worth: string; route: string; note: Value };
-export function billNode(
-  label: Value,
-  day: Value,
-  lines: Line[],
-  sums: [string, Value, Value?][],
-  total: [Value, Value, Value],
-): HTMLElement {
-  const node = $<HTMLTemplateElement>("#bill").content.firstElementChild!.cloneNode(true) as HTMLElement;
-  fill(node, {
-    label,
-    day,
-    total: total[0],
-    "total-value": total[1],
-    "total-worth": total[2],
-    "total-detail": null,
-    foot: null,
-    after: null,
-  });
-  list(
-    $("[data-list=line]", node),
-    lines,
-    (_, i) => String(i),
-    (li, line) => fill(li, { ...line }),
-  );
-  list(
-    $("[data-list=sum]", node),
-    sums,
-    (_, i) => String(i),
-    (row, [label, value, detail]) => fill(row, { label, value, detail: detail || null }),
-  );
-  list($("[data-list=claim]", node), [], String, () => {});
-  return node;
-}
-
 // The receipt: what each token fetched against its quote, the fee, what reached the wallet, and those skipped, which
 // stay in the wallet with their approval, which it offers to reset.
 export function swapReceipt(
@@ -550,7 +514,7 @@ export function swapReceipt(
   }
   const fetched = swapped.reduce((sum, { amountOut }) => sum + amountOut, 0n);
   const value = (amount: bigint) => output(amount, swapper, prices);
-  const node = billNode(
+  const node = bill(
     frag("Receipt · swap into ", code(swapper.symbol)),
     `${utc(time)}${gas === undefined ? "" : ` · gas ${gasWords(gas, prices)}`}`,
     [...sold.values()].map(({ token, amountIn, amountOut }) => {

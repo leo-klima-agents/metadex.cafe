@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { encodeFunctionData } from "viem";
+import { encodeFunctionData, toFunctionSelector } from "viem";
 import { DOUBLE_ESPRESSO, SWAPPERS, USDC, WETH } from "../src/config.ts";
 import { SAFE_ORIGIN } from "../src/wallet.ts";
 import * as h from "./harness.ts";
@@ -22,6 +22,8 @@ import {
 } from "./harness.ts";
 
 const INTO_USDC = SWAPPERS[0]!;
+// What a reward contract owes an account, as the page asks it in its reads.
+const EARNED = toFunctionSelector("function earned(uint256, address)").slice(2);
 // The pool Matcha Latte votes for most: its incentives contract began 54 epochs before the epoch claimed, past the 50
 // that earned() reads for an account that never claimed from it.
 const POOL = "0x66352585BAD83DA857a020f739f1f7cA93209A1B";
@@ -117,9 +119,19 @@ describe("the swap and the claim against a fork after the swappers' deployment",
   test("an overdue payout in Double Espresso: claimed, then what it brought swapped into USDC", async () => {
     await h.approveConduit(PAYEE, DOUBLE_ESPRESSO.address, 82774n);
     await h.settle();
-    const { page, sent } = await connected({ owner: PAYEE, batch: true }, { url: `${SITE}/#app` });
+    let refusing = false;
+    const { page, sent } = await connected(
+      { owner: PAYEE, batch: true },
+      { url: `${SITE}/#app`, refuse: (body) => refusing && body.includes(EARNED) },
+    );
     const line = view(page, "app").locator("[data-list=need] > li").filter({ hasText: "#82774: payout overdue" });
     await line.filter({ hasText: /payout overdue, at least (≈|<)\s\$[\d,.]+ in \d+ tokens?/ }).waitFor();
+    // While Base does not say what waits, the claim says so, and can be asked again.
+    refusing = true;
+    await line.getByRole("button", { name: "Claim now" }).click();
+    await review(page).getByText("Base did not say what waits: try again in a moment.").waitFor();
+    await review(page).getByRole("button", { name: "Back" }).click();
+    refusing = false;
     await line.getByRole("button", { name: "Claim now" }).click();
     await heading(review(page), "What waits", 2).waitFor();
     assert.equal(

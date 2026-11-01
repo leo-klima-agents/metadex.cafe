@@ -204,9 +204,12 @@ function drawGroups(root: HTMLElement, holdings: Holdings, belongs: (group: stri
         box.setAttribute("aria-label", `Pick ${accountName(account)}`);
       },
     );
+    // A button busy with its action stays disabled until it is done.
     for (const button of buttons) {
       button.hidden = !able.some((account) => can(button.dataset.action!, account, button.dataset.arg, holdings));
-      button.disabled = !chosen.some((account) => can(button.dataset.action!, account, button.dataset.arg, holdings));
+      button.disabled =
+        button.getAttribute("aria-busy") === "true" ||
+        !chosen.some((account) => can(button.dataset.action!, account, button.dataset.arg, holdings));
     }
     const box = section.querySelector<HTMLInputElement>("[data-action=pick-all]");
     if (box) {

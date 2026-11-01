@@ -37,7 +37,7 @@ import { hrefOf } from "../routes.ts";
 import { now, same, tagged } from "../rpc.ts";
 import { state } from "../state.ts";
 import { tokensOf, type Amount } from "../tokens.ts";
-import { $, code, fill, frag, link, list, shown, stateOf, status, BASESCAN, type Value } from "../ui.ts";
+import { $, bill, code, fill, frag, link, list, shown, stateOf, status, BASESCAN, type Value } from "../ui.ts";
 import { accountName, lockWords, statusNode } from "./hydrex.ts";
 import { prefill } from "./swap.ts";
 
@@ -248,35 +248,6 @@ const worth = (found: Amount[], { tokens, prices }: ReturnType<typeof priced>): 
   const total = tokens && prices ? valueAt(found, tokens, prices) : 0;
   return total > 0 ? money(moneyAt(total, prices!), true) : "";
 };
-function bill(
-  label: string,
-  day: string,
-  sums: [string, Value, Value?][],
-  total: [string, Value, Value, Value?],
-  foot: Value,
-  after: Value = null,
-): HTMLElement {
-  const node = $<HTMLTemplateElement>("#bill").content.firstElementChild!.cloneNode(true) as HTMLElement;
-  fill(node, {
-    label,
-    day,
-    total: total[0],
-    "total-value": total[1],
-    "total-worth": total[2],
-    "total-detail": total[3] ?? null,
-    foot,
-    after,
-  });
-  list(
-    $("[data-list=sum]", node),
-    sums,
-    (_, i) => String(i),
-    (row, [label, value, detail]) => fill(row, { label, value, detail: detail ?? null }),
-  );
-  list($("[data-list=line]", node), [], String, () => {});
-  return node;
-}
-
 // Matcha Latte's receipt: what its payout claimed, swapped to kVCM, retired, took, and paid, to whoever owned it then.
 function payoutReceipt(payout: Payout, id: bigint, owner: Address, time: number, own: boolean): Node {
   const p = priced([...payout.earned, ...payout.paid], weekStart(time));
@@ -289,6 +260,7 @@ function payoutReceipt(payout: Payout, id: bigint, owner: Address, time: number,
   return bill(
     `Receipt · Account #${id} · Matcha Latte`,
     `${day(weekStart(time) - WEEK)} to ${day(weekStart(time))}`,
+    [],
     [
       ["Earned", worth(payout.earned, p), amounts(payout.earned, p.tokens)],
       ["Swapped", `${amount(swapped > 0n ? swapped : 0n, 18)} kVCM`],
@@ -319,6 +291,7 @@ function claimsReceipt({ claims, stopped }: Walk, id: bigint, owner: Address, ow
   const node = bill(
     `Receipt · Account #${id} · Double Espresso`,
     flip === undefined ? "" : `${day(flip - WEEK)} to ${day(flip)}`,
+    [],
     [
       ["Claimed", worth(received, p), amounts(received, p.tokens)],
       [`Fee ${bps(100n)}`, worth(fees, p), amounts(fees, p.tokens, fees.length ? "−" : "")],
