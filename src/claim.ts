@@ -1,7 +1,7 @@
 import { decodeEventLog, encodeFunctionData, parseAbi, type Address, type Hex } from "viem";
 import { DOUBLE_ESPRESSO, FEE_BPS } from "./config.ts";
 import { WEEK, count } from "./format.ts";
-import { less, readEarned, summed, type Amount, type Entry, type Owed } from "./payouts.ts";
+import { less, readOwed, summed, type Amount, type Entry, type Owed } from "./payouts.ts";
 import { key, type Token } from "./prices.ts";
 import { rewardsFor, type Reward } from "./rewards.ts";
 import { same, type Receipt } from "./rpc.ts";
@@ -20,9 +20,16 @@ const unique = (addresses: Address[]): Address[] => [
   ...new Map(addresses.map((address) => [key(address), address])).values(),
 ];
 
-// What a call costs at most, as traced on a fork: each contract walks each token asked back up to 50 epochs.
+// Each contract asked, as many times as its claim must reach past the 50 epochs each asking reads: see readOwed.
+const asked = (owed: Claim["owed"]): Address[] =>
+  unique(owed.map(({ contract }) => contract)).flatMap((contract) =>
+    Array<Address>(
+      Math.max(...owed.filter((each) => same(each.contract, contract)).map(({ passes = 1 }) => passes)),
+    ).fill(contract),
+  );
+// What a call costs at most, as traced on a fork: each asking of each contract walks each token up to 50 epochs.
 export function claimGas(owed: Claim["owed"]): bigint {
-  const contracts = BigInt(new Set(owed.map(({ contract }) => key(contract))).size);
+  const contracts = BigInt(asked(owed).length);
   const tokens = BigInt(new Set(owed.map(({ token }) => key(token))).size);
   return 100_000n + tokens * 80_000n + contracts * (50_000n + tokens * 400_000n);
 }
@@ -74,8 +81,8 @@ export function claimArgs({ id, owed }: Claim): [bigint, Address[], Address[], A
   const owing = owed.filter(({ amount }) => amount > 0n);
   return [
     id,
-    unique(owing.filter(({ fee }) => fee).map(({ contract }) => contract)),
-    unique(owing.filter(({ fee }) => !fee).map(({ contract }) => contract)),
+    asked(owing.filter(({ fee }) => fee)),
+    asked(owing.filter(({ fee }) => !fee)),
     unique(owing.map(({ token }) => token)),
   ];
 }
@@ -95,7 +102,11 @@ export function paidBy(owed: Amount[]): { token: Address; earned: bigint; fee: b
 export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true): Slip {
   const args = claimArgs(claim);
   const [id, fees, bribes, claimed] = args;
-  const from = whole ? "" : ` from ${count(fees.length + bribes.length, "reward contract", "reward contracts")}`;
+  const contracts = unique([...fees, ...bribes]).length;
+  const from = whole ? "" : ` from ${count(contracts, "reward contract", "reward contracts")}`;
+  // A contract listed again is asked again: what it owes lies past the 50 epochs one asking reads.
+  const again = (listed: Address[]) =>
+    unique(listed).length < listed.length ? "; twice where one asking cannot reach all it owes" : "";
   return {
     to: DOUBLE_ESPRESSO.address,
     data: encodeFunctionData({ abi, functionName: "claim", args }),
@@ -105,8 +116,12 @@ export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true
     call: "claim",
     fields: [
       { label: "Account", code: String(id) },
-      { label: "Fees from", code: fees, description: "Pools' fees contracts that owe it" },
-      { label: "Incentives from", code: bribes, description: "Pools' incentives contracts that owe it" },
+      { label: "Fees from", code: fees, description: `Pools' fees contracts that owe it${again(fees)}` },
+      {
+        label: "Incentives from",
+        code: bribes,
+        description: `Pools' incentives contracts that owe it${again(bribes)}`,
+      },
       { label: "Tokens", code: claimed, tags: claimed.map((token) => tokens.get(key(token))?.symbol ?? "") },
     ],
   };
@@ -128,16 +143,18 @@ export async function owedOf(
         ...new Map(rewards.map((reward) => [`${key(reward.contract)} ${key(reward.token.address)}`, reward])).values(),
       ];
       for (const { token } of pairs) tokens.set(key(token.address), token);
-      const [earned] = await readEarned(
+      const [owing] = await readOwed(
         [account.id],
         pairs.map(({ contract, token }) => ({ contract, token: token.address })),
         "latest",
+        [earnings!.start - WEEK, earnings!.start],
       );
       return {
         id: account.id,
-        owed: pairs.flatMap(({ contract, token, fee }, i) =>
-          earned![i] ? [{ contract, token: token.address, amount: earned![i]!, fee }] : [],
-        ),
+        owed: pairs.flatMap(({ contract, token, fee }, i) => {
+          const { amount, passes } = owing![i]!;
+          return amount ? [{ contract, token: token.address, amount, fee, passes }] : [];
+        }),
       };
     }),
   );

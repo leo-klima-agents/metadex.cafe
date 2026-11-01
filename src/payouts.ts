@@ -16,6 +16,8 @@ import { blockTime, call, now, read, required, rpc, same, type Call } from "./rp
 const rewardsAbi = parseAbi([
   "function tokenTimestamp(uint256 tokenId, address token) view returns (uint256)",
   "function earned(uint256 tokenId, address token) view returns (uint256)",
+  "function earnedTokenId(uint256 tokenId, address token, uint48 timestamp) view returns (uint256)",
+  "function firstBribeTimestamp() view returns (uint256)",
 ]);
 const eventsAbi = parseAbi([
   "event CarbonRetired(address indexed creditToken_, uint256 retireTonnes, uint256 kvcmSpent)",
@@ -34,7 +36,8 @@ export const WALK_LIMIT = 10;
 
 export type Amount = { token: Address; amount: bigint };
 export type Pair = { contract: Address; token: Address };
-export type Owed = Amount & { contract: Address };
+// `passes`: how many times a claim asks the contract, to reach past the 50 epochs each asking reads: see readOwed.
+export type Owed = Amount & { contract: Address; passes?: number | undefined };
 // A pair of an epoch's rewards, with what it paid the automation's votes, or 0 if unknown.
 export type Weighed = Pair & { value: number };
 type Rewards = { start: number; pairs: Weighed[] };
@@ -170,17 +173,72 @@ export async function readStamps(ids: bigint[], pairs: Pair[], block: number): P
     pairs,
   );
 }
-// What each account can claim from each pair: earned() adds up to 50 epochs, about a million gas each, so 20 a batch.
-export async function readEarned(
+// earned() reads at most 50 epochs: from the account's last claim from the contract, or, if it never claimed there, from
+// the contract's first incentives, or the account's creation if later, as hydrex-keeper works it out. Each claim moves
+// them on by as many.
+const WINDOW = 50 * WEEK;
+export const windowStart = (stamp: number, first: number, created: number): number =>
+  stamp >= first ? stamp : created > first ? created : first - WEEK;
+// How many times a claim asks a contract to pay through `epoch`, from where earned() starts.
+export const passesTo = (start: number, epoch: number): number =>
+  epoch < start ? 1 : Math.floor((epoch - start) / WINDOW) + 1;
+
+// What each account can claim from each pair: what earned() reads, and, of the `epochs` given, those past it, each read
+// on its own; with the claim's passes. If where earned() starts cannot be read, what it reads alone. earned() adds up to
+// 50 epochs, about a million gas each, so 20 a batch.
+export type Owing = { amount: bigint | undefined; passes: number };
+export async function readOwed(
   ids: bigint[],
   pairs: Pair[],
   block: number | "latest",
-): Promise<(bigint | undefined)[][]> {
-  return byAccount(
-    (await read(pairReads(ids, pairs, "earned"), { block, tag: "payouts", perBatch: 20 })) as (bigint | undefined)[],
-    ids,
-    pairs,
+  epochs: number[],
+): Promise<Owing[][]> {
+  const contracts = [...new Set(pairs.map(({ contract }) => key(contract) as Address))];
+  const at = { block, tag: "payouts" } as const;
+  const [earned, stamps, context] = await Promise.all([
+    read(pairReads(ids, pairs, "earned"), { ...at, perBatch: 20 }),
+    read(pairReads(ids, pairs, "tokenTimestamp"), at),
+    read(
+      [
+        ...contracts.map((contract) => call(contract, rewardsAbi, "firstBribeTimestamp")),
+        ...ids.map((id) => escrow("getFirstEscrowPoint", id)),
+      ],
+      at,
+    ),
+  ]);
+  const firsts = new Map<string, bigint | undefined>(contracts.map((contract, i) => [contract, context[i] as bigint]));
+  const created = ids.map((_, a) => (context[contracts.length + a] as [unknown, number] | undefined)?.[1]);
+  const starts = ids.flatMap((_, a) =>
+    pairs.map(({ contract }, p) => {
+      const [stamp, first] = [stamps[a * pairs.length + p] as bigint | undefined, firsts.get(key(contract))];
+      if (stamp === undefined || first === undefined || (stamp < first && created[a] === undefined)) return undefined;
+      return windowStart(Number(stamp), Number(first), weekStart(created[a] ?? 0));
+    }),
   );
+  const past = starts.flatMap((start, i) =>
+    start === undefined
+      ? []
+      : epochs
+          .filter((epoch) => epoch >= start + WINDOW)
+          .map((epoch) => {
+            const [id, { contract, token }] = [ids[Math.floor(i / pairs.length)]!, pairs[i % pairs.length]!];
+            return { i, call: call(contract, rewardsAbi, "earnedTokenId", id, token, epoch) };
+          }),
+  );
+  const amounts = past.length
+    ? await read(
+        past.map((each) => each.call),
+        at,
+      )
+    : [];
+  const owing: Owing[] = earned.map((amount) => ({ amount: amount as bigint | undefined, passes: 1 }));
+  past.forEach(({ i }, k) => {
+    const hidden = amounts[k] as bigint | undefined;
+    const each = owing[i]!;
+    each.amount = each.amount === undefined || hidden === undefined ? undefined : each.amount + hidden;
+    if (hidden) each.passes = passesTo(starts[i]!, Math.max(...epochs));
+  });
+  return byAccount(owing, ids, pairs);
 }
 
 // The first block after `from`, up to `to`, at which each item has reached what it waits for, if it has by `to`. Each
@@ -575,7 +633,7 @@ export async function readPayouts(
       const votedBefore = these.filter((id) => votedWith(automation, id, 2));
       const [stamps, earned, rewards] = await Promise.all([
         readStamps(these, last.pairs, top),
-        readEarned(these, last.pairs, top),
+        readOwed(these, last.pairs, top, [last.start - WEEK, last.start]),
         votedBefore.length ? rewardsFor(automation.address, earnings.start - WEEK) : [],
       ]).catch(() => []);
       if (!stamps) return;
@@ -583,7 +641,8 @@ export async function readPayouts(
       const stampsBefore = await readStamps(votedBefore, before.pairs, top).catch(() => undefined);
       if (!stampsBefore) return;
       these.forEach((id, i) => {
-        const records = { last: stamps[i]!, earned: earned![i]!, before: stampsBefore[votedBefore.indexOf(id)] ?? [] };
+        const owing = earned![i]!.map(({ amount }) => amount);
+        const records = { last: stamps[i]!, earned: owing, before: stampsBefore[votedBefore.indexOf(id)] ?? [] };
         const voted = { last: votedWith(automation, id, 1), before: votedWith(automation, id, 2) };
         const standing =
           last.pairs.length || before.pairs.length ? standingOf(id, last, before, records, voted) : undefined;

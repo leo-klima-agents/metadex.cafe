@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { encodeFunctionData, parseAbi, toFunctionSelector } from "viem";
+import { toFunctionSelector } from "viem";
 import { VOTER } from "../src/config.ts";
 import { short } from "../src/format.ts";
 import * as h from "./harness.ts";
@@ -13,16 +13,11 @@ import {
   MEMBER,
   NEWCOMER,
   SITE,
-  STRANGER,
   connectButton,
   heading,
   open,
   view,
 } from "./harness.ts";
-
-// Hydrex's minter: whoever calls it after a flip moves Hydrex on to the new epoch.
-const MINTER = "0xA7D64625F45548a19B2A19e28E7546bb2839003E";
-const minterAbi = parseAbi(["function update_period() returns (uint256)"]);
 
 describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () => {
   h.fork(BLOCK, [MEMBER, NEWCOMER, ELSEWHERE, LEAVER, ENDED], h.deployDoubleEspresso);
@@ -161,7 +156,7 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
     await h.row(page, 141).getByRole("link", { name: "Hydrex account #141" }).click();
     const standing = view(page, "account").locator("[data-list=standing] > article");
     await standing.getByText("Not final yet").waitFor();
-    await h.mined(STRANGER, MINTER, encodeFunctionData({ abi: minterAbi, functionName: "update_period" }));
+    await h.moveOn();
     await page.clock.runFor(5 * 60_000);
     await standing.getByText(/^(Paid up to|Not paid yet|Nothing to pay)/).waitFor();
   });

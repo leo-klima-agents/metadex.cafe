@@ -12,13 +12,15 @@ import {
   firstReached,
   paidFor,
   payoutsOf,
-  readEarned,
+  passesTo,
+  readOwed,
   readStamps,
   standingOf,
   totals,
   valueAt,
   walkClaims,
   weighed,
+  windowStart,
   type Claim,
   type Pair,
   type Records,
@@ -223,30 +225,61 @@ test("each reward weighed at last epoch's prices, or its stand-in, today's; none
   assert.equal(paidFor(pairs, [OCT_15, 0], OCT_15), false);
 });
 
-test("records are read in one batch, what waits in batches of 20, as earned() can take a million gas", async (t) => {
+test("records are read in one batch; what waits in batches of 20, and what lies past earned()'s 50 epochs", async (t) => {
   const multicall = parseAbi([
     "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
   ]);
-  const rewardsAbi = parseAbi(["function earned(uint256, address)", "function tokenTimestamp(uint256, address)"]);
+  const reads = parseAbi([
+    "function earned(uint256, address)",
+    "function tokenTimestamp(uint256, address)",
+    "function firstBribeTimestamp()",
+    "function earnedTokenId(uint256, address, uint48)",
+    "function getFirstEscrowPoint(uint256)",
+  ]);
   const word = (value: bigint) => ({ success: true, returnData: encodeAbiParameters([{ type: "uint256" }], [value]) });
+  // The fees contract had its first incentives 54 epochs before OCT_15, and account #1 never claimed from it.
+  const FIRST = OCT_15 - 54 * WEEK;
+  const point = encodeAbiParameters(
+    ["int128", "int128", "int128", "uint48"].map((type) => ({ type })),
+    [0n, 0n, 0n, FIRST - 100 * WEEK],
+  );
   const batches: number[] = [];
+  const past: unknown[] = [];
   t.mock.method(globalThis, "fetch", async (_: unknown, init: RequestInit) => {
     const calls = decodeFunctionData({ abi: multicall, data: JSON.parse(String(init.body)).params[0].data }).args[0];
     batches.push(calls.length);
-    const result = calls.map(({ callData }) => {
-      const { functionName, args } = decodeFunctionData({ abi: rewardsAbi, data: callData });
-      if (functionName === "tokenTimestamp") return word(BigInt(SEP_17));
+    const result = calls.map(({ target, callData }) => {
+      const { functionName, args = [] } = decodeFunctionData({ abi: reads, data: callData });
+      if (functionName === "tokenTimestamp") return word(args[0] === 1n && target === FEES ? 0n : BigInt(SEP_17));
+      if (functionName === "firstBribeTimestamp") return word(BigInt(target === FEES ? FIRST : OCT_1 - 10 * WEEK));
+      if (functionName === "getFirstEscrowPoint") return { success: true, returnData: point };
+      if (functionName === "earnedTokenId") return (past.push(args), word(7n));
       return args[0] === 2n && args[1] === WETH ? { success: false, returnData: "0x" as Hex } : word(5n);
     });
     return Response.json({ result: encodeFunctionResult({ abi: multicall, functionName: "aggregate3", result }) });
   });
   const ids = Array.from({ length: 11 }, (_, i) => BigInt(i + 1));
   const stamps = await readStamps(ids, [fees, bribes], TOP);
-  const earned = await readEarned(ids, [fees, bribes], TOP);
-  assert.deepEqual(batches, [22, 20, 2]);
-  assert.deepEqual(stamps[0], [SEP_17, SEP_17]);
-  assert.deepEqual(earned[0], [5n, 5n]);
-  assert.deepEqual(earned[1], [5n, undefined], "a failed read is unknown");
+  assert.deepEqual(stamps[1], [SEP_17, SEP_17]);
+  batches.length = 0;
+  const owed = await readOwed(ids, [fees, bribes], TOP, [OCT_8, OCT_15]);
+  assert.deepEqual(
+    batches.sort((a, b) => a - b),
+    [2, 2, 13, 20, 22],
+  );
+  // earned() reads from a week before the first incentives: both epochs lie past its 50, and are read on their own.
+  assert.deepEqual(past, [
+    [1n, USDC, OCT_8],
+    [1n, USDC, OCT_15],
+  ]);
+  assert.deepEqual(owed[0], [
+    { amount: 19n, passes: 2 },
+    { amount: 5n, passes: 1 },
+  ]);
+  assert.deepEqual(owed[1]![1], { amount: undefined, passes: 1 }, "a failed read is unknown");
+  assert.equal(windowStart(SEP_17, FIRST, 0), SEP_17, "from the last claim");
+  assert.equal(windowStart(0, FIRST, OCT_1), OCT_1, "or from the account's creation, after the first incentives");
+  assert.deepEqual([passesTo(OCT_1, OCT_15), passesTo(OCT_15 - 50 * WEEK, OCT_15)], [1, 2]);
 });
 
 // A fake Double Espresso: the claims' logs, read a block at a time for the accounts asked.

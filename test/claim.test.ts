@@ -51,6 +51,30 @@ test("a claim that fits one call passes only the contracts and tokens that owe s
   assert.equal(slip.says, "Claims account #9540's rewards through Double Espresso, which pays them to you, less 1%.");
 });
 
+test("a contract owing past the 50 epochs one asking reads is listed, and costed, once for each asking", () => {
+  const twice: Owed[] = [
+    { contract: FEES, token: USDC, amount: 1n, fee: true },
+    { contract: BRIBES, token: USDC, amount: 1n, fee: false, passes: 2 },
+  ];
+  assert.deepEqual(claimArgs({ id: 1n, owed: twice }), [1n, [FEES], [BRIBES, BRIBES], [USDC]]);
+  assert.equal(
+    claimGas(twice),
+    claimGas([twice[0]!, owe(BRIBES, USDC), owe(contract(7), USDC)]),
+    "as a third contract",
+  );
+  const { fields, says } = claimSlip({ id: 1n, owed: twice }, new Map(), false);
+  assert.match(says, /from 2 reward contracts/);
+  assert.deepEqual(
+    fields.map(({ description }) => description),
+    [
+      undefined,
+      "Pools' fees contracts that owe it",
+      "Pools' incentives contracts that owe it; twice where one asking cannot reach all it owes",
+      undefined,
+    ],
+  );
+});
+
 test("Double Espresso takes 1% of what each token brings, rounded down, and pays the rest", () => {
   assert.deepEqual(paidBy(owed), [
     { token: USDC, earned: 1_520_000n, fee: 15_200n, paid: 1_504_800n },

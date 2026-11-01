@@ -183,15 +183,19 @@ export async function expectApprovals(ids: bigint[], delegate: Address, claimer:
 // The page reads a few blocks before the latest, which on the fork can be before the last transactions.
 export const settle = () => anvil("anvil_mine", [toHex(6)]);
 
-// The fork moved to the next Thursday 00:00 UTC, and `after` seconds more; then Hydrex moved on to that epoch, as anyone
-// may, which makes what the epoch before earned final. A few blocks follow, as the page reads a little behind the newest.
+// Hydrex moved on to the epoch under way, as anyone may once it flipped: what the epoch before earned is then final.
+export async function moveOn(): Promise<void> {
+  await anvil("anvil_setBalance", [STRANGER, toHex(FOR_GAS)]);
+  const minter = await readOn<Address>(VOTER, "minter");
+  await mined(STRANGER, minter, encodeFunctionData({ abi, functionName: "update_period" }));
+}
+// The fork moved on to the next Thursday 00:00 UTC, and `after` seconds more, and Hydrex with it; then a few blocks, as
+// the page reads a little behind the newest.
 export async function nextEpoch(after = 60): Promise<void> {
   const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false]);
   await anvil("evm_setNextBlockTimestamp", [weekStart(Number(timestamp)) + WEEK + after]);
   await anvil("evm_mine");
-  await anvil("anvil_setBalance", [STRANGER, toHex(FOR_GAS)]);
-  const minter = await readOn<Address>(VOTER, "minter");
-  await mined(STRANGER, minter, encodeFunctionData({ abi, functionName: "update_period" }));
+  await moveOn();
   await settle();
 }
 // Incentives for this epoch's votes for `pool`, as anyone may add them: `amount` of `token`, from HOLDER.

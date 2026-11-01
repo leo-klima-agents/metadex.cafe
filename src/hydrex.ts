@@ -21,6 +21,8 @@ const escrowAbi = parseAbi([
   "function getConduitApprovalConfig(address conduit) view returns (uint8[] actions, bool active, string description)",
   "function approvalLogic() view returns (address)",
   "function setConduitApproval(address conduit, uint256 tokenId, bool approve)",
+  "struct Point { int128 bias; int128 slope; int128 permanent; }",
+  "function getFirstEscrowPoint(uint256 tokenId) view returns (Point point, uint48 timestamp)",
 ]);
 const voterAbi = parseAbi([
   "function _epochTimestamp() view returns (uint256)",

@@ -22,9 +22,9 @@ import {
 } from "./harness.ts";
 
 const INTO_USDC = SWAPPERS[0]!;
-// LCAP / USDC, among Hydrex's newest pools: its incentives contract has had none yet. One that has had them for more
-// than 50 epochs could not pay an account that never claimed from it: a claim walks 50 epochs at most.
-const LCAP_USDC = "0x7F3bb80Ef09559ADB387601fc1767E5CCB19023D";
+// The pool Matcha Latte votes for most: its incentives contract began 54 epochs before the epoch claimed, past the 50
+// that earned() reads for an account that never claimed from it.
+const POOL = "0x66352585BAD83DA857a020f739f1f7cA93209A1B";
 const says = (root: h.Opened["page"] | ReturnType<h.Opened["page"]["frameLocator"]>) =>
   review(root).locator("[data-text=says]").allTextContents();
 // An answer as if the page's RPCs served another chain: Ethereum's id to eth_chainId.
@@ -187,13 +187,13 @@ describe("the swap and the claim against a fork after the swappers' deployment",
   });
 
   // Last, as it moves the fork's time on two weeks.
-  test("a claim of one call, and the swap of what it brings, go in one prompt, all or nothing", async () => {
+  test("a claim past the 50 epochs earned() reads, and the swap of what it brings, go in one prompt", async () => {
     // An epoch as anyone could stage it on Base: #141 joins Double Espresso, which votes for a pool that someone
-    // incentivises; half a day after the epoch, its payout is overdue, and owes one reward.
+    // incentivises; half a day after the epoch, its payout is overdue, and owes one reward, past what earned() reads.
     await h.approveConduit(NEWCOMER, DOUBLE_ESPRESSO.address, 141n);
     await h.nextEpoch();
-    await h.incentive(LCAP_USDC, USDC, 100_000_000n);
-    const vote = encodeFunctionData({ abi: h.abi, functionName: "vote", args: [[LCAP_USDC], [1n]] });
+    await h.incentive(POOL, USDC, 100_000_000n);
+    const vote = encodeFunctionData({ abi: h.abi, functionName: "vote", args: [[POOL], [1n]] });
     await h.mined(STRANGER, DOUBLE_ESPRESSO.address, vote);
     await h.nextEpoch(12 * 3600 + 60);
     const { page, sent, violations } = await connected({ owner: NEWCOMER, batch: true }, { url: `${SITE}/#app` });
@@ -209,10 +209,16 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     // The review began with the claim's one call; it is the three, claim, approval and swap, that go together.
     await review(page).getByText("All 3 in one prompt, all or nothing").waitFor();
     assert.match((await says(page))[0]!, /^Claims account #141's rewards through Double Espresso/);
+    // One call asks the contract twice: the first asking moves earned() on 50 epochs, the second pays.
+    await review(page)
+      .getByText(/incentives contracts that owe it; twice where one asking cannot reach all it owes/i)
+      .waitFor();
     const before = await balanceOf(WETH, NEWCOMER);
     await review(page).getByRole("button", { name: "Sign 3 transactions" }).click();
     await heading(review(page), "Done", 2).waitFor();
     assert.equal(sent.length, 3);
+    // The claim's receipt: what earned() alone did not show, less the 1% fee.
+    await review(page).locator("[data-text=done]").getByText("4.269 USDC").first().waitFor();
     assert.ok((await balanceOf(WETH, NEWCOMER)) > before);
     assert.ok((await h.readOn<bigint>(DOUBLE_ESPRESSO.address, "lastClaimBlock", [141n])) > 0n);
     assert.deepEqual(violations, []);
