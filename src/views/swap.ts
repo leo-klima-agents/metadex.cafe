@@ -207,8 +207,7 @@ function together(found: Scan): Got<Together> {
 }
 
 // The output's amounts, to as many places as a cent of it needs, with what they are worth.
-function output(amount: bigint, prices: Prices | undefined): { exact: string; worth?: Money } {
-  const swapper = swapperShown();
+function output(amount: bigint, swapper: Swapper, prices: Prices | undefined): { exact: string; worth?: Money } {
   const price = prices?.of.get(key(swapper.token));
   const places = Math.min(
     swapper.decimals,
@@ -220,8 +219,13 @@ function output(amount: bigint, prices: Prices | undefined): { exact: string; wo
   };
 }
 // How far a quote falls under the page's own price, where it falls more than 2% short.
-function underPrice(token: Token, amount: bigint, out: bigint, prices: Prices | undefined): number | undefined {
-  const swapper = swapperShown();
+function underPrice(
+  token: Token,
+  amount: bigint,
+  out: bigint,
+  swapper: Swapper,
+  prices: Prices | undefined,
+): number | undefined {
   const [price, outputPrice] = [prices?.of.get(key(token.address)), prices?.of.get(key(swapper.token))];
   if (price === undefined || outputPrice === undefined || amount === maxUint256) return undefined;
   const [sold, fetched] = [worthOf(amount, token.decimals, price), worthOf(out, swapper.decimals, outputPrice)];
@@ -277,11 +281,11 @@ export function drawSwap(): void {
           ? partsOf(row).reduce((sum, { out }) => (out === undefined ? sum : sum + out), 0n)
           : row.found.value.out;
       const skipped = row.ticked && !!routed.value && partsOf(row).every(({ out }) => out === undefined);
-      const quote = out === undefined || skipped ? undefined : output(out, found.value!.prices);
+      const quote = out === undefined || skipped ? undefined : output(out, swapper, found.value!.prices);
       const like = lookalike(row.token);
       const under =
         quote && out !== undefined && !row.reason
-          ? underPrice(row.token, row.amount, out, found.value!.prices)
+          ? underPrice(row.token, row.amount, out, swapper, found.value!.prices)
           : undefined;
       fill(li, {
         symbol: row.token.symbol,
@@ -309,7 +313,7 @@ export function drawSwap(): void {
       swap.swapGas(parts.map(({ route }) => route));
   const prices = found.value?.prices;
   const line = (amount: bigint) => {
-    const shown = output(amount, prices);
+    const shown = output(amount, swapper, prices);
     return `${shown.exact}${shown.worth ? `  ${money(shown.worth, true)}` : ""}`;
   };
   const waiting = !picked.length && found.value?.reading;
@@ -395,10 +399,16 @@ actions["review-swap"] = async (el) => {
         },
       ),
     );
-  failedReview = (await reviewSwap({ swapper, items, margin }, found.tokens, found.prices, found.costs)) ?? "";
-  reviewing = false;
-  busy(el as HTMLButtonElement, false);
-  render();
+  try {
+    failedReview = (await reviewSwap({ swapper, items, margin }, found.tokens, found.prices, found.costs)) ?? "";
+  } catch (error) {
+    console.error(error);
+    failedReview = "The review could not open. Nothing was sent.";
+  } finally {
+    reviewing = false;
+    busy(el as HTMLButtonElement, false);
+    render();
+  }
 };
 
 export async function reviewSwap(
@@ -425,12 +435,12 @@ export async function reviewSwap(
     simulated?.gas ??
     BigInt(simulated?.steps.approvals.length ?? 0) * swap.APPROVAL_GAS +
       swap.swapGas(going.items.map(({ route }) => route));
-  const value = (amount: bigint) => output(amount, prices);
+  const value = (amount: bigint) => output(amount, plan.swapper, prices);
   const body = billNode(
     frag("Quote · swap into ", code(plan.swapper.symbol)),
     gasCosts ? `Estimated gas ${gasWords(gas * gasCosts.gasPrice, prices)}` : "",
     lines.map(({ item, reason }) => {
-      const under = reason ? undefined : underPrice(item.token, item.route.amount, item.out, prices);
+      const under = reason ? undefined : underPrice(item.token, item.route.amount, item.out, plan.swapper, prices);
       return {
         symbol: item.token.symbol,
         amount: figure(item.route.amount, item.token.decimals),
@@ -477,7 +487,7 @@ export async function reviewSwap(
         ),
         includedAt(receipts),
       ]);
-      return swapReceipt(receipts, going, tokens, prices, quoted, paidGas, time);
+      return swapReceipt(receipts, going, tokens, prices, quoted, connection.address, paidGas, time);
     },
   });
 }
@@ -526,11 +536,12 @@ export function swapReceipt(
   tokens: Map<string, Token>,
   prices: Prices | undefined,
   quoted: Map<string, bigint>,
+  caller: Address,
   gas?: bigint,
   time = now(),
 ): HTMLElement {
   const { swapper } = plan;
-  const { swapped, failed, paid } = swap.swappedIn(receipts, swapper, state.connection!.address);
+  const { swapped, failed, paid } = swap.swappedIn(receipts, swapper, caller);
   const sold = new Map<string, { token: Address; amountIn: bigint; amountOut: bigint }>();
   for (const { token, amountIn, amountOut } of swapped) {
     const each = sold.get(key(token)) ?? { token, amountIn: 0n, amountOut: 0n };
@@ -538,7 +549,7 @@ export function swapReceipt(
     sold.set(key(token), each);
   }
   const fetched = swapped.reduce((sum, { amountOut }) => sum + amountOut, 0n);
-  const value = (amount: bigint) => output(amount, prices);
+  const value = (amount: bigint) => output(amount, swapper, prices);
   const node = billNode(
     frag("Receipt · swap into ", code(swapper.symbol)),
     `${utc(time)}${gas === undefined ? "" : ` · gas ${gasWords(gas, prices)}`}`,
@@ -579,7 +590,8 @@ export function swapReceipt(
           textContent: "Reset its approval",
         });
         reset.addEventListener("click", () => openReset([{ token, spender: swapper.address, amount: 1n }]));
-        p.append(frag(code(tokens.get(key(token))?.symbol ?? token), ` kept: ${swap.reasonOf(reason)}`), reset);
+        const kept = sold.has(key(token)) ? " partly kept" : " kept";
+        p.append(frag(code(tokens.get(key(token))?.symbol ?? token), `${kept}: ${swap.reasonOf(reason)}`), reset);
         return p;
       }),
     );

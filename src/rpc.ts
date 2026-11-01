@@ -115,6 +115,7 @@ export function rpc<T>(method: string, params: unknown[], { tag, want = (r) => r
           });
           if (response.status === 429 || response.status >= 500) throw new Error("Busy.");
           reply = (await response.json()) as Reply;
+          if (typeof reply !== "object" || reply === null) throw new Error("Not JSON-RPC.");
         } catch {
           // Busy, out of reach, too slow, or answering other than JSON-RPC.
           busy.push(url);

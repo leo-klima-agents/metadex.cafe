@@ -29,6 +29,8 @@ export type Review = {
   // Calls too large for one transaction together, in groups that each fit one: counts of calls, in order.
   groups?: number[] | undefined;
   outcome?: (receipts: Receipt[]) => Promise<Node | undefined>;
+  // What the calls wait for, if anything: they may change until then, so none is sent.
+  waiting?: () => string | undefined;
   // Where the page explains the calls, for a Safe's co-signers.
   checkHref: string;
 };
@@ -112,21 +114,24 @@ function draw(): void {
   const next = safe || batch || review.finished || steps.length < 2 ? -1 : review.done.length;
   const callsName = steps.length === 1 ? "Transaction" : "Transactions";
   const atomic = !!review.atomic && !!review.capabilities?.atomic;
+  const waiting = review.finished ? undefined : review.waiting?.();
   fill(dialog, {
     step: `${review.name}${pages.length > 1 ? ` · ${review.page + 1} of ${pages.length}` : ""}`,
     title: review.outcome_ ? "Done" : (shown.title ?? callsName),
     page: review.outcome_ ? null : (shown.body ?? null),
     calls: !review.outcome_ && last && steps.length > 0,
     "calls-title": shown.title ? callsName : null,
-    how: safe
-      ? apart(review)
-        ? `${count(groups.length, "Safe transaction", "Safe transactions")}, ${steps.length} calls`
-        : steps.length === 1
-          ? "One Safe transaction"
-          : `One Safe transaction, ${steps.length} calls`
-      : batch
-        ? `All ${steps.length} in one prompt${atomic ? ", all or nothing" : ""}`
-        : null,
+    how: waiting
+      ? waiting
+      : safe
+        ? apart(review)
+          ? `${count(groups.length, "Safe transaction", "Safe transactions")}, ${steps.length} calls`
+          : steps.length === 1
+            ? "One Safe transaction"
+            : `One Safe transaction, ${steps.length} calls`
+        : batch
+          ? `All ${steps.length} in one prompt${atomic ? ", all or nothing" : ""}`
+          : null,
     done:
       review.outcome_ ??
       (safe && review.finished
@@ -147,7 +152,7 @@ function draw(): void {
         : null,
     back: review.submitted ? "Close" : "Back",
   });
-  $<HTMLButtonElement>("[data-action=confirm]", dialog).disabled = review.sending || (safe && wrongChain);
+  $<HTMLButtonElement>("[data-action=confirm]", dialog).disabled = review.sending || (safe && wrongChain) || !!waiting;
   $("[data-action=next]", dialog).hidden = last || !!review.outcome_;
   list(
     $("[data-list=slip]", dialog),
@@ -296,7 +301,7 @@ async function sendBatch(review: Sending): Promise<void> {
 actions.confirm = () => {
   const review = current;
   const connection = state.connection;
-  if (!review || !connection || review.sending) return;
+  if (!review || !connection || review.sending || review.waiting?.()) return;
   const sending =
     connection.chainId !== CHAIN_ID
       ? switchToBase(connection)

@@ -243,6 +243,8 @@ test("records are read in one batch; what waits in batches of 20, and what lies 
     ["int128", "int128", "int128", "uint48"].map((type) => ({ type })),
     [0n, 0n, 0n, FIRST - 100 * WEEK],
   );
+  // An epoch past another 50, which owes nothing.
+  const LATER = OCT_15 + 50 * WEEK;
   const batches: number[] = [];
   const past: unknown[] = [];
   t.mock.method(globalThis, "fetch", async (_: unknown, init: RequestInit) => {
@@ -253,7 +255,7 @@ test("records are read in one batch; what waits in batches of 20, and what lies 
       if (functionName === "tokenTimestamp") return word(args[0] === 1n && target === FEES ? 0n : BigInt(SEP_17));
       if (functionName === "firstBribeTimestamp") return word(BigInt(target === FEES ? FIRST : OCT_1 - 10 * WEEK));
       if (functionName === "getFirstEscrowPoint") return { success: true, returnData: point };
-      if (functionName === "earnedTokenId") return (past.push(args), word(7n));
+      if (functionName === "earnedTokenId") return (past.push(args), word(args[2] === LATER ? 0n : 7n));
       return args[0] === 2n && args[1] === WETH ? { success: false, returnData: "0x" as Hex } : word(5n);
     });
     return Response.json({ result: encodeFunctionResult({ abi: multicall, functionName: "aggregate3", result }) });
@@ -273,10 +275,17 @@ test("records are read in one batch; what waits in batches of 20, and what lies 
     [1n, USDC, OCT_15],
   ]);
   assert.deepEqual(owed[0], [
-    { amount: 19n, passes: 2 },
-    { amount: 5n, passes: 1 },
+    { amount: 19n, passes: 2, stamp: 0 },
+    { amount: 5n, passes: 1, stamp: SEP_17 },
   ]);
-  assert.deepEqual(owed[1]![1], { amount: undefined, passes: 1 }, "a failed read is unknown");
+  assert.deepEqual(owed[1]![1], { amount: undefined, passes: 1, stamp: SEP_17 }, "a failed read is unknown");
+  assert.deepEqual(
+    owed.map((pairs) => pairs.map(({ stamp }) => stamp)),
+    await readStamps(ids, [fees, bribes], TOP),
+    "with the records it read",
+  );
+  const first = (await readOwed([1n], [fees], TOP, [OCT_8, LATER]))[0]![0];
+  assert.deepEqual(first, { amount: 12n, passes: 2, stamp: 0 }, "asked as far as an epoch that owes something");
   assert.equal(windowStart(SEP_17, FIRST, 0), SEP_17, "from the last claim");
   assert.equal(windowStart(0, FIRST, OCT_1), OCT_1, "or from the account's creation, after the first incentives");
   assert.deepEqual([passesTo(OCT_1, OCT_15), passesTo(OCT_15 - 50 * WEEK, OCT_15)], [1, 2]);

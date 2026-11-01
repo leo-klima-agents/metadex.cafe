@@ -219,6 +219,13 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.equal(sent.length, 3);
     // The claim's receipt: what earned() alone did not show, less the 1% fee.
     await review(page).locator("[data-text=done]").getByText("4.269 USDC").first().waitFor();
+    // The swap's receipt, from the App, in WETH: its figures are the swap's output, not the swap page's.
+    const swapped = review(page).locator("[data-text=done] .slip").filter({ hasText: "swap into WETH" });
+    await swapped
+      .locator("[data-text=total-value]")
+      .getByText(/^[\d,.]+ WETH$/)
+      .waitFor();
+    assert.equal(await swapped.getByText(/ USDC$/).count(), 0);
     assert.ok((await balanceOf(WETH, NEWCOMER)) > before);
     assert.ok((await h.readOn<bigint>(DOUBLE_ESPRESSO.address, "lastClaimBlock", [141n])) > 0n);
     assert.deepEqual(violations, []);

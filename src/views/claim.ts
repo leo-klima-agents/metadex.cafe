@@ -1,4 +1,4 @@
-import { maxUint256 } from "viem";
+import { maxUint256, type Address } from "viem";
 import * as claim from "../claim.ts";
 import { DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
 import { checksRead, swapsOff } from "../checks.ts";
@@ -24,6 +24,8 @@ type Claiming = {
   into: Value;
   gasWithSwap?: bigint | undefined;
   planned: number;
+  // Whether the swap is being routed: the review waits for it, as it changes the calls.
+  planning: boolean;
 };
 let open: Claiming | undefined;
 const MARGIN = 50n;
@@ -31,7 +33,7 @@ const MARGIN = 50n;
 export async function openClaim(entries: Entry[]): Promise<void> {
   const connection = state.connection!;
   // Swaps wait for the checks, which say whether the RPCs serve Base.
-  const [{ claims, tokens }, gasCosts, caps, middles] = await Promise.all([
+  const [{ claims, tokens, unread }, gasCosts, caps, middles] = await Promise.all([
     claim.owedOf(entries),
     costs().catch(() => undefined),
     capabilities(connection),
@@ -50,37 +52,48 @@ export async function openClaim(entries: Entry[]): Promise<void> {
       steps: () => [],
       checkHref,
     });
-  if (!owing.length) return nothing("Nothing to claim: someone else may have just claimed it for you.");
+  if (!owing.length)
+    return nothing(
+      unread
+        ? "Base did not say what waits: try again in a moment."
+        : "Nothing to claim: someone else may have just claimed it for you.",
+    );
 
   const totals = claim.paidBy(owing.flatMap(({ owed }) => owed));
   const paid = totals.map(({ token, paid }) => ({ token, amount: paid }));
   const weight = ({ owed }: claim.Claim) => valueAt(owed, tokens, entries[0]!.earnings!.prices, true);
   const budget = connection.wallet.propose ? claim.SAFE_CLAIM_CALL_GAS : claim.CLAIM_CALL_GAS;
-  const calls = owing.flatMap((each) => {
-    const parts = claim.claimCalls(each, budget).sort((a, b) => weight(b) - weight(a));
-    return parts.map((part) => claim.claimSlip(part, tokens, parts.length === 1));
+  const parts = owing.flatMap((each) => {
+    const split = claim.claimCalls(each, budget).sort((a, b) => weight(b) - weight(a));
+    return split.map((part) => ({ part, whole: split.length === 1 }));
   });
+  const calls = parts.map(({ part, whole }) => claim.claimSlip(part, tokens, whole));
   const simulated = await simulate(connection.address, calls).catch(() => undefined);
   if (simulated?.some(({ ok }) => !ok)) return nothing("Base refused the claim. Someone else may be claiming now.");
   if (simulated?.some(({ gas }) => gas > claim.MAX_CLAIM_GAS))
     return nothing("This claim needs more gas than Base allows.");
-  const gas =
-    simulated?.map(({ gas }) => gas) ??
-    owing.flatMap((each) => claim.claimCalls(each, budget).map(({ owed }) => claim.claimGas(owed)));
+  const gas = simulated?.map(({ gas }) => gas) ?? parts.map(({ part }) => claim.claimGas(part.owed));
   const groups = claim.claimTransactions(gas);
   const apart = groups.length > 1;
   const together = (caps.atomic || !!connection.wallet.propose) && !apart;
   const totalGas = gas.reduce((sum, one) => sum + one, 0n);
 
   const body = $<HTMLTemplateElement>("#claim-review").content.firstElementChild!.cloneNode(true) as HTMLElement;
+  if (unread)
+    body.prepend(
+      Object.assign(document.createElement("p"), {
+        className: "notice",
+        textContent: `Base did not say what ${count(unread, "reward contract owes", "reward contracts owe")}: it is left out, to claim later.`,
+      }),
+    );
   let prices: Prices | undefined;
   let settled = false;
   const ids = owing.map(({ id }) => id);
   const brought = (receipts: Receipt[]): Amount[] =>
     summed(claim.claimedIn(receipts, ids, connection.address).flatMap(({ paid }) => paid));
   const asTheyAre = async (receipts: Receipt[]) =>
-    frag(...claimReceipts(receipts, ids, tokens, prices), swapThese(brought(receipts)));
-  const current: Claiming = { steps: () => calls, outcome: asTheyAre, into: "", planned: 0 };
+    frag(...claimReceipts(receipts, ids, tokens, prices, connection.address), swapThese(brought(receipts)));
+  const current: Claiming = { steps: () => calls, outcome: asTheyAre, into: "", planned: 0, planning: false };
   open = current;
 
   const draw = () => {
@@ -148,8 +161,7 @@ export async function openClaim(entries: Entry[]): Promise<void> {
   if (into.disabled) current.into = safeApart ? "Swap them once the claims go through." : "Swaps are off.";
 
   // Plans the swap into `swapper`: only tokens whose quote clears their gas twice over; the others stay as they are.
-  const plan = async (swapper: Swapper) => {
-    const id = ++current.planned;
+  const planInto = async (swapper: Swapper, id: number) => {
     current.into = undefined;
     current.gasWithSwap = undefined;
     draw();
@@ -222,7 +234,7 @@ export async function openClaim(entries: Entry[]): Promise<void> {
             );
             next.append(button);
           }
-          return frag(...claimReceipts(receipts, ids, tokens, prices), next);
+          return frag(...claimReceipts(receipts, ids, tokens, prices, connection.address), next);
         };
       return draw();
     }
@@ -251,9 +263,24 @@ export async function openClaim(entries: Entry[]): Promise<void> {
       ];
       current.gasWithSwap = run.gas;
       current.outcome = async (receipts) =>
-        frag(...claimReceipts(receipts, ids, tokens, prices), swapReceipt(receipts, going, tokens, prices, new Map()));
+        frag(
+          ...claimReceipts(receipts, ids, tokens, prices, connection.address),
+          swapReceipt(receipts, going, tokens, prices, new Map(), connection.address),
+        );
     }
     draw();
+  };
+  const plan = async (swapper: Swapper) => {
+    const id = ++current.planned;
+    current.planning = true;
+    try {
+      await planInto(swapper, id);
+    } finally {
+      if (id === current.planned) {
+        current.planning = false;
+        draw();
+      }
+    }
   };
   const choose = () => {
     if (open !== current) return;
@@ -296,6 +323,7 @@ export async function openClaim(entries: Entry[]): Promise<void> {
     steps: (sending) => current.steps(sending),
     atomic: true,
     groups: apart ? groups : undefined,
+    waiting: () => (current.planning && into.checked ? "Routing the swap…" : undefined),
     checkHref,
     outcome: (receipts) => current.outcome(receipts),
   });
@@ -307,6 +335,7 @@ function claimReceipts(
   ids: bigint[],
   tokens: Map<string, Token>,
   prices: Prices | undefined,
+  caller: Address,
 ): Node[] {
   const words = (amounts: Amount[], sign = "") =>
     amounts.length
@@ -319,7 +348,7 @@ function claimReceipts(
           ),
         )
       : "Nothing";
-  return claim.claimedIn(receipts, ids, state.connection!.address).map(({ id, received, fees, paid }) => {
+  return claim.claimedIn(receipts, ids, caller).map(({ id, received, fees, paid }) => {
     const worth = prices ? valueAt(received, tokens, prices) : 0;
     const node = billNode(
       `Receipt · Account #${id} · Double Espresso`,

@@ -69,6 +69,7 @@ test("a batch is pending, done once every receipt succeeded, or failed, in numbe
   assert.equal(await state({ status: 200, receipts: [receipt("0x1"), receipt("0x1")] }), "done");
   assert.equal(await state({ status: "CONFIRMED", receipts: [receipt("0x1")] }), "done");
   assert.equal(await state({ status: 200, receipts: [receipt("0x1"), receipt("0x0")] }), "failed");
+  assert.equal(await state({ status: 200 }), "pending", "confirmed, but its receipts have not come");
   for (const status of [400, 500, 600]) assert.equal(await state({ status }), "failed");
 });
 

@@ -172,9 +172,9 @@ export const passesTo = (start: number, epoch: number): number =>
   epoch < start ? 1 : Math.floor((epoch - start) / WINDOW) + 1;
 
 // What each account can claim from each pair: what earned() reads, and, of the `epochs` given, those past it, each read
-// on its own; with the claim's passes. If where earned() starts cannot be read, what it reads alone. earned() adds up to
-// 50 epochs, about a million gas each, so 20 a batch.
-export type Owing = { amount: bigint | undefined; passes: number };
+// on its own; with the claim's passes, and the pair's record. If where earned() starts cannot be read, what it reads
+// alone. earned() adds up to 50 epochs, about a million gas each, so 20 a batch.
+export type Owing = { amount: bigint | undefined; passes: number; stamp: number | undefined };
 export async function readOwed(
   ids: bigint[],
   pairs: Pair[],
@@ -210,7 +210,7 @@ export async function readOwed(
           .filter((epoch) => epoch >= start + WINDOW)
           .map((epoch) => {
             const [id, { contract, token }] = [ids[Math.floor(i / pairs.length)]!, pairs[i % pairs.length]!];
-            return { i, call: call(contract, rewardsAbi, "earnedTokenId", id, token, epoch) };
+            return { i, epoch, call: call(contract, rewardsAbi, "earnedTokenId", id, token, epoch) };
           }),
   );
   const amounts = past.length
@@ -219,12 +219,15 @@ export async function readOwed(
         at,
       )
     : [];
-  const owing: Owing[] = earned.map((amount) => ({ amount: amount as bigint | undefined, passes: 1 }));
-  past.forEach(({ i }, k) => {
+  const owing: Owing[] = earned.map((amount, i) => {
+    const stamp = stamps[i] as bigint | undefined;
+    return { amount: amount as bigint | undefined, passes: 1, stamp: stamp === undefined ? undefined : Number(stamp) };
+  });
+  past.forEach(({ i, epoch }, k) => {
     const hidden = amounts[k] as bigint | undefined;
     const each = owing[i]!;
     each.amount = each.amount === undefined || hidden === undefined ? undefined : each.amount + hidden;
-    if (hidden) each.passes = passesTo(starts[i]!, Math.max(...epochs));
+    if (hidden) each.passes = Math.max(each.passes, passesTo(starts[i]!, epoch));
   });
   return byAccount(owing, ids, pairs);
 }
@@ -329,10 +332,10 @@ type Log = {
   blockNumber: Hex;
 };
 const order = (log: Log): bigint => BigInt(log.blockNumber) * 1_000_000n + BigInt(log.logIndex);
-function decoded<A extends Abi>(abi: A, logs: Log[]) {
+function decoded<A extends Abi, L extends { data: Hex; topics: Hex[] }>(abi: A, logs: L[]) {
   return logs.flatMap((log) => {
     try {
-      return [{ log, event: decodeEventLog({ abi, data: log.data, topics: log.topics }) }];
+      return [{ log, event: decodeEventLog({ abi, data: log.data, topics: log.topics as [Hex, ...Hex[]] }) }];
     } catch {
       return [];
     }
@@ -418,27 +421,30 @@ export type Claim = {
   block: number;
 };
 export type Walk = { claims: Claim[]; stopped: boolean };
-export function claimsOf(logs: Log[]): Claim[] {
-  return decoded(
-    doubleEspressoAbi,
-    [...logs].sort((a, b) => Number(order(b) - order(a))),
-  ).flatMap(({ log, event }) =>
+// The Claimed events in some logs, in their order, with the log of each.
+export function claimed<L extends { data: Hex; topics: Hex[] }>(logs: L[]) {
+  return decoded(doubleEspressoAbi, logs).flatMap(({ log, event }) =>
     event.eventName === "Claimed"
       ? [
           {
+            log,
             id: event.args.tokenId,
             owner: event.args.owner,
             caller: event.args.caller,
             received: positive(event.args.tokens, event.args.amounts),
             fees: positive(event.args.tokens, event.args.fees),
             previous: Number(event.args.previousClaimBlock),
-            tx: log.transactionHash,
-            block: Number(log.blockNumber),
           },
         ]
       : [],
   );
 }
+export const claimsOf = (logs: Log[]): Claim[] =>
+  claimed([...logs].sort((a, b) => Number(order(b) - order(a)))).map(({ log, ...claim }) => ({
+    ...claim,
+    tx: log.transactionHash,
+    block: Number(log.blockNumber),
+  }));
 // What claims received, took and paid, token by token.
 export function totals(claims: Pick<Claim, "received" | "fees">[]) {
   const received = summed(claims.flatMap((claim) => claim.received));
@@ -625,18 +631,22 @@ export async function readPayouts(
       if (earnings.start < epochStart - WEEK) return these.forEach((id) => found.set(id, "early"));
       const last = { start: earnings.start, pairs: weighed(earnings.rewards, earnings.prices) };
       const votedBefore = these.filter((id) => votedWith(automation, id, 2));
-      const [stamps, earned, rewards] = await Promise.all([
-        readStamps(these, last.pairs, top),
+      const [earned, rewards] = await Promise.all([
         readOwed(these, last.pairs, top, [last.start - WEEK, last.start]),
         votedBefore.length ? rewardsFor(automation.address, earnings.start - WEEK) : [],
       ]).catch(() => []);
-      if (!stamps) return;
+      const stamps = earned?.map((pairs) => pairs.map(({ stamp }) => stamp));
+      if (!stamps || stamps.flat().includes(undefined)) return;
       const before = { start: earnings.start - WEEK, pairs: weighed(rewards!, earnings.prices) };
       const stampsBefore = await readStamps(votedBefore, before.pairs, top).catch(() => undefined);
       if (!stampsBefore) return;
       these.forEach((id, i) => {
         const owing = earned![i]!.map(({ amount }) => amount);
-        const records = { last: stamps[i]!, earned: owing, before: stampsBefore[votedBefore.indexOf(id)] ?? [] };
+        const records = {
+          last: stamps[i] as number[],
+          earned: owing,
+          before: stampsBefore[votedBefore.indexOf(id)] ?? [],
+        };
         const voted = { last: votedWith(automation, id, 1), before: votedWith(automation, id, 2) };
         const standing =
           last.pairs.length || before.pairs.length ? standingOf(id, last, before, records, voted) : undefined;
@@ -681,12 +691,12 @@ export async function readPayouts(
   return { epochStart, entries };
 }
 
-// A payout under way: some accounts due paid since the flip, others not yet, the first less than half a day ago.
+// A payout under way: some accounts due paid since the flip, others not yet, the first known less than half a day ago.
 export function underWay({ entries }: Found): { paid: Entry[]; left: Entry[] } | undefined {
   const paid = entries.filter((entry) => entry.due && entry.standing?.paid);
   const left = entries.filter((entry) => entry.due && !entry.standing?.paid);
-  const first = Math.min(...paid.flatMap(({ time }) => (time === undefined ? [] : [time])));
-  return paid.length && left.length && now() - first < UNDER_WAY ? { paid, left } : undefined;
+  const times = paid.flatMap(({ time }) => (time === undefined ? [] : [time]));
+  return times.length && left.length && now() - Math.min(...times) < UNDER_WAY ? { paid, left } : undefined;
 }
 // Whether a payout due since the flip has not come yet: what the page reads again every five minutes.
 export const awaited = ({ entries }: Found): boolean =>

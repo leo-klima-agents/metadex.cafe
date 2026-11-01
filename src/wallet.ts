@@ -262,6 +262,7 @@ type CallsReceipt = {
   logs: { address: Address; data: Hex; topics: Hex[] }[];
 };
 // A batch is pending, included (with each transaction's receipt), or failed. Wallets of the first drafts answer in words.
+// One confirmed whose receipts have not come yet is still pending: they make its outcome.
 type CallsStatus = { state: "pending" | "done" | "failed"; receipts: CallsReceipt[] };
 
 export async function callsStatus({ provider }: Connection, id: string): Promise<CallsStatus> {
@@ -274,9 +275,11 @@ export async function callsStatus({ provider }: Connection, id: string): Promise
     status === 100 || status === "PENDING"
       ? "pending"
       : status === 200 || status === "CONFIRMED"
-        ? receipts.every((receipt) => receipt.status === "0x1")
-          ? "done"
-          : "failed"
+        ? !receipts.length
+          ? "pending"
+          : receipts.every((receipt) => receipt.status === "0x1")
+            ? "done"
+            : "failed"
         : "failed";
   return { state, receipts };
 }

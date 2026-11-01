@@ -1,8 +1,8 @@
-import { decodeEventLog, encodeFunctionData, type Address, type Hex } from "viem";
+import { encodeFunctionData, type Address } from "viem";
 import { doubleEspressoAbi as abi } from "./abi.ts";
 import { DOUBLE_ESPRESSO, FEE_BPS } from "./config.ts";
 import { WEEK, count } from "./format.ts";
-import { less, readOwed, summed, type Entry, type Owed } from "./payouts.ts";
+import { claimed, readOwed, summed, totals, type Entry, type Owed } from "./payouts.ts";
 import type { Amount } from "./tokens.ts";
 import { key, type Token } from "./prices.ts";
 import { rewardsFor, type Reward } from "./rewards.ts";
@@ -126,11 +126,13 @@ export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true
 }
 
 // What waits for each overdue account now: in the pools its automation voted for last epoch, and the epoch before's
-// when it is late for it too. Pools from further back are not read, so it is a floor.
+// when it is late for it too. Pools from further back are not read, so it is a floor. `unread`: how many reward
+// contracts Base did not say all they owe, which are left out.
 export async function owedOf(
   entries: Entry[],
-): Promise<{ claims: Claim[]; tokens: Map<string, Token>; earlier: boolean }> {
+): Promise<{ claims: Claim[]; tokens: Map<string, Token>; earlier: boolean; unread: number }> {
   const tokens = new Map<string, Token>();
+  const unread = new Set<string>();
   const claims = await Promise.all(
     entries.map(async ({ account, earnings, standing, voter }): Promise<Claim> => {
       const rewards: Reward[] = [
@@ -151,37 +153,23 @@ export async function owedOf(
         id: account.id,
         owed: pairs.flatMap(({ contract, token, fee }, i) => {
           const { amount, passes } = owing![i]!;
+          if (amount === undefined) unread.add(key(contract));
           return amount ? [{ contract, token: token.address, amount, fee, passes }] : [];
         }),
       };
     }),
   );
-  return { claims, tokens, earlier: entries.some(({ standing }) => standing?.late) };
+  return { claims, tokens, earlier: entries.some(({ standing }) => standing?.late), unread: unread.size };
 }
 
 // What the page's own claims received, took and paid, from their Claimed events. One that received nothing, as when
 // someone else claimed first, has none.
 export type Claimed = { id: bigint; received: Amount[]; fees: Amount[]; paid: Amount[] };
 export function claimedIn(receipts: Pick<Receipt, "logs">[], ids: bigint[], caller: Address): Claimed[] {
-  const found = new Map<bigint, { received: Amount[]; fees: Amount[] }>();
-  for (const log of receipts.flatMap(({ logs }) => logs)) {
-    if (!same(log.address, DOUBLE_ESPRESSO.address)) continue;
-    try {
-      const { eventName, args } = decodeEventLog({ abi, data: log.data, topics: log.topics as [Hex, ...Hex[]] });
-      if (eventName !== "Claimed" || !ids.includes(args.tokenId) || !same(args.caller, caller)) continue;
-      const at = (values: readonly bigint[]) =>
-        args.tokens.map((token, i) => ({ token, amount: values[i] ?? 0n })).filter(({ amount }) => amount > 0n);
-      const before = found.get(args.tokenId) ?? { received: [], fees: [] };
-      found.set(args.tokenId, {
-        received: [...before.received, ...at(args.amounts)],
-        fees: [...before.fees, ...at(args.fees)],
-      });
-    } catch {}
-  }
-  return [...found].map(([id, { received, fees }]) => ({
+  const logs = receipts.flatMap(({ logs }) => logs).filter((log) => same(log.address, DOUBLE_ESPRESSO.address));
+  const mine = claimed(logs).filter((claim) => ids.includes(claim.id) && same(claim.caller, caller));
+  return [...new Set(mine.map(({ id }) => id))].map((id) => ({
     id,
-    received: summed(received),
-    fees: summed(fees),
-    paid: less(summed(received), summed(fees)),
+    ...totals(mine.filter((claim) => claim.id === id)),
   }));
 }

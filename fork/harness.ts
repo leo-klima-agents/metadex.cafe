@@ -629,11 +629,15 @@ export async function startAnvil(block: number, cached: string, stopping = () =>
   const child = (node = spawn("anvil", args, {
     stdio: ["ignore", "ignore", process.env.ANVIL_LOG ? "inherit" : "ignore"],
   }));
+  // A missing binary is an error event, not an exit: unheard, it would be an uncaught exception.
+  let failed: Error | undefined;
+  child.once("error", (error) => (failed = error));
   for (;;) {
     try {
       await anvil("eth_chainId");
       break;
     } catch {
+      if (failed) throw new Error(`anvil did not start (${failed.message}): is Foundry on the PATH?`);
       if (stopping()) await stopAnvil(false);
       if (child.exitCode !== null || child.signalCode !== null)
         throw new Error(`anvil stopped as it started, with ${child.exitCode ?? child.signalCode}.`);

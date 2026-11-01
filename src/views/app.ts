@@ -5,8 +5,8 @@ import * as hydrex from "../hydrex.ts";
 import { overdue } from "../payouts.ts";
 import { hrefOf } from "../routes.ts";
 import { now, same } from "../rpc.ts";
-import { actions, state } from "../state.ts";
-import { $, fill, frag, link, list, shown, status, type Value } from "../ui.ts";
+import { actions, render, state } from "../state.ts";
+import { $, busy, fill, frag, link, list, shown, status, type Value } from "../ui.ts";
 import { waitsWords } from "./account.ts";
 import { change } from "./hydrex.ts";
 import { openClaim } from "./claim.ts";
@@ -15,6 +15,9 @@ import { allowances, drawAllowances, swapLine } from "./swap.ts";
 // The App: what needs the wallet's owner, each with one action, then the products, and what the wallet allows.
 const view = $('[data-view="app"]');
 type Need = { key: string; shape: string; words: string; act: Value };
+
+// The claim being read, by its account, to open its review: its button stays busy, as each draw makes it again.
+let claiming = "";
 
 export function drawApp(): void {
   const holdings = data.accounts();
@@ -28,6 +31,7 @@ export function drawApp(): void {
     });
     el.dataset.action = action;
     el.dataset.arg = arg;
+    if (action === "claim-app" && arg === claiming) busy(el);
     return el;
   };
   const toHydrex = link(hrefOf({ view: "hydrex" }), "Change");
@@ -142,5 +146,13 @@ actions["claim-app"] = (el) => {
   const holdings = data.accounts().value;
   const found = holdings && data.payouts(holdings).value;
   const entry = found && overdue(found).find(({ account }) => String(account.id) === el.dataset.arg);
-  if (entry) void openClaim([entry]);
+  if (!entry || claiming) return;
+  claiming = String(entry.account.id);
+  render();
+  void openClaim([entry])
+    .catch(console.error)
+    .finally(() => {
+      claiming = "";
+      render();
+    });
 };
