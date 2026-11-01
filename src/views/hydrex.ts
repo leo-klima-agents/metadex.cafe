@@ -7,7 +7,7 @@ import {
   byKind,
   type Automation,
 } from "../config.ts";
-import { type Got } from "../cache.ts";
+import { then, type Got } from "../cache.ts";
 import { checks } from "../checks.ts";
 import * as data from "../data.ts";
 import {
@@ -18,7 +18,7 @@ import {
   date,
   day,
   fraction,
-  list as listWords,
+  listWords,
   money,
   moneyAt,
   short,
@@ -41,7 +41,6 @@ import { openReview } from "./review.ts";
 
 const hydrexView = $('[data-view="hydrex"]');
 const productView = $('[data-view="product"]');
-const automationOf = (kind = ""): Automation | undefined => byKind(kind);
 
 // Words for figures
 
@@ -111,10 +110,10 @@ const record = (automation: Automation): Value =>
   );
 // How some votes compare with Hydrex's average: hidden when there is nothing to compare, or it could not be read.
 const compared = (mine: Got<Earnings | "none">): Value => {
-  const got = data.then(mine, (earnings) =>
+  const got = then(mine, (earnings) =>
     earnings === "none" || !earnings.votes || !earnings.pools.length
       ? { value: null }
-      : data.then(data.average(), (all) => ({ value: versus(earnings, all) ?? null })),
+      : then(data.average(), (all) => ({ value: versus(earnings, all) ?? null })),
   );
   return got.failed || got.value === null ? null : shown(got, versusWords);
 };
@@ -144,15 +143,15 @@ const members = ({ owner, accounts, epochStart }: Holdings): Member[] =>
     const status = hydrex.statusOf(account, owner, now(), epochStart);
     return { account, status, group: hydrex.groupOf(account, status) };
   });
-const open = (automation: Automation): boolean => !!checks().value && !checks().value!.get(automation.kind)!.length;
+const joinable = (automation: Automation): boolean => !!checks().value && !checks().value!.get(automation.kind)!.length;
 const overdueOf = (holdings: Holdings) => {
   const found = data.payouts(holdings).value;
   return found ? overdue(found) : [];
 };
 // What a group's buttons can do for an account.
 function can(action: string, account: Account, arg: string | undefined, holdings: Holdings): boolean {
-  const automation = automationOf(arg);
-  if (action === "join") return !!automation && open(automation) && hydrex.canJoin(account, automation, now());
+  const automation = byKind(arg ?? "");
+  if (action === "join") return !!automation && joinable(automation) && hydrex.canJoin(account, automation, now());
   if (action === "leave") return AUTOMATIONS.some((each) => hydrex.canLeave(account, each));
   if (action === "self")
     return AUTOMATIONS.some((each) => hydrex.canLeave(account, each)) || hydrex.canLeaveOther(account);
@@ -284,7 +283,7 @@ function epochWords(): Value {
 }
 // What the wallet's own votes earned last epoch per 1,000 votes, through the accounts it voted with itself.
 function ownEarnings(holdings: Holdings): Got<Earnings | "none"> {
-  return data.then<Map<bigint, import("../rewards.ts").Stake>, Earnings | "none">(data.stakes(holdings), (stakes) => {
+  return then(data.stakes(holdings), (stakes): Got<Earnings | "none"> => {
     if (![...stakes.values()].some(({ delegate }) => same(delegate, holdings.owner))) return { value: "none" };
     return data.voter(holdings.owner);
   });
@@ -301,9 +300,9 @@ function ownWords(holdings: Holdings): Value {
 const ownVersus = (holdings: Holdings): Value => compared(ownEarnings(holdings));
 
 export function drawProduct(): void {
-  const automation = automationOf(state.route.view === "product" ? state.route.kind : "")!;
+  const automation = byKind(state.route.view === "product" ? state.route.kind : "")!;
   const earnings = data.earnings(automation);
-  const off = !open(automation) && checks().value;
+  const off = !joinable(automation) && checks().value;
   fill(productView, {
     name: automation.name,
     state: stateNode(automation),
@@ -356,7 +355,7 @@ export function drawProduct(): void {
       group === "in"
         ? hydrex.canLeave(account, automation) ||
           ((status.kind === "in" || status.kind === "joined") && status.automation === automation)
-        : open(automation) && hydrex.canJoin(account, automation, now()),
+        : joinable(automation) && hydrex.canJoin(account, automation, now()),
     );
 }
 
@@ -436,7 +435,7 @@ function chosen(el: HTMLElement): Account[] {
     .map((row) => BigInt(row.dataset.key!));
   return holdings.accounts.filter(({ id }) => ids.includes(id));
 }
-actions.join = (el) => change(chosen(el), "join", automationOf(el.dataset.arg));
+actions.join = (el) => change(chosen(el), "join", byKind(el.dataset.arg ?? ""));
 actions.leave = (el) => change(chosen(el), "leave");
 actions.self = (el) => change(chosen(el), "self");
 actions.claim = (el) => {

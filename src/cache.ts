@@ -43,6 +43,10 @@ export function use<T>(key: string, read: () => Promise<T>, ttl?: TTL<T>): Got<T
   return "value" in entry ? { value: entry.value as T } : "error" in entry ? { failed: true } : {};
 }
 
+// The second read, once the first has a value.
+export const then = <T, U>(got: Got<T>, next: (value: T) => Got<U>): Got<U> =>
+  got.value !== undefined ? next(got.value) : got.failed ? { failed: true } : {};
+
 // Forgets what failed, so that it is read again.
 export function retry(): void {
   for (const [key, entry] of entries) if ("error" in entry) entries.delete(key);

@@ -281,27 +281,44 @@ function payoutReceipt(payout: Payout, id: bigint, owner: Address, time: number,
   );
 }
 
-// Double Espresso's receipt: its claims in the epoch of the last one, its fee, and what reached the owner.
+// A Double Espresso receipt: what its claims received, its fee, and what reached the owner. The claim's Done page shows
+// the same, of the claims it sent.
+export function claimReceipt(
+  id: bigint,
+  { received, fees, paid }: { received: Amount[]; fees: Amount[]; paid: Amount[] },
+  p: ReturnType<typeof priced>,
+  dates: string,
+  paidTo: string,
+  foot: Value = null,
+  after: Value = null,
+): HTMLElement {
+  return bill(
+    `Receipt · Account #${id} · Double Espresso`,
+    dates,
+    [],
+    [
+      ["Claimed", worth(received, p), amounts(received, p.tokens)],
+      [`Fee ${bps(100n)}`, worth(fees, p), amounts(fees, p.tokens, fees.length ? "−" : "")],
+    ],
+    [paidTo, amounts(paid, p.tokens), worth(paid, p)],
+    foot,
+    after,
+  );
+}
+
+// Double Espresso's receipt on an account's page: its claims in the epoch of the last one, and who sent each.
 function claimsReceipt({ claims, stopped }: Walk, id: bigint, owner: Address, own: boolean): Node {
   const { received, fees, paid } = totals(claims);
   const times = claims.map(({ block }) => data.blockTime(block).value);
   const flip = times[0] === undefined ? undefined : weekStart(times[0]);
   const p = flip === undefined ? {} : priced(received, flip);
   const you = (address: Address) => own && same(address, owner);
-  const node = bill(
-    `Receipt · Account #${id} · Double Espresso`,
+  const node = claimReceipt(
+    id,
+    { received, fees, paid },
+    p,
     flip === undefined ? "" : `${day(flip - WEEK)} to ${day(flip)}`,
-    [],
-    [
-      ["Claimed", worth(received, p), amounts(received, p.tokens)],
-      [`Fee ${bps(100n)}`, worth(fees, p), amounts(fees, p.tokens, fees.length ? "−" : "")],
-    ],
-    [
-      claims.every((claim) => you(claim.owner)) ? "Paid to you" : "Paid to its owner",
-      worth(paid, p),
-      amounts(paid, p.tokens),
-      null,
-    ],
+    claims.every((claim) => you(claim.owner)) ? "Paid to you" : "Paid to its owner",
     stopped ? `Last ${WALK_LIMIT} blocks only` : null,
     own ? link(hrefOf({ view: "swap", output: "usdc" }), "Swap these") : null,
   );

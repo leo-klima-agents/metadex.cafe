@@ -39,7 +39,7 @@ function replace(el: Element, value: Node): void {
     el.replaceChildren(...nodes);
 }
 
-export function put(el: HTMLElement, value: Value): void {
+function put(el: HTMLElement, value: Value): void {
   el.hidden = value === null || value === false;
   setAttr(el, "data-loading", value === undefined ? "" : null);
   if (value === null || value === false || value === true) return;
@@ -117,7 +117,7 @@ export const stateOf = (got: Got<unknown>, empty?: boolean): Value => ({
 });
 
 // A bill, from the page's template: its lines, its sums, its total, and what goes under it.
-export type Line = { symbol: string; amount: string; value: string; worth: string; route: string; note: Value };
+type Line = { symbol: string; amount: string; value: string; worth: string; route: string; note: Value };
 export function bill(
   label: Value,
   day: Value,

@@ -1,5 +1,5 @@
 import type { Address } from "viem";
-import { memo, use, type Got } from "./cache.ts";
+import { memo, then, use, type Got } from "./cache.ts";
 import { checks } from "./checks.ts";
 import { AUTOMATIONS, type Automation } from "./config.ts";
 import { WEEK, weekStart } from "./format.ts";
@@ -15,9 +15,6 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const week = (): number => weekStart(now());
 export const owner = (): Address | undefined => state.connection?.address;
-// The second read, once the first has a value.
-export const then = <T, U>(got: Got<T>, next: (value: T) => Got<U>): Got<U> =>
-  got.value !== undefined ? next(got.value) : got.failed ? { failed: true } : {};
 
 export const matchaLatte = () => use(`matcha-latte ${week()}`, readMatchaLatte, HOUR);
 export const freshness = (automation: Automation) =>

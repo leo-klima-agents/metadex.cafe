@@ -1,17 +1,18 @@
-import { maxUint256, type Address } from "viem";
+import type { Address } from "viem";
 import * as claim from "../claim.ts";
 import { DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
 import { checksRead, swapsOff } from "../checks.ts";
-import { count, figure, list as listWords, money, moneyAt } from "../format.ts";
+import { count, figure, listWords, money, moneyAt } from "../format.ts";
 import { summed, valueAt, type Entry } from "../payouts.ts";
-import { ethCost, gasWords, key, pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
+import { gasWords, key, pricesNow, type Prices, type Token } from "../prices.ts";
 import { hrefOf } from "../routes.ts";
 import { costs, now, same, simulate, type Costs, type Receipt } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import * as swap from "../swap.ts";
 import { describe, type Amount } from "../tokens.ts";
-import { $, bill, fill, frag, list, type Value } from "../ui.ts";
+import { $, fill, frag, list, type Value } from "../ui.ts";
 import { capabilities, type Slip } from "../wallet.ts";
+import { claimReceipt } from "./account.ts";
 import { openReview } from "./review.ts";
 import { prefill, reviewSwap, swapReceipt } from "./swap.ts";
 
@@ -27,7 +28,7 @@ type Claiming = {
   // Whether the swap is being routed: the review waits for it, as it changes the calls.
   planning: boolean;
 };
-let open: Claiming | undefined;
+let claiming: Claiming | undefined;
 const MARGIN = 50n;
 
 export async function openClaim(entries: Entry[]): Promise<void> {
@@ -93,10 +94,10 @@ export async function openClaim(entries: Entry[]): Promise<void> {
   const asTheyAre = async (receipts: Receipt[]) =>
     frag(...claimReceipts(receipts, ids, tokens, prices, connection.address), swapThese(brought(receipts)));
   const current: Claiming = { steps: () => calls, outcome: asTheyAre, into: "", planned: 0, planning: false };
-  open = current;
+  claiming = current;
 
   const draw = () => {
-    if (open !== current) return;
+    if (claiming !== current) return;
     const value = (amounts: Amount[]) =>
       prices ? money(moneyAt(valueAt(amounts, tokens, prices), prices), true) : settled ? "Not read" : undefined;
     const earned = totals.map(({ token, earned }) => ({ token, amount: earned }));
@@ -164,37 +165,8 @@ export async function openClaim(entries: Entry[]): Promise<void> {
     current.into = undefined;
     current.gasWithSwap = undefined;
     draw();
-    const routes = await Promise.all(
-      paid.map(({ token, amount }) =>
-        same(token, swapper.token) ? undefined : swap.findRoute(token, amount, swapper, true).catch(() => undefined),
-      ),
-    );
+    const { plan: sale, left } = await swap.saleOf(paid, swapper, tokens, prices, gasCosts?.gasPrice, MARGIN);
     if (id !== current.planned) return;
-    const items: swap.Item[] = [];
-    const left: string[] = [];
-    paid.forEach(({ token, amount }, i) => {
-      const route = routes[i];
-      if (same(token, swapper.token)) return;
-      const outputPrice = prices?.of.get(key(swapper.token));
-      const known = tokens.get(key(token));
-      const worth = !route
-        ? undefined
-        : outputPrice !== undefined
-          ? worthOf(route.out, swapper.decimals, outputPrice)
-          : prices?.of.get(key(token)) !== undefined && known
-            ? worthOf(amount, known.decimals, prices.of.get(key(token))!)
-            : undefined;
-      const cost =
-        gasCosts && route ? (ethCost((route.gas + swap.APPROVAL_GAS) * gasCosts.gasPrice, prices)?.value ?? 0) : 0;
-      if (!route || !known || worth === undefined || worth < 2 * cost) return void left.push(known?.symbol ?? token);
-      items.push({
-        token: known,
-        route: { ...route.route, amount: maxUint256, minPaid: swap.minimumOf(route.out, MARGIN) },
-        out: route.out,
-        allowance: 0n,
-        approve: amount,
-      });
-    });
     const kept = paid.find(({ token }) => same(token, swapper.token))?.amount ?? 0n;
     const sayInto = (these: swap.Item[]) => {
       const out = kept + these.reduce((sum, { out }) => sum + swap.paidOf(out), 0n);
@@ -203,43 +175,21 @@ export async function openClaim(entries: Entry[]): Promise<void> {
         ? `${figure(out, swapper.decimals)} ${swapper.symbol}, at least ${figure(least, swapper.decimals)}, from ${listWords(these.map(({ token }) => token.symbol))}${left.length ? `; ${count(left.length, "token", "tokens")} kept` : ""}`
         : `None worth swapping into ${swapper.symbol}`;
     };
-    sayInto(items);
-    const swapPlan: swap.Plan = { swapper, items, margin: MARGIN };
-    if (!items.length) return draw();
+    sayInto(sale.items);
+    if (!sale.items.length) return draw();
     // Apart, the claim goes first; once it has, its Done page offers the swap of what it brought, if asked.
     if (!together) {
       if (into.checked)
-        current.outcome = async (receipts) => {
-          const came = brought(receipts);
-          const exact = {
-            ...swapPlan,
-            items: items.flatMap(({ approve = 0n, ...item }) => {
-              const amount = came.find(({ token }) => same(token, item.token.address))?.amount;
-              return amount ? [swap.partOf(item, amount, approve)] : [];
-            }),
-          };
-          const next = Object.assign(document.createElement("p"), { className: "row" });
-          if (exact.items.length) {
-            const button = Object.assign(document.createElement("button"), {
-              type: "button",
-              textContent: `Review the swap into ${swapper.symbol}`,
-            });
-            button.addEventListener(
-              "click",
-              () =>
-                void reviewSwap(exact, tokens, prices, gasCosts as Costs | undefined).then(
-                  (reason) => reason && (next.textContent = reason),
-                ),
-            );
-            next.append(button);
-          }
-          return frag(...claimReceipts(receipts, ids, tokens, prices, connection.address), next);
-        };
+        current.outcome = async (receipts) =>
+          frag(
+            ...claimReceipts(receipts, ids, tokens, prices, connection.address),
+            swapLater(brought(receipts), sale, tokens, prices, gasCosts),
+          );
       return draw();
     }
     // Run through Base after the claims, with no minimums: each route then sets its own.
     let at = deadline();
-    const run = await swap.simulatePlan(connection.address, calls, swapPlan, tokens, at, true);
+    const run = await swap.simulatePlan(connection.address, calls, sale, tokens, at, true);
     if (id !== current.planned) return;
     if (!run || run.refused !== undefined || run.gas > claim.MAX_CLAIM_GAS) {
       current.into = "Base refused both together: they come as they are.";
@@ -248,14 +198,14 @@ export async function openClaim(entries: Entry[]): Promise<void> {
       return draw();
     }
     const going = {
-      ...swapPlan,
+      ...sale,
       items: swap
-        .withMinimums(swapPlan, run.results)
+        .withMinimums(sale, run.results)
         .flatMap(({ item, reason }) => (reason ? (left.push(item.token.symbol), []) : [item])),
     };
     sayInto(going.items);
     if (!going.items.length) return draw();
-    if (body.querySelector<HTMLInputElement>('input[value="into"]')!.checked) {
+    if (into.checked) {
       current.steps = (sending) => [
         ...calls,
         ...swap.planSteps(going, tokens, sending ? (at = deadline()) : at, undefined, true).slips,
@@ -282,7 +232,7 @@ export async function openClaim(entries: Entry[]): Promise<void> {
     }
   };
   const choose = () => {
-    if (open !== current) return;
+    if (claiming !== current) return;
     const chosen = body.querySelector<HTMLInputElement>('input[value="into"]')!.checked;
     current.steps = () => calls;
     current.outcome = asTheyAre;
@@ -336,38 +286,46 @@ function claimReceipts(
   prices: Prices | undefined,
   caller: Address,
 ): Node[] {
-  const words = (amounts: Amount[], sign = "") =>
-    amounts.length
-      ? sign +
-        listWords(
-          amounts.map(({ token, amount }) =>
-            tokens.get(key(token))
-              ? `${figure(amount, tokens.get(key(token))!.decimals)} ${tokens.get(key(token))!.symbol}`
-              : `${amount} of ${token}`,
-          ),
-        )
-      : "Nothing";
-  return claim.claimedIn(receipts, ids, caller).map(({ id, received, fees, paid }) => {
-    const worth = prices ? valueAt(received, tokens, prices) : 0;
-    const node = bill(
-      `Receipt · Account #${id} · Double Espresso`,
-      "",
-      [],
-      [
-        ["Claimed", worth > 0 ? money(moneyAt(worth, prices!), true) : "", words(received)],
-        ["Fee 1%", words(fees, "−")],
-      ],
-      ["Paid to you", words(paid), ""],
+  return claim
+    .claimedIn(receipts, ids, caller)
+    .map((claimed) =>
+      claimReceipt(
+        claimed.id,
+        claimed,
+        { tokens, prices },
+        "",
+        "Paid to you",
+        claimed.received.length ? null : "Nothing came: someone else already claimed it for you.",
+      ),
     );
-    if (!received.length)
-      node.append(
-        Object.assign(document.createElement("p"), {
-          className: "small",
-          textContent: "Nothing came: someone else already claimed it for you.",
-        }),
-      );
-    return node;
+}
+// After a claim apart from its swap: the review of the swap planned, of what it brought.
+function swapLater(
+  came: Amount[],
+  sale: swap.Plan,
+  tokens: Map<string, Token>,
+  prices: Prices | undefined,
+  gasCosts: Costs | undefined,
+): Node {
+  const exact = {
+    ...sale,
+    items: sale.items.flatMap(({ approve = 0n, ...item }) => {
+      const amount = came.find(({ token }) => same(token, item.token.address))?.amount;
+      return amount ? [swap.partOf(item, amount, approve)] : [];
+    }),
+  };
+  const next = Object.assign(document.createElement("p"), { className: "row" });
+  if (!exact.items.length) return next;
+  const button = Object.assign(document.createElement("button"), {
+    type: "button",
+    textContent: `Review the swap into ${sale.swapper.symbol}`,
   });
+  button.addEventListener(
+    "click",
+    () => void reviewSwap(exact, tokens, prices, gasCosts).then((reason) => reason && (next.textContent = reason)),
+  );
+  next.append(button);
+  return next;
 }
 // After a claim as it is: a link to swap what it brought.
 function swapThese(came: Amount[]): Node {

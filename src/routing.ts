@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 import type { Swapper } from "./config.ts";
-import { pairKey, waysFor, type Hop, type Way } from "./prices.ts";
+import { key, pairKey, waysFor, type Hop, type Way } from "./prices.ts";
 import { tagged } from "./rpc.ts";
 import {
   QUOTES_PER_REQUEST,
@@ -47,7 +47,6 @@ const LADDER = [
   { pools: 1, amounts: 4 },
 ];
 
-const key = (address: string): string => address.toLowerCase();
 const poolKey = (way: Way): string =>
   `${way.exchange} ${key(way.pool)} ${way.fee} ${way.tickSpacing} ${pairKey(way.tokenIn, way.tokenOut)}`;
 // The pools of a sale's own route, each hop from what the one before paid.

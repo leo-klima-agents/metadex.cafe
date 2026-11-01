@@ -148,7 +148,7 @@ export function walletLines(address: string): string[][] {
   return [cells.slice(0, 4), cells.slice(4, 8), cells.slice(8)];
 }
 
-export const list = (items: string[]): string => and.format(items);
+export const listWords = (items: string[]): string => and.format(items);
 // The items with the words between them: [a, ", ", b, " and ", c].
 export const listWith = <T>(items: T[]): (T | string)[] =>
   and

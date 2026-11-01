@@ -174,7 +174,7 @@ export const passesTo = (start: number, epoch: number): number =>
 // What each account can claim from each pair: what earned() reads, and, of the `epochs` given, those past it, each read
 // on its own; with the claim's passes, and the pair's record. If where earned() starts cannot be read, what it reads
 // alone. earned() adds up to 50 epochs, about a million gas each, so 20 a batch.
-export type Owing = { amount: bigint | undefined; passes: number; stamp: number | undefined };
+type Owing = { amount: bigint | undefined; passes: number; stamp: number | undefined };
 export async function readOwed(
   ids: bigint[],
   pairs: Pair[],

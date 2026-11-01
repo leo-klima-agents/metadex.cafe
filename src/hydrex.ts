@@ -2,9 +2,9 @@ import { encodeFunctionData, parseAbi, zeroAddress, type Address, type Hex } fro
 import { escrowAbi, matchaLatteAbi, namesAbi, voterAbi } from "./abi.ts";
 import * as config from "./config.ts";
 import { AUTOMATIONS, MATCHA_LATTE, type Automation, type Kind } from "./config.ts";
-import { WEEK, clean, list, weekStart } from "./format.ts";
+import { WEEK, clean, listWords, weekStart } from "./format.ts";
 import conduits from "./hydrex-conduits.json" with { type: "json" };
-import { anchorsNow, type Prices } from "./prices.ts";
+import { anchorsNow, key, type Prices } from "./prices.ts";
 import { blockTime, call, costs, read, required, rpc, same, sawBlock, type Call } from "./rpc.ts";
 import type { Slip, Tx } from "./wallet.ts";
 
@@ -90,7 +90,7 @@ export type Holdings = { owner: Address; accounts: Account[]; time: number; epoc
 // read, an automation or an owner is just not known to have stopped voting.
 async function accountsOf(owner: Address, ids: bigint[], epochStart: number, voted: unknown[]): Promise<Account[]> {
   const lastVoted = new Map(
-    others.map(({ address }, i) => [address.toLowerCase(), Number((voted[i] as bigint | undefined) ?? 0n)]),
+    others.map(({ address }, i) => [key(address), Number((voted[i] as bigint | undefined) ?? 0n)]),
   );
   const details = await read([
     voter("lastVoted", owner),
@@ -114,7 +114,7 @@ async function accountsOf(owner: Address, ids: bigint[], epochStart: number, vot
       Address,
     ];
     const { amount, endTime, lockType } = lock;
-    const delegateVoted = lastVoted.get(delegate.toLowerCase()) ?? 0;
+    const delegateVoted = lastVoted.get(key(delegate)) ?? 0;
     return {
       id,
       name: clean(names[i]),
@@ -271,12 +271,12 @@ export const join = (accounts: Account[], automation: Automation): Step[] =>
     const names = [...new Set(holders.map(otherName).filter((name) => name !== undefined))];
     const parts = [
       ...own.map(({ name }) => name),
-      ...(names.length ? [`the ${list(names)} automation${names.length > 1 ? "s" : ""}`] : []),
+      ...(names.length ? [`the ${listWords(names)} automation${names.length > 1 ? "s" : ""}`] : []),
     ];
     return approval(
       account,
       true,
-      `${parts.length ? `leaves ${list(parts)} and ` : ""}joins ${automation.name}.`,
+      `${parts.length ? `leaves ${listWords(parts)} and ` : ""}joins ${automation.name}.`,
       automation,
     );
   });

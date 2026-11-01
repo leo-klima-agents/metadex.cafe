@@ -3,15 +3,28 @@ import {
   decodeEventLog,
   decodeFunctionResult,
   encodeFunctionData,
+  maxUint256,
   parseAbi,
   type Address,
   type Hex,
 } from "viem";
 import { CBBTC, FEE_BPS, HYDX, SWAPPERS, USDC, WETH, type Swapper } from "./config.ts";
 import { figure, utc } from "./format.ts";
-import { exchangeOf, key, pairKey, waysFor, type Hop, type Read, type Token, type Way } from "./prices.ts";
+import {
+  ethCost,
+  exchangeOf,
+  key,
+  pairKey,
+  waysFor,
+  worthOf,
+  type Hop,
+  type Prices,
+  type Read,
+  type Token,
+  type Way,
+} from "./prices.ts";
 import { call, read, same, simulate, type Call, type Receipt, type Tx } from "./rpc.ts";
-import { erc20Abi } from "./tokens.ts";
+import { erc20Abi, type Amount } from "./tokens.ts";
 import type { Slip } from "./wallet.ts";
 
 // ImmutableSwapper sells the tokens its caller names for its output, each along the route its caller picks, and takes
@@ -218,6 +231,46 @@ export async function findRoute(
     undefined,
   );
   return chosen && { route: chosen.route, out: chosen.out, gas: chosen.gas };
+}
+
+// Selling what a claim brings into `swapper`, each token whole by its best route, up to an approval of what it brings:
+// only those whose quote clears their gas twice over; the others are `left`, by symbol.
+export async function saleOf(
+  amounts: Amount[],
+  swapper: Swapper,
+  tokens: Map<string, Token>,
+  prices: Prices | undefined,
+  gasPrice: bigint | undefined,
+  margin: bigint,
+): Promise<{ plan: Plan; left: string[] }> {
+  const sold = amounts.filter(({ token }) => !same(token, swapper.token));
+  const routes = await Promise.all(
+    sold.map(({ token, amount }) => findRoute(token, amount, swapper, true).catch(() => undefined)),
+  );
+  const items: Item[] = [];
+  const left: string[] = [];
+  sold.forEach(({ token, amount }, i) => {
+    const [route, known] = [routes[i], tokens.get(key(token))];
+    const [outputPrice, price] = [prices?.of.get(key(swapper.token)), prices?.of.get(key(token))];
+    const worth = !route
+      ? undefined
+      : outputPrice !== undefined
+        ? worthOf(route.out, swapper.decimals, outputPrice)
+        : price !== undefined && known
+          ? worthOf(amount, known.decimals, price)
+          : undefined;
+    const cost =
+      gasPrice !== undefined && route ? (ethCost((route.gas + APPROVAL_GAS) * gasPrice, prices)?.value ?? 0) : 0;
+    if (!route || !known || worth === undefined || worth < 2 * cost) return void left.push(known?.symbol ?? token);
+    items.push({
+      token: known,
+      route: { ...route.route, amount: maxUint256, minPaid: minimumOf(route.out, margin) },
+      out: route.out,
+      allowance: 0n,
+      approve: amount,
+    });
+  });
+  return { plan: { swapper, items, margin }, left };
 }
 
 // The calls, as the review shows them.

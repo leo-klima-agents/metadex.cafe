@@ -46,15 +46,15 @@ type Sending = Review & {
   submitted: boolean;
   finished: boolean;
   progress: string;
-  outcome_?: Node | undefined;
+  result?: Node | undefined;
 };
 
 const dialog = $<HTMLDialogElement>("#review");
 const refreshAfter = (): void => ["account", "held", "allowances", "payouts"].forEach(refresh);
 let current: Sending | undefined;
 const apart = (review: Sending): boolean => (review.groups?.length ?? 1) > 1;
-const batched = (review: Sending): boolean =>
-  review.batch ?? (!!review.capabilities?.batch && !apart(review) && review.steps().length > 1);
+const batched = (review: Sending, steps = review.steps()): boolean =>
+  review.batch ?? (!!review.capabilities?.batch && !apart(review) && steps.length > 1);
 
 export function openReview(review: Review): void {
   // One opened from another, as the swap after a claim: what the other sent is read again.
@@ -103,7 +103,7 @@ function draw(): void {
   const review = current!;
   const { connection } = state;
   const steps = review.steps();
-  const batch = batched(review);
+  const batch = batched(review, steps);
   const pages = review.pages.length ? review.pages : [{}];
   const last = review.page === pages.length - 1;
   const shown = pages[review.page]!;
@@ -117,9 +117,9 @@ function draw(): void {
   const waiting = review.finished ? undefined : review.waiting?.();
   fill(dialog, {
     step: `${review.name}${pages.length > 1 ? ` · ${review.page + 1} of ${pages.length}` : ""}`,
-    title: review.outcome_ ? "Done" : (shown.title ?? callsName),
-    page: review.outcome_ ? null : (shown.body ?? null),
-    calls: !review.outcome_ && last && steps.length > 0,
+    title: review.result ? "Done" : (shown.title ?? callsName),
+    page: review.result ? null : (shown.body ?? null),
+    calls: !review.result && last && steps.length > 0,
     "calls-title": shown.title ? callsName : null,
     how: waiting
       ? waiting
@@ -133,7 +133,7 @@ function draw(): void {
           ? `All ${steps.length} in one prompt${atomic ? ", all or nothing" : ""}`
           : null,
     done:
-      review.outcome_ ??
+      review.result ??
       (safe && review.finished
         ? frag("For co-signers: ", link(review.checkHref, `https://metadex.cafe/${review.checkHref}`))
         : null),
@@ -153,7 +153,7 @@ function draw(): void {
     back: review.submitted ? "Close" : "Back",
   });
   $<HTMLButtonElement>("[data-action=confirm]", dialog).disabled = review.sending || (safe && wrongChain) || !!waiting;
-  $("[data-action=next]", dialog).hidden = last || !!review.outcome_;
+  $("[data-action=next]", dialog).hidden = last || !!review.result;
   list(
     $("[data-list=slip]", dialog),
     steps,
@@ -213,11 +213,11 @@ async function finish(review: Sending): Promise<void> {
   if (outcome) {
     const box = Object.assign(document.createElement("div"), { className: "stack" });
     box.append(outcome);
-    review.outcome_ = box;
+    review.result = box;
   }
   if (review !== current) return;
   draw();
-  if (review.outcome_) $("#review-title").focus();
+  if (review.result) $("#review-title").focus();
 }
 
 async function proposeAll(review: Sending): Promise<void> {

@@ -1,9 +1,9 @@
 import { maxUint256, type Address } from "viem";
-import { use, type Got } from "../cache.ts";
+import { then, use, type Got } from "../cache.ts";
 import { swapsOff } from "../checks.ts";
 import { AUTOMATIONS, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
 import * as data from "../data.ts";
-import { fixed, figure, fraction, money, moneyAt, utc, type Money } from "../format.ts";
+import { count, fixed, figure, fraction, money, moneyAt, utc, type Money } from "../format.ts";
 import { ethCost, gasWords, key, pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
 import { hrefOf, parse } from "../routes.ts";
 import { routeTogether, type Sale } from "../routing.ts";
@@ -75,10 +75,10 @@ function scan(): Got<Scan> {
   const held = use(`held ${connection.address} ${swapper.output} ${all.length}`, () =>
     holdingsOf(connection.address, all, swapper.address, rd),
   );
-  return data.then(held, (balances) => {
+  return then(held, (balances) => {
     const owned = all.filter((token) => (balances.get(key(token))?.balance ?? 0n) > 0n && !same(token, swapper.token));
     const names = [...owned, swapper.token, ...swap.MIDDLES];
-    return data.then(
+    return then(
       use(`tokens ${names.join()}`, () => describe(names)),
       (tokens) => {
         const amounts = new Map(owned.map((token) => [key(token), balances.get(key(token))!.balance]));
@@ -153,12 +153,12 @@ function together(found: Scan): Got<Together> {
   const swapper = swapperShown();
   const rows = found.rows.filter((row) => row.ticked && row.found.value);
   const id = `${swapper.output} ${rows.map(({ token, amount }) => `${token.address}:${amount}`).join()}`;
-  if (id !== ticked.key) ticked = { key: id, at: performance.now() };
   // Ticks settle before they are routed.
-  if (performance.now() - ticked.at < 400) {
+  if (id !== ticked.key) {
+    ticked = { key: id, at: performance.now() };
     setTimeout(render, 400);
-    return {};
   }
+  if (performance.now() - ticked.at < 400) return {};
   return use(
     `together ${connection.address} ${id}`,
     async () => {
@@ -348,7 +348,7 @@ actions.output = (el) => {
   ticks.clear();
 };
 actions.tick = (el) => {
-  ticks.set(el.closest<HTMLElement>("[data-key]")!.dataset.key!.toLowerCase(), (el as HTMLInputElement).checked);
+  ticks.set(key(el.closest<HTMLElement>("[data-key]")!.dataset.key!), (el as HTMLInputElement).checked);
   render();
 };
 actions.margin = (el) => {
@@ -614,11 +614,10 @@ async function openReset(these: Allowance[]): Promise<void> {
 // The App's line: how many tokens the wallet could swap, and what they are worth.
 export function swapLine(): Value {
   const found = scan();
-  return shown(found, ({ rows, reading }) => {
+  return shown(found, ({ rows, reading, prices }) => {
     const worth = rows.reduce((sum, { worth = 0 }) => sum + worth, 0);
     if (!rows.length) return reading ? undefined : "Nothing to swap";
-    const prices = scan().value!.prices;
-    return `${rows.length} token${rows.length === 1 ? "" : "s"} · ${money(moneyAt(worth, prices))}${reading ? " so far" : ""}`;
+    return `${count(rows.length, "token", "tokens")} · ${money(moneyAt(worth, prices))}${reading ? " so far" : ""}`;
   });
 }
 export const preloadSwap = (): void => void scan();
