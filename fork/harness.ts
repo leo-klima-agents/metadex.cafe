@@ -29,7 +29,8 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { DOUBLE_ESPRESSO, MATCHA_LATTE, RPCS, VOTING_ESCROW } from "../src/config.ts";
+import { DOUBLE_ESPRESSO, MATCHA_LATTE, RPCS, VOTER, VOTING_ESCROW } from "../src/config.ts";
+import { WEEK, weekStart } from "../src/format.ts";
 import { lastEpoch, votesEarned, type Reward } from "../src/rewards.ts";
 import { SAFE_ORIGIN } from "../src/wallet.ts";
 import { runsCalls } from "./rpc-cache.ts";
@@ -91,6 +92,13 @@ export const abi = parseAbi([
   "function allowance(address owner, address spender) view returns (uint256)",
   "function transfer(address to, uint256 amount) returns (bool)",
   "function lastClaimBlock(uint256 tokenId) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function minter() view returns (address)",
+  "function update_period() returns (uint256)",
+  "function gauges(address pool) view returns (address)",
+  "function external_bribes(address gauge) view returns (address)",
+  "function notifyRewardAmount(address token, uint256 amount)",
+  "function vote(address[] pools, uint256[] weights)",
 ]);
 
 let ANVIL = "";
@@ -174,6 +182,24 @@ export async function expectApprovals(ids: bigint[], delegate: Address, claimer:
 }
 // The page reads a few blocks before the latest, which on the fork can be before the last transactions.
 export const settle = () => anvil("anvil_mine", [toHex(6)]);
+
+// The fork moved to the next Thursday 00:00 UTC, and `after` seconds more; then Hydrex moved on to that epoch, as anyone
+// may, which makes what the epoch before earned final. A few blocks follow, as the page reads a little behind the newest.
+export async function nextEpoch(after = 60): Promise<void> {
+  const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false]);
+  await anvil("evm_setNextBlockTimestamp", [weekStart(Number(timestamp)) + WEEK + after]);
+  await anvil("evm_mine");
+  await anvil("anvil_setBalance", [STRANGER, toHex(FOR_GAS)]);
+  const minter = await readOn<Address>(VOTER, "minter");
+  await mined(STRANGER, minter, encodeFunctionData({ abi, functionName: "update_period" }));
+  await settle();
+}
+// Incentives for this epoch's votes for `pool`, as anyone may add them: `amount` of `token`, from HOLDER.
+export async function incentive(pool: Address, token: Address, amount: bigint): Promise<void> {
+  const bribe = await readOn<Address>(VOTER, "external_bribes", [await readOn<Address>(VOTER, "gauges", [pool])]);
+  await mined(HOLDER, token, encodeFunctionData({ abi, functionName: "approve", args: [bribe, amount] }));
+  await mined(HOLDER, bribe, encodeFunctionData({ abi, functionName: "notifyRewardAmount", args: [token, amount] }));
+}
 
 // Double Espresso on a fork of a block before its deployment, as the page takes it to be on Base.
 export async function deployDoubleEspresso(): Promise<void> {

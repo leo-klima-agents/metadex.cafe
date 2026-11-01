@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { encodeFunctionData } from "viem";
-import { DOUBLE_ESPRESSO, SWAPPERS, WETH } from "../src/config.ts";
+import { DOUBLE_ESPRESSO, SWAPPERS, USDC, WETH } from "../src/config.ts";
 import { SAFE_ORIGIN } from "../src/wallet.ts";
 import * as h from "./harness.ts";
 import {
   AVNT,
   HOLDER,
+  NEWCOMER,
   PAYEE,
   RECENT,
   SELLER,
@@ -21,6 +22,9 @@ import {
 } from "./harness.ts";
 
 const INTO_USDC = SWAPPERS[0]!;
+// LCAP / USDC, among Hydrex's newest pools: its incentives contract has had none yet. One that has had them for more
+// than 50 epochs could not pay an account that never claimed from it: a claim walks 50 epochs at most.
+const LCAP_USDC = "0x7F3bb80Ef09559ADB387601fc1767E5CCB19023D";
 const says = (root: h.Opened["page"] | ReturnType<h.Opened["page"]["frameLocator"]>) =>
   review(root).locator("[data-text=says]").allTextContents();
 // An answer as if the page's RPCs served another chain: Ethereum's id to eth_chainId.
@@ -43,7 +47,7 @@ async function tickOnly(page: h.Opened["page"], symbols: string[]): Promise<void
 }
 
 describe("the swap and the claim against a fork after the swappers' deployment", { timeout: 2_400_000 }, () => {
-  h.fork(RECENT, [HOLDER, PAYEE, SELLER]);
+  h.fork(RECENT, [HOLDER, NEWCOMER, PAYEE, SELLER]);
 
   test("swap three tokens into USDC in one prompt; one is skipped, and its approval is reset", async () => {
     await h.fund([WETH, ZORA, AVNT]);
@@ -179,6 +183,38 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     type Received = { method: string; params: { txs: unknown[] } };
     const received = await page.evaluate(() => (window as unknown as { received: Received[] }).received);
     assert.equal(received.filter(({ method }) => method === "sendTransactions").length, Number(safeTxs));
+    assert.deepEqual(violations, []);
+  });
+
+  // Last, as it moves the fork's time on two weeks.
+  test("a claim of one call, and the swap of what it brings, go in one prompt, all or nothing", async () => {
+    // An epoch as anyone could stage it on Base: #141 joins Double Espresso, which votes for a pool that someone
+    // incentivises; half a day after the epoch, its payout is overdue, and owes one reward.
+    await h.approveConduit(NEWCOMER, DOUBLE_ESPRESSO.address, 141n);
+    await h.nextEpoch();
+    await h.incentive(LCAP_USDC, USDC, 100_000_000n);
+    const vote = encodeFunctionData({ abi: h.abi, functionName: "vote", args: [[LCAP_USDC], [1n]] });
+    await h.mined(STRANGER, DOUBLE_ESPRESSO.address, vote);
+    await h.nextEpoch(12 * 3600 + 60);
+    const { page, sent, violations } = await connected({ owner: NEWCOMER, batch: true }, { url: `${SITE}/#app` });
+    const line = view(page, "app").locator("[data-list=need] > li").filter({ hasText: "#141: payout overdue" });
+    await line.getByRole("button", { name: "Claim now" }).click();
+    await heading(review(page), "What waits", 2).waitFor();
+    await review(page).getByRole("radio", { name: "Into" }).check();
+    await review(page).getByRole("combobox", { name: "The token to receive" }).selectOption("weth");
+    await review(page)
+      .getByText(/^[\d,.]+ WETH, at least [\d,.]+, from USDC$/)
+      .waitFor();
+    await review(page).getByRole("button", { name: "Continue" }).click();
+    // The review began with the claim's one call; it is the three, claim, approval and swap, that go together.
+    await review(page).getByText("All 3 in one prompt, all or nothing").waitFor();
+    assert.match((await says(page))[0]!, /^Claims account #141's rewards through Double Espresso/);
+    const before = await balanceOf(WETH, NEWCOMER);
+    await review(page).getByRole("button", { name: "Sign 3 transactions" }).click();
+    await heading(review(page), "Done", 2).waitFor();
+    assert.equal(sent.length, 3);
+    assert.ok((await balanceOf(WETH, NEWCOMER)) > before);
+    assert.ok((await h.readOn<bigint>(DOUBLE_ESPRESSO.address, "lastClaimBlock", [141n])) > 0n);
     assert.deepEqual(violations, []);
   });
 });
