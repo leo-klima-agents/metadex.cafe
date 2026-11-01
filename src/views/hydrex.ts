@@ -35,7 +35,7 @@ import { perThousand, perThousandOf, valueOf, versus, type Earnings } from "../r
 import { hrefOf } from "../routes.ts";
 import { now, same } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
-import { $, busy, fill, frag, link, list, shown, stateOf, status, type Value } from "../ui.ts";
+import { $, busy, enable, fill, frag, link, list, shown, stateOf, status, type Value } from "../ui.ts";
 import { openClaim } from "./claim.ts";
 import { openReview } from "./review.ts";
 
@@ -204,12 +204,12 @@ function drawGroups(root: HTMLElement, holdings: Holdings, belongs: (group: stri
         box.setAttribute("aria-label", `Pick ${accountName(account)}`);
       },
     );
-    // A button busy with its action stays disabled until it is done.
     for (const button of buttons) {
       button.hidden = !able.some((account) => can(button.dataset.action!, account, button.dataset.arg, holdings));
-      button.disabled =
-        button.getAttribute("aria-busy") === "true" ||
-        !chosen.some((account) => can(button.dataset.action!, account, button.dataset.arg, holdings));
+      enable(
+        button,
+        chosen.some((account) => can(button.dataset.action!, account, button.dataset.arg, holdings)),
+      );
     }
     const box = section.querySelector<HTMLInputElement>("[data-action=pick-all]");
     if (box) {

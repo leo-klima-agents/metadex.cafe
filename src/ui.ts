@@ -200,10 +200,13 @@ export function announce(text: string): void {
   region.textContent = "";
   queueMicrotask(() => (region.textContent = text));
 }
-// A button whose action is under way keeps its size and its name, with a spinner over it.
+// A button whose action is under way keeps its size and its name, with a spinner over it, and stays disabled until it
+// is done: each draw says whether a button can act through enable(), which leaves a busy one disabled.
 export function busy(button: HTMLButtonElement, on = true): void {
   button.disabled = on;
   setAttr(button, "aria-busy", on ? "true" : null);
 }
+export const enable = (button: HTMLButtonElement, can: boolean): void =>
+  void (button.disabled = !can || button.getAttribute("aria-busy") === "true");
 export const toggle = (name: string, on: boolean, value = ""): void =>
   setAttr(document.documentElement, `data-${name}`, on ? value : null);

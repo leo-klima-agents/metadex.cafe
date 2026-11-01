@@ -23,7 +23,7 @@ import {
   type Allowance,
   type Amount,
 } from "../tokens.ts";
-import { $, bill, busy, code, fill, frag, list, shown, stateOf, type Value } from "../ui.ts";
+import { $, bill, busy, code, enable, fill, frag, list, shown, stateOf, type Value } from "../ui.ts";
 import { walletAssets } from "../wallet.ts";
 import { openReview } from "./review.ts";
 
@@ -36,7 +36,6 @@ let margin = 50n;
 let prefilled: Map<string, bigint> | undefined;
 let added = "";
 let ticked = { key: "", at: 0 };
-let reviewing = false;
 let failedReview = "";
 
 const swapperShown = (): Swapper => swapperOf(state.route.view === "swap" ? state.route.output : "usdc")!;
@@ -318,7 +317,7 @@ export function drawSwap(): void {
   };
   const waiting = !picked.length && found.value?.reading;
   const button = $<HTMLButtonElement>("[data-action=review-swap]", view);
-  button.disabled = !picked.length || off !== false || reviewing;
+  enable(button, !!picked.length && off === false);
   fill(view, {
     pick: picked.length || waiting ? null : "Pick tokens to sell",
     summary: !!picked.length || !!waiting,
@@ -377,8 +376,7 @@ actions.add = async (el) => {
 actions["review-swap"] = async (el) => {
   const connection = state.connection;
   const found = scan().value;
-  if (!connection || !found || reviewing) return;
-  reviewing = true;
+  if (!connection || !found) return;
   failedReview = "";
   busy(el as HTMLButtonElement);
   const swapper = swapperShown();
@@ -405,7 +403,6 @@ actions["review-swap"] = async (el) => {
     console.error(error);
     failedReview = "The review could not open. Nothing was sent.";
   } finally {
-    reviewing = false;
     busy(el as HTMLButtonElement, false);
     render();
   }
