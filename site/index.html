@@ -227,11 +227,14 @@
             <p class="u-row" data-list="wallet"></p>
             <p class="u-small u-hideEmpty" role="status" data-text="connecting"></p>
           </div>
-          <ul class="Skeleton" data-when="loading" data-if="wallet" aria-hidden="true">
-            <li class="Skeleton-item"></li>
-            <li class="Skeleton-item"></li>
-            <li class="Skeleton-item"></li>
-          </ul>
+          <div class="u-stack" data-when="loading" data-if="wallet" aria-hidden="true">
+            <p><span data-loading>Loading…</span></p>
+            <ul class="Skeleton">
+              <li class="Skeleton-item"></li>
+              <li class="Skeleton-item"></li>
+              <li class="Skeleton-item"></li>
+            </ul>
+          </div>
           <p class="u-small" data-when="failed">Your Hydrex accounts could not be read.</p>
           <p class="u-small" data-when="empty">
             No Hydrex accounts.
@@ -418,10 +421,13 @@
           <p class="u-small u-hideEmpty" role="status" data-text="connecting"></p>
         </div>
         <div class="u-stack u-gapAbove" data-if="wallet" data-text="accounts" data-state="loading">
-          <ul class="Skeleton" data-when="loading" aria-hidden="true">
-            <li class="Skeleton-item"></li>
-            <li class="Skeleton-item"></li>
-          </ul>
+          <div class="u-stack" data-when="loading" aria-hidden="true">
+            <p><span data-loading>Loading…</span></p>
+            <ul class="Skeleton">
+              <li class="Skeleton-item"></li>
+              <li class="Skeleton-item"></li>
+            </ul>
+          </div>
           <p class="u-small" data-when="failed">Your Hydrex accounts could not be read.</p>
           <p class="u-small" data-when="empty">No Hydrex account can join.</p>
           <div class="u-stackLoose" data-when="ready">
@@ -678,9 +684,13 @@
             </section>
             <section class="u-stack u-gapAbove" aria-labelledby="payout-title" data-text="payouts" data-state="loading">
               <h2 id="payout-title">Last payout</h2>
-              <ul class="Skeleton" data-when="loading" aria-hidden="true">
-                <li class="Skeleton-item"></li>
-              </ul>
+              <div class="u-stack" data-when="loading" aria-hidden="true">
+                <ul class="u-stackTight">
+                  <li><span data-loading>Loading…</span></li>
+                  <li><span data-loading>Loading…</span></li>
+                </ul>
+                <p class="Skeleton-item u-narrow"></p>
+              </div>
               <p class="u-small" data-when="failed">The payouts could not be read.</p>
               <div class="u-stack" data-when="ready" data-list="standing"></div>
             </section>
