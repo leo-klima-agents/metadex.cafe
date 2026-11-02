@@ -2,31 +2,26 @@
 @font-face {
   font-family: "Atkinson Hyperlegible Next";
   font-weight: 400;
-  font-display: swap;
   src: url("fonts/atkinson-hyperlegible-next-400.woff2") format("woff2");
 }
 @font-face {
   font-family: "Atkinson Hyperlegible Next";
   font-weight: 700;
-  font-display: swap;
   src: url("fonts/atkinson-hyperlegible-next-700.woff2") format("woff2");
 }
 @font-face {
   font-family: "Atkinson Hyperlegible Mono";
   font-weight: 400;
-  font-display: swap;
   src: url("fonts/atkinson-hyperlegible-mono-400.woff2") format("woff2");
 }
 @font-face {
   font-family: "Atkinson Hyperlegible Mono";
   font-weight: 600;
-  font-display: swap;
   src: url("fonts/atkinson-hyperlegible-mono-600.woff2") format("woff2");
 }
 @font-face {
   font-family: "Young Serif";
   font-weight: 400;
-  font-display: swap;
   src: url("fonts/young-serif-400.woff2") format("woff2");
 }
 
@@ -150,10 +145,6 @@ a {
   text-underline-offset: 0.15em;
   unicode-bidi: isolate;
 }
-a:not([href]) {
-  color: inherit;
-  text-decoration: none;
-}
 a[target="_blank"]::after {
   content: " ↗" / ", opens in a new tab";
 }
@@ -190,9 +181,6 @@ summary {
 }
 summary:hover {
   color: var(--ink);
-}
-summary::-webkit-details-marker {
-  display: none;
 }
 summary::before {
   content: "";
@@ -320,44 +308,42 @@ dialog[open] {
   gap: var(--gap);
 }
 
-.u-stack {
-  display: grid;
-  align-content: start;
-  gap: var(--gap);
-}
-.u-stackTight {
-  display: grid;
-  align-content: start;
-  gap: var(--gap-s);
-}
+.u-stack,
+.u-stackTight,
 .u-stackLoose {
   display: grid;
   align-content: start;
+}
+.u-stack {
+  gap: var(--gap);
+}
+.u-stackTight {
+  gap: var(--gap-s);
+}
+.u-stackLoose {
   gap: var(--gap-l);
 }
 /* In a stack, a section within a section adds a gap to the stack's own, `--gap-l` in all. */
 .u-gapAbove {
   margin-block-start: var(--gap);
 }
-.u-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--gap-s);
-}
-.u-spread {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--gap-s);
-}
+.u-row,
+.u-spread,
 .u-spreadTop {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
   gap: var(--gap-s);
+}
+.u-row,
+.u-spread {
+  align-items: center;
+}
+.u-spread,
+.u-spreadTop {
+  justify-content: space-between;
+}
+.u-spreadTop {
+  align-items: flex-start;
 }
 .u-grow {
   flex: 1;
@@ -419,7 +405,6 @@ dialog[open] {
   font-weight: 400;
 }
 .u-figures {
-  display: grid;
   text-align: end;
 }
 .u-withBox {
@@ -561,7 +546,6 @@ dialog[open] {
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
-  vertical-align: middle;
 }
 /* Its target is larger than it looks. */
 .Button--info::after {
@@ -616,7 +600,6 @@ dialog[open] {
 
 .Pill {
   justify-self: start;
-  inline-size: fit-content;
   padding: 0.25rem var(--gap);
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -627,7 +610,6 @@ dialog[open] {
   display: inline-flex;
   align-items: center;
   min-block-size: 2.5rem;
-  padding-inline: var(--gap);
   cursor: pointer;
 }
 .Pill--choice:has(.Pill-input:checked) {
@@ -979,7 +961,6 @@ dialog[open] {
    inline-block halves, so each half draws its own. */
 .Hex {
   display: inline-block;
-  overflow-wrap: normal;
   vertical-align: top;
 }
 .Hex--link {
