@@ -229,7 +229,7 @@ function output(
 }
 // An amount, with what it is worth under it.
 function worthUnder(text: string, worth: string): Node {
-  const under = Object.assign(document.createElement("small"), { className: "worth", textContent: worth });
+  const under = Object.assign(document.createElement("small"), { className: "u-worth", textContent: worth });
   return worth ? frag(text, under) : frag(text);
 }
 // Gas is paid apart, in ETH: its amount, with what it is worth under it.
@@ -470,7 +470,7 @@ export async function reviewSwap(
   if (!simulated)
     body.append(
       Object.assign(document.createElement("p"), {
-        className: "notice",
+        className: "Notice",
         textContent: "Not simulated: these are quotes.",
       }),
     );
@@ -552,10 +552,10 @@ export function swapReceipt(
   if (skipped.length)
     node.append(
       ...skipped.map(({ token, reason }) => {
-        const p = Object.assign(document.createElement("p"), { className: "spread" });
+        const p = Object.assign(document.createElement("p"), { className: "u-spread" });
         const reset = Object.assign(document.createElement("button"), {
           type: "button",
-          className: "secondary compact",
+          className: "Button--secondary Button--compact",
           textContent: "Reset its approval",
         });
         reset.addEventListener("click", () => openReset([{ token, spender: swapper.address, amount: 1n }]));

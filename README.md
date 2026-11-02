@@ -54,6 +54,10 @@ The build bundles `src/main.ts`, and `site/style.css` with the fonts of `site/fo
 `site/index.html`'s version and integrity hashes, and copies the other files of `site/` unchanged.
 `python3 scripts/fonts.py` makes the fonts.
 
+Classes follow [SUIT CSS](https://github.com/suitcss/suit/blob/master/doc/naming-conventions.md): `Component`,
+`Component-part`, `Component--variant` and `u-utility`, each element styled by its own classes. State is native or ARIA
+where the platform has it, and otherwise a `data-*` attribute the scripts set; the head of `site/style.css` says which.
+
 ## When a contract changes
 
 Each check has an id in `src/checks.ts`, and `src/views/hydrex.ts` says in words why a failed one turns joining off:

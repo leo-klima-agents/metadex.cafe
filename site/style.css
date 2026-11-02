@@ -30,6 +30,13 @@
   src: url("fonts/young-serif-400.woff2") format("woff2");
 }
 
+/* Conventions. Names follow SUIT CSS: a component is `Name`, its parts `Name-part`, its variants `Name--variant`, and a
+   utility `u-name`; each element is styled by its own classes, so a rule never depends on where its element sits.
+   State is not a class: it is native or ARIA (`:checked`, `:disabled`, `[hidden]`, `[aria-busy]`, `[aria-current]`)
+   where the platform has it, and otherwise a `data-*` attribute the scripts set (`data-state` and `data-when`,
+   `data-if`, `data-shape`, `data-loading`). The scripts' own hooks, `data-text`, `data-list` and `data-action`, carry no
+   style. */
+
 :root {
   --sans: "Atkinson Hyperlegible Next", system-ui, sans-serif;
   --serif: "Young Serif", Georgia, serif;
@@ -58,6 +65,8 @@
   line-height: 1.5;
 }
 
+/* State. The page's flags on the root, `data-if` and `data-only` on what depends on them; a read's state on its
+   section, `data-when` on the parts that show in it. */
 :root:not([data-wallet]) [data-if~="wallet"],
 :root[data-wallet] [data-if~="no-wallet"],
 :root:not([data-wrong-chain]) [data-if~="wrong-chain"],
@@ -72,7 +81,11 @@
 [hidden] {
   display: none !important;
 }
+[data-section] {
+  scroll-margin-block-start: 5rem;
+}
 
+/* Elements. */
 *,
 ::before,
 ::after {
@@ -91,6 +104,10 @@ body {
   background: var(--paper);
   color: var(--ink);
 }
+main {
+  flex: 1 0 auto;
+  padding-block: var(--gap-l);
+}
 h1,
 h2,
 h3,
@@ -108,8 +125,7 @@ ol {
   padding: 0;
   list-style: none;
 }
-:is(ul, ol):empty,
-[data-text="connecting"]:empty {
+:is(ul, ol):empty {
   display: none;
 }
 small {
@@ -117,7 +133,7 @@ small {
 }
 h1,
 h2,
-.masthead {
+.Slip-name {
   font-family: var(--serif);
   font-weight: 400;
   line-height: 1.2;
@@ -154,9 +170,10 @@ a[target="_blank"]::after {
 }
 code,
 table,
-.slip,
-.hex,
-.tail {
+.Slip,
+.Slip-ruled,
+.Hex,
+.u-figures {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
@@ -214,158 +231,26 @@ details[open] > summary::before {
   margin: 0;
   accent-color: var(--accent);
 }
-
-.stack {
-  display: grid;
-  align-content: start;
-  gap: var(--gap);
-}
-.tight {
-  gap: var(--gap-s);
-}
-.loose {
-  gap: var(--gap-l);
-}
-/* In a `.stack`, `.part` adds a gap to the stack's own, `--gap-l` in all, for a section within a section; `.below`
-   spaces a list from the summary above it. */
-.part {
-  margin-block-start: var(--gap);
-}
-.below {
-  margin-block-start: var(--gap);
-}
-.row,
-.spread {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--gap-s);
-}
-.spread {
-  justify-content: space-between;
-}
-.small {
+/* Table cells don't wrap, so on a narrow screen a table scrolls sideways instead. */
+table {
+  inline-size: 100%;
+  border-collapse: collapse;
   font-size: var(--small);
 }
-.quiet,
-.description {
-  color: var(--quiet);
-}
-.aside {
-  color: var(--quiet);
-  font-family: var(--sans);
-  font-weight: 400;
-}
-.label,
-.term {
-  font-family: var(--mono);
-  font-size: var(--label);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.label {
-  color: var(--quiet);
-}
-.term {
-  overflow-wrap: normal;
-}
-.visually-hidden {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
+th,
+td {
+  padding: 0.375rem 0.5rem;
+  border-block-end: 1px solid var(--line);
+  text-align: end;
   white-space: nowrap;
 }
-.skip {
-  position: absolute;
-  inset-block-start: -10rem;
+th:first-child,
+td:first-child {
+  text-align: start;
 }
-.skip:focus {
-  inset-block-start: var(--gap-s);
-  padding: var(--gap-s);
-  background: var(--paper);
-}
-
-.site-header {
-  padding-block: var(--gap);
-  border-block-end: 1px solid var(--line);
-}
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--gap-s);
-  color: inherit;
-  font-family: var(--serif);
-  font-size: 1.25rem;
-  text-decoration: none;
-}
-.logo {
-  flex: none;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
-  border-radius: 22%;
-  box-shadow: 0 0 0 1px var(--line);
-}
-.chip::before {
-  content: "";
-  inline-size: 0.5rem;
-  block-size: 0.5rem;
-  border-radius: 50%;
-  background: currentColor;
-}
-main {
-  flex: 1 0 auto;
-  padding-block: var(--gap-l);
-}
-.site-footer {
-  padding-block: var(--gap);
-  border-block-start: 1px solid var(--line);
-  color: var(--quiet);
-  font-size: var(--small);
-}
-/* Selects inside a line of small text, as the footer's currency and the swap's slippage, are as small as it. */
-.site-footer select,
-.term select {
-  min-block-size: 1.75rem;
-  padding-block: 0;
-  padding-inline: 0.25rem;
-  font-size: var(--small);
-}
-.home {
-  gap: var(--gap-l);
-  padding-block: 3rem;
-}
-.hero {
-  max-inline-size: 14ch;
-  font-size: 3rem;
-  line-height: 1.05;
-}
-.back {
-  color: var(--quiet);
-  font-size: var(--small);
-  text-decoration: none;
-}
-.back::before {
-  content: "‹ ";
-}
-.lead {
-  font-size: 1.125rem;
-}
-/* A count beside a heading is quiet and in the sans, whatever the heading: "Needs you · 2". */
-.count {
-  color: var(--quiet);
-  font-family: var(--sans);
-  font-size: 1rem;
-  font-weight: 400;
-}
-.count:not(:empty)::before {
-  content: "· ";
-}
-
+/* A `<button>` is a Button by its element; a link drawn as one takes `Button`. */
 button,
-.button {
+.Button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -383,7 +268,7 @@ button,
   cursor: pointer;
 }
 button:hover,
-.button:hover {
+.Button:hover {
   filter: brightness(1.15);
 }
 button:disabled {
@@ -391,19 +276,7 @@ button:disabled {
   cursor: not-allowed;
   filter: none;
 }
-.secondary {
-  background: transparent;
-  color: var(--accent);
-}
-.secondary:hover {
-  background: var(--tint);
-  filter: none;
-}
-.compact {
-  min-block-size: 2.25rem;
-  padding: 0.25rem 0.875rem;
-  font-size: var(--small);
-}
+/* A button whose action is under way keeps its size and its name, with a spinner over its words. */
 [aria-busy="true"] {
   position: relative;
   color: transparent !important;
@@ -419,395 +292,10 @@ button:disabled {
   border-inline-end-color: transparent;
   border-radius: 50%;
 }
-button:not(.secondary)[aria-busy="true"]::after {
+button:not(.Button--secondary)[aria-busy="true"]::after {
   border-color: var(--on-accent);
   border-inline-end-color: transparent;
 }
-@keyframes spin {
-  to {
-    transform: rotate(1turn);
-  }
-}
-.icon {
-  inline-size: 1.25rem;
-  block-size: 1.25rem;
-}
-.close {
-  inline-size: 2.5rem;
-  padding: 0;
-  border-color: transparent;
-  background: transparent;
-  color: var(--quiet);
-  font-size: 1.5rem;
-  font-weight: 400;
-}
-.info {
-  position: relative;
-  inline-size: 1.5rem;
-  min-block-size: 1.5rem;
-  padding: 0;
-  border-color: var(--line);
-  background: var(--card);
-  color: var(--quiet);
-  font-family: var(--serif);
-  font-size: var(--label);
-  font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
-  vertical-align: middle;
-}
-.info::after {
-  content: "";
-  position: absolute;
-  inset: -0.5rem;
-}
-
-/* Each status has a shape before its words, so it never relies on colour alone. */
-.shape {
-  display: inline-block;
-  inline-size: 0.75em;
-  block-size: 0.75em;
-  margin-inline-end: 0.375em;
-  border-radius: 50%;
-  vertical-align: -0.05em;
-}
-.shape[data-shape="running"] {
-  background: var(--accent);
-}
-.shape[data-shape="elsewhere"] {
-  background: var(--quiet);
-}
-.shape[data-shape="joining"] {
-  border: 2px solid var(--info);
-  background: linear-gradient(90deg, var(--info) 50%, transparent 50%);
-}
-.shape[data-shape="leaving"] {
-  border: 2px solid var(--quiet);
-  background: linear-gradient(90deg, transparent 50%, var(--quiet) 50%);
-}
-.shape[data-shape="idle"],
-.shape[data-shape="checking"] {
-  border: 2px solid var(--quiet);
-}
-.shape[data-shape="checking"] {
-  border-color: var(--line);
-}
-.shape[data-shape="stopped"] {
-  border-radius: 0;
-  background: var(--warn);
-  clip-path: polygon(50% 0, 100% 100%, 0 100%);
-}
-.shape[data-shape="failed"] {
-  border-radius: 0;
-  background: var(--danger);
-}
-.pill {
-  justify-self: start;
-  inline-size: fit-content;
-  padding: 0.25rem var(--gap);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--card);
-}
-
-/* A loading figure shows as a quiet bar, and a loading list as cards of bars. The text is only made transparent, so
-   screen readers still hear "Loading…". */
-[data-loading],
-.ghost::before {
-  color: transparent;
-  border-radius: 0.25em;
-  background: var(--line);
-}
-[data-loading] {
-  display: inline-block;
-  min-inline-size: 4em;
-  line-height: 1.1;
-  user-select: none;
-}
-.ghost::before {
-  content: "";
-  display: block;
-  inline-size: 60%;
-  block-size: 1em;
-}
-@media (prefers-reduced-motion: no-preference) {
-  [data-loading],
-  .ghost::before {
-    animation: pulse 1.6s ease-in-out infinite;
-  }
-  [aria-busy="true"]::after {
-    animation: spin 0.8s linear infinite;
-  }
-  dialog:popover-open {
-    animation: rise 0.15s ease-out;
-  }
-  summary::before {
-    transition: transform 0.15s;
-  }
-}
-@keyframes pulse {
-  50% {
-    opacity: 0.45;
-  }
-}
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(0.5rem);
-  }
-}
-@media (forced-colors: active) {
-  /* Shapes keep their fills in forced colours, drawn in the text colour, so each status stays distinct. */
-  .shape {
-    forced-color-adjust: none;
-    --accent: CanvasText;
-    --quiet: CanvasText;
-    --info: CanvasText;
-    --warn: CanvasText;
-    --danger: CanvasText;
-  }
-}
-
-.card,
-.ghost,
-.table,
-.tile {
-  padding: 0.75rem var(--gap);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--card);
-}
-.skeleton {
-  display: grid;
-  gap: var(--gap-s);
-}
-.notice,
-.callout {
-  padding: 0.75rem var(--gap);
-  border-radius: var(--radius);
-  background: var(--notice);
-}
-.callout {
-  background: var(--tint);
-}
-.title {
-  font-family: var(--sans);
-  font-size: 1rem;
-  font-weight: 700;
-}
-.soon {
-  border-style: dashed;
-  color: var(--quiet);
-}
-.table {
-  padding: 0;
-  overflow: hidden;
-}
-.entry {
-  padding: 0.75rem var(--gap);
-}
-.entry:not(:first-child) {
-  border-block-start: 1px solid var(--line);
-}
-/* A card that leads somewhere is a link as large as the card, its title in ink, with a chevron at its end: the
-   `.cover` link's `::after` stretches over its `.link` card. What else the card holds, such as a box to tick or a link
-   in its status, stays above the cover. */
-.link {
-  position: relative;
-  padding-inline-end: 3rem;
-}
-.link::before {
-  content: "";
-  position: absolute;
-  inset-block-start: 50%;
-  inset-inline-end: 1.25rem;
-  inline-size: 0.5rem;
-  block-size: 0.5rem;
-  border-block-start: 2px solid var(--quiet);
-  border-inline-end: 2px solid var(--quiet);
-  transform: translateY(-50%) rotate(45deg);
-}
-.cover {
-  color: inherit;
-  text-decoration: none;
-}
-.cover::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-}
-.link :is(a:not(.cover), button, label) {
-  position: relative;
-  z-index: 1;
-}
-.link:hover {
-  border-color: var(--quiet);
-}
-.link:hover::before {
-  border-color: var(--ink);
-}
-.table > .link:hover {
-  background: var(--tint);
-}
-
-/* Facts: a label above each figure, in columns. Tiles give a page's key figures a box each, their labels as tall as an
-   info button so that the figures line up. */
-.facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--gap-s) var(--gap-l);
-}
-.facts > div {
-  display: grid;
-  align-content: start;
-  gap: 0.125rem;
-}
-.table .facts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-block-start: var(--gap-s);
-}
-.tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
-  gap: var(--gap-s);
-}
-.tiles.two {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.tile > dt {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-s);
-  min-block-size: 1.5rem;
-}
-.fact {
-  font-weight: 700;
-}
-.tile .fact {
-  font-size: 1.125rem;
-}
-/* "/ 1k votes, last epoch": the unit stays whole, beside the figure or under it. */
-.aside {
-  white-space: nowrap;
-}
-/* Klima's guidelines keep a third of the mark's size clear around it. */
-.through {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-s);
-  margin-block-start: var(--gap-s);
-}
-.end .through {
-  justify-content: flex-end;
-}
-.klima {
-  flex: none;
-  inline-size: 1.5rem;
-  block-size: 1.5rem;
-}
-.pair {
-  display: grid;
-  grid-template-columns: 9rem minmax(0, 1fr);
-  gap: var(--gap);
-  padding-block: 0.375rem;
-  border-block-end: 1px solid var(--line);
-}
-
-/* A card with a box to tick: ticked, it takes the accent's edge and the tint. The box's target reaches the card's
-   edge; a token's whole card ticks it. */
-.ticks {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-}
-.ticks:has(.tick:checked:not([hidden])) {
-  border-color: var(--accent);
-  background: var(--tint);
-}
-label.ticks {
-  cursor: pointer;
-}
-label.ticks:has(.tick:disabled) {
-  cursor: default;
-}
-.tick {
-  flex: none;
-}
-/* The box's target takes the card's padding, 0.75rem by 1rem, back to its edge. */
-.pick {
-  display: flex;
-  align-self: stretch;
-  margin-block: -0.75rem;
-  margin-inline-start: -1rem;
-  padding-block: 0.75rem;
-  padding-inline-start: 1rem;
-  cursor: pointer;
-}
-.pick:has(> [hidden]) {
-  display: none;
-}
-.grow {
-  flex: 1;
-  min-inline-size: 0;
-}
-.ticks .spread {
-  align-items: flex-start;
-}
-.tail {
-  display: grid;
-  text-align: end;
-}
-.wide {
-  flex-basis: 100%;
-}
-.strong {
-  font-weight: 600;
-}
-/* A label holding a box, as "All": the box and its word on one line. */
-.with-box {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  cursor: pointer;
-}
-.spread > .row:last-child {
-  margin-inline-start: auto;
-}
-/* A choice among pills, as the swap's output: the radio is hidden, and the chosen pill filled. */
-.choice {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  min-block-size: 2.5rem;
-  padding-inline: var(--gap);
-  cursor: pointer;
-}
-.choice input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-.choice:has(:checked) {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--on-accent);
-}
-.choice:has(:focus-visible) {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
-}
-.choice:has(:disabled) {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-/* A need's words wrap under their words, not under their shape. */
-.hang {
-  flex: 1 1 16rem;
-  padding-inline-start: 1.125em;
-  text-indent: -1.125em;
-}
-
 /* A dialog is 36rem wide. The review, a modal dialog, keeps the browser's limit, a little less than the screen. A popup
    has none: its insets keep it 1rem from the screen's sides, and it is at most 44rem tall, or 90% of a short screen. */
 dialog {
@@ -825,16 +313,11 @@ dialog[popover] {
   inline-size: auto;
   max-inline-size: 36rem;
   max-block-size: 44rem;
-  padding-inline: 0;
 }
 @media (max-height: 47rem) {
   dialog[popover] {
     max-block-size: 90svh;
   }
-}
-/* A popup's bar reaches its edges, and the rest keeps the inset. */
-dialog[popover] > :not(.bar) {
-  margin-inline: var(--inset);
 }
 dialog::backdrop {
   background: rgb(0 0 0 / 0.4);
@@ -845,23 +328,574 @@ dialog[open] {
   align-content: start;
   gap: var(--gap);
 }
-.bar {
+
+/* Utilities. */
+.u-stack {
+  display: grid;
+  align-content: start;
+  gap: var(--gap);
+}
+.u-stackTight {
+  display: grid;
+  align-content: start;
+  gap: var(--gap-s);
+}
+.u-stackLoose {
+  display: grid;
+  align-content: start;
+  gap: var(--gap-l);
+}
+/* In a stack, a section within a section adds a gap to the stack's own, `--gap-l` in all. */
+.u-gapAbove {
+  margin-block-start: var(--gap);
+}
+.u-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-s);
+}
+.u-spread {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-s);
+}
+.u-spreadTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap-s);
+}
+.u-grow {
+  flex: 1;
+  min-inline-size: 0;
+}
+.u-wide {
+  flex-basis: 100%;
+}
+.u-end {
+  margin-inline-start: auto;
+  text-align: end;
+}
+.u-narrow {
+  max-inline-size: 32rem;
+}
+.u-scroll {
+  overflow-x: auto;
+}
+.u-small {
+  font-size: var(--small);
+}
+.u-lead {
+  font-size: 1.125rem;
+}
+.u-strong {
+  font-weight: 600;
+}
+.u-quiet {
+  color: var(--quiet);
+}
+.u-label,
+.Slip-term {
+  font-family: var(--mono);
+  font-size: var(--label);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.u-label {
+  color: var(--quiet);
+}
+/* What a value is, or the detail under it, on a line of its own. */
+.u-detail {
+  display: block;
+  color: var(--quiet);
+  font-family: var(--sans);
+  font-size: var(--label);
+}
+/* "/ 1k votes, last epoch": the unit stays whole, beside the figure or under it. */
+.u-aside {
+  color: var(--quiet);
+  font-family: var(--sans);
+  font-weight: 400;
+  white-space: nowrap;
+}
+/* What an amount is worth, quieter, under it. */
+.u-worth {
+  display: block;
+  color: var(--quiet);
+  font-size: var(--label);
+  font-weight: 400;
+}
+/* Figures at the end of a line, one under the other. */
+.u-figures {
+  display: grid;
+  text-align: end;
+}
+/* A label holding a box, as "All": the box and its word on one line. */
+.u-withBox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  cursor: pointer;
+}
+/* Words after a shape wrap under the words, not under the shape. */
+.u-hang {
+  flex: 1 1 16rem;
+  padding-inline-start: 1.125em;
+  text-indent: -1.125em;
+}
+/* A select inside a line of small text, as the footer's currency and the swap's slippage, is as small as it. */
+.u-smallSelect {
+  min-block-size: 1.75rem;
+  padding-block: 0;
+  padding-inline: 0.25rem;
+  font-size: var(--small);
+}
+.u-hideEmpty:empty {
+  display: none;
+}
+.u-visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Components. */
+.SkipLink {
+  position: absolute;
+  inset-block-start: -10rem;
+}
+.SkipLink:focus {
+  inset-block-start: var(--gap-s);
+  padding: var(--gap-s);
+  background: var(--paper);
+}
+
+.Header {
+  padding-block: var(--gap);
+  border-block-end: 1px solid var(--line);
+}
+.Header-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-s);
+  color: inherit;
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  text-decoration: none;
+}
+.Header-logo {
+  flex: none;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: 22%;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.Header-chip::before {
+  content: "";
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.Footer {
+  padding-block: var(--gap);
+  border-block-start: 1px solid var(--line);
+  color: var(--quiet);
+  font-size: var(--small);
+}
+
+.Home {
+  padding-block: 3rem;
+}
+.Home-title {
+  max-inline-size: 14ch;
+  font-size: 3rem;
+  line-height: 1.05;
+}
+
+.Back {
+  color: var(--quiet);
+  font-size: var(--small);
+  text-decoration: none;
+}
+.Back::before {
+  content: "‹ ";
+}
+
+/* A count beside a heading is quiet and in the sans, whatever the heading: "Needs you · 2". */
+.Count {
+  color: var(--quiet);
+  font-family: var(--sans);
+  font-size: 1rem;
+  font-weight: 400;
+}
+.Count:not(:empty)::before {
+  content: "· ";
+}
+
+.Button--secondary {
+  background: transparent;
+  color: var(--accent);
+}
+.Button--secondary:hover {
+  background: var(--tint);
+  filter: none;
+}
+.Button--compact {
+  min-block-size: 2.25rem;
+  padding: 0.25rem 0.875rem;
+  font-size: var(--small);
+}
+.Button--close {
+  inline-size: 2.5rem;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--quiet);
+  font-size: 1.5rem;
+  font-weight: 400;
+}
+.Button--info {
+  position: relative;
+  inline-size: 1.5rem;
+  min-block-size: 1.5rem;
+  padding: 0;
+  border-color: var(--line);
+  background: var(--card);
+  color: var(--quiet);
+  font-family: var(--serif);
+  font-size: var(--label);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  vertical-align: middle;
+}
+/* Its target is larger than it looks. */
+.Button--info::after {
+  content: "";
+  position: absolute;
+  inset: -0.5rem;
+}
+.Button-icon {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+}
+
+/* Each status has a shape before its words, so it never relies on colour alone. */
+.Shape {
+  display: inline-block;
+  inline-size: 0.75em;
+  block-size: 0.75em;
+  margin-inline-end: 0.375em;
+  border-radius: 50%;
+  vertical-align: -0.05em;
+}
+.Shape[data-shape="running"] {
+  background: var(--accent);
+}
+.Shape[data-shape="elsewhere"] {
+  background: var(--quiet);
+}
+.Shape[data-shape="joining"] {
+  border: 2px solid var(--info);
+  background: linear-gradient(90deg, var(--info) 50%, transparent 50%);
+}
+.Shape[data-shape="leaving"] {
+  border: 2px solid var(--quiet);
+  background: linear-gradient(90deg, transparent 50%, var(--quiet) 50%);
+}
+.Shape[data-shape="idle"],
+.Shape[data-shape="checking"] {
+  border: 2px solid var(--quiet);
+}
+.Shape[data-shape="checking"] {
+  border-color: var(--line);
+}
+.Shape[data-shape="stopped"] {
+  border-radius: 0;
+  background: var(--warn);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+.Shape[data-shape="failed"] {
+  border-radius: 0;
+  background: var(--danger);
+}
+
+.Pill {
+  justify-self: start;
+  inline-size: fit-content;
+  padding: 0.25rem var(--gap);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+}
+/* A choice among pills, as the swap's output: the radio is hidden, and the chosen pill filled. */
+.Pill--choice {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.5rem;
+  padding-inline: var(--gap);
+  cursor: pointer;
+}
+.Pill--choice:has(.Pill-input:checked) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.Pill--choice:has(.Pill-input:focus-visible) {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.Pill--choice:has(.Pill-input:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.Pill-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* A loading figure shows as a quiet bar, and a loading list as cards of bars. The text is only made transparent, so
+   screen readers still hear "Loading…". */
+[data-loading],
+.Skeleton-item::before {
+  color: transparent;
+  border-radius: 0.25em;
+  background: var(--line);
+}
+[data-loading] {
+  display: inline-block;
+  min-inline-size: 4em;
+  line-height: 1.1;
+  user-select: none;
+}
+
+/* Boxes: a card, a skeleton's card, the menu and a tile have the same edge and background. */
+.Card,
+.Skeleton-item,
+.Facts-tile {
+  padding: 0.75rem var(--gap);
+}
+.Card,
+.Skeleton-item,
+.Menu,
+.Facts-tile {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.Skeleton {
+  display: grid;
+  gap: var(--gap-s);
+}
+.Skeleton--tiles {
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+}
+.Skeleton-item::before {
+  content: "";
+  display: block;
+  inline-size: 60%;
+  block-size: 1em;
+}
+
+.Card--link {
+  padding-inline-end: 3rem;
+}
+.Card--soon {
+  border-style: dashed;
+  color: var(--quiet);
+}
+.Card-title {
+  font-family: var(--sans);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* What leads somewhere is a link as large as its box, with a chevron at its end: the cover's `::after` stretches over
+   it. The box's other links and controls, such as a box to tick or a link in a status, stay above the cover. */
+.Linked {
+  position: relative;
+}
+.Linked::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 1.25rem;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-block-start: 2px solid var(--quiet);
+  border-inline-end: 2px solid var(--quiet);
+  transform: translateY(-50%) rotate(45deg);
+}
+.Linked:hover {
+  border-color: var(--quiet);
+}
+.Linked:hover::before {
+  border-color: var(--ink);
+}
+.Linked-cover {
+  color: inherit;
+  text-decoration: none;
+}
+.Linked-cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.Linked :is(a:not(.Linked-cover), button, label) {
+  position: relative;
+  z-index: 1;
+}
+
+/* The automations: one box, a row each. */
+.Menu {
+  overflow: hidden;
+}
+.Menu-item {
+  padding: 0.75rem 3rem 0.75rem var(--gap);
+}
+.Menu-item:not(:first-child) {
+  border-block-start: 1px solid var(--line);
+}
+.Menu-item:hover {
+  background: var(--tint);
+}
+
+.Notice {
+  padding: 0.75rem var(--gap);
+  border-radius: var(--radius);
+  background: var(--notice);
+}
+.Notice--callout {
+  background: var(--tint);
+}
+
+/* Facts: a label above each figure. In columns, as an automation's; or as tiles, a page's key figures, a box each,
+   their labels as tall as an info button so that the figures line up, their figures larger. */
+.Facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-s) var(--gap-l);
+}
+.Facts--columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-block-start: var(--gap-s);
+}
+.Facts--tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: var(--gap-s);
+}
+.Facts--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.Facts-item,
+.Facts-tile {
+  display: grid;
+  align-content: start;
+  gap: 0.125rem;
+}
+.Facts-tile {
+  font-size: 1.125rem;
+}
+.Facts-tileLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-s);
+  min-block-size: 1.5rem;
+}
+.Facts-figure {
+  font-weight: 700;
+}
+
+/* Klima's guidelines keep a third of the mark's size clear around it. */
+.Klima-line {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-s);
+  margin-block-start: var(--gap-s);
+}
+.Klima-line--end {
+  justify-content: flex-end;
+}
+.Klima {
+  flex: none;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+}
+
+.Pair {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: var(--gap);
+  padding-block: 0.375rem;
+  border-block-end: 1px solid var(--line);
+}
+
+/* A card with a box to tick: ticked, it takes the accent's edge and the tint. The box's target reaches the card's
+   edge; a whole card ticks a token. */
+.Ticks {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.Ticks:has(.Ticks-box:checked:not([hidden])) {
+  border-color: var(--accent);
+  background: var(--tint);
+}
+.Ticks--whole {
+  cursor: pointer;
+}
+.Ticks--whole:has(.Ticks-box:disabled) {
+  cursor: default;
+}
+.Ticks-box {
+  flex: none;
+}
+/* The box's target takes the card's padding, 0.75rem by 1rem, back to its edge. */
+.Ticks-target {
+  display: flex;
+  align-self: stretch;
+  margin-block: -0.75rem;
+  margin-inline-start: -1rem;
+  padding-block: 0.75rem;
+  padding-inline-start: 1rem;
+  cursor: pointer;
+}
+.Ticks-target:has(.Ticks-box[hidden]) {
+  display: none;
+}
+
+/* A popup's bar is sticky at its top, and reaches its edges through the popup's inset, 1.25rem. */
+.Dialog-bar {
   position: sticky;
   inset-block-start: 0;
   z-index: 1;
+  margin-inline: -1.25rem;
   padding: 0.5rem 0.5rem 0.5rem var(--inset);
   border-block-end: 1px solid var(--line);
   background: var(--paper);
 }
-[data-section] {
-  scroll-margin-block-start: 5rem;
-}
+
 /* The review has no bottom padding: under the sticky foot it would show content scrolling beneath, so the foot pads
    itself. */
-.review {
+.Review {
   padding-block: var(--inset) 0;
 }
-.foot {
+.Review-foot {
   position: sticky;
   inset-block-end: 0;
   padding-block: 0.75rem var(--inset);
@@ -869,67 +903,72 @@ dialog[open] {
   background: var(--paper);
 }
 
-.narrow {
-  max-inline-size: 32rem;
-}
-.slip {
+/* Slips: calls, bills and receipts, with the structure of a till receipt, in the mono face. */
+.Slip {
   padding: var(--inset);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--card);
   font-size: var(--small);
 }
-.masthead {
-  font-size: 1.375rem;
-  text-align: center;
-}
-.sub {
-  margin-block-start: 0.25rem;
-  text-align: center;
-}
-.says {
-  font-family: var(--sans);
-  font-size: 1.0625rem;
-  font-weight: 700;
-}
-.slip[aria-current] {
+.Slip[aria-current] {
   border-color: var(--accent);
   outline: 1px solid var(--accent);
   outline-offset: -2px;
 }
-.ruled {
+.Slip-name {
+  font-size: 1.375rem;
+  text-align: center;
+}
+.Slip-sub {
+  margin-block-start: 0.25rem;
+  text-align: center;
+}
+.Slip-says {
+  font-family: var(--sans);
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+.Slip-ruled {
   display: grid;
   gap: 0.375rem;
   padding-block-start: 0.625rem;
   border-block-start: 2px dashed var(--ink);
 }
-.field {
+.Slip-term {
+  overflow-wrap: normal;
+}
+.Slip-field {
   display: grid;
   grid-template-columns: 6rem minmax(0, 1fr);
   column-gap: 0.625rem;
   align-items: baseline;
 }
-.line {
+.Slip-line {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   column-gap: 0.625rem;
   align-items: baseline;
 }
-.end {
-  margin-inline-start: auto;
-  text-align: end;
+/* The sum the swap's slippage sets: between rules, as large as its words. */
+.Slip-line--sum {
+  margin-block: 0.125rem;
+  padding-block: 0.375rem;
+  border-block: 1px solid var(--line);
+  font-weight: 700;
 }
-.ruled .end {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
+/* A line on a bill: the token and its amount, then what it fetches; under them, its route, then what that is worth. */
+.Slip-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--gap);
+  align-items: baseline;
 }
-.description {
-  display: block;
-  font-family: var(--sans);
-  font-size: var(--label);
+.Slip-itemNote {
+  grid-column: 1 / -1;
 }
-.calldata {
+.Slip-calldata {
   display: block;
   max-inline-size: 36ch;
   margin-block-start: 0.375rem;
@@ -937,123 +976,120 @@ dialog[open] {
   border-radius: 8px;
   background: var(--tint);
 }
-.total {
+.Slip-total {
   padding-block-start: 0.625rem;
   border-block-start: 4px double var(--ink);
   font-size: 1.125rem;
   font-weight: 600;
 }
-.total-term {
+.Slip-totalTerm {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.total-note {
+.Slip-totalNote {
   color: var(--quiet);
   font-size: var(--small);
   font-weight: 400;
   text-align: end;
 }
-/* What an amount is worth, quieter, under it. */
-.worth {
-  display: block;
-  color: var(--quiet);
-  font-size: var(--label);
-  font-weight: 400;
-}
-/* A line on a bill: the token and its amount, then what it fetches; under them, its route, then what that is worth. */
-.bill-line {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: var(--gap);
-  align-items: baseline;
-}
-.bill-line > .note {
-  grid-column: 1 / -1;
-}
-/* The sum the swap's slippage sets: between rules, as large as its words. */
-.ruled > .sum {
-  margin-block: 0.125rem;
-  padding-block: 0.375rem;
-  border-block: 1px solid var(--line);
-  font-weight: 700;
-}
 /* The time and the transaction close a receipt, under a dashed rule. */
-.slip > footer {
+.Slip-foot {
   padding-block-start: 0.625rem;
   border-block-start: 2px dashed var(--ink);
 }
 
-/* Groups of four hex digits are spaced by margins, not spaces, so a copy is plain hex. An address breaks once, in the
-   middle; one shown as the wallet shows it takes three lines of four groups. */
-.hex {
+/* Hex in groups of four, spaced by margins, not spaces, so a copy is plain hex. An address breaks once, in the middle,
+   each half underlined when it is a link; shown as the wallet shows it, it takes three lines of four groups, which
+   stand apart in columns. */
+.Hex {
   display: inline-block;
   overflow-wrap: normal;
   vertical-align: top;
 }
-.quad,
-.half {
+.Hex--link {
+  text-decoration: none;
+}
+.Hex-quad,
+.Hex-half {
   margin-inline-end: 0.4ch;
   white-space: nowrap;
 }
-.quad:last-child,
-.half:last-child {
+.Hex-quad:last-child,
+.Hex-half:last-child {
   margin-inline-end: 0;
 }
-.half {
-  display: inline-block;
-}
-/* A link's underline doesn't reach into inline blocks: each half draws its own. */
-a.hex {
-  text-decoration: none;
-}
-a.hex > .half {
-  border-block-end: 1px solid currentColor;
-}
-/* As the wallet shows it, the groups stand apart in columns. */
-.hex.wallet .quad:not(:last-child) {
+.Hex-quad--wallet:not(:last-child) {
   margin-inline-end: 1ch;
 }
-.hex-line {
+.Hex-half {
+  display: inline-block;
+}
+.Hex-half--link {
+  border-block-end: 1px solid currentColor;
+}
+.Hex-line {
   display: block;
   white-space: nowrap;
 }
-.indent {
+.Hex-line--indent {
   padding-inline-start: 2ch;
 }
 
-/* Table cells don't wrap, so on a narrow screen a table scrolls sideways instead. */
-.scroll {
-  overflow-x: auto;
+@media (prefers-reduced-motion: no-preference) {
+  [data-loading],
+  .Skeleton-item::before {
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  [aria-busy="true"]::after {
+    animation: spin 0.8s linear infinite;
+  }
+  dialog:popover-open {
+    animation: rise 0.15s ease-out;
+  }
+  summary::before {
+    transition: transform 0.15s;
+  }
 }
-table {
-  inline-size: 100%;
-  border-collapse: collapse;
-  font-size: var(--small);
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
 }
-th,
-td {
-  padding: 0.375rem 0.5rem;
-  border-block-end: 1px solid var(--line);
-  text-align: end;
-  white-space: nowrap;
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
 }
-th:first-child,
-td:first-child {
-  text-align: start;
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+}
+@media (forced-colors: active) {
+  /* Shapes keep their fills in forced colours, drawn in the text colour, so each status stays distinct. */
+  .Shape {
+    forced-color-adjust: none;
+    --accent: CanvasText;
+    --quiet: CanvasText;
+    --info: CanvasText;
+    --warn: CanvasText;
+    --danger: CanvasText;
+  }
 }
 
 @media (max-width: 30rem) {
   h1 {
     font-size: 1.75rem;
   }
-  .hero {
+  .Home-title {
     font-size: 2.5rem;
   }
   /* The header stays on one line: the logo, the name and the button. */
-  .brand {
+  .Header-brand {
     font-size: 1.125rem;
   }
-  .logo {
+  .Header-logo {
     inline-size: 1.5rem;
     block-size: 1.5rem;
   }
@@ -1064,46 +1100,44 @@ td:first-child {
     border-end-start-radius: 0;
     border-end-end-radius: 0;
   }
-  .pair {
+  .Pair {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
   }
-  /* An automation's figures, and a page's tiles, become rows: the label, then the figure at the end. */
-  .table .facts {
+  /* An automation's figures, and a page's tiles, become rows: the label, then the figure at the end; the tiles, one
+     box. */
+  .Facts--columns {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.25rem;
   }
-  .table .facts > div,
-  .facts.tiles > div {
-    display: grid;
+  .Facts-item,
+  .Facts-tile {
     grid-template-columns: auto minmax(0, 1fr);
     column-gap: var(--gap-l);
     align-items: baseline;
   }
-  .table .facts dd,
-  .facts.tiles dd {
+  .Facts-value {
     grid-column: 2;
     text-align: end;
   }
-  .facts.tiles {
+  .Facts--tiles {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
     border: 1px solid var(--line);
     border-radius: var(--radius);
     background: var(--card);
   }
-  .facts.tiles > div {
+  .Facts-tile {
     border: 0;
     border-radius: 0;
     background: none;
-  }
-  .facts.tiles > div + div {
-    border-block-start: 1px solid var(--line);
-  }
-  .facts.tiles .fact {
     font-size: 1rem;
   }
-  .facts.tiles dd.small {
+  .Facts-tile + .Facts-tile {
+    border-block-start: 1px solid var(--line);
+  }
+  .Facts-tileNote {
     grid-column: 1 / -1;
+    text-align: end;
   }
 }

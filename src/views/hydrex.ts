@@ -99,7 +99,7 @@ const record = (automation: Automation): Value =>
     earnings.votes
       ? frag(
           money(perThousandOf(earnings)),
-          Object.assign(document.createElement("small"), { className: "aside", textContent: " / 1k votes" }),
+          Object.assign(document.createElement("small"), { className: "u-aside", textContent: " / 1k votes" }),
         )
       : "No record yet",
   );

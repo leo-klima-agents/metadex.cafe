@@ -123,7 +123,7 @@ function drawActions(own: Holdings | undefined, st: hydrex.Status): void {
     if (automation) {
       const moves = !!account && AUTOMATIONS.some((other) => other !== automation && hydrex.canLeave(account, other));
       button.textContent = `${moves ? "Move to" : "Join"} ${automation.name}`;
-      button.classList.toggle("secondary", moves);
+      button.classList.toggle("Button--secondary", moves);
     }
     // Leaving one of Hydrex's other automations uses the "self" action, which also leaves the page's own.
     if (action === "leave" || action === "self") {
@@ -230,9 +230,9 @@ const worth = (found: Amount[], { tokens, prices }: ReturnType<typeof priced>): 
 };
 // Klima Protocol's mark beside a retirement, at 24 px, as its guidelines ask.
 function throughKlima(): HTMLElement {
-  const line = Object.assign(document.createElement("span"), { className: "through" });
+  const line = Object.assign(document.createElement("span"), { className: "Klima-line Klima-line--end" });
   const mark = Object.assign(document.createElement("img"), {
-    className: "klima",
+    className: "Klima",
     src: "klima-protocol.svg",
     alt: "",
     width: 24,

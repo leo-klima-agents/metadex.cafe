@@ -22,7 +22,7 @@ export function drawApp(): void {
   const button = (text: string, action: string, arg = "") => {
     const el = Object.assign(document.createElement("button"), {
       type: "button",
-      className: "secondary compact",
+      className: "Button--secondary Button--compact",
       textContent: text,
     });
     el.dataset.action = action;
@@ -30,7 +30,8 @@ export function drawApp(): void {
     return el;
   };
   // A link that does a button's job is drawn as one.
-  const changeLink = (href: string) => Object.assign(link(href, "Change"), { className: "button secondary compact" });
+  const changeLink = (href: string) =>
+    Object.assign(link(href, "Change"), { className: "Button Button--secondary Button--compact" });
   const toHydrex = changeLink(hrefOf({ view: "hydrex" }));
   if (holdings.value) {
     const { owner, accounts, epochStart } = holdings.value;

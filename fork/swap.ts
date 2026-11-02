@@ -65,7 +65,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await h.shoot(page, "swap");
     await swap.getByRole("button", { name: "Review" }).click();
     await heading(review(page), "Quote", 2).waitFor();
-    const bill = review(page).locator("article.slip");
+    const bill = review(page).locator("article.Slip");
     assert.match(await bill.innerText(), /Estimated gas/);
     for (const route of await bill.locator("[data-text=route]").allInnerTexts())
       assert.match(
@@ -86,7 +86,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await review(page).getByRole("button", { name: "Sign 4 transactions" }).click();
     await heading(review(page), "Done", 2).waitFor();
     assert.equal(sent.length, 4);
-    const receipt = review(page).locator("[data-text=done] article.slip");
+    const receipt = review(page).locator("[data-text=done] article.Slip");
     for (const compared of await receipt.locator("[data-text=route]").allInnerTexts())
       assert.match(compared, /^(As quoted|[+−][\d.]+% vs quote)$/);
     assert.ok((await balanceOf(INTO_USDC.token, SELLER)) > before);
@@ -231,7 +231,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     // The claim's receipt shows what `earned()` alone did not, less the 1% fee.
     await review(page).locator("[data-text=done]").getByText("4.27 USDC").first().waitFor();
     // The receipt of the swap started from the App shows its output, WETH, not the swap page's own token.
-    const swapped = review(page).locator("[data-text=done] .slip").filter({ hasText: "swap into WETH" });
+    const swapped = review(page).locator("[data-text=done] .Slip").filter({ hasText: "swap into WETH" });
     await swapped
       .locator("[data-text=total-value]")
       .getByText(/^[\d,.]+ WETH$/)

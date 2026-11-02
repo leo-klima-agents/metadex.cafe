@@ -18,7 +18,7 @@ describe("payouts against a fork of Base", { timeout: 1_800_000 }, () => {
     const article = standing(page);
     await article.getByText(/^Late · paid up to Thu,? 17 Sept?, 00:00 UTC$/).waitFor();
     await article.getByText(/^(At least )?≈\s\$\d[\d,.]* in \d+ tokens waiting$/).waitFor();
-    const bill = article.locator("article.slip");
+    const bill = article.locator("article.Slip");
     await bill.getByText("Receipt · Account #82774 · Matcha Latte").waitFor();
     const text = await bill.innerText();
     for (const shown of [
@@ -64,7 +64,7 @@ describe("payouts against a fork of Base", { timeout: 1_800_000 }, () => {
     await view(page, "account")
       .getByText(/Joining Double Espresso:/)
       .waitFor();
-    const bill = standing(page).locator("article.slip");
+    const bill = standing(page).locator("article.Slip");
     await bill.getByText("Receipt · Account #82774 · Double Espresso").waitFor();
     const lines = await bill.locator("[data-list=claim] [data-text=words]").allTextContents();
     assert.deepEqual(

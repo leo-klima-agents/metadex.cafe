@@ -81,7 +81,7 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
   if (unread)
     body.prepend(
       Object.assign(document.createElement("p"), {
-        className: "notice",
+        className: "Notice",
         textContent: `Base did not say what ${count(unread, "reward contract owes", "reward contracts owe")}: it is left out, to claim later.`,
       }),
     );
@@ -313,7 +313,7 @@ function swapLater(
       return amount ? [swap.partOf(item, amount, approve)] : [];
     }),
   };
-  const next = Object.assign(document.createElement("p"), { className: "row" });
+  const next = Object.assign(document.createElement("p"), { className: "u-row" });
   if (!exact.items.length) return next;
   const button = Object.assign(document.createElement("button"), {
     type: "button",
@@ -328,6 +328,6 @@ function swapLater(
 }
 function swapThese(came: Amount[]): Node {
   const p = document.createElement("p");
-  if (came.length) p.append(swapLink(came, "button secondary"));
+  if (came.length) p.append(swapLink(came, "Button Button--secondary"));
   return p;
 }
