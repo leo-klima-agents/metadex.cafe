@@ -11,11 +11,12 @@
   },
   "scripts": {
     "build": "node scripts/build.ts",
+    "dev": "node scripts/dev.ts",
     "release": "node scripts/release.ts",
     "format": "prettier --write .",
     "test": "node --test",
     "test:fork": "npm run build && node fork/run.ts",
-    "qa": "npm run build && node fork/qa.ts",
+    "qa": "npm run build && node qa/qa.ts",
     "typecheck": "tsc"
   },
   "dependencies": {

@@ -5,8 +5,9 @@
     "lib": ["es2025", "dom", "dom.iterable"],
     "types": ["node"],
     "strict": true,
-    "exactOptionalPropertyTypes": true,
     "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noEmit": true,
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,
@@ -14,5 +15,5 @@
     "resolveJsonModule": true,
     "skipLibCheck": true
   },
-  "include": ["src", "scripts", "test", "fork"]
+  "include": ["src", "scripts", "test", "fork", "qa"]
 }

@@ -8,13 +8,13 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { carOf, contenthashOf, notesOf, zipOf } from "../scripts/release.ts";
 
-// A folder with a file of two chunks, one of one, a folder within, and a hidden file and folder, which both leave out.
-// Its CID was recorded once with Kubo 0.43.1, from the repository's root: ipfs add -r --cid-version=1
-// test/fixtures/release
+// A folder with a file of two chunks, a file of one, a subfolder, and a hidden file and folder, which the CAR and the
+// zip both leave out. Its CID was recorded with Kubo 0.43.1, run from the repository's root:
+// `ipfs add -r --cid-version=1 test/fixtures/release`.
 const FIXTURE = fileURLToPath(new URL("fixtures/release", import.meta.url));
 const RECORDED = "bafybeigmzca45gv2dy34w5gfnkqtquwixzlcfusid55faiobbow6bfpcou";
-// Its zip's SHA-256, recorded once unzip -t and Python's zipfile found the zip sound, and unzip gave back the folder,
-// less its hidden file and folder.
+// The zip's SHA-256, recorded once `unzip -t` and Python's `zipfile` found the zip sound and `unzip` gave back the
+// folder without its hidden file and folder.
 const ZIPPED = "c14d51d1f689107821c134460cff81e68acdfc3c1f3e5ed52690a4b02e8675b5";
 
 const { root, car } = await carOf(FIXTURE);
@@ -53,7 +53,7 @@ test("the CAR file has that one root, and each block under it once, each matchin
     assert.deepEqual(cid.multihash.bytes, (await sha256.digest(bytes)).bytes, `${cid} does not match its block`);
     blocks.set(cid.toString(), bytes);
   }
-  // Each directory and file of more than one chunk is a dag-pb node; each chunk, a raw block.
+  // Directories and files of more than one chunk are dag-pb nodes; each chunk is a raw block.
   const reached = new Set<string>();
   const walk = (cid: CID) => {
     reached.add(cid.toString());

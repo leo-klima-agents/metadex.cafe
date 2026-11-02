@@ -1,7 +1,7 @@
 import type { Address } from "viem";
-import { rate, readFor } from "./chain.ts";
 import type { Swapper } from "./config.ts";
-import { pairKey, waysFor, type Hop, type Way } from "./pools.ts";
+import { key, pairKey, waysFor, type Hop, type Way } from "./prices.ts";
+import { tagged } from "./rpc.ts";
 import {
   QUOTES_PER_REQUEST,
   candidatePaths,
@@ -10,35 +10,36 @@ import {
   routeGas,
   swapperFor,
   taxed,
-  type Found,
+  type Routed,
   type Route,
 } from "./swap.ts";
 
-// Routes for several tokens sold together into one output. Each token's own route, as findRoute finds it, is priced as
-// if it sold alone: two tokens whose routes meet in a pool both move it, and a token too large for one pool sells better
-// in parts, through several. This picks routes for them together, in tenths, from a model of each pool they may use:
-// what it pays for a few amounts, read through the swapper's quote(), and in proportion between them. A pool pays for
-// two sales about what it pays for both at once, whatever their order, so the model runs the routes one after another,
-// as the swap will. The model only picks the routes: what they fetch is what Base finds when it runs them.
-//
-// It reads only what it can afford: as many requests as the RPCs allow in a second, by what the page has learnt of their
-// limits, and fewer pools and amounts per pool when they allow less. Too few, and the tokens keep their own routes.
+// Routes several tokens sold together into one output. `findRoute` prices each token's route as if it sold alone, but
+// two routes that share a pool both move it, and a token too large for one pool sells better split across several. So
+// this picks routes for all of them together, in tenths of each sale, from a model of each pool they may use: its
+// `quote()` at a few amounts, interpolated linearly between them. A pool pays about the same for two sales one after
+// the other as for both at once, in either order, so the model runs the routes in sequence, as the swap does. The model
+// only picks the routes; what they fetch is what Base returns when it runs them. It reads only what it can afford,
+// about as many requests as the RPCs allow in a second, and reads fewer pools and amounts per pool when there are many.
 
-export type Sale = { token: Address; amount: bigint; found: Found; hydrex: boolean };
+export type Sale = { token: Address; amount: bigint; found: Routed; hydrex: boolean };
 
-// A sale moves its pools when its quote, against 100 times that of a hundredth of it, falls short by more than 0.1%.
+// A sale moves its pools when its quote falls more than 0.1% short of 100 times the quote for a hundredth of it.
 const PROBE = 100n;
 const IMPACT = 0.001;
-// The most sales routed together, by what they fetch; the others keep their own routes.
+// Of the sales that move their pools, at most this many, those that fetch most, are routed together. The rest, and
+// every sale too small to move its pools, keep their own routes.
 const MAX_SALES = 8;
 // A sale goes in tenths, along three routes at most.
 const CHUNKS = 10;
 const MAX_PARTS = 3;
-// The routes considered for a sale, by what each fetches for all of it alone; and the moves made, at most.
+// At most `MAX_CANDIDATES` routes per sale, ranked by what each fetches for the whole sale alone, and at most
+// `MAX_MOVES` moves.
 const MAX_CANDIDATES = 24;
 const MAX_MOVES = 80;
-// How many pools of each pair of tokens, and how many amounts each is read at, by what the RPCs allow: the first that
-// fits. Two of the amounts, all of what may reach a pool and an eighth of it, are read for every pool first.
+// Pools per token pair and amounts read per pool, from most to fewest: `routeTogether` takes the first step that fits
+// in `BUDGET` requests. Every pool is first read at two of the amounts: all that may reach it, and an eighth of that.
+const BUDGET = 75;
 const LADDER = [
   { pools: 3, amounts: 6 },
   { pools: 2, amounts: 5 },
@@ -46,16 +47,14 @@ const LADDER = [
   { pools: 1, amounts: 4 },
 ];
 
-const key = (address: string): string => address.toLowerCase();
 const poolKey = (way: Way): string =>
   `${way.exchange} ${key(way.pool)} ${way.fee} ${way.tickSpacing} ${pairKey(way.tokenIn, way.tokenOut)}`;
-// The pools of a sale's own route, each hop from what the one before paid.
 const ownKeys = ({ token, found }: Sale): string[] =>
   found.route.hops.map((hop, h) => poolKey({ ...hop, tokenIn: h ? found.route.hops[h - 1]!.tokenOut : token }));
 
-// What a pool pays, between the amounts it was read at, in proportion; past the last, at half its last rate, up to the
-// least amount it refused, if any. Aero's classic pools pay 1% less, as their tax is not in the quote. All in numbers:
-// the model compares, and needs no more than their precision.
+// What a pool pays: linear between the amounts it was quoted at, then at half the last segment's rate up to `cap`, the
+// smallest amount it refused. Aero's basic pools pay 1% less, since their MEV tax is not in the quote. Plain numbers
+// are precise enough, as the model only compares routes.
 export type Curve = { xs: number[]; ys: number[]; cap: number };
 
 export function curveOf(read: [bigint, bigint | undefined][], haircut = false): Curve {
@@ -86,13 +85,14 @@ export function along({ xs, ys, cap }: Curve, x: number): number | undefined {
   return ys[i - 1]! + ((ys[i]! - ys[i - 1]!) * (x - xs[i - 1]!)) / (xs[i]! - xs[i - 1]!);
 }
 
-// A route a sale may take, by its pools' keys; and the model: each sale's amount, its routes, the first of which is its
-// own, what each pool pays, and gas, in the output, per unit.
+// A route a sale may take, with its pools' keys. In a `Model`, each sale's first candidate is its own route, and
+// `gasPrice` is the output paid per unit of gas.
 export type Candidate = { pools: string[]; hops: Hop[]; gas: number };
 export type Model = { amounts: number[]; candidates: Candidate[][]; curves: Map<string, Curve>; gasPrice: number };
 
-// What the routes fetch, less their gas, with each sale's tenths along its routes as `chunks` says, run in order: a sale,
-// then the next, each route after the last. Undefined if a pool would be asked for more than it can take.
+// What the routes fetch, less gas, with `chunks[s][c]` tenths of sale `s` on its route `c`. Routes run in order, sale
+// by sale, each against the pools as the routes before it left them. Undefined if a pool would be asked for more than
+// it can take.
 export function worth({ amounts, candidates, curves, gasPrice }: Model, chunks: number[][]): number | undefined {
   const used = new Map<string, number>();
   let total = 0;
@@ -115,8 +115,9 @@ export function worth({ amounts, candidates, curves, gasPrice }: Model, chunks: 
   return total;
 }
 
-// Each sale's tenths, by route: all along its own at first. Then, a sale at a time, in turn, its best move of a tenth, or
-// of all a route has, to another route, while one gains: for eight sales, in about a tenth of a second.
+// Each sale's tenths by route, all on its own route at first. Then, taking the sales in turn, it makes each one's best
+// move of a tenth, or of all a route holds, to another route, until no move gains. Eight sales take about a tenth of a
+// second.
 export function allocate(model: Model): number[][] {
   const chunks = model.candidates.map((routes) => routes.map((_, c): number => (c === 0 ? CHUNKS : 0)));
   let best = worth(model, chunks);
@@ -155,22 +156,20 @@ export function allocate(model: Model): number[][] {
   return chunks;
 }
 
-// The routes for `sales`, in their order, each in its parts, if routing them together gains on their own routes:
-// undefined otherwise, or when the RPCs allow too little to find out. Gas is valued in the output by `gasValue`.
+// Each sale's routes, in the order of `sales`, if routing them together beats their own routes; undefined if it does
+// not, or if the RPCs allow too few requests to find out. `gasValue` prices gas in the output.
 export async function routeTogether(
   sales: Sale[],
   output: Swapper,
   gasValue: (gas: bigint) => bigint,
 ): Promise<Route[][] | undefined> {
-  const budget = rate();
-  if (budget < 4) return undefined;
-  // Which sales move their pools: the others are too small to matter, and keep their own routes.
+  const rd = tagged("swap");
   const probes = await quoteAll(
     sales.map(({ found, amount }) => ({
       swapper: output,
       route: { ...found.route, amount: amount / PROBE, minPaid: 0n },
     })),
-    readFor("swap"),
+    rd,
   );
   const heavy = sales
     .map((sale, i) => ({ sale, i, probe: probes[i] }))
@@ -186,22 +185,21 @@ export async function routeTogether(
     ...new Map(
       paths.flat().flatMap((path) => path.slice(1).map((b, i) => [pairKey(path[i]!, b), [path[i]!, b]] as const)),
     ).values(),
-  ] as [Address, Address][];
-  const ways = await waysFor(pairs, undefined, readFor("swap"));
+  ];
+  const ways = await waysFor(pairs, undefined, rd);
   const poolsOf = (a: Address, b: Address) => ways.get(pairKey(a, b)) ?? [];
   const all = pairs.reduce((sum, [a, b]) => sum + poolsOf(a, b).length, 0);
-  // Two requests left for running both plans through Base.
+  // The `+ 2` keeps two requests for running both plans, own routes and routed together, through Base.
   const requests = (quotes: number) => Math.ceil(quotes / QUOTES_PER_REQUEST);
   const step = LADDER.find(
     ({ pools, amounts }) =>
       requests(2 * all) +
         requests(pairs.reduce((sum, [a, b]) => sum + Math.min(pools, poolsOf(a, b).length) * (amounts - 2), 0)) +
         2 <=
-      budget,
+      BUDGET,
   );
   if (!step) return undefined;
 
-  // What each pool paid for each amount read.
   const read = new Map<string, Map<bigint, bigint | undefined>>();
   const readAll = async (asks: { way: Way; amounts: bigint[] }[]) => {
     const items = asks.flatMap(({ way, amounts }) => {
@@ -215,7 +213,7 @@ export async function routeTogether(
         swapper: swapperFor(way.tokenOut)!,
         route: { token: way.tokenIn, amount, minPaid: 0n, hops: [hopOf(way)] },
       })),
-      readFor("swap"),
+      rd,
     );
     items.forEach(({ way, amount }, i) => {
       const at = read.get(poolKey(way)) ?? new Map();
@@ -224,16 +222,16 @@ export async function routeTogether(
     });
   };
 
-  // What may reach each token: the sale's own, if it is one, and the most each pair into it may pay. Each pair's pools
-  // are read at all of that and an eighth, in up to three rounds, as a route has up to three hops; again when it grew
-  // by more than a tenth.
-  const own = new Map(heavy.map(({ sale }) => [key(sale.token), sale.amount]));
+  // What may reach each token: the amount sold of it, if any, plus the most each pair into it can pay. Each pair's
+  // pools are read at all of that and at an eighth of it, over up to three rounds since a route has up to three hops,
+  // and read again when the amount grows by more than a tenth.
+  const sold = new Map(heavy.map(({ sale }) => [key(sale.token), sale.amount]));
   const most = new Map<string, bigint>();
   const reach = new Map<string, bigint>();
   const into = (token: Address) =>
     pairs.reduce(
       (sum, [a, b]) => (key(b) === key(token) ? sum + (most.get(pairKey(a, b)) ?? 0n) : sum),
-      own.get(key(token)) ?? 0n,
+      sold.get(key(token)) ?? 0n,
     );
   for (let round = 0; round < 3; round++) {
     const due = pairs
@@ -259,8 +257,8 @@ export async function routeTogether(
     }
   }
 
-  // The pools kept for each pair: the best for an eighth of what may reach them, and those of the sales' own routes. Each
-  // is read at more amounts, halving from all of it.
+  // Each pair keeps its best pools for an eighth of what may reach it, plus any pools on the sales' own routes. Each
+  // kept pool is then read at more amounts, halving down from the full amount.
   const ownPools = new Set(heavy.flatMap(({ sale }) => ownKeys(sale)));
   const kept = new Map<string, Way[]>();
   for (const [a, b] of pairs) {
@@ -286,7 +284,6 @@ export async function routeTogether(
     [...kept.values()].flat().map((way) => [poolKey(way), curveOf([...read.get(poolKey(way))!], taxed(way))] as const),
   );
 
-  // Each sale's routes: every path, through every pool kept for each of its hops; its own route first.
   const candidates = heavy.map(({ sale }, s) => {
     const routes: Candidate[] = [];
     for (const path of paths[s]!) {
@@ -303,7 +300,6 @@ export async function routeTogether(
     const mine = ownKeys(sale);
     const own: Candidate = { pools: mine, hops: sale.found.route.hops, gas: Number(sale.found.gas) };
     const others = routes.filter(({ pools }) => pools.join() !== mine.join());
-    // The best alone, if there are too many.
     const alone = (route: Candidate) =>
       worth({ amounts: [Number(sale.amount)], candidates: [[route]], curves, gasPrice: 0 }, [[CHUNKS]]) ?? -Infinity;
     const best = others
@@ -319,7 +315,8 @@ export async function routeTogether(
   const chunks = allocate(model);
   if (chunks.every((row) => row[0] === CHUNKS)) return undefined;
 
-  // Each sale's parts, largest first; the last takes what the tenths leave, so that they add up to the sale.
+  // Each sale's parts, largest first. The last part takes what rounding the tenths leaves, so the parts add up to the
+  // sale.
   const routes: Route[][] = sales.map(({ found, amount }) => [{ ...found.route, amount, minPaid: 0n }]);
   heavy.forEach(({ sale, i }, s) => {
     const parts = candidates[s]!.map((route, c) => ({ route, n: chunks[s]![c]! }))

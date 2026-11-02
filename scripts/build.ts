@@ -1,11 +1,12 @@
 import * as esbuild from "esbuild";
 import { createHash } from "node:crypto";
-import { appendFileSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { bundled, noticeOf, partsOf } from "./notices.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUT = `${ROOT}/dist`;
+const SITE = `${ROOT}/site`;
 const { version } = JSON.parse(readFileSync(`${ROOT}/package.json`, "utf8")) as { version: string };
 
 function integrity(file: string): string {
@@ -19,7 +20,7 @@ rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT);
 const { metafile } = await esbuild.build({
   absWorkingDir: ROOT,
-  entryPoints: { main: "src/main.ts", style: "style.css" },
+  entryPoints: { main: "src/main.ts", style: "site/style.css" },
   outdir: OUT,
   bundle: true,
   format: "esm",
@@ -31,7 +32,7 @@ const { metafile } = await esbuild.build({
   metafile: true,
   logLevel: "warning",
 });
-// Each built file ends with the license notices of what it bundles, before its integrity is taken.
+// Each built file gets its license notices before its integrity hash is taken, so the hash covers them.
 for (const file of ["main.js", "style.css"]) {
   const built = readFileSync(`${OUT}/${file}`, "utf8");
   appendFileSync(
@@ -39,14 +40,16 @@ for (const file of ["main.js", "style.css"]) {
     `${built.endsWith("\n") ? "" : "\n"}${noticeOf(ROOT, partsOf(ROOT, bundled(metafile, file)))}`,
   );
 }
-for (const file of ["icon.svg", "favicon.ico", "apple-touch-icon.png", "klima-protocol.svg", "manifest.json"])
-  copyFileSync(`${ROOT}/${file}`, `${OUT}/${file}`);
+// Only files are copied: the fonts are in the stylesheet as data, so `site/fonts/` is not.
+for (const file of readdirSync(SITE, { withFileTypes: true }))
+  if (file.isFile() && !["index.html", "style.css"].includes(file.name))
+    copyFileSync(`${SITE}/${file.name}`, `${OUT}/${file.name}`);
 const values: Record<string, string> = {
   VERSION: version,
   MAIN_INTEGRITY: integrity("main.js"),
   STYLE_INTEGRITY: integrity("style.css"),
 };
-const html = readFileSync(`${ROOT}/index.html`, "utf8").replace(/%([A-Z_]+)%/g, (_, key: string) => {
+const html = readFileSync(`${SITE}/index.html`, "utf8").replace(/%([A-Z_]+)%/g, (_, key: string) => {
   if (!(key in values)) throw new Error(`index.html has no value for %${key}%.`);
   return values[key]!;
 });

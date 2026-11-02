@@ -1,6 +1,5 @@
-# Each week, one pull request for the Actions and one for the npm packages, each with every update due. A release is
-# proposed only once it is a week old, as a compromised one is mostly found and pulled within days. Security updates
-# come apart, and at once: neither the groups nor the wait apply to them.
+# Updates wait until a release is a week old, because a compromised release is usually found and pulled within days.
+# Security updates are not grouped and do not wait.
 version: 2
 updates:
   - package-ecosystem: github-actions
