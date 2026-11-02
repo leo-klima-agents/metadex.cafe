@@ -5,17 +5,19 @@ import { AUTOMATIONS, MATCHA_LATTE, type Automation, type Kind } from "./config.
 import { WEEK, clean, listWords, weekStart } from "./format.ts";
 import conduits from "./hydrex-conduits.json" with { type: "json" };
 import { anchorsNow, key, type Prices } from "./prices.ts";
-import { blockTime, call, costs, read, required, rpc, same, sawBlock, type Call } from "./rpc.ts";
+import { blockTime, call, contract, costs, read, readLists, required, rpc, same, sawBlock } from "./rpc.ts";
 import type { Slip, Tx } from "./wallet.ts";
 
 const l1Abi = parseAbi(["function getL1FeeUpperBound(uint256 unsignedTxSize) view returns (uint256)"]);
 
-export const escrow = (name: string, ...args: unknown[]): Call => call(config.VOTING_ESCROW, escrowAbi, name, ...args);
-export const voter = (name: string, ...args: unknown[]): Call => call(config.VOTER, voterAbi, name, ...args);
-const matchaLatte = (name: string): Call => call(MATCHA_LATTE.address, matchaLatteAbi, name);
+export const escrow = contract(config.VOTING_ESCROW, escrowAbi);
+export const voter = contract(config.VOTER, voterAbi);
+const matchaLatte = contract(MATCHA_LATTE.address, matchaLatteAbi);
 
 // Hydrex's other automations. If Hydrex lists one of the page's own, the page still treats it as its own.
-export const others = conduits.filter(({ address }) => !AUTOMATIONS.some((each) => same(address, each.address)));
+export const others = (conduits as { name: string; address: Address }[]).filter(
+  ({ address }) => !AUTOMATIONS.some((each) => same(address, each.address)),
+);
 export const otherName = (address: Address): string | undefined =>
   others.find((other) => same(other.address, address))?.name;
 const automationAt = (address: Address): Automation | undefined =>
@@ -23,7 +25,6 @@ const automationAt = (address: Address): Automation | undefined =>
 
 // Epochs follow the calendar: joins count from the next Thursday, whenever Hydrex's Voter moves on.
 export type MatchaLatte = {
-  time: number;
   epochStart: number;
   retireBps: bigint;
   tonnes: bigint;
@@ -34,7 +35,7 @@ export type MatchaLatte = {
   feeRecipient?: Address | undefined;
 };
 export async function readMatchaLatte(): Promise<MatchaLatte> {
-  const replies = await read([
+  const [time, retire, retired, voted, feeBps, maxFeeBps, feeRecipient] = await read([
     blockTime,
     matchaLatte("retireBps"),
     matchaLatte("totalTonnesRetired"),
@@ -43,15 +44,12 @@ export async function readMatchaLatte(): Promise<MatchaLatte> {
     matchaLatte("MAX_TREASURY_FEE_BPS"),
     matchaLatte("treasury"),
   ]);
-  const [time, retireBps, tonnes] = required(replies.slice(0, 3)) as bigint[];
-  const [voted, feeBps, maxFeeBps, feeRecipient] = replies.slice(3) as [bigint?, bigint?, bigint?, Address?];
-  const at = Number(time);
-  sawBlock(at);
+  const [at, retireBps, tonnes] = required([time, retire, retired]);
+  sawBlock(Number(at));
   return {
-    time: at,
-    epochStart: weekStart(at),
-    retireBps: retireBps!,
-    tonnes: tonnes!,
+    epochStart: weekStart(Number(at)),
+    retireBps,
+    tonnes,
     voted: voted === undefined ? undefined : Number(voted),
     feeBps,
     maxFeeBps,
@@ -65,7 +63,7 @@ export const paidBpsOf = ({ retireBps, feeBps }: MatchaLatte): bigint | undefine
 // When an automation last voted, or 0, as of an epoch.
 type Freshness = { epochStart: number; voted: number };
 export async function readFreshness({ address }: Automation): Promise<Freshness> {
-  const [time, voted] = required(await read([blockTime, voter("lastVoted", address)])) as bigint[];
+  const [time, voted] = required(await read([blockTime, voter("lastVoted", address)]));
   return { epochStart: weekStart(Number(time)), voted: Number(voted) };
 }
 
@@ -84,37 +82,36 @@ export type Account = {
   ownerVoted: number;
   claimer: Address;
 };
-export type Holdings = { owner: Address; accounts: Account[]; time: number; epochStart: number };
+export type Holdings = { owner: Address; accounts: Account[]; epochStart: number };
 
 // The accounts read for their owner, with when each of Hydrex's other automations last voted. If the Voter cannot be
 // read, an automation or an owner is just not known to have stopped voting.
-async function accountsOf(owner: Address, ids: bigint[], epochStart: number, voted: unknown[]): Promise<Account[]> {
-  const lastVoted = new Map(
-    others.map(({ address }, i) => [key(address), Number((voted[i] as bigint | undefined) ?? 0n)]),
-  );
-  const details = await read([
-    voter("lastVoted", owner),
-    ...ids.flatMap((id) => [
-      escrow("lockDetails", id),
-      escrow("balanceOfNFT", id),
-      escrow("getLockDelegatee", id),
-      escrow("delegates", id, epochStart),
-      escrow("getClaimRedirectApproved", id),
-    ]),
-    call(config.ACCOUNT_NAMES, namesAbi, "getBulkNames", ids),
-  ]);
-  const ownerVoted = Number((details.shift() as bigint | undefined) ?? BigInt(epochStart));
-  const names = (details[5 * ids.length] as string[] | undefined) ?? [];
+async function accountsOf(
+  owner: Address,
+  ids: bigint[],
+  epochStart: number,
+  voted: (bigint | undefined)[],
+): Promise<Account[]> {
+  const lastVoted = new Map(others.map(({ address }, i) => [key(address), Number(voted[i] ?? 0n)]));
+  const found = await readLists({
+    ownerVoted: [voter("lastVoted", owner)],
+    locks: ids.map((id) => escrow("lockDetails", id)),
+    votes: ids.map((id) => escrow("balanceOfNFT", id)),
+    delegates: ids.map((id) => escrow("getLockDelegatee", id)),
+    atStart: ids.map((id) => escrow("delegates", id, epochStart)),
+    claimers: ids.map((id) => escrow("getClaimRedirectApproved", id)),
+    names: [call(config.ACCOUNT_NAMES, namesAbi, "getBulkNames", ids)],
+  });
+  const ownerVoted = Number(found.ownerVoted[0] ?? BigInt(epochStart));
+  const names = found.names[0] ?? [];
   return ids.map((id, i): Account => {
-    const [lock, votes, delegate, delegateAtStart, claimer] = required(details.slice(5 * i, 5 * i + 5)) as [
-      { amount: bigint; endTime: bigint; lockType: number },
-      bigint,
-      Address,
-      Address,
-      Address,
-    ];
-    const { amount, endTime, lockType } = lock;
-    const delegateVoted = lastVoted.get(key(delegate)) ?? 0;
+    const [{ amount, endTime, lockType }, votes, delegate, delegateAtStart, claimer] = required([
+      found.locks[i],
+      found.votes[i],
+      found.delegates[i],
+      found.atStart[i],
+      found.claimers[i],
+    ]);
     return {
       id,
       name: clean(names[i]),
@@ -124,33 +121,33 @@ async function accountsOf(owner: Address, ids: bigint[], epochStart: number, vot
       votes,
       delegate,
       delegateAtStart,
-      delegateVoted,
+      delegateVoted: lastVoted.get(key(delegate)) ?? 0,
       ownerVoted,
       claimer,
     };
   });
 }
-const withContext = (calls: Call[]) =>
-  read([...calls, blockTime, ...others.map(({ address }) => voter("lastVoted", address))]);
+// With what the accounts read: the block's time, and when each of Hydrex's other automations last voted.
+const context = () => ({ time: [blockTime], voted: others.map(({ address }) => voter("lastVoted", address)) });
 
 export async function readAccounts(owner: Address): Promise<Holdings> {
-  const [count, time, ...voted] = await withContext([escrow("balanceOf", owner)]);
-  required([count, time]);
+  const found = await readLists({ count: [escrow("balanceOf", owner)], ...context() });
+  const [count, time] = required([found.count[0], found.time[0]]);
   sawBlock(Number(time));
   const epochStart = weekStart(Number(time));
   const indexes = Array.from({ length: Number(count) }, (_, i) => escrow("tokenOfOwnerByIndex", owner, BigInt(i)));
-  const accounts = await accountsOf(owner, required(await read(indexes)) as bigint[], epochStart, voted);
+  const accounts = await accountsOf(owner, required(await read(indexes)), epochStart, found.voted);
   accounts.sort((a, b) => (a.votes === b.votes ? Number(a.id - b.id) : a.votes > b.votes ? -1 : 1));
-  return { owner, accounts, time: Number(time), epochStart };
+  return { owner, accounts, epochStart };
 }
 // One account, whoever owns it; undefined if Hydrex has none of that number. ownerOf can fail for other reasons, so a
 // failed one is asked again on its own before the account is taken for gone.
 export async function readAccount(id: bigint): Promise<Holdings | undefined> {
-  const [first, time, ...voted] = await withContext([escrow("ownerOf", id)]);
-  const owner = (first ?? (await read([escrow("ownerOf", id)]))[0]) as Address | undefined;
+  const found = await readLists({ owner: [escrow("ownerOf", id)], ...context() });
+  const owner = found.owner[0] ?? (await read([escrow("ownerOf", id)]))[0];
   if (!owner) return undefined;
-  const epochStart = weekStart(Number(required([time])[0]));
-  return { owner, accounts: await accountsOf(owner, [id], epochStart, voted), time: Number(time), epochStart };
+  const epochStart = weekStart(Number(required(found.time)[0]));
+  return { owner, accounts: await accountsOf(owner, [id], epochStart, found.voted), epochStart };
 }
 
 // "in", "partly", "joined" and "left" are about the page's own automations.
@@ -304,5 +301,5 @@ export async function gasEstimate(steps: Tx[], from: Address): Promise<{ wei: bi
     read([l1]),
     anchorsNow(),
   ]);
-  return { wei: (BigInt(gas) * gasPrice + ((fee as bigint | undefined) ?? 0n)) * BigInt(steps.length), prices };
+  return { wei: (BigInt(gas) * gasPrice + (fee ?? 0n)) * BigInt(steps.length), prices };
 }

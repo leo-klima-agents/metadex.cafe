@@ -35,8 +35,8 @@ export function drawWallets(): void {
       if (wallet.icon) icon.src = wallet.icon;
     },
   );
-  fill(popup, { connecting: message, "no-wallet": missing });
-  fill(document.body, { "switch-failed": switchFailed });
+  fill(popup, { connecting: message, "no-wallet": missing || null });
+  fill(document.body, { "switch-failed": switchFailed || null });
 }
 
 export function startWallets(): void {

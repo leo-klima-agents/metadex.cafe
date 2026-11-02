@@ -16,8 +16,8 @@ import {
   type Hex,
 } from "viem";
 import { CBBTC, EXCHANGES, HYDX, SWAPPERS, USDC, WETH } from "../src/config.ts";
-import { BY_ID, key, pairKey, pools, waysFor, type Hop, type Read } from "../src/prices.ts";
-import { same } from "../src/rpc.ts";
+import { BY_ID, key, pairKey, pools, waysFor, type Hop } from "../src/prices.ts";
+import { same, type Read } from "../src/rpc.ts";
 import {
   MAX_SWAP_GAS,
   best,
@@ -144,7 +144,7 @@ test("a swap is swap(routes, deadline, true), selling each token once, in as man
 
 test("each route's quote comes back to it, whatever the swapper and however the quotes are batched", async () => {
   // Each swapper pays its place in the list, plus one, times the amount: a quote that comes back wrong shows.
-  const rd: Read = async (calls) =>
+  const rd: Read = async (calls): Promise<any> =>
     calls.map(({ address, args: [routes] }) => {
       const place = BigInt(SWAPPERS.findIndex((swapper) => swapper.address === address) + 1);
       return paid(routes as Route[]).map((result) => ({ ...result, amountOut: result.amountIn * place }));
@@ -161,7 +161,7 @@ const spacingsAt = (address: Address) => SPACINGS[BY_ID.find(({ factory }) => sa
 
 test("a pair is looked up on every exchange, fee and spacing; a v4 pool counts once priced and liquid", async () => {
   let [lookups, slots] = [0, 0];
-  const rd: Read = async (calls) =>
+  const rd: Read = async (calls): Promise<any> =>
     calls.map(({ address, functionName }) => {
       if (functionName === "tickSpacings") return spacingsAt(address);
       lookups++;
@@ -181,7 +181,7 @@ test("a route of one hop is quoted once, as its hop, and not again as a whole", 
   // The only pool is Uniswap v3's at 0.05% from AVNT to USDC.
   const v3 = EXCHANGES.find(({ kind }) => kind === "v3")!;
   let quoted = 0;
-  const rd: Read = async (calls) =>
+  const rd: Read = async (calls): Promise<any> =>
     calls.map(({ address, functionName, args }) => {
       if (functionName === "quote") return ((quoted += (args[0] as Route[]).length), paid(args[0] as Route[]));
       if (functionName === "tickSpacings") return spacingsAt(address);

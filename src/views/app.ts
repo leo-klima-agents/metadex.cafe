@@ -64,7 +64,7 @@ export function drawApp(): void {
       needs.push({
         key: `overdue ${entry.account.id}`,
         shape: "stopped",
-        words: `Hydrex account #${entry.account.id}: payout overdue, ${waitsWords(entry, found!)}`,
+        words: `Hydrex account #${entry.account.id}: payout overdue, ${waitsWords(entry.standing, found!)}`,
         act: button("Claim now", "claim-app", String(entry.account.id)),
       });
   }

@@ -4,13 +4,13 @@ import { swapsOff } from "../checks.ts";
 import { AUTOMATIONS, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
 import * as data from "../data.ts";
 import { count, fixed, figure, fraction, money, moneyAt, utc, type Money } from "../format.ts";
-import { ethCost, gasWords, key, pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
+import { ethCost, gasWords, key, noPrices, pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
 import { hrefOf, parse } from "../routes.ts";
 import { routeTogether, type Sale } from "../routing.ts";
 import { gasPaid, includedAt, now, readCosts, same, tagged, type Costs, type Receipt } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import * as swap from "../swap.ts";
-import type { Found, Item, Plan, Route } from "../swap.ts";
+import type { Routed, Item, Plan, Route } from "../swap.ts";
 import {
   allowancesOf,
   describe,
@@ -54,15 +54,20 @@ addEventListener("hashchange", () => {
 // What the scan reads: the wallet's tokens and their allowances to the swapper, their names, gas and prices now. Each
 // token's route is read again every five minutes, those ticked routed together again every minute.
 type Scan = { rows: Row[]; tokens: Map<string, Token>; prices: Prices; costs?: Costs | undefined; reading: boolean };
+// A token held, with its route once read, if it has one.
 type Row = {
   token: Token;
   amount: bigint;
   allowance: bigint;
-  found: Got<Found | null>;
+  route?: Routed | undefined;
+  reading: boolean;
   reason?: string | undefined;
   worth?: number | undefined;
   ticked: boolean;
 };
+// A row ticked, so routed.
+type Ticked = Row & { route: Routed };
+const isTicked = (row: Row): row is Ticked => row.ticked && !!row.route;
 function scan(): Got<Scan> {
   const connection = state.connection;
   if (!connection) return {};
@@ -89,7 +94,7 @@ function scan(): Got<Scan> {
         );
         const gas = use("costs", readCosts, 60_000);
         if (prices.value === undefined && !prices.failed) return {};
-        const pricing = prices.value ?? { unit: "USD", of: new Map(), standIns: new Map() };
+        const pricing = prices.value ?? noPrices();
         const value = (amount: bigint) => {
           const price = pricing.of.get(key(swapper.token));
           return price === undefined ? undefined : worthOf(amount, swapper.decimals, price);
@@ -110,20 +115,21 @@ function scan(): Got<Scan> {
             async () => (await swap.findRoute(address, capped, swapper, isHydrex(address), gasValue, rd)) ?? null,
             5 * 60_000,
           );
-          const row: Row = { token, amount: capped, allowance, found, ticked: false };
+          const route = found.value ?? undefined;
+          const reading = found.value === undefined && !found.failed;
+          const row: Row = { token, amount: capped, allowance, route, reading, ticked: false };
           if (found.failed) row.reason = "Not read";
-          else if (found.value === undefined) return [row];
-          else if (!found.value) row.reason = "No route";
+          else if (reading) return [row];
+          else if (!route) row.reason = "No route";
           else {
             const price = pricing.of.get(key(address));
-            row.worth =
-              value(found.value.out) ?? (price === undefined ? undefined : worthOf(capped, token.decimals, price));
-            const units = found.value.gas + (allowance < capped ? swap.APPROVAL_GAS : 0n);
+            row.worth = value(route.out) ?? (price === undefined ? undefined : worthOf(capped, token.decimals, price));
+            const units = route.gas + (allowance < capped ? swap.APPROVAL_GAS : 0n);
             const cost = gas.value ? (ethCost(units * gas.value.gasPrice, pricing)?.value ?? 0) : 0;
             row.reason = row.worth === undefined ? "No price" : row.worth < 2 * cost ? "Below gas" : undefined;
           }
-          const auto = !!found.value && !row.reason && (!prefilled || prefilled.has(key(address)));
-          row.ticked = !!found.value && (ticks.get(key(address)) ?? auto);
+          const auto = !!route && !row.reason && (!prefilled || prefilled.has(key(address)));
+          row.ticked = !!route && (ticks.get(key(address)) ?? auto);
           return [row];
         });
         rows.sort((a, b) => (b.worth ?? -1) - (a.worth ?? -1));
@@ -133,7 +139,7 @@ function scan(): Got<Scan> {
             tokens,
             prices: pricing,
             costs: gas.value,
-            reading: rows.some(({ found }) => !found.value && !found.failed),
+            reading: rows.some(({ reading }) => reading),
           },
         };
       },
@@ -151,7 +157,7 @@ type Together = {
 function together(found: Scan): Got<Together> {
   const connection = state.connection!;
   const swapper = swapperShown();
-  const rows = found.rows.filter((row) => row.ticked && row.found.value);
+  const rows = found.rows.filter(isTicked);
   const id = `${swapper.output} ${rows.map(({ token, amount }) => `${token.address}:${amount}`).join()}`;
   // Ticks settle before they are routed.
   if (id !== ticked.key) {
@@ -169,11 +175,11 @@ function together(found: Scan): Got<Together> {
           routes[i]!.map((route) => ({ token: row.token, route, out: 0n, allowance: row.allowance })),
         ),
       });
-      const own = rows.map((row) => [{ ...row.found.value!.route, amount: row.amount }]);
+      const own = rows.map((row) => [{ ...row.route.route, amount: row.amount }]);
       const sales: Sale[] = rows.map((row) => ({
         token: row.token.address,
         amount: row.amount,
-        found: row.found.value!,
+        found: row.route,
         hydrex: isHydrex(row.token.address),
       }));
       const deadline = BigInt(now() + 1800);
@@ -192,9 +198,9 @@ function together(found: Scan): Got<Together> {
       const [routes, simulated] = better ? [parted!, partedRun] : [own, ownRun];
       let next = 0;
       const results = simulated?.refused === undefined ? simulated?.results : undefined;
-      const outOf = (row: Row) => {
+      const outOf = (row: Ticked) => {
         const result = results?.[next++];
-        return results ? (result?.done ? result.amountOut : undefined) : row.found.value!.out;
+        return results ? (result?.done ? result.amountOut : undefined) : row.route.out;
       };
       const parts = new Map(
         rows.map((row, i) => [key(row.token.address), routes[i]!.map((route) => ({ route, out: outOf(row) }))]),
@@ -255,10 +261,11 @@ export function drawSwap(): void {
   drawAllowances($("[data-list=allowance]", view));
   const found = scan();
   const rows = found.value?.rows ?? [];
-  const picked = rows.filter((row) => row.ticked);
+  const prices = found.value?.prices;
+  const picked = rows.filter(isTicked);
   const routed = found.value && picked.length ? together(found.value) : {};
-  const partsOf = (row: Row) =>
-    routed.value?.parts.get(key(row.token.address)) ?? [{ route: row.found.value!.route, out: row.found.value!.out }];
+  const partsOf = (row: Ticked) =>
+    routed.value?.parts.get(key(row.token.address)) ?? [{ route: row.route.route, out: row.route.out }];
   fill(view, {
     off: off ? "Swaps are off." : null,
     tokens: stateOf(found, !rows.length && !found.value?.reading),
@@ -272,24 +279,20 @@ export function drawSwap(): void {
     (li, row) => {
       const box = li.querySelector("input")!;
       box.checked = row.ticked;
-      box.disabled = !row.found.value;
+      box.disabled = !row.route;
       box.setAttribute("aria-label", `Sell ${row.token.symbol}`);
-      const out = !row.found.value
-        ? undefined
-        : row.ticked
-          ? partsOf(row).reduce((sum, { out }) => (out === undefined ? sum : sum + out), 0n)
-          : row.found.value.out;
-      const skipped = row.ticked && !!routed.value && partsOf(row).every(({ out }) => out === undefined);
-      const quote = out === undefined || skipped ? undefined : output(out, swapper, found.value!.prices);
+      const out = isTicked(row)
+        ? partsOf(row).reduce((sum, { out }) => (out === undefined ? sum : sum + out), 0n)
+        : row.route?.out;
+      const skipped = isTicked(row) && !!routed.value && partsOf(row).every(({ out }) => out === undefined);
+      const quote = out === undefined || skipped ? undefined : output(out, swapper, prices);
       const like = lookalike(row.token);
       const under =
-        quote && out !== undefined && !row.reason
-          ? underPrice(row.token, row.amount, out, swapper, found.value!.prices)
-          : undefined;
+        quote && out !== undefined && !row.reason ? underPrice(row.token, row.amount, out, swapper, prices) : undefined;
       fill(li, {
         symbol: row.token.symbol,
         amount: figure(row.amount, row.token.decimals),
-        fetches: row.found.value === undefined && !row.found.failed ? undefined : (quote?.exact ?? ""),
+        fetches: row.reading ? undefined : (quote?.exact ?? ""),
         worth: quote?.worth ? money(quote.worth) : "",
         note: row.reason ?? (skipped ? "Base would skip it" : null),
         warning: like
@@ -310,7 +313,6 @@ export function drawSwap(): void {
     routed.value?.gas ??
     BigInt(picked.filter((row) => row.allowance < row.amount).length) * swap.APPROVAL_GAS +
       swap.swapGas(parts.map(({ route }) => route));
-  const prices = found.value?.prices;
   const line = (amount: bigint) => {
     const shown = output(amount, swapper, prices);
     return `${shown.exact}${shown.worth ? `  ${money(shown.worth, true)}` : ""}`;
@@ -320,7 +322,7 @@ export function drawSwap(): void {
   enable(button, !!picked.length && off === false);
   fill(view, {
     pick: picked.length || waiting ? null : "Pick tokens to sell",
-    summary: !!picked.length || !!waiting,
+    summary: !!picked.length || !!waiting || null,
     quote: picked.length ? line(out) : undefined,
     fee: picked.length ? line(-fee) : undefined,
     paid: picked.length ? line(out - fee) : undefined,
@@ -381,22 +383,20 @@ actions["review-swap"] = async (el) => {
   busy(el as HTMLButtonElement);
   const swapper = swapperShown();
   const routed = together(found).value;
-  const items: Item[] = found.rows
-    .filter((row) => row.ticked && row.found.value)
-    .flatMap((row) =>
-      (routed?.parts.get(key(row.token.address)) ?? [{ route: row.found.value!.route, out: row.found.value!.out }]).map(
-        ({ route, out }) => {
-          // A part without its own quote takes its share of the token's.
-          const quote = out ?? (row.found.value!.out * route.amount) / row.amount;
-          return {
-            token: row.token,
-            route: { ...route, minPaid: swap.minimumOf(quote, margin) },
-            out: quote,
-            allowance: row.allowance,
-          };
-        },
-      ),
-    );
+  const items: Item[] = found.rows.filter(isTicked).flatMap((row) =>
+    (routed?.parts.get(key(row.token.address)) ?? [{ route: row.route.route, out: row.route.out }]).map(
+      ({ route, out }) => {
+        // A part without its own quote takes its share of the token's.
+        const quote = out ?? (row.route.out * route.amount) / row.amount;
+        return {
+          token: row.token,
+          route: { ...route, minPaid: swap.minimumOf(quote, margin) },
+          out: quote,
+          allowance: row.allowance,
+        };
+      },
+    ),
+  );
   try {
     failedReview = (await reviewSwap({ swapper, items, margin }, found.tokens, found.prices, found.costs)) ?? "";
   } catch (error) {
@@ -566,11 +566,8 @@ export const allowances = (): Got<Allowance[]> => {
 };
 export function drawAllowances(el: HTMLElement): void {
   const found = allowances();
-  const tokens =
-    found.value &&
-    use(`tokens ${found.value.map(({ token }) => token).join()}`, () =>
-      describe(found.value!.map(({ token }) => token)),
-    ).value;
+  const addresses = found.value?.map(({ token }) => token);
+  const tokens = addresses && use(`tokens ${addresses.join()}`, () => describe(addresses)).value;
   list(
     el,
     found.value ?? [],
@@ -584,7 +581,7 @@ export function drawAllowances(el: HTMLElement): void {
       });
     },
   );
-  fill(view, { "reset-all": (found.value?.length ?? 0) > 1 });
+  fill(view, { "reset-all": (found.value?.length ?? 0) > 1 || null });
 }
 actions.reset = (el) => {
   const all = allowances().value ?? [];

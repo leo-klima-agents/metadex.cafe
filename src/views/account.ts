@@ -26,13 +26,12 @@ import {
   underWay,
   valueAt,
   WALK_LIMIT,
-  type Entry,
-  type Found,
+  type Payouts,
   type Payout,
+  type Standing,
   type Walk,
 } from "../payouts.ts";
-import { gasWords, key, pricesAtFlip, pricesNow, type Prices, type Token } from "../prices.ts";
-import { valueOf } from "../rewards.ts";
+import { gasWords, key, noPrices, pricesAtFlip, pricesNow, type Prices, type Token } from "../prices.ts";
 import { hrefOf } from "../routes.ts";
 import { now, same, tagged } from "../rpc.ts";
 import { state } from "../state.ts";
@@ -44,13 +43,12 @@ import { prefill } from "./swap.ts";
 const view = $('[data-view="account"]');
 
 // What waits for some accounts, at prices now, read again every five minutes.
-export function waiting(found: Found): Got<{ tokens: Map<string, Token>; prices: Prices }> {
+export function waiting(found: Payouts): Got<{ tokens: Map<string, Token>; prices: Prices }> {
   const amounts = new Map<string, bigint>();
   for (const { standing } of found.entries)
     for (const { token, amount } of standing?.waiting ?? [])
       amounts.set(key(token), (amounts.get(key(token)) ?? 0n) + amount);
-  if (!amounts.size)
-    return { value: { tokens: new Map(), prices: { unit: "USD", of: new Map(), standIns: new Map() } } };
+  if (!amounts.size) return { value: { tokens: new Map(), prices: noPrices() } };
   return use(
     `waiting ${[...amounts].join()}`,
     async () => {
@@ -61,14 +59,14 @@ export function waiting(found: Found): Got<{ tokens: Map<string, Token>; prices:
   );
 }
 // "≈ $1.84 in 9 tokens", or "at least" where some could not be read or priced.
-export function waitsWords({ standing }: Entry, found: Found): string {
+export function waitsWords(standing: Standing, found: Payouts): string {
   const priced = waiting(found).value;
-  const tokens = new Set(standing!.waiting.map(({ token }) => key(token)));
+  const tokens = new Set(standing.waiting.map(({ token }) => key(token)));
   if (!tokens.size) return "from the epoch before last";
-  const worth = priced ? valueAt(standing!.waiting, priced.tokens, priced.prices) : 0;
+  const worth = priced ? valueAt(standing.waiting, priced.tokens, priced.prices) : 0;
   const partial = [...tokens].some((token) => !priced?.prices.of.has(token));
   const words = count(tokens.size, "token", "tokens");
-  return `${standing!.unknown || standing!.late || (worth && partial) ? "at least " : ""}${worth ? `${money(moneyAt(worth, priced!.prices))} in ${words}` : words}`;
+  return `${standing.unknown || standing.late || (worth && partial) ? "at least " : ""}${worth ? `${money(moneyAt(worth, priced!.prices))} in ${words}` : words}`;
 }
 
 export function drawAccount(): void {
@@ -93,23 +91,20 @@ export function drawAccount(): void {
     status: statusNode(st, own),
     lock: account.amount === 0n ? "Empty" : lockWords(account),
     votes: voteFigure(account.votes),
-    "earned-row": earned.value !== null,
-    earned:
-      earned.value === null
-        ? null
-        : shown(earned, (e) => money(moneyAt(e!.share * valueOf(e!.of).total, e!.of.prices))),
-    "owner-row": !own,
+    "earned-row": earned.value !== null || null,
+    earned: shown(earned, (worth) => money(worth)),
+    "owner-row": !own || null,
     owner: { address: found.owner, text: short(found.owner) },
     overdue:
       late && payouts.value
         ? frag(
             Object.assign(document.createElement("strong"), { textContent: "Payout overdue: " }),
-            waitsWords(late, payouts.value),
+            waitsWords(late.standing, payouts.value),
           )
         : null,
-    stopped,
+    stopped: stopped || null,
     since: stopped ? utc(st.since) : "",
-    leftovers: own,
+    leftovers: own || null,
     underway:
       own && payouts.value && underWay(payouts.value)?.left.some((each) => each.account.id === id)
         ? "Payout under way."
@@ -161,23 +156,23 @@ function drawActions(own: Holdings | undefined, st: hydrex.Status): void {
         )
       : undefined;
   fill(section, {
-    actions: any || (!!own && st.kind === "unvoted"),
-    vote: !!own && st.kind === "unvoted",
+    actions: any || (!!own && st.kind === "unvoted") || null,
+    vote: (!!own && st.kind === "unvoted") || null,
     gas: !gas || gas.failed ? null : gas.value && `A change costs ${gasWords(gas.value.wei, gas.value.prices)} in gas.`,
   });
 }
 
 // Each account's standing in its automation's payouts, and the receipt of its last one.
-function drawStandings(found: Found, owner: Address, own: boolean): void {
+function drawStandings(found: Payouts, owner: Address, own: boolean): void {
   list(
     $("[data-list=standing]", view),
     found.entries,
     ({ account }) => String(account.id),
     (article, entry) => {
       const { automation, voter, account, standing, earnings, early, note, time } = entry;
-      const through = standing?.through ?? 0;
-      const waits = standing && earnings ? waitingLine(entry, found) : undefined;
-      const states: Value[] = [
+      const through = standing?.paidUpTo?.through ?? 0;
+      const waits = standing && earnings ? waitingLine(standing, found) : undefined;
+      const states = [
         !earnings && !early && status("idle", "Not read yet"),
         early && status("idle", "Not final yet"),
         !!earnings && !standing && status("idle", "Nothing to pay"),
@@ -194,7 +189,7 @@ function drawStandings(found: Found, owner: Address, own: boolean): void {
           time !== undefined &&
           `Last claimed outside ${automation.name} on ${day(time)}: no receipt.`,
         note === "unclaimed" && `Never claimed through ${automation.name}.`,
-      ].filter((each) => each);
+      ].filter((each) => each !== false && each !== undefined);
       list(
         $("[data-list=state]", article),
         states,
@@ -211,10 +206,10 @@ function drawStandings(found: Found, owner: Address, own: boolean): void {
     },
   );
 }
-function waitingLine(entry: Entry, found: Found): string {
-  const { waiting: owed, unknown } = entry.standing!;
+function waitingLine(standing: Standing, found: Payouts): string {
+  const { waiting: owed, unknown } = standing;
   if (!owed.length) return unknown ? "Waiting: not read" : "Nothing waiting";
-  return `${unknown ? "At least " : ""}${waitsWords(entry, found).replace(/^at least /, "")} waiting`;
+  return `${unknown ? "At least " : ""}${waitsWords(standing, found).replace(/^at least /, "")} waiting`;
 }
 
 // A receipt's tokens and prices at its flip.

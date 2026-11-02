@@ -119,7 +119,7 @@ function draw(): void {
     step: `${review.name}${pages.length > 1 ? ` · ${review.page + 1} of ${pages.length}` : ""}`,
     title: review.result ? "Done" : (shown.title ?? callsName),
     page: review.result ? null : (shown.body ?? null),
-    calls: !review.result && last && steps.length > 0,
+    calls: (!review.result && last && steps.length > 0) || null,
     "calls-title": shown.title ? callsName : null,
     how: waiting
       ? waiting
@@ -167,10 +167,10 @@ function draw(): void {
         on: step.on,
         to: { wallet: step.to },
         call: step.call,
-        "data-row": safe,
+        "data-row": safe || null,
         bytes: `${(step.data.length - 2) / 2} bytes`,
         data: safe ? fieldValue({ label: "", code: step.data }) : null,
-        operation: safe && groups[g] === 1,
+        operation: (safe && groups[g] === 1) || null,
       });
       list(
         $("[data-list=field]", row),

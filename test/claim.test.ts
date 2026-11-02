@@ -23,15 +23,15 @@ const OWNER: Address = "0x60924601E73EBc5C2Bd9244c788d93e0710a6c93";
 type Owed = Claim["owed"][number];
 
 const owed: Owed[] = [
-  { contract: FEES, token: USDC, amount: 1_000_000n, fee: true },
-  { contract: BRIBES, token: USDC, amount: 520_000n, fee: false },
-  { contract: BRIBES, token: AVNT, amount: 2_400_000_000_000_000_000n, fee: false },
-  { contract: "0x00000000000000000000000000000000000000f2", token: AVNT, amount: 0n, fee: true },
+  { contract: FEES, token: USDC, amount: 1_000_000n, fee: true, passes: 1 },
+  { contract: BRIBES, token: USDC, amount: 520_000n, fee: false, passes: 1 },
+  { contract: BRIBES, token: AVNT, amount: 2_400_000_000_000_000_000n, fee: false, passes: 1 },
+  { contract: "0x00000000000000000000000000000000000000f2", token: AVNT, amount: 0n, fee: true, passes: 1 },
 ];
 // A contract and a token at addresses of their numbers; and as #82774's on a fork: 71 contracts, 37 tokens.
 const contract = (n: number): Address => `0x${n.toString(16).padStart(40, "0")}`;
 const token = (n: number): Address => contract(n + 0x1000);
-const owe = (contract: Address, token: Address, fee = false): Owed => ({ contract, token, amount: 1n, fee });
+const owe = (contract: Address, token: Address, fee = false): Owed => ({ contract, token, amount: 1n, fee, passes: 1 });
 const many = Array.from({ length: 71 }, (_, i) =>
   (i % 3 ? [i] : [i, i + 1]).map((t) => owe(contract(i), token(t % 37), i % 2 === 0)),
 ).flat();
@@ -53,7 +53,7 @@ test("a claim that fits one call passes only the contracts and tokens that owe s
 
 test("a contract owing past the 50 epochs one asking reads is listed, and costed, once for each asking", () => {
   const twice: Owed[] = [
-    { contract: FEES, token: USDC, amount: 1n, fee: true },
+    { contract: FEES, token: USDC, amount: 1n, fee: true, passes: 1 },
     { contract: BRIBES, token: USDC, amount: 1n, fee: false, passes: 2 },
   ];
   assert.deepEqual(claimArgs({ id: 1n, owed: twice }), [1n, [FEES], [BRIBES, BRIBES], [USDC]]);

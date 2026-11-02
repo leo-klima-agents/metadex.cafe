@@ -3,14 +3,14 @@ import type { Got } from "./cache.ts";
 import { hexLines, walletLines } from "./format.ts";
 
 // The page's markup holds every view, popup and row; this fills it. An element marked data-text="key" takes a value:
-//   string: its text; undefined: "Loading…", drawn as a bar; null or false: hidden; true: shown as it is;
+//   string: its text; undefined: "Loading…", drawn as a bar; null: hidden; true: shown as it is;
 //   a Node: its content; {state}: a data-state its [data-when] children follow, shown or hidden by CSS;
 //   {href, text}: a link; {address}: hex in groups of four, a link to Basescan; {wallet}: as a wallet shows it.
 export type Value =
   | string
   | undefined
   | null
-  | boolean
+  | true
   | Node
   | { state: "loading" | "failed" | "empty" | "ready" }
   | { href: string; text: string; external?: boolean }
@@ -40,9 +40,9 @@ function replace(el: Element, value: Node): void {
 }
 
 function put(el: HTMLElement, value: Value): void {
-  el.hidden = value === null || value === false;
+  el.hidden = value === null;
   setAttr(el, "data-loading", value === undefined ? "" : null);
-  if (value === null || value === false || value === true) return;
+  if (value === null || value === true) return;
   if (value === undefined) return setText(el, "Loading…");
   if (typeof value === "string") return setText(el, value);
   if (value instanceof Node) return replace(el, value);
@@ -109,9 +109,9 @@ export function list<T>(
   }
 }
 
-// A read's value as text: loading while read, "Not read" once failed.
-export const shown = <T>(got: Got<T>, text: (value: T) => Value): Value =>
-  got.value !== undefined ? text(got.value) : got.failed ? "Not read" : undefined;
+// A read's value as text: loading while read, "Not read" once failed, and hidden when it is null: nothing to show.
+export const shown = <T>(got: Got<T>, text: (value: NonNullable<T>) => Value): Value =>
+  got.value === null ? null : got.value !== undefined ? text(got.value) : got.failed ? "Not read" : undefined;
 export const stateOf = (got: Got<unknown>, empty?: boolean): Value => ({
   state: got.value !== undefined ? (empty ? "empty" : "ready") : got.failed ? "failed" : "loading",
 });

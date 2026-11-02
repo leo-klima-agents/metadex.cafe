@@ -5,18 +5,42 @@ import {
   parseAbi,
   type Abi,
   type Address,
+  type ContractFunctionArgs,
+  type ContractFunctionName,
+  type ContractFunctionReturnType,
   type Hex,
 } from "viem";
 import { memo } from "./cache.ts";
 import { MULTICALL3, RPCS } from "./config.ts";
 
-export type Call = { address: Address; abi: Abi; functionName: string; args: unknown[] };
-export const call = (address: Address, abi: Abi, functionName: string, ...args: unknown[]): Call => ({
-  address,
-  abi,
-  functionName,
-  args,
-});
+// A call of a contract's function, its name and arguments checked against its ABI, which also types what it returns.
+export type Call<A extends Abi = Abi, N extends string = string> = {
+  address: Address;
+  abi: A;
+  functionName: N;
+  args: readonly unknown[];
+};
+// eth_call runs any function, so a read may call any of them.
+type Mutability = "pure" | "view" | "nonpayable" | "payable";
+type Args<A extends Abi, N extends ContractFunctionName<A>> =
+  ContractFunctionArgs<A, Mutability, N> extends infer T extends readonly unknown[] ? T : never;
+export type Result<C> =
+  C extends Call<infer A, infer N>
+    ? N extends ContractFunctionName<A>
+      ? ContractFunctionReturnType<A, Mutability, N>
+      : unknown
+    : unknown;
+export const call = <const A extends Abi, N extends ContractFunctionName<A>>(
+  address: Address,
+  abi: A,
+  functionName: N,
+  ...args: Args<A, N>
+): Call<A, N> => ({ address, abi, functionName, args });
+// One contract's calls, by function name.
+export const contract =
+  <const A extends Abi>(address: Address, abi: A) =>
+  <N extends ContractFunctionName<A>>(functionName: N, ...args: Args<A, N>): Call<A, N> =>
+    call(address, abi, functionName, ...args);
 // Never throws, even on the undefined of a failed read.
 export const same = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 export const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
@@ -135,17 +159,15 @@ export function rpc<T>(method: string, params: unknown[], { tag, want = (r) => r
 }
 
 type ReadOptions = { block?: number | "latest"; tag?: Tag | undefined; perBatch?: number };
-export type Read = (calls: Call[], options?: ReadOptions) => Promise<unknown[]>;
-// Reads contracts through Multicall3, in batches of `perBatch`, as each eth_call runs within its own gas limit. A call
-// that fails reads as undefined.
-export async function read(
-  calls: Call[],
-  { block = "latest", tag, perBatch = 200 }: ReadOptions = {},
-): Promise<unknown[]> {
+// Each call's result, as its ABI types it, or undefined if it failed.
+export type Results<C extends readonly Call[]> = { -readonly [K in keyof C]: Result<C[K]> | undefined };
+export type Read = <const C extends readonly Call[]>(calls: C, options?: ReadOptions) => Promise<Results<C>>;
+// Reads contracts through Multicall3, in batches of `perBatch`, as each eth_call runs within its own gas limit.
+export const read: Read = async (calls, { block = "latest", tag, perBatch = 200 } = {}) => {
   const batches: Promise<unknown[]>[] = [];
   for (let i = 0; i < calls.length; i += perBatch) batches.push(aggregate(calls.slice(i, i + perBatch), block, tag));
-  return (await Promise.all(batches)).flat();
-}
+  return (await Promise.all(batches)).flat() as never;
+};
 async function aggregate(calls: Call[], block: number | "latest", tag: Tag | undefined): Promise<unknown[]> {
   const data = encodeFunctionData({
     abi: multicall3Abi,
@@ -169,10 +191,26 @@ export const tagged =
   (tag: Tag): Read =>
   (calls, options) =>
     read(calls, { ...options, tag });
+// Named lists of calls, read together as one: each list comes back on its own, typed by its calls.
+export async function readLists<const R extends Record<string, readonly Call[]>>(
+  lists: R,
+  options?: ReadOptions,
+  rd: Read = read,
+): Promise<{ [K in keyof R]: Results<R[K]> }> {
+  const names = Object.keys(lists);
+  const all: unknown[] = await rd(
+    names.flatMap((name) => lists[name]!),
+    options,
+  );
+  let at = 0;
+  return Object.fromEntries(names.map((name) => [name, all.slice(at, (at += lists[name]!.length))])) as never;
+}
 // Throws unless every call was read.
-export function required<T>(values: (T | undefined)[]): T[] {
+export function required<const T extends readonly unknown[]>(
+  values: T,
+): { -readonly [K in keyof T]: Exclude<T[K], undefined> } {
   if (values.includes(undefined)) throw new Error("A read from Base failed.");
-  return values as T[];
+  return values as never;
 }
 
 export const implementation = async (proxy: Address): Promise<Address> =>

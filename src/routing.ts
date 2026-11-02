@@ -10,7 +10,7 @@ import {
   routeGas,
   swapperFor,
   taxed,
-  type Found,
+  type Routed,
   type Route,
 } from "./swap.ts";
 
@@ -24,7 +24,7 @@ import {
 // It reads only what it can afford: about as many requests as the RPCs allow in a second, with fewer pools and amounts
 // per pool when there are many.
 
-export type Sale = { token: Address; amount: bigint; found: Found; hydrex: boolean };
+export type Sale = { token: Address; amount: bigint; found: Routed; hydrex: boolean };
 
 // A sale moves its pools when its quote, against 100 times that of a hundredth of it, falls short by more than 0.1%.
 const PROBE = 100n;

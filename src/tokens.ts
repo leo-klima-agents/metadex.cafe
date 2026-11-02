@@ -2,8 +2,8 @@ import { erc20Abi, getAddress, type Address } from "viem";
 import { SWAPPERS } from "./config.ts";
 import list from "./base-tokens.json" with { type: "json" };
 import { clean } from "./format.ts";
-import { key, type Read, type Token } from "./prices.ts";
-import { call, read, same } from "./rpc.ts";
+import { key, type Token } from "./prices.ts";
+import { call, read, readLists, same, type Read } from "./rpc.ts";
 
 export { erc20Abi };
 // The tokens the page knows, whose balances it reads, as no RPC lists a wallet's tokens: Base's common tokens, and
@@ -35,12 +35,17 @@ export type Amount = { token: Address; amount: bigint };
 // Each token's symbol and decimals, by lower-case address, as its contract answers. Those without decimals are left out.
 export async function tokensOf(addresses: Address[], rd: Read = read): Promise<Map<string, Token>> {
   const unique = [...new Set(addresses.map(key))] as Address[];
-  const found = await rd(
-    unique.flatMap((address) => [call(address, erc20Abi, "symbol"), call(address, erc20Abi, "decimals")]),
+  const found = await readLists(
+    {
+      symbols: unique.map((address) => call(address, erc20Abi, "symbol")),
+      decimals: unique.map((address) => call(address, erc20Abi, "decimals")),
+    },
+    {},
+    rd,
   );
   return new Map(
     unique.flatMap((address, i) => {
-      const [symbol, decimals] = found.slice(2 * i, 2 * i + 2) as [string?, number?];
+      const [symbol, decimals] = [found.symbols[i], found.decimals[i]];
       return decimals === undefined ? [] : [[address, { address, decimals, symbol: clean(symbol) || "?" }]];
     }),
   );
@@ -59,18 +64,16 @@ export async function describe(addresses: Address[]): Promise<Map<string, Token>
 
 // The wallet's balance of each token, and what it allows `spender` to take. A failed read counts as nothing.
 export async function holdingsOf(owner: Address, tokens: Address[], spender?: Address, rd: Read = read) {
-  const width = spender ? 2 : 1;
-  const replies = await rd(
-    tokens.flatMap((token) => [
-      call(token, erc20Abi, "balanceOf", owner),
-      ...(spender ? [call(token, erc20Abi, "allowance", owner, spender)] : []),
-    ]),
+  const found = await readLists(
+    {
+      balances: tokens.map((token) => call(token, erc20Abi, "balanceOf", owner)),
+      allowances: spender ? tokens.map((token) => call(token, erc20Abi, "allowance", owner, spender)) : [],
+    },
+    {},
+    rd,
   );
   return new Map(
-    tokens.map((token, i) => {
-      const [balance = 0n, allowance = 0n] = replies.slice(width * i, width * i + width) as (bigint | undefined)[];
-      return [key(token), { balance, allowance }];
-    }),
+    tokens.map((token, i) => [key(token), { balance: found.balances[i] ?? 0n, allowance: found.allowances[i] ?? 0n }]),
   );
 }
 
@@ -79,5 +82,8 @@ export type Allowance = { token: Address; spender: Address; amount: bigint };
 export async function allowancesOf(owner: Address, tokens: Address[], rd: Read = read): Promise<Allowance[]> {
   const pairs = tokens.flatMap((token) => SWAPPERS.map(({ address }) => ({ token, spender: address })));
   const replies = await rd(pairs.map(({ token, spender }) => call(token, erc20Abi, "allowance", owner, spender)));
-  return pairs.flatMap((pair, i) => (replies[i] ? [{ ...pair, amount: replies[i] as bigint }] : []));
+  return pairs.flatMap((pair, i) => {
+    const amount = replies[i];
+    return amount ? [{ ...pair, amount }] : [];
+  });
 }

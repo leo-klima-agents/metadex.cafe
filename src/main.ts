@@ -104,7 +104,7 @@ onRender(() => {
   toggle("wallet", !!connection);
   toggle("wrong-chain", !!connection && connection.chainId !== CHAIN_ID);
   toggle("safe", !!connection?.wallet.propose);
-  fill(document.body, { chip: connection ? short(connection.address) : "", failed: failures() > 0 });
+  fill(document.body, { chip: connection ? short(connection.address) : "", failed: failures() > 0 || null });
   $("header [data-text=chip]").setAttribute(
     "aria-label",
     connection ? `Your wallet, connected as ${short(connection.address)}` : "",

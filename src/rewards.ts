@@ -4,8 +4,8 @@ import { memo } from "./cache.ts";
 import { AUTOMATIONS } from "./config.ts";
 import { WEEK, clean, moneyAt, type Money } from "./format.ts";
 import { escrow, voter } from "./hydrex.ts";
-import { key, pricesAtFlip, worthOf, type Prices, type Read, type Token } from "./prices.ts";
-import { blockTime, call, read, required, same } from "./rpc.ts";
+import { key, noPrices, pricesAtFlip, worthOf, type Prices, type Token } from "./prices.ts";
+import { blockTime, call, read, readLists, required, same, type Read } from "./rpc.ts";
 import { tokensOf } from "./tokens.ts";
 
 // What votes earned in an epoch that has ended, from Hydrex's reward contracts: each pool's gauge has one for the
@@ -25,16 +25,16 @@ const poolAbi = parseAbi([
 // An epoch's rewards are final only once Hydrex's own epoch has moved on, as it does once someone calls its minter:
 // so the last epoch to have ended is Hydrex's word.
 export async function lastEpoch(): Promise<number> {
-  const [, active] = required(await read([blockTime, voter("_epochTimestamp")])) as bigint[];
+  const [, active] = required(await read([blockTime, voter("_epochTimestamp")]));
   return Number(active) - WEEK;
 }
 
 type Contract = { pool: Address; address: Address; fee: boolean };
 async function contractsOf(pools: Address[], rd: Read): Promise<Contract[]> {
-  const gauges = required(await rd(pools.map((pool) => voter("gauges", pool)))) as Address[];
+  const gauges = required(await rd(pools.map((pool) => voter("gauges", pool))));
   const bribes = required(
     await rd(gauges.flatMap((gauge) => [voter("internal_bribes", gauge), voter("external_bribes", gauge)])),
-  ) as Address[];
+  );
   return pools.flatMap((pool, i) => [
     { pool, address: bribes[2 * i]!, fee: true },
     { pool, address: bribes[2 * i + 1]!, fee: false },
@@ -44,10 +44,8 @@ async function contractsOf(pools: Address[], rd: Read): Promise<Contract[]> {
 // began. Hydrex only adds pools, so they hold every epoch up to the one under way when read.
 async function allContracts(start: number): Promise<Contract[]> {
   const readAll = async () => {
-    const [length, active] = required(await read([voter("length"), voter("_epochTimestamp")])) as bigint[];
-    const pools = required(
-      await read(Array.from({ length: Number(length) }, (_, i) => voter("pools", BigInt(i)))),
-    ) as Address[];
+    const [length, active] = required(await read([voter("length"), voter("_epochTimestamp")]));
+    const pools = required(await read(Array.from({ length: Number(length) }, (_, i) => voter("pools", BigInt(i)))));
     return { through: Number(active), contracts: await contractsOf(pools, read) };
   };
   const found = await memo("contracts", readAll);
@@ -60,21 +58,28 @@ export const earnedBy = (perEpoch: bigint, supply: bigint, balance: bigint): big
 
 // What a voter's votes, or all votes, earned in the epoch from `start` in the contracts, and the votes for each pool.
 async function rewardsOf(contracts: Contract[], start: number, holder: Address | undefined, rd: Read) {
-  const width = holder ? 3 : 2;
-  const totals = required(
-    await rd(
-      contracts.flatMap(({ address }) => [
-        call(address, rewardsAbi, "totalSupplyAt", start),
-        call(address, rewardsAbi, "rewardsListLength"),
-        ...(holder ? [call(address, rewardsAbi, "balanceOfOwnerAt", holder, start)] : []),
-      ]),
-    ),
-  ) as bigint[];
+  const at = BigInt(start);
+  const totals = await readLists(
+    {
+      supplies: contracts.map(({ address }) => call(address, rewardsAbi, "totalSupplyAt", at)),
+      lengths: contracts.map(({ address }) => call(address, rewardsAbi, "rewardsListLength")),
+      balances: holder ? contracts.map(({ address }) => call(address, rewardsAbi, "balanceOfOwnerAt", holder, at)) : [],
+    },
+    {},
+    rd,
+  );
+  const [supplies, lengths, balances] = [
+    required(totals.supplies),
+    required(totals.lengths),
+    required(totals.balances),
+  ];
   const voted = contracts
-    .map((contract, i) => {
-      const [supply, length, balance = supply] = totals.slice(width * i, width * i + width) as bigint[];
-      return { ...contract, supply: supply!, length: Number(length), balance: balance! };
-    })
+    .map((contract, i) => ({
+      ...contract,
+      supply: supplies[i]!,
+      length: Number(lengths[i]),
+      balance: holder ? balances[i]! : supplies[i]!,
+    }))
     .filter(({ supply, balance }) => supply > 0n && balance > 0n);
   const tokens = required(
     await rd(
@@ -82,20 +87,20 @@ async function rewardsOf(contracts: Contract[], start: number, holder: Address |
         Array.from({ length }, (_, i) => call(address, rewardsAbi, "rewardTokens", BigInt(i))),
       ),
     ),
-  ) as Address[];
+  );
   let k = 0;
   const listed = voted.map((contract) => ({ ...contract, tokens: tokens.slice(k, (k += contract.length)) }));
   const data = required(
     await rd(
       listed.flatMap(({ address, tokens }) =>
-        tokens.map((token) => call(address, rewardsAbi, "rewardData", token, start)),
+        tokens.map((token) => call(address, rewardsAbi, "rewardData", token, at)),
       ),
     ),
-  ) as bigint[][];
+  );
   k = 0;
   const found = listed.flatMap(({ pool, address: contract, fee, supply, balance, tokens }) =>
     tokens.flatMap((token) => {
-      const perEpoch = data[k++]![1]!;
+      const [, perEpoch] = data[k++]!;
       const amount = holder ? earnedBy(perEpoch, supply, balance) : perEpoch;
       return amount > 0n ? [{ pool, contract, token, amount, fee }] : [];
     }),
@@ -124,71 +129,83 @@ async function priced(start: number, votes: bigint, pools: Pool[], rewards: Rewa
 // just before each flip, after which they are found among every pool's.
 export async function votesEarned(holder: Address, start: number, named: boolean, rd: Read = read): Promise<Earnings> {
   const [voted, length, votes] = required(
-    await rd([voter("lastVoted", holder), voter("poolVoteLength", holder), escrow("getPastVotes", holder, start)]),
-  ) as bigint[];
-  if (!votes || Number(voted) < start - WEEK)
-    return {
-      start,
-      votes: votes!,
-      pools: [],
-      rewards: [],
-      prices: { unit: "USD", of: new Map(), standIns: new Map() },
-    };
+    await rd([
+      voter("lastVoted", holder),
+      voter("poolVoteLength", holder),
+      escrow("getPastVotes", holder, BigInt(start)),
+    ]),
+  );
+  if (!votes || Number(voted) < start - WEEK) return { start, votes, pools: [], rewards: [], prices: noPrices() };
   const contracts =
     Number(voted) >= start + WEEK
       ? await allContracts(start)
       : await contractsOf(
-          required(
-            await rd(Array.from({ length: Number(length) }, (_, i) => voter("poolVote", holder, BigInt(i)))),
-          ) as Address[],
+          required(await rd(Array.from({ length: Number(length) }, (_, i) => voter("poolVote", holder, BigInt(i))))),
           rd,
         );
   const { rewards, votes: byPool } = await rewardsOf(contracts, start, holder, rd);
   const used = [...byPool];
-  const parts = named
-    ? await rd(used.flatMap(([pool]) => ["token0", "token1", "symbol"].map((name) => call(pool, poolAbi, name))))
-    : [];
-  const symbols = await tokensOf(parts.filter((part, i) => i % 3 < 2 && part) as Address[], rd);
-  const symbol = (address: unknown) => symbols.get(key(address as string))?.symbol ?? "?";
-  // A pool goes by its two tokens; a classic pair by its own symbol; a vault by both.
-  const pools = used.map(([address, poolVotes], i): Pool => {
-    if (!named) return { address, name: "", votes: poolVotes };
-    const [token0, token1, own] = parts.slice(3 * i, 3 * i + 3);
-    const kind = clean(own as string | undefined);
+  const pools = named ? await withNames(used, rd) : used.map(([address, votes]) => ({ address, name: "", votes }));
+  pools.sort((a, b) => (a.votes === b.votes ? 0 : a.votes > b.votes ? -1 : 1));
+  return priced(start, votes, pools, rewards, rd);
+}
+// A pool goes by its two tokens; a classic pair by its own symbol; a vault by both.
+async function withNames(used: [Address, bigint][], rd: Read): Promise<Pool[]> {
+  const found = await readLists(
+    {
+      token0: used.map(([pool]) => call(pool, poolAbi, "token0")),
+      token1: used.map(([pool]) => call(pool, poolAbi, "token1")),
+      kinds: used.map(([pool]) => call(pool, poolAbi, "symbol")),
+    },
+    {},
+    rd,
+  );
+  const symbols = await tokensOf(
+    [...found.token0, ...found.token1].filter((token) => token !== undefined),
+    rd,
+  );
+  const symbol = (address: Address) => symbols.get(key(address))?.symbol ?? "?";
+  return used.map(([address, votes], i) => {
+    const [token0, token1, kind] = [found.token0[i], found.token1[i], clean(found.kinds[i])];
     const pair = token0 && token1 ? `${symbol(token0)} / ${symbol(token1)}` : "";
     return {
       address,
       name: /^[sv]AMM-/.test(kind) ? kind : pair && kind ? `${pair} (${kind})` : pair || kind || address,
-      votes: poolVotes,
+      votes,
     };
   });
-  pools.sort((a, b) => (a.votes === b.votes ? 0 : a.votes > b.votes ? -1 : 1));
-  return priced(start, votes!, pools, rewards, rd);
 }
 
 // What all votes on Hydrex earned in the epoch, for the average.
 export async function allEarnings(start: number, rd: Read = read): Promise<Earnings> {
   const [[votes], found] = await Promise.all([
-    rd([voter("totalWeightAt", start)]).then(required) as Promise<bigint[]>,
+    rd([voter("totalWeightAt", BigInt(start))]).then(required),
     allContracts(start).then((all) => rewardsOf(all, start, undefined, rd)),
   ]);
   const pools = [...found.votes].map(([address, poolVotes]) => ({ address, name: "", votes: poolVotes }));
-  return priced(start, votes!, pools, found.rewards, rd);
+  return priced(start, votes, pools, found.rewards, rd);
 }
 
 // What an automation's votes earned in the epoch, reward by reward, unpriced, for the payouts.
 export async function rewardsFor(automation: Address, start: number, rd: Read = read): Promise<Reward[]> {
-  const [votes] = required(await rd([escrow("getPastVotes", automation, start)]));
+  const [votes] = required(await rd([escrow("getPastVotes", automation, BigInt(start))]));
   return votes ? (await rewardsOf(await allContracts(start), start, automation, rd)).rewards : [];
 }
 
 // Who held each account's votes when the epoch from `start` began, and how many.
 export type Stake = { delegate: Address; votes: bigint };
 export async function stakesOf(ids: bigint[], start: number, rd: Read = read): Promise<Map<bigint, Stake>> {
-  const found = await rd(ids.flatMap((id) => [escrow("delegates", id, start), escrow("balanceOfNFTAt", id, start)]));
+  const found = await readLists(
+    {
+      delegates: ids.map((id) => escrow("delegates", id, start)),
+      votes: ids.map((id) => escrow("balanceOfNFTAt", id, BigInt(start))),
+    },
+    {},
+    rd,
+  );
   return new Map(
     ids.flatMap((id, i) => {
-      const [delegate, votes] = found.slice(2 * i, 2 * i + 2) as [Address?, bigint?];
+      const [delegate, votes] = [found.delegates[i], found.votes[i]];
       return delegate && votes ? [[id, { delegate, votes }]] : [];
     }),
   );

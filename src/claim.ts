@@ -2,7 +2,7 @@ import { encodeFunctionData, type Address } from "viem";
 import { doubleEspressoAbi as abi } from "./abi.ts";
 import { DOUBLE_ESPRESSO, FEE_BPS } from "./config.ts";
 import { WEEK, count } from "./format.ts";
-import { claimed, readOwed, summed, totals, type Entry, type Owed } from "./payouts.ts";
+import { claimed, readOwed, summed, totals, type Overdue, type Owed } from "./payouts.ts";
 import type { Amount } from "./tokens.ts";
 import { key, type Token } from "./prices.ts";
 import { rewardsFor, type Reward } from "./rewards.ts";
@@ -13,7 +13,8 @@ import type { Slip } from "./wallet.ts";
 // tokens) for any account in it, and it pays the owner, less 1%. A claim asks every contract given for every token
 // given, each walking back up to 50 epochs, so the page passes only what earned() finds owed, split into calls that fit.
 
-export type Claim = { id: bigint; owed: (Owed & { fee: boolean })[] };
+// `passes`: how many times the claim asks each contract, to reach past the 50 epochs each asking reads: see readOwed.
+export type Claim = { id: bigint; owed: (Owed & { fee: boolean; passes: number })[] };
 const unique = (addresses: Address[]): Address[] => [
   ...new Map(addresses.map((address) => [key(address), address])).values(),
 ];
@@ -21,9 +22,9 @@ const unique = (addresses: Address[]): Address[] => [
 // Each contract asked, as many times as its claim must reach past the 50 epochs each asking reads: see readOwed.
 const asked = (owed: Claim["owed"]): Address[] =>
   unique(owed.map(({ contract }) => contract)).flatMap((contract) =>
-    Array<Address>(
-      Math.max(...owed.filter((each) => same(each.contract, contract)).map(({ passes = 1 }) => passes)),
-    ).fill(contract),
+    Array<Address>(Math.max(...owed.filter((each) => same(each.contract, contract)).map(({ passes }) => passes))).fill(
+      contract,
+    ),
   );
 // What a call costs at most, as traced on a fork: each asking of each contract walks each token up to 50 epochs.
 export function claimGas(owed: Claim["owed"]): bigint {
@@ -129,15 +130,15 @@ export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true
 // when it is late for it too. Pools from further back are not read, so it is a floor. `unread`: how many reward
 // contracts Base did not say all they owe, which are left out.
 export async function owedOf(
-  entries: Entry[],
+  entries: Overdue[],
 ): Promise<{ claims: Claim[]; tokens: Map<string, Token>; earlier: boolean; unread: number }> {
   const tokens = new Map<string, Token>();
   const unread = new Set<string>();
   const claims = await Promise.all(
     entries.map(async ({ account, earnings, standing, voter }): Promise<Claim> => {
       const rewards: Reward[] = [
-        ...earnings!.rewards,
-        ...(standing?.late ? await rewardsFor(voter.address, earnings!.start - WEEK) : []),
+        ...earnings.rewards,
+        ...(standing.late ? await rewardsFor(voter.address, earnings.start - WEEK) : []),
       ];
       const pairs = [
         ...new Map(rewards.map((reward) => [`${key(reward.contract)} ${key(reward.token.address)}`, reward])).values(),
@@ -147,7 +148,7 @@ export async function owedOf(
         [account.id],
         pairs.map(({ contract, token }) => ({ contract, token: token.address })),
         "latest",
-        [earnings!.start - WEEK, earnings!.start],
+        [earnings.start - WEEK, earnings.start],
       );
       return {
         id: account.id,

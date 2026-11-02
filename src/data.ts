@@ -2,10 +2,19 @@ import type { Address } from "viem";
 import { memo, then, use, type Got } from "./cache.ts";
 import { checks } from "./checks.ts";
 import { AUTOMATIONS, type Automation } from "./config.ts";
-import { WEEK, weekStart } from "./format.ts";
+import { WEEK, moneyAt, weekStart, type Money } from "./format.ts";
 import { readAccount, readAccounts, readFreshness, readMatchaLatte, type Holdings } from "./hydrex.ts";
-import { awaited, readPayouts, readTime, type Found } from "./payouts.ts";
-import { allEarnings, holdersOf, lastEpoch, stakesOf, votesEarned, type Earnings, type Stake } from "./rewards.ts";
+import { awaited, readPayouts, readTime, type Payouts } from "./payouts.ts";
+import {
+  allEarnings,
+  holdersOf,
+  lastEpoch,
+  stakesOf,
+  valueOf,
+  votesEarned,
+  type Earnings,
+  type Stake,
+} from "./rewards.ts";
 import { now, same, tagged } from "./rpc.ts";
 import { state } from "./state.ts";
 
@@ -51,13 +60,16 @@ export const stakes = (holdings: Holdings): Got<Map<bigint, Stake>> =>
 export const voter = (holder: Address): Got<Earnings> =>
   then(epoch(), (start) => use(`voter ${holder} ${start}`, () => votesEarned(holder, start, false, tagged("shares"))));
 // What an account's votes earned last epoch: its part of whoever held them, if they voted.
-export function earnedBy(holdings: Holdings, id: bigint): Got<{ share: number; of: Earnings } | null> {
+export function earnedBy(holdings: Holdings, id: bigint): Got<Money | null> {
   return then(stakes(holdings), (all) => {
     const stake = all.get(id);
     if (!stake) return { value: null };
     const automation = AUTOMATIONS.find(({ address }) => same(address, stake.delegate));
     return then(automation ? earnings(automation) : voter(stake.delegate), (of) => ({
-      value: of.votes && (automation || of.pools.length) ? { share: Number(stake.votes) / Number(of.votes), of } : null,
+      value:
+        of.votes && (automation || of.pools.length)
+          ? moneyAt((Number(stake.votes) / Number(of.votes)) * valueOf(of).total, of.prices)
+          : null,
     }));
   });
 }
@@ -65,14 +77,14 @@ export const holders = (holdings: Holdings) => then(stakes(holdings), (all) => (
 
 // The payouts of the accounts in the automations, as of the last epoch Hydrex has ended: read again once it moves on,
 // and every five minutes while one due has not come.
-export function payouts(holdings: Holdings): Got<Found> {
+export function payouts(holdings: Holdings): Got<Payouts> {
   const key = holdings.accounts.map(({ id, delegate, claimer }) => `${id}:${delegate}:${claimer}`).join(" ");
   return then(epoch(), (start) =>
     use(
       `payouts ${holdings.owner} ${holdings.epochStart} ${start} ${key}`,
       () =>
         readPayouts(holdings, (automation) => memo(earningsKey(automation, start), readEarnings(automation, start))),
-      (found: Found) => (awaited(found) ? 5 * MINUTE : Infinity),
+      (found: Payouts) => (awaited(found) ? 5 * MINUTE : Infinity),
     ),
   );
 }

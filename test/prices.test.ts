@@ -73,7 +73,7 @@ test("a search probes every point of a short range, and spreads its points over 
 function history(times: number[], failAt?: number) {
   let batches = 0;
   const probe = (index: number): Call => ({ address: zeroAddress, abi: [], functionName: "at", args: [index] });
-  const reader = async (calls: Call[]) => {
+  const reader = async (calls: readonly Call[]): Promise<any> => {
     batches++;
     return calls.map(({ args: [index] }) => (index === failAt ? undefined : times[index as number]));
   };
@@ -180,7 +180,7 @@ function market(pools: Fake[], answers = ANSWERS) {
   // Classic pools' observations: every half hour, the last ten minutes ago.
   const COUNT = 10;
   const observedAt = (i: number) => NOW - 600 - 1800 * (COUNT - 1 - i);
-  const reader = async (calls: Call[]) =>
+  const reader = async (calls: readonly Call[]): Promise<any> =>
     calls.map(({ address, functionName, args }) => {
       asked.add(address.toLowerCase());
       const fed = ANCHORS.find(({ feed }) => same(feed, address));
@@ -270,8 +270,8 @@ test("without any of Chainlink's prices, prices are in USDC, from the pools alon
 test("now, the feeds' latest rounds count, even one newer than the visitor's clock", async () => {
   // The first round of a new phase, updated a minute after NOW: a clock a minute behind the chain's.
   const { reader } = market([{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }]);
-  const ahead = async (calls: Call[]) =>
-    (await reader(calls)).map((reply, i) =>
+  const ahead = async (calls: readonly Call[]): Promise<any> =>
+    (await reader(calls)).map((reply: unknown, i: number) =>
       calls[i]!.functionName === "latestRoundData" && reply
         ? [(3n << 64n) + 1n, (reply as bigint[])[1]!, 0n, BigInt(NOW + 60), (3n << 64n) + 1n]
         : reply,
@@ -287,7 +287,7 @@ test("each currency's rate goes with dollar prices, read with the anchors' feeds
   // A reader that also answers EUR / USD, at 1.12 dollars a euro, and GBP / USD, at 1.34; CHF / USD and the others fail.
   const withRates = (answers?: Map<Address, number>) => {
     const { reader } = market(pools, answers);
-    return async (calls: Call[]) => {
+    return async (calls: readonly Call[]): Promise<any> => {
       const replies = await reader(calls);
       return calls.map(({ address }, i) =>
         same(address, FIAT_FEEDS.EUR)
@@ -379,7 +379,7 @@ test("feeds: one read for the latest rounds, then one search for the rounds in e
     0n,
   ];
   let reads = 0;
-  const reader = async (calls: Call[]) => {
+  const reader = async (calls: readonly Call[]): Promise<any> => {
     reads++;
     return calls.map(({ address, functionName, args }) => {
       const feed = Number(address.at(-1));
@@ -394,7 +394,7 @@ test("feeds: one read for the latest rounds, then one search for the rounds in e
   assert.deepEqual(await feedsAt(feeds, Infinity, reader), [300, 400, undefined]);
   // A search whose first batch of reads fails runs once more.
   let failing = true;
-  const flaky = async (calls: Call[]) => {
+  const flaky = async (calls: readonly Call[]): Promise<any> => {
     const searching = calls.some(({ functionName }) => functionName === "getRoundData");
     if (searching && failing) {
       failing = false;

@@ -21,7 +21,7 @@ import {
   walkClaims,
   weighed,
   windowStart,
-  type Claim,
+  type ClaimLog,
   type Pair,
   type Records,
 } from "../src/payouts.ts";
@@ -168,7 +168,7 @@ const before = rewards(OCT_1, 60, 40);
 const owed: (bigint | undefined)[] = [2_500_000n, 10n ** 15n, 0n];
 const of = (records: Partial<Records>, voted = { last: true, before: true }) =>
   standingOf(1n, last, before, { last: [0, 0, 0], earned: owed, before: [0, 0], ...records }, voted);
-const brief = ({ through, pair, paid, late }: ReturnType<typeof of>) => [through, pair, paid, late];
+const brief = ({ paidUpTo, paid, late }: ReturnType<typeof of>) => [paidUpTo?.through ?? 0, paidUpTo?.pair, paid, late];
 
 test("an epoch is paid once claims since it ended took more than half of what its rewards were worth", () => {
   const end = OCT_15;
@@ -189,7 +189,8 @@ test("an account is paid up to last epoch until its payout, which a claim of a f
     { ...fees, amount: 2_500_000n },
     { ...bribes, amount: 10n ** 15n },
   ];
-  assert.deepEqual(due, { id: 1n, through: OCT_8, pair: fees, paid: false, late: false, waiting, unknown: false });
+  const paidUpTo = { through: OCT_8, pair: fees };
+  assert.deepEqual(due, { id: 1n, paidUpTo, paid: false, late: false, waiting, unknown: false });
   // Its small bribes claimed since the flip, as by a stranger through Double Espresso: still due.
   assert.deepEqual(brief(of({ last: [OCT_8, OCT_15, OCT_15], before: [OCT_8, OCT_8] })), [OCT_8, fees, false, false]);
   // Paid for most of last epoch's rewards: up to the flip, through the reward worth the most among those claimed.
@@ -302,7 +303,7 @@ function doubleEspresso(logs: ReturnType<typeof claimed>[]) {
   return { claimsAt, reads };
 }
 const blocks = (list: { block: number }[]) => list.map(({ block }) => block);
-const walk = async (claimsAt: (block: number, ids: bigint[]) => Promise<Claim[]>, from: number, since: number) =>
+const walk = async (claimsAt: (block: number, ids: bigint[]) => Promise<ClaimLog[]>, from: number, since: number) =>
   (await walkClaims(new Map([[1n, { from, since }]]), claimsAt)).get(1n)!;
 
 test("an account's claims, newest first, back to the start of the epoch of its last one", async () => {

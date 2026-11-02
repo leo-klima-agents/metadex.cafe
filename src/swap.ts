@@ -19,11 +19,10 @@ import {
   worthOf,
   type Hop,
   type Prices,
-  type Read,
   type Token,
   type Way,
 } from "./prices.ts";
-import { call, read, same, simulate, type Call, type Receipt, type Tx } from "./rpc.ts";
+import { call, read, same, simulate, type Read, type Receipt, type Tx } from "./rpc.ts";
 import { erc20Abi, type Amount } from "./tokens.ts";
 import type { Slip } from "./wallet.ts";
 
@@ -137,20 +136,19 @@ export async function quoteAll(
   items: { swapper: Swapper; route: Route }[],
   rd: Read = read,
 ): Promise<(Result | undefined)[]> {
-  const calls: { call: Call; at: number[] }[] = [];
+  const quote = (swapper: Swapper, at: number[]) =>
+    call(
+      swapper.address,
+      swapperAbi,
+      "quote",
+      at.map((index) => items[index]!.route),
+    );
+  const calls: { call: ReturnType<typeof quote>; at: number[] }[] = [];
   for (const swapper of new Set(items.map(({ swapper }) => swapper))) {
     const indexes = items.flatMap((item, i) => (item.swapper === swapper ? [i] : []));
     for (let i = 0; i < indexes.length; i += 6) {
       const at = indexes.slice(i, i + 6);
-      calls.push({
-        call: call(
-          swapper.address,
-          swapperAbi as never,
-          "quote",
-          at.map((index) => items[index]!.route),
-        ),
-        at,
-      });
+      calls.push({ call: quote(swapper, at), at });
     }
   }
   const replies = await rd(
@@ -158,13 +156,13 @@ export async function quoteAll(
     { perBatch: 3 },
   );
   const results: (Result | undefined)[] = items.map(() => undefined);
-  calls.forEach(({ at }, i) => at.forEach((index, j) => (results[index] = (replies[i] as Result[] | undefined)?.[j])));
+  calls.forEach(({ at }, i) => at.forEach((index, j) => (results[index] = replies[i]?.[j])));
   return results;
 }
 
 // A token's best route to the output, net of its gas in the output. Each hop takes the best of its pools for what the
 // hop before paid; then routes of several hops are quoted whole, as their pools may meet.
-export type Found = { route: Route; out: bigint; gas: bigint };
+export type Routed = { route: Route; out: bigint; gas: bigint };
 export async function findRoute(
   token: Address,
   amount: bigint,
@@ -172,7 +170,7 @@ export async function findRoute(
   hydrex: boolean,
   gasValue: (gas: bigint) => bigint = () => 0n,
   rd: Read = read,
-): Promise<Found | undefined> {
+): Promise<Routed | undefined> {
   type Partial = { path: Address[]; hops: Hop[]; amount: bigint };
   let open: Partial[] = candidatePaths(token, output.token, hydrex).map((path) => ({ path, hops: [], amount }));
   const complete: Partial[] = [];

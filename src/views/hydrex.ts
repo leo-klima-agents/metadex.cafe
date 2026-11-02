@@ -56,12 +56,10 @@ export const lockWords = ({ lockType, end }: Account): string =>
         : "Flex";
 const inYear = (time: number): string =>
   new Date(time * 1000).getUTCFullYear() === new Date(now() * 1000).getUTCFullYear() ? day(time) : date(time);
-const versusWords = (ratio: number | null | undefined): Value =>
-  ratio === undefined || ratio === null
-    ? null
-    : Math.abs(ratio - 1) < 0.005
-      ? "About the average"
-      : `${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "above" : "below"} the average`;
+const versusWords = (ratio: number): Value =>
+  Math.abs(ratio - 1) < 0.005
+    ? "About the average"
+    : `${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "above" : "below"} the average`;
 const feeWords = (feeBps: bigint | undefined): string =>
   feeBps === 0n ? "" : feeBps === undefined ? ", fee not read yet" : `, ${bps(feeBps)} fee`;
 
@@ -115,7 +113,7 @@ const compared = (mine: Got<Earnings>): Value => {
       ? { value: null }
       : then(data.average(), (all) => ({ value: versus(earnings, all) ?? null })),
   );
-  return got.failed || got.value === null ? null : shown(got, versusWords);
+  return got.failed ? null : shown(got, versusWords);
 };
 const recordVersus = (automation: Automation): Value => compared(data.earnings(automation));
 // The automation's state: whether joining is on, whether it voted in the epoch.
@@ -134,7 +132,7 @@ function stateNode(automation: Automation): Value {
     ...(voted ? [`${stopped ? " since " : " · voted "}${day(voted)}`] : []),
   );
 }
-const matchaLatteValue = <T>(text: (found: MatchaLatte) => T): Value => shown(data.matchaLatte(), text as never);
+const matchaLatteValue = (text: (found: MatchaLatte) => Value): Value => shown(data.matchaLatte(), text);
 
 // The wallet's Hydrex accounts, each with its status and group.
 type Member = { account: Account; status: Status; group: hydrex.Group };
@@ -186,14 +184,7 @@ function drawGroups(root: HTMLElement, holdings: Holdings, belongs: (group: stri
         fill(row, {
           link: { href: hrefOf({ view: "account", id: account.id }), text: accountName(account) },
           votes: voteWords(account.votes),
-          earned:
-            earned.value === null
-              ? null
-              : shown(
-                  earned,
-                  (found) =>
-                    ` · ${money(moneyAt(found!.share * valueOf(found!.of).total, found!.of.prices))} last epoch`,
-                ),
+          earned: shown(earned, (worth) => ` · ${money(worth)} last epoch`),
           status: statusNode(st, true, section.dataset.group),
           late: late.has(account.id) ? status("stopped", "Payout late") : null,
         });
@@ -218,8 +209,8 @@ function drawGroups(root: HTMLElement, holdings: Holdings, belongs: (group: stri
     const votes = chosen.reduce((sum, { votes }) => sum + votes, 0n);
     const fewer = these.some(({ account }) => account.votes > 0n);
     fill(section, {
-      all: able.length > 1,
-      picked: able.length > 1 && chosen.length > 0 && `${chosen.length} of ${able.length} · ${voteWords(votes)}`,
+      all: able.length > 1 || null,
+      picked: able.length > 1 && chosen.length > 0 ? `${chosen.length} of ${able.length} · ${voteWords(votes)}` : null,
       count:
         section.dataset.group === "closed"
           ? count(
@@ -265,7 +256,7 @@ export function drawHydrex(): void {
     checks: failed.size
       ? frag(...[...failed].map((id) => Object.assign(document.createElement("p"), { textContent: reasons[id] })))
       : null,
-    underway: !!found && !!underWay(found) && "Payout under way.",
+    underway: found && underWay(found) ? "Payout under way." : null,
     average: shown(data.average(), (all) => money(moneyAt(perThousand(valueOf(all).total, all.votes), all.prices))),
     own: holdings.value ? ownWords(holdings.value) : holdings.failed ? "Not read" : undefined,
     "own-versus": holdings.value ? ownVersus(holdings.value) : null,
@@ -539,6 +530,6 @@ export function change(accounts: Account[], action: "join" | "leave" | "self", a
 }
 function doneNode(words: string, vote = false): HTMLElement {
   const done = $<HTMLTemplateElement>("#done").content.firstElementChild!.cloneNode(true) as HTMLElement;
-  fill(done, { words, vote, "co-signers": null });
+  fill(done, { words, vote: vote || null, "co-signers": null });
   return done;
 }

@@ -4,13 +4,14 @@ import * as config from "./config.ts";
 import type { Anchor, Exchange, ExchangeKind, Fiat } from "./config.ts";
 import { figure, money, moneyAt, type Basis, type Money, type Rates } from "./format.ts";
 import { call, now, read, same, type Call, type Read } from "./rpc.ts";
-export type { Read };
 
 export type Token = { address: Address; decimals: number; symbol: string };
 // Per whole token, by lower-case address. `standIns` are today's prices of tokens none of whose pools kept a history
 // at a past time: only to weigh rewards against one another, never shown.
 export type Prices = Basis & { of: Map<string, number>; standIns: Map<string, number> };
 export const key = (address: string): string => address.toLowerCase();
+// Prices of nothing, as for votes that earned nothing.
+export const noPrices = (): Prices => ({ unit: "USD", of: new Map(), standIns: new Map() });
 export const worthOf = (amount: bigint, decimals: number, price: number): number =>
   (Number(amount) / 10 ** decimals) * price;
 
@@ -23,7 +24,7 @@ export const BY_ID = [...config.EXCHANGES].sort((a, b) => a.id - b.id);
 export const exchangeOf = (id: number): Exchange => BY_ID[id]!;
 export const pairKey = (a: Address, b: Address): string => `${key(a)} ${key(b)}`;
 
-const factoryAbis: Record<ExchangeKind, Abi> = {
+const factoryAbis = {
   algebra: parseAbi(["function poolByPair(address, address) view returns (address)"]),
   pair: parseAbi(["function getPair(address, address, bool stable) view returns (address)"]),
   solidly: parseAbi(["function getPool(address, address) view returns (address)"]),
@@ -35,7 +36,7 @@ const factoryAbis: Record<ExchangeKind, Abi> = {
   v2: parseAbi(["function getPair(address, address) view returns (address)"]),
   v3: parseAbi(["function getPool(address, address, uint24 fee) view returns (address)"]),
   v4: parseAbi(["function extsload(bytes32 startSlot, uint256 nSlots) view returns (bytes32[])"]),
-};
+} satisfies Record<ExchangeKind, Abi>;
 // Uniswap v4's standard pools without hooks, as [fee, tick spacing]; v3 takes the same fees.
 const V4_POOLS = [
   [100, 1],
@@ -51,13 +52,13 @@ function v4Slot([a, b]: [Address, Address], fee: number, tickSpacing: number): H
   return keccak256(encodeAbiParameters([{ type: "bytes32" }, { type: "uint256" }], [id, 6n]));
 }
 
-type Found = Omit<Way, "tokenIn" | "tokenOut">;
-type Lookup = { call: Call; found(reply: unknown): Found | undefined };
+type PoolFound = Omit<Way, "tokenIn" | "tokenOut">;
+type Lookup = { call: Call; found(reply: unknown): PoolFound | undefined };
 // An exchange's reads for a pair's pools, its tokens sorted: one per curve, fee tier or tick spacing.
 function lookupsOn(exchange: Exchange, pair: [Address, Address], spacings: Map<number, number[]>): Lookup[] {
   const { id, factory, kind } = exchange;
-  const abi = factoryAbis[kind];
-  const lookup = (name: string, args: unknown[], way: Partial<Found> = {}): Lookup => ({
+  const abi: Abi = factoryAbis[kind];
+  const lookup = (name: string, args: unknown[], way: Partial<PoolFound> = {}): Lookup => ({
     call: call(factory, abi, name, ...pair, ...args),
     found: (pool) =>
       typeof pool === "string" && !same(pool, zeroAddress)
@@ -94,7 +95,7 @@ function lookupsOn(exchange: Exchange, pair: [Address, Address], spacings: Map<n
 }
 
 // The pools found, by exchange and sorted pair, kept for the visit. A lookup that fails is asked again next time.
-export const pools = new Map<string, Promise<Found[]>>();
+export const pools = new Map<string, Promise<PoolFound[]>>();
 let spacingsRead: Promise<Map<number, number[]>> | undefined;
 function spacings(rd: Read): Promise<Map<number, number[]>> {
   const slipstreams = BY_ID.filter(({ kind }) => kind === "slipstream");
@@ -104,7 +105,10 @@ function spacings(rd: Read): Promise<Map<number, number[]>> {
     (replies) => {
       if (replies.includes(undefined)) spacingsRead = undefined;
       return new Map(
-        slipstreams.flatMap(({ id }, i) => (replies[i] ? [[id, (replies[i] as number[]).map(Number)]] : [])),
+        slipstreams.flatMap(({ id }, i) => {
+          const found = replies[i];
+          return found ? [[id, [...found]]] : [];
+        }),
       );
     },
     (error: unknown) => {
@@ -257,7 +261,7 @@ export async function narrow(searches: Search[], rd: Read = read): Promise<void>
 // Chainlink's answers at `flip`, Infinity being now: the latest rounds, then a search for the rounds in effect at the
 // flip. A feed without a round of that time gives no price: a price from another time would pass for the flip's.
 export async function feedsAt(feeds: Address[], flip: number, rd: Read = read): Promise<(number | undefined)[]> {
-  const latest = (await rd(feeds.map((feed) => call(feed, feedAbi, "latestRoundData")))) as (Round | undefined)[];
+  const latest = await rd(feeds.map((feed) => call(feed, feedAbi, "latestRoundData")));
   const searchOf = (i: number): Search | undefined => {
     const round = latest[i];
     if (!round || Number(round[3]) <= flip) return undefined;
