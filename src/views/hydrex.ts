@@ -96,12 +96,7 @@ export function statusNode(s: Status, own: boolean, inGroup?: string): Value {
 
 const record = (automation: Automation): Value =>
   shown(data.earnings(automation), (earnings) =>
-    earnings.votes
-      ? frag(
-          money(perThousandOf(earnings)),
-          Object.assign(document.createElement("small"), { className: "u-aside", textContent: " / 1k votes" }),
-        )
-      : "No record yet",
+    earnings.votes ? frag(money(perThousandOf(earnings)), fromTemplate("per-1k")) : "No record yet",
   );
 const compared = (mine: Got<Earnings>): Value => {
   const got = andThen(mine, (earnings) =>

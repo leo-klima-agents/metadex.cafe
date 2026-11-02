@@ -23,7 +23,21 @@ import {
   type Allowance,
   type Amount,
 } from "../tokens.ts";
-import { $, bill, busy, code, enable, fill, frag, link, list, shown, stateOf, type Value } from "../ui.ts";
+import {
+  $,
+  bill,
+  busy,
+  code,
+  enable,
+  fill,
+  frag,
+  fromTemplate,
+  link,
+  list,
+  shown,
+  stateOf,
+  type Value,
+} from "../ui.ts";
 import { walletAssets } from "../wallet.ts";
 import { openReview } from "./review.ts";
 
@@ -466,13 +480,7 @@ export async function reviewSwap(
     ],
     [`Minimum at ${Number(plan.margin) / 100}% slippage`, value(least).exact, value(least).worthText],
   );
-  if (!simulated)
-    body.append(
-      Object.assign(document.createElement("p"), {
-        className: "Notice",
-        textContent: "Not simulated: these are quotes.",
-      }),
-    );
+  if (!simulated) body.append(fromTemplate("not-simulated"));
   let at = deadline();
   const quoted = new Map<string, bigint>();
   for (const { token, out } of going.items)
