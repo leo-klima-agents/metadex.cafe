@@ -135,9 +135,7 @@ h2 {
 h3 {
   font-size: 1rem;
 }
-h1:focus,
-h2:focus,
-h3:focus {
+:is(h1, h2, h3):focus {
   outline: none;
 }
 a {
@@ -148,7 +146,8 @@ a {
 a[target="_blank"]::after {
   content: " ↗" / ", opens in a new tab";
 }
-:focus-visible {
+:focus-visible,
+.Pill--choice:has(.Pill-input:focus-visible) {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
 }
@@ -179,9 +178,6 @@ summary {
   list-style: none;
   cursor: pointer;
 }
-summary:hover {
-  color: var(--ink);
-}
 summary::before {
   content: "";
   display: inline-block;
@@ -191,10 +187,11 @@ summary::before {
   border-block-end: 2px solid currentColor;
   border-inline-end: 2px solid currentColor;
   vertical-align: middle;
-  transform: rotate(-45deg);
+  rotate: -45deg;
 }
 details[open] > summary::before {
-  transform: translateY(-0.2em) rotate(45deg);
+  translate: 0 -0.2em;
+  rotate: 45deg;
 }
 :where(input:not([type]), select) {
   min-block-size: 2.25rem;
@@ -247,14 +244,10 @@ button,
   text-decoration: none;
   cursor: pointer;
 }
-button:hover,
-.Button:hover {
-  filter: brightness(1.15);
-}
-button:disabled {
+button:disabled,
+.Pill--choice:has(.Pill-input:disabled) {
   opacity: 0.45;
   cursor: not-allowed;
-  filter: none;
 }
 [aria-busy="true"] {
   position: relative;
@@ -267,13 +260,9 @@ button:disabled {
   inline-size: 1em;
   block-size: 1em;
   margin: auto;
-  border: 2px solid var(--accent);
+  border: 2px solid var(--on-accent);
   border-inline-end-color: transparent;
   border-radius: 50%;
-}
-button:not(.Button--secondary)[aria-busy="true"]::after {
-  border-color: var(--on-accent);
-  border-inline-end-color: transparent;
 }
 /* The review is a modal dialog, which the browser keeps a little under the screen's size. Popups get no such limit,
    so their insets keep them off the screen's edges. */
@@ -293,7 +282,7 @@ dialog[popover] {
   max-inline-size: 36rem;
   max-block-size: 44rem;
 }
-@media (max-height: 47rem) {
+@media (height <= 47rem) {
   dialog[popover] {
     max-block-size: 90svh;
   }
@@ -515,10 +504,6 @@ dialog[open] {
   background: transparent;
   color: var(--accent);
 }
-.Button--secondary:hover {
-  background: var(--tint);
-  filter: none;
-}
 .Button--compact {
   min-block-size: 2.25rem;
   padding: 0.25rem 0.875rem;
@@ -617,14 +602,6 @@ dialog[open] {
   background: var(--accent);
   color: var(--on-accent);
 }
-.Pill--choice:has(.Pill-input:focus-visible) {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
-}
-.Pill--choice:has(.Pill-input:disabled) {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
 /* The radio stays in the page, unseen, so that the pills still work as radios from a keyboard and to a screen reader. */
 .Pill-input {
   position: absolute;
@@ -649,13 +626,16 @@ dialog[open] {
 
 .Card,
 .Skeleton-item,
-.Facts-tile {
+.Facts-tile,
+.Menu-item,
+.Notice {
   padding: 0.75rem var(--gap);
 }
 .Card,
 .Skeleton-item,
 .Menu,
-.Facts-tile {
+.Facts-tile,
+.Slip {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--card);
@@ -665,9 +645,6 @@ dialog[open] {
   display: grid;
   gap: var(--gap-s);
 }
-.Skeleton--tiles {
-  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
-}
 .Skeleton-item::before {
   content: "";
   display: block;
@@ -675,9 +652,6 @@ dialog[open] {
   block-size: 1em;
 }
 
-.Card--link {
-  padding-inline-end: 3rem;
-}
 .Card--soon {
   border-style: dashed;
   color: var(--quiet);
@@ -692,6 +666,7 @@ dialog[open] {
    that they can still be clicked. */
 .Linked {
   position: relative;
+  padding-inline-end: 3rem;
 }
 .Linked::before {
   content: "";
@@ -702,13 +677,8 @@ dialog[open] {
   block-size: 0.5rem;
   border-block-start: 2px solid var(--quiet);
   border-inline-end: 2px solid var(--quiet);
-  transform: translateY(-50%) rotate(45deg);
-}
-.Linked:hover {
-  border-color: var(--quiet);
-}
-.Linked:hover::before {
-  border-color: var(--ink);
+  translate: 0 -50%;
+  rotate: 45deg;
 }
 .Linked-cover {
   color: inherit;
@@ -727,18 +697,11 @@ dialog[open] {
 .Menu {
   overflow: hidden;
 }
-.Menu-item {
-  padding: 0.75rem 3rem 0.75rem var(--gap);
-}
 .Menu-item:not(:first-child) {
   border-block-start: 1px solid var(--line);
 }
-.Menu-item:hover {
-  background: var(--tint);
-}
 
 .Notice {
-  padding: 0.75rem var(--gap);
   border-radius: var(--radius);
   background: var(--notice);
 }
@@ -756,7 +719,8 @@ dialog[open] {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-block-start: var(--gap-s);
 }
-.Facts--tiles {
+.Facts--tiles,
+.Skeleton--tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
   gap: var(--gap-s);
@@ -864,9 +828,6 @@ dialog[open] {
 
 .Slip {
   padding: var(--inset);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--card);
   font-size: var(--small);
 }
 .Slip[aria-current] {
@@ -887,11 +848,14 @@ dialog[open] {
   font-size: 1.0625rem;
   font-weight: 700;
 }
+.Slip-ruled,
+.Slip-foot {
+  padding-block-start: 0.625rem;
+  border-block-start: 2px dashed var(--ink);
+}
 .Slip-ruled {
   display: grid;
   gap: 0.375rem;
-  padding-block-start: 0.625rem;
-  border-block-start: 2px dashed var(--ink);
 }
 .Slip-term {
   overflow-wrap: normal;
@@ -948,10 +912,6 @@ dialog[open] {
   font-weight: 400;
   text-align: end;
 }
-.Slip-foot {
-  padding-block-start: 0.625rem;
-  border-block-start: 2px dashed var(--ink);
-}
 
 /* Groups are spaced by margins, not spaces, so that a copy is plain hex. A link's underline doesn't reach into the
    inline-block halves, so each half draws its own. */
@@ -1000,7 +960,9 @@ dialog[open] {
     animation: rise 0.15s ease-out;
   }
   summary::before {
-    transition: transform 0.15s;
+    transition:
+      rotate 0.15s,
+      translate 0.15s;
   }
 }
 @keyframes pulse {
@@ -1010,13 +972,38 @@ dialog[open] {
 }
 @keyframes spin {
   to {
-    transform: rotate(1turn);
+    rotate: 1turn;
   }
 }
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(0.5rem);
+    translate: 0 0.5rem;
+  }
+}
+/* On a touch screen, a tap would leave its target looking hovered. The disabled button comes after the hover rules,
+   so that it doesn't brighten. */
+@media (hover: hover) {
+  summary:hover {
+    color: var(--ink);
+  }
+  button:hover,
+  .Button:hover {
+    filter: brightness(1.15);
+  }
+  button:disabled,
+  .Button--secondary:hover {
+    filter: none;
+  }
+  .Button--secondary:hover,
+  .Menu-item:hover {
+    background: var(--tint);
+  }
+  .Linked:hover {
+    border-color: var(--quiet);
+  }
+  .Linked:hover::before {
+    border-color: var(--ink);
   }
 }
 @media (forced-colors: active) {
@@ -1031,7 +1018,7 @@ dialog[open] {
   }
 }
 
-@media (max-width: 30rem) {
+@media (width <= 30rem) {
   h1 {
     font-size: 1.75rem;
   }
