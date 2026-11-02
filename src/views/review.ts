@@ -19,7 +19,8 @@ import {
 
 type Review = {
   name: string;
-  // The last page also shows the calls; a page without a title shows only the calls.
+  // The last page also shows the calls. A page without a title is titled after the calls, rather than giving them a
+  // heading of their own.
   pages: { title?: string; body?: Node }[];
   // The calls. With `sending`, they are encoded to be sent, with a fresh deadline.
   steps: (sending?: boolean) => Slip[];

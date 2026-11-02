@@ -195,7 +195,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.deepEqual(violations, []);
   });
 
-  // Keep this test last: it moves the fork's time on two weeks.
+  // Keep this test last: it moves the fork on two epochs, about eight days.
   test("a claim past the 50 epochs earned() reads, and the swap of what it brings, go in one prompt", async () => {
     // Stages an epoch as anyone could on Base: #141 joins Double Espresso, which votes for a pool that someone
     // incentivises. Half a day after that epoch, its payout is overdue and owes one reward beyond what `earned()`

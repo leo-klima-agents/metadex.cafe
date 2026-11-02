@@ -33,8 +33,9 @@ export function claimGas(owed: Claim["owed"]): bigint {
   const tokens = BigInt(new Set(owed.map(({ token }) => key(token))).size);
   return 100_000n + tokens * 80_000n + contracts * (50_000n + tokens * 400_000n);
 }
-// `claimGas` keeps each call under its budget, and simulation keeps it under `MAX_CLAIM_GAS`. A Safe sends many calls
-// in one transaction, so its claim splits into small calls, none asking a contract for a token it does not owe.
+// `claimCalls` keeps each call under its budget as `claimGas` estimates it, and simulation keeps it under
+// `MAX_CLAIM_GAS`. A Safe sends many calls in one transaction, so its claim splits into small calls, none asking a
+// contract for a token it does not owe.
 export const CLAIM_CALL_GAS = 12_000_000n;
 export const SAFE_CLAIM_CALL_GAS = 1_500_000n;
 export const MAX_CLAIM_GAS = 15_000_000n;

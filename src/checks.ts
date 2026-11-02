@@ -4,10 +4,10 @@ import { AUTOMATIONS, type Kind } from "./config.ts";
 import { escrow } from "./hydrex.ts";
 import { implementation, read, readEach, required, rpc, same } from "./rpc.ts";
 
-// For each automation, the ids of the checks that fail, which are also the ids of their messages on the page. The
-// checks: the RPCs serve Base; Hydrex's VotingEscrow and its approval logic are the ones the page knows, since an
-// upgrade could change what joining allows; and joining each automation is on and approves only its claims and votes.
-// If a read fails, this throws, so the checks count as not read rather than failed.
+// For each automation, the ids of the checks that fail; `src/views/hydrex.ts` words each one for the page. The checks:
+// the RPCs serve Base; Hydrex's VotingEscrow and its approval logic are the ones the page knows, since an upgrade could
+// change what joining allows; and joining each automation is on and approves only its claims and votes. If a read
+// fails, this throws, so the checks count as not read rather than failed.
 export async function failedChecks(): Promise<Map<Kind, string[]>> {
   const [chainId, impl, [logic], configs] = await Promise.all([
     rpc<string>("eth_chainId", []),

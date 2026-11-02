@@ -6,7 +6,7 @@ import { hexLines, walletLines } from "./format.ts";
 // What `fill()` does with each value for an element marked `data-text="key"`: a string sets its text; `undefined` shows
 // "Loading…" as a bar; `null` hides it; `true` shows it unchanged; a `Node` becomes its content; `{state}` sets
 // `data-state`, and CSS shows only the `[data-when]` children that match; `{href, text}` makes a link; `{address}`
-// shows hex in groups of four, linked to Basescan.
+// links to Basescan, a hash as a transaction, and shows `text`, or else the hex in groups of four.
 export type Value =
   | string
   | undefined

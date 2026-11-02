@@ -27,7 +27,8 @@ export type Sale = { token: Address; amount: bigint; found: Routed; hydrex: bool
 // A sale moves its pools when its quote falls more than 0.1% short of 100 times the quote for a hundredth of it.
 const PROBE = 100n;
 const IMPACT = 0.001;
-// At most this many sales, those that fetch most, are routed together; the rest keep their own routes.
+// Of the sales that move their pools, at most this many, those that fetch most, are routed together. The rest, and
+// every sale too small to move its pools, keep their own routes.
 const MAX_SALES = 8;
 // A sale goes in tenths, along three routes at most.
 const CHUNKS = 10;

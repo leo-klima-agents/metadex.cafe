@@ -49,7 +49,8 @@ export async function tokensOf(addresses: Address[], rd: Read = read): Promise<M
     ),
   );
 }
-// Like `tokensOf`, but takes listed tokens from the list and reads any other token only once.
+// Like `tokensOf`, but takes listed tokens from the list and keeps every other token once read. A token whose read
+// fails is read again next time.
 export async function describe(addresses: Address[]): Promise<Map<string, Token>> {
   const unknown = addresses.filter((address) => !listed(address) && !described.has(key(address)));
   if (unknown.length) for (const [address, token] of await tokensOf(unknown)) described.set(address, token);

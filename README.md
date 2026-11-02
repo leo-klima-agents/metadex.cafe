@@ -21,7 +21,7 @@ Needs Node 26 LTS, plus [anvil](https://getfoundry.sh/) and Chromium for the bro
 npm ci --ignore-scripts
 npm run typecheck && npm test && npx prettier --check .
 npm run build      # dist/
-npm run dev        # serves dist/ at http://localhost:8000 (or `PORT`), rebuilt on each change
+npm run dev        # serves dist/ at http://localhost:8000 (or $PORT), rebuilt on each change
 npm run test:fork  # the page in Chromium against forks of Base in anvil
 npm run qa         # try the page by hand against a fork, with a wallet that signs as any address
 ```
@@ -56,11 +56,11 @@ The build bundles `src/main.ts`, and `site/style.css` with the fonts of `site/fo
 
 ## When a contract changes
 
-The page names a failed check by its id in `src/checks.ts`: `chain` (an RPC serves another chain; joining and swaps are
-off), `upgrade` (Hydrex upgraded its VotingEscrow), `logic` (Hydrex changed its approval logic), and `approvals` and
-`double-espresso-approvals` (joining Matcha Latte or Double Espresso is turned off, or approves other actions than
-`[3, 5]`). Read the new code's verified source, update `src/config.ts` if the page should trust it, and release. To see
-what Base holds:
+Each check has an id in `src/checks.ts`, and `src/views/hydrex.ts` says in words why a failed one turns joining off:
+`chain` (an RPC serves another chain; joining and swaps are off), `upgrade` (Hydrex upgraded its VotingEscrow), `logic`
+(Hydrex changed its approval logic), and `approvals` and `double-espresso-approvals` (joining Matcha Latte or Double
+Espresso is turned off, or approves other actions than `[3, 5]`). Read the new code's verified source, update
+`src/config.ts` if the page should trust it, and release. To see what Base holds:
 
 ```sh
 RPC=https://mainnet.base.org

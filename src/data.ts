@@ -61,8 +61,8 @@ export const holderEarnings = (holder: Address): Got<Earnings> =>
   andThen(epoch(), (start) =>
     use(`voter ${holder} ${start}`, () => votesEarned(holder, start, false, tagged("shares"))),
   );
-// What an account's votes earned last epoch: its share of what their holder earned, or `null` if the holder did not
-// vote.
+// What an account's votes earned last epoch: its share of what their holder earned. `null` when it had no votes as the
+// epoch began, when their holder had none, or when a holder other than the automations did not vote.
 export function accountEarned(holdings: Holdings, id: bigint): Got<Money | null> {
   return andThen(stakes(holdings), (all) => {
     const stake = all.get(id);

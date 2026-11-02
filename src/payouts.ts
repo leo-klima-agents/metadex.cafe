@@ -266,8 +266,9 @@ export async function firstReached<T>(
   return found;
 }
 
-// The first block whose time is at least `time`, searching below block `top`, which must be at or after it. The first
-// guesses interpolate from the nearest known block times; later ones halve the range.
+// The first block whose time is at least `time`, at or below block `top`, which must be at or after it. The first four
+// guesses interpolate between the closest blocks read so far, at two seconds a block until one before `time` is read;
+// later ones halve the range.
 export async function firstBlockAt(
   time: number,
   top: number,
@@ -444,6 +445,7 @@ export async function walkClaims(
     for (const [id, current] of at) {
       const walk = walks.get(id)!;
       const mine = (found.get(current) ?? []).filter((claim) => claim.id === id && claim.block === current);
+      // A claim that received nothing paid nothing, so the receipt leaves it out; the walk still follows it back.
       walk.claims.push(...mine.filter(({ received }) => received.length));
       const before = Math.min(...mine.map(({ previous }) => previous).filter((previous) => previous < current));
       if (!Number.isFinite(before) || before === 0 || before < starts.get(id)!.since) continue;

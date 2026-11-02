@@ -79,10 +79,10 @@ export const SAFE_ORIGIN = "https://app.safe.global";
 // The Safe Apps SDK version sent with each request, which Safe{Wallet} expects from a Safe App.
 const SAFE_APPS_VERSION = "9.1.0";
 
-// The origin of the page that frames this one, when the browser gives it. A sandboxed frame, or one framed without a
-// referrer, has the opaque origin "null", which tells nothing; then only whether Safe{Wallet} answers decides. Without
-// `ancestorOrigins`, a referrer from the page's own origin (`own`) tells nothing either: the frame navigated within
-// itself.
+// The origin of the page that frames this one, when the browser gives it. A sandboxed frame has the opaque origin
+// "null", and without `ancestorOrigins` a frame loaded with no referrer has none at all; neither tells anything, so
+// then only whether Safe{Wallet} answers decides. Without `ancestorOrigins`, a referrer from the page's own origin
+// (`own`) tells nothing either: the frame navigated within itself.
 export function parentOrigin(ancestor: string | undefined, referrer: string, own?: string): string | undefined {
   const origin = ancestor ?? (referrer ? new URL(referrer).origin : "");
   if (ancestor === undefined && origin === own) return undefined;

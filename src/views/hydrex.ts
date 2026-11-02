@@ -149,8 +149,8 @@ export function can(action: string, account: Account, arg: string | undefined, h
   if (action === "claim") return overdueOf(holdings).some((entry) => entry.account.id === account.id);
   return false;
 }
-// The accounts ticked in a group. Until the owner ticks or unticks one, a `needs:` group starts with all its accounts
-// ticked, and any other group with none.
+// The accounts ticked in a group. Until the owner ticks or unticks one, a `needs:` group starts with every account its
+// buttons can act on ticked, and any other group with none.
 const picks = (group: string, able: Account[]): Set<bigint> =>
   state.picks.get(group) ?? new Set(group.includes(" needs:") ? able.map(({ id }) => id) : []);
 
