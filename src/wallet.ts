@@ -1,35 +1,40 @@
-import { getAddress, type Address, type Hex } from "viem";
-import { CHAIN_ID, RPCS } from "./config.ts";
+import {
+  MethodNotFoundRpcError,
+  SwitchChainError,
+  UnsupportedProviderMethodError,
+  UserRejectedRequestError,
+  getAddress,
+  isAddress,
+  numberToHex,
+  type Address,
+  type ChainIdToCapabilities,
+  type EIP1193Provider,
+  type ExtractCapabilities,
+  type Hex,
+} from "viem";
+import { BASESCAN, CHAIN_ID, RPCS } from "./config.ts";
 import { clean } from "./format.ts";
 import type { Landed } from "./rpc.ts";
-
-export type Provider = {
-  request(args: { method: string; params?: unknown }): Promise<unknown>;
-  on?(event: string, listener: (value: any) => void): unknown;
-};
 
 export type Wallet = {
   name: string;
   icon?: string | undefined;
-  provider: () => Promise<Provider>;
+  provider: () => Promise<EIP1193Provider>;
   // Only Safe{Wallet} has it: it proposes all the calls as one Safe transaction, for the owners to sign there.
   propose?(txs: Tx[]): Promise<void>;
 };
-export type Connection = { wallet: Wallet; provider: Provider; address: Address; chainId: number };
+export type Connection = { wallet: Wallet; provider: EIP1193Provider; address: Address; chainId: number };
 // `tip`, the most priority fee to ask for, where the wallet lets the page set it.
 export type Tx = { to: Address; data: Hex; tip?: bigint | undefined };
 // A call as the review shows it: what it is, the page's own words, the contract it goes to, and its fields.
 export type Field = { label: string; code?: string | string[]; tags?: string[]; words?: string; description?: string };
 export type Slip = Tx & { title: string; says: string; on: string; call: string; fields: Field[] };
 
-type Announcement = { info: { name: string; icon: string; rdns: string }; provider: Provider };
+type Announcement = { info: { name: string; icon: string; rdns: string }; provider: EIP1193Provider };
 
-const HEX_CHAIN_ID = `0x${CHAIN_ID.toString(16)}`;
-const USER_REJECTED = 4001;
-const UNSUPPORTED_METHOD = 4200;
-const UNKNOWN_CHAIN = 4902;
+const CHAIN = numberToHex(CHAIN_ID);
 // A wallet that does not support a method, or does not know it.
-const UNKNOWN_METHOD = [UNSUPPORTED_METHOD, -32601];
+const UNKNOWN_METHOD: number[] = [UnsupportedProviderMethodError.code, MethodNotFoundRpcError.code];
 
 export class NoWallet extends Error {}
 
@@ -52,8 +57,8 @@ export function findWallets(found: (wallets: Wallet[]) => void): void {
 }
 
 // Read only once picked: some wallets set window.ethereum late.
-async function injected(): Promise<Provider> {
-  const provider = (window as { ethereum?: Provider }).ethereum;
+async function injected(): Promise<EIP1193Provider> {
+  const provider = (window as { ethereum?: EIP1193Provider }).ethereum;
   if (!provider) throw new NoWallet();
   return provider;
 }
@@ -129,13 +134,18 @@ export async function safeFrom(ask: AskSafe, wait: number): Promise<Wallet | und
     ask.stop();
     return undefined;
   }
-  const provider: Provider = {
-    async request({ method }) {
+  // A provider that says which Safe, on which chain, and that it does not support the rest.
+  const provider = {
+    async request({ method }: { method: string }) {
       if (method === "eth_requestAccounts") return [info.safeAddress];
-      if (method === "eth_chainId") return `0x${info.chainId.toString(16)}`;
-      throw Object.assign(new Error(`Safe{Wallet} does not answer ${method} here.`), { code: UNSUPPORTED_METHOD });
+      if (method === "eth_chainId") return numberToHex(info.chainId);
+      throw Object.assign(new Error(`Safe{Wallet} does not answer ${method} here.`), {
+        code: UnsupportedProviderMethodError.code,
+      });
     },
-  };
+    on() {},
+    removeListener() {},
+  } as EIP1193Provider;
   return {
     name: "Safe{Wallet}",
     provider: async () => provider,
@@ -145,7 +155,7 @@ export async function safeFrom(ask: AskSafe, wait: number): Promise<Wallet | und
       // Safe{Wallet} says "Transaction was rejected" when its window is closed.
       await ask("sendTransactions", { txs: txs.map(({ to, data }) => ({ to, data, value: "0" })) }).catch(
         (error: Error) => {
-          throw Object.assign(error, /rejected/i.test(error.message) ? { code: USER_REJECTED } : {});
+          throw Object.assign(error, /rejected/i.test(error.message) ? { code: UserRejectedRequestError.code } : {});
         },
       );
     },
@@ -154,7 +164,7 @@ export async function safeFrom(ask: AskSafe, wait: number): Promise<Wallet | und
 
 export async function connect(wallet: Wallet): Promise<Connection | undefined> {
   const provider = await wallet.provider();
-  const [address] = (await provider.request({ method: "eth_requestAccounts" })) as string[];
+  const [address] = await provider.request({ method: "eth_requestAccounts" });
   if (!address) return undefined;
   const chainId = Number(await provider.request({ method: "eth_chainId" }));
   return { wallet, provider, address: getAddress(address), chainId };
@@ -166,23 +176,23 @@ export const code = (error: unknown): number | undefined => {
   return data?.originalError?.code ?? code;
 };
 
-export const declined = (error: unknown): boolean => code(error) === USER_REJECTED;
+export const declined = (error: unknown): boolean => code(error) === UserRejectedRequestError.code;
 
 export async function switchToBase(connection: Connection): Promise<void> {
   const { provider } = connection;
   try {
-    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: HEX_CHAIN_ID }] });
+    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN }] });
   } catch (error) {
-    if (code(error) !== UNKNOWN_CHAIN) throw error;
+    if (code(error) !== SwitchChainError.code) throw error;
     await provider.request({
       method: "wallet_addEthereumChain",
       params: [
         {
-          chainId: HEX_CHAIN_ID,
+          chainId: CHAIN,
           chainName: "Base",
           nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-          rpcUrls: [RPCS[0]],
-          blockExplorerUrls: ["https://basescan.org"],
+          rpcUrls: RPCS.slice(0, 1),
+          blockExplorerUrls: [BASESCAN],
         },
       ],
     });
@@ -191,19 +201,19 @@ export async function switchToBase(connection: Connection): Promise<void> {
 }
 
 // The chain ID makes a wallet that is on another chain refuse the transaction.
-export const sendTransaction = async ({ provider, address }: Connection, { to, data, tip }: Tx): Promise<Hex> =>
-  (await provider.request({
+export const sendTransaction = ({ provider, address }: Connection, { to, data, tip }: Tx): Promise<Hex> =>
+  provider.request({
     method: "eth_sendTransaction",
     params: [
       {
         from: address,
         to,
         data,
-        chainId: HEX_CHAIN_ID,
-        maxPriorityFeePerGas: tip === undefined ? undefined : `0x${tip.toString(16)}`,
+        chainId: CHAIN,
+        maxPriorityFeePerGas: tip === undefined ? undefined : numberToHex(tip),
       },
     ],
-  })) as Hex;
+  });
 
 // What a wallet can do beyond one transaction at a time, from EIP-5792's wallet_getCapabilities: send several calls in
 // one prompt, all or nothing (`atomic`), and list the tokens it holds (ERC-7811's `assets`). Asked once per wallet and
@@ -211,7 +221,7 @@ export const sendTransaction = async ({ provider, address }: Connection, { to, d
 // can do neither for now, and is asked again the next time.
 export type Capabilities = { batch: boolean; atomic: boolean; assets: boolean };
 const NONE: Capabilities = { batch: false, atomic: false, assets: false };
-const asked = new WeakMap<Provider, Map<string, Promise<Capabilities>>>();
+const asked = new WeakMap<EIP1193Provider, Map<string, Promise<Capabilities>>>();
 
 export function capabilities({ wallet, provider, address }: Connection): Promise<Capabilities> {
   // Safe{Wallet} proposes every call as one Safe transaction already.
@@ -222,12 +232,10 @@ export function capabilities({ wallet, provider, address }: Connection): Promise
   let found = byAddress.get(key);
   if (!found) {
     found = provider
-      .request({ method: "wallet_getCapabilities", params: [address, [HEX_CHAIN_ID]] })
-      .then((reply) => {
-        const all = (reply ?? {}) as Record<string, Record<string, { status?: string; supported?: boolean }>>;
-        const base = { ...all["0x0"], ...all[HEX_CHAIN_ID], ...all[String(CHAIN_ID)] };
-        const status = base.atomic?.status;
-        const atomic = status === "supported" || status === "ready" || base.atomicBatch?.supported === true;
+      .request({ method: "wallet_getCapabilities", params: [address, [CHAIN]] })
+      .then((all: ChainIdToCapabilities<ExtractCapabilities<"getCapabilities", "ReturnType">>) => {
+        const base = { ...all["0x0"], ...all[CHAIN] };
+        const atomic = base.atomic?.status === "supported" || base.atomic?.status === "ready";
         // A wallet that answers sends calls together, even if not all or nothing.
         return { batch: true, atomic, assets: base.assetDiscovery?.supported === true };
       })
@@ -242,35 +250,31 @@ export function capabilities({ wallet, provider, address }: Connection): Promise
 
 // Sends the calls in one prompt, with EIP-5792's wallet_sendCalls, and gives the batch's id.
 export async function sendCalls({ provider, address }: Connection, txs: Tx[], atomic: boolean): Promise<string> {
-  const reply = await provider.request({
+  const { id } = await provider.request({
     method: "wallet_sendCalls",
     params: [
       {
         version: "2.0.0",
         from: address,
-        chainId: HEX_CHAIN_ID,
+        chainId: CHAIN,
         atomicRequired: atomic,
         calls: txs.map(({ to, data }) => ({ to, data, value: "0x0" })),
       },
     ],
   });
-  return typeof reply === "string" ? reply : String((reply as { id: string }).id);
+  return id;
 }
 
-// A batch is pending, included (with each transaction's receipt), or failed. Wallets of the first drafts answer in words.
-// One confirmed whose receipts have not come yet is still pending: they make its outcome.
+// A batch is pending (100), included (200, with each transaction's receipt), or failed. One confirmed whose receipts
+// have not come yet is still pending: they make its outcome.
 type CallsStatus = { state: "pending" | "done" | "failed"; receipts: Landed[] };
 
 export async function callsStatus({ provider }: Connection, id: string): Promise<CallsStatus> {
-  const reply = (await provider.request({ method: "wallet_getCallsStatus", params: [id] })) as {
-    status: number | string;
-    receipts?: Landed[];
-  };
-  const { status, receipts = [] } = reply;
+  const { status, receipts = [] } = await provider.request({ method: "wallet_getCallsStatus", params: [id] });
   const state =
-    status === 100 || status === "PENDING"
+    status === 100
       ? "pending"
-      : status === 200 || status === "CONFIRMED"
+      : status === 200
         ? !receipts.length
           ? "pending"
           : receipts.every((receipt) => receipt.status === "0x1")
@@ -284,12 +288,12 @@ export async function callsStatus({ provider }: Connection, id: string): Promise
 export async function walletAssets(connection: Connection): Promise<Address[]> {
   if (!(await capabilities(connection)).assets) return [];
   try {
-    const reply = (await connection.provider.request({
+    const assets = await connection.provider.request({
       method: "wallet_getAssets",
-      params: [{ account: connection.address, chainFilter: [HEX_CHAIN_ID] }],
-    })) as Record<string, { address?: string; type?: string }[]>;
-    return (reply[HEX_CHAIN_ID] ?? []).flatMap(({ address, type }) =>
-      type === "erc20" && address && /^0x[0-9a-fA-F]{40}$/.test(address) ? [getAddress(address)] : [],
+      params: [{ account: connection.address, chainFilter: [CHAIN] }],
+    });
+    return (assets[CHAIN] ?? []).flatMap(({ address, type }) =>
+      type === "erc20" && isAddress(address, { strict: false }) ? [getAddress(address)] : [],
     );
   } catch {
     return [];

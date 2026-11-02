@@ -6,7 +6,7 @@ import { claimed, readOwed, summed, totals, type Overdue, type Owed } from "./pa
 import type { Amount } from "./tokens.ts";
 import { key, type Token } from "./prices.ts";
 import { rewardsFor, type Reward } from "./rewards.ts";
-import { same, type Receipt } from "./rpc.ts";
+import { logsIn, same, type Landed } from "./rpc.ts";
 import type { Slip } from "./wallet.ts";
 
 // Claiming through Double Espresso, once a payout is overdue: anyone can claim(tokenId, feeAddresses, bribeAddresses,
@@ -167,8 +167,8 @@ export async function owedOf(
 // What the page's own claims received, took and paid, from their Claimed events. One that received nothing, as when
 // someone else claimed first, has none.
 export type Claimed = { id: bigint; received: Amount[]; fees: Amount[]; paid: Amount[] };
-export function claimedIn(receipts: Pick<Receipt, "logs">[], ids: bigint[], caller: Address): Claimed[] {
-  const logs = receipts.flatMap(({ logs }) => logs).filter((log) => same(log.address, DOUBLE_ESPRESSO.address));
+export function claimedIn(receipts: Pick<Landed, "logs">[], ids: bigint[], caller: Address): Claimed[] {
+  const logs = logsIn(receipts).filter((log) => same(log.address, DOUBLE_ESPRESSO.address));
   const mine = claimed(logs).filter((claim) => ids.includes(claim.id) && same(claim.caller, caller));
   return [...new Set(mine.map(({ id }) => id))].map((id) => ({
     id,

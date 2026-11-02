@@ -1,5 +1,6 @@
 import {
   AUTOMATIONS,
+  BASESCAN,
   FEE_BPS,
   MATCHA_LATTE,
   MATCHA_LATTE_OPERATOR,
@@ -84,7 +85,7 @@ export function statusNode(s: Status, own: boolean, inGroup?: string): Value {
     case "left-other":
       return status("leaving", `Left ${s.name}: `, back(s.date));
     case "delegated":
-      return status("elsewhere", "Delegated to ", link(`https://basescan.org/address/${s.to}`, short(s.to), true));
+      return status("elsewhere", "Delegated to ", link(`${BASESCAN}/address/${s.to}`, short(s.to), true));
     case "self":
       return status("idle", own ? "You vote with it" : "Its owner votes with it");
     case "unvoted":

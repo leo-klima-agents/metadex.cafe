@@ -1,15 +1,19 @@
 import {
   decodeFunctionResult,
   encodeFunctionData,
+  multicall3Abi,
   numberToHex,
-  parseAbi,
   type Abi,
   type Address,
   type ContractFunctionArgs,
   type ContractFunctionName,
   type ContractFunctionReturnType,
   type Hex,
+  type RpcBlock,
+  type RpcLog,
+  type WalletCallReceipt,
 } from "viem";
+import type { OpStackRpcTransactionReceipt } from "viem/chains";
 import { memo } from "./cache.ts";
 import { MULTICALL3, RPCS } from "./config.ts";
 
@@ -45,10 +49,6 @@ export const contract =
 export const same = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 export const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
 
-const multicall3Abi = parseAbi([
-  "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
-  "function getCurrentBlockTimestamp() view returns (uint256 timestamp)",
-]);
 export const blockTime = call(MULTICALL3, multicall3Abi, "getCurrentBlockTimestamp");
 
 // Base's time, from the newest block read, in case the device's clock is wrong.
@@ -238,18 +238,12 @@ export async function simulate(from: Address, txs: Tx[]): Promise<{ ok: boolean;
   }));
 }
 
-export type Receipt = {
-  transactionHash: Hex;
-  status: Hex;
-  from: Address;
-  logs: { address: Address; data: Hex; topics: Hex[] }[];
-  blockNumber: Hex;
-  gasUsed: Hex;
-  effectiveGasPrice?: Hex;
-  l1Fee?: Hex;
-};
-// What a receipt holds wherever it comes from, a wallet's included.
-export type Landed = Pick<Receipt, "transactionHash" | "status" | "logs" | "blockNumber">;
+export type Receipt = OpStackRpcTransactionReceipt;
+// What a receipt holds wherever it comes from: a wallet's, from EIP-5792's wallet_getCallsStatus, holds no more.
+export type Landed = WalletCallReceipt;
+// The receipts' logs, as parseEventLogs takes them. A wallet's hold only their address, data and topics, which is all
+// their events need, but not the block and index an RPC's logs also hold.
+export const logsIn = (receipts: Pick<Landed, "logs">[]): RpcLog[] => receipts.flatMap(({ logs }) => logs) as RpcLog[];
 // The receipt, or undefined if Base has not included the transaction within ten minutes.
 export async function waitForReceipt(hash: Hex): Promise<Receipt | undefined> {
   for (const end = Date.now() + 600_000; Date.now() < end; await sleep(2_000)) {
@@ -262,7 +256,7 @@ export async function waitForReceipt(hash: Hex): Promise<Receipt | undefined> {
 // When Base included the last of the receipts.
 export async function includedAt(receipts: Landed[]): Promise<number | undefined> {
   const block = receipts.at(-1)?.blockNumber;
-  const found = block && (await rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [block, false]).catch(() => undefined));
+  const found = block && (await rpc<RpcBlock>("eth_getBlockByNumber", [block, false]).catch(() => undefined));
   return found ? Number(found.timestamp) : undefined;
 }
 // What the transactions cost, L1 fee included, if `from` sent and paid for each: not a bundler or a sponsor.

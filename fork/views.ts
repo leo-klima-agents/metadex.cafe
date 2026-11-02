@@ -112,7 +112,7 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
   });
 
   test("if the Voter cannot be read, the accounts still show, and nothing stays loading", async () => {
-    await h.anvil("anvil_setCode", [VOTER, "0x"]);
+    await h.anvil.setCode({ address: VOTER, bytecode: "0x" });
     const { page } = await h.connected({ owner: ELSEWHERE });
     await h.row(page, 2439).getByText("In USDC", { exact: true }).waitFor();
     const hydrex = view(page, "hydrex");
@@ -145,8 +145,8 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
     await h.row(page, 141).getByText("Joining Matcha Latte:").waitFor();
     await page.getByText(/moves the votes from Thu,? 22 Oct/).waitFor();
     await Promise.allSettled(h.forwarding);
-    await h.anvil("evm_setNextBlockTimestamp", [FLIP + 60]);
-    await h.anvil("evm_mine");
+    await h.anvil.setNextBlockTimestamp({ timestamp: BigInt(FLIP + 60) });
+    await h.anvil.mine({ blocks: 1 });
     await page.clock.setSystemTime((FLIP + 60) * 1000);
     await page.clock.runFor(30_000);
     await page.getByText(/moves the votes from Thu,? 29 Oct/).waitFor();

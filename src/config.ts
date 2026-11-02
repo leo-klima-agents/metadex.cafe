@@ -4,6 +4,7 @@ export const CHAIN_ID = 8453;
 // Asked in this order. drpc serves old blocks for free; publicnode needs a paid token for them.
 export const RPCS = ["https://mainnet.base.org", "https://base.drpc.org", "https://base-rpc.publicnode.com"];
 export const MULTICALL3: Address = "0xcA11bde05977b3631167028862bE2a173976CA11";
+export const BASESCAN = "https://basescan.org";
 
 export type Kind = "matcha-latte" | "double-espresso";
 // `actions` is what joining approves: 3 sends the account's claims to the automation, 5 delegates its votes.

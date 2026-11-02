@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 import { use, type Got } from "../cache.ts";
-import { AUTOMATIONS, KVCM } from "../config.ts";
+import { AUTOMATIONS, BASESCAN, KVCM } from "../config.ts";
 import { checks } from "../checks.ts";
 import * as data from "../data.ts";
 import {
@@ -36,7 +36,7 @@ import { hrefOf } from "../routes.ts";
 import { now, same, tagged } from "../rpc.ts";
 import { state } from "../state.ts";
 import { tokensOf, type Amount } from "../tokens.ts";
-import { $, bill, code, fill, frag, link, list, shown, stateOf, status, BASESCAN, type Value } from "../ui.ts";
+import { $, bill, code, fill, frag, link, list, shown, stateOf, status, type Value } from "../ui.ts";
 import { accountName, lockWords, statusNode } from "./hydrex.ts";
 import { prefill } from "./swap.ts";
 

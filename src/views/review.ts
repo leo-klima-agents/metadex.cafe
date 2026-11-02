@@ -1,10 +1,10 @@
-import type { Hex } from "viem";
+import { isAddress, isHash, type Hex } from "viem";
 import { refresh } from "../cache.ts";
-import { CHAIN_ID } from "../config.ts";
+import { BASESCAN, CHAIN_ID } from "../config.ts";
 import { count } from "../format.ts";
 import { sleep, waitForReceipt, type Landed } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
-import { $, announce, code, fill, frag, hex, link, list, BASESCAN } from "../ui.ts";
+import { $, announce, code, fill, frag, hex, link, list } from "../ui.ts";
 import {
   callsStatus,
   capabilities,
@@ -88,8 +88,8 @@ function fieldValue({ code: value, tags = [], words }: Field): Node | string {
   if (words !== undefined) return words;
   const one = (text: string) => {
     const el = code(text);
-    if (/^0x[0-9a-fA-F]{40}$/.test(text)) hex(el, text, true);
-    else if (/^0x[0-9a-fA-F]{64}$/.test(text)) hex(el, text);
+    if (isAddress(text, { strict: false })) hex(el, text, true);
+    else if (isHash(text)) hex(el, text);
     return el;
   };
   if (!Array.isArray(value)) return one(value ?? "");

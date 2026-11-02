@@ -1,10 +1,10 @@
 import {
   decodeErrorResult,
-  decodeEventLog,
   decodeFunctionResult,
   encodeFunctionData,
   maxUint256,
   parseAbi,
+  parseEventLogs,
   type Address,
   type Hex,
 } from "viem";
@@ -22,7 +22,7 @@ import {
   type Token,
   type Way,
 } from "./prices.ts";
-import { call, read, same, simulate, type Read, type Receipt, type Tx } from "./rpc.ts";
+import { call, logsIn, read, same, simulate, type Landed, type Read, type Tx } from "./rpc.ts";
 import { erc20Abi, type Amount } from "./tokens.ts";
 import type { Slip } from "./wallet.ts";
 
@@ -432,18 +432,13 @@ export type Swapped = {
   paid: bigint;
   fee: bigint;
 };
-export function swappedIn(receipts: Pick<Receipt, "logs">[], swapper: Swapper, caller: Address): Swapped {
+export function swappedIn(receipts: Pick<Landed, "logs">[], swapper: Swapper, caller: Address): Swapped {
   const outcome: Swapped = { swapped: [], failed: [], paid: 0n, fee: 0n };
-  for (const log of receipts.flatMap(({ logs }) => logs)) {
-    if (!same(log.address, swapper.address)) continue;
-    try {
-      const event = decodeEventLog({ abi: swapperAbi, data: log.data, topics: log.topics as [Hex, ...Hex[]] });
-      if (!same(event.args.caller, caller)) continue;
-      if (event.eventName === "RouteSwapped") outcome.swapped.push({ ...event.args, index: Number(event.args.index) });
-      if (event.eventName === "RouteFailed") outcome.failed.push({ ...event.args, index: Number(event.args.index) });
-      if (event.eventName === "Swapped")
-        [outcome.paid, outcome.fee] = [outcome.paid + event.args.paid, outcome.fee + event.args.fee];
-    } catch {}
+  const logs = logsIn(receipts).filter((log) => same(log.address, swapper.address));
+  for (const { eventName, args } of parseEventLogs({ abi: swapperAbi, logs, args: { caller } })) {
+    if (eventName === "RouteSwapped") outcome.swapped.push({ ...args, index: Number(args.index) });
+    if (eventName === "RouteFailed") outcome.failed.push({ ...args, index: Number(args.index) });
+    if (eventName === "Swapped") [outcome.paid, outcome.fee] = [outcome.paid + args.paid, outcome.fee + args.fee];
   }
   return outcome;
 }

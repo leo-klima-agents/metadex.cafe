@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { decodeFunctionData, encodeAbiParameters, encodeEventTopics, encodeFunctionResult, parseAbi } from "viem";
-import type { Address, Hex } from "viem";
+import {
+  decodeFunctionData,
+  encodeAbiParameters,
+  encodeEventTopics,
+  encodeFunctionResult,
+  numberToHex,
+  parseAbi,
+} from "viem";
+import type { Address, Hex, RpcLog } from "viem";
 import { MATCHA_LATTE } from "../src/config.ts";
 import { WEEK } from "../src/format.ts";
 import { key, type Prices, type Token } from "../src/prices.ts";
@@ -46,16 +53,25 @@ const amount = (token: Address, amount: bigint) => ({ token, amount });
 
 // Logs in the order they were made, each in a transaction of its own unless said otherwise.
 let index = 0;
-function log(eventName: (typeof abi)[number]["name"], args: object, values: unknown[], block: number, tx?: Hex) {
+function log(
+  eventName: (typeof abi)[number]["name"],
+  args: object,
+  values: unknown[],
+  block: number,
+  tx?: Hex,
+): RpcLog {
   const inputs = abi.find(({ name }) => name === eventName)!.inputs.filter((input) => !("indexed" in input));
   index++;
   return {
     address: MATCHA_LATTE.address,
     topics: encodeEventTopics({ abi, eventName, args } as never) as [Hex, ...Hex[]],
     data: encodeAbiParameters(inputs, values as never),
-    transactionHash: tx ?? `0x${index.toString(16).padStart(64, "0")}`,
-    blockNumber: `0x${block.toString(16)}` as Hex,
-    logIndex: `0x${index.toString(16)}` as Hex,
+    transactionHash: tx ?? numberToHex(index, { size: 32 }),
+    transactionIndex: "0x0",
+    blockHash: numberToHex(block, { size: 32 }),
+    blockNumber: numberToHex(block),
+    logIndex: numberToHex(index),
+    removed: false,
   };
 }
 // Amounts by token, as an event's two lists.

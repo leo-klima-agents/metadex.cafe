@@ -178,12 +178,11 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   }
 
   const latest = async () => {
-    const block = await anvil<{ number: Hex; timestamp: Hex }>("eth_getBlockByNumber", ["latest", false]);
+    const block = await anvil.getBlock();
     return { block: Number(block.number), time: Number(block.timestamp) };
   };
   async function gas(address: Address): Promise<void> {
-    if (BigInt(await anvil<Hex>("eth_getBalance", [address, "latest"])) < FOR_GAS / 10n)
-      await anvil("anvil_setBalance", [address, toHex(FOR_GAS)]);
+    if ((await anvil.getBalance({ address })) < FOR_GAS / 10n) await anvil.setBalance({ address, value: FOR_GAS });
   }
 
   // A window with the test wallet, and one without, for Safe{Wallet} too. Each one's clock starts at the fork's time.
@@ -250,11 +249,11 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
       if (closing) return;
       await startAnvil(next.block, cache, () => !!closing);
       if (closing) return void (await stopAnvil(false));
-      for (const { address } of next.owners) await anvil("anvil_setBalance", [address, toHex(FOR_GAS)]);
+      for (const { address } of next.owners) await anvil.setBalance({ address, value: FOR_GAS });
       busy = `Setting up ${next.name}…`;
       await next.setup?.();
       // A block every 2 seconds, as on Base.
-      await anvil("evm_setIntervalMining", [2]);
+      await anvil.setIntervalMining({ interval: 2 });
       await open("wallet");
       console.log(`Ready: ${next.name}.`);
     } catch (error) {
@@ -278,8 +277,8 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   // A minute into the next epoch, Thursday 00:00 UTC; the pages' clocks follow, and run their next half minute's timers.
   async function travel(): Promise<void> {
     const at = (Math.floor((await latest()).time / WEEK) + 1) * WEEK + 60;
-    await anvil("evm_setNextBlockTimestamp", [at]);
-    await anvil("evm_mine");
+    await anvil.setNextBlockTimestamp({ timestamp: BigInt(at) });
+    await anvil.mine({ blocks: 1 });
     for (const context of sites.values()) {
       await context.clock.setSystemTime(at * 1000);
       await context.clock.runFor(30_000);
@@ -291,9 +290,7 @@ export async function launch(first: Scenario, { headless = false } = {}): Promis
   async function replay(): Promise<void> {
     const next = current.replays?.[replayed];
     if (!next) throw new Error("No transaction is left to send.");
-    const tx = await anvil<{ from: Address; to: Address; input: Hex; gas: Hex } | null>("eth_getTransactionByHash", [
-      next.hash,
-    ]);
+    const tx = await anvil.getTransaction({ hash: next.hash }).catch(() => undefined);
     if (!tx) throw new Error(`Base's RPC does not know ${short(next.hash)}.`);
     await gas(tx.from);
     replayed++;

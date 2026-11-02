@@ -96,12 +96,12 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await review(page)
       .getByText(/AVNT kept: its token refused the transfer/)
       .waitFor();
-    assert.ok((await h.readOn<bigint>(AVNT, "allowance", [SELLER, INTO_USDC.address])) > 0n);
+    assert.ok((await h.at(AVNT).read.allowance([SELLER, INTO_USDC.address])) > 0n);
     await review(page).getByRole("button", { name: "Reset its approval" }).click();
     await heading(review(page), "Transaction", 2).waitFor();
     assert.deepEqual(await says(page), ["Reset AVNT's approval of the USDC swapper"]);
     await h.confirm(page);
-    assert.equal(await h.readOn<bigint>(AVNT, "allowance", [SELLER, INTO_USDC.address]), 0n);
+    assert.equal(await h.at(AVNT).read.allowance([SELLER, INTO_USDC.address]), 0n);
     assert.deepEqual(violations, []);
   });
 
@@ -167,7 +167,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await heading(review(page), "Done", 2).waitFor();
     assert.equal(sent.length, claims.length + swaps.length);
     assert.ok((await balanceOf(INTO_USDC.token, PAYEE)) > before);
-    assert.ok((await h.readOn<bigint>(DOUBLE_ESPRESSO.address, "lastClaimBlock", [82774n])) > 0n);
+    assert.ok((await h.at(DOUBLE_ESPRESSO.address).read.lastClaimBlock([82774n])) > 0n);
   });
 
   test("inside Safe{Wallet}, a Safe proposes a claim too large for one transaction as several Safe transactions", async () => {
@@ -239,7 +239,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       .waitFor();
     assert.equal(await swapped.getByText(/ USDC$/).count(), 0);
     assert.ok((await balanceOf(WETH, NEWCOMER)) > before);
-    assert.ok((await h.readOn<bigint>(DOUBLE_ESPRESSO.address, "lastClaimBlock", [141n])) > 0n);
+    assert.ok((await h.at(DOUBLE_ESPRESSO.address).read.lastClaimBlock([141n])) > 0n);
     assert.deepEqual(violations, []);
   });
 });

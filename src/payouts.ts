@@ -1,4 +1,4 @@
-import { decodeEventLog, encodeEventTopics, numberToHex, type Abi, type Address, type Hex } from "viem";
+import { encodeEventTopics, numberToHex, parseEventLogs, type Address, type Hex, type RpcLog } from "viem";
 import { doubleEspressoAbi, matchaLatteAbi, rewardsAbi } from "./abi.ts";
 import type { Amount } from "./tokens.ts";
 import { memo } from "./cache.ts";
@@ -319,24 +319,9 @@ async function payoutBlocks(standings: Standing[], top: number, time: number): P
   return blocks;
 }
 
-type Log = {
-  address: Address;
-  data: Hex;
-  topics: [Hex, ...Hex[]];
-  transactionHash: Hex;
-  logIndex: Hex;
-  blockNumber: Hex;
-};
-const order = (log: Log): bigint => BigInt(log.blockNumber) * 1_000_000n + BigInt(log.logIndex);
-function decoded<A extends Abi, L extends { data: Hex; topics: Hex[] }>(abi: A, logs: L[]) {
-  return logs.flatMap((log) => {
-    try {
-      return [{ log, event: decodeEventLog({ abi, data: log.data, topics: log.topics as [Hex, ...Hex[]] }) }];
-    } catch {
-      return [];
-    }
-  });
-}
+// Decoded logs in the order Base made them.
+type Placed = { blockNumber: bigint; logIndex: number };
+const inOrder = (a: Placed, b: Placed): number => Number(a.blockNumber - b.blockNumber) || a.logIndex - b.logIndex;
 
 // Matcha Latte's payout, as its logs give it: an account's retirement, if any, comes just before, in its transaction.
 export type Payout = {
@@ -351,16 +336,13 @@ export type Payout = {
   tx: Hex;
   block: number;
 };
-export function payoutsOf(logs: Log[]): Payout[] {
+export function payoutsOf(logs: RpcLog[]): Payout[] {
   const found: Payout[] = [];
   const retired = new Map<Hex, { tonnes: bigint; kvcm: bigint }>();
-  for (const { log, event } of decoded(
-    matchaLatteAbi,
-    [...logs].sort((a, b) => Number(order(a) - order(b))),
-  )) {
-    if (event.eventName === "CarbonRetired")
-      retired.set(log.transactionHash, { tonnes: event.args.retireTonnes, kvcm: event.args.kvcmSpent });
-    if (event.eventName !== "ClaimSwapAndDistributeCompleted") continue;
+  for (const log of parseEventLogs({ abi: matchaLatteAbi, logs }).sort(inOrder)) {
+    if (log.eventName === "CarbonRetired")
+      retired.set(log.transactionHash, { tonnes: log.args.retireTonnes, kvcm: log.args.kvcmSpent });
+    if (log.eventName !== "ClaimSwapAndDistributeCompleted") continue;
     const {
       tokenId,
       owner,
@@ -370,7 +352,7 @@ export function payoutsOf(logs: Log[]): Payout[] {
       distributedTokens,
       distributedAmounts,
       treasuryFees,
-    } = event.args;
+    } = log.args;
     const retirement = retired.get(log.transactionHash);
     retired.delete(log.transactionHash);
     found.push({
@@ -393,12 +375,12 @@ export function payoutsOf(logs: Log[]): Payout[] {
 const logsOf = new Map<number, Payout[]>();
 async function payoutsIn(block: number): Promise<Payout[]> {
   if (logsOf.has(block)) return logsOf.get(block)!;
-  const logs = await rpc<Log[]>(
+  const logs = await rpc<RpcLog[]>(
     "eth_getLogs",
     [{ address: MATCHA_LATTE.address, fromBlock: numberToHex(block), toBlock: numberToHex(block) }],
     {
       tag: "payouts",
-      want: (found) => (found as Log[]).length > 0,
+      want: (found) => (found as RpcLog[]).length > 0,
     },
   );
   if (logs.length) logsOf.set(block, payoutsOf(logs));
@@ -418,29 +400,20 @@ export type ClaimLog = {
 };
 export type Walk = { claims: ClaimLog[]; stopped: boolean };
 // The Claimed events in some logs, in their order, with the log of each.
-export function claimed<L extends { data: Hex; topics: Hex[] }>(logs: L[]) {
-  return decoded(doubleEspressoAbi, logs).flatMap(({ log, event }) =>
-    event.eventName === "Claimed"
-      ? [
-          {
-            log,
-            id: event.args.tokenId,
-            owner: event.args.owner,
-            caller: event.args.caller,
-            received: positive(event.args.tokens, event.args.amounts),
-            fees: positive(event.args.tokens, event.args.fees),
-            previous: Number(event.args.previousClaimBlock),
-          },
-        ]
-      : [],
-  );
-}
-export const claimsOf = (logs: Log[]): ClaimLog[] =>
-  claimed([...logs].sort((a, b) => Number(order(b) - order(a)))).map(({ log, ...claim }) => ({
-    ...claim,
-    tx: log.transactionHash,
-    block: Number(log.blockNumber),
+export const claimed = (logs: RpcLog[]) =>
+  parseEventLogs({ abi: doubleEspressoAbi, eventName: "Claimed", logs }).map((log) => ({
+    log,
+    id: log.args.tokenId,
+    owner: log.args.owner,
+    caller: log.args.caller,
+    received: positive(log.args.tokens, log.args.amounts),
+    fees: positive(log.args.tokens, log.args.fees),
+    previous: Number(log.args.previousClaimBlock),
   }));
+export const claimsOf = (logs: RpcLog[]): ClaimLog[] =>
+  claimed(logs)
+    .sort((a, b) => inOrder(b.log, a.log))
+    .map(({ log, ...claim }) => ({ ...claim, tx: log.transactionHash, block: Number(log.blockNumber) }));
 // What claims received, took and paid, token by token.
 export function totals(claims: Pick<ClaimLog, "received" | "fees">[]) {
   const received = summed(claims.flatMap((claim) => claim.received));
@@ -504,9 +477,9 @@ async function claimsAt(block: number, ids: bigint[]): Promise<ClaimLog[]> {
       toBlock: numberToHex(block),
       topics,
     };
-    const logs = await rpc<Log[]>("eth_getLogs", [filter], {
+    const logs = await rpc<RpcLog[]>("eth_getLogs", [filter], {
       tag: "payouts",
-      want: (found) => missing.every((id) => claimsOf(found as Log[]).some((claim) => claim.id === id)),
+      want: (found) => missing.every((id) => claimsOf(found as RpcLog[]).some((claim) => claim.id === id)),
     });
     found = claimsOf(logs);
     for (const id of missing) {

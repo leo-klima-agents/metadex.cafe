@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { EIP1193Provider } from "viem";
 import {
   SAFE_ORIGIN,
   askSafe,
@@ -9,18 +10,19 @@ import {
   parentOrigin,
   safeFrom,
   type Connection,
-  type Provider,
 } from "../src/wallet.ts";
 
 const ADDRESS = "0x0208DdBc05a91e1B937E8B3140B62ef22A274C95";
 const connected = (answer: (method: string) => unknown, propose = false): Connection => {
-  const provider: Provider = {
-    async request({ method }) {
+  const provider = {
+    async request({ method }: { method: string }) {
       const found = answer(method);
       if (found instanceof Error) throw found;
       return found;
     },
-  };
+    on() {},
+    removeListener() {},
+  } as EIP1193Provider;
   const wallet = { name: "Test", provider: async () => provider, ...(propose && { propose: async () => {} }) };
   return { wallet, provider, address: ADDRESS, chainId: 8453 };
 };
@@ -32,7 +34,6 @@ test("a wallet batches when it answers wallet_getCapabilities, all or nothing wh
   const of = (reply: unknown, propose = false) => capabilities(connected(() => reply, propose));
   assert.deepEqual(await of({ "0x2105": { atomic: { status: "supported" } } }), ATOMIC);
   assert.deepEqual(await of({ "0x2105": { atomic: { status: "ready" } } }), ATOMIC);
-  assert.deepEqual(await of({ "0x2105": { atomicBatch: { supported: true } } }), ATOMIC);
   const discovery = { "0x0": { assetDiscovery: { supported: true } }, "0x2105": {} };
   assert.deepEqual(await of(discovery), { batch: true, atomic: false, assets: true });
   assert.deepEqual(await of(failure(4200)), NONE);
@@ -55,7 +56,7 @@ test("capabilities are asked again after a failure, unless the wallet does not k
   }
 });
 
-test("a batch is pending, done once every receipt succeeded, or failed, in numbers or in words", async () => {
+test("a batch is pending, done once every receipt succeeded, or failed", async () => {
   const receipt = (status: string) => ({ transactionHash: "0x01", status, logs: [] });
   const state = async (reply: unknown) =>
     (
@@ -65,9 +66,7 @@ test("a batch is pending, done once every receipt succeeded, or failed, in numbe
       )
     ).state;
   assert.equal(await state({ status: 100 }), "pending");
-  assert.equal(await state({ status: "PENDING" }), "pending");
   assert.equal(await state({ status: 200, receipts: [receipt("0x1"), receipt("0x1")] }), "done");
-  assert.equal(await state({ status: "CONFIRMED", receipts: [receipt("0x1")] }), "done");
   assert.equal(await state({ status: 200, receipts: [receipt("0x1"), receipt("0x0")] }), "failed");
   assert.equal(await state({ status: 200 }), "pending", "confirmed, but its receipts have not come");
   for (const status of [400, 500, 600]) assert.equal(await state({ status }), "failed");
@@ -153,7 +152,7 @@ test("Safe{Wallet} is a wallet once it names its Safe; the page stops listening 
   const provider = await wallet!.provider();
   assert.deepEqual(await provider.request({ method: "eth_requestAccounts" }), [ADDRESS]);
   assert.equal(await provider.request({ method: "eth_chainId" }), "0x2105");
-  await assert.rejects(provider.request({ method: "eth_sendTransaction" }), { code: 4200 });
+  await assert.rejects(provider.request({ method: "eth_sendTransaction", params: [{}] }), { code: 4200 });
   for (const answers of [false, true]) {
     const { parent, events, reply } = framed();
     const ask = askSafe(parent, events);

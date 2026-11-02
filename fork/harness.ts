@@ -17,15 +17,19 @@ import {
 } from "playwright-core";
 import {
   concat,
-  decodeFunctionResult,
+  createPublicClient,
   encodeFunctionData,
   getAddress,
+  getContract,
   getContractAddress,
   hexToBytes,
+  http,
   keccak256,
   parseAbi,
+  testActions,
   toHex,
-  type Abi,
+  WaitForTransactionReceiptTimeoutError,
+  walletActions,
   type Address,
   type Hex,
 } from "viem";
@@ -81,7 +85,7 @@ const NATIVE: Address[] = [
   "0xb200000000000000000000856a95738c92feed01",
 ];
 // A generous gas limit, as wallets add a margin: anvil estimates gas at another time than it mines at.
-export const GAS = "0xf42400";
+export const GAS = 16_000_000n;
 export const FOR_GAS = 10n ** 17n;
 export const abi = parseAbi([
   "function getLockDelegatee(uint256 tokenId) view returns (address)",
@@ -111,14 +115,22 @@ async function post(body: string): Promise<string> {
   prefetch(body);
   return (await nodeFetch(ANVIL, { method: "POST", headers: { "content-type": "application/json" }, body })).text();
 }
-export async function anvil<T>(method: string, params: unknown[] = []): Promise<T> {
-  const { result, error } = JSON.parse(await post(JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }))) as {
-    result: T;
-    error?: { message: string };
-  };
-  if (error) throw new Error(`${method}: ${error.message}`);
-  return result;
-}
+// The fork's anvil, as viem's clients ask it: Base's methods, anvil's own, and transactions from the accounts it
+// impersonates. Each request waits up to ten minutes, as anvil does for Base, which a first run reads a slot at a time.
+const clientOf = (url: string) =>
+  createPublicClient({
+    transport: http(url, {
+      fetchFn: nodeFetch,
+      onFetchRequest: (_, init) => prefetch(String(init.body)),
+      retryCount: 0,
+      timeout: 600_000,
+    }),
+  })
+    .extend(testActions({ mode: "anvil" }))
+    .extend(walletActions);
+export let anvil: ReturnType<typeof clientOf>;
+// A contract on the fork, read through the tests' ABI.
+export const at = (address: Address) => getContract({ address, abi, client: anvil });
 // Runs the page's own reads in Node, against the fork.
 export async function onFork<T>(reads: () => Promise<T>): Promise<T> {
   globalThis.fetch = (_, init) => {
@@ -134,35 +146,24 @@ export async function onFork<T>(reads: () => Promise<T>): Promise<T> {
 
 // Sends a transaction from an account anvil impersonates, with no tip; the cache hears of it, so that it does not ask
 // FORK_URL for its receipt.
-export type Sendable = { from: string; to?: string; data: string; gas?: string };
-export async function send(tx: Sendable): Promise<Hex> {
-  const hash = await anvil<Hex>("eth_sendTransaction", [{ ...tx, maxPriorityFeePerGas: "0x0" }]);
+export type Sendable = { from: Address; to?: Address | null; data: Hex; gas?: bigint };
+export async function send({ from, ...tx }: Sendable): Promise<Hex> {
+  const hash = await anvil.sendTransaction({ account: from, chain: null, maxPriorityFeePerGas: 0n, ...tx });
   await nodeFetch(`${CACHE_URL}/sent`, { method: "POST", body: hash });
   return hash;
 }
 export async function included(hash: Hex, what: string = hash): Promise<void> {
-  for (
-    const deadline = Date.now() + 120_000;
-    Date.now() < deadline;
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  ) {
-    const receipt = await anvil<{ status: Hex } | null>("eth_getTransactionReceipt", [hash]);
-    if (receipt?.status === "0x1") return;
-    if (receipt) throw new Error(`${what} failed on the fork.`);
-  }
-  throw new Error(`${what} was not mined in two minutes.`);
+  const { status } = await anvil
+    .waitForTransactionReceipt({ hash, pollingInterval: 100, timeout: 120_000 })
+    .catch((error: unknown) => {
+      if (!(error instanceof WaitForTransactionReceiptTimeoutError)) throw error;
+      throw new Error(`${what} was not mined in two minutes.`, { cause: error });
+    });
+  if (status !== "success") throw new Error(`${what} failed on the fork.`);
 }
 export const mined = async (from: Address, to: Address, data: Hex): Promise<void> =>
   included(await send({ from, to, data, gas: GAS }));
-export async function readOn<T>(to: Address, functionName: string, args: unknown[] = [], on: Abi = abi): Promise<T> {
-  const data = encodeFunctionData({ abi: on, functionName, args } as never);
-  return decodeFunctionResult({
-    abi: on,
-    functionName,
-    data: await anvil<Hex>("eth_call", [{ to, data }, "latest"]),
-  } as never) as T;
-}
-export const balanceOf = (token: Address, owner: Address) => readOn<bigint>(token, "balanceOf", [owner]);
+export const balanceOf = (token: Address, owner: Address) => at(token).read.balanceOf([owner]);
 export const approveConduit = (owner: Address, conduit: Address, id: bigint, approve = true) =>
   mined(
     owner,
@@ -173,44 +174,44 @@ export async function expectApprovals(ids: bigint[], delegate: Address, claimer:
   for (const id of ids)
     assert.deepEqual(
       {
-        delegate: await readOn(VOTING_ESCROW, "getLockDelegatee", [id]),
-        claimer: await readOn(VOTING_ESCROW, "getClaimRedirectApproved", [id]),
+        delegate: await at(VOTING_ESCROW).read.getLockDelegatee([id]),
+        claimer: await at(VOTING_ESCROW).read.getClaimRedirectApproved([id]),
       },
       { delegate, claimer },
       `#${id}`,
     );
 }
 // The page reads a few blocks before the latest, which on the fork can be before the last transactions.
-export const settle = () => anvil("anvil_mine", [toHex(6)]);
+export const settle = () => anvil.mine({ blocks: 6 });
 
 // Hydrex moved on to the epoch under way, as anyone may once it flipped: what the epoch before earned is then final.
 export async function moveOn(): Promise<void> {
-  await anvil("anvil_setBalance", [STRANGER, toHex(FOR_GAS)]);
-  const minter = await readOn<Address>(VOTER, "minter");
+  await anvil.setBalance({ address: STRANGER, value: FOR_GAS });
+  const minter = await at(VOTER).read.minter();
   await mined(STRANGER, minter, encodeFunctionData({ abi, functionName: "update_period" }));
 }
 // The fork moved on to the next Thursday 00:00 UTC, and `after` seconds more, and Hydrex with it; then a few blocks, as
 // the page reads a little behind the newest.
 export async function nextEpoch(after = 60): Promise<void> {
-  const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false]);
-  await anvil("evm_setNextBlockTimestamp", [weekStart(Number(timestamp)) + WEEK + after]);
-  await anvil("evm_mine");
+  const { timestamp } = await anvil.getBlock();
+  await anvil.setNextBlockTimestamp({ timestamp: BigInt(weekStart(Number(timestamp)) + WEEK + after) });
+  await anvil.mine({ blocks: 1 });
   await moveOn();
   await settle();
 }
 // Incentives for this epoch's votes for `pool`, as anyone may add them: `amount` of `token`, from HOLDER.
 export async function incentive(pool: Address, token: Address, amount: bigint): Promise<void> {
-  const bribe = await readOn<Address>(VOTER, "external_bribes", [await readOn<Address>(VOTER, "gauges", [pool])]);
+  const bribe = await at(VOTER).read.external_bribes([await at(VOTER).read.gauges([pool])]);
   await mined(HOLDER, token, encodeFunctionData({ abi, functionName: "approve", args: [bribe, amount] }));
   await mined(HOLDER, bribe, encodeFunctionData({ abi, functionName: "notifyRewardAmount", args: [token, amount] }));
 }
 
 // Double Espresso on a fork of a block before its deployment, as the page takes it to be on Base.
 export async function deployDoubleEspresso(): Promise<void> {
-  if ((await anvil<Hex>("eth_getCode", [DOUBLE_ESPRESSO.address, "latest"])) !== "0x") return;
-  const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", [toHex(BLOCK), false]);
-  await anvil("evm_setNextBlockTimestamp", [Number(timestamp) + 60]);
-  await anvil("anvil_setBalance", [SOMEONE, toHex(FOR_GAS)]);
+  if (await anvil.getCode({ address: DOUBLE_ESPRESSO.address })) return;
+  const { timestamp } = await anvil.getBlock({ blockNumber: BigInt(BLOCK) });
+  await anvil.setNextBlockTimestamp({ timestamp: timestamp + 60n });
+  await anvil.setBalance({ address: SOMEONE, value: FOR_GAS });
   await mined(SOMEONE, CREATE2_DEPLOYER, concat([SALT, INIT_CODE]));
   assert.equal(
     getContractAddress({ opcode: "CREATE2", from: CREATE2_DEPLOYER, salt: SALT, bytecode: INIT_CODE }),
@@ -221,15 +222,15 @@ export async function deployDoubleEspresso(): Promise<void> {
 export async function doubleEspressoReceipts(): Promise<Reward[]> {
   await deployDoubleEspresso();
   const { rewards } = await onFork(async () => votesEarned(CONDUIT, await lastEpoch(), true));
-  for (const who of [PAYEE, STRANGER, SOMEONE]) await anvil("anvil_setBalance", [who, toHex(FOR_GAS)]);
+  for (const who of [PAYEE, STRANGER, SOMEONE]) await anvil.setBalance({ address: who, value: FOR_GAS });
   await approveConduit(PAYEE, DOUBLE_ESPRESSO.address, 82774n);
   const usdc = rewards.filter(({ token }) => token.symbol === "USDC");
   for (const [who, { contract, token, fee }] of [
     [SOMEONE, usdc[0]!],
     [STRANGER, usdc[1]!],
   ] as const) {
-    const args = [82774n, fee ? [contract] : [], fee ? [] : [contract], [token.address]];
-    await mined(who, DOUBLE_ESPRESSO.address, encodeFunctionData({ abi, functionName: "claim", args } as never));
+    const args = [82774n, fee ? [contract] : [], fee ? [] : [contract], [token.address]] as const;
+    await mined(who, DOUBLE_ESPRESSO.address, encodeFunctionData({ abi, functionName: "claim", args }));
   }
   await settle();
   return rewards;
@@ -268,7 +269,7 @@ export type Rpc = {
   answer?: ((body: string) => string | undefined) | undefined;
   rewrite?: ((body: string, reply: string) => string | undefined) | undefined;
 };
-type Sent = { to: string; data: string };
+type Sent = { to: Address; data: Hex };
 export const walletScript = (names: string[]) => `(() => {
   const listeners = {};
   window.testWalletEmit = (event, value) => { for (const l of listeners[event] ?? []) l(value); };
@@ -305,21 +306,20 @@ const safePage = (safe: Address) => `<!doctype html><meta charset="utf-8"><title
 </script>`;
 
 // Gas enough for Base to take the transaction, and too little to run it: what its calldata costs at least (EIP-7623).
-async function starved(from: Address, to: Address, data: Hex): Promise<string> {
+async function starved(from: Address, to: Address, data: Hex): Promise<bigint> {
   const bytes = hexToBytes(data);
   const nonzero = bytes.filter(Boolean).length;
   const floor = 21_000n + 40n * BigInt(nonzero) + 10n * BigInt(bytes.length - nonzero);
-  const needed = await anvil<Hex>("eth_estimateGas", [{ from, to, data }]).then(BigInt, () => undefined);
+  const needed = await anvil.estimateGas({ account: from, to, data }).catch(() => undefined);
   if (needed !== undefined && needed <= floor)
     throw new Error(`A call to ${to} runs on ${needed} gas: it cannot fail.`);
-  return toHex(floor);
+  return floor;
 }
 async function together(from: Address, calls: Sent[]): Promise<boolean> {
-  const [block] = await anvil<{ calls: { status: Hex }[] }[]>("eth_simulateV1", [
-    { blockStateCalls: [{ calls: calls.map(({ to, data }) => ({ from, to, data })) }], validation: false },
-    "latest",
-  ]);
-  return !!block && block.calls.every(({ status }) => status === "0x1");
+  const [block] = await anvil.simulateBlocks({
+    blocks: [{ calls: calls.map((call) => ({ account: from, ...call })) }],
+  });
+  return !!block && block.calls.every(({ status }) => status === "success");
 }
 
 export function testWallet(options: WalletOptions, sent?: Sent[], asked?: string[]) {
@@ -393,14 +393,14 @@ export function testWallet(options: WalletOptions, sent?: Sent[], asked?: string
         } else
           for (const { to, data } of calls) {
             sent?.push({ to, data });
-            hashes.push(await send({ to, data, from: signer, gas: await gasFor(signer, to as Address, data as Hex) }));
+            hashes.push(await send({ to, data, from: signer, gas: await gasFor(signer, to, data) }));
           }
         return { result: { id } };
       }
       case "wallet_getCallsStatus": {
         const receipts = await Promise.all(
           (batches.get(params[0] as string) ?? []).map((hash) =>
-            anvil<{ status: Hex } | null>("eth_getTransactionReceipt", [hash]),
+            anvil.request({ method: "eth_getTransactionReceipt", params: [hash] }),
           ),
         );
         if (receipts.some((receipt) => !receipt)) return { result: { status: 100 } };
@@ -506,7 +506,7 @@ export async function open(wallet: Partial<WalletOptions> | false, options: Open
   };
   await context.route("**/*", (route) => serve(route, opened));
   // The clock fakes AbortSignal.timeout too: PAGE_SCRIPT, added after it, undoes that.
-  const { timestamp } = await anvil<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false]);
+  const { timestamp } = await anvil.getBlock();
   if (script)
     await (flowing
       ? context.clock.install({ time: Number(timestamp) * 1000 })
@@ -594,7 +594,7 @@ export function fork(block: number, owners: Address[], setup?: () => Promise<unk
     if (!cached)
       throw new Error("Run the browser tests through fork/run.ts, which serves the caches anvil forks through.");
     await startAnvil(block, cached);
-    for (const owner of owners) await anvil("anvil_setBalance", [owner, toHex(FOR_GAS)]);
+    for (const owner of owners) await anvil.setBalance({ address: owner, value: FOR_GAS });
     browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
     await setup?.();
   });
@@ -602,11 +602,11 @@ export function fork(block: number, owners: Address[], setup?: () => Promise<unk
     await browser?.close();
     await stopAnvil();
   });
-  beforeEach(async () => void (snapshot = await anvil<Hex>("evm_snapshot")));
+  beforeEach(async () => void (snapshot = await anvil.snapshot()));
   afterEach(async () => {
     for (const context of contexts.splice(0)) await context.close();
     await Promise.allSettled(forwarding);
-    await anvil("evm_revert", [snapshot]);
+    await anvil.revert({ id: snapshot });
   });
 }
 export async function startAnvil(block: number, cached: string, stopping = () => false): Promise<void> {
@@ -616,6 +616,7 @@ export async function startAnvil(block: number, cached: string, stopping = () =>
   const { port } = server.address() as { port: number };
   await new Promise((resolve) => server.close(resolve));
   ANVIL = `http://127.0.0.1:${port}`;
+  anvil = clientOf(ANVIL);
   const args = [
     "--fork-url",
     CACHE_URL,
@@ -634,7 +635,7 @@ export async function startAnvil(block: number, cached: string, stopping = () =>
   child.once("error", (error) => (failed = error));
   for (;;) {
     try {
-      await anvil("eth_chainId");
+      await anvil.getChainId();
       break;
     } catch {
       if (failed) throw new Error(`anvil did not start (${failed.message}): is Foundry on the PATH?`);
@@ -644,7 +645,7 @@ export async function startAnvil(block: number, cached: string, stopping = () =>
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
-  for (const token of NATIVE) await anvil("anvil_setCode", [token, "0x"]);
+  for (const token of NATIVE) await anvil.setCode({ address: token, bytecode: "0x" });
 }
 export async function stopAnvil(drain = true): Promise<void> {
   if (drain) await Promise.allSettled(forwarding);

@@ -1,17 +1,8 @@
-import { getAddress } from "viem";
+import { getAddress, type EIP1193Provider } from "viem";
 import { refresh } from "../cache.ts";
 import { actions, render, state } from "../state.ts";
 import { $, announce, fill, list } from "../ui.ts";
-import {
-  NoWallet,
-  connect,
-  declined,
-  findWallets,
-  safeWallet,
-  switchToBase,
-  type Provider,
-  type Wallet,
-} from "../wallet.ts";
+import { NoWallet, connect, declined, findWallets, safeWallet, switchToBase, type Wallet } from "../wallet.ts";
 import { closeReview } from "./review.ts";
 
 // Connecting a wallet: at once when the browser has one, else from the list in the header's popup.
@@ -21,7 +12,7 @@ let missing = false;
 let attempt = 0;
 let switchFailed = false;
 const popup = $("#connect");
-const listening = new WeakSet<Provider>();
+const listening = new WeakSet<EIP1193Provider>();
 
 export function drawWallets(): void {
   list(
@@ -97,11 +88,11 @@ function letGo(): void {
 }
 
 // A wallet's events: another account, another network, or locked.
-function listen(provider: Provider): void {
+function listen(provider: EIP1193Provider): void {
   if (listening.has(provider)) return;
   listening.add(provider);
   const ours = () => (state.connection?.provider === provider ? state.connection : undefined);
-  provider.on?.("accountsChanged", ([address]: string[]) => {
+  provider.on("accountsChanged", ([address]) => {
     const connection = ours();
     if (!connection || (address && getAddress(address) === connection.address)) return;
     if (!address) return letGo();
@@ -110,7 +101,7 @@ function listen(provider: Provider): void {
     state.picks.clear();
     render();
   });
-  provider.on?.("chainChanged", (chainId: string) => {
+  provider.on("chainChanged", (chainId) => {
     const connection = ours();
     if (!connection) return;
     connection.chainId = Number(chainId);
@@ -118,5 +109,5 @@ function listen(provider: Provider): void {
     refresh("accounts");
     render();
   });
-  provider.on?.("disconnect", () => ours() && letGo());
+  provider.on("disconnect", () => ours() && letGo());
 }

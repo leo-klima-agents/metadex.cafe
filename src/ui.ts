@@ -1,5 +1,6 @@
 import type { Address, Hex } from "viem";
 import type { Got } from "./cache.ts";
+import { BASESCAN } from "./config.ts";
 import { hexLines, walletLines } from "./format.ts";
 
 // The page's markup holds every view, popup and row; this fills it. An element marked data-text="key" takes a value:
@@ -19,7 +20,6 @@ export type Value =
 
 export const $ = <T extends Element = HTMLElement>(selector: string, root: ParentNode = document): T =>
   root.querySelector<T>(selector)!;
-export const BASESCAN = "https://basescan.org";
 
 function setAttr(el: Element, name: string, value: string | null): void {
   if (value === null) el.removeAttribute(name);
