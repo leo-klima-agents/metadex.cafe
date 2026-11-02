@@ -719,7 +719,7 @@ button:not(.secondary)[aria-busy="true"]::after {
   align-items: flex-start;
   gap: 0.75rem;
 }
-.ticks:has(.tick:checked) {
+.ticks:has(.tick:checked:not([hidden])) {
   border-color: var(--accent);
   background: var(--tint);
 }
