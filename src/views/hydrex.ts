@@ -266,8 +266,8 @@ export function drawHydrex(): void {
 }
 
 function epochWords(): Value {
-  const found = data.matchaLatte().value;
-  if (!found) return null;
+  const { value: found, failed } = data.matchaLatte();
+  if (!found) return found === undefined && !failed ? undefined : null;
   const end = found.epochStart + WEEK;
   return `A change made now moves the votes from ${utc(end)}${now() < end ? `, in ${until(end - now())}` : ""}.`;
 }
