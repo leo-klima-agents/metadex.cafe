@@ -96,12 +96,7 @@ export function statusNode(s: Status, own: boolean, inGroup?: string): Value {
 
 const record = (automation: Automation): Value =>
   shown(data.earnings(automation), (earnings) =>
-    earnings.votes
-      ? frag(
-          money(perThousandOf(earnings)),
-          Object.assign(document.createElement("small"), { className: "aside", textContent: " / 1k votes" }),
-        )
-      : "No record yet",
+    earnings.votes ? frag(money(perThousandOf(earnings)), fromTemplate("per-1k")) : "No record yet",
   );
 const compared = (mine: Got<Earnings>): Value => {
   const got = andThen(mine, (earnings) =>
@@ -154,6 +149,9 @@ export function can(action: string, account: Account, arg: string | undefined, h
 const picks = (group: string, able: Account[]): Set<bigint> =>
   state.picks.get(group) ?? new Set(group.includes(" needs:") ? able.map(({ id }) => id) : []);
 
+// The accounts each group's buttons can act on, and those they act on, as last drawn.
+const drawn = new WeakMap<HTMLElement, { able: Account[]; chosen: Account[] }>();
+
 function drawGroups(root: HTMLElement, holdings: Holdings, belongs: (group: string, member: Member) => boolean): void {
   const all = members(holdings);
   const late = new Set(
@@ -168,6 +166,7 @@ function drawGroups(root: HTMLElement, holdings: Holdings, belongs: (group: stri
       .filter((account) => buttons.some(({ dataset }) => can(dataset.action!, account, dataset.arg, holdings)));
     const picked = picks(group, able);
     const chosen = able.length > 1 ? able.filter(({ id }) => picked.has(id)) : able;
+    drawn.set(section, { able, chosen });
     section.hidden = !these.length;
     list(
       $("[data-list=account]", section),
@@ -182,9 +181,10 @@ function drawGroups(root: HTMLElement, holdings: Holdings, belongs: (group: stri
           status: statusNode(st, true, section.dataset.group),
           late: late.has(account.id) ? status("stopped", "Payout late") : null,
         });
+        const pickable = able.length > 1 && able.includes(account);
         const box = row.querySelector<HTMLInputElement>("input")!;
-        box.hidden = !(able.length > 1 && able.includes(account));
-        box.checked = picked.has(account.id);
+        box.parentElement!.hidden = !pickable;
+        box.checked = pickable && picked.has(account.id);
         box.setAttribute("aria-label", `Pick ${accountName(account)}`);
       },
     );
@@ -261,8 +261,8 @@ export function drawHydrex(): void {
 }
 
 function epochWords(): Value {
-  const found = data.matchaLatte().value;
-  if (!found) return null;
+  const { value: found, failed } = data.matchaLatte();
+  if (!found) return found === undefined && !failed ? undefined : null;
   const end = found.epochStart + WEEK;
   return `A change made now moves the votes from ${utc(end)}${now() < end ? `, in ${until(end - now())}` : ""}.`;
 }
@@ -380,33 +380,30 @@ function performance(automation: Automation): Value {
 
 function pickGroup(el: HTMLElement) {
   const section = el.closest<HTMLElement>("[data-group]")!;
-  const rows = [...section.querySelectorAll<HTMLElement>("[data-list=account] > [data-key]")].map((row) => ({
-    id: BigInt(row.dataset.key!),
-    box: $<HTMLInputElement>("input", row),
-  }));
-  return { key: `${el.closest<HTMLElement>("[data-view]")!.dataset.view} ${section.dataset.group}`, rows };
+  return {
+    key: `${el.closest<HTMLElement>("[data-view]")!.dataset.view} ${section.dataset.group}`,
+    ...drawn.get(section)!,
+  };
 }
 actions.pick = (el) => {
-  const { key, rows } = pickGroup(el);
-  state.picks.set(key, new Set(rows.filter(({ box }) => box.checked).map(({ id }) => id)));
+  const { key, able } = pickGroup(el);
+  const ids = new Set(picks(key, able));
+  const id = BigInt(el.closest<HTMLElement>("[data-key]")!.dataset.key!);
+  if ((el as HTMLInputElement).checked) ids.add(id);
+  else ids.delete(id);
+  state.picks.set(key, ids);
   render();
 };
 actions["pick-all"] = (el) => {
-  const { key, rows } = pickGroup(el);
-  const all = (el as HTMLInputElement).checked;
-  state.picks.set(key, new Set(all ? rows.filter(({ box }) => !box.hidden).map(({ id }) => id) : []));
+  const { key, able } = pickGroup(el);
+  state.picks.set(key, new Set((el as HTMLInputElement).checked ? able.map(({ id }) => id) : []));
   render();
 };
 function chosen(el: HTMLElement): Account[] {
-  const holdings = data.accounts().value;
   const view = el.closest<HTMLElement>("[data-view]")!;
   if (view.dataset.view === "account" && state.route.view === "account")
     return data.accountShown(state.route.id).holdings.value?.accounts ?? [];
-  if (!holdings) return [];
-  const ids = pickGroup(el)
-    .rows.filter(({ box }) => box.hidden || box.checked)
-    .map(({ id }) => id);
-  return holdings.accounts.filter(({ id }) => ids.includes(id));
+  return data.accounts().value ? pickGroup(el).chosen : [];
 }
 actions.join = (el) => change(chosen(el), "join", byKind(el.dataset.arg ?? ""));
 actions.leave = (el) => change(chosen(el), "leave");

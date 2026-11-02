@@ -23,7 +23,21 @@ import {
   type Allowance,
   type Amount,
 } from "../tokens.ts";
-import { $, bill, busy, code, enable, fill, frag, link, list, shown, stateOf, type Value } from "../ui.ts";
+import {
+  $,
+  bill,
+  busy,
+  code,
+  enable,
+  fill,
+  frag,
+  fromTemplate,
+  link,
+  list,
+  shown,
+  stateOf,
+  type Value,
+} from "../ui.ts";
 import { walletAssets } from "../wallet.ts";
 import { openReview } from "./review.ts";
 
@@ -227,6 +241,15 @@ function output(
     worthText: worth ? money(worth, true) : "",
   };
 }
+function worthUnder(text: string, worth: string): Node {
+  const under = Object.assign(document.createElement("small"), { className: "u-worth", textContent: worth });
+  return worth ? frag(text, under) : frag(text);
+}
+// Gas is paid apart, in ETH, so it shows in ETH first.
+function gasUnder(wei: bigint, prices: Prices | undefined): Node {
+  const cost = ethCost(wei, prices);
+  return worthUnder(`${figure(wei, 18)} ETH`, cost ? money(cost, true) : "");
+}
 function underPrice(
   token: Token,
   amount: bigint,
@@ -317,7 +340,7 @@ export function drawSwap(): void {
       swap.swapGas(parts.map(({ route }) => route));
   const line = (amount: bigint) => {
     const shown = output(amount, swapper, prices);
-    return `${shown.exact}${shown.worthText && `  ${shown.worthText}`}`;
+    return worthUnder(shown.exact, shown.worthText);
   };
   const waiting = !picked.length && found.value?.reading;
   const button = $<HTMLButtonElement>("[data-action=review-swap]", view);
@@ -331,7 +354,7 @@ export function drawSwap(): void {
     least: picked.length ? line(least) : undefined,
     gas:
       picked.length && found.value?.costs
-        ? gasWords(gas * found.value.costs.gasPrice, prices)
+        ? gasUnder(gas * found.value.costs.gasPrice, prices)
         : picked.length
           ? ""
           : undefined,
@@ -438,7 +461,7 @@ export async function reviewSwap(
   const value = (amount: bigint) => output(amount, plan.swapper, prices);
   const body = bill(
     frag("Quote · swap into ", code(plan.swapper.symbol)),
-    gasCosts ? `Estimated gas ${gasWords(gas * gasCosts.gasPrice, prices)}` : "",
+    gasCosts ? frag("Estimated gas ", gasUnder(gas * gasCosts.gasPrice, prices)) : "",
     lines.map(({ item, reason }) => {
       const under = reason ? undefined : underPrice(item.token, item.route.amount, item.out, plan.swapper, prices);
       return {
@@ -452,18 +475,12 @@ export async function reviewSwap(
     }),
     [
       ["Quote", value(out).exact, value(out).worthText],
-      ["Swap fee", value(-fee).exact],
+      ["Swap fee", value(-fee).exact, value(-fee).worthText],
       ["Reaches you", value(out - fee).exact, value(out - fee).worthText],
     ],
     [`Minimum at ${Number(plan.margin) / 100}% slippage`, value(least).exact, value(least).worthText],
   );
-  if (!simulated)
-    body.append(
-      Object.assign(document.createElement("p"), {
-        className: "notice",
-        textContent: "Not simulated: these are quotes.",
-      }),
-    );
+  if (!simulated) body.append(fromTemplate("not-simulated"));
   let at = deadline();
   const quoted = new Map<string, bigint>();
   for (const { token, out } of going.items)
@@ -542,10 +559,10 @@ export function swapReceipt(
   if (skipped.length)
     node.append(
       ...skipped.map(({ token, reason }) => {
-        const p = Object.assign(document.createElement("p"), { className: "spread" });
+        const p = Object.assign(document.createElement("p"), { className: "u-spread" });
         const reset = Object.assign(document.createElement("button"), {
           type: "button",
-          className: "secondary compact",
+          className: "Button--secondary Button--compact",
           textContent: "Reset its approval",
         });
         reset.addEventListener("click", () => openReset([{ token, spender: swapper.address, amount: 1n }]));
@@ -608,9 +625,10 @@ async function openReset(these: Allowance[]): Promise<void> {
 export function swapLine(): Value {
   const found = scan();
   return shown(found, ({ rows, reading, prices }) => {
-    const worth = rows.reduce((sum, { worth = 0 }) => sum + worth, 0);
-    if (!rows.length) return reading ? undefined : "Nothing to swap";
-    return `${count(rows.length, "token", "tokens")} · ${money(moneyAt(worth, prices))}${reading ? " so far" : ""}`;
+    const swappable = rows.filter(({ route, reason }) => route && !reason);
+    const worth = swappable.reduce((sum, { worth = 0 }) => sum + worth, 0);
+    if (!swappable.length) return reading ? undefined : "Nothing to swap";
+    return `${count(swappable.length, "token", "tokens")} · ${money(moneyAt(worth, prices))}${reading ? " so far" : ""}`;
   });
 }
 export const preloadSwap = (): void => void scan();

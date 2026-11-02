@@ -87,14 +87,14 @@ function fieldValue({ code: value, tags = [], words, after, calldata }: Field): 
   if (words !== undefined) return words;
   const one = (text: string) => {
     const el = code(text);
-    if (calldata) el.className = "calldata";
+    if (calldata) el.className = "Slip-calldata";
     else if (isAddress(text, { strict: false })) hex(el, text, true);
     else if (isHash(text)) hex(el, text);
     return el;
   };
   if (!Array.isArray(value)) return after ? frag(one(value ?? ""), after) : one(value ?? "");
   if (!value.length) return "None";
-  const grid = Object.assign(document.createElement("span"), { className: "row" });
+  const grid = Object.assign(document.createElement("span"), { className: "u-row" });
   grid.append(...value.map((text, i) => frag(tags[i] ? code(tags[i]!) : "", one(text))));
   return grid;
 }
@@ -214,7 +214,7 @@ async function finish(review: Sending): Promise<void> {
   const outcome = await review.outcome?.(review.receipts).catch((error: unknown) => void console.error(error));
   // Wrapped in an element because a fragment empties once inserted, and would show empty on the next draw.
   if (outcome) {
-    const box = Object.assign(document.createElement("div"), { className: "stack" });
+    const box = Object.assign(document.createElement("div"), { className: "u-stack" });
     box.append(outcome);
     review.result = box;
   }

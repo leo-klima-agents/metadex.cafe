@@ -99,7 +99,7 @@ export function list<T>(
   });
   if (!items.length && empty)
     rows.push(
-      old.get("") ?? Object.assign(document.createElement("li"), { className: "small quiet", textContent: empty }),
+      old.get("") ?? Object.assign(document.createElement("li"), { className: "u-small u-quiet", textContent: empty }),
     );
   const focused = [...old.values()].some((row) => row.contains(document.activeElement));
   rows.forEach((row, i) => el.children[i] !== row && el.insertBefore(row, el.children[i] ?? null));
@@ -160,7 +160,7 @@ export function bill(
 // Puts a shape before the words so a status never relies on colour alone.
 export function status(shape: string, strong: string, ...rest: (string | Node)[]): HTMLElement {
   const span = document.createElement("span");
-  const mark = Object.assign(document.createElement("span"), { className: "shape" });
+  const mark = Object.assign(document.createElement("span"), { className: "Shape" });
   mark.dataset.shape = shape;
   mark.setAttribute("aria-hidden", "true");
   span.append(mark, Object.assign(document.createElement("strong"), { textContent: strong }), ...rest);
@@ -186,7 +186,9 @@ export function frag(...parts: (string | Node)[]): DocumentFragment {
 export function hex(el: HTMLElement, value: string, wallet = false): void {
   if (el.dataset.hex === `${wallet} ${value}`) return;
   el.dataset.hex = `${wallet} ${value}`;
-  el.classList.add("hex");
+  const link = el instanceof HTMLAnchorElement;
+  el.classList.add("Hex");
+  el.classList.toggle("Hex--link", link);
   el.translate = false;
   const block = wallet || hexLines(value).length > 1;
   const lines = wallet
@@ -196,11 +198,18 @@ export function hex(el: HTMLElement, value: string, wallet = false): void {
       : hexLines(value);
   el.replaceChildren(
     ...lines.map((groups, i) => {
-      const className = !block ? "half" : wallet && i === 0 ? "hex-line indent" : "hex-line";
+      const className = !block
+        ? `Hex-half${link ? " Hex-half--link" : ""}`
+        : wallet && i === 0
+          ? "Hex-line Hex-line--indent"
+          : "Hex-line";
       const line = Object.assign(document.createElement("span"), { className });
       line.append(
         ...groups.map((group) =>
-          Object.assign(document.createElement("span"), { className: "quad", textContent: group }),
+          Object.assign(document.createElement("span"), {
+            className: wallet ? "Hex-quad Hex-quad--wallet" : "Hex-quad",
+            textContent: group,
+          }),
         ),
       );
       return line;

@@ -34,7 +34,7 @@ import { gasWords, key, noPrices, pricesAtFlip, pricesNow, type Prices, type Tok
 import { now, same, tagged } from "../rpc.ts";
 import { state } from "../state.ts";
 import { tokensOf, type Amount } from "../tokens.ts";
-import { $, bill, code, fill, frag, link, list, shown, stateOf, status, type Value } from "../ui.ts";
+import { $, bill, code, fill, frag, fromTemplate, link, list, shown, stateOf, status, type Value } from "../ui.ts";
 import { accountName, can, lockWords, statusNode } from "./hydrex.ts";
 import { swapLink } from "./swap.ts";
 
@@ -123,7 +123,7 @@ function drawActions(own: Holdings | undefined, st: hydrex.Status): void {
     if (automation) {
       const moves = !!account && AUTOMATIONS.some((other) => other !== automation && hydrex.canLeave(account, other));
       button.textContent = `${moves ? "Move to" : "Join"} ${automation.name}`;
-      button.classList.toggle("secondary", moves);
+      button.classList.toggle("Button--secondary", moves);
     }
     // Leaving one of Hydrex's other automations uses the "self" action, which also leaves the page's own.
     if (action === "leave" || action === "self") {
@@ -246,7 +246,7 @@ function payoutReceipt(payout: Payout, id: bigint, owner: Address, time: number,
       [
         `Retired ${share(payout.retiredKvcm)}`,
         `${payout.retiredKvcm ? "−" : ""}${amount(payout.retiredKvcm, 18)} kVCM`,
-        payout.tonnes ? `${amount(payout.tonnes, 18)} t of carbon credits, through Klima Protocol` : null,
+        payout.tonnes ? frag(`${amount(payout.tonnes, 18)} t of carbon credits`, fromTemplate("klima")) : null,
       ],
       [`Fee ${share(kvcm(payout.fees))}`, amounts(payout.fees, p.tokens, payout.fees.length ? "−" : "", "0 kVCM")],
     ],
