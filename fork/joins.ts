@@ -163,25 +163,9 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     await review(page).getByText("You said no in your wallet.").waitFor();
     await page.keyboard.press("Escape");
     assert.equal(await page.getByText("Wrong network.").isVisible(), false);
-    // An account that moved away from the wallet since: its join fails on Base.
-    await h.send({
-      from: NEWCOMER,
-      to: VOTING_ESCROW,
-      data: encodeFunctionData({
-        abi: [
-          {
-            type: "function",
-            name: "transferFrom",
-            inputs: [{ type: "address" }, { type: "address" }, { type: "uint256" }],
-            outputs: [],
-            stateMutability: "nonpayable",
-          },
-        ],
-        functionName: "transferFrom",
-        args: [NEWCOMER, h.STRANGER, 141n],
-      }),
-    });
+    // A join that fails on Base, sent with too little gas.
     wallet.decline = false;
+    wallet.failing = 1;
     await join.click();
     await h.toCalls(page);
     await review(page).getByRole("button", { name: "Sign transaction" }).click();
