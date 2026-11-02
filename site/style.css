@@ -104,11 +104,14 @@ fieldset,
 figure {
   margin: 0;
 }
-/* No list has bullets. */
+/* No list has bullets, and an empty one takes no room. */
 ul,
 ol {
   padding: 0;
   list-style: none;
+}
+:is(ul, ol):empty {
+  display: none;
 }
 small {
   font-size: var(--small);
@@ -667,8 +670,10 @@ dialog[open] {
 [data-section] {
   scroll-margin-block-start: 5rem;
 }
+/* The review's foot, sticky at its bottom, has its own padding: a padding of the popup's below it would show what
+   scrolls beneath. */
 .review {
-  padding-block-start: var(--inset);
+  padding-block: var(--inset) 0;
 }
 .foot {
   position: sticky;
@@ -698,7 +703,6 @@ dialog[open] {
   text-align: center;
 }
 .says {
-  margin-block-start: var(--gap);
   font-family: var(--sans);
   font-size: 1.0625rem;
   font-weight: 700;
@@ -708,15 +712,12 @@ dialog[open] {
   outline: 1px solid var(--accent);
   outline-offset: -2px;
 }
-/* A slip's parts, each below a dashed rule; a list of lines has none while it is empty. */
+/* A slip's parts, each below a dashed rule. */
 .ruled {
   display: grid;
   gap: 0.375rem;
   padding-block-start: 0.625rem;
   border-block-start: 2px dashed var(--ink);
-}
-ul.ruled:empty {
-  display: none;
 }
 .field {
   display: grid;
@@ -749,7 +750,6 @@ ul.ruled:empty {
   background: var(--tint);
 }
 .total {
-  margin-block-start: 0.625rem;
   padding-block-start: 0.625rem;
   border-block-start: 4px double var(--ink);
   font-size: 1.125rem;

@@ -132,7 +132,17 @@ export function bill(
   after: Value = null,
 ): HTMLElement {
   const node = fromTemplate("bill");
-  fill(node, { label, day, total, "total-value": value, "total-worth": worth, "total-detail": detail, foot, after });
+  fill(node, {
+    label,
+    day,
+    total,
+    "total-value": value,
+    "total-worth": worth,
+    "total-detail": detail,
+    foot,
+    after,
+    closing: foot === null && after === null ? null : true,
+  });
   list(
     $("[data-list=line]", node),
     lines,

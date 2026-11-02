@@ -892,13 +892,13 @@
       <li data-text="words"></li>
     </template>
     <template id="slip">
-      <li class="slip">
+      <li class="slip stack">
         <header>
           <p class="masthead">metaDEX Café</p>
           <p class="label sub" data-text="count"></p>
         </header>
         <p class="says" data-text="says"></p>
-        <dl class="ruled below" data-list="field"></dl>
+        <dl class="ruled" data-list="field"></dl>
       </li>
     </template>
     <template id="field">
@@ -973,14 +973,14 @@
       </div>
     </template>
     <template id="bill">
-      <article class="slip">
+      <article class="slip stack">
         <header>
           <p class="masthead">metaDEX Café</p>
           <p class="label sub" data-text="label"></p>
           <p class="sub" data-text="day"></p>
         </header>
-        <ul class="ruled below" data-list="line"></ul>
-        <dl class="ruled below" data-list="sum"></dl>
+        <ul class="ruled" data-list="line"></ul>
+        <dl class="ruled" data-list="sum"></dl>
         <dl class="total">
           <div class="line">
             <dt class="total-term" data-text="total"></dt>
@@ -989,8 +989,8 @@
           <dd class="total-note" data-text="total-worth"></dd>
           <dd class="total-note" data-text="total-detail"></dd>
         </dl>
-        <footer>
-          <ul class="small" data-list="claim"></ul>
+        <ul class="small" data-list="claim"></ul>
+        <footer data-text="closing">
           <p class="small" data-text="foot"></p>
           <p data-text="after"></p>
         </footer>
@@ -1007,13 +1007,13 @@
     </template>
     <template id="claim-review">
       <div class="stack">
-        <article class="slip">
+        <article class="slip stack">
           <header>
             <p class="masthead">metaDEX Café</p>
             <p class="label sub">What waits</p>
           </header>
-          <ul class="ruled below" data-list="line"></ul>
-          <dl class="ruled below" data-list="sum"></dl>
+          <ul class="ruled" data-list="line"></ul>
+          <dl class="ruled" data-list="sum"></dl>
           <dl class="total">
             <div class="line">
               <dt class="total-term">Reaches you</dt>
