@@ -6,7 +6,7 @@ import { overdue } from "../payouts.ts";
 import { hrefOf } from "../routes.ts";
 import { now, same } from "../rpc.ts";
 import { actions, state } from "../state.ts";
-import { $, fill, frag, link, list, shown, status, type Value } from "../ui.ts";
+import { $, fill, frag, link, list, shown, stateOf, status, type Value } from "../ui.ts";
 import { waitsWords } from "./account.ts";
 import { change } from "./hydrex.ts";
 import { openClaim } from "./claim.ts";
@@ -77,7 +77,7 @@ export function drawApp(): void {
       act: button("Reset", "reset", "all"),
     });
   fill(view, {
-    needs: { state: holdings.value ? (needs.length ? "ready" : "empty") : holdings.failed ? "failed" : "loading" },
+    needs: stateOf(holdings, !needs.length),
     "needs-count": needs.length ? String(needs.length) : "",
     "swap-yours": state.connection ? swapLine() : null,
     "hydrex-yours": !state.connection

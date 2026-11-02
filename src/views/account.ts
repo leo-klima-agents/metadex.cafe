@@ -1,7 +1,6 @@
 import type { Address } from "viem";
 import { use, type Got } from "../cache.ts";
-import { AUTOMATIONS, BASESCAN, KVCM } from "../config.ts";
-import { checks } from "../checks.ts";
+import { AUTOMATIONS, BASESCAN, KVCM, byKind } from "../config.ts";
 import * as data from "../data.ts";
 import {
   WEEK,
@@ -32,18 +31,17 @@ import {
   type Walk,
 } from "../payouts.ts";
 import { gasWords, key, noPrices, pricesAtFlip, pricesNow, type Prices, type Token } from "../prices.ts";
-import { hrefOf } from "../routes.ts";
 import { now, same, tagged } from "../rpc.ts";
 import { state } from "../state.ts";
 import { tokensOf, type Amount } from "../tokens.ts";
 import { $, bill, code, fill, frag, link, list, shown, stateOf, status, type Value } from "../ui.ts";
-import { accountName, lockWords, statusNode } from "./hydrex.ts";
-import { prefill } from "./swap.ts";
+import { accountName, can, lockWords, statusNode } from "./hydrex.ts";
+import { swapLink } from "./swap.ts";
 
 const view = $('[data-view="account"]');
 
 // What waits for some accounts, at prices now, read again every five minutes.
-export function waiting(found: Payouts): Got<{ tokens: Map<string, Token>; prices: Prices }> {
+function waiting(found: Payouts): Got<{ tokens: Map<string, Token>; prices: Prices }> {
   const amounts = new Map<Address, bigint>();
   for (const { standing } of found.entries)
     for (const { token, amount } of standing?.waiting ?? [])
@@ -82,7 +80,7 @@ export function drawAccount(): void {
   });
   if (!found || !account) return;
   const st = hydrex.statusOf(account, found.owner, now(), found.epochStart);
-  const earned = own ? data.earnedBy(found, id) : { value: null };
+  const earned = own ? data.accountEarned(found, id) : { value: null };
   const payouts = data.payouts(found);
   const entry = payouts.value?.entries.find((each) => each.account.id === id);
   const late = own && payouts.value ? overdue(payouts.value).find((each) => each.account.id === id) : undefined;
@@ -121,18 +119,7 @@ function drawActions(own: Holdings | undefined, st: hydrex.Status): void {
   let any = false;
   for (const button of section.querySelectorAll<HTMLButtonElement>("button[data-action]")) {
     const { action, arg } = button.dataset;
-    const automation = arg ? AUTOMATIONS.find(({ kind }) => kind === arg) : undefined;
-    const late = own && data.payouts(own).value;
-    const allowed =
-      !!account &&
-      (action === "claim"
-        ? !!late && overdue(late).some((each) => each.account.id === account.id)
-        : action === "join"
-          ? !!automation &&
-            !checks().value?.get(automation.kind)?.length &&
-            !!checks().value &&
-            hydrex.canJoin(account, automation, now())
-          : AUTOMATIONS.some((each) => hydrex.canLeave(account, each)) || hydrex.canLeaveOther(account));
+    const automation = byKind(arg ?? "");
     if (automation) {
       const moves = !!account && AUTOMATIONS.some((other) => other !== automation && hydrex.canLeave(account, other));
       button.textContent = `${moves ? "Move to" : "Join"} ${automation.name}`;
@@ -143,6 +130,7 @@ function drawActions(own: Holdings | undefined, st: hydrex.Status): void {
       button.textContent = st.kind === "stopped" ? "Leave automation" : "Leave";
       button.dataset.action = account && hydrex.canLeaveOther(account) ? "self" : "leave";
     }
+    const allowed = !!own && !!account && can(button.dataset.action ?? "", account, arg, own);
     button.hidden = !allowed;
     any ||= allowed;
   }
@@ -304,7 +292,7 @@ export function claimReceipt(
 // Double Espresso's receipt on an account's page: its claims in the epoch of the last one, and who sent each.
 function claimsReceipt({ claims, stopped }: Walk, id: bigint, owner: Address, own: boolean): Node {
   const { received, fees, paid } = totals(claims);
-  const timeOf = (block: number) => data.blockTime(block).value;
+  const timeOf = (block: number) => data.timeOfBlock(block).value;
   const first = claims[0] && timeOf(claims[0].block);
   const flip = first === undefined ? undefined : weekStart(first);
   const p = flip === undefined ? {} : priced(received, flip);
@@ -316,7 +304,7 @@ function claimsReceipt({ claims, stopped }: Walk, id: bigint, owner: Address, ow
     flip === undefined ? "" : `${day(flip - WEEK)} to ${day(flip)}`,
     claims.every((claim) => you(claim.owner)) ? "Paid to you" : "Paid to its owner",
     stopped ? `Last ${WALK_LIMIT} blocks only` : null,
-    own ? link(hrefOf({ view: "swap", output: "usdc" }), "Swap these") : null,
+    own ? swapLink(paid) : null,
   );
   list(
     $("[data-list=claim]", node),
@@ -328,6 +316,5 @@ function claimsReceipt({ claims, stopped }: Walk, id: bigint, owner: Address, ow
       fill(row, { words, tx: { href: `${BASESCAN}/tx/${tx}`, text: "Transaction", external: true } });
     },
   );
-  node.querySelector<HTMLAnchorElement>("[data-text=after] a")?.addEventListener("click", () => prefill(paid));
   return node;
 }

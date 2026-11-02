@@ -15,6 +15,7 @@ import {
 import { BASESCAN, CHAIN_ID, RPCS } from "./config.ts";
 import { clean } from "./format.ts";
 import type { Landed } from "./rpc.ts";
+import type {} from "viem/window";
 
 export type Wallet = {
   name: string;
@@ -27,7 +28,16 @@ export type Connection = { wallet: Wallet; provider: EIP1193Provider; address: A
 // `tip`, the most priority fee to ask for, where the wallet lets the page set it.
 export type Tx = { to: Address; data: Hex; tip?: bigint | undefined };
 // A call as the review shows it: what it is, the page's own words, the contract it goes to, and its fields.
-export type Field = { label: string; code?: string | string[]; tags?: string[]; words?: string; description?: string };
+// `after`: words after the code; `calldata`: the code is a call's data, shown as a block.
+export type Field = {
+  label: string;
+  code?: string | string[];
+  tags?: string[];
+  words?: string;
+  description?: string;
+  after?: string;
+  calldata?: boolean;
+};
 export type Slip = Tx & { title: string; says: string; on: string; call: string; fields: Field[] };
 
 type Announcement = { info: { name: string; icon: string; rdns: string }; provider: EIP1193Provider };
@@ -58,7 +68,7 @@ export function findWallets(found: (wallets: Wallet[]) => void): void {
 
 // Read only once picked: some wallets set window.ethereum late.
 async function injected(): Promise<EIP1193Provider> {
-  const provider = (window as { ethereum?: EIP1193Provider }).ethereum;
+  const provider = window.ethereum;
   if (!provider) throw new NoWallet();
   return provider;
 }
@@ -171,7 +181,7 @@ export async function connect(wallet: Wallet): Promise<Connection | undefined> {
 }
 
 // Some wallets wrap the error code they pass on.
-export const code = (error: unknown): number | undefined => {
+const code = (error: unknown): number | undefined => {
   const { code, data } = (error ?? {}) as { code?: number; data?: { originalError?: { code?: number } } };
   return data?.originalError?.code ?? code;
 };

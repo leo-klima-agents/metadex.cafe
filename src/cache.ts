@@ -14,7 +14,7 @@ export function memo<T>(key: string, read: () => Promise<T>, ttl?: TTL<T>): Prom
   const fresh = (entry: Entry) =>
     performance.now() - entry.at < (typeof entry.ttl === "number" ? entry.ttl : entry.ttl(entry.value as never));
   if (entry && "value" in entry && fresh(entry)) return Promise.resolve(entry.value as T);
-  const next: Entry = { ...entry, at: performance.now(), ttl: (ttl ?? entry?.ttl ?? Infinity) as TTL<never> };
+  const next: Entry = { ...entry, at: performance.now(), ttl: ttl ?? entry?.ttl ?? Infinity };
   const reading = read().then(
     (value) => {
       if (entries.get(key) === next) [next.value, next.reading] = [value, undefined];
@@ -44,7 +44,7 @@ export function use<T>(key: string, read: () => Promise<T>, ttl?: TTL<T>): Got<T
 }
 
 // The second read, once the first has a value.
-export const then = <T, U>(got: Got<T>, next: (value: T) => Got<U>): Got<U> =>
+export const andThen = <T, U>(got: Got<T>, next: (value: T) => Got<U>): Got<U> =>
   got.value !== undefined ? next(got.value) : got.failed ? { failed: true } : {};
 
 // Forgets what failed, so that it is read again.

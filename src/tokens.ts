@@ -5,7 +5,6 @@ import { clean } from "./format.ts";
 import { key, type Token } from "./prices.ts";
 import { call, read, readEach, same, type Read } from "./rpc.ts";
 
-export { erc20Abi };
 // The tokens the page knows, whose balances it reads, as no RPC lists a wallet's tokens: Base's common tokens, and
 // for the visit, Hydrex's reward tokens, those added by address, those the wallet lists, and those of a payout. `name`
 // tells apart two listed tokens of one symbol.
@@ -41,7 +40,6 @@ export async function tokensOf(addresses: Address[], rd: Read = read): Promise<M
       symbol: (address) => call(address, erc20Abi, "symbol"),
       decimals: (address) => call(address, erc20Abi, "decimals"),
     },
-    {},
     rd,
   );
   return new Map(
@@ -70,7 +68,6 @@ export async function holdingsOf(owner: Address, tokens: Address[], spender?: Ad
       balance: (token) => call(token, erc20Abi, "balanceOf", owner),
       allowance: spender ? (token) => call(token, erc20Abi, "allowance", owner, spender) : undefined,
     },
-    {},
     rd,
   );
   return new Map(found.map(({ item, balance = 0n, allowance = 0n }) => [key(item), { balance, allowance }]));
@@ -83,7 +80,6 @@ export async function allowancesOf(owner: Address, tokens: Address[], rd: Read =
   const found = await readEach(
     pairs,
     { amount: ({ token, spender }) => call(token, erc20Abi, "allowance", owner, spender) },
-    {},
     rd,
   );
   return found.flatMap(({ item, amount }) => (amount ? [{ ...item, amount }] : []));

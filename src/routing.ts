@@ -226,13 +226,13 @@ export async function routeTogether(
   // What may reach each token: the sale's own, if it is one, and the most each pair into it may pay. Each pair's pools
   // are read at all of that and an eighth, in up to three rounds, as a route has up to three hops; again when it grew
   // by more than a tenth.
-  const own = new Map(heavy.map(({ sale }) => [key(sale.token), sale.amount]));
+  const sold = new Map(heavy.map(({ sale }) => [key(sale.token), sale.amount]));
   const most = new Map<string, bigint>();
   const reach = new Map<string, bigint>();
   const into = (token: Address) =>
     pairs.reduce(
       (sum, [a, b]) => (key(b) === key(token) ? sum + (most.get(pairKey(a, b)) ?? 0n) : sum),
-      own.get(key(token)) ?? 0n,
+      sold.get(key(token)) ?? 0n,
     );
   for (let round = 0; round < 3; round++) {
     const due = pairs

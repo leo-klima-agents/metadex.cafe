@@ -2,6 +2,7 @@ import {
   decodeErrorResult,
   decodeFunctionResult,
   encodeFunctionData,
+  erc20Abi,
   maxUint256,
   parseAbi,
   parseEventLogs,
@@ -23,7 +24,7 @@ import {
   type Way,
 } from "./prices.ts";
 import { call, logsIn, read, same, simulate, type Landed, type Read, type Tx } from "./rpc.ts";
-import { erc20Abi, type Amount } from "./tokens.ts";
+import type { Amount } from "./tokens.ts";
 import type { Slip } from "./wallet.ts";
 
 // ImmutableSwapper sells the tokens its caller names for its output, each along the route its caller picks, and takes
@@ -86,11 +87,16 @@ export function candidatePaths(token: Address, output: Address, hydrex = false):
 // than 1%.
 export const taxed = ({ exchange }: Hop): boolean => exchangeOf(exchange).kind === "solidly";
 export const venueOf = ({ exchange }: Hop): string => exchangeOf(exchange).name.split(" ")[0]!;
-const top = <T extends { out: bigint }>(list: T[]): T | undefined =>
-  list.reduce<T | undefined>((found, each) => (!found || each.out > found.out ? each : found), undefined);
+const top = <T>(list: T[], by: (each: T) => bigint): T | undefined =>
+  list.reduce<T | undefined>((found, each) => (!found || by(each) > by(found) ? each : found), undefined);
 export function best<T extends { way: Hop; out: bigint }>(quotes: T[]): T | undefined {
   const paid = quotes.filter(({ out }) => out > 0n);
-  const [plain, aero] = [top(paid.filter(({ way }) => !taxed(way))), top(paid.filter(({ way }) => taxed(way)))];
+  const [plain, aero] = [false, true].map((tax) =>
+    top(
+      paid.filter(({ way }) => taxed(way) === tax),
+      ({ out }) => out,
+    ),
+  );
   return !aero ? plain : !plain ? aero : aero.out * 100n > plain.out * 101n ? aero : plain;
 }
 
@@ -106,11 +112,11 @@ export const routeGas = ({ hops }: { hops: Hop[] }): bigint => hops.reduce((sum,
 export const swapGas = (routes: { hops: Hop[] }[]): bigint =>
   routes.reduce((sum, route) => sum + routeGas(route), 150_000n);
 // The routes, in order, in as few swaps as keep each under the limit.
-export function split<T extends { hops: Hop[] }>(routes: T[], limit = MAX_SWAP_GAS): T[][] {
+export function split<T extends { hops: Hop[] }>(routes: T[]): T[][] {
   const swaps: T[][] = [];
   for (const route of routes) {
     const last = swaps.at(-1);
-    if (last && swapGas([...last, route]) <= limit) last.push(route);
+    if (last && swapGas([...last, route]) <= MAX_SWAP_GAS) last.push(route);
     else swaps.push([route]);
   }
   return swaps;
@@ -131,7 +137,9 @@ export function partOf<T extends { route: Route; out: bigint }>(item: T, amount:
 
 // Quotes routes on each output's swapper, six routes a call and three calls a read, as a hop through Hydrex's Algebra
 // pools takes about a million gas and an RPC gives an eth_call up to 50 million.
-export const QUOTES_PER_REQUEST = 18;
+const ROUTES_PER_CALL = 6;
+const CALLS_PER_READ = 3;
+export const QUOTES_PER_REQUEST = ROUTES_PER_CALL * CALLS_PER_READ;
 export async function quoteAll(
   items: { swapper: Swapper; route: Route }[],
   rd: Read = read,
@@ -146,14 +154,14 @@ export async function quoteAll(
   const calls: { call: ReturnType<typeof quote>; at: number[] }[] = [];
   for (const swapper of new Set(items.map(({ swapper }) => swapper))) {
     const indexes = items.flatMap((item, i) => (item.swapper === swapper ? [i] : []));
-    for (let i = 0; i < indexes.length; i += 6) {
-      const at = indexes.slice(i, i + 6);
+    for (let i = 0; i < indexes.length; i += ROUTES_PER_CALL) {
+      const at = indexes.slice(i, i + ROUTES_PER_CALL);
       calls.push({ call: quote(swapper, at), at });
     }
   }
   const replies = await rd(
     calls.map(({ call }) => call),
-    { perBatch: 3 },
+    { perBatch: CALLS_PER_READ },
   );
   const results: (Result | undefined)[] = items.map(() => undefined);
   calls.forEach(({ at }, i) => at.forEach((index, j) => (results[index] = replies[i]?.[j])));
@@ -171,9 +179,9 @@ export async function findRoute(
   gasValue: (gas: bigint) => bigint = () => 0n,
   rd: Read = read,
 ): Promise<Routed | undefined> {
-  type Partial = { path: Address[]; hops: Hop[]; amount: bigint };
-  let open: Partial[] = candidatePaths(token, output.token, hydrex).map((path) => ({ path, hops: [], amount }));
-  const complete: Partial[] = [];
+  type Partway = { path: Address[]; hops: Hop[]; amount: bigint };
+  let open: Partway[] = candidatePaths(token, output.token, hydrex).map((path) => ({ path, hops: [], amount }));
+  const complete: Partway[] = [];
   while (open.length) {
     const legs = open.map(({ path, hops }) => [path[hops.length]!, path[hops.length + 1]!] as const);
     const ways = await waysFor(legs, undefined, rd);
@@ -197,7 +205,7 @@ export async function findRoute(
       );
     });
     const results = await quoteAll(items, rd);
-    const next: Partial[] = [];
+    const next: Partway[] = [];
     open.forEach((partial, i) => {
       const [a, b] = legs[i]!;
       const quoted = asked
@@ -224,10 +232,7 @@ export async function findRoute(
     const gas = routeGas(route);
     return out ? [{ route, out, gas, net: out - gasValue(gas) }] : [];
   });
-  const chosen = options.reduce<(typeof options)[number] | undefined>(
-    (found, each) => (!found || each.net > found.net ? each : found),
-    undefined,
-  );
+  const chosen = top(options, ({ net }) => net);
   return chosen && { route: chosen.route, out: chosen.out, gas: chosen.gas };
 }
 
@@ -274,10 +279,13 @@ export async function saleOf(
 // The calls, as the review shows them.
 const symbolOf = (tokens: Map<string, Token>, address: Address): string => tokens.get(key(address))?.symbol ?? address;
 // "ZORA → WETH → USDC via Aerodrome, Uniswap": the wallet shows no pool's address, so neither does the page.
-export function hopsWords(route: Route, tokens: Map<string, Token>): string {
-  const path = [route.token, ...route.hops.map(({ tokenOut }) => tokenOut)].map((token) => symbolOf(tokens, token));
-  return `${path.join(" → ")} via ${[...new Set(route.hops.map(venueOf))].join(", ")}`;
-}
+const pathWords = (steps: string[], { hops }: Route): string =>
+  `${steps.join(" → ")} via ${[...new Set(hops.map(venueOf))].join(", ")}`;
+export const hopsWords = (route: Route, tokens: Map<string, Token>): string =>
+  pathWords(
+    [route.token, ...route.hops.map(({ tokenOut }) => tokenOut)].map((token) => symbolOf(tokens, token)),
+    route,
+  );
 export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Slip {
   const words = `${figure(amount, token.decimals)} ${token.symbol}`;
   return {
@@ -321,7 +329,14 @@ export function swapSlip(
     fields: [
       ...routes.map((route, i) => ({
         label: routes.length === 1 ? "Route" : `Route ${i + 1}`,
-        words: `${[amountOf(route), ...route.hops.slice(0, -1).map(({ tokenOut }) => symbolOf(tokens, tokenOut)), `${figure(route.minPaid, swapper.decimals)}+ ${swapper.symbol}`].join(" → ")} via ${[...new Set(route.hops.map(venueOf))].join(", ")}`,
+        words: pathWords(
+          [
+            amountOf(route),
+            ...route.hops.slice(0, -1).map(({ tokenOut }) => symbolOf(tokens, tokenOut)),
+            `${figure(route.minPaid, swapper.decimals)}+ ${swapper.symbol}`,
+          ],
+          route,
+        ),
       })),
       { label: "Deadline", code: String(deadline), description: utc(Number(deadline)) },
       { label: "Skip failed", code: "true", description: "A route under its minimum is skipped." },
@@ -426,7 +441,7 @@ export function reasonOf(reason: Hex): string {
 }
 
 // What a swap did for `caller`, from its receipts' logs, which a batch may share with others' swaps.
-export type Swapped = {
+type Swapped = {
   swapped: { index: number; token: Address; amountIn: bigint; amountOut: bigint }[];
   failed: { index: number; token: Address; reason: Hex }[];
   paid: bigint;

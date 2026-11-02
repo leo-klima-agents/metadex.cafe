@@ -5,6 +5,8 @@ export const CHAIN_ID = 8453;
 export const RPCS = ["https://mainnet.base.org", "https://base.drpc.org", "https://base-rpc.publicnode.com"];
 export const MULTICALL3: Address = "0xcA11bde05977b3631167028862bE2a173976CA11";
 export const BASESCAN = "https://basescan.org";
+// Base's GasPriceOracle, which says what posting a transaction to Ethereum costs.
+export const GAS_PRICE_ORACLE: Address = "0x420000000000000000000000000000000000000F";
 
 export type Kind = "matcha-latte" | "double-espresso";
 // `actions` is what joining approves: 3 sends the account's claims to the automation, 5 delegates its votes.
@@ -42,10 +44,10 @@ export const ACCOUNT_NAMES: Address = "0x998cf40a742460b4eBbFB569A0D23eA91976c0d
 export const WETH: Address = "0x4200000000000000000000000000000000000006";
 export const USDC: Address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 export const CBBTC: Address = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
-export const EURC: Address = "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42";
+const EURC: Address = "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42";
 export const HYDX: Address = "0x00000e7efa313F4E11Bfff432471eD9423AC6B30";
 
-const CURRENCIES = ["USD", "EUR", "GBP", "CHF", "AUD", "CAD"] as const;
+export const CURRENCIES = ["USD", "EUR", "GBP", "CHF", "AUD", "CAD"] as const;
 export type Currency = (typeof CURRENCIES)[number];
 export const currencyOf = (name: string): Currency | undefined => CURRENCIES.find((each) => each === name);
 export type Fiat = Exclude<Currency, "USD">;

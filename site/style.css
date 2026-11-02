@@ -74,7 +74,8 @@
   }
 }
 
-/* What the page shows of its state: the view, the wallet, the network, a product's kind. */
+/* What the page shows of its state: the wallet, the network, a product's kind, set on the root; and what a part shows of
+   its own reading, set on it. */
 :root:not([data-wallet]) [data-if~="wallet"],
 :root[data-wallet] [data-if~="no-wallet"],
 :root:not([data-wrong-chain]) [data-if~="wrong-chain"],
@@ -115,7 +116,7 @@ figure {
 }
 h1,
 h2,
-.head {
+.masthead {
   font-family: var(--serif);
   font-weight: 400;
   line-height: 1.2;
@@ -152,10 +153,13 @@ a[target="_blank"]::after {
 }
 code,
 table,
-.facts dd,
+.fact,
 .slip {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
+}
+code {
+  text-transform: none;
 }
 fieldset {
   padding: 0;
@@ -164,8 +168,8 @@ fieldset {
 legend {
   padding: 0;
 }
-input:not([type]),
-select {
+/* Base styles of fields, which classes may change. */
+:where(input:not([type]), select) {
   box-sizing: border-box;
   min-block-size: 2.25rem;
   padding: 0.25rem 0.5rem;
@@ -175,8 +179,7 @@ select {
   color: inherit;
   font: inherit;
 }
-input[type="checkbox"],
-input[type="radio"] {
+:where(input[type="checkbox"], input[type="radio"]) {
   inline-size: 1.5rem;
   block-size: 1.5rem;
   margin: 0;
@@ -184,12 +187,23 @@ input[type="radio"] {
 }
 
 /* Primitives */
-.stack > * + * {
-  margin-block-start: var(--gap);
+.stack {
+  display: grid;
+  align-content: start;
+  gap: var(--gap);
 }
-main.stack > * + *,
-section.stack > section {
-  margin-block-start: var(--gap-l);
+.tight {
+  gap: var(--gap-s);
+}
+.loose {
+  gap: var(--gap-l);
+}
+/* A section within a section's stack stands further apart, as does a list below a summary. */
+.part {
+  margin-block-start: calc(var(--gap-l) - var(--gap));
+}
+.below {
+  margin-block-start: var(--gap);
 }
 .row,
 .spread {
@@ -213,20 +227,26 @@ section.stack > section {
 .detail {
   color: var(--quiet);
 }
-.label,
-.facts dt,
-.fields dt,
-.lines dt {
+/* Words beside a figure, in the page's face. */
+.aside {
   color: var(--quiet);
+  font-family: var(--sans);
+  font-weight: 400;
+}
+/* A label above a figure, and a term on a slip's line. */
+.label,
+.term {
   font-family: var(--mono);
   font-size: var(--label);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.label code,
-.lines dt code {
-  text-transform: none;
+.label {
+  color: var(--quiet);
+}
+.term {
+  overflow-wrap: normal;
 }
 .visually-hidden {
   position: absolute;
@@ -252,7 +272,7 @@ footer {
   padding-block: var(--gap);
   border-block-end: 1px solid var(--line);
 }
-header .name {
+.brand {
   display: inline-flex;
   align-items: center;
   gap: var(--gap-s);
@@ -261,11 +281,11 @@ header .name {
   font-size: 1.25rem;
   text-decoration: none;
 }
-header .name img {
+.logo {
   border-radius: 22%;
   box-shadow: 0 0 0 1px var(--line);
 }
-header [data-text="chip"]::before {
+.chip::before {
   content: "";
   inline-size: 0.5rem;
   block-size: 0.5rem;
@@ -274,10 +294,11 @@ header [data-text="chip"]::before {
 }
 main {
   flex: 1 0 auto;
-  padding-block: var(--gap-l);
+  padding-block: calc(2 * var(--gap-l)) var(--gap-l);
 }
 footer {
-  border-block: 1px solid var(--line) 0;
+  border-block-start: 1px solid var(--line);
+  border-block-end: 0;
   color: var(--quiet);
   font-size: var(--small);
 }
@@ -285,21 +306,21 @@ footer {
   padding-block: 18vh;
   text-align: center;
 }
-.home h1 {
+.hero {
   font-size: 2.5rem;
 }
-.trail a {
+.back {
   color: var(--quiet);
   font-size: var(--small);
   text-decoration: none;
 }
-.trail a::before {
+.back::before {
   content: "‹ ";
 }
-.trail + h1,
-.trail + .row,
-.lead + p {
-  margin-block-start: var(--gap-s);
+/* What follows the way back, or a lead, sits closer to it. */
+.trail,
+.lead {
+  margin-block-end: calc(var(--gap-s) - var(--gap));
 }
 .lead {
   font-size: 1.125rem;
@@ -365,7 +386,6 @@ button:disabled {
   border: 2px solid var(--accent);
   border-inline-end-color: transparent;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
 }
 button:not(.secondary)[aria-busy="true"]::after {
   border-color: var(--on-accent);
@@ -376,7 +396,7 @@ button:not(.secondary)[aria-busy="true"]::after {
     transform: rotate(1turn);
   }
 }
-button img {
+.icon {
   inline-size: 1.25rem;
   block-size: 1.25rem;
 }
@@ -461,7 +481,7 @@ button img {
 
 /* Loading: a quiet bar in place of a figure, cards of bars in place of a list. Screen readers hear "Loading…". */
 [data-loading],
-.skeleton > li::before {
+.ghost::before {
   color: transparent;
   border-radius: 0.25em;
   background: var(--line);
@@ -472,7 +492,7 @@ button img {
   line-height: 1.1;
   user-select: none;
 }
-.skeleton > li::before {
+.ghost::before {
   content: "";
   display: block;
   inline-size: 60%;
@@ -480,8 +500,11 @@ button img {
 }
 @media (prefers-reduced-motion: no-preference) {
   [data-loading],
-  .skeleton > li::before {
+  .ghost::before {
     animation: pulse 1.6s ease-in-out infinite;
+  }
+  [aria-busy="true"]::after {
+    animation: spin 0.8s linear infinite;
   }
   dialog:popover-open {
     animation: rise 0.15s ease-out;
@@ -502,13 +525,22 @@ button img {
   [data-loading] {
     color: CanvasText;
   }
+  /* The shapes keep their fills, in the text's colour, so that each status stays apart from the others. */
+  .shape {
+    forced-color-adjust: none;
+    --accent: CanvasText;
+    --quiet: CanvasText;
+    --info: CanvasText;
+    --warn: CanvasText;
+    --danger: CanvasText;
+  }
 }
 
 /* Boxes */
 .card,
-.skeleton > li,
+.ghost,
 .table,
-.tiles > div {
+.tile {
   padding: 0.75rem var(--gap);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -529,29 +561,23 @@ button img {
 .callout {
   background: var(--tint);
 }
-.notice > * + *,
-.callout > * + * {
-  margin-block-start: var(--gap-s);
-}
 /* A card that leads somewhere is a link as large as the card. */
 .link {
   position: relative;
 }
-.link h2 a::after,
-.link h3 a::after {
+.cover {
+  color: inherit;
+  text-decoration: none;
+}
+.cover::after {
   content: "";
   position: absolute;
   inset: 0;
 }
-.link h2 a,
-.link h3 a {
-  color: inherit;
-  text-decoration: none;
-}
 .link:hover {
   border-color: var(--accent);
 }
-.card h2 {
+.title {
   font-family: var(--sans);
   font-size: 1rem;
   font-weight: 700;
@@ -563,10 +589,10 @@ button img {
 .table {
   padding: 0;
 }
-.table > li {
+.entry {
   padding: 0.75rem var(--gap);
 }
-.table > li + li {
+.entry:not(:first-child) {
   border-block-start: 1px solid var(--line);
 }
 
@@ -581,63 +607,50 @@ button img {
   grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
   gap: var(--gap-s);
 }
-.facts dd {
+.fact {
   font-weight: 600;
 }
-.facts .small {
-  color: var(--quiet);
-  font-family: var(--sans);
-  font-weight: 400;
-}
-.klima img {
+.klima {
   vertical-align: -0.2em;
 }
-.rows > div {
+.pair {
   display: grid;
   grid-template-columns: 9rem minmax(0, 1fr);
   gap: var(--gap);
   padding-block: 0.375rem;
   border-block-end: 1px solid var(--line);
 }
-.rows dt {
-  color: var(--quiet);
-}
 
-/* Accounts and tokens: a box to tick, then what it is. */
-.account,
-.token {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
+/* Accounts and tokens: a box to tick, then what it is, across the whole card when there is no box. */
+.ticks {
+  display: flex;
+  align-items: flex-start;
   gap: 0.75rem;
 }
-.account > input,
-.token > input {
+.tick {
+  flex: none;
   margin-block-start: 0.2rem;
 }
-.account > input[hidden] + div,
-.token > input[hidden] + div {
-  grid-column: 1 / -1;
+.grow {
+  flex: 1;
+  min-inline-size: 0;
 }
-.token .end {
+.tail {
   display: grid;
   text-align: end;
 }
-.token .wide {
+.wide {
   flex-basis: 100%;
 }
-.outputs .pill {
+.choice {
   display: inline-flex;
   gap: 0.375rem;
   align-items: center;
   cursor: pointer;
 }
-.outputs .pill:has(:checked) {
+.choice:has(:checked) {
   border-color: var(--accent);
   background: var(--tint);
-}
-.states > li + li {
-  margin-block-start: var(--gap-s);
 }
 
 /* Popups: a panel over the page; on a phone, a sheet from the foot of the screen. */
@@ -656,11 +669,14 @@ dialog {
 dialog::backdrop {
   background: rgb(0 0 0 / 0.4);
 }
-dialog > * + *,
-dialog section > * + * {
-  margin-block-start: var(--gap);
+dialog:popover-open,
+dialog[open] {
+  display: grid;
+  align-content: start;
+  gap: var(--gap);
 }
-dialog > .spread:first-child {
+/* A popup's title and close button stay at its top. */
+.bar {
   position: sticky;
   inset-block-start: 0;
   z-index: 1;
@@ -669,13 +685,13 @@ dialog > .spread:first-child {
   border-block-end: 1px solid var(--line);
   background: var(--paper);
 }
-dialog [data-section] {
+[data-section] {
   scroll-margin-block-start: 5rem;
 }
-#review > :first-child {
-  margin-block-start: var(--inset);
+.review {
+  padding-block-start: var(--inset);
 }
-#review .foot {
+.foot {
   position: sticky;
   inset-block-end: 0;
   padding-block: 0.75rem var(--inset);
@@ -688,28 +704,26 @@ dialog [data-section] {
   }
 }
 
-/* Slips and receipts: the café's bill, in the mono face. */
+/* Slips and receipts: the café's bill, in the mono face; on a page, 30rem wide inside its padding and border. */
+.narrow {
+  max-inline-size: calc(30rem + 2 * var(--inset) + 2px);
+}
 .slip {
-  max-inline-size: 30rem;
   padding: var(--inset);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--card);
   font-size: var(--small);
 }
-dialog .slip {
-  max-inline-size: none;
-}
-.slip > .head {
+.masthead {
   font-size: 1.375rem;
   text-align: center;
 }
-.slip > .label,
-.slip > .day {
+.sub {
   margin-block-start: 0.25rem;
   text-align: center;
 }
-.slip .says {
+.says {
   margin-block-start: var(--gap);
   font-family: var(--sans);
   font-size: 1.0625rem;
@@ -717,46 +731,43 @@ dialog .slip {
 }
 .slip[aria-current] {
   border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  outline: 1px solid var(--accent);
+  outline-offset: -2px;
 }
-.fields,
-.lines,
-.slip > ul:not(:empty) {
+/* A slip's parts, each below a dashed rule; a list of lines has none while it is empty. */
+.ruled {
   display: grid;
   gap: 0.375rem;
-  margin-block-start: var(--gap);
   padding-block-start: 0.625rem;
   border-block-start: 2px dashed var(--ink);
 }
-.fields > div,
-.lines > div {
+ul.ruled:empty {
+  display: none;
+}
+.field {
   display: grid;
   grid-template-columns: 6rem minmax(0, 1fr);
   column-gap: 0.625rem;
   align-items: baseline;
 }
-.lines > div {
+.line {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
+  column-gap: 0.625rem;
+  align-items: baseline;
 }
-.lines dd,
-.slip .end {
+.end {
   margin-inline-start: auto;
   text-align: end;
 }
-.fields dt,
-.lines dt {
-  color: var(--ink);
-  overflow-wrap: normal;
-}
-.fields .description,
+.description,
 .detail {
   display: block;
   font-family: var(--sans);
   font-size: var(--label);
 }
-.fields .data {
+.calldata {
   display: block;
   max-inline-size: 36ch;
   margin-block-start: 0.375rem;
@@ -771,24 +782,21 @@ dialog .slip {
   font-size: 1.125rem;
   font-weight: 600;
 }
-.total > div {
+.total-line {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 0 var(--gap);
 }
-.total dt {
+.total-term {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.total dd {
-  text-align: end;
-}
-.total .worth,
-.total .detail {
+.total-note {
   color: var(--quiet);
   font-size: var(--small);
   font-weight: 400;
+  text-align: end;
 }
 
 /* Hex in groups of four, apart by margins, so that a copy is the plain hex. An address breaks once, in the middle; one
@@ -798,18 +806,19 @@ dialog .slip {
   overflow-wrap: normal;
   vertical-align: top;
 }
-.hex span {
+.quad,
+.half {
   margin-inline-end: 0.4ch;
   white-space: nowrap;
 }
-.hex .line {
+.half {
   display: inline-block;
 }
-.hex.block .line {
+.hex-line {
   display: block;
-  margin: 0;
+  white-space: nowrap;
 }
-.hex.wallet .line:first-child {
+.indent {
   padding-inline-start: 2ch;
 }
 
@@ -842,17 +851,8 @@ td:first-child {
     border-end-start-radius: 0;
     border-end-end-radius: 0;
   }
-  .rows > div {
+  .pair {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0s !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
   }
 }

@@ -6,7 +6,7 @@ import { count, figure, listWords, money, moneyAt } from "../format.ts";
 import { summed, valueAt, type Overdue } from "../payouts.ts";
 import { gasWords, key, pricesNow, type Prices, type Token } from "../prices.ts";
 import { hrefOf } from "../routes.ts";
-import { costs, now, same, simulate, type Costs, type Landed } from "../rpc.ts";
+import { costsRead, now, same, simulate, type Costs, type Landed } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import * as swap from "../swap.ts";
 import { describe, type Amount } from "../tokens.ts";
@@ -14,7 +14,7 @@ import { $, fill, frag, fromTemplate, list, type Value } from "../ui.ts";
 import { capabilities, type Slip } from "../wallet.ts";
 import { claimReceipt } from "./account.ts";
 import { openReview } from "./review.ts";
-import { prefill, reviewSwap, swapReceipt } from "./swap.ts";
+import { reviewSwap, swapLink, swapReceipt } from "./swap.ts";
 
 // Claiming an overdue payout through Double Espresso, as it is or swapped into one token: in one prompt, all or
 // nothing, where the wallet can; else the claim first, then the swap of what it brought.
@@ -46,7 +46,7 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
   // Swaps wait for the checks, which say whether the RPCs serve Base.
   const [owed, gasCosts, caps, middles] = await Promise.all([
     claim.owedOf(entries).catch((error: unknown) => void console.error(error)),
-    costs().catch(() => undefined),
+    costsRead().catch(() => undefined),
     capabilities(connection),
     describe([...swap.MIDDLES, HYDX]).catch(() => new Map<string, Token>()),
     checksRead().catch(() => undefined),
@@ -233,7 +233,7 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
   };
   const choose = () => {
     if (claiming !== current) return;
-    const chosen = body.querySelector<HTMLInputElement>('input[value="into"]')!.checked;
+    const chosen = into.checked;
     current.steps = () => calls;
     current.outcome = asTheyAre;
     current.gasWithSwap = undefined;
@@ -330,13 +330,6 @@ function swapLater(
 // After a claim as it is: a link to swap what it brought.
 function swapThese(came: Amount[]): Node {
   const p = document.createElement("p");
-  if (!came.length) return p;
-  const link = Object.assign(document.createElement("a"), {
-    className: "button secondary",
-    href: "#swap",
-    textContent: "Swap these",
-  });
-  link.addEventListener("click", () => prefill(came));
-  p.append(link);
+  if (came.length) p.append(swapLink(came, "button secondary"));
   return p;
 }

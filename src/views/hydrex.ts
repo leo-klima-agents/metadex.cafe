@@ -8,7 +8,7 @@ import {
   byKind,
   type Automation,
 } from "../config.ts";
-import { then, type Got } from "../cache.ts";
+import { andThen, type Got } from "../cache.ts";
 import { checks } from "../checks.ts";
 import * as data from "../data.ts";
 import {
@@ -103,16 +103,16 @@ const record = (automation: Automation): Value =>
     earnings.votes
       ? frag(
           money(perThousandOf(earnings)),
-          Object.assign(document.createElement("span"), { className: "small", textContent: " / 1k votes" }),
+          Object.assign(document.createElement("span"), { className: "small aside", textContent: " / 1k votes" }),
         )
       : "No record yet",
   );
 // How some votes compare with Hydrex's average: hidden when there is nothing to compare, or it could not be read.
 const compared = (mine: Got<Earnings>): Value => {
-  const got = then(mine, (earnings) =>
+  const got = andThen(mine, (earnings) =>
     !earnings.votes || !earnings.pools.length
       ? { value: null }
-      : then(data.average(), (all) => ({ value: versus(earnings, all) ?? null })),
+      : andThen(data.average(), (all) => ({ value: versus(earnings, all) ?? null })),
   );
   return got.failed ? null : shown(got, versusWords);
 };
@@ -142,13 +142,13 @@ const members = ({ owner, accounts, epochStart }: Holdings): Member[] =>
     const status = hydrex.statusOf(account, owner, now(), epochStart);
     return { account, status, group: hydrex.groupOf(account, status) };
   });
-const joinable = (automation: Automation): boolean => !!checks().value && !checks().value!.get(automation.kind)!.length;
+const joinable = (automation: Automation): boolean => checks().value?.get(automation.kind)?.length === 0;
 const overdueOf = (holdings: Holdings) => {
   const found = data.payouts(holdings).value;
   return found ? overdue(found) : [];
 };
-// What a group's buttons can do for an account.
-function can(action: string, account: Account, arg: string | undefined, holdings: Holdings): boolean {
+// What a group's buttons, or an account page's, can do for an account.
+export function can(action: string, account: Account, arg: string | undefined, holdings: Holdings): boolean {
   const automation = byKind(arg ?? "");
   if (action === "join") return !!automation && joinable(automation) && hydrex.canJoin(account, automation, now());
   if (action === "leave") return AUTOMATIONS.some((each) => hydrex.canLeave(account, each));
@@ -181,7 +181,7 @@ function drawGroups(root: HTMLElement, holdings: Holdings, belongs: (group: stri
       these,
       ({ account }) => String(account.id),
       (row, { account, status: st }) => {
-        const earned = data.earnedBy(holdings, account.id);
+        const earned = data.accountEarned(holdings, account.id);
         fill(row, {
           link: { href: hrefOf({ view: "account", id: account.id }), text: accountName(account) },
           votes: voteWords(account.votes),
@@ -259,7 +259,7 @@ export function drawHydrex(): void {
       : null,
     underway: found && underWay(found) ? "Payout under way." : null,
     average: shown(data.average(), (all) => money(moneyAt(perThousand(valueOf(all).total, all.votes), all.prices))),
-    own: holdings.value ? ownWords(holdings.value) : holdings.failed ? "Not read" : undefined,
+    own: shown(holdings, ownWords),
     "own-versus": holdings.value ? ownVersus(holdings.value) : null,
     epoch: state.connection ? epochWords() : null,
     accounts: stateOf(holdings, !holdings.value?.accounts.some(({ amount }) => amount > 0n)),
@@ -275,7 +275,7 @@ function epochWords(): Value {
 }
 // What the wallet's own votes earned last epoch per 1,000 votes: none when its accounts vote through others.
 function ownWords(holdings: Holdings): Value {
-  return shown(data.voter(holdings.owner), (own) =>
+  return shown(data.holderEarnings(holdings.owner), (own) =>
     !own.votes
       ? "No votes of your own"
       : !own.pools.length
@@ -283,7 +283,7 @@ function ownWords(holdings: Holdings): Value {
         : `${money(perThousandOf(own))} / 1k votes, last epoch`,
   );
 }
-const ownVersus = (holdings: Holdings): Value => compared(data.voter(holdings.owner));
+const ownVersus = (holdings: Holdings): Value => compared(data.holderEarnings(holdings.owner));
 
 export function drawProduct(): void {
   const automation = byKind(state.route.view === "product" ? state.route.kind : "")!;
@@ -384,27 +384,24 @@ function performance(automation: Automation): Value {
     : `${automation.name}'s votes earned ${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "more" : "less"} than average last epoch.`;
 }
 
-// Picking accounts, then acting on those picked.
-actions.pick = (el) => {
+// Picking accounts, then acting on those picked. A pick's group, by view, and its accounts, each with its box.
+function pickGroup(el: HTMLElement) {
   const section = el.closest<HTMLElement>("[data-group]")!;
-  const group = `${el.closest<HTMLElement>("[data-view]")!.dataset.view} ${section.dataset.group}`;
-  const id = BigInt(el.closest<HTMLElement>("[data-key]")!.dataset.key!);
-  const rows = [...section.querySelectorAll<HTMLElement>("[data-list=account] > [data-key]")];
-  const picked = new Set(
-    rows.filter((row) => row.querySelector<HTMLInputElement>("input")!.checked).map((row) => BigInt(row.dataset.key!)),
-  );
-  if ((el as HTMLInputElement).checked) picked.add(id);
-  else picked.delete(id);
-  state.picks.set(group, picked);
+  const rows = [...section.querySelectorAll<HTMLElement>("[data-list=account] > [data-key]")].map((row) => ({
+    id: BigInt(row.dataset.key!),
+    box: $<HTMLInputElement>("input", row),
+  }));
+  return { key: `${el.closest<HTMLElement>("[data-view]")!.dataset.view} ${section.dataset.group}`, rows };
+}
+actions.pick = (el) => {
+  const { key, rows } = pickGroup(el);
+  state.picks.set(key, new Set(rows.filter(({ box }) => box.checked).map(({ id }) => id)));
   render();
 };
 actions["pick-all"] = (el) => {
-  const section = el.closest<HTMLElement>("[data-group]")!;
-  const group = `${el.closest<HTMLElement>("[data-view]")!.dataset.view} ${section.dataset.group}`;
-  const ids = [...section.querySelectorAll<HTMLElement>("[data-list=account] > [data-key]")].filter(
-    (row) => !row.querySelector("input")!.hidden,
-  );
-  state.picks.set(group, new Set((el as HTMLInputElement).checked ? ids.map((row) => BigInt(row.dataset.key!)) : []));
+  const { key, rows } = pickGroup(el);
+  const all = (el as HTMLInputElement).checked;
+  state.picks.set(key, new Set(all ? rows.filter(({ box }) => !box.hidden).map(({ id }) => id) : []));
   render();
 };
 // The accounts an action is for: those picked in the button's group, or the account shown.
@@ -413,12 +410,10 @@ function chosen(el: HTMLElement): Account[] {
   const view = el.closest<HTMLElement>("[data-view]")!;
   if (view.dataset.view === "account" && state.route.view === "account")
     return data.accountShown(state.route.id).holdings.value?.accounts ?? [];
-  const section = el.closest<HTMLElement>("[data-group]")!;
   if (!holdings) return [];
-  const rows = [...section.querySelectorAll<HTMLElement>("[data-list=account] > [data-key]")];
-  const ids = rows
-    .filter((row) => row.querySelector("input")!.hidden || row.querySelector<HTMLInputElement>("input")!.checked)
-    .map((row) => BigInt(row.dataset.key!));
+  const ids = pickGroup(el)
+    .rows.filter(({ box }) => box.hidden || box.checked)
+    .map(({ id }) => id);
   return holdings.accounts.filter(({ id }) => ids.includes(id));
 }
 actions.join = (el) => change(chosen(el), "join", byKind(el.dataset.arg ?? ""));
@@ -442,11 +437,11 @@ export function change(accounts: Account[], action: "join" | "leave" | "self", a
   const holdings =
     data.accounts().value ?? (state.route.view === "account" ? data.accountShown(state.route.id).holdings.value : null);
   if (!connection || !holdings || !accounts.length) return;
-  const can = accounts.filter((account) =>
+  const able = accounts.filter((account) =>
     action === "join" ? automation && hydrex.canJoin(account, automation, now()) : true,
   );
   const next = utc(holdings.epochStart + WEEK);
-  const plural = (one: string, many: string) => (can.length === 1 ? one : many);
+  const plural = (one: string, many: string) => (able.length === 1 ? one : many);
   if (action === "join" && automation) {
     const body = fromTemplate("join");
     const ml = automation === MATCHA_LATTE;
@@ -457,10 +452,10 @@ export function change(accounts: Account[], action: "join" | "leave" | "self", a
         : settings?.feeBps === undefined
           ? " and any fee"
           : ` and the ${bps(settings.feeBps)} fee`;
-    const steps = hydrex.join(can, automation);
+    const steps = hydrex.join(able, automation);
     const weekly = data.earnings(automation);
     const paid = ml ? settings && hydrex.paidBpsOf(settings) : 10_000n - FEE_BPS;
-    const votes = can.reduce((sum, { votes }) => sum + votes, 0n);
+    const votes = able.reduce((sum, { votes }) => sum + votes, 0n);
     const gas = hydrex.gasEstimate(steps, connection.address);
     const drawBody = (wei?: Value) =>
       fill(body, {
@@ -531,6 +526,6 @@ export function change(accounts: Account[], action: "join" | "leave" | "self", a
 }
 function doneNode(words: string, vote = false): HTMLElement {
   const done = fromTemplate("done");
-  fill(done, { words, vote: vote || null, "co-signers": null });
+  fill(done, { words, vote: vote || null });
   return done;
 }

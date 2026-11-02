@@ -235,7 +235,8 @@ export type Search = {
   seen: Map<number, unknown>;
   failed?: boolean;
 };
-export function points(lo: number, hi: number, width = 16): number[] {
+export function points(lo: number, hi: number): number[] {
+  const width = 16;
   const n = hi - lo;
   return n <= width
     ? Array.from({ length: n }, (_, i) => lo + i)
@@ -285,8 +286,12 @@ export async function feedsAt(feeds: Address[], flip: number, rd: Read = read): 
     rd,
   );
   // A search that a failed read ended runs once more.
-  const again = searches.map((search, i) => (search?.failed ? searchOf(i) : search));
-  await narrow(again.filter((search, i) => !!search && search !== searches[i]) as Search[], rd);
+  const retried = searches.map((search, i) => (search?.failed ? searchOf(i) : undefined));
+  await narrow(
+    retried.filter((search) => !!search),
+    rd,
+  );
+  const again = searches.map((search, i) => retried[i] ?? search);
   return feeds.map((_, i) => {
     const search = again[i];
     const round = search
@@ -342,13 +347,14 @@ const classic: Pricing = {
   history: ({ pool, state: [length, current] }, flip, ago) => {
     const count = Number(length as bigint);
     const lo = Math.max(0, count - Math.ceil((ago + WINDOW) / WINDOW) - 3);
-    const [start, end] = [flip - WINDOW + 1, flip].map((time): Search => ({
+    const from = (time: number): Search => ({
       lo,
       hi: count,
       probe: (index) => call(pool.address, pairAbi, "observations", BigInt(index)),
       passes: (observation) => Number((observation as Observation)[0]) >= time,
       seen: new Map(),
-    })) as [Search, Search];
+    });
+    const [start, end] = [from(flip - WINDOW + 1), from(flip)];
     return {
       calls: [],
       searches: [start, end],
@@ -461,11 +467,7 @@ async function inPools(
       })),
     )
     .sort((a, b) => rank(a) - rank(b));
-  const ranked = new Map<string, Measured[]>();
-  for (const entry of await measure(candidates, prices, amounts, rd)) {
-    const token = key(entry.pool.token.address);
-    ranked.set(token, [...(ranked.get(token) ?? []), entry]);
-  }
+  const ranked = Map.groupBy(await measure(candidates, prices, amounts, rd), ({ pool }) => key(pool.token.address));
   for (const pools of ranked.values()) pools.sort((a, b) => b.depth - a.depth);
   const found = await atFlipIn(
     [...ranked.values()].map((pools) => pools[0]!),
@@ -508,36 +510,28 @@ export async function pricesAt(
     ago ? flip : Infinity,
     rd,
   );
+  const [anchorFeeds, fiatFeeds] = [feeds.slice(0, config.ANCHORS.length), feeds.slice(config.ANCHORS.length)];
   const fed = config.ANCHORS.flatMap(({ address }, i) =>
-    feeds[i] === undefined ? [] : [[key(address), feeds[i]] as const],
+    anchorFeeds[i] === undefined ? [] : [[key(address), anchorFeeds[i]] as const],
   );
   const rates: Rates = Object.fromEntries(
-    fiat.flatMap(([currency], i) =>
-      feeds[config.ANCHORS.length + i] === undefined ? [] : [[currency, feeds[config.ANCHORS.length + i]]],
-    ),
+    fiat.flatMap(([currency], i) => (fiatFeeds[i] === undefined ? [] : [[currency, fiatFeeds[i]]])),
   );
   const prices: Prices = fed.length
     ? { unit: "USD", rates, of: new Map(fed), standIns: new Map() }
     : { unit: "USDC", rates: {}, of: new Map([[key(config.USDC), 1]]), standIns: new Map() };
-  const unpriced = config.ANCHORS.filter(({ address }) => !prices.of.has(key(address)));
-  await inPools(
-    unpriced.map(({ address, decimals }) => ({ address, decimals, symbol: "" })),
-    prices,
-    amounts,
-    flip,
-    ago,
-    exchanges,
-    rd,
-  );
-  await inPools(
-    tokens.filter(({ address }) => !prices.of.has(key(address))),
-    prices,
-    amounts,
-    flip,
-    ago,
-    exchanges,
-    rd,
-  );
+  // Anchors without a price first, then the others.
+  const anchors = config.ANCHORS.map(({ address, decimals }) => ({ address, decimals, symbol: "" }));
+  for (const each of [anchors, tokens])
+    await inPools(
+      each.filter(({ address }) => !prices.of.has(key(address))),
+      prices,
+      amounts,
+      flip,
+      ago,
+      exchanges,
+      rd,
+    );
   return prices;
 }
 
@@ -558,7 +552,7 @@ export const anchorsNow = (): Promise<Prices | undefined> =>
 // What wei of ETH costs at the prices given, ETH's among them; gas in words, to the cent, or else in ETH.
 export function ethCost(wei: bigint, prices: Prices | undefined): Money | undefined {
   const eth = prices?.of.get(key(config.WETH));
-  return eth === undefined ? undefined : moneyAt((Number(wei) / 1e18) * eth, prices!);
+  return prices && eth !== undefined ? moneyAt(worthOf(wei, 18, eth), prices) : undefined;
 }
 export const gasWords = (wei: bigint, prices: Prices | undefined): string => {
   const cost = ethCost(wei, prices);

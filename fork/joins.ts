@@ -60,7 +60,7 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     ]);
     const slip = review(page).locator("[data-list=slip] > li").first();
     assert.equal(await slip.locator("[data-text=count]").textContent(), "Transaction 1 of 2 · Join Matcha Latte");
-    assert.equal((await slip.locator("[data-text=to]").innerText()).replace(/\s/g, ""), VOTING_ESCROW);
+    assert.equal((await h.field(slip, "To").innerText()).replace(/\s/g, ""), VOTING_ESCROW);
     assert.match(await slip.innerText(), /KlimaVeTokenConduit/);
     await review(page).getByRole("button", { name: "Sign transaction 1 of 2" }).click();
     await review(page)
@@ -205,7 +205,7 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     await dialog.getByText(/^One Safe transaction, 2 calls$/).waitFor();
     const slip = dialog.locator("[data-list=slip] > li").first();
     assert.equal(await slip.locator("[data-text=count]").textContent(), "Safe · Call 1 of 2 · Leave Matcha Latte");
-    assert.equal(await slip.locator("[data-text=bytes]").innerText(), "100 bytes");
+    assert.equal(await h.field(slip, "Data", "description").innerText(), "100 bytes");
     await dialog.getByRole("button", { name: "Propose in Safe{Wallet}" }).click();
     await dialog.getByText("Proposed. Sign it in Safe{Wallet}.").waitFor();
     await dialog.getByRole("link", { name: "https://metadex.cafe/#hydrex/matcha-latte/check" }).waitFor();

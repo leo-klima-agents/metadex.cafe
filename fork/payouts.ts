@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { encodeFunctionData } from "viem";
 import { DOUBLE_ESPRESSO } from "../src/config.ts";
 import { short } from "../src/format.ts";
 import * as h from "./harness.ts";
@@ -75,14 +74,8 @@ describe("payouts against a fork of Base", { timeout: 1_800_000 }, () => {
     );
     assert.match(await bill.innerText(), /Fee 1%/i);
     // Dust in many blocks: the page reads ten of them, and says it stopped.
-    for (const { contract, token, fee } of rewards.filter(({ token }) => token.symbol !== "USDC").slice(0, 10)) {
-      const args = [82774n, fee ? [contract] : [], fee ? [] : [contract], [token.address]];
-      await h.mined(
-        STRANGER,
-        DOUBLE_ESPRESSO.address,
-        encodeFunctionData({ abi: h.abi, functionName: "claim", args } as never),
-      );
-    }
+    for (const reward of rewards.filter(({ token }) => token.symbol !== "USDC").slice(0, 10))
+      await h.mined(STRANGER, DOUBLE_ESPRESSO.address, h.claimOne(82774n, reward));
     await h.settle();
     const again = await open({ owner: PAYEE }, { width: 390, height: 844, url: `${SITE}/#hydrex/82774` });
     await standing(again.page).getByText("Last 10 blocks only").waitFor();

@@ -7,13 +7,13 @@ import { gunzipSync, gzipSync } from "node:zlib";
 // What anvil forks from: a JSON-RPC server that asks the upstream once for each answer about the fork's block, and keeps
 // them in a file per block for the next run. What may change (the newest block, a receipt not found) is kept for the run.
 export const forkUrl = (fallback: string): string => process.env.BASE_RPC_URL || fallback;
-export const FORK_CACHE = process.env.FORK_CACHE || join(homedir(), ".cache", "metadex.cafe", "fork");
+const FORK_CACHE = process.env.FORK_CACHE || join(homedir(), ".cache", "metadex.cafe", "fork");
 export const cacheFileOf = (block: number): string => join(FORK_CACHE, `base-${block}.json.gz`);
 
 type Call = { jsonrpc: "2.0"; id: unknown; method: string; params?: unknown[] };
 type Reply = { jsonrpc: "2.0"; id: unknown; result?: unknown; error?: unknown };
 type Tx = { from?: string; to?: string; data?: string; input?: string; value?: string; gas?: string };
-export type Upstream = {
+type Upstream = {
   ask(call: Call, later?: () => boolean): Promise<Reply | undefined>;
   serves(method: string): boolean;
 };

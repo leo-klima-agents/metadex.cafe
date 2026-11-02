@@ -1,13 +1,13 @@
 import { isAddress, maxUint256, type Address } from "viem";
-import { then, use, type Got } from "../cache.ts";
+import { andThen, use, type Got } from "../cache.ts";
 import { swapsOff } from "../checks.ts";
-import { AUTOMATIONS, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
+import { AUTOMATIONS, DEFAULT_OUTPUT, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
 import * as data from "../data.ts";
 import { count, fixed, figure, fraction, money, moneyAt, utc, type Money } from "../format.ts";
 import { ethCost, gasWords, key, noPrices, pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
 import { hrefOf, parse } from "../routes.ts";
 import { routeTogether, type Sale } from "../routing.ts";
-import { gasPaid, includedAt, now, readCosts, same, tagged, type Costs, type Landed } from "../rpc.ts";
+import { costs, gasPaid, includedAt, now, same, tagged, type Costs, type Landed } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import * as swap from "../swap.ts";
 import type { Routed, Item, Plan, Route } from "../swap.ts";
@@ -23,7 +23,7 @@ import {
   type Allowance,
   type Amount,
 } from "../tokens.ts";
-import { $, bill, busy, code, enable, fill, frag, list, shown, stateOf, type Value } from "../ui.ts";
+import { $, bill, busy, code, enable, fill, frag, link, list, shown, stateOf, type Value } from "../ui.ts";
 import { walletAssets } from "../wallet.ts";
 import { openReview } from "./review.ts";
 
@@ -40,7 +40,13 @@ let failedReview = "";
 
 const swapperShown = (): Swapper => swapperOf(state.route.view === "swap" ? state.route.output : "usdc")!;
 // The amounts a receipt's "Swap these" brings to the swap, until the visitor leaves it.
-export function prefill(amounts: Amount[]): void {
+// A link to the swap page with these amounts ticked.
+export function swapLink(amounts: Amount[], className = ""): HTMLAnchorElement {
+  const a = Object.assign(link(hrefOf({ view: "swap", output: DEFAULT_OUTPUT }), "Swap these"), { className });
+  a.addEventListener("click", () => prefill(amounts));
+  return a;
+}
+function prefill(amounts: Amount[]): void {
   prefilled = new Map(amounts.map(({ token, amount }) => [key(token), amount]));
   know(amounts.map(({ token }) => token));
   ticks.clear();
@@ -80,10 +86,10 @@ function scan(): Got<Scan> {
   const held = use(`held ${connection.address} ${swapper.output} ${all.length}`, () =>
     holdingsOf(connection.address, all, swapper.address, rd),
   );
-  return then(held, (balances) => {
+  return andThen(held, (balances) => {
     const owned = all.filter((token) => (balances.get(key(token))?.balance ?? 0n) > 0n && !same(token, swapper.token));
     const names = [...owned, swapper.token, ...swap.MIDDLES];
-    return then(
+    return andThen(
       use(`tokens ${names.join()}`, () => describe(names)),
       (tokens) => {
         const amounts = new Map(owned.map((token) => [key(token), balances.get(key(token))!.balance]));
@@ -92,7 +98,7 @@ function scan(): Got<Scan> {
           () => pricesNow([...tokens.values()], amounts, rd),
           60_000,
         );
-        const gas = use("costs", readCosts, 60_000);
+        const gas = costs();
         if (prices.value === undefined && !prices.failed) return {};
         const pricing = prices.value ?? noPrices();
         const value = (amount: bigint) => {
@@ -212,15 +218,21 @@ function together(found: Scan): Got<Together> {
 }
 
 // The output's amounts, to as many places as a cent of it needs, with what they are worth.
-function output(amount: bigint, swapper: Swapper, prices: Prices | undefined): { exact: string; worth?: Money } {
+function output(
+  amount: bigint,
+  swapper: Swapper,
+  prices: Prices | undefined,
+): { exact: string; worth?: Money | undefined; worthText: string } {
   const price = prices?.of.get(key(swapper.token));
   const places = Math.min(
     swapper.decimals,
     Math.max(2, price ? Math.ceil(Math.log10(price) + 2 - 0.05) : swapper.places),
   );
+  const worth = prices && price !== undefined ? moneyAt(worthOf(amount, swapper.decimals, price), prices) : undefined;
   return {
     exact: `${fixed(amount, swapper.decimals, places)} ${swapper.symbol}`,
-    worth: price === undefined ? undefined : moneyAt(worthOf(amount, swapper.decimals, price), prices!),
+    worth,
+    worthText: worth ? money(worth, true) : "",
   };
 }
 // How far a quote falls under the page's own price, where it falls more than 2% short.
@@ -315,7 +327,7 @@ export function drawSwap(): void {
       swap.swapGas(parts.map(({ route }) => route));
   const line = (amount: bigint) => {
     const shown = output(amount, swapper, prices);
-    return `${shown.exact}${shown.worth ? `  ${money(shown.worth, true)}` : ""}`;
+    return `${shown.exact}${shown.worthText && `  ${shown.worthText}`}`;
   };
   const waiting = !picked.length && found.value?.reading;
   const button = $<HTMLButtonElement>("[data-action=review-swap]", view);
@@ -443,21 +455,17 @@ export async function reviewSwap(
         symbol: item.token.symbol,
         amount: figure(item.route.amount, item.token.decimals),
         value: reason ? "Skipped" : value(item.out).exact,
-        worth: reason ? "" : (value(item.out).worth && money(value(item.out).worth!, true)) || "",
+        worth: reason ? "" : value(item.out).worthText,
         route: swap.hopsWords(item.route, tokens),
         note: reason ? `Skipped: ${reason}` : under !== undefined ? `${fraction(under)} under price` : null,
       };
     }),
     [
-      ["Quote", value(out).exact, value(out).worth && money(value(out).worth!, true)],
+      ["Quote", value(out).exact, value(out).worthText],
       ["Swap fee", value(-fee).exact],
-      ["Reaches you", value(out - fee).exact, value(out - fee).worth && money(value(out - fee).worth!, true)],
+      ["Reaches you", value(out - fee).exact, value(out - fee).worthText],
     ],
-    [
-      `Minimum at ${Number(plan.margin) / 100}% slippage`,
-      value(least).exact,
-      value(least).worth ? money(value(least).worth!, true) : "",
-    ],
+    [`Minimum at ${Number(plan.margin) / 100}% slippage`, value(least).exact, value(least).worthText],
   );
   if (!simulated)
     body.append(
@@ -525,7 +533,7 @@ export function swapReceipt(
         symbol: tokens.get(key(token))?.symbol ?? token,
         amount: figure(amountIn, tokens.get(key(token))?.decimals ?? 0),
         value: value(amountOut).exact,
-        worth: value(amountOut).worth ? money(value(amountOut).worth!, true) : "",
+        worth: value(amountOut).worthText,
         route:
           tenths === undefined
             ? ""
@@ -539,7 +547,7 @@ export function swapReceipt(
       ["Fetched", value(fetched).exact],
       ["Swap fee", value(paid - fetched).exact],
     ],
-    ["Paid to you", value(paid).exact, value(paid).worth ? money(value(paid).worth!, true) : ""],
+    ["Paid to you", value(paid).exact, value(paid).worthText],
   );
   const skipped = [...new Map(failed.map((each) => [key(each.token), each])).values()];
   if (skipped.length)

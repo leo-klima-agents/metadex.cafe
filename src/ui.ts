@@ -15,8 +15,7 @@ export type Value =
   | Node
   | { state: "loading" | "failed" | "empty" | "ready" }
   | { href: string; text: string; external?: boolean }
-  | { address: Address | Hex; text?: string }
-  | { wallet: Address };
+  | { address: Address | Hex; text?: string };
 
 export const $ = <T extends Element = HTMLElement>(selector: string, root: ParentNode = document): T =>
   root.querySelector<T>(selector)!;
@@ -47,7 +46,6 @@ function put(el: HTMLElement, value: Value): void {
   if (typeof value === "string") return setText(el, value);
   if (value instanceof Node) return replace(el, value);
   if ("state" in value) return setAttr(el, "data-state", value.state);
-  if ("wallet" in value) return hex(el, value.wallet, true);
   if ("address" in value) {
     const link = Object.assign(document.createElement("a"), {
       href: `${BASESCAN}/${value.address.length > 42 ? "tx" : "address"}/${value.address}`,
@@ -76,11 +74,12 @@ export function fill(root: ParentNode, values: Record<string, Value>): void {
   }
 }
 
-// A list's rows, from its template, kept by key so that focus and ticks survive each draw.
 // A copy of the element a template of the page holds.
 export const fromTemplate = (id: string): HTMLElement =>
   $<HTMLTemplateElement>(`#${id}`).content.firstElementChild!.cloneNode(true) as HTMLElement;
 
+// A list's rows, from its template, kept by key so that focus and ticks survive each draw. The row that says the list is
+// empty has the key "".
 export function list<T>(
   el: HTMLElement,
   items: T[],
@@ -88,7 +87,7 @@ export function list<T>(
   fillRow: (row: HTMLElement, item: T, i: number) => void,
 ): void {
   const old = new Map(
-    [...el.children].filter((row) => row instanceof HTMLElement).map((row) => [row.dataset.key, row]),
+    [...el.children].filter((row) => row instanceof HTMLElement).map((row) => [row.dataset.key ?? "", row]),
   );
   const empty = el.dataset.empty;
   const rows = items.map((item, i) => {
@@ -178,18 +177,23 @@ export function hex(el: HTMLElement, value: string, wallet = false): void {
   if (el.dataset.hex === `${wallet} ${value}`) return;
   el.dataset.hex = `${wallet} ${value}`;
   el.classList.add("hex");
-  el.classList.toggle("wallet", wallet);
-  el.classList.toggle("block", wallet || hexLines(value).length > 1);
   el.translate = false;
+  // In blocks, a line each; else two halves that break between them where they do not fit one line.
+  const block = wallet || hexLines(value).length > 1;
   const lines = wallet
     ? walletLines(value)
     : hexLines(value).length === 1
       ? halves(hexLines(value)[0]!)
       : hexLines(value);
   el.replaceChildren(
-    ...lines.map((groups) => {
-      const line = Object.assign(document.createElement("span"), { className: "line" });
-      line.append(...groups.map((group) => Object.assign(document.createElement("span"), { textContent: group })));
+    ...lines.map((groups, i) => {
+      const className = !block ? "half" : wallet && i === 0 ? "hex-line indent" : "hex-line";
+      const line = Object.assign(document.createElement("span"), { className });
+      line.append(
+        ...groups.map((group) =>
+          Object.assign(document.createElement("span"), { className: "quad", textContent: group }),
+        ),
+      );
       return line;
     }),
   );

@@ -57,10 +57,10 @@ function show(first: boolean): void {
   if (popup && section) {
     popup.showPopover();
     section.scrollIntoView();
-    popup.querySelector<HTMLElement>("h2")!.focus({ preventScroll: true });
+    $("h2", popup).focus({ preventScroll: true });
   } else if (moved) {
     scrollTo(0, 0);
-    if (!first) view.querySelector<HTMLElement>("h1")!.focus({ preventScroll: true });
+    if (!first) $("h1", view).focus({ preventScroll: true });
   }
 }
 // A popup's address goes once it closes, so that the same address opens it again.
@@ -76,18 +76,17 @@ for (const popup of popups) {
 }
 
 // One listener for each kind of event dispatches to the action an element names.
-document.addEventListener("click", (event) => {
-  const el = (event.target as Element).closest<HTMLElement>("button[data-action], a[data-action]");
-  if (el) actions[el.dataset.action!]?.(el, event);
-});
-document.addEventListener("change", (event) => {
-  const el = event.target as HTMLElement;
-  if (el.dataset.action) actions[el.dataset.action]?.(el, event);
-});
+function dispatch(el: HTMLElement | null, event: Event): void {
+  const action = el?.dataset.action;
+  if (el && action) actions[action]?.(el, event);
+}
+document.addEventListener("click", (event) =>
+  dispatch((event.target as Element).closest<HTMLElement>("button[data-action], a[data-action]"), event),
+);
+document.addEventListener("change", (event) => dispatch(event.target as HTMLElement, event));
 document.addEventListener("submit", (event) => {
   event.preventDefault();
-  const el = event.target as HTMLElement;
-  if (el.dataset.action) actions[el.dataset.action]?.(el, event);
+  dispatch(event.target as HTMLElement, event);
 });
 actions.skip = (_, event) => {
   event.preventDefault();

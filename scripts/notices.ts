@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from "node:fs";
 // is not the café's, such as a font, by REUSE.toml. The license texts come verbatim from LICENSES/. A license the page
 // has no text or name for stops the build.
 
-export type Part = { name: string; copyright: string[]; license: string };
+type Part = { name: string; copyright: string[]; license: string };
 
 const LICENSE_NAMES: Record<string, string> = {
   MIT: "the MIT License",
@@ -46,7 +46,7 @@ export function packagePart(root: string, dir: string): Part {
 type Annotation = { path: string; copyright: string; license: string };
 
 // REUSE.toml's annotations, in order: a later one takes precedence over an earlier one for the same file.
-export function annotations(root: string): Annotation[] {
+function annotations(root: string): Annotation[] {
   const blocks = readFileSync(`${root}/REUSE.toml`, "utf8").split("[[annotations]]").slice(1);
   return blocks.map((block) => {
     const value = (key: string) => {

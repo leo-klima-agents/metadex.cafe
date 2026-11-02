@@ -1,4 +1,4 @@
-import type { Currency, Fiat } from "./config.ts";
+import { CURRENCIES, type Currency, type Fiat } from "./config.ts";
 
 const LANG = "en-GB";
 export const WEEK = 604_800;
@@ -51,11 +51,11 @@ export function fixed(value: bigint, decimals: number, places: number): string {
   const scale = 10n ** BigInt(places);
   const over = 10n ** BigInt(Math.max(0, decimals - places));
   const under = 10n ** BigInt(Math.max(0, places - decimals));
-  const units = (rounded(magnitude, decimals, places) / over) * under;
-  const shown = (units: bigint) =>
-    `${whole.format(units / scale)}${places ? POINT + String(units % scale).padStart(places, "0") : ""}`;
-  if (magnitude > 0n && units === 0n) return `${sign ? ">" : "<"} ${sign}${shown(1n)}`;
-  return `${sign}${shown(units)}`;
+  const scaled = (rounded(magnitude, decimals, places) / over) * under;
+  const shown = (n: bigint) =>
+    `${whole.format(n / scale)}${places ? POINT + String(n % scale).padStart(places, "0") : ""}`;
+  if (magnitude > 0n && scaled === 0n) return `${sign ? ">" : "<"} ${sign}${shown(1n)}`;
+  return `${sign}${shown(scaled)}`;
 }
 
 export const voteFigure = (votes: bigint): string => (votes > 0n && votes < 10n ** 18n ? "< 1" : units(votes));
@@ -81,9 +81,7 @@ const inCurrency = (currency: Currency, digits: number) =>
   });
 const FORMATS: Record<string, [Intl.NumberFormat, Intl.NumberFormat]> = {
   USDC: [hundredths, whole],
-  ...Object.fromEntries(
-    (["USD", "EUR", "GBP", "CHF", "AUD", "CAD"] as const).map((c) => [c, [inCurrency(c, 2), inCurrency(c, 0)]]),
-  ),
+  ...Object.fromEntries(CURRENCIES.map((c) => [c, [inCurrency(c, 2), inCurrency(c, 0)]])),
 };
 
 // The currency picked for the visit. A sum shows in it at the rate of its prices' time, else in what they are in.

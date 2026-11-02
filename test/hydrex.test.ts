@@ -26,9 +26,9 @@ import {
   readAccount,
   statusOf,
   type Account,
-  type Step,
 } from "../src/hydrex.ts";
 import { failedChecks } from "../src/checks.ts";
+import type { Slip } from "../src/wallet.ts";
 
 const OWNER: Address = "0x0208DdBc05a91e1B937E8B3140B62ef22A274C95";
 const LIQUID_HYDREX: Address = "0x809F8175b8F60960dF2bc7a78a7C4Eb04d138AF0";
@@ -57,8 +57,8 @@ const approval = (id: bigint, approve: boolean, conduit: Address = CONDUIT) => (
   to: VOTING_ESCROW,
   data: encodeFunctionData({ abi, functionName: "setConduitApproval", args: [conduit, id, approve] }),
 });
-const txs = (steps: Step[]) => steps.map(({ to, data }) => ({ to, data }));
-const says = (steps: Step[]) => steps.map(({ says }) => says);
+const txs = (steps: Slip[]) => steps.map(({ to, data }) => ({ to, data }));
+const says = (steps: Slip[]) => steps.map(({ says }) => says);
 
 test("the page's automations: in, joined or left this epoch, and partly in", () => {
   assert.deepEqual(status(inBoth(CONDUIT, { delegateAtStart: CONDUIT })), { kind: "in", ...matcha });
@@ -127,7 +127,7 @@ test("who can join and who can leave", () => {
 test("joining sets the conduit's approval, in one call per account, naming what each leaves", () => {
   const [step] = join([account()], MATCHA_LATTE);
   assert.deepEqual(txs([step!]), [approval(141n, true)]);
-  assert.deepEqual([step!.id, step!.approve, step!.on], [141n, true, "Hydrex's VotingEscrow"]);
+  assert.deepEqual([step!.title, step!.on], ["Join Matcha Latte", "Hydrex's VotingEscrow"]);
   assert.equal(step!.says, "Account #141 joins Matcha Latte.");
   assert.deepEqual(step!.fields[0], { label: "Conduit", code: CONDUIT, description: "KlimaVeTokenConduit" });
   const many = [inBoth(LIQUID_HYDREX), { id: 42n, delegate: LOCK_MAXI, claimer: USDC }, { id: 7n, claimer: USDC }];

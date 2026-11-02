@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getAddress, type Address } from "viem";
+import { same } from "../src/rpc.ts";
 import { tokensOf } from "../src/tokens.ts";
 
 // Checks the page's list of tokens, src/base-tokens.json, against Base: each address's symbol and decimals, as its
@@ -9,15 +10,14 @@ import { tokensOf } from "../src/tokens.ts";
 // for its maintainer to remove by hand.
 
 const PATH = fileURLToPath(new URL("../src/base-tokens.json", import.meta.url));
-type Entry = { symbol: string; name?: string; address: string; decimals: number };
+type Entry = { symbol: string; name?: string; address: Address; decimals: number };
 
 const list = JSON.parse(readFileSync(PATH, "utf8")) as Entry[];
 const added = process.argv.flatMap((arg, i) => (process.argv[i - 1] === "--add" ? [getAddress(arg)] : []));
 for (const address of added) {
-  if (!list.some((entry) => entry.address.toLowerCase() === address.toLowerCase()))
-    list.push({ symbol: "", address, decimals: 0 });
+  if (!list.some((entry) => same(entry.address, address))) list.push({ symbol: "", address, decimals: 0 });
 }
-const found = await tokensOf(list.map(({ address }) => address as Address));
+const found = await tokensOf(list.map(({ address }) => address));
 let differs = 0;
 const checked = list.map((entry) => {
   const token = found.get(entry.address.toLowerCase());

@@ -1,8 +1,8 @@
-import { isAddress, isHash, type Hex } from "viem";
+import { isAddress, isHash, size, type Hex } from "viem";
 import { refresh } from "../cache.ts";
 import { BASESCAN, CHAIN_ID } from "../config.ts";
 import { count } from "../format.ts";
-import { sleep, waitForReceipt, type Landed } from "../rpc.ts";
+import { poll, waitForReceipt, type Landed } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import { $, announce, code, fill, frag, hex, link, list } from "../ui.ts";
 import {
@@ -19,7 +19,7 @@ import {
 
 // The review: the pages that say what a change does, then each call as a bill, as the wallet will show it; then the
 // wallet signs them, in one prompt where it can, one at a time where not, or as Safe transactions.
-export type Review = {
+type Review = {
   name: string;
   // The last page shows the calls too; one without a title is the calls'.
   pages: { title?: string; body?: Node }[];
@@ -83,16 +83,17 @@ export function openReview(review: Review): void {
 export const closeReview = (): void => dialog.close();
 export const drawReview = (): void => void (current && draw());
 
-// A field's value: an address as the wallet shows it, a list of them, or words.
-function fieldValue({ code: value, tags = [], words }: Field): Node | string {
+// A field's value: an address as the wallet shows it, a list of them, calldata, or words.
+function fieldValue({ code: value, tags = [], words, after, calldata }: Field): Node | string {
   if (words !== undefined) return words;
   const one = (text: string) => {
     const el = code(text);
-    if (isAddress(text, { strict: false })) hex(el, text, true);
+    if (calldata) el.className = "calldata";
+    else if (isAddress(text, { strict: false })) hex(el, text, true);
     else if (isHash(text)) hex(el, text);
     return el;
   };
-  if (!Array.isArray(value)) return one(value ?? "");
+  if (!Array.isArray(value)) return after ? frag(one(value ?? ""), after) : one(value ?? "");
   if (!value.length) return "None";
   const grid = Object.assign(document.createElement("span"), { className: "row" });
   grid.append(...value.map((text, i) => frag(tags[i] ? code(tags[i]!) : "", one(text))));
@@ -164,17 +165,20 @@ function draw(): void {
       fill(row, {
         count: `${where}${steps.length > 1 ? ` ${i + 1} of ${steps.length}` : ""} · ${step.title}`,
         says: step.says,
-        on: step.on,
-        to: { wallet: step.to },
-        call: step.call,
-        "data-row": safe || null,
-        bytes: `${(step.data.length - 2) / 2} bytes`,
-        data: safe ? fieldValue({ label: "", code: step.data }) : null,
-        operation: (safe && groups[g] === 1) || null,
       });
+      // What the wallet shows of the call: where it goes, the function, its fields, no ETH; and for a Safe, its data
+      // and, for a call alone, that it is a plain call.
+      const fields: Field[] = [
+        { label: "To", description: step.on, code: step.to },
+        { label: "Call", code: step.call },
+        ...step.fields,
+        { label: "Value", code: "0", after: " ETH" },
+        ...(safe ? [{ label: "Data", description: `${size(step.data)} bytes`, code: step.data, calldata: true }] : []),
+        ...(safe && groups[g] === 1 ? [{ label: "Operation", code: "0", after: " · call" }] : []),
+      ];
       list(
         $("[data-list=field]", row),
-        step.fields,
+        fields,
         ({ label }) => label,
         (field, value) =>
           fill(field, { label: value.label, description: value.description ?? null, value: fieldValue(value) }),
@@ -284,17 +288,18 @@ async function sendBatch(review: Sending): Promise<void> {
   }
   review.submitted = true;
   say(review, "Transactions signed. Waiting for them to go through…");
-  for (const end = Date.now() + 600_000; Date.now() < end; await sleep(2_000)) {
-    const status = await callsStatus(state.connection!, id).catch((error: unknown) => void console.error(error));
-    if (!status || status.state === "pending") continue;
-    review.finished = true;
-    review.done = status.receipts.map(({ transactionHash }) => transactionHash);
-    if (status.state === "failed") return say(review, "The calls failed on Base, or your wallet did not send them.");
-    review.receipts = status.receipts;
-    return finish(review);
-  }
+  const status = await poll(() =>
+    callsStatus(state.connection!, id).then(
+      (status) => (status.state === "pending" ? undefined : status),
+      (error: unknown) => void console.error(error),
+    ),
+  );
   review.finished = true;
-  say(review, "Transactions signed. Reload the page in a minute to see if they went through.");
+  if (!status) return say(review, "Transactions signed. Reload the page in a minute to see if they went through.");
+  review.done = status.receipts.map(({ transactionHash }) => transactionHash);
+  if (status.state === "failed") return say(review, "The calls failed on Base, or your wallet did not send them.");
+  review.receipts = status.receipts;
+  finish(review);
 }
 
 // The wallet is asked at once, within the click: some wallets need it.

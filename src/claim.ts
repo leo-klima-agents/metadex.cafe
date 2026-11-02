@@ -41,14 +41,16 @@ export const MAX_CLAIM_GAS = 15_000_000n;
 // An account's claim, as calls that each fit `budget`: contracts that owe the same tokens share one, and each other goes
 // where it adds the least, those that owe the most tokens first. One that owes too many for one call is asked in several.
 export function claimCalls(claim: Claim, budget = CLAIM_CALL_GAS): Claim[] {
-  const byContract = new Map<string, Claim["owed"]>();
-  for (const owed of claim.owed.filter(({ amount }) => amount > 0n))
-    byContract.set(key(owed.contract), [...(byContract.get(key(owed.contract)) ?? []), owed]);
+  const byContract = Map.groupBy(
+    claim.owed.filter(({ amount }) => amount > 0n),
+    ({ contract }) => key(contract),
+  );
   const pieces = [...byContract.values()].flatMap((owed) => {
-    const parts: Claim["owed"][] = [[]];
+    const parts: Claim["owed"][] = [];
     for (const one of owed) {
-      if (parts.at(-1)!.length && claimGas([...parts.at(-1)!, one]) > budget) parts.push([]);
-      parts.at(-1)!.push(one);
+      const last = parts.at(-1);
+      if (last && claimGas([...last, one]) <= budget) last.push(one);
+      else parts.push([one]);
     }
     return parts;
   });
@@ -131,7 +133,7 @@ export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true
 // contracts Base did not say all they owe, which are left out.
 export async function owedOf(
   entries: Overdue[],
-): Promise<{ claims: Claim[]; tokens: Map<string, Token>; earlier: boolean; unread: number }> {
+): Promise<{ claims: Claim[]; tokens: Map<string, Token>; unread: number }> {
   const tokens = new Map<string, Token>();
   const unread = new Set<string>();
   const claims = await Promise.all(
@@ -161,12 +163,12 @@ export async function owedOf(
       };
     }),
   );
-  return { claims, tokens, earlier: entries.some(({ standing }) => standing?.late), unread: unread.size };
+  return { claims, tokens, unread: unread.size };
 }
 
 // What the page's own claims received, took and paid, from their Claimed events. One that received nothing, as when
 // someone else claimed first, has none.
-export type Claimed = { id: bigint; received: Amount[]; fees: Amount[]; paid: Amount[] };
+type Claimed = { id: bigint; received: Amount[]; fees: Amount[]; paid: Amount[] };
 export function claimedIn(receipts: Pick<Landed, "logs">[], ids: bigint[], caller: Address): Claimed[] {
   const logs = logsIn(receipts).filter((log) => same(log.address, DOUBLE_ESPRESSO.address));
   const mine = claimed(logs).filter((claim) => ids.includes(claim.id) && same(claim.caller, caller));

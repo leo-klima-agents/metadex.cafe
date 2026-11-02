@@ -1,11 +1,11 @@
-import { encodeFunctionData, parseAbi, zeroAddress, type Address, type Hex } from "viem";
+import { encodeFunctionData, parseAbi, size, zeroAddress, type Address, type Hex } from "viem";
 import { escrowAbi, matchaLatteAbi, namesAbi, voterAbi } from "./abi.ts";
 import * as config from "./config.ts";
 import { AUTOMATIONS, MATCHA_LATTE, type Automation, type Kind } from "./config.ts";
 import { WEEK, clean, listWords, weekStart } from "./format.ts";
 import conduits from "./hydrex-conduits.json" with { type: "json" };
 import { anchorsNow, key, type Prices } from "./prices.ts";
-import { blockTime, call, contract, costs, read, readEach, required, rpc, same, sawBlock } from "./rpc.ts";
+import { blockTime, call, contract, costsRead, read, readEach, required, rpc, same, sawBlock } from "./rpc.ts";
 import type { Slip, Tx } from "./wallet.ts";
 
 const l1Abi = parseAbi(["function getL1FeeUpperBound(uint256 unsignedTxSize) view returns (uint256)"]);
@@ -14,14 +14,12 @@ export const escrow = contract(config.VOTING_ESCROW, escrowAbi);
 export const voter = contract(config.VOTER, voterAbi);
 const matchaLatte = contract(MATCHA_LATTE.address, matchaLatteAbi);
 
+export const automationAt = (address: Address): Automation | undefined =>
+  AUTOMATIONS.find((each) => same(address, each.address));
 // Hydrex's other automations. If Hydrex lists one of the page's own, the page still treats it as its own.
-export const others = (conduits as { name: string; address: Address }[]).filter(
-  ({ address }) => !AUTOMATIONS.some((each) => same(address, each.address)),
-);
+const others = (conduits as { name: string; address: Address }[]).filter(({ address }) => !automationAt(address));
 export const otherName = (address: Address): string | undefined =>
   others.find((other) => same(other.address, address))?.name;
-const automationAt = (address: Address): Automation | undefined =>
-  AUTOMATIONS.find((each) => same(address, each.address));
 
 // Epochs follow the calendar: joins count from the next Thursday, whenever Hydrex's Voter moves on.
 export type MatchaLatte = {
@@ -126,7 +124,7 @@ async function accountsOf(
       delegate,
       delegateAtStart,
       delegateVoted: lastVoted.get(key(delegate)) ?? 0,
-      ownerVoted: Number(ownerVoted ?? BigInt(epochStart)),
+      ownerVoted: Number(ownerVoted ?? epochStart),
       claimer,
     };
   });
@@ -183,7 +181,8 @@ export function statusOf(account: Account, owner: Address, now: number, epochSta
   const next = epochStart + WEEK;
   if (votes && votes === claims)
     return votes === atStart ? { kind: "in", automation: votes } : { kind: "joined", automation: votes, date: next };
-  if (votes || claims) return { kind: "partly", automation: (votes ?? claims)! };
+  const partly = votes ?? claims;
+  if (partly) return { kind: "partly", automation: partly };
   if (atStart) return { kind: "left", automation: atStart, date: next };
   if (same(account.delegate, owner) || same(account.delegate, zeroAddress)) {
     const before = otherName(account.delegateAtStart);
@@ -232,16 +231,13 @@ export function groupOf(account: Account, status: Status): Group {
   }
 }
 
-// A call to setConduitApproval. `other` names one of Hydrex's other automations.
-export type Step = Slip & { id: bigint; approve: boolean };
+// A call to setConduitApproval, for one of the page's automations or one of Hydrex's others.
 function approval(
   { id }: Account,
   approve: boolean,
   says: string,
-  target: { address: Address; name: string },
-  other = false,
-): Step {
-  const conduitName = other ? `The ${target.name} automation` : (automationAt(target.address)?.contract ?? target.name);
+  target: Pick<Automation, "address" | "name" | "contract">,
+): Slip {
   return {
     to: config.VOTING_ESCROW,
     data: encodeFunctionData({
@@ -249,21 +245,19 @@ function approval(
       functionName: "setConduitApproval",
       args: [target.address, id, approve],
     }),
-    id,
-    approve,
-    title: approve ? `Join ${target.name}` : `Leave ${other ? `the ${target.name} automation` : target.name}`,
+    title: `${approve ? "Join" : "Leave"} ${target.name}`,
     says: `Account #${id} ${says}`,
     on: "Hydrex's VotingEscrow",
     call: "setConduitApproval",
     fields: [
-      { label: "Conduit", code: target.address, description: conduitName },
+      { label: "Conduit", code: target.address, description: target.contract },
       { label: "Account", code: String(id) },
       { label: "Approve", code: String(approve) },
     ],
   };
 }
 // A join takes over the votes and the claims, which other automations may hold, the page's own included.
-export const join = (accounts: Account[], automation: Automation): Step[] =>
+export const join = (accounts: Account[], automation: Automation): Slip[] =>
   accounts.map((account) => {
     const holders = [account.delegate, account.claimer];
     const own = AUTOMATIONS.filter(
@@ -281,15 +275,14 @@ export const join = (accounts: Account[], automation: Automation): Step[] =>
       automation,
     );
   });
-export const leave = (accounts: Account[], automation: Automation): Step[] =>
+export const leave = (accounts: Account[], automation: Automation): Slip[] =>
   accounts.map((account) => approval(account, false, `leaves ${automation.name}.`, automation));
 // The same call, with the other automation's address: only those on Hydrex's list, so that each call names it.
-export const leaveOther = (accounts: Account[]): Step[] =>
+export const leaveOther = (accounts: Account[]): Slip[] =>
   accounts.flatMap((account) => {
     const name = otherName(account.delegate);
-    return name
-      ? [approval(account, false, `leaves the ${name} automation.`, { address: account.delegate, name }, true)]
-      : [];
+    const target = { address: account.delegate, name: `the ${name} automation`, contract: `The ${name} automation` };
+    return name ? [approval(account, false, `leaves ${target.name}.`, target)] : [];
   });
 
 // What gas costs for calls that differ only by account, from `from`: the first's estimate, plus the most Base charges
@@ -297,10 +290,9 @@ export const leaveOther = (accounts: Account[]): Step[] =>
 export async function gasEstimate(steps: Tx[], from: Address): Promise<{ wei: bigint; prices: Prices | undefined }> {
   const [first] = steps;
   if (!first) return { wei: 0n, prices: undefined };
-  const size = BigInt((first.data.length - 2) / 2 + 100);
-  const l1 = call("0x420000000000000000000000000000000000000F", l1Abi, "getL1FeeUpperBound", size);
+  const l1 = call(config.GAS_PRICE_ORACLE, l1Abi, "getL1FeeUpperBound", BigInt(size(first.data) + 100));
   const [{ gasPrice }, gas, [fee], prices] = await Promise.all([
-    costs(),
+    costsRead(),
     rpc<Hex>("eth_estimateGas", [{ from, to: first.to, data: first.data }]),
     read([l1]),
     anchorsNow(),

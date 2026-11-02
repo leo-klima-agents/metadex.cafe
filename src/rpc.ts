@@ -14,7 +14,7 @@ import {
   type WalletCallReceipt,
 } from "viem";
 import type { OpStackRpcTransactionReceipt } from "viem/chains";
-import { memo } from "./cache.ts";
+import { memo, use, type Got } from "./cache.ts";
 import { MULTICALL3, RPCS } from "./config.ts";
 
 // A call of a contract's function, its name and arguments checked against its ABI, which also types what it returns.
@@ -28,7 +28,7 @@ export type Call<A extends Abi = Abi, N extends string = string> = {
 type Mutability = "pure" | "view" | "nonpayable" | "payable";
 type Args<A extends Abi, N extends ContractFunctionName<A>> =
   ContractFunctionArgs<A, Mutability, N> extends infer T extends readonly unknown[] ? T : never;
-export type Result<C> =
+type Result<C> =
   C extends Call<infer A, infer N>
     ? N extends ContractFunctionName<A>
       ? ContractFunctionReturnType<A, Mutability, N>
@@ -45,9 +45,9 @@ export const contract =
   <const A extends Abi>(address: Address, abi: A) =>
   <N extends ContractFunctionName<A>>(functionName: N, ...args: Args<A, N>): Call<A, N> =>
     call(address, abi, functionName, ...args);
-// Never throws, even on the undefined of a failed read.
+// Whether two addresses are the same, in any case. Unlike viem's isAddressEqual, it takes strings that are not addresses.
 export const same = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
-export const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
+const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
 
 export const blockTime = call(MULTICALL3, multicall3Abi, "getCurrentBlockTimestamp");
 
@@ -70,7 +70,7 @@ let shown = new Set<Tag>();
 let running = 0;
 let behind = 0;
 const queue: { tag: Tag | undefined; go: (back: boolean) => void }[] = [];
-const ahead = (tag?: Tag): boolean => !tag || shown.has(tag);
+const first = (tag?: Tag): boolean => !tag || shown.has(tag);
 
 export function showTags(tags: Tag[]): void {
   shown = new Set(tags);
@@ -78,11 +78,11 @@ export function showTags(tags: Tag[]): void {
 }
 function pump(): void {
   while (running < MAX) {
-    let i = queue.findIndex(({ tag }) => ahead(tag));
+    let i = queue.findIndex(({ tag }) => first(tag));
     if (i < 0 && queue.length && behind < BEHIND) i = 0;
     if (i < 0) return;
     const [next] = queue.splice(i, 1);
-    const back = !ahead(next!.tag);
+    const back = !first(next!.tag);
     running++;
     if (back) behind++;
     next!.go(back);
@@ -115,16 +115,20 @@ async function pace(url: string, logs: boolean): Promise<void> {
 
 type Reply = { result?: unknown; error?: { code?: number; message?: string } };
 const BUSY = /request limit|rate limit|too many requests/i;
-type Options = { tag?: Tag | undefined; want?: (result: unknown) => boolean };
+type Options<T> = { tag?: Tag | undefined; want?: (result: T) => boolean };
 
 // Asks the RPCs in turn until one gives an answer it `want`s, by default not null. When none does, the last answer
 // they gave is taken if not null. Those busy or out of reach are asked again, up to three more times, a little later.
-export function rpc<T>(method: string, params: unknown[], { tag, want = (r) => r !== null }: Options = {}): Promise<T> {
+export function rpc<T>(
+  method: string,
+  params: unknown[],
+  { tag, want = (r) => r !== null }: Options<T> = {},
+): Promise<T> {
   const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
   return inSlot(tag, async () => {
     if (globalThis.navigator?.onLine === false) throw new Error("Offline.");
     let urls = RPCS;
-    let last: unknown = null;
+    let last: T | null = null;
     for (let attempt = 0; attempt < 4 && urls.length; attempt++) {
       const busy: string[] = [];
       for (const url of [...urls].sort((a, b) => (restUntil.get(a) ?? 0) - (restUntil.get(b) ?? 0))) {
@@ -145,22 +149,24 @@ export function rpc<T>(method: string, params: unknown[], { tag, want = (r) => r
           busy.push(url);
           continue;
         }
-        if ("result" in reply && want(reply.result)) return reply.result as T;
-        if ("result" in reply) last = reply.result ?? last;
-        else if (reply.error?.code === 429 || BUSY.test(reply.error?.message ?? "")) busy.push(url);
+        if ("result" in reply) {
+          const result = reply.result as T;
+          if (want(result)) return result;
+          last = result ?? last;
+        } else if (reply.error?.code === 429 || BUSY.test(reply.error?.message ?? "")) busy.push(url);
       }
       for (const url of busy) restUntil.set(url, performance.now() + 1_000);
       urls = busy;
       if (busy.length) await sleep(Math.random() * 250 * 2 ** attempt);
     }
-    if (last !== null) return last as T;
+    if (last !== null) return last;
     throw new Error(`No Base RPC answered ${method}.`);
   });
 }
 
 type ReadOptions = { block?: number | "latest"; tag?: Tag | undefined; perBatch?: number };
 // Each call's result, as its ABI types it, or undefined if it failed.
-export type Results<C extends readonly Call[]> = { -readonly [K in keyof C]: Result<C[K]> | undefined };
+type Results<C extends readonly Call[]> = { -readonly [K in keyof C]: Result<C[K]> | undefined };
 export type Read = <const C extends readonly Call[]>(calls: C, options?: ReadOptions) => Promise<Results<C>>;
 // Reads contracts through Multicall3, in batches of `perBatch`, as each eth_call runs within its own gas limit.
 export const read: Read = async (calls, { block = "latest", tag, perBatch = 200 } = {}) => {
@@ -198,8 +204,8 @@ type Field<F> = F extends (item: never) => infer C ? Result<C> | undefined : und
 export async function readEach<T, F extends Record<string, ((item: T) => Call) | undefined>>(
   items: readonly T[],
   fields: F,
-  options?: ReadOptions,
   rd: Read = read,
+  options?: ReadOptions,
 ): Promise<({ item: T } & { [K in keyof F]: Field<F[K]> })[]> {
   const asked = Object.entries(fields).flatMap(([name, of]) => (of ? [[name, of] as const] : []));
   const all: unknown[] = await rd(
@@ -238,21 +244,27 @@ export async function simulate(from: Address, txs: Tx[]): Promise<{ ok: boolean;
   }));
 }
 
-export type Receipt = OpStackRpcTransactionReceipt;
+type Receipt = OpStackRpcTransactionReceipt;
 // What a receipt holds wherever it comes from: a wallet's, from EIP-5792's wallet_getCallsStatus, holds no more.
 export type Landed = WalletCallReceipt;
 // The receipts' logs, as parseEventLogs takes them. A wallet's hold only their address, data and topics, which is all
 // their events need, but not the block and index an RPC's logs also hold.
 export const logsIn = (receipts: Pick<Landed, "logs">[]): RpcLog[] => receipts.flatMap(({ logs }) => logs) as RpcLog[];
-// The receipt, or undefined if Base has not included the transaction within ten minutes.
-export async function waitForReceipt(hash: Hex): Promise<Receipt | undefined> {
+// What `ask` gives, asked every two seconds for ten minutes until it gives something.
+export async function poll<T>(ask: () => Promise<T | undefined>): Promise<T | undefined> {
   for (const end = Date.now() + 600_000; Date.now() < end; await sleep(2_000)) {
-    const receipt = await rpc<Receipt | null>("eth_getTransactionReceipt", [hash], { want: () => true }).catch(
-      () => null,
-    );
-    if (receipt) return receipt;
+    const answer = await ask();
+    if (answer !== undefined) return answer;
   }
 }
+// The receipt, or undefined if Base has not included the transaction within ten minutes.
+export const waitForReceipt = (hash: Hex): Promise<Receipt | undefined> =>
+  poll(() =>
+    rpc<Receipt | null>("eth_getTransactionReceipt", [hash], { want: () => true }).then(
+      (receipt) => receipt ?? undefined,
+      () => undefined,
+    ),
+  );
 // When Base included the last of the receipts.
 export async function includedAt(receipts: Landed[]): Promise<number | undefined> {
   const block = receipts.at(-1)?.blockNumber;
@@ -275,7 +287,7 @@ export async function gasPaid(hashes: Hex[], from: Address): Promise<bigint | un
 // The gas price, and the tip the page asks for, at most 1 gwei: above it, Aero's classic pools tax a swap.
 const MAX_TIP = 1_000_000_000n;
 export type Costs = { gasPrice: bigint; tip?: bigint | undefined };
-export async function readCosts(): Promise<Costs> {
+async function readCosts(): Promise<Costs> {
   const [gasPrice, tip] = await Promise.all([
     rpc<Hex>("eth_gasPrice", []),
     rpc<Hex>("eth_maxPriorityFeePerGas", []).catch(() => undefined),
@@ -285,4 +297,5 @@ export async function readCosts(): Promise<Costs> {
     tip: tip === undefined ? undefined : BigInt(tip) < MAX_TIP ? BigInt(tip) : MAX_TIP,
   };
 }
-export const costs = (): Promise<Costs> => memo("costs", readCosts, 60_000);
+export const costs = (): Got<Costs> => use("costs", readCosts, 60_000);
+export const costsRead = (): Promise<Costs> => memo("costs", readCosts, 60_000);

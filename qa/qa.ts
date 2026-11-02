@@ -73,7 +73,7 @@ function requestWords(method: string, params: any[], owner: Address): string {
   }
 }
 
-export type Session = {
+type Session = {
   panel: Page;
   command(name: string, ...args: any[]): Promise<unknown>;
   pages(): Page[];
@@ -84,7 +84,7 @@ export type Session = {
   close(): Promise<void>;
 };
 
-export async function launch(first: Scenario, { headless = false } = {}): Promise<Session> {
+async function launch(first: Scenario, { headless = false } = {}): Promise<Session> {
   const upstream = upstreamOf(forkUrl(RPCS[0]!));
   const caches = new Map<number, Promise<Cache>>();
   async function cacheAt(block: number): Promise<string> {

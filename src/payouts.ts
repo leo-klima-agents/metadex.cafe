@@ -26,7 +26,7 @@ export const WALK_LIMIT = 10;
 export type Pair = { contract: Address; token: Address };
 export type Owed = Amount & { contract: Address };
 // A pair of an epoch's rewards, with what it paid the automation's votes, or 0 if unknown.
-export type Weighed = Pair & { value: number };
+type Weighed = Pair & { value: number };
 type Rewards = { start: number; pairs: Weighed[] };
 export type Standing = {
   id: bigint;
@@ -53,7 +53,7 @@ export function summed(amounts: Amount[]): Amount[] {
   return [...all.values()];
 }
 // What is left of each amount once `taken` is.
-export const less = (amounts: Amount[], taken: Amount[]): Amount[] =>
+const less = (amounts: Amount[], taken: Amount[]): Amount[] =>
   amounts
     .map(({ token, amount }) => ({
       token,
@@ -154,7 +154,7 @@ const stampOf = ({ id, pair }: { id: bigint; pair: Pair }) =>
   call(pair.contract, rewardsAbi, "tokenTimestamp", id, pair.token);
 // Each account's record in each pair, at a block.
 export async function readStamps(ids: bigint[], pairs: Pair[], block: number): Promise<Map<bigint, number[]>> {
-  const found = await readEach(cellsOf(ids, pairs), { stamp: stampOf }, { block, tag: "payouts" });
+  const found = await readEach(cellsOf(ids, pairs), { stamp: stampOf }, read, { block, tag: "payouts" });
   return new Map(
     ids.map((id) => [id, required(found.flatMap(({ item, stamp }) => (item.id === id ? [stamp] : []))).map(Number)]),
   );
@@ -183,14 +183,13 @@ export async function readOwed<P extends Pair>(
   const contracts = [...new Map(pairs.map(({ contract }) => [key(contract), contract])).values()];
   const at = { block, tag: "payouts" } as const;
   const [earned, stamps, firsts, points] = await Promise.all([
-    readEach(
-      cells,
-      { amount: ({ id, pair }) => call(pair.contract, rewardsAbi, "earned", id, pair.token) },
-      { ...at, perBatch: 20 },
-    ),
-    readEach(cells, { stamp: stampOf }, at),
-    readEach(contracts, { first: (contract) => call(contract, rewardsAbi, "firstBribeTimestamp") }, at),
-    readEach(ids, { point: (id) => escrow("getFirstEscrowPoint", id) }, at),
+    readEach(cells, { amount: ({ id, pair }) => call(pair.contract, rewardsAbi, "earned", id, pair.token) }, read, {
+      ...at,
+      perBatch: 20,
+    }),
+    readEach(cells, { stamp: stampOf }, read, at),
+    readEach(contracts, { first: (contract) => call(contract, rewardsAbi, "firstBribeTimestamp") }, read, at),
+    readEach(ids, { point: (id) => escrow("getFirstEscrowPoint", id) }, read, at),
   ]);
   const stampOfCell = new Map(stamps.map(({ item, stamp }) => [item, stamp]));
   const firstOf = new Map(firsts.map(({ item, first }) => [key(item), first]));
@@ -215,6 +214,7 @@ export async function readOwed<P extends Pair>(
         : epochs.filter((epoch) => epoch >= start + WINDOW).map((epoch) => ({ row, start, epoch }));
     }),
     { hidden: ({ row, epoch }) => call(row.pair.contract, rewardsAbi, "earnedTokenId", row.id, row.pair.token, epoch) },
+    read,
     at,
   );
   for (const { item, hidden } of past) {
@@ -305,12 +305,7 @@ async function payoutBlocks(standings: Standing[], top: number, time: number): P
   await Promise.all(
     [...new Set(paid.map(({ through }) => through))].map(async (epoch) => {
       const reached = async (block: number, items: typeof paid) =>
-        required(
-          await read(
-            items.map(({ id, pair }) => call(pair.contract, rewardsAbi, "tokenTimestamp", id, pair.token)),
-            { block, tag: "payouts" },
-          ),
-        ).map((value) => value >= BigInt(epoch));
+        required(await read(items.map(stampOf), { block, tag: "payouts" })).map((value) => value >= BigInt(epoch));
       const these = paid.filter(({ through }) => through === epoch);
       const found = await firstReached(reached, these, (await epochBlock(epoch, top, time)) - 1, top);
       for (const [{ id }, block] of found) blocks.set(id, block);
@@ -374,17 +369,19 @@ export function payoutsOf(logs: RpcLog[]): Payout[] {
 // Latte's, so no logs is taken only once no RPC has any, and is read again next time.
 const logsOf = new Map<number, Payout[]>();
 async function payoutsIn(block: number): Promise<Payout[]> {
-  if (logsOf.has(block)) return logsOf.get(block)!;
+  const known = logsOf.get(block);
+  if (known) return known;
   const logs = await rpc<RpcLog[]>(
     "eth_getLogs",
     [{ address: MATCHA_LATTE.address, fromBlock: numberToHex(block), toBlock: numberToHex(block) }],
     {
       tag: "payouts",
-      want: (found) => (found as RpcLog[]).length > 0,
+      want: (found) => found.length > 0,
     },
   );
-  if (logs.length) logsOf.set(block, payoutsOf(logs));
-  return payoutsOf(logs);
+  const payouts = payoutsOf(logs);
+  if (logs.length) logsOf.set(block, payouts);
+  return payouts;
 }
 
 // Double Espresso's claims in some logs, newest first. `previous` is the claim block recorded before it.
@@ -467,19 +464,15 @@ async function claimsAt(block: number, ids: bigint[]): Promise<ClaimLog[]> {
   const missing = ids.filter((id) => !claimsIn.has(`${block} ${id}`));
   let found: ClaimLog[] = [];
   if (missing.length) {
-    const topics = [
-      encodeEventTopics({ abi: doubleEspressoAbi, eventName: "Claimed" })[0],
-      missing.map((id) => numberToHex(id, { size: 32 })),
-    ];
     const filter = {
       address: DOUBLE_ESPRESSO.address,
       fromBlock: numberToHex(block),
       toBlock: numberToHex(block),
-      topics,
+      topics: encodeEventTopics({ abi: doubleEspressoAbi, eventName: "Claimed", args: { tokenId: missing } }),
     };
     const logs = await rpc<RpcLog[]>("eth_getLogs", [filter], {
       tag: "payouts",
-      want: (found) => missing.every((id) => claimsOf(found as RpcLog[]).some((claim) => claim.id === id)),
+      want: (found) => missing.every((id) => claimsOf(found).some((claim) => claim.id === id)),
     });
     found = claimsOf(logs);
     for (const id of missing) {
@@ -492,7 +485,7 @@ async function claimsAt(block: number, ids: bigint[]): Promise<ClaimLog[]> {
 
 // An account's payouts through the automation it is in, joining or leaving; its standing in the pools of the one it
 // voted with last epoch, where its rewards are; and its last payout's receipt, or why there is none.
-export type Entry = {
+type Entry = {
   automation: Automation;
   voter: Automation;
   account: Account;
@@ -547,6 +540,7 @@ async function doubleEspressoParts(ids: bigint[], top: number): Promise<Map<bigi
   const found = await readEach(
     ids,
     { last: (id) => call(DOUBLE_ESPRESSO.address, doubleEspressoAbi, "lastClaimBlock", id) },
+    read,
     { block: top, tag: "payouts" },
   );
   const lasts = await Promise.all(
@@ -573,9 +567,12 @@ export async function readPayouts(
   earningsOf: (automation: Automation) => Promise<Earnings>,
 ): Promise<Payouts> {
   const { epochStart } = holdings;
-  const members = holdings.accounts.filter((account) => automationOf(account));
+  const members = holdings.accounts.flatMap((account) => {
+    const automation = automationOf(account);
+    return automation ? [{ account, automation }] : [];
+  });
   if (!members.length) return { epochStart, entries: [] };
-  const ids = members.map(({ id }) => id);
+  const ids = members.map(({ account }) => account.id);
   const top = Number(await rpc<Hex>("eth_blockNumber", [], { tag: "payouts" })) - SETTLED;
   const at = { block: top, tag: "payouts" } as const;
   const [[time], held] = await Promise.all([
@@ -586,18 +583,20 @@ export async function readPayouts(
         last: (id) => escrow("delegates", id, epochStart - WEEK),
         before: (id) => escrow("delegates", id, epochStart - 2 * WEEK),
       },
+      read,
       at,
     ),
   ]);
   const delegates = new Map(held.map(({ item, ...each }) => [item, each]));
-  const votedWith = (automation: Automation, id: bigint, ago: 1 | 2): boolean =>
-    same((ago === 1 ? delegates.get(id)?.last : delegates.get(id)?.before) ?? "", automation.address);
-  const voterOf = (account: Account): Automation =>
-    AUTOMATIONS.find((automation) => votedWith(automation, account.id, 1)) ?? automationOf(account)!;
-  const groups = (of: (account: Account) => Automation) =>
+  const votedWith = (automation: Automation, id: bigint, epoch: "last" | "before"): boolean =>
+    same(delegates.get(id)?.[epoch] ?? "", automation.address);
+  type Member = (typeof members)[number];
+  const voterOf = ({ account, automation }: Member): Automation =>
+    AUTOMATIONS.find((each) => votedWith(each, account.id, "last")) ?? automation;
+  const groups = (of: (member: Member) => Automation) =>
     [...new Set(members.map(of))].map(
       (automation) =>
-        [automation, members.filter((account) => of(account) === automation).map(({ id }) => id)] as const,
+        [automation, members.filter((member) => of(member) === automation).map(({ account }) => account.id)] as const,
     );
 
   // An account's figures, or `early` when its automation's are not final yet.
@@ -608,7 +607,7 @@ export async function readPayouts(
       if (!earnings) return;
       if (earnings.start < epochStart - WEEK) return these.forEach((id) => found.set(id, { early: true }));
       const last = { start: earnings.start, pairs: weighed(earnings.rewards, earnings.prices) };
-      const votedBefore = these.filter((id) => votedWith(automation, id, 2));
+      const votedBefore = these.filter((id) => votedWith(automation, id, "before"));
       const owed = await Promise.all([
         readOwed(these, last.pairs, top, [last.start - WEEK, last.start]).then((rows) =>
           rows.map(({ id, owing }) => ({
@@ -626,7 +625,7 @@ export async function readPayouts(
       if (!stampsBefore) return;
       rows.forEach(({ id, earned, stamps }) => {
         const records = { last: stamps, earned, before: stampsBefore.get(id) ?? [] };
-        const voted = { last: votedWith(automation, id, 1), before: votedWith(automation, id, 2) };
+        const voted = { last: votedWith(automation, id, "last"), before: votedWith(automation, id, "before") };
         const standing =
           last.pairs.length || before.pairs.length ? standingOf(id, last, before, records, voted) : undefined;
         found.set(id, { earnings, standing });
@@ -635,7 +634,7 @@ export async function readPayouts(
   );
   const parts = new Map<bigint, Part>();
   await Promise.all(
-    groups((account) => automationOf(account)!).map(async ([automation, these]) => {
+    groups(({ automation }) => automation).map(async ([automation, these]) => {
       const theirs = standings.then(() => these.map((id) => found.get(id)?.standing));
       const reading =
         automation === MATCHA_LATTE
@@ -646,16 +645,16 @@ export async function readPayouts(
     }),
   );
   await standings;
-  const entries = members.map((account): Entry => {
-    const automation = automationOf(account)!;
+  const entries = members.map((member): Entry => {
+    const { account, automation } = member;
     const figures = found.get(account.id);
     const part = parts.get(account.id);
     const known = part ? figures : undefined;
-    const due = votedWith(automation, account.id, 1) && same(account.claimer, automation.address);
+    const due = votedWith(automation, account.id, "last") && same(account.claimer, automation.address);
     return {
       ...part,
       automation,
-      voter: voterOf(account),
+      voter: voterOf(member),
       account,
       earnings: known?.earnings,
       standing: known?.standing,

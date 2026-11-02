@@ -85,7 +85,7 @@ const NATIVE: Address[] = [
   "0xb200000000000000000000856a95738c92feed01",
 ];
 // A generous gas limit, as wallets add a margin: anvil estimates gas at another time than it mines at.
-export const GAS = 16_000_000n;
+const GAS = 16_000_000n;
 export const FOR_GAS = 10n ** 17n;
 export const abi = parseAbi([
   "function getLockDelegatee(uint256 tokenId) view returns (address)",
@@ -132,7 +132,7 @@ export let anvil: ReturnType<typeof clientOf>;
 // A contract on the fork, read through the tests' ABI.
 export const at = (address: Address) => getContract({ address, abi, client: anvil });
 // Runs the page's own reads in Node, against the fork.
-export async function onFork<T>(reads: () => Promise<T>): Promise<T> {
+async function onFork<T>(reads: () => Promise<T>): Promise<T> {
   globalThis.fetch = (_, init) => {
     prefetch(String(init?.body));
     return nodeFetch(ANVIL, { ...init, signal: null });
@@ -146,7 +146,7 @@ export async function onFork<T>(reads: () => Promise<T>): Promise<T> {
 
 // Sends a transaction from an account anvil impersonates, with no tip; the cache hears of it, so that it does not ask
 // FORK_URL for its receipt.
-export type Sendable = { from: Address; to?: Address | null; data: Hex; gas?: bigint };
+type Sendable = { from: Address; to?: Address | null; data: Hex; gas?: bigint };
 export async function send({ from, ...tx }: Sendable): Promise<Hex> {
   const hash = await anvil.sendTransaction({ account: from, chain: null, maxPriorityFeePerGas: 0n, ...tx });
   await nodeFetch(`${CACHE_URL}/sent`, { method: "POST", body: hash });
@@ -229,12 +229,18 @@ export async function doubleEspressoReceipts(): Promise<Reward[]> {
     [SOMEONE, usdc[0]!],
     [STRANGER, usdc[1]!],
   ] as const) {
-    const args = [82774n, fee ? [contract] : [], fee ? [] : [contract], [token.address]] as const;
-    await mined(who, DOUBLE_ESPRESSO.address, encodeFunctionData({ abi, functionName: "claim", args }));
+    await mined(who, DOUBLE_ESPRESSO.address, claimOne(82774n, { contract, token, fee }));
   }
   await settle();
   return rewards;
 }
+// Double Espresso's claim of one reward for an account, as anyone may call it.
+export const claimOne = (id: bigint, { contract, token, fee }: Pick<Reward, "contract" | "token" | "fee">): Hex =>
+  encodeFunctionData({
+    abi,
+    functionName: "claim",
+    args: [id, fee ? [contract] : [], fee ? [] : [contract], [token.address]],
+  });
 // Gives SELLER the fee recipient's whole balance of each token.
 export async function fund(tokens: Address[]): Promise<void> {
   for (const token of tokens)
@@ -262,9 +268,8 @@ export type WalletOptions = {
   // The tokens it lists with ERC-7811's wallet_getAssets.
   assets?: Address[];
 };
-export const sendsBatches = (options: Pick<WalletOptions, "batch" | "assets">): boolean =>
-  !!options.batch || !!options.assets;
-export type Rpc = {
+const sendsBatches = (options: Pick<WalletOptions, "batch" | "assets">): boolean => !!options.batch || !!options.assets;
+type Rpc = {
   refuse?: ((body: string) => boolean) | undefined;
   answer?: ((body: string) => string | undefined) | undefined;
   rewrite?: ((body: string, reply: string) => string | undefined) | undefined;
@@ -386,10 +391,10 @@ export function testWallet(options: WalletOptions, sent?: Sent[], asked?: string
         batches.set(id, hashes);
         if (options.atomic !== false && (options.failing || !(await together(signer, calls)))) {
           // All or nothing: a batch that fails changes nothing but the gas of its one transaction.
-          const [{ to, data }] = calls as [Sent];
+          const { to, data } = calls[0]!;
           sent?.push(...calls);
           if (options.failing) options.failing--;
-          hashes.push(await send({ to, data, from: signer, gas: await starved(signer, to as Address, data as Hex) }));
+          hashes.push(await send({ to, data, from: signer, gas: await starved(signer, to, data) }));
         } else
           for (const { to, data } of calls) {
             sent?.push({ to, data });
@@ -543,6 +548,12 @@ export const review = (page: Page | FrameLocator) => page.locator("#review");
 export const heading = (page: Page | FrameLocator | Locator, name: string | RegExp, level = 1) =>
   page.getByRole("heading", { name, level, exact: typeof name === "string" });
 export const text = (page: Page | Locator, key: string) => page.locator(`[data-text="${key}"]`);
+// What a call's slip says on the line of `label`: its value, or the words beside it.
+export const field = (slip: Locator, label: string, part: "value" | "description" = "value") =>
+  slip
+    .locator("[data-list=field] > div")
+    .filter({ has: slip.page().locator("dt", { hasText: new RegExp(`^${label}$`) }) })
+    .locator(`[data-text=${part}]`);
 export const pick = async (page: Page, ...ids: number[]) => {
   for (const id of ids) await page.getByRole("checkbox", { name: new RegExp(`#${id}$`) }).check();
 };
