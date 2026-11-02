@@ -616,10 +616,13 @@
         <nav aria-label="Back"><a class="Back" href="#hydrex">Hydrex</a></nav>
         <h1 tabindex="-1" data-text="name"></h1>
         <div class="u-stack" data-text="account" data-state="loading">
-          <ul class="Skeleton Skeleton--tiles" data-when="loading" aria-hidden="true">
-            <li class="Skeleton-item"></li>
-            <li class="Skeleton-item"></li>
-          </ul>
+          <div class="u-stack" data-when="loading" aria-hidden="true">
+            <p class="Pill u-small"><span data-loading>Loading…</span></p>
+            <ul class="Facts Facts--tiles">
+              <li class="Facts-tile Skeleton-item"></li>
+              <li class="Facts-tile Skeleton-item"></li>
+            </ul>
+          </div>
           <p class="u-small" data-when="failed">This Hydrex account could not be read.</p>
           <p class="u-small" data-when="empty">No such Hydrex account.</p>
           <div class="u-stack" data-when="ready">
