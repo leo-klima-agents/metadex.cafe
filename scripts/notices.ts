@@ -1,12 +1,12 @@
 import type { Metafile } from "esbuild";
 import { readFileSync, readdirSync } from "node:fs";
 
-// The license notices of what a built file bundles, appended to it as one comment, so that they travel with it: each
-// npm package by its package.json and the copyright lines of its LICENSE, and each file of the repository's own that
-// is not the café's, such as a font, by REUSE.toml. The license texts come verbatim from LICENSES/. A license the page
-// has no text or name for stops the build.
+// Builds the license notices of what a built file bundles, appended to it as one comment so they travel with it. An npm
+// package's notice comes from its package.json and the copyright lines of its LICENSE; a repository file that is not
+// the café's, such as a font, gets its notice from REUSE.toml. License texts come verbatim from `LICENSES/`. A license
+// without a text or name here stops the build.
 
-export type Part = { name: string; copyright: string[]; license: string };
+type Part = { name: string; copyright: string[]; license: string };
 
 const LICENSE_NAMES: Record<string, string> = {
   MIT: "the MIT License",
@@ -26,8 +26,7 @@ export function bundled(metafile: Metafile, output: string): string[] {
   return [...new Set([...inputs, ...embedded])];
 }
 
-// An npm package's notice: its LICENSE's copyright lines. A package that ships none stops the build, rather than its
-// notice being guessed.
+// A package whose LICENSE has no copyright line stops the build, rather than having its notice guessed.
 export function packagePart(root: string, dir: string): Part {
   const pkg = JSON.parse(readFileSync(`${root}/${dir}/package.json`, "utf8")) as {
     name: string;
@@ -45,8 +44,8 @@ export function packagePart(root: string, dir: string): Part {
 
 type Annotation = { path: string; copyright: string; license: string };
 
-// REUSE.toml's annotations, in order: a later one takes precedence over an earlier one for the same file.
-export function annotations(root: string): Annotation[] {
+// In file order, because a later annotation takes precedence over an earlier one for the same file.
+function annotations(root: string): Annotation[] {
   const blocks = readFileSync(`${root}/REUSE.toml`, "utf8").split("[[annotations]]").slice(1);
   return blocks.map((block) => {
     const value = (key: string) => {
@@ -68,8 +67,8 @@ const glob = (pattern: string) => {
   return new RegExp(`^${escaped.replace(/\*\*|\*/g, (star) => (star === "**" ? ".*" : "[^/]*"))}$`);
 };
 
-// The notices of what a built file bundles, each package once, and each file of the repository's own that REUSE.toml
-// gives another holder than the café, whose own files its "**" annotation covers.
+// One part per bundled package, and one per repository file that REUSE.toml gives a holder other than the café. The
+// café's own files are those only its `**` annotation covers.
 export function partsOf(root: string, files: string[]): Part[] {
   const parts = new Map<string, Part>();
   const annotated = annotations(root);
@@ -86,7 +85,6 @@ export function partsOf(root: string, files: string[]): Part[] {
   return [...parts.values()];
 }
 
-// One comment: the parts under each license, by name, each license's text after them, verbatim from LICENSES/.
 export function noticeOf(root: string, parts: Part[]): string {
   if (!parts.length) return "";
   const licenses = [...new Set(parts.map(({ license }) => license))].sort();

@@ -1,362 +1,224 @@
 import assert from "node:assert/strict";
-import { after, before, describe, test } from "node:test";
-import { encodeFunctionData, toFunctionSelector, zeroAddress } from "viem";
-import { VOTING_ESCROW } from "../src/config.ts";
+import { describe, test } from "node:test";
+import { encodeFunctionData, zeroAddress } from "viem";
+import { DOUBLE_ESPRESSO, VOTING_ESCROW } from "../src/config.ts";
+import { short } from "../src/format.ts";
+import * as h from "./harness.ts";
 import {
+  BLOCK,
   CONDUIT,
-  SITE,
-  RPC_ORIGINS,
+  ELSEWHERE,
+  LEAVER,
+  LOCK_MAXI,
   MEMBER,
   NEWCOMER,
-  ELSEWHERE,
-  LOCK_MAXI,
-  USDC,
-  RECIPIENT,
-  abi,
-  anvil,
-  send,
-  view,
-  warm,
-  expectApprovals,
-  open,
+  SITE,
   connected,
-  hydrex,
-  account,
+  expectApprovals,
   group,
-  only,
-  product,
+  heading,
   review,
-  homeTitle,
-  appTitle,
-  hydrexTitle,
-  toHydrex,
-  chip,
-  toWallet,
-  connectButton,
-  pick,
-  shoot,
-  confirm,
-  stop,
-  hooks,
-  startAtBlock,
-  UNVOTED,
-  earnedLastEpoch,
+  row,
 } from "./harness.ts";
 
-describe("the page against a fork of Base: joining and leaving, and what can fail", { timeout: 1_800_000 }, () => {
-  before(startAtBlock);
-  after(stop);
-  hooks();
+const UNVOTED = /Not voted since/;
+const says = (page: h.Opened["page"]) => review(page).locator("[data-text=says]").allTextContents();
 
-  test("join with two accounts from automations that stopped, one transaction at a time", async () => {
-    // The review's estimate needs last epoch's figures.
-    await warm(() => earnedLastEpoch(CONDUIT));
-    const { page, sent, asked, origins, violations } = await open({ owner: ELSEWHERE }, { url: `${SITE}/#hydrex` });
-    await hydrex(page).locator("time.matcha-latte-voted").getByText(/Wed/).waitFor();
-    assert.deepEqual(asked, [], "the page asks a wallet nothing until it is picked");
-    // The one wallet in the browser connects from the header's button at once; the Hydrex accounts list it too.
-    await hydrex(page).locator(".wallets").getByRole("button", { name: "Test Wallet" }).waitFor();
-    await connectButton(page).click();
-    await chip(page, ELSEWHERE).waitFor();
-    await account(page, 2439)
-      .getByText(/In USDC\s+· stopped since\s+Wed,? 9 Sept?/)
-      .waitFor();
-    // Both are in automations that stopped: one group, whose buttons are the remedy of each.
-    await hydrex(page).getByRole("heading", { name: "In a stopped automation · 2" }).waitFor();
+describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, () => {
+  h.fork(BLOCK, [MEMBER, NEWCOMER, ELSEWHERE, LEAVER], h.deployDoubleEspresso);
+
+  test("join Matcha Latte with two accounts from stopped automations, one transaction at a time", async () => {
+    const { page, sent, asked, violations } = await connected({ owner: ELSEWHERE });
     const needs = group(page, "needs:stopped");
-    assert.equal(await needs.locator(".count").innerText(), "· 2");
-    // What needs you starts ticked, with what it adds up to.
-    assert.equal(await page.getByRole("checkbox", { name: "Pick Hydrex account #2439" }).isChecked(), true);
-    await needs
-      .locator(".picked")
-      .getByText(/^2 of 2 · [\d,]+ votes$/)
+    await heading(page, "In a stopped automation 2", 3)
+      .or(needs.getByRole("heading", { name: /In a stopped automation/ }))
+      .first()
       .waitFor();
+    await row(page, 2439)
+      .getByText(/In USDC · stopped since Wed,? 9 Sept?/)
+      .waitFor();
+    await needs.getByText(/^2 of 2 · [\d,]+ votes$/).waitFor();
+    assert.equal(
+      await page.getByRole("checkbox", { name: "Pick Hydrex account #2439" }).isChecked(),
+      true,
+      "what needs its owner starts ticked",
+    );
     await needs.getByRole("checkbox", { name: "All" }).uncheck();
-    assert.equal(await needs.getByRole("button", { name: "Join Matcha Latte" }).isDisabled(), true);
-    await pick(page, 2435, 2439);
-    await shoot(page, "picked-1440-light");
-    await needs.getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
+    await needs.getByRole("button", { name: "Join Matcha Latte", disabled: true }).waitFor();
+    await h.pick(page, 2435, 2439);
+    await needs.getByRole("button", { name: "Join Matcha Latte" }).click();
     await review(page).getByText("Join Matcha Latte · 1 of 2").waitFor();
-    assert.match(await review(page).locator(".pages").innerText(), /Votes from\s+Thu,? 22 Oct,? 00:00 UTC/i);
+    assert.match(await review(page).innerText(), /Votes from\s+Thu,? 22 Oct,? 00:00 UTC/i);
     await review(page)
-      .locator(".estimate-gas")
       .getByText(/^(≈|<)\s\$[\d.]+$/)
-      .waitFor({ timeout: 60_000 });
-    await review(page)
-      .locator(".estimate-week")
-      .getByText(/^(≈|<)\s\$[\d.]+$/)
-      .waitFor({ timeout: 120_000 });
-    await shoot(page, "join-1-1440-light");
-    await review(page).getByRole("button", { name: "Continue" }).click();
-    await review(page).getByRole("heading", { name: "Transactions", exact: true }).waitFor();
-    assert.equal(await review(page).locator(".how").textContent(), "");
-    assert.deepEqual(await review(page).locator(".says").allTextContents(), [
+      .first()
+      .waitFor();
+    await h.toCalls(page);
+    assert.deepEqual(await says(page), [
       "Account #2439 leaves the USDC automation and joins Matcha Latte.",
       "Account #2435 leaves the Hydrex Lock Maxi automation and joins Matcha Latte.",
     ]);
-    assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), [
-      "KlimaVeTokenConduit",
-      "KlimaVeTokenConduit",
-    ]);
-    assert.deepEqual(await review(page).locator(".account").allTextContents(), ["2439", "2435"]);
-    assert.deepEqual(await review(page).locator(".approve").allTextContents(), ["true", "true"]);
-    // Each call is a bill, its fields in full under what it does, with nothing to open.
-    assert.equal(await review(page).locator(".slip .info").count(), 0);
-    assert.deepEqual(await review(page).locator(".slip .receipt-name").allTextContents(), [
-      "metaDEX Café",
-      "metaDEX Café",
-    ]);
-    // Shown in groups of four, an address still reads and copies as one.
-    assert.equal(await review(page).locator(".conduit").first().innerText(), CONDUIT);
-    assert.equal(await review(page).locator(".to").first().innerText(), VOTING_ESCROW);
-    assert.equal(await review(page).locator(".count").first().textContent(), "Transaction 1 of 2 · Join Matcha Latte");
-    assert.equal(await review(page).locator(".data").first().isVisible(), false, "the wallet shows the call's fields");
-    await shoot(page, "join-2-1440-light");
+    const slip = review(page).locator("[data-list=slip] > li").first();
+    assert.equal(await slip.locator("[data-text=count]").textContent(), "Transaction 1 of 2 · Join Matcha Latte");
+    assert.equal((await h.field(slip, "To").innerText()).replace(/\s/g, ""), VOTING_ESCROW);
+    assert.match(await slip.innerText(), /KlimaVeTokenConduit/);
     await review(page).getByRole("button", { name: "Sign transaction 1 of 2" }).click();
-    await review(page).getByText("Transaction 1 of 2 went through.").waitFor();
+    await review(page)
+      .getByText(/Transaction 1 of 2 went through\./)
+      .waitFor();
     await review(page).getByRole("button", { name: "Sign transaction 2 of 2" }).click();
-    await review(page).getByRole("heading", { name: "Done" }).waitFor();
-    await review(page).getByText("Joined.").waitFor();
+    await heading(review(page), "Done", 2).waitFor();
+    await review(page)
+      .getByText(/^Joined\./)
+      .waitFor();
     await review(page).getByRole("button", { name: "Close" }).click();
     assert.equal(sent.length, 2);
     await expectApprovals([2435n, 2439n], CONDUIT, CONDUIT);
-    // Lock Maxi's ERC-5725 claim approval stays, but the VotingEscrow does not use it for claims.
-    assert.equal(await view(VOTING_ESCROW, "getClaimApproved", [2435n]), LOCK_MAXI);
-    const joined = /Joining Matcha Latte:\s+votes from\s+Thu,? 22 Oct/;
-    await group(page, "in:matcha-latte").locator("li").filter({ hasText: "#2439" }).getByText(joined).waitFor();
-    await account(page, 2435).getByText(joined).waitFor();
-    assert.equal(await hydrex(page).locator('.group[data-group^="needs:"]:not([hidden])').count(), 0, "none needs you");
+    await row(page, 2439)
+      .getByText(/Joining Matcha Latte: votes from Thu,? 22 Oct/)
+      .waitFor();
     assert.deepEqual([...new Set(asked)].sort(), [
       "eth_chainId",
       "eth_requestAccounts",
       "eth_sendTransaction",
       "wallet_getCapabilities",
     ]);
-    assert.deepEqual([...origins].sort(), [SITE, ...RPC_ORIGINS].filter((o) => origins.has(o)).sort());
-    assert.ok(origins.has(SITE));
     assert.deepEqual(violations, []);
   });
 
-  test("join with an account of its own; the header shows the wallet on every view", async () => {
-    const { page, sent } = await connected({ owner: NEWCOMER });
-    // Its owner last voted before last epoch: it earns nothing, and needs them.
-    await group(page, "needs:unvoted").locator("li").filter({ hasText: "#141" }).getByText(UNVOTED).waitFor();
-    await account(page, 42877)
-      .getByText(/In Liquid Hydrex\s+· stopped since\s+Wed,? 9 Sept?/)
-      .waitFor();
-    const nothing = group(page, "closed");
-    await nothing.locator("summary").click();
-    await nothing.locator("li").getByText("Empty", { exact: true }).first().waitFor();
-    assert.equal(await nothing.locator(".pick").first().isVisible(), false, "an empty account has no box");
-    // #42877, in an automation that stopped, needs another remedy, in a group of its own: alone in its group, #141
-    // needs no box.
-    await group(page, "needs:stopped").locator("li").filter({ hasText: "#42877" }).waitFor();
-    assert.equal(await account(page, 141).locator(".pick").isVisible(), false);
+  test("with a wallet that batches: join Double Espresso, move to Matcha Latte, and leave", async () => {
+    const { page, sent } = await connected({ owner: NEWCOMER, batch: true });
+    await row(page, 141).getByText(UNVOTED).waitFor();
+    await h.only(page, "needs:unvoted", 141);
     await group(page, "needs:unvoted")
       .getByRole("link", { name: /Vote on Hydrex/ })
       .waitFor();
-    assert.equal(
-      await group(page, "needs:stopped")
-        .getByRole("link", { name: /Vote on Hydrex/ })
-        .count(),
-      0,
-    );
-    // With a wallet connected, the name in the header still leads Home, which stays apart from the App; the wallet's
-    // chip leads to the App.
-    await page.getByRole("link", { name: "metaDEX Café" }).click();
-    await homeTitle(page).waitFor();
-    assert.equal(await appTitle(page).isVisible(), false);
-    await chip(page, NEWCOMER).waitFor();
-    await page
-      .locator("header")
-      .getByRole("link", { name: /Your wallet, connected as 0x0208…4C95/ })
-      .click();
-    await appTitle(page).waitFor();
-    assert.equal(await homeTitle(page).isVisible(), false);
-    await toHydrex(page);
-    await only(page, "needs:unvoted", 141);
-    await group(page, "needs:unvoted").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
-    await toWallet(page);
-    assert.equal(await review(page).locator(".how").isVisible(), false, "one transaction needs no line");
-    assert.deepEqual(await review(page).locator(".says").allTextContents(), ["Account #141 joins Matcha Latte."]);
-    await confirm(page);
-    assert.equal(sent.length, 1);
+    await group(page, "needs:unvoted").getByRole("button", { name: "Join Double Espresso" }).click();
+    await h.toCalls(page);
+    await h.confirm(page);
+    await review(page).getByRole("button", { name: "Close" }).click();
+    await expectApprovals([141n], DOUBLE_ESPRESSO.address, DOUBLE_ESPRESSO.address);
+    await row(page, 141)
+      .getByText(/Joining Double Espresso/)
+      .waitFor();
+    await group(page, "in:double-espresso").getByRole("button", { name: "Move to Matcha Latte" }).click();
+    await h.toCalls(page);
+    assert.deepEqual(await says(page), ["Account #141 leaves Double Espresso and joins Matcha Latte."]);
+    await h.confirm(page);
+    await review(page).getByRole("button", { name: "Close" }).click();
     await expectApprovals([141n], CONDUIT, CONDUIT);
-    await account(page, 141).getByText("Joining Matcha Latte:").waitFor();
-    // Double Espresso's page, before it ever voted, has no record, and joining it is on.
-    await page.goto(`${SITE}/#hydrex/double-espresso/check`);
-    const maxi = product(page, "double-espresso");
-    await maxi.locator(".record").getByText("No record yet").waitFor();
-    assert.equal(await maxi.locator(".checks-failed").isVisible(), false);
+    await group(page, "in:matcha-latte").getByRole("button", { name: "Leave" }).click();
+    await heading(review(page), "Leave Matcha Latte", 2).waitFor();
+    assert.match(await review(page).innerText(), /Claims stop\s+Now\s+Votes return\s+Thu,? 22 Oct/i);
+    await review(page).getByRole("button", { name: "Sign transaction" }).click();
+    await review(page)
+      .getByText(/^Left\./)
+      .waitFor();
+    await expectApprovals([141n], NEWCOMER, zeroAddress);
+    assert.equal(sent.length, 3);
   });
 
-  test("closing between transactions stops there; a link then opens in a new tab", async () => {
-    const { page, sent } = await connected({ owner: ELSEWHERE });
-    await pick(page, 2435, 2439);
-    await group(page, "needs:stopped").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
-    await toWallet(page);
-    await review(page).getByRole("button", { name: "Sign transaction 1 of 2" }).click();
-    await review(page).getByText("Sign transaction 2 when you are ready.").waitFor();
-    // The first page's link to what Matcha Latte can change, which its page no longer shows.
-    const [tab] = await Promise.all([
-      page.context().waitForEvent("page"),
-      review(page).locator('a[href="#hydrex/matcha-latte/control"]').dispatchEvent("click"),
-    ]);
-    await tab.waitForURL(`${SITE}/#hydrex/matcha-latte/control`);
-    await review(page).getByRole("button", { name: "Sign transaction 2 of 2" }).waitFor();
+  test("leave a stopped automation to vote yourself", async () => {
+    const { page } = await connected({ owner: ELSEWHERE }, { width: 390, height: 844, dark: true });
+    await h.only(page, "needs:stopped", 2439);
+    await group(page, "needs:stopped").getByRole("button", { name: "Leave automation" }).click();
+    await heading(review(page), "Leave USDC", 2).waitFor();
+    assert.deepEqual(await says(page), ["Account #2439 leaves the USDC automation."]);
+    await h.shoot(page, "leave-390-dark");
+    await h.confirm(page);
     await review(page).getByRole("button", { name: "Close" }).click();
-    await account(page, 2439).getByText("Joining Matcha Latte:").waitFor();
-    await account(page, 2435)
-      .getByText(/In Hydrex Lock Maxi\s+· stopped/)
+    await row(page, 2439)
+      .getByText(/Left USDC: your votes from Thu,? 22 Oct/)
       .waitFor();
-    assert.equal(sent.length, 1);
+    await row(page, 2435)
+      .getByText(/In Hydrex Lock Maxi · stopped/)
+      .waitFor();
     await expectApprovals([2435n], LOCK_MAXI, LOCK_MAXI);
   });
 
-  test("leave with one account", async () => {
-    const { page, sent } = await connected({ owner: MEMBER }, { width: 390, height: 844, dark: true });
-    await group(page, "in:matcha-latte").getByText("#9540").waitFor();
-    assert.equal(await account(page, 9540).locator(".status-line").count(), 0, "its group says it is in");
-    await account(page, 14485).getByText(UNVOTED).waitFor();
-    await shoot(page, "member-390-dark");
-    await group(page, "in:matcha-latte").getByRole("button", { name: "Leave" }).click();
-    await review(page).getByRole("heading", { name: "Leave Matcha Latte" }).waitFor();
-    assert.equal(await review(page).locator(".how").isVisible(), false, "one transaction needs no line");
-    assert.equal(await review(page).locator(".step-count").isVisible(), false, "one step");
-    assert.match(await review(page).locator(".pages").innerText(), /Claims stop\s+Now\s+Votes return\s+Thu,? 22 Oct/i);
-    await shoot(page, "leave-390-dark");
-    await confirm(page);
-    await expectApprovals([9540n], MEMBER, zeroAddress);
-    await group(page, "other")
-      .locator("li")
-      .filter({ hasText: "#9540" })
-      .getByText(/Leaving Matcha Latte:\s+your votes from\s+Thu,? 22 Oct/)
-      .waitFor();
-    assert.equal(sent.length, 1);
-  });
-
-  test("leave an automation that stopped, to vote yourself", async () => {
-    const { page, sent } = await connected({ owner: ELSEWHERE }, { width: 390, height: 844 });
-    await account(page, 2439)
-      .getByText(/In USDC\s+· stopped/)
-      .waitFor();
-    await shoot(page, "stopped-390-light");
-    await only(page, "needs:stopped", 2439);
-    await group(page, "needs:stopped").getByRole("button", { name: "Leave automation", exact: true }).click();
-    await review(page).getByRole("heading", { name: "Leave USDC" }).waitFor();
-    await review(page).locator(".pages").getByText("Claims stop").waitFor();
-    assert.deepEqual(await review(page).locator(".says").allTextContents(), [
-      "Account #2439 leaves the USDC automation.",
-    ]);
-    assert.deepEqual(await review(page).locator(".conduit-name").allTextContents(), ["The USDC automation"]);
-    assert.equal(await review(page).locator(".conduit").innerText(), USDC);
-    assert.equal(await review(page).locator(".approve").innerText(), "false");
-    assert.equal(
-      await review(page).locator(".count").textContent(),
-      "Transaction · Leave the USDC automation",
-      "one transaction has no count",
-    );
-    await shoot(page, "release-390-light");
-    // Once left, the review says its votes are the owner's from the next epoch, to vote with on Hydrex.
-    await review(page).getByRole("button", { name: "Sign transaction" }).click();
-    await review(page).getByText("its votes are yours", { exact: false }).waitFor({ timeout: 120_000 });
-    await review(page)
-      .getByRole("link", { name: /Vote on Hydrex/ })
-      .waitFor();
+  test("on an account's own page, its buttons act at once, and it leaves a stopped automation", async () => {
+    const { page, violations } = await connected({ owner: ELSEWHERE }, { url: `${SITE}/#hydrex/2439` });
+    const account = h.view(page, "account");
+    await account.getByRole("button", { name: "Join Matcha Latte" }).click();
+    await heading(review(page), "Before you join", 2).waitFor();
+    await review(page).getByRole("button", { name: "Back" }).click();
+    await account.getByRole("button", { name: "Leave automation" }).click();
+    await heading(review(page), "Leave USDC", 2).waitFor();
+    assert.deepEqual(await says(page), ["Account #2439 leaves the USDC automation."]);
+    await h.confirm(page);
     await review(page).getByRole("button", { name: "Close" }).click();
-    assert.equal(sent.length, 1);
-    await expectApprovals([2439n], ELSEWHERE, zeroAddress);
-    await group(page, "other")
-      .getByText(/Left USDC:\s+your votes from\s+Thu,? 22 Oct/)
-      .waitFor();
-    await account(page, 2435)
-      .getByText(/In Hydrex Lock Maxi\s+· stopped/)
-      .waitFor();
+    await account.getByText(/Left USDC: your votes from Thu,? 22 Oct/).waitFor();
+    assert.deepEqual(violations, []);
   });
 
-  test("the wrong network, a refusal in the wallet, and a transaction that fails", async () => {
+  test("the wrong network, a refusal, a failing transaction, Back while the wallet asks, and closing between two", async () => {
     const { page, wallet, sent } = await connected({ owner: NEWCOMER, chainId: 1, decline: true });
-    await hydrex(page).getByText("Wrong network.").waitFor();
-    await account(page, 141).getByText(UNVOTED).waitFor();
-    await only(page, "needs:unvoted", 141);
-    const joinOwn = group(page, "needs:unvoted").getByRole("button", { name: "Join Matcha Latte", exact: true });
-    await joinOwn.click();
-    await toWallet(page);
+    await page.getByText("Wrong network.").waitFor();
+    await h.only(page, "needs:unvoted", 141);
+    const join = group(page, "needs:unvoted").getByRole("button", { name: "Join Matcha Latte" });
+    await join.click();
+    await h.toCalls(page);
     await review(page).getByRole("button", { name: "Switch to Base" }).click();
     await review(page).getByRole("button", { name: "Sign transaction" }).click();
     await review(page).getByText("You said no in your wallet.").waitFor();
-    assert.equal(sent.length, 1);
-    await expectApprovals([141n], NEWCOMER, zeroAddress);
     await page.keyboard.press("Escape");
-    assert.equal(await review(page).isVisible(), false);
-    assert.equal(await hydrex(page).getByText("Wrong network.").isVisible(), false);
-
-    const data = encodeFunctionData({ abi, functionName: "transferFrom", args: [NEWCOMER, RECIPIENT, 141n] });
-    await send({ from: NEWCOMER, to: VOTING_ESCROW, data });
+    assert.equal(await page.getByText("Wrong network.").isVisible(), false);
     wallet.decline = false;
-    await joinOwn.click();
-    await toWallet(page);
+    wallet.failing = 1;
+    await join.click();
+    await h.toCalls(page);
     await review(page).getByRole("button", { name: "Sign transaction" }).click();
     await review(page).getByText("A transaction failed on Base.").waitFor();
-    assert.equal(await review(page).locator(".confirm").isVisible(), false);
     assert.equal(sent.length, 2);
-  });
-
-  test("Back while the wallet asks closes the review, which still follows what it sent", async () => {
     let answer = () => {};
-    const sending = new Promise<void>((resolve) => (answer = resolve));
-    const { page, sent } = await connected({ owner: NEWCOMER, sending });
-    await account(page, 141).getByText(UNVOTED).waitFor();
-    await only(page, "needs:unvoted", 141);
-    await group(page, "needs:unvoted").getByRole("button", { name: "Join Matcha Latte", exact: true }).click();
-    await toWallet(page);
-    await review(page).getByRole("button", { name: "Sign transaction" }).click();
-    await review(page).getByText("Waiting for your wallet…").waitFor();
-    await review(page).getByRole("button", { name: "Back" }).click();
-    assert.equal(await review(page).isVisible(), false);
+    const other = await connected({ owner: ELSEWHERE, sending: new Promise<void>((resolve) => (answer = resolve)) });
+    await h.pick(other.page, 2435, 2439);
+    await group(other.page, "needs:stopped").getByRole("button", { name: "Join Matcha Latte" }).click();
+    await h.toCalls(other.page);
+    await review(other.page).getByRole("button", { name: "Sign transaction 1 of 2" }).click();
+    await review(other.page).getByText("Waiting for your wallet…").waitFor();
+    await review(other.page).getByRole("button", { name: "Back" }).click();
+    assert.equal(await review(other.page).isVisible(), false);
     answer();
-    await account(page, 141).getByText("Joining Matcha Latte:").waitFor();
-    assert.equal(sent.length, 1);
-    await expectApprovals([141n], CONDUIT, CONDUIT);
-  });
-
-  test("when the automation cannot be read, leaving does not wait, Try again keeps the view, and the page reads again", async () => {
-    const tonnes = toFunctionSelector("function totalTonnesRetired()").slice(2);
-    const opened = await open(
-      { owner: MEMBER },
-      { width: 390, height: 844, url: `${SITE}/#app`, flowing: true, refuse: (body) => body.includes(tonnes) },
-    );
-    const { page } = opened;
-    await page.locator("#error").getByText("Reading Base failed.").waitFor();
-    await shoot(page, "error-390-light");
-    await page.getByRole("button", { name: "Test Wallet" }).click();
-    await toHydrex(page);
-    await group(page, "in:matcha-latte").getByText("#9540").waitFor();
-    await group(page, "in:matcha-latte").getByRole("button", { name: "Leave" }).click();
-    await review(page).getByRole("heading", { name: "Leave Matcha Latte" }).waitFor();
-    await page.keyboard.press("Escape");
-    // Without the block's time, the epoch's end is only Thursday's, with no countdown.
-    assert.equal(await page.locator("#epoch .countdown-line").isVisible(), false);
-    await page.getByRole("button", { name: "Try again" }).click();
-    await connectButton(page).waitFor();
-    await hydrexTitle(page).waitFor();
-    assert.equal(new URL(page.url()).hash, "#hydrex");
-    await page.locator("#error").getByText("Reading Base failed.").waitFor();
-    // Once Base answers, the page reads it again by itself, and no longer says that reading it failed.
-    await connectButton(page).click();
-    await group(page, "in:matcha-latte").getByText("#9540").waitFor();
-    opened.rpc.refuse = undefined;
-    await page.clock.runFor(30_000);
-    await page
-      .locator("#epoch .countdown")
-      .getByText(/^in \d/)
+    await row(other.page, 2439)
+      .getByText(/Joining Matcha Latte/)
       .waitFor();
-    await page.locator("#error").waitFor({ state: "hidden" });
+    await expectApprovals([2435n], LOCK_MAXI, LOCK_MAXI);
+    const stuck = await connected({ owner: NEWCOMER, chainId: 1, switches: false });
+    await stuck.page.getByRole("button", { name: "Switch to Base" }).first().click();
+    await stuck.page.getByText("Switch to Base in your wallet.").first().waitFor();
   });
 
-  test("a wallet that cannot switch to Base says so", async () => {
-    const { page } = await connected({ owner: NEWCOMER, chainId: 1, switches: false });
-    await hydrex(page).locator(".wrong-chain").getByRole("button", { name: "Switch to Base" }).click();
-    await hydrex(page).getByText("Switch in your wallet.").waitFor();
+  test("inside Safe{Wallet}, a Safe proposes leaving with two accounts as one Safe transaction", async () => {
+    const { page, origins, violations } = await h.open(false, { url: `${SAFE_ORIGIN}/` });
+    const frame = page.frameLocator("iframe");
+    await frame.getByRole("banner").getByText(short(LEAVER)).waitFor();
+    await heading(frame, "Your wallet").waitFor();
+    await frame.getByRole("link", { name: "Hydrex", exact: true }).click();
+    await frame.getByRole("checkbox", { name: "Pick Hydrex account #53350" }).check();
+    await frame.getByRole("checkbox", { name: "Pick Hydrex account #82206" }).check();
+    await frame.locator('[data-group="in:matcha-latte"]').getByRole("button", { name: "Leave", exact: true }).click();
+    const dialog = frame.locator("#review");
+    await dialog.getByText(/^One Safe transaction, 2 calls$/).waitFor();
+    const slip = dialog.locator("[data-list=slip] > li").first();
+    assert.equal(await slip.locator("[data-text=count]").textContent(), "Safe · Call 1 of 2 · Leave Matcha Latte");
+    assert.equal(await h.field(slip, "Data", "description").innerText(), "100 bytes");
+    await dialog.getByRole("button", { name: "Propose in Safe{Wallet}" }).click();
+    await dialog.getByText("Proposed. Sign it in Safe{Wallet}.").waitFor();
+    await dialog.getByRole("link", { name: "https://metadex.cafe/#hydrex/matcha-latte/check" }).waitFor();
+    type Received = { method: string; params: { txs: { to: string; data: string; value: string }[] } };
+    const received = await page.evaluate(() => (window as unknown as { received: Received[] }).received);
+    const leave = (id: bigint) => ({
+      to: VOTING_ESCROW,
+      data: encodeFunctionData({ abi: h.abi, functionName: "setConduitApproval", args: [CONDUIT, id, false] }),
+      value: "0",
+    });
+    assert.deepEqual(received.find(({ method }) => method === "sendTransactions")?.params.txs, [
+      leave(53350n),
+      leave(82206n),
+    ]);
+    assert.deepEqual(violations, []);
+    for (const origin of origins) assert.ok([SITE, SAFE_ORIGIN, ...h.RPC_ORIGINS].includes(origin), origin);
   });
 });
+import { SAFE_ORIGIN } from "../src/wallet.ts";

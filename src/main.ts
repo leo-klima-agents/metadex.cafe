@@ -1,109 +1,124 @@
-import { showTopics, type Topic } from "./chain.ts";
-import { AUTOMATIONS } from "./config.ts";
-import { clone, groupAllHex, pendAll } from "./dom.ts";
-import { setCurrency, type Currency } from "./format.ts";
-import type { Route } from "./routes.ts";
-import { earningsDue, onEarnings } from "./last-epoch.ts";
-import { initAccounts, showAccounts } from "./views/accounts.ts";
-import { initApp, showApp } from "./views/app.ts";
-import {
-  doubleEspresso,
-  checks,
-  matchaLatte,
-  loadAllEarnings,
-  readAverage,
-  showDoubleEspresso,
-  showCountdown,
-  showRecords,
-} from "./views/automations.ts";
-import { initConnection, loadAccounts } from "./views/connection.ts";
-import { failed, hooks, session, views } from "./views/page.ts";
-import { appPayouts } from "./views/payouts.ts";
-import { catchUpPosition, initPosition, showPosition, showShares } from "./views/position.ts";
-import { onRoute } from "./views/router.ts";
-import { initSwap } from "./views/swap.ts";
+import { failures, retry } from "./cache.ts";
+import { CHAIN_ID, currencyOf } from "./config.ts";
+import { preload } from "./data.ts";
+import { setCurrency, short } from "./format.ts";
+import { parse, type View } from "./routes.ts";
+import { showTags, type Tag } from "./rpc.ts";
+import { actions, onRender, render, state } from "./state.ts";
+import { $, fill, toggle } from "./ui.ts";
+import { drawApp } from "./views/app.ts";
+import { drawAccount } from "./views/account.ts";
+import { drawHydrex, drawProduct } from "./views/hydrex.ts";
+import { drawReview } from "./views/review.ts";
+import { drawSwap, preloadSwap } from "./views/swap.ts";
+import { drawWallets, startWallets } from "./views/wallet.ts";
 
-// The page starts here: it marks pending what it will read, sets up each view, then reads Base, and again every half a
-// minute whatever is due. Each view is in src/views/.
-
-// Every page reads the same: what each view shows, as soon as what it needs is read. Only the order differs: the reads
-// of what the page shown draws go first, and the others as slots free, so that each page opens with what the others
-// show read, or under way. Home and About draw none.
-const TOPICS: Record<Route["view"], Topic[]> = {
+// The page is one HTML file of views, and the hash picks the one shown. A view's tags name its reads, which go before
+// other views' reads.
+const TAGS: Record<View, Tag[]> = {
   home: [],
   about: [],
-  // The payouts need what the automations earned; so do the swap's rows, which list Hydrex's rewards.
   app: ["earnings", "payouts", "swap"],
   hydrex: ["earnings", "average", "shares", "payouts"],
-  // Each automation's page lists the wallet's accounts in it, with their late payouts and Double Espresso's claims.
   product: ["earnings", "average", "shares", "payouts"],
-  position: ["earnings", "shares", "payouts"],
+  account: ["earnings", "shares", "payouts"],
   swap: ["earnings", "swap"],
 };
-onRoute((route) => showTopics(TOPICS[route.view]));
+const DRAW: Partial<Record<View, () => void>> = {
+  app: drawApp,
+  hydrex: drawHydrex,
+  product: drawProduct,
+  account: drawAccount,
+  swap: drawSwap,
+};
+const views = [...document.querySelectorAll<HTMLElement>("main > [data-view]")];
+const popups = [...document.querySelectorAll<HTMLElement>("[popover]")];
 
-// Where a list or a page is read, cards of bars where its items will show, three, or as many as the slot says, or the
-// tiles of a page's key figures.
-for (const slot of document.querySelectorAll<HTMLElement>(".loading-slot")) {
-  const loading = clone("loading");
-  const cards = loading.querySelector(".skeleton")!;
-  cards.classList.toggle("tiles", "tiles" in slot.dataset);
-  cards.append(...Array.from({ length: Number(slot.dataset.cards ?? 3) }, () => document.createElement("li")));
-  slot.append(loading);
+function show(first: boolean): void {
+  const before = state.route;
+  const route = (state.route = parse(location.hash));
+  const moved =
+    route.view !== before.view ||
+    (route.view === "account" && before.view === "account" && route.id !== before.id) ||
+    first;
+  const view = views.find(({ dataset }) => dataset.view === route.view)!;
+  for (const each of views) each.hidden = each !== view;
+  toggle("view", true, route.view);
+  toggle("kind", route.view === "product", route.view === "product" ? route.kind : "");
+  document.title = route.view === "account" ? `Hydrex account #${route.id} · metaDEX Café` : view.dataset.title!;
+  const chip = $("[data-text=chip]");
+  if (route.view === "app") chip.setAttribute("aria-current", "page");
+  else chip.removeAttribute("aria-current");
+  showTags(TAGS[route.view]);
+  for (const popup of popups) if (popup.matches(":popover-open")) popup.hidePopover();
+  render();
+  const section =
+    "section" in route && route.section ? view.querySelector<HTMLElement>(`[data-section="${route.section}"]`) : null;
+  const popup = section?.closest<HTMLElement>("[popover]");
+  if (popup && section) {
+    popup.showPopover();
+    section.scrollIntoView();
+    $("h2", popup).focus({ preventScroll: true });
+  } else if (moved) {
+    scrollTo(0, 0);
+    if (!first) $("h1", view).focus({ preventScroll: true });
+  }
 }
-pendAll(document);
-groupAllHex(document);
-// The footer's currency, for the visit: every figure in money is drawn again in it.
-const currencySelect = document.querySelector<HTMLSelectElement>("footer .currency")!;
-currencySelect.addEventListener("change", () => setCurrency(currencySelect.value as Currency));
-// A reload keeps the hash, and so the view.
-document.querySelector("#error .again")!.addEventListener("click", () => location.reload());
+// When a popup closes, its section leaves the address, so that the same address opens it again.
+for (const popup of popups) {
+  popup.querySelector("h2")?.setAttribute("tabindex", "-1");
+  popup.addEventListener("toggle", () => {
+    if (popup.matches(":popover-open") || !("section" in state.route) || !state.route.section) return;
+    if (!popup.matches(`[data-section="${state.route.section}"], :has([data-section="${state.route.section}"])`))
+      return;
+    history.replaceState(null, "", location.hash.replace(/\/[^/]*$/, ""));
+    state.route = parse(location.hash);
+  });
+}
 
-// Each view sets how it is drawn again as it starts, before anything is read.
-views.catchUp = catchUp;
-initSwap({ connection: () => session.connection, hooks });
-initAccounts();
-initPosition();
-initApp();
-initConnection();
+function dispatch(el: HTMLElement | null, event: Event): void {
+  const action = el?.dataset.action;
+  if (el && action) actions[action]?.(el, event);
+}
+document.addEventListener("click", (event) =>
+  dispatch((event.target as Element).closest<HTMLElement>("button[data-action], a[data-action]"), event),
+);
+document.addEventListener("change", (event) => dispatch(event.target as HTMLElement, event));
+document.addEventListener("submit", (event) => {
+  event.preventDefault();
+  dispatch(event.target as HTMLElement, event);
+});
+actions.skip = (_, event) => {
+  event.preventDefault();
+  $("main > [data-view]:not([hidden]) h1").focus();
+};
+actions.retry = () => retry();
+actions.currency = (el) => {
+  const currency = currencyOf((el as HTMLSelectElement).value);
+  if (currency) setCurrency(currency);
+  render();
+};
 
-// Each read of figures, whoever started it, shows on the menu, on the automations' pages and in the accounts' shares:
-// what an account in that automation earned, pending until then, or nothing once no epoch can be read.
-onEarnings((_, outcome) => {
-  void showShares();
-  readAverage();
-  showDoubleEspresso();
-  showRecords();
-  showApp();
-  if (outcome === "same") return;
-  showAccounts(true);
-  showPosition();
+onRender(() => {
+  const connection = state.connection;
+  toggle("wallet", !!connection);
+  toggle("wrong-chain", !!connection && connection.chainId !== CHAIN_ID);
+  toggle("safe", !!connection?.wallet.propose);
+  fill(document.body, { chip: connection ? short(connection.address) : "", failed: failures() > 0 || null });
+  $("[data-text=chip]").setAttribute(
+    "aria-label",
+    connection ? `Your wallet, connected as ${short(connection.address)}` : "",
+  );
+  drawWallets();
+  DRAW[state.route.view]?.();
+  drawReview();
+  preload();
+  preloadSwap();
 });
 
-// Reads again whatever is missing or from an epoch that has ended, so that the page moves on by itself.
-function catchUp(): void {
-  if (session.accounts?.due()) void loadAccounts(true);
-  // The wallet's own account moves on with the wallet's accounts.
-  catchUpPosition();
-  matchaLatte.check();
-  checks.check();
-  if (earningsDue(AUTOMATIONS)) loadAllEarnings();
-  readAverage();
-  // Reads what the accounts' votes earned that failed before, once due again.
-  void showShares();
-  doubleEspresso.check();
-  appPayouts.check();
-}
-
-function tick(): void {
-  catchUp();
-  showApp();
-  showCountdown();
-}
-
-matchaLatte.read().catch(failed);
-checks.read().catch(failed);
-doubleEspresso.check();
-loadAllEarnings();
-readAverage();
-setInterval(tick, 30_000);
+// Safe{Wallet} shows the page in a frame, where it starts on the App.
+if (window.parent !== window && !location.hash) location.replace("#app");
+addEventListener("hashchange", () => show(false));
+show(true);
+startWallets();
+setInterval(render, 30_000);
