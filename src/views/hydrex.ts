@@ -33,7 +33,7 @@ import { overdue, underWay } from "../payouts.ts";
 import { gasWords } from "../prices.ts";
 import { perThousand, perThousandOf, valueOf, versus, type Earnings } from "../rewards.ts";
 import { hrefOf } from "../routes.ts";
-import { now, same } from "../rpc.ts";
+import { now } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import { $, busy, enable, fill, frag, link, list, shown, stateOf, status, type Value } from "../ui.ts";
 import { openClaim } from "./claim.ts";
@@ -109,9 +109,9 @@ const record = (automation: Automation): Value =>
       : "No record yet",
   );
 // How some votes compare with Hydrex's average: hidden when there is nothing to compare, or it could not be read.
-const compared = (mine: Got<Earnings | "none">): Value => {
+const compared = (mine: Got<Earnings>): Value => {
   const got = then(mine, (earnings) =>
-    earnings === "none" || !earnings.votes || !earnings.pools.length
+    !earnings.votes || !earnings.pools.length
       ? { value: null }
       : then(data.average(), (all) => ({ value: versus(earnings, all) ?? null })),
   );
@@ -281,23 +281,17 @@ function epochWords(): Value {
   const end = found.epochStart + WEEK;
   return `A change made now moves the votes from ${utc(end)}${now() < end ? `, in ${until(end - now())}` : ""}.`;
 }
-// What the wallet's own votes earned last epoch per 1,000 votes, through the accounts it voted with itself.
-function ownEarnings(holdings: Holdings): Got<Earnings | "none"> {
-  return then(data.stakes(holdings), (stakes): Got<Earnings | "none"> => {
-    if (![...stakes.values()].some(({ delegate }) => same(delegate, holdings.owner))) return { value: "none" };
-    return data.voter(holdings.owner);
-  });
-}
+// What the wallet's own votes earned last epoch per 1,000 votes: none when its accounts vote through others.
 function ownWords(holdings: Holdings): Value {
-  return shown(ownEarnings(holdings), (own) =>
-    own === "none" || !own.votes
+  return shown(data.voter(holdings.owner), (own) =>
+    !own.votes
       ? "No votes of your own"
       : !own.pools.length
         ? "Didn't vote"
         : `${money(perThousandOf(own))} / 1k votes, last epoch`,
   );
 }
-const ownVersus = (holdings: Holdings): Value => compared(ownEarnings(holdings));
+const ownVersus = (holdings: Holdings): Value => compared(data.voter(holdings.owner));
 
 export function drawProduct(): void {
   const automation = byKind(state.route.view === "product" ? state.route.kind : "")!;
