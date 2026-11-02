@@ -45,7 +45,7 @@ function show(first: boolean): void {
   toggle("view", true, route.view);
   toggle("kind", route.view === "product", route.view === "product" ? route.kind : "");
   document.title = route.view === "account" ? `Hydrex account #${route.id} · metaDEX Café` : view.dataset.title!;
-  const chip = $("header [data-text=chip]");
+  const chip = $("[data-text=chip]");
   if (route.view === "app") chip.setAttribute("aria-current", "page");
   else chip.removeAttribute("aria-current");
   showTags(TAGS[route.view]);
@@ -105,7 +105,7 @@ onRender(() => {
   toggle("wrong-chain", !!connection && connection.chainId !== CHAIN_ID);
   toggle("safe", !!connection?.wallet.propose);
   fill(document.body, { chip: connection ? short(connection.address) : "", failed: failures() > 0 || null });
-  $("header [data-text=chip]").setAttribute(
+  $("[data-text=chip]").setAttribute(
     "aria-label",
     connection ? `Your wallet, connected as ${short(connection.address)}` : "",
   );

@@ -18,36 +18,34 @@
   </head>
   <body>
     <a class="skip" href="#main" data-action="skip">Skip to content</a>
-    <header class="spread">
+    <header class="spread site-header">
       <a class="brand" href="#"><img class="logo" src="icon.svg" alt="" width="28" height="28" /> metaDEX Café</a>
       <button type="button" data-if="no-wallet" data-action="connect">Connect a wallet</button>
       <a class="button secondary chip" data-if="wallet" href="#app" data-text="chip"></a>
-      <dialog popover id="connect" aria-labelledby="connect-title">
-        <div class="spread bar">
-          <h2 id="connect-title">Connect a wallet</h2>
-          <button type="button" class="close" popovertarget="connect" popovertargetaction="hide" aria-label="Close">
-            ×
-          </button>
-        </div>
-        <p class="row" data-list="wallet"></p>
-        <p class="small" role="status" data-text="connecting"></p>
-        <div class="notice stack tight" data-text="no-wallet" hidden>
-          <p>No wallet found. Open this page in:</p>
-          <p class="row">
-            <a
-              class="button secondary compact"
-              href="https://go.cb-w.com/dapp?cb_url=https%3A%2F%2Fmetadex.cafe%2F%23app"
-              >Coinbase Wallet</a
-            >
-            <a class="button secondary compact" href="https://link.metamask.io/dapp/metadex.cafe/#app">MetaMask</a>
-          </p>
-        </div>
-      </dialog>
     </header>
+    <dialog popover id="connect" aria-labelledby="connect-title">
+      <header class="spread bar">
+        <h2 id="connect-title">Connect a wallet</h2>
+        <button type="button" class="close" popovertarget="connect" popovertargetaction="hide" aria-label="Close">
+          ×
+        </button>
+      </header>
+      <p class="row" data-list="wallet"></p>
+      <p class="small" role="status" data-text="connecting"></p>
+      <div class="notice stack tight" data-text="no-wallet" hidden>
+        <p>No wallet found. Open this page in:</p>
+        <p class="row">
+          <a class="button secondary compact" href="https://go.cb-w.com/dapp?cb_url=https%3A%2F%2Fmetadex.cafe%2F%23app"
+            >Coinbase Wallet</a
+          >
+          <a class="button secondary compact" href="https://link.metamask.io/dapp/metadex.cafe/#app">MetaMask</a>
+        </p>
+      </div>
+    </dialog>
 
     <main id="main" class="stack loose">
       <noscript><p class="notice">This page needs JavaScript.</p></noscript>
-      <div class="visually-hidden" role="status" id="status"></div>
+      <p class="visually-hidden" role="status" id="status"></p>
       <p class="notice spread" data-text="failed" hidden>
         Some figures could not be read.
         <button type="button" class="secondary compact" data-action="retry">Try again</button>
@@ -66,10 +64,10 @@
       </section>
 
       <section data-view="app" data-title="Your wallet · metaDEX Café" class="stack" hidden>
-        <div class="spread">
+        <header class="spread">
           <h1 tabindex="-1">Your wallet</h1>
           <button type="button" class="secondary compact" popovertarget="allows" data-if="wallet">Approvals</button>
-        </div>
+        </header>
         <section
           class="stack part"
           aria-labelledby="needs-title"
@@ -82,9 +80,9 @@
             <li class="ghost"></li>
           </ul>
           <p class="small" data-when="empty failed">Nothing right now.</p>
-          <ul class="plain stack" data-when="ready" data-list="need"></ul>
+          <ul class="stack" data-when="ready" data-list="need"></ul>
         </section>
-        <ul class="plain stack" aria-label="Products">
+        <ul class="stack" aria-label="Products">
           <li class="card link">
             <h2 class="title"><a class="cover" href="#swap">Swap</a></h2>
             <p class="small quiet">Sell many tokens for one</p>
@@ -102,33 +100,33 @@
         </ul>
         <p data-if="no-wallet"><button type="button" data-action="connect">Connect a wallet</button></p>
         <dialog popover id="allows" data-section="allows" aria-labelledby="allows-title">
-          <div class="spread bar">
+          <header class="spread bar">
             <h2 id="allows-title">Approvals</h2>
             <button type="button" class="close" popovertarget="allows" popovertargetaction="hide" aria-label="Close">
               ×
             </button>
-          </div>
+          </header>
           <h3 class="label">Automations</h3>
-          <ul class="plain stack" data-list="approval" data-empty="None"></ul>
+          <ul class="stack" data-list="approval" data-empty="None"></ul>
           <h3 class="label">Swappers</h3>
-          <ul class="plain stack" data-list="allowance" data-empty="None"></ul>
+          <ul class="stack" data-list="allowance" data-empty="None"></ul>
         </dialog>
       </section>
 
       <section data-view="hydrex" data-title="Hydrex · metaDEX Café" class="stack" hidden>
-        <nav class="trail" aria-label="Back"><a class="back" href="#app">Your wallet</a></nav>
+        <nav aria-label="Back"><a class="back" href="#app">Your wallet</a></nav>
         <h1 tabindex="-1">Hydrex</h1>
         <div class="notice stack tight" data-text="checks"></div>
         <p class="notice" data-text="underway"></p>
         <section class="stack part" aria-labelledby="menu-title">
           <h2 id="menu-title">Automations</h2>
           <p class="small quiet">They vote with your Hydrex accounts each week. Your accounts stay in your wallet.</p>
-          <ul class="plain table">
+          <ul class="table">
             <li class="link entry" data-kind="matcha-latte">
-              <div class="spread">
+              <header class="spread">
                 <h3><a class="cover" href="#hydrex/matcha-latte">Matcha Latte</a></h3>
                 <p class="small" data-text="state"></p>
-              </div>
+              </header>
               <p class="small" data-text="yours"></p>
               <dl class="facts">
                 <div>
@@ -147,10 +145,10 @@
               </dl>
             </li>
             <li class="link entry" data-kind="double-espresso">
-              <div class="spread">
+              <header class="spread">
                 <h3><a class="cover" href="#hydrex/double-espresso">Double Espresso</a></h3>
                 <p class="small" data-text="state"></p>
-              </div>
+              </header>
               <p class="small" data-text="yours"></p>
               <dl class="facts">
                 <div>
@@ -177,7 +175,7 @@
             <div class="tile">
               <dt class="label">Hydrex average</dt>
               <dd class="fact">
-                <span data-text="average"></span> <span class="small aside">/ 1k votes, last epoch</span>
+                <span data-text="average"></span> <small class="aside">/ 1k votes, last epoch</small>
               </dd>
             </div>
             <div class="tile" data-if="wallet">
@@ -205,15 +203,15 @@
             <a href="https://www.hydrex.fi/accounts" target="_blank" rel="noopener">Lock HYDX on Hydrex</a>
           </p>
           <div class="stack" data-when="ready">
-            <section class="group stack" data-group="needs:unvoted" aria-labelledby="g-unvoted">
-              <div class="spread">
+            <section class="stack" data-group="needs:unvoted" aria-labelledby="g-unvoted">
+              <header class="spread">
                 <h3 id="g-unvoted">Didn't vote last epoch <span class="count" data-text="count"></span></h3>
                 <span class="row small"
                   ><span data-text="picked"></span
                   ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
                 >
-              </div>
-              <ul class="plain stack" data-list="account"></ul>
+              </header>
+              <ul class="stack" data-list="account"></ul>
               <p class="row">
                 <button type="button" data-action="join" data-arg="matcha-latte">Join Matcha Latte</button>
                 <button type="button" data-action="join" data-arg="double-espresso">Join Double Espresso</button>
@@ -222,45 +220,45 @@
                 >
               </p>
             </section>
-            <section class="group stack" data-group="needs:stopped" aria-labelledby="g-stopped">
-              <div class="spread">
+            <section class="stack" data-group="needs:stopped" aria-labelledby="g-stopped">
+              <header class="spread">
                 <h3 id="g-stopped">In a stopped automation <span class="count" data-text="count"></span></h3>
                 <span class="row small"
                   ><span data-text="picked"></span
                   ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
                 >
-              </div>
-              <ul class="plain stack" data-list="account"></ul>
+              </header>
+              <ul class="stack" data-list="account"></ul>
               <p class="row">
                 <button type="button" data-action="join" data-arg="matcha-latte">Join Matcha Latte</button>
                 <button type="button" data-action="join" data-arg="double-espresso">Join Double Espresso</button>
                 <button type="button" class="secondary" data-action="self">Leave automation</button>
               </p>
             </section>
-            <section class="group stack" data-group="needs:partly" aria-labelledby="g-partly">
-              <div class="spread">
+            <section class="stack" data-group="needs:partly" aria-labelledby="g-partly">
+              <header class="spread">
                 <h3 id="g-partly">Partly in an automation <span class="count" data-text="count"></span></h3>
                 <span class="row small"
                   ><span data-text="picked"></span
                   ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
                 >
-              </div>
-              <ul class="plain stack" data-list="account"></ul>
+              </header>
+              <ul class="stack" data-list="account"></ul>
               <p class="row">
                 <button type="button" data-action="join" data-arg="matcha-latte">Join Matcha Latte</button>
                 <button type="button" data-action="join" data-arg="double-espresso">Join Double Espresso</button>
                 <button type="button" class="secondary" data-action="self">Leave</button>
               </p>
             </section>
-            <section class="group stack" data-group="in:matcha-latte" aria-labelledby="g-matcha-latte">
-              <div class="spread">
+            <section class="stack" data-group="in:matcha-latte" aria-labelledby="g-matcha-latte">
+              <header class="spread">
                 <h3 id="g-matcha-latte">In Matcha Latte <span class="count" data-text="count"></span></h3>
                 <span class="row small"
                   ><span data-text="picked"></span
                   ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
                 >
-              </div>
-              <ul class="plain stack" data-list="account"></ul>
+              </header>
+              <ul class="stack" data-list="account"></ul>
               <p class="row">
                 <button type="button" class="secondary" data-action="join" data-arg="double-espresso">
                   Move to Double Espresso
@@ -268,15 +266,15 @@
                 <button type="button" class="secondary" data-action="leave" data-arg="matcha-latte">Leave</button>
               </p>
             </section>
-            <section class="group stack" data-group="in:double-espresso" aria-labelledby="g-double-espresso">
-              <div class="spread">
+            <section class="stack" data-group="in:double-espresso" aria-labelledby="g-double-espresso">
+              <header class="spread">
                 <h3 id="g-double-espresso">In Double Espresso <span class="count" data-text="count"></span></h3>
                 <span class="row small"
                   ><span data-text="picked"></span
                   ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
                 >
-              </div>
-              <ul class="plain stack" data-list="account"></ul>
+              </header>
+              <ul class="stack" data-list="account"></ul>
               <p class="row">
                 <button type="button" data-action="claim">Claim</button>
                 <button type="button" class="secondary" data-action="join" data-arg="matcha-latte">
@@ -285,35 +283,35 @@
                 <button type="button" class="secondary" data-action="leave" data-arg="double-espresso">Leave</button>
               </p>
             </section>
-            <section class="group stack" data-group="other" aria-labelledby="g-other">
-              <div class="spread">
+            <section class="stack" data-group="other" aria-labelledby="g-other">
+              <header class="spread">
                 <h3 id="g-other">Other Hydrex accounts <span class="count" data-text="count"></span></h3>
                 <span class="row small"
                   ><span data-text="picked"></span
                   ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
                 >
-              </div>
-              <ul class="plain stack" data-list="account"></ul>
+              </header>
+              <ul class="stack" data-list="account"></ul>
               <p class="row">
                 <button type="button" data-action="join" data-arg="matcha-latte">Join Matcha Latte</button>
                 <button type="button" data-action="join" data-arg="double-espresso">Join Double Espresso</button>
                 <button type="button" class="secondary" data-action="self">Leave</button>
               </p>
             </section>
-            <details class="group" data-group="closed">
+            <details data-group="closed">
               <summary class="small" data-text="count"></summary>
-              <ul class="plain stack below" data-list="account"></ul>
+              <ul class="stack below" data-list="account"></ul>
             </details>
           </div>
         </section>
       </section>
 
       <section data-view="product" data-title="Hydrex · metaDEX Café" class="stack" hidden>
-        <nav class="trail" aria-label="Back"><a class="back" href="#hydrex">Hydrex</a></nav>
-        <div class="row">
+        <nav aria-label="Back"><a class="back" href="#hydrex">Hydrex</a></nav>
+        <header class="row">
           <h1 tabindex="-1" data-text="name"></h1>
           <button type="button" class="info" popovertarget="info" aria-label="Costs and contracts">i</button>
-        </div>
+        </header>
         <p class="pill small" data-text="state"></p>
         <p class="lead" data-only="matcha-latte">
           Votes with your Hydrex accounts, retires a share of their rewards as carbon credits, and pays you the rest in
@@ -371,37 +369,37 @@
           <p class="small" data-when="failed">Your Hydrex accounts could not be read.</p>
           <p class="small" data-when="empty">No Hydrex account can join.</p>
           <div class="stack" data-when="ready">
-            <section class="group stack" data-group="in" aria-labelledby="g-in">
-              <div class="spread">
+            <section class="stack" data-group="in" aria-labelledby="g-in">
+              <header class="spread">
                 <h2 id="g-in">Your Hydrex accounts</h2>
                 <span class="row small"
                   ><span data-text="picked"></span
                   ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
                 >
-              </div>
-              <ul class="plain stack" data-list="account"></ul>
+              </header>
+              <ul class="stack" data-list="account"></ul>
               <p class="row" data-only="double-espresso"><button type="button" data-action="claim">Claim</button></p>
             </section>
-            <section class="group stack" data-group="can" aria-labelledby="g-can">
-              <div class="spread">
+            <section class="stack" data-group="can" aria-labelledby="g-can">
+              <header class="spread">
                 <h2 id="g-can">Can join</h2>
                 <span class="row small"
                   ><span data-text="picked"></span
                   ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
                 >
-              </div>
-              <ul class="plain stack" data-list="account"></ul>
+              </header>
+              <ul class="stack" data-list="account"></ul>
               <p class="row"><button type="button" data-action="join" data-text="join"></button></p>
             </section>
           </div>
         </div>
         <dialog popover id="info" data-section="fees" aria-labelledby="info-title">
-          <div class="spread bar">
+          <header class="spread bar">
             <h2 id="info-title">Costs and contracts</h2>
             <button type="button" class="close" popovertarget="info" popovertargetaction="hide" aria-label="Close">
               ×
             </button>
-          </div>
+          </header>
           <p class="small" data-only="matcha-latte">
             Matcha Latte is the “Carbon Impact” automation from Hydrex. Its smart contract is named KlimaVeTokenConduit.
           </p>
@@ -464,12 +462,12 @@
           </section>
         </dialog>
         <dialog popover id="record" data-section="record" aria-labelledby="record-title">
-          <div class="spread bar">
+          <header class="spread bar">
             <h2 id="record-title">Performance</h2>
             <button type="button" class="close" popovertarget="record" popovertargetaction="hide" aria-label="Close">
               ×
             </button>
-          </div>
+          </header>
           <div class="stack" data-text="performance" data-state="loading">
             <p class="small" data-when="loading">Loading… The first read of last epoch can take a minute.</p>
             <p class="small" data-when="failed">Last epoch could not be read.</p>
@@ -543,7 +541,7 @@
       </section>
 
       <section data-view="account" data-title="Hydrex account · metaDEX Café" class="stack" hidden>
-        <nav class="trail" aria-label="Back"><a class="back" href="#hydrex">Hydrex</a></nav>
+        <nav aria-label="Back"><a class="back" href="#hydrex">Hydrex</a></nav>
         <h1 tabindex="-1" data-text="name"></h1>
         <div class="stack" data-text="account" data-state="loading">
           <ul class="skeleton tiles" data-when="loading" aria-hidden="true">
@@ -612,11 +610,11 @@
       </section>
 
       <section data-view="swap" data-title="Swap · metaDEX Café" class="stack" hidden>
-        <nav class="trail" aria-label="Back"><a class="back" href="#app">Your wallet</a></nav>
-        <div class="row">
+        <nav aria-label="Back"><a class="back" href="#app">Your wallet</a></nav>
+        <header class="row">
           <h1 tabindex="-1">Swap</h1>
           <button type="button" class="info" popovertarget="swap-info" aria-label="Costs and contracts">i</button>
-        </div>
+        </header>
         <p class="small quiet">Swap many tokens through Aero, Hydrex, Uniswap, and Aerodrome.</p>
         <p class="notice" data-text="off"></p>
         <fieldset>
@@ -624,12 +622,12 @@
           <p class="row" data-list="output"></p>
         </fieldset>
         <section class="stack part" aria-labelledby="sell-title">
-          <div class="spread">
+          <header class="spread">
             <h2 id="sell-title">Sell <span class="count" data-text="ticked"></span></h2>
             <button type="button" class="secondary compact" popovertarget="swap-approvals" data-if="wallet">
               Approvals
             </button>
-          </div>
+          </header>
           <p data-if="no-wallet"><button type="button" data-action="connect">Connect a wallet</button></p>
           <div class="stack" data-if="wallet" data-text="tokens" data-state="loading">
             <ul class="skeleton" data-when="loading" aria-hidden="true">
@@ -639,7 +637,7 @@
             </ul>
             <p class="small" data-when="failed">Your tokens could not be read.</p>
             <p class="small" data-when="empty">No tokens to sell.</p>
-            <ul class="plain stack" data-when="ready" data-list="token"></ul>
+            <ul class="stack" data-when="ready" data-list="token"></ul>
           </div>
           <details data-if="wallet">
             <summary class="small">Add a token</summary>
@@ -700,12 +698,12 @@
           <p class="notice" role="alert" data-text="review-failed"></p>
         </section>
         <dialog popover id="swap-info" data-section="fees" aria-labelledby="swap-info-title">
-          <div class="spread bar">
+          <header class="spread bar">
             <h2 id="swap-info-title">Costs and contracts</h2>
             <button type="button" class="close" popovertarget="swap-info" popovertargetaction="hide" aria-label="Close">
               ×
             </button>
-          </div>
+          </header>
           <h3 class="label">Costs</h3>
           <dl>
             <div class="pair">
@@ -742,7 +740,7 @@
           </section>
         </dialog>
         <dialog popover id="swap-approvals" data-section="approvals" aria-labelledby="swap-approvals-title">
-          <div class="spread bar">
+          <header class="spread bar">
             <h2 id="swap-approvals-title">Approvals</h2>
             <button
               type="button"
@@ -753,8 +751,8 @@
             >
               ×
             </button>
-          </div>
-          <ul class="plain stack" data-list="allowance" data-empty="None"></ul>
+          </header>
+          <ul class="stack" data-list="allowance" data-empty="None"></ul>
           <p data-text="reset-all">
             <button type="button" class="secondary compact" data-action="reset" data-arg="all">Reset all</button>
           </p>
@@ -784,7 +782,7 @@
       </section>
     </main>
 
-    <footer class="spread">
+    <footer class="spread site-footer">
       <a href="#about">About</a>
       <label
         ><span class="visually-hidden">Currency</span>
@@ -806,17 +804,17 @@
       <section class="stack" data-text="calls" aria-labelledby="calls-title">
         <h3 id="calls-title" data-text="calls-title"></h3>
         <p class="small" data-text="how"></p>
-        <ol class="plain stack" data-list="slip"></ol>
+        <ol class="stack" data-list="slip"></ol>
       </section>
       <div class="stack" data-text="done"></div>
-      <div class="foot stack">
+      <footer class="foot stack">
         <p class="small" role="status" data-text="progress"></p>
         <p class="row">
           <button type="button" data-action="next">Continue</button>
           <button type="button" data-action="confirm" data-text="confirm"></button>
           <button type="button" class="secondary" data-action="back" data-text="back">Back</button>
         </p>
-      </div>
+      </footer>
     </dialog>
 
     <!-- List rows -->
@@ -876,17 +874,17 @@
     <template id="token">
       <li class="card ticks">
         <input class="tick" type="checkbox" data-action="tick" />
-        <div class="spread grow">
+        <p class="spread grow">
           <span><code data-text="symbol"></code> <span data-text="amount"></span></span>
-          <span class="tail"><span data-text="fetches"></span><span class="small quiet" data-text="worth"></span></span>
-          <span class="small quiet wide" data-text="note"></span>
+          <span class="tail"><span data-text="fetches"></span><small class="quiet" data-text="worth"></small></span>
+          <small class="quiet wide" data-text="note"></small>
           <span class="small wide" data-text="warning"></span>
-        </div>
+        </p>
       </li>
     </template>
     <template id="standing">
       <article class="stack">
-        <ul class="plain stack tight" data-list="state"></ul>
+        <ul class="stack tight" data-list="state"></ul>
         <div class="narrow" data-text="receipt"></div>
       </article>
     </template>
@@ -895,8 +893,10 @@
     </template>
     <template id="slip">
       <li class="slip">
-        <p class="masthead">metaDEX Café</p>
-        <p class="label sub" data-text="count"></p>
+        <header>
+          <p class="masthead">metaDEX Café</p>
+          <p class="label sub" data-text="count"></p>
+        </header>
         <p class="says" data-text="says"></p>
         <dl class="ruled below" data-list="field"></dl>
       </li>
@@ -904,14 +904,14 @@
     <template id="field">
       <div class="field">
         <dt class="term" data-text="label"></dt>
-        <dd><span class="description" data-text="description"></span><span data-text="value"></span></dd>
+        <dd><small class="description" data-text="description"></small><span data-text="value"></span></dd>
       </div>
     </template>
     <template id="line">
       <li>
-        <div class="spread">
+        <p class="spread">
           <span><code data-text="symbol"></code> <span data-text="amount"></span></span><span data-text="value"></span>
-        </div>
+        </p>
         <p class="end quiet" data-text="worth"></p>
         <p class="quiet" data-text="route"></p>
         <p data-text="note"></p>
@@ -974,28 +974,32 @@
     </template>
     <template id="bill">
       <article class="slip">
-        <p class="masthead">metaDEX Café</p>
-        <p class="label sub" data-text="label"></p>
-        <p class="sub" data-text="day"></p>
-        <ul class="plain ruled below" data-list="line"></ul>
+        <header>
+          <p class="masthead">metaDEX Café</p>
+          <p class="label sub" data-text="label"></p>
+          <p class="sub" data-text="day"></p>
+        </header>
+        <ul class="ruled below" data-list="line"></ul>
         <dl class="ruled below" data-list="sum"></dl>
         <dl class="total">
-          <div class="total-line">
+          <div class="line">
             <dt class="total-term" data-text="total"></dt>
             <dd class="end" data-text="total-value"></dd>
           </div>
           <dd class="total-note" data-text="total-worth"></dd>
           <dd class="total-note" data-text="total-detail"></dd>
         </dl>
-        <ul class="plain small" data-list="claim"></ul>
-        <p class="small" data-text="foot"></p>
-        <p data-text="after"></p>
+        <footer>
+          <ul class="small" data-list="claim"></ul>
+          <p class="small" data-text="foot"></p>
+          <p data-text="after"></p>
+        </footer>
       </article>
     </template>
     <template id="sum">
       <div class="line">
         <dt class="term" data-text="label"></dt>
-        <dd class="end"><span data-text="value"></span><span class="detail" data-text="detail"></span></dd>
+        <dd class="end"><span data-text="value"></span><small class="description" data-text="detail"></small></dd>
       </div>
     </template>
     <template id="claim">
@@ -1004,12 +1008,14 @@
     <template id="claim-review">
       <div class="stack">
         <article class="slip">
-          <p class="masthead">metaDEX Café</p>
-          <p class="label sub">What waits</p>
-          <ul class="plain ruled below" data-list="line"></ul>
+          <header>
+            <p class="masthead">metaDEX Café</p>
+            <p class="label sub">What waits</p>
+          </header>
+          <ul class="ruled below" data-list="line"></ul>
           <dl class="ruled below" data-list="sum"></dl>
           <dl class="total">
-            <div class="total-line">
+            <div class="line">
               <dt class="total-term">Reaches you</dt>
               <dd class="end" data-text="paid"></dd>
             </div>

@@ -41,37 +41,22 @@
   --inset: 1.25rem;
   --small: 0.875rem;
   --label: 0.8125rem;
-  --paper: #fdfcf9;
-  --card: #ffffff;
-  --ink: #251a15;
-  --quiet: #645850;
-  --line: #d9d3cc;
-  --accent: #6b3818;
-  --on-accent: #fdfcf9;
-  --tint: #f9eee4;
-  --notice: #fbe6e3;
-  --warn: #944e00;
-  --info: #234e82;
-  --danger: #ab331f;
+  /* Each colour in light, then dark. */
+  --paper: light-dark(#fdfcf9, #18120f);
+  --card: light-dark(#ffffff, #211915);
+  --ink: light-dark(#251a15, #f1eee9);
+  --quiet: light-dark(#645850, #b7b0a7);
+  --line: light-dark(#d9d3cc, #413933);
+  --accent: light-dark(#6b3818, #e7d4bf);
+  --on-accent: light-dark(#fdfcf9, #18120f);
+  --tint: light-dark(#f9eee4, #2e2118);
+  --notice: light-dark(#fbe6e3, #3a1b18);
+  --warn: light-dark(#944e00, #efb062);
+  --info: light-dark(#234e82, #85b6e9);
+  --danger: light-dark(#ab331f, #ef816b);
   color-scheme: light dark;
   font-family: var(--sans);
   line-height: 1.5;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #18120f;
-    --card: #211915;
-    --ink: #f1eee9;
-    --quiet: #b7b0a7;
-    --line: #413933;
-    --accent: #e7d4bf;
-    --on-accent: #18120f;
-    --tint: #2e2118;
-    --notice: #3a1b18;
-    --warn: #efb062;
-    --info: #85b6e9;
-    --danger: #ef816b;
-  }
 }
 
 /* What the page shows of its state: the wallet, the network, a product's kind, set on the root; and what a part shows of
@@ -91,11 +76,16 @@
   display: none !important;
 }
 
+*,
+::before,
+::after {
+  box-sizing: border-box;
+}
 body {
   display: flex;
   flex-direction: column;
   min-block-size: 100svh;
-  max-inline-size: 42rem;
+  max-inline-size: calc(42rem + 2 * var(--inset));
   margin: 0 auto;
   padding-inline: var(--inset);
   overflow-wrap: anywhere;
@@ -113,6 +103,15 @@ dd,
 fieldset,
 figure {
   margin: 0;
+}
+/* No list has bullets. */
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+small {
+  font-size: var(--small);
 }
 h1,
 h2,
@@ -170,7 +169,6 @@ legend {
 }
 /* Base styles of fields, which classes may change. */
 :where(input:not([type]), select) {
-  box-sizing: border-box;
   min-block-size: 2.25rem;
   padding: 0.25rem 0.5rem;
   border: 1px solid var(--quiet);
@@ -215,16 +213,11 @@ legend {
 .spread {
   justify-content: space-between;
 }
-.plain {
-  padding: 0;
-  list-style: none;
-}
 .small {
   font-size: var(--small);
 }
 .quiet,
-.description,
-.detail {
+.description {
   color: var(--quiet);
 }
 /* Words beside a figure, in the page's face. */
@@ -267,8 +260,7 @@ legend {
 }
 
 /* Header, footer, views */
-header,
-footer {
+.site-header {
   padding-block: var(--gap);
   border-block-end: 1px solid var(--line);
 }
@@ -294,11 +286,11 @@ footer {
 }
 main {
   flex: 1 0 auto;
-  padding-block: calc(2 * var(--gap-l)) var(--gap-l);
+  padding-block: var(--gap-l);
 }
-footer {
+.site-footer {
+  padding-block: var(--gap);
   border-block-start: 1px solid var(--line);
-  border-block-end: 0;
   color: var(--quiet);
   font-size: var(--small);
 }
@@ -317,11 +309,6 @@ footer {
 .back::before {
   content: "‹ ";
 }
-/* What follows the way back, or a lead, sits closer to it. */
-.trail,
-.lead {
-  margin-block-end: calc(var(--gap-s) - var(--gap));
-}
 .lead {
   font-size: 1.125rem;
 }
@@ -337,7 +324,6 @@ button,
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
-  box-sizing: border-box;
   min-block-size: 2.75rem;
   padding: 0.5rem 1.25rem;
   border: 1px solid var(--accent);
@@ -433,7 +419,6 @@ button:not(.secondary)[aria-busy="true"]::after {
 /* Status: a shape before the words, so that it never depends on colour alone. */
 .shape {
   display: inline-block;
-  box-sizing: border-box;
   inline-size: 0.75em;
   block-size: 0.75em;
   margin-inline-end: 0.375em;
@@ -522,9 +507,6 @@ button:not(.secondary)[aria-busy="true"]::after {
   }
 }
 @media (forced-colors: active) {
-  [data-loading] {
-    color: CanvasText;
-  }
   /* The shapes keep their fills, in the text's colour, so that each status stays apart from the others. */
   .shape {
     forced-color-adjust: none;
@@ -549,8 +531,6 @@ button:not(.secondary)[aria-busy="true"]::after {
 .skeleton {
   display: grid;
   gap: var(--gap-s);
-  padding: 0;
-  list-style: none;
 }
 .notice,
 .callout {
@@ -655,7 +635,6 @@ button:not(.secondary)[aria-busy="true"]::after {
 
 /* Popups: a panel over the page; on a phone, a sheet from the foot of the screen. */
 dialog {
-  box-sizing: border-box;
   inline-size: min(36rem, 100% - 2rem);
   max-block-size: min(44rem, 100% - 3rem);
   padding: 0 var(--inset) var(--inset);
@@ -698,15 +677,10 @@ dialog[open] {
   border-block-start: 1px solid var(--line);
   background: var(--paper);
 }
-@supports not selector(:popover-open) {
-  .info {
-    display: none;
-  }
-}
 
-/* Slips and receipts: the café's bill, in the mono face; on a page, 30rem wide inside its padding and border. */
+/* Slips and receipts: the café's bill, in the mono face; on a page, a bill's width. */
 .narrow {
-  max-inline-size: calc(30rem + 2 * var(--inset) + 2px);
+  max-inline-size: 32rem;
 }
 .slip {
   padding: var(--inset);
@@ -761,8 +735,7 @@ ul.ruled:empty {
   margin-inline-start: auto;
   text-align: end;
 }
-.description,
-.detail {
+.description {
   display: block;
   font-family: var(--sans);
   font-size: var(--label);
@@ -781,12 +754,6 @@ ul.ruled:empty {
   border-block-start: 4px double var(--ink);
   font-size: 1.125rem;
   font-weight: 600;
-}
-.total-line {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0 var(--gap);
 }
 .total-term {
   letter-spacing: 0.06em;

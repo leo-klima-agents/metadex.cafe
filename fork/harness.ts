@@ -539,7 +539,7 @@ export async function connected(wallet: Partial<WalletOptions>, options?: OpenOp
 }
 
 // The page's parts, by role and name where they have one.
-export const connectButton = (page: Page) => page.locator("header").getByRole("button", { name: "Connect a wallet" });
+export const connectButton = (page: Page) => page.getByRole("banner").getByRole("button", { name: "Connect a wallet" });
 export const view = (page: Page | FrameLocator, name: string) => page.locator(`main > [data-view="${name}"]`);
 export const group = (page: Page, key: string, where = "hydrex") => view(page, where).locator(`[data-group="${key}"]`);
 export const row = (page: Page, id: number, where = "hydrex") =>

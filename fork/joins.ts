@@ -195,7 +195,7 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
   test("inside Safe{Wallet}, a Safe proposes leaving with two accounts as one Safe transaction", async () => {
     const { page, origins, violations } = await h.open(false, { url: `${SAFE_ORIGIN}/` });
     const frame = page.frameLocator("iframe");
-    await frame.locator("header").getByText(short(LEAVER)).waitFor();
+    await frame.getByRole("banner").getByText(short(LEAVER)).waitFor();
     await heading(frame, "Your wallet").waitFor();
     await frame.getByRole("link", { name: "Hydrex", exact: true }).click();
     await frame.getByRole("checkbox", { name: "Pick Hydrex account #53350" }).check();

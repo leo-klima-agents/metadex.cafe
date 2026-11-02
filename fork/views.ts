@@ -41,10 +41,10 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
     await heading(page, "Vote, claim and swap on Base").waitFor();
     await page.goForward();
     await heading(page, "Your wallet").waitFor();
-    await page.locator("footer").getByRole("link", { name: "About" }).click();
+    await page.getByRole("contentinfo").getByRole("link", { name: "About" }).click();
     await heading(page, "About").waitFor();
     assert.equal(await page.title(), "About · metaDEX Café");
-    const footer = (await page.locator("footer").boundingBox())!;
+    const footer = (await page.getByRole("contentinfo").boundingBox())!;
     assert.equal(Math.round(footer.y + footer.height), 844, "the footer is at the foot of the screen");
     for (const unknown of ["#about/check", "#how-it-works", "#%E0%A4"]) {
       await page.goto(`${SITE}/${unknown}`);
@@ -62,11 +62,11 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
     await connectButton(page).click();
     await heading(page, "Your wallet").waitFor();
     assert.equal(new URL(page.url()).hash, "#app");
-    const chip = page.locator("header").getByRole("link", { name: `Your wallet, connected as ${short(NEWCOMER)}` });
+    const chip = page.getByRole("banner").getByRole("link", { name: `Your wallet, connected as ${short(NEWCOMER)}` });
     assert.equal(await chip.getAttribute("aria-current"), "page");
     const hydrexFirst = await open({ owner: NEWCOMER }, { url: `${SITE}/#hydrex` });
     await connectButton(hydrexFirst.page).click();
-    await hydrexFirst.page.locator("header").getByText(short(NEWCOMER)).waitFor();
+    await hydrexFirst.page.getByRole("banner").getByText(short(NEWCOMER)).waitFor();
     assert.equal(new URL(hydrexFirst.page.url()).hash, "#hydrex");
     await hydrexFirst.page.evaluate(() =>
       (window as unknown as { testWalletEmit: (e: string, v: unknown) => void }).testWalletEmit("accountsChanged", []),
