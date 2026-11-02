@@ -55,8 +55,8 @@ The build bundles `src/main.ts`, and `site/style.css` with the fonts of `site/fo
 `python3 scripts/fonts.py` makes the fonts.
 
 Classes follow [SUIT CSS](https://github.com/suitcss/suit/blob/master/doc/naming-conventions.md): `Component`,
-`Component-part`, `Component--variant` and `u-utility`, each element styled by its own classes. State is native or ARIA
-where the platform has it, and otherwise a `data-*` attribute the scripts set; the head of `site/style.css` says which.
+`Component-part`, `Component--variant` and `u-utility`. State is native or ARIA where the platform has it, and otherwise
+a `data-*` attribute the scripts set, such as `data-state`, `data-if` or `data-loading`.
 
 ## When a contract changes
 

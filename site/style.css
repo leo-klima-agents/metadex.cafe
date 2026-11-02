@@ -30,12 +30,8 @@
   src: url("fonts/young-serif-400.woff2") format("woff2");
 }
 
-/* Conventions. Names follow SUIT CSS: a component is `Name`, its parts `Name-part`, its variants `Name--variant`, and a
-   utility `u-name`; each element is styled by its own classes, so a rule never depends on where its element sits.
-   State is not a class: it is native or ARIA (`:checked`, `:disabled`, `[hidden]`, `[aria-busy]`, `[aria-current]`)
-   where the platform has it, and otherwise a `data-*` attribute the scripts set (`data-state` and `data-when`,
-   `data-if`, `data-shape`, `data-loading`). The scripts' own hooks, `data-text`, `data-list` and `data-action`, carry no
-   style. */
+/* Each element is styled by its own classes, so that no rule depends on where its element sits. `data-text`,
+   `data-list` and `data-action` are the scripts' hooks, and carry no style. */
 
 :root {
   --sans: "Atkinson Hyperlegible Next", system-ui, sans-serif;
@@ -65,8 +61,6 @@
   line-height: 1.5;
 }
 
-/* State. The page's flags on the root, `data-if` and `data-only` on what depends on them; a read's state on its
-   section, `data-when` on the parts that show in it. */
 :root:not([data-wallet]) [data-if~="wallet"],
 :root[data-wallet] [data-if~="no-wallet"],
 :root:not([data-wrong-chain]) [data-if~="wrong-chain"],
@@ -85,13 +79,12 @@
   scroll-margin-block-start: 5rem;
 }
 
-/* Elements. */
 *,
 ::before,
 ::after {
   box-sizing: border-box;
 }
-/* The page is a column of 42rem, with its gutters outside it. */
+/* With content-box, the 42rem hold the text, and the gutters sit outside them. */
 body {
   box-sizing: content-box;
   display: flex;
@@ -190,7 +183,6 @@ legend {
 legend + * {
   margin-block-start: var(--gap-s);
 }
-/* A fold's summary: quiet and small, after a chevron that turns as it opens. */
 summary {
   color: var(--quiet);
   list-style: none;
@@ -248,7 +240,7 @@ th:first-child,
 td:first-child {
   text-align: start;
 }
-/* A `<button>` is a Button by its element; a link drawn as one takes `Button`. */
+/* A `<button>` needs no class to look like one; a link drawn as a button takes `Button`. */
 button,
 .Button {
   display: inline-flex;
@@ -276,7 +268,6 @@ button:disabled {
   cursor: not-allowed;
   filter: none;
 }
-/* A button whose action is under way keeps its size and its name, with a spinner over its words. */
 [aria-busy="true"] {
   position: relative;
   color: transparent !important;
@@ -296,8 +287,8 @@ button:not(.Button--secondary)[aria-busy="true"]::after {
   border-color: var(--on-accent);
   border-inline-end-color: transparent;
 }
-/* A dialog is 36rem wide. The review, a modal dialog, keeps the browser's limit, a little less than the screen. A popup
-   has none: its insets keep it 1rem from the screen's sides, and it is at most 44rem tall, or 90% of a short screen. */
+/* The review is a modal dialog, which the browser keeps a little under the screen's size. Popups get no such limit,
+   so their insets keep them off the screen's edges. */
 dialog {
   inline-size: 36rem;
   padding: 0 var(--inset) var(--inset);
@@ -329,7 +320,6 @@ dialog[open] {
   gap: var(--gap);
 }
 
-/* Utilities. */
 .u-stack {
   display: grid;
   align-content: start;
@@ -409,7 +399,6 @@ dialog[open] {
 .u-label {
   color: var(--quiet);
 }
-/* What a value is, or the detail under it, on a line of its own. */
 .u-detail {
   display: block;
   color: var(--quiet);
@@ -423,19 +412,16 @@ dialog[open] {
   font-weight: 400;
   white-space: nowrap;
 }
-/* What an amount is worth, quieter, under it. */
 .u-worth {
   display: block;
   color: var(--quiet);
   font-size: var(--label);
   font-weight: 400;
 }
-/* Figures at the end of a line, one under the other. */
 .u-figures {
   display: grid;
   text-align: end;
 }
-/* A label holding a box, as "All": the box and its word on one line. */
 .u-withBox {
   display: inline-flex;
   align-items: center;
@@ -448,7 +434,6 @@ dialog[open] {
   padding-inline-start: 1.125em;
   text-indent: -1.125em;
 }
-/* A select inside a line of small text, as the footer's currency and the swap's slippage, is as small as it. */
 .u-smallSelect {
   min-block-size: 1.75rem;
   padding-block: 0;
@@ -467,7 +452,6 @@ dialog[open] {
   white-space: nowrap;
 }
 
-/* Components. */
 .SkipLink {
   position: absolute;
   inset-block-start: -10rem;
@@ -531,7 +515,7 @@ dialog[open] {
   content: "‹ ";
 }
 
-/* A count beside a heading is quiet and in the sans, whatever the heading: "Needs you · 2". */
+/* A count sits inside its heading, so it sets its own face and size. */
 .Count {
   color: var(--quiet);
   font-family: var(--sans);
@@ -638,7 +622,6 @@ dialog[open] {
   border-radius: 999px;
   background: var(--card);
 }
-/* A choice among pills, as the swap's output: the radio is hidden, and the chosen pill filled. */
 .Pill--choice {
   position: relative;
   display: inline-flex;
@@ -660,6 +643,7 @@ dialog[open] {
   opacity: 0.45;
   cursor: not-allowed;
 }
+/* The radio stays in the page, unseen, so that the pills still work as radios from a keyboard and to a screen reader. */
 .Pill-input {
   position: absolute;
   opacity: 0;
@@ -681,7 +665,6 @@ dialog[open] {
   user-select: none;
 }
 
-/* Boxes: a card, a skeleton's card, the menu and a tile have the same edge and background. */
 .Card,
 .Skeleton-item,
 .Facts-tile {
@@ -723,8 +706,8 @@ dialog[open] {
   font-weight: 700;
 }
 
-/* What leads somewhere is a link as large as its box, with a chevron at its end: the cover's `::after` stretches over
-   it. The box's other links and controls, such as a box to tick or a link in a status, stay above the cover. */
+/* The cover's `::after` stretches the link over its whole box; the box's other links and controls sit above it, so
+   that they can still be clicked. */
 .Linked {
   position: relative;
 }
@@ -759,7 +742,6 @@ dialog[open] {
   z-index: 1;
 }
 
-/* The automations: one box, a row each. */
 .Menu {
   overflow: hidden;
 }
@@ -782,8 +764,6 @@ dialog[open] {
   background: var(--tint);
 }
 
-/* Facts: a label above each figure. In columns, as an automation's; or as tiles, a page's key figures, a box each,
-   their labels as tall as an info button so that the figures line up, their figures larger. */
 .Facts {
   display: flex;
   flex-wrap: wrap;
@@ -808,9 +788,11 @@ dialog[open] {
   align-content: start;
   gap: 0.125rem;
 }
+/* A tile sets its figure's size; its labels and notes set their own. */
 .Facts-tile {
   font-size: 1.125rem;
 }
+/* As tall as an info button, so that the figures of tiles with one and without line up. */
 .Facts-tileLabel {
   display: flex;
   align-items: center;
@@ -845,13 +827,12 @@ dialog[open] {
   border-block-end: 1px solid var(--line);
 }
 
-/* A card with a box to tick: ticked, it takes the accent's edge and the tint. The box's target reaches the card's
-   edge; a whole card ticks a token. */
 .Ticks {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
 }
+/* A group of one hides its box but leaves it ticked, and its card isn't picked. */
 .Ticks:has(.Ticks-box:checked:not([hidden])) {
   border-color: var(--accent);
   background: var(--tint);
@@ -865,7 +846,7 @@ dialog[open] {
 .Ticks-box {
   flex: none;
 }
-/* The box's target takes the card's padding, 0.75rem by 1rem, back to its edge. */
+/* The negative margins undo the card's padding, 0.75rem by 1rem, so that the box's target reaches the card's edge. */
 .Ticks-target {
   display: flex;
   align-self: stretch;
@@ -879,7 +860,7 @@ dialog[open] {
   display: none;
 }
 
-/* A popup's bar is sticky at its top, and reaches its edges through the popup's inset, 1.25rem. */
+/* The negative margin undoes the popup's inset, 1.25rem, so that the bar reaches its edges. */
 .Dialog-bar {
   position: sticky;
   inset-block-start: 0;
@@ -903,7 +884,6 @@ dialog[open] {
   background: var(--paper);
 }
 
-/* Slips: calls, bills and receipts, with the structure of a till receipt, in the mono face. */
 .Slip {
   padding: var(--inset);
   border: 1px solid var(--line);
@@ -951,14 +931,12 @@ dialog[open] {
   column-gap: 0.625rem;
   align-items: baseline;
 }
-/* The sum the swap's slippage sets: between rules, as large as its words. */
 .Slip-line--sum {
   margin-block: 0.125rem;
   padding-block: 0.375rem;
   border-block: 1px solid var(--line);
   font-weight: 700;
 }
-/* A line on a bill: the token and its amount, then what it fetches; under them, its route, then what that is worth. */
 .Slip-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -992,15 +970,13 @@ dialog[open] {
   font-weight: 400;
   text-align: end;
 }
-/* The time and the transaction close a receipt, under a dashed rule. */
 .Slip-foot {
   padding-block-start: 0.625rem;
   border-block-start: 2px dashed var(--ink);
 }
 
-/* Hex in groups of four, spaced by margins, not spaces, so a copy is plain hex. An address breaks once, in the middle,
-   each half underlined when it is a link; shown as the wallet shows it, it takes three lines of four groups, which
-   stand apart in columns. */
+/* Groups are spaced by margins, not spaces, so that a copy is plain hex. A link's underline doesn't reach into the
+   inline-block halves, so each half draws its own. */
 .Hex {
   display: inline-block;
   overflow-wrap: normal;
@@ -1085,7 +1061,7 @@ dialog[open] {
   .Home-title {
     font-size: 2.5rem;
   }
-  /* The header stays on one line: the logo, the name and the button. */
+  /* Smaller on a phone, so that the header stays on one line. */
   .Header-brand {
     font-size: 1.125rem;
   }
@@ -1104,8 +1080,6 @@ dialog[open] {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
   }
-  /* An automation's figures, and a page's tiles, become rows: the label, then the figure at the end; the tiles, one
-     box. */
   .Facts--columns {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.25rem;

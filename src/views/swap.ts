@@ -227,12 +227,11 @@ function output(
     worthText: worth ? money(worth, true) : "",
   };
 }
-// An amount, with what it is worth under it.
 function worthUnder(text: string, worth: string): Node {
   const under = Object.assign(document.createElement("small"), { className: "u-worth", textContent: worth });
   return worth ? frag(text, under) : frag(text);
 }
-// Gas is paid apart, in ETH: its amount, with what it is worth under it.
+// Gas is paid apart, in ETH, so it shows in ETH first.
 function gasUnder(wei: bigint, prices: Prices | undefined): Node {
   const cost = ethCost(wei, prices);
   return worthUnder(`${figure(wei, 18)} ETH`, cost ? money(cost, true) : "");

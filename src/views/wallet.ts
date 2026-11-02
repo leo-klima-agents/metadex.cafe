@@ -13,7 +13,6 @@ let switchFailed = false;
 const popup = $("#connect");
 const listening = new WeakSet<EIP1193Provider>();
 
-// The wallets in the browser: in the header's popup, and in the page wherever a view needs a wallet.
 export function drawWallets(): void {
   for (const el of document.querySelectorAll<HTMLElement>("[data-list=wallet]"))
     list(

@@ -181,8 +181,8 @@ export function frag(...parts: (string | Node)[]): DocumentFragment {
 }
 
 // Splits hex into spans of four digits that CSS spaces apart, so a copy is still plain hex. An address or hash splits
-// into two halves that break where one line doesn't fit, each underlined in a link; with `wallet`, an address takes
-// three lines, as the wallet shows it, its groups in columns; calldata gets a line per 32-byte word.
+// into two halves that break where one line doesn't fit; with `wallet`, an address takes three lines, as the wallet
+// shows it; calldata gets a line per 32-byte word.
 export function hex(el: HTMLElement, value: string, wallet = false): void {
   if (el.dataset.hex === `${wallet} ${value}`) return;
   el.dataset.hex = `${wallet} ${value}`;

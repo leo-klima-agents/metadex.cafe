@@ -228,7 +228,7 @@ const worth = (found: Amount[], { tokens, prices }: ReturnType<typeof priced>): 
   const total = tokens && prices ? valueAt(found, tokens, prices) : 0;
   return total > 0 ? money(moneyAt(total, prices!), true) : "";
 };
-// Klima Protocol's mark beside a retirement, at 24 px, as its guidelines ask.
+// Klima Protocol's guidelines set its mark at 24 px.
 function throughKlima(): HTMLElement {
   const line = Object.assign(document.createElement("span"), { className: "Klima-line Klima-line--end" });
   const mark = Object.assign(document.createElement("img"), {
