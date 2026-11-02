@@ -55,7 +55,7 @@ function waiting(found: Payouts): Got<{ tokens: Map<string, Token>; prices: Pric
     300_000,
   );
 }
-// "≈ $1.84 in 9 tokens", or "at least" where some could not be read or priced.
+// Returns words such as "≈ $1.84 in 9 tokens", starting "at least " when some tokens could not be read or priced.
 export function waitsWords(standing: Standing, found: Payouts): string {
   const priced = waiting(found).value;
   const tokens = new Set(standing.waiting.map(({ token }) => key(token)));
@@ -124,7 +124,7 @@ function drawActions(own: Holdings | undefined, st: hydrex.Status): void {
       button.textContent = `${moves ? "Move to" : "Join"} ${automation.name}`;
       button.classList.toggle("secondary", moves);
     }
-    // Leaving one of Hydrex's other automations is "self": it leaves the page's own too.
+    // Leaving one of Hydrex's other automations uses the "self" action, which also leaves the page's own.
     if (action === "leave" || action === "self") {
       button.textContent = st.kind === "stopped" ? "Leave automation" : "Leave";
       button.dataset.action = account && hydrex.canLeaveOther(account) ? "self" : "leave";
@@ -282,7 +282,7 @@ export function claimReceipt(
   );
 }
 
-// Double Espresso's receipt on an account's page: its claims in the epoch of the last one, and who sent each.
+// Double Espresso's receipt on an account's page: the claims in the last claim's epoch, with who sent each.
 function claimsReceipt({ claims, stopped }: Walk, id: bigint, owner: Address, own: boolean): Node {
   const { received, fees, paid } = totals(claims);
   const timeOf = (block: number) => data.timeOfBlock(block).value;

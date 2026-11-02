@@ -149,7 +149,8 @@ export function can(action: string, account: Account, arg: string | undefined, h
   if (action === "claim") return overdueOf(holdings).some((entry) => entry.account.id === account.id);
   return false;
 }
-// Each group's accounts ticked: those that need their owner, until the owner ticks or unticks one.
+// The accounts ticked in a group. Until the owner ticks or unticks one, a `needs:` group starts with all its accounts
+// ticked, and any other group with none.
 const picks = (group: string, able: Account[]): Set<bigint> =>
   state.picks.get(group) ?? new Set(group.includes(" needs:") ? able.map(({ id }) => id) : []);
 
@@ -265,7 +266,7 @@ function epochWords(): Value {
   const end = found.epochStart + WEEK;
   return `A change made now moves the votes from ${utc(end)}${now() < end ? `, in ${until(end - now())}` : ""}.`;
 }
-// What the wallet's own votes earned last epoch per 1,000 votes: none when its accounts vote through others.
+// Last epoch's earnings per 1,000 votes, for the votes the wallet casts itself; votes cast through others don't count.
 function ownWords(holdings: Holdings): Value {
   return shown(data.holderEarnings(holdings.owner), (own) =>
     !own.votes
@@ -337,7 +338,8 @@ export function drawProduct(): void {
     );
 }
 
-// The popup "Performance": the automation against all of Hydrex, both at the average's prices, and its pools.
+// Fills the "Performance" popup, valuing the automation and all of Hydrex at the average's prices, and returns the
+// words comparing them.
 function performance(automation: Automation): Value {
   const mine = data.earnings(automation).value;
   if (!mine?.votes) return null;

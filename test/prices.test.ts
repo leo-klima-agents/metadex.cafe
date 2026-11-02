@@ -35,7 +35,8 @@ test("a concentrated pool's tick, in whole tokens of each", () => {
   close(tickPrice(0, 18, 18), 1);
   close(tickPrice(0, 18, 6), 1e12);
   close(tickPrice(10_000, 6, 6), 1.0001 ** 10_000);
-  // USDC (6 decimals) is token0 of USDC / cbBTC (8): about 0.0000123 cbBTC a dollar, with bitcoin at $81,500.
+  // USDC (6 decimals) is token0 of USDC / cbBTC (8 decimals), so the tick gives cbBTC per dollar: about 0.0000123, with
+  // bitcoin at about $81,460.
   close(1 / tickPrice(-67_040, 6, 8), 81_460, 1e-3);
 });
 
@@ -50,7 +51,8 @@ test("a classic pair's price: the ratio of its reserves, or the slope of x³y + 
 
 test("a classic pair's average between two observations, unless they are too far apart or it held nothing", () => {
   const flip = 1_792_022_400n;
-  // 2,000 of token0 (18 decimals) and 50 of token1 (6 decimals), held for the 50 minutes between the two.
+  // Reserves of 2,000 token0 (18 decimals) and 50 token1 (6 decimals), held for the 50 minutes between the two
+  // observations.
   const [reserve0, reserve1] = [2_000n * 10n ** 18n, 50n * 10n ** 6n];
   const at = (time: bigint, elapsed: bigint) => [time, reserve0 * elapsed, reserve1 * elapsed] as const;
   const first = at(flip - BigInt(WINDOW) - 600n, 0n);
@@ -148,9 +150,9 @@ const [AERO, AERO_STABLE, AERODROME, HYDREX] = [
   exchange("Hydrex Classic Pools"),
 ];
 
-// A pool of `token` against `anchor`, USDC by default: its reserves now in whole tokens, the token's first, and those it
-// held throughout before, if they differ. Aero's pools keep that history, unless `fresh`; classic pools record it every
-// half hour.
+// A pool of `token` against `anchor` (USDC by default). `now` is its reserves now and `held` what it held throughout
+// before, if different, both in whole tokens with the token's first. Aero's pools keep that history unless `fresh`;
+// classic pools record it every half hour.
 type Fake = {
   exchange: Exchange;
   token: Token;
@@ -174,7 +176,7 @@ function market(pools: Fake[], answers = ANSWERS) {
   };
   const sumsAt = (pool: Fake, time: number) =>
     units(pool, pool.held ?? pool.now).map((amount) => amount * BigInt(time));
-  // Classic pools' observations: every half hour, the last ten minutes ago.
+  // Classic pools record an observation every half hour, the last ten minutes ago.
   const COUNT = 10;
   const observedAt = (i: number) => NOW - 600 - 1800 * (COUNT - 1 - i);
   const reader = async (calls: readonly Call[]): Promise<any> =>
@@ -232,7 +234,7 @@ test("USDC and EURC take Chainlink's prices, and a token priced in USDC takes US
 });
 
 test("an anchor whose feed fails is priced like any other token", async () => {
-  // 11,500 USDC against 10,000 EURC at $1.15: a dollar.
+  // 11,500 USDC against 10,000 EURC at $1.15 puts USDC at a dollar.
   const pools: Fake[] = [{ exchange: HYDREX, token: USDC_TOKEN, anchor: EURC, now: [11_500, 10_000] }];
   const answers = new Map([[EURC, EURC_USD]]);
   const prices = await pricesAt([USDC_TOKEN], new Map(), NOW, NOW, SWAP_PRICING, market(pools, answers).reader);
@@ -265,7 +267,8 @@ test("without any of Chainlink's prices, prices are in USDC, from the pools alon
 });
 
 test("now, the feeds' latest rounds count, even one newer than the visitor's clock", async () => {
-  // The first round of a new phase, updated a minute after NOW: a clock a minute behind the chain's.
+  // The first round of a new phase, updated a minute after `NOW`, as when the visitor's clock is a minute behind the
+  // chain's.
   const { reader } = market([{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }]);
   const ahead = async (calls: readonly Call[]): Promise<any> =>
     (await reader(calls)).map((reply: unknown, i: number) =>
@@ -281,7 +284,7 @@ test("now, the feeds' latest rounds count, even one newer than the visitor's clo
 
 test("each currency's rate goes with dollar prices, read with the anchors' feeds; prices in USDC have none", async () => {
   const pools: Fake[] = [{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }];
-  // A reader that also answers EUR / USD, at 1.12 dollars a euro, and GBP / USD, at 1.34; CHF / USD and the others fail.
+  // Also answers EUR / USD at 1.12 dollars a euro and GBP / USD at 1.34; CHF / USD and the other fiat feeds fail.
   const withRates = (answers?: Map<Address, number>) => {
     const { reader } = market(pools, answers);
     return async (calls: readonly Call[]): Promise<any> => {
@@ -335,7 +338,7 @@ test("at a past flip, a pool whose history falls short gives no price: not its p
 });
 
 test("at a past flip, a pool without a history then gives way to the next deepest; with none, today's only stands in", async () => {
-  // Deepest today, at 4 USDC, but without its history; and shallower, at 3 USDC at the flip.
+  // `deep` is deepest today, at 4 USDC, but has no history; `kept` is shallower, at 3 USDC at the flip.
   const deep: Fake = { exchange: AERO, token: TOKEN, now: [10_000, 40_000], fresh: true };
   const kept: Fake = { exchange: AERODROME, token: TOKEN, now: [5_000, 12_500], held: [5_000, 15_000] };
   const at = (pools: Fake[]) => pricesAt([TOKEN], new Map(), NOW - 3_600, NOW, SWAP_PRICING, market(pools).reader);
@@ -384,7 +387,7 @@ test("feeds: one read for the latest rounds, then one search for the rounds in e
       return functionName === "latestRoundData" ? round(feed, 200) : round(feed, Number((args[0] as bigint) - phase));
     });
   };
-  // Round 150 started 50 hours before NOW, and 151 49 hours before.
+  // Round 150 started 50 hours before `NOW` and round 151 49 hours before, so 150 is in effect at `flip`.
   const flip = NOW - 3_600 * 50 + 1;
   assert.deepEqual(await feedsAt(feeds, flip, reader), [250, 350, undefined]);
   assert.ok(reads <= 4, `${reads} reads`);
@@ -400,6 +403,7 @@ test("feeds: one read for the latest rounds, then one search for the rounds in e
     return reader(calls);
   };
   assert.deepEqual(await feedsAt(feeds, flip, flaky), [250, 350, undefined]);
-  // Before the phase's first round, as when the feed moved to a new aggregator since, no price: not today's.
+  // Before the phase's first round, as when the feed has since moved to a new aggregator, there is no price rather than
+  // today's.
   assert.deepEqual(await feedsAt(feeds, NOW - 3_600 * 300, reader), [undefined, undefined, undefined]);
 });

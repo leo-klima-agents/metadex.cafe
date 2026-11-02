@@ -4,10 +4,9 @@ import { getAddress, type Address } from "viem";
 import { same } from "../src/rpc.ts";
 import { tokensOf } from "../src/tokens.ts";
 
-// Checks the page's list of tokens, src/base-tokens.json, against Base: each address's symbol and decimals, as its
-// contract answers them now. `node scripts/tokens.ts` prints what differs; with --write, it writes the list back with
-// Base's answers, and `node scripts/tokens.ts --add 0x…` adds a token. A token that no longer answers is left as it is,
-// for its maintainer to remove by hand.
+// Checks `src/base-tokens.json` against Base: each token's symbol and decimals, as its contract answers now.
+// `node scripts/tokens.ts` prints what differs, `--write` writes Base's answers back, and `--add 0x…` adds a token. A
+// listed token that no longer answers is left as it is, for its maintainer to remove by hand.
 
 const PATH = fileURLToPath(new URL("../src/base-tokens.json", import.meta.url));
 type Entry = { symbol: string; name?: string; address: Address; decimals: number };
@@ -38,7 +37,7 @@ const checked = list.map((entry) => {
   }
   return { ...entry, symbol: token.symbol, address: getAddress(entry.address), decimals: token.decimals };
 });
-// A token added that does not answer is not written: only those already on the list stay for their maintainer.
+// An added token that does not answer is dropped; only tokens already on the list are kept for their maintainer.
 const kept = checked.filter(({ address }) => found.has(address.toLowerCase()) || !added.includes(getAddress(address)));
 if (process.argv.includes("--write")) writeFileSync(PATH, `${JSON.stringify(kept, null, 2)}\n`);
 else if (!differs) console.log(`All ${list.length} tokens are as Base says.`);

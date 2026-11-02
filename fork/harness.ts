@@ -1,5 +1,5 @@
-// What the browser tests share: the owners and blocks they fork, anvil, Chromium, the test wallet, and the page's
-// parts. Each test file starts an anvil of its own; each test starts from the snapshot its file took.
+// Shared by the browser tests and the QA wallet (qa/qa.ts). Each test file starts its own anvil, and each test starts
+// from the snapshot its file took.
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -42,25 +42,25 @@ import { runsCalls } from "./rpc-cache.ts";
 export const CONDUIT = MATCHA_LATTE.address;
 export const BLOCK = 52_694_000; // Fri 16 Oct 2026, 19:02 UTC
 export const FLIP = 1_792_627_200; // Thu 22 Oct 2026, 00:00 UTC, when the epoch after BLOCK's starts
-// After the swappers' deployment, on Wed 21 Oct 2026.
+// Wed 21 Oct 2026, after the swappers' deployment.
 export const RECENT = 52_904_000;
 export const SITE = "https://metadex.cafe";
 const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 export const RPC_ORIGINS = RPCS.map((url) => new URL(url).origin);
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type" };
 
-// Owners at BLOCK, and what they hold.
+// What each owner holds at `BLOCK`.
 export const MEMBER = getAddress("0x388b2d29e7919d45b1b8f6e88b8a13a392f97b40"); // #9540 in Matcha Latte, #14485 its own
 export const NEWCOMER = getAddress("0x0208ddbc05a91e1b937e8b3140b62ef22a274c95"); // #141 its own, #42877 in Liquid Hydrex
 export const ELSEWHERE = getAddress("0x69707a120ade8239f07595165e180c61395ea655"); // #2435 in Lock Maxi, #2439 in USDC
 export const LEAVER = getAddress("0x2573264b8e690ca6b2128c113890f42198840b16"); // #53350 and #82206 in Matcha Latte
-export const ENDED = getAddress("0x2518820268e4079e90446b93020dfad7dd54e84d"); // #123351 ended with HYDX in it, #123364
+export const ENDED = getAddress("0x2518820268e4079e90446b93020dfad7dd54e84d"); // #123351 (ended, holds HYDX), #123364
 export const PAYEE = getAddress("0x60924601e73ebc5c2bd9244c788d93e0710a6c93"); // #82774 in Matcha Latte, paid Wed 23 Sep
 export const PAID_TX = "0x0932e5a24f24e45bfd1021764d94abc1d920754c4dc17128dd89f44bd086e899";
 export const LOCK_MAXI = getAddress("0x53388a4E98Bb56F8571433F5461010Fc287929d3");
 export const STRANGER = getAddress("0x000000000000000000000000000000000000dead");
 const SOMEONE = getAddress("0x0000000000000000000000000000000000001234");
-// Matcha Latte's fee recipient, which holds many of the tokens its fee took, and tokens to sell.
+// Matcha Latte's fee recipient. It holds many of the tokens its fee took, so the tests take tokens to sell from it.
 export const HOLDER = getAddress("0xd9e966a6bfa2ae2113a34bb4dd02ded921da50af");
 export const AVNT = getAddress("0x696f9436b67233384889472cd7cd58a6fb5df4f1");
 export const ZORA = getAddress("0x1111111111166b7fe7bd91427724b487980afc69");
@@ -73,7 +73,7 @@ const INIT_CODE = readFileSync(
   new URL("fixtures/double-espresso-init-code.hex", import.meta.url),
   "utf8",
 ).trim() as Hex;
-// Tokens Base runs natively, whose code anvil cannot run.
+// Tokens Base runs natively. anvil cannot run their code, so `startAnvil` removes it.
 const NATIVE: Address[] = [
   "0xb200000000000000000000c2e324d24d7eecd1fb",
   "0xb20000000000000000000078ee7ce2fe4908108c",
@@ -84,7 +84,8 @@ const NATIVE: Address[] = [
   "0xb200000000000000000000451d033a5000cb479e",
   "0xb200000000000000000000856a95738c92feed01",
 ];
-// A generous gas limit, as wallets add a margin: anvil estimates gas at another time than it mines at.
+// A generous gas limit, like a wallet's margin: anvil estimates gas at a different time from when it mines the
+// transaction.
 const GAS = 16_000_000n;
 export const FOR_GAS = 10n ** 17n;
 export const abi = parseAbi([
@@ -108,15 +109,14 @@ export const abi = parseAbi([
 let ANVIL = "";
 let CACHE_URL = "";
 const nodeFetch = globalThis.fetch;
-// What a request to anvil reads is fetched from FORK_URL meanwhile, all at once: see rpc-cache.ts.
+// While anvil runs a request, the cache fetches everything it reads from the upstream at once: see rpc-cache.ts.
 const prefetch = (body: string): void =>
   void (runsCalls(body) && nodeFetch(`${CACHE_URL}/prefetch`, { method: "POST", body }).catch(() => {}));
 async function post(body: string): Promise<string> {
   prefetch(body);
   return (await nodeFetch(ANVIL, { method: "POST", headers: { "content-type": "application/json" }, body })).text();
 }
-// The fork's anvil, as viem's clients ask it: Base's methods, anvil's own, and transactions from the accounts it
-// impersonates. Each request waits up to ten minutes, as anvil does for Base, which a first run reads a slot at a time.
+// Each request waits up to ten minutes, as anvil does for Base: a first run reads Base one slot at a time.
 const clientOf = (url: string) =>
   createPublicClient({
     transport: http(url, {
@@ -142,8 +142,8 @@ async function onFork<T>(reads: () => Promise<T>): Promise<T> {
   }
 }
 
-// Sends a transaction from an account anvil impersonates, with no tip; the cache hears of it, so that it does not ask
-// FORK_URL for its receipt.
+// Sends from any account, as anvil impersonates them all. The cache is told the hash, so that it never asks the
+// upstream for that transaction or its receipt.
 type Sendable = { from: Address; to?: Address | null; data: Hex; gas?: bigint };
 export async function send({ from, ...tx }: Sendable): Promise<Hex> {
   const hash = await anvil.sendTransaction({ account: from, chain: null, maxPriorityFeePerGas: 0n, ...tx });
@@ -179,10 +179,11 @@ export async function expectApprovals(ids: bigint[], delegate: Address, claimer:
       `#${id}`,
     );
 }
-// The page reads a few blocks before the latest, which on the fork can be before the last transactions.
+// The page reads a few blocks behind the latest, so mine a few to let it see the last transactions.
 export const settle = () => anvil.mine({ blocks: 6 });
 
-// Hydrex moved on to the epoch under way, as anyone may once it flipped: what the epoch before earned is then final.
+// Moves Hydrex on to the current epoch, as anyone may once the epoch has flipped. What the previous epoch earned is
+// then final.
 export async function moveOn(): Promise<void> {
   await anvil.setBalance({ address: STRANGER, value: FOR_GAS });
   const minter = await at(VOTER).read.minter();
@@ -195,14 +196,14 @@ export async function nextEpoch(after = 60): Promise<void> {
   await moveOn();
   await settle();
 }
-// Incentives for this epoch's votes for `pool`, as anyone may add them: `amount` of `token`, from HOLDER.
+// Adds `amount` of `token` from HOLDER as incentives for this epoch's votes for `pool`, as anyone may.
 export async function incentive(pool: Address, token: Address, amount: bigint): Promise<void> {
   const bribe = await at(VOTER).read.external_bribes([await at(VOTER).read.gauges([pool])]);
   await mined(HOLDER, token, encodeFunctionData({ abi, functionName: "approve", args: [bribe, amount] }));
   await mined(HOLDER, bribe, encodeFunctionData({ abi, functionName: "notifyRewardAmount", args: [token, amount] }));
 }
 
-// Double Espresso on a fork of a block before its deployment, as the page takes it to be on Base.
+// Deploys Double Espresso at the address the page expects, for forks of blocks before its deployment on Base.
 export async function deployDoubleEspresso(): Promise<void> {
   if (await anvil.getCode({ address: DOUBLE_ESPRESSO.address })) return;
   const { timestamp } = await anvil.getBlock({ blockNumber: BigInt(BLOCK) });
@@ -244,7 +245,7 @@ export async function fund(tokens: Address[]): Promise<void> {
     );
 }
 
-// The test wallet: it announces itself (EIP-6963) and hands each request to Node, which the page's CSP cannot block.
+// The test wallet announces itself by EIP-6963 and hands each request to Node, which the page's CSP cannot block.
 export type WalletOptions = {
   owner: Address;
   chainId: number;
@@ -287,8 +288,8 @@ export const walletScript = (names: string[]) => `(() => {
   window.addEventListener("eip6963:requestProvider", announce);
   announce();
 })();`;
-// The page waits for anvil as long as it takes, which on a first run reads Base a slot at a time; and says what
-// breaks its Content Security Policy.
+// Makes `AbortSignal.timeout` never fire, as a first run reads Base one slot at a time, and logs each Content Security
+// Policy violation.
 export const PAGE_SCRIPT = `AbortSignal.timeout = () => new AbortController().signal;
 document.addEventListener("securitypolicyviolation", (event) => console.error("Content Security Policy: " + event.violatedDirective + " " + event.blockedURI));`;
 const safePage = (safe: Address) => `<!doctype html><meta charset="utf-8"><title>Safe{Wallet}</title>
@@ -303,7 +304,7 @@ const safePage = (safe: Address) => `<!doctype html><meta charset="utf-8"><title
   });
 </script>`;
 
-// Gas enough for Base to take the transaction, and too little to run it: what its calldata costs at least (EIP-7623).
+// The calldata's floor cost under EIP-7623: enough gas for Base to accept the transaction, too little to run it.
 async function starved(from: Address, to: Address, data: Hex): Promise<bigint> {
   const bytes = hexToBytes(data);
   const nonzero = bytes.filter(Boolean).length;
@@ -383,7 +384,8 @@ export function testWallet(options: WalletOptions, sent?: Sent[], asked?: string
         const hashes: Hex[] = [];
         batches.set(id, hashes);
         if (options.atomic !== false && (options.failing || !(await together(signer, calls)))) {
-          // All or nothing: a batch that fails changes nothing but the gas of its one transaction.
+          // All or nothing: a failing batch is mined as one failed transaction, which changes nothing but the gas it
+          // spends.
           const { to, data } = calls[0]!;
           sent?.push(...calls);
           if (options.failing) options.failing--;
@@ -417,7 +419,7 @@ export function testWallet(options: WalletOptions, sent?: Sent[], asked?: string
   };
 }
 
-// Requests the page sent to anvil that it has not answered yet: anvil answers them all before it stops or reverts.
+// The page's requests that anvil has not answered yet. They are awaited before anvil stops or reverts.
 export const forwarding = new Set<Promise<string>>();
 type Served = { origins: Set<string>; rpc: Rpc; safe: Address };
 export async function serve(route: Route, { origins, rpc, safe }: Served): Promise<void> {
@@ -503,7 +505,7 @@ export async function open(wallet: Partial<WalletOptions> | false, options: Open
     safe,
   };
   await context.route("**/*", (route) => serve(route, opened));
-  // The clock fakes AbortSignal.timeout too: PAGE_SCRIPT, added after it, undoes that.
+  // Playwright's clock fakes `AbortSignal.timeout` too, so PAGE_SCRIPT must be added after it to undo that.
   const { timestamp } = await anvil.getBlock();
   if (script)
     await (flowing
@@ -547,7 +549,7 @@ export const field = (slip: Locator, label: string, part: "value" | "description
 export const pick = async (page: Page, ...ids: number[]) => {
   for (const id of ids) await page.getByRole("checkbox", { name: new RegExp(`#${id}$`) }).check();
 };
-// Ticks these accounts of a group, and only these: what needs its owner starts ticked.
+// Ticks only these accounts of the group and unticks the rest, as accounts that need their owner start ticked.
 export async function only(page: Page, key: string, ...ids: number[]): Promise<void> {
   const rows = group(page, key).locator("[data-list=account] > li");
   await rows.first().waitFor();
@@ -628,7 +630,7 @@ export async function startAnvil(block: number, cached: string, stopping = () =>
   const child = (node = spawn("anvil", args, {
     stdio: ["ignore", "ignore", process.env.ANVIL_LOG ? "inherit" : "ignore"],
   }));
-  // A missing binary is an error event, not an exit: unheard, it would be an uncaught exception.
+  // A missing binary emits `error`, not `exit`, and an unhandled `error` event throws.
   let failed: Error | undefined;
   child.once("error", (error) => (failed = error));
   for (;;) {

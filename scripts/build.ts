@@ -32,7 +32,7 @@ const { metafile } = await esbuild.build({
   metafile: true,
   logLevel: "warning",
 });
-// Each built file ends with the license notices of what it bundles, before its integrity is taken.
+// Each built file gets its license notices before its integrity hash is taken, so the hash covers them.
 for (const file of ["main.js", "style.css"]) {
   const built = readFileSync(`${OUT}/${file}`, "utf8");
   appendFileSync(
@@ -40,7 +40,7 @@ for (const file of ["main.js", "style.css"]) {
     `${built.endsWith("\n") ? "" : "\n"}${noticeOf(ROOT, partsOf(ROOT, bundled(metafile, file)))}`,
   );
 }
-// The fonts are in the stylesheet, as data.
+// Only files are copied: the fonts are in the stylesheet as data, so `site/fonts/` is not.
 for (const file of readdirSync(SITE, { withFileTypes: true }))
   if (file.isFile() && !["index.html", "style.css"].includes(file.name))
     copyFileSync(`${SITE}/${file.name}`, `${OUT}/${file.name}`);

@@ -3,8 +3,8 @@ import { RPCS } from "../src/config.ts";
 import { BLOCK, RECENT } from "./harness.ts";
 import { cacheFileOf, forkUrl, serveCached, upstreamOf } from "./rpc-cache.ts";
 
-// Runs the browser test files at once, each with an anvil of its own, all forking through one cache per block and one
-// queue to BASE_RPC_URL (see rpc-cache.ts). Arguments go to node --test: files to run (all by default), or options.
+// Runs the browser test files in parallel, each with its own anvil, all forking through one cache per block and one
+// queue to BASE_RPC_URL (see rpc-cache.ts). Arguments go to `node --test`: files to run (all by default), or options.
 const FILES = ["fork/views.ts", "fork/joins.ts", "fork/payouts.ts", "fork/swap.ts"];
 const args = process.argv.slice(2);
 const named = args.some((arg) => !arg.startsWith("-"));
@@ -26,7 +26,7 @@ const child = spawn(
     },
   },
 );
-// Stopped, as by Ctrl-C, the tests stop, and the answers so far are kept.
+// On Ctrl-C, stop the tests but not this process, so that the caches still save the answers so far.
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => child.kill(signal));
 const code = await new Promise<number>((resolve) => child.on("exit", (code) => resolve(code ?? 1)));
 for (const { cache } of caches) await cache.close();

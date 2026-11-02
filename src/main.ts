@@ -13,7 +13,8 @@ import { drawReview } from "./views/review.ts";
 import { drawSwap, preloadSwap } from "./views/swap.ts";
 import { drawWallets, startWallets } from "./views/wallet.ts";
 
-// The page is one HTML file of views; the hash picks the one shown. Each view's reads go first, the others' after.
+// The page is one HTML file of views, and the hash picks the one shown. A view's tags name its reads, which go before
+// other views' reads.
 const TAGS: Record<View, Tag[]> = {
   home: [],
   about: [],
@@ -63,7 +64,7 @@ function show(first: boolean): void {
     if (!first) $("h1", view).focus({ preventScroll: true });
   }
 }
-// A popup's address goes once it closes, so that the same address opens it again.
+// When a popup closes, its section leaves the address, so that the same address opens it again.
 for (const popup of popups) {
   popup.querySelector("h2")?.setAttribute("tabindex", "-1");
   popup.addEventListener("toggle", () => {
@@ -115,7 +116,7 @@ onRender(() => {
   preloadSwap();
 });
 
-// Safe{Wallet} shows the page in a frame: it starts on the App there.
+// Safe{Wallet} shows the page in a frame, where it starts on the App.
 if (window.parent !== window && !location.hash) location.replace("#app");
 addEventListener("hashchange", () => show(false));
 show(true);

@@ -3,10 +3,10 @@ import type { Got } from "./cache.ts";
 import { BASESCAN } from "./config.ts";
 import { hexLines, walletLines } from "./format.ts";
 
-// The page's markup holds every view, popup and row; this fills it. An element marked data-text="key" takes a value:
-//   string: its text; undefined: "Loading…", drawn as a bar; null: hidden; true: shown as it is;
-//   a Node: its content; {state}: a data-state its [data-when] children follow, shown or hidden by CSS;
-//   {href, text}: a link; {address}: hex in groups of four, a link to Basescan; {wallet}: as a wallet shows it.
+// What `fill()` does with each value for an element marked `data-text="key"`: a string sets its text; `undefined` shows
+// "Loading…" as a bar; `null` hides it; `true` shows it unchanged; a `Node` becomes its content; `{state}` sets
+// `data-state`, and CSS shows only the `[data-when]` children that match; `{href, text}` makes a link; `{address}`
+// shows hex in groups of four, linked to Basescan.
 export type Value =
   | string
   | undefined
@@ -29,8 +29,8 @@ function setText(el: Element, text: string): void {
     el.textContent = text;
 }
 
-// Puts a node, or a fragment's nodes, in `el`, unless it holds the same already: a redraw then leaves focus where it was,
-// and a live region quiet.
+// Leaves `el` alone when it already holds equal nodes, so a redraw keeps focus where it is and a live region stays
+// quiet.
 function replace(el: Element, value: Node): void {
   const nodes = value instanceof DocumentFragment ? [...value.childNodes] : [value];
   const held = el.childNodes;
@@ -63,7 +63,7 @@ function put(el: HTMLElement, value: Value): void {
   replace(el, Object.assign(document.createElement("a"), { href: value.href, textContent: value.text }));
 }
 
-// Fills `root` and what it holds, but not its lists' rows, which their own fill() fills.
+// Fills `root` and its descendants, except the rows of lists inside it, which `list()` fills.
 export function fill(root: ParentNode, values: Record<string, Value>): void {
   const all = [...root.querySelectorAll<HTMLElement>("[data-text]")];
   for (const el of root instanceof HTMLElement && root.dataset.text ? [root, ...all] : all) {
@@ -77,8 +77,8 @@ export function fill(root: ParentNode, values: Record<string, Value>): void {
 export const fromTemplate = (id: string): HTMLElement =>
   $<HTMLTemplateElement>(`#${id}`).content.firstElementChild!.cloneNode(true) as HTMLElement;
 
-// A list's rows, from its template, kept by key so that focus and ticks survive each draw. The row that says the list is
-// empty has the key "".
+// Draws a list's rows from its template, reusing each row by key so focus and ticks survive a redraw. The row saying
+// the list is empty has the key `""`.
 export function list<T>(
   el: HTMLElement,
   items: T[],
@@ -104,7 +104,7 @@ export function list<T>(
   const focused = [...old.values()].some((row) => row.contains(document.activeElement));
   rows.forEach((row, i) => el.children[i] !== row && el.insertBefore(row, el.children[i] ?? null));
   for (const row of old.values()) row.remove();
-  // Focus in a row that went goes to the heading of its section.
+  // If a removed row held focus, move it to the heading of the row's section or dialog so it isn't lost.
   const heading = focused ? el.closest("section, dialog")?.querySelector<HTMLElement>("h1, h2, h3") : undefined;
   if (heading) {
     heading.tabIndex = -1;
@@ -112,7 +112,8 @@ export function list<T>(
   }
 }
 
-// A read's value as text: loading while read, "Not read" once failed, and hidden when it is null: nothing to show.
+// Turns a read into a `Value`: loading while it reads, "Not read" if it failed, hidden when it read `null` (nothing to
+// show).
 export const shown = <T>(got: Got<T>, text: (value: NonNullable<T>) => Value): Value =>
   got.value === null ? null : got.value !== undefined ? text(got.value) : got.failed ? "Not read" : undefined;
 export const stateOf = (got: Got<unknown>, empty?: boolean): Value => ({
@@ -156,7 +157,7 @@ export function bill(
   return node;
 }
 
-// A status: a shape before the words, so that it never depends on colour alone.
+// Puts a shape before the words so a status never relies on colour alone.
 export function status(shape: string, strong: string, ...rest: (string | Node)[]): HTMLElement {
   const span = document.createElement("span");
   const mark = Object.assign(document.createElement("span"), { className: "shape" });
@@ -179,8 +180,9 @@ export function frag(...parts: (string | Node)[]): DocumentFragment {
   return fragment;
 }
 
-// Hex in groups of four, a span each, which CSS spaces, so that a copy is the plain hex: an address on two lines where
-// it does not fit one, as the wallet shows it on three, calldata a line per 32-byte word.
+// Splits hex into spans of four digits that CSS spaces apart, so a copy is still plain hex. An address or hash splits
+// into two halves that break where one line doesn't fit; with `wallet`, an address takes three lines, as the wallet
+// shows it; calldata gets a line per 32-byte word.
 export function hex(el: HTMLElement, value: string, wallet = false): void {
   if (el.dataset.hex === `${wallet} ${value}`) return;
   el.dataset.hex = `${wallet} ${value}`;
@@ -210,14 +212,14 @@ const halves = (groups: string[]): string[][] => [
   groups.slice(Math.ceil(groups.length / 2)),
 ];
 
-// One polite live region says what changed: never what is loading.
+// Announces a change in the page's one polite live region, `#status`. Never use it for loading.
 export function announce(text: string): void {
   const region = $("#status");
   region.textContent = "";
   queueMicrotask(() => (region.textContent = text));
 }
-// A button whose action is under way keeps its size and its name, with a spinner over it, and stays disabled until it
-// is done: each draw says whether a button can act through enable(), which leaves a busy one disabled.
+// A busy button keeps its size and name under a spinner and stays disabled until its action is done. Draws set
+// `disabled` through `enable()`, which leaves a busy button disabled.
 export function busy(button: HTMLButtonElement, on = true): void {
   button.disabled = on;
   setAttr(button, "aria-busy", on ? "true" : null);

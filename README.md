@@ -4,56 +4,63 @@ A static page at <https://metadex.cafe/> for Hydrex accounts on Base:
 
 - join or leave **Matcha Latte**, Hydrex's automation, and **Double Espresso**, an automation nobody controls;
 - claim Double Espresso's rewards when a payout is late;
-- see what votes earned last epoch, against Hydrex's average, and each account's last payout as a receipt;
-- swap many tokens into one through **ImmutableSwapper**, routed together and run through Base before the wallet asks.
+- see what votes earned last epoch compared with Hydrex's average, and each account's last payout as a receipt;
+- swap many tokens into one through **ImmutableSwapper**, routed together and simulated on Base before the wallet asks
+  to sign.
 
-It has no server, holds no keys and stores nothing. It reads Base through three public RPCs, which its Content Security
-Policy allows and nothing else: `https://mainnet.base.org`, `https://base.drpc.org` and
-`https://base-rpc.publicnode.com`. Before anyone can join, it checks the contracts it trusts (`src/config.ts`): if a
-check fails, joining is off and the page says why; leaving always works.
+It has no server, holds no keys and stores nothing. It reads Base through three public RPCs, the only hosts its Content
+Security Policy lets it connect to: `https://mainnet.base.org`, `https://base.drpc.org` and
+`https://base-rpc.publicnode.com`. Before anyone can join, it checks Base against the contracts it trusts
+(`src/config.ts`). If a check fails, joining is turned off and the page says why; leaving always works.
 
 ## Develop
 
-Needs Node 26 LTS. [anvil](https://getfoundry.sh/) and Chromium for the browser tests.
+Needs Node 26 LTS, plus [anvil](https://getfoundry.sh/) and Chromium for the browser tests.
 
 ```sh
 npm ci --ignore-scripts
 npm run typecheck && npm test && npx prettier --check .
 npm run build      # dist/
-npm run dev        # dist/ at http://localhost:8000, built again on each change
+npm run dev        # serves dist/ at http://localhost:8000 (or `PORT`), rebuilt on each change
 npm run test:fork  # the page in Chromium against forks of Base in anvil
-npm run qa         # the page by hand against a fork, beside a wallet that signs as any address
+npm run qa         # try the page by hand against a fork, with a wallet that signs as any address
 ```
 
-The browser tests and the QA wallet fork through `fork/rpc-cache.ts`, which asks `BASE_RPC_URL` (an archive RPC, else
-the page's first RPC) once for each answer and keeps it in `~/.cache/metadex.cafe/fork`. `CHROMIUM` names a browser
-binary; `SCREENSHOTS` a folder for screenshots.
+The browser tests and the QA wallet fork Base through `fork/rpc-cache.ts`, which asks `BASE_RPC_URL` (an archive RPC; by
+default the page's first RPC) once for each answer and caches it in `~/.cache/metadex.cafe/fork` (`FORK_CACHE` sets
+another folder). `CHROMIUM` sets the browser binary, and `SCREENSHOTS` a folder to save screenshots in.
 
-| Path                        | What it holds                                                                |
-| --------------------------- | ---------------------------------------------------------------------------- |
-| `site/`                     | What the site serves: every view, popup and row template, the styles, icons. |
-| `src/config.ts`, `abi.ts`   | What the page trusts: contracts, RPCs, feeds, swappers; and Hydrex's ABIs.   |
-| `src/checks.ts`             | The checks of Base before joining or swapping.                               |
-| `src/rpc.ts`, `cache.ts`    | RPC requests (failover, pacing, the shown view's reads first) and one cache. |
-| `src/prices.ts`             | Pools on twelve exchanges, Chainlink, and prices now and at an epoch's end.  |
-| `src/rewards.ts`            | What votes earned in an epoch, and Hydrex's average.                         |
-| `src/hydrex.ts`             | Hydrex accounts, their statuses, joining and leaving.                        |
-| `src/payouts.ts`            | Up to when each account was paid, what waits, and its last receipt.          |
-| `src/claim.ts`              | Claims through Double Espresso, split to fit transactions.                   |
-| `src/swap.ts`, `routing.ts` | Routes, quotes, simulation and minimums; routing ticked tokens together.     |
-| `src/data.ts`, `views/`     | What each view reads, and how it fills the page.                             |
-| `test/`, `fork/`, `qa/`     | Unit tests; browser tests (`fork/run.ts`); the QA wallet (`qa/qa.ts`).       |
-| `scripts/`                  | The build, `dev`, license notices, the release, fonts, the token list.       |
+| Path                                   | What it holds                                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `site/`                                | The files the site serves: the page with every view, popup and row template, the styles and the icons. |
+| `src/main.ts`, `routes.ts`, `state.ts` | The page's start, its addresses, and the state every view is drawn from.                               |
+| `src/config.ts`, `abi.ts`              | What the page trusts: contracts, RPCs, feeds, swappers; and Hydrex's ABIs.                             |
+| `src/checks.ts`                        | The checks of Base that run before joining or swapping.                                                |
+| `src/rpc.ts`, `cache.ts`               | RPC requests (failover, pacing, the shown view's reads first), and the cache of every read.            |
+| `src/wallet.ts`                        | Wallets (EIP-6963, Safe{Wallet}), and sending calls one at a time or in one prompt.                    |
+| `src/tokens.ts`                        | The tokens the page knows, and an owner's balances and allowances.                                     |
+| `src/prices.ts`                        | Prices now and at an epoch's end, from pools on twelve exchanges and Chainlink's feeds.                |
+| `src/rewards.ts`                       | What votes earned in an epoch, and Hydrex's average.                                                   |
+| `src/hydrex.ts`                        | Hydrex accounts, their statuses, joining and leaving.                                                  |
+| `src/payouts.ts`                       | How far each account has been paid, what is waiting, and its last receipt.                             |
+| `src/claim.ts`                         | Claims through Double Espresso, split to fit transactions.                                             |
+| `src/swap.ts`, `routing.ts`            | Routes, quotes, simulation and minimums; `routing.ts` routes the ticked tokens together.               |
+| `src/data.ts`, `views/`                | What each view reads (`data.ts`), and how it fills the page (`views/`).                                |
+| `src/ui.ts`, `format.ts`               | Filling the page's templates, and how figures, sums, dates and hex are written.                        |
+| `test/`, `fork/`, `qa/`                | Unit tests; browser tests (`fork/run.ts`); the QA wallet (`qa/qa.ts`).                                 |
+| `scripts/`                             | The build, the dev server, license notices, the release files, the fonts and the token list check.     |
 
-The build bundles `src/main.ts` and `site/style.css`, with the fonts of `site/fonts/` inside it, and copies the rest of
-`site/` as it is. `python3 scripts/fonts.py` makes the fonts.
+The build bundles `src/main.ts`, and `site/style.css` with the fonts of `site/fonts/` inlined, fills in
+`site/index.html`'s version and integrity hashes, and copies the other files of `site/` unchanged.
+`python3 scripts/fonts.py` makes the fonts.
 
 ## When a contract changes
 
-Each check is named by its id in `src/checks.ts`: `chain` (an RPC serves another chain: joining and swaps off),
-`upgrade` (Hydrex upgraded its VotingEscrow), `logic` (its approval logic), `approvals` and `double-espresso-approvals`
-(what joining each automation approves is off, or other than `[3, 5]`). Read the new code's verified source, update
-`src/config.ts` if the page should trust it, and release. To see what Base holds:
+The page names a failed check by its id in `src/checks.ts`: `chain` (an RPC serves another chain; joining and swaps are
+off), `upgrade` (Hydrex upgraded its VotingEscrow), `logic` (Hydrex changed its approval logic), and `approvals` and
+`double-espresso-approvals` (joining Matcha Latte or Double Espresso is turned off, or approves other actions than
+`[3, 5]`). Read the new code's verified source, update `src/config.ts` if the page should trust it, and release. To see
+what Base holds:
 
 ```sh
 RPC=https://mainnet.base.org
@@ -65,19 +72,21 @@ for AUTOMATION in 0xdE91885cF35ac57DF0c4A75c16862127dBe8317c 0x692c323B425A9Dfee
 done
 ```
 
-Hydrex's automations are in `src/hydrex-conduits.json`, from <https://api.hydrex.fi/conduits>. The token list,
-`src/base-tokens.json`, is checked against Base by `node scripts/tokens.ts` (`--add 0x…`, `--write`).
+Hydrex's automations are in `src/hydrex-conduits.json`, from <https://api.hydrex.fi/conduits>. `node scripts/tokens.ts`
+checks the token list, `src/base-tokens.json`, against Base; `--add 0x…` adds a token and `--write` saves Base's
+answers.
 
 ## Release
 
-1. `npm version x.y.z --no-git-tag-version`, commit, and tag `vx.y.z`; push the tag. CI tests it, deploys it to GitHub
-   Pages (source "GitHub Actions", custom domain `metadex.cafe`), and makes a Release with `dist/` as a CAR file and a
-   zip, and its CID and content hash.
+1. Run `npm version x.y.z --no-git-tag-version`, commit, tag `vx.y.z` and push the tag. CI tests it, deploys it to
+   GitHub Pages (source "GitHub Actions", custom domain `metadex.cafe`), and makes a Release holding `dist/` as a CAR
+   file and a zip, with the CID and content hash in its notes.
 2. Upload `dist/`, built from the tag, to Pinata as a folder; check that its CID is the Release's.
-3. Set `metadexcafe.eth`'s content hash to the Release's, and check <https://metadexcafe.eth.limo/>'s About.
+3. Set `metadexcafe.eth`'s content hash to the Release's, and check the version in About on
+   <https://metadexcafe.eth.limo/>.
 
 The same commit always builds the same files: to check a deployment, build the tag and compare each file of `dist/` with
-what the site serves. In Safe{Wallet}, the custom app is `https://metadex.cafe/`.
+what the site serves. To use the page in Safe{Wallet}, add `https://metadex.cafe/` as a custom app.
 
 ## License
 

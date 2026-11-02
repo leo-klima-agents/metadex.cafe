@@ -96,7 +96,7 @@ const framed = () => {
     answer({ id: sent.at(n)!.message.id, success, ...(success ? { data } : { error: data }) });
   return { sent, parent, events, answer, reply };
 };
-// What a promise holds once the tasks queued so far have run, or "pending".
+// The promise's value once the tasks queued so far have run, or "pending" if it has not settled by then.
 const by = (promise: Promise<unknown>) =>
   Promise.race([promise, new Promise((resolve) => setImmediate(resolve, "pending"))]);
 const TX = { to: ADDRESS, data: "0x1234" } as const;

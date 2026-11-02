@@ -51,7 +51,7 @@ const group = (changes: Partial<Account>) => groupOf(account(changes), status(ch
 const inBoth = (at: Address, changes: Partial<Account> = {}) => ({ delegate: at, claimer: at, ...changes });
 const matcha = { automation: MATCHA_LATTE };
 
-// Written separately from src/hydrex.ts, from the verified source on Sourcify.
+// From the verified source on Sourcify, not from `src/hydrex.ts`, so a wrong ABI there fails the test.
 const abi = parseAbi(["function setConduitApproval(address conduitAddress, uint256 tokenId, bool approve)"]);
 const approval = (id: bigint, approve: boolean, conduit: Address = CONDUIT) => ({
   to: VOTING_ESCROW,
@@ -197,7 +197,8 @@ test("an account whose ownerOf fails is asked again on its own before it is take
   });
   assert.equal(await readAccount(9540n), undefined);
   assert.equal(asked, 2);
-  // It answers the second time: the account is read, and fails on its details rather than being taken for gone.
+  // When `ownerOf` answers on the second try, the account is read, so a failed read of its details rejects instead of
+  // returning `undefined`.
   [owners, asked] = [[undefined, OWNER], 0];
   await assert.rejects(readAccount(9540n), /A read from Base failed/);
   assert.equal(asked, 2);

@@ -31,7 +31,8 @@ export const voterAbi = parseAbi([
   "function totalWeightAt(uint256 time) view returns (uint256)",
 ]);
 
-// A pool's two reward contracts, for its fees and its incentives.
+// Shared by a pool's two reward contracts: the one for its fees (`internal_bribes`) and the one for its incentives
+// (`external_bribes`).
 export const rewardsAbi = parseAbi([
   "function totalSupplyAt(uint256 time) view returns (uint256)",
   "function balanceOfOwnerAt(address owner, uint256 time) view returns (uint256)",

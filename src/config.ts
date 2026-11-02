@@ -29,7 +29,8 @@ export const DOUBLE_ESPRESSO: Automation = {
 };
 export const AUTOMATIONS = [MATCHA_LATTE, DOUBLE_ESPRESSO];
 export const byKind = (kind: string): Automation | undefined => AUTOMATIONS.find((each) => each.kind === kind);
-// Double Espresso's fee of each claim and the swappers' fee of each route, and the 2-of-3 Safe both go to.
+// The fee Double Espresso takes on each claim and the swappers take on each route, and the 2-of-3 Safe that receives
+// both.
 export const FEE_BPS = 100n;
 export const FEE_RECIPIENT: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
 // The 2-of-3 Safe that holds Matcha Latte's EXECUTOR_ROLE.
@@ -51,7 +52,8 @@ export const CURRENCIES = ["USD", "EUR", "GBP", "CHF", "AUD", "CAD"] as const;
 export type Currency = (typeof CURRENCIES)[number];
 export const currencyOf = (name: string): Currency | undefined => CURRENCIES.find((each) => each === name);
 export type Fiat = Exclude<Currency, "USD">;
-// Chainlink feeds on Base, all with 8 decimals: each currency's price in dollars, and the anchors others are priced by.
+// Chainlink feeds on Base, all with 8 decimals: each currency's price in dollars, and the dollar price of each anchor,
+// the tokens that others are priced against.
 export const FIAT_FEEDS: Record<Fiat, Address> = {
   EUR: "0xc91D87E81faB8f93699ECf7Ee9B44D11e1D53F0F",
   GBP: "0xCceA6576904C118037695eB71195a5425E69Fa15",
@@ -67,7 +69,8 @@ export const ANCHORS: Anchor[] = [
   { address: EURC, decimals: 6, feed: "0xDAe398520e2B67cd3f27aeF9Cf14D93D927f8250" },
 ];
 
-// ImmutableSwapper, one per output: no owner, no settings. `places` shows about a cent at its usual price.
+// ImmutableSwapper, one per output token, with no owner and no settings. `places` is the number of decimals that shows
+// about a cent at the token's usual price.
 export type Output = "usdc" | "eurc" | "weth" | "cbbtc" | "aero" | "hydx";
 export type Swapper = {
   output: Output;
@@ -103,8 +106,8 @@ export const SWAPPERS: Swapper[] = [
 export const DEFAULT_OUTPUT: Output = "usdc";
 export const swapperOf = (output: string): Swapper | undefined => SWAPPERS.find((each) => each.output === output);
 
-// The swappers' exchanges, in the page's order. `id` is the swapper's Exchange enum. Uniswap v4's factory is its
-// PoolManager.
+// The swappers' exchanges, in the order the page lists them. `id` is the value of the swapper's `Exchange` enum. For
+// Uniswap v4, `factory` is the PoolManager.
 export type ExchangeKind = "algebra" | "pair" | "solidly" | "slipstream" | "aerodrome" | "v2" | "v3" | "v4";
 export type Exchange = { id: number; name: string; kind: ExchangeKind; factory: Address; stable?: boolean };
 export const EXCHANGES: Exchange[] = [
@@ -129,6 +132,7 @@ export const EXCHANGES: Exchange[] = [
 ];
 const exchangesOf = (...kinds: ExchangeKind[]) =>
   kinds.flatMap((kind) => EXCHANGES.filter((each) => each.kind === kind));
-// Prices at an epoch's end come from Hydrex's pools; prices now from the basic pools too, the first of two as deep.
+// Prices at an epoch's end come from Hydrex's pools only; current prices also use the basic pools. Of two equally deep
+// pools, the first listed wins.
 export const HYDREX_PRICING = exchangesOf("pair", "algebra");
 export const SWAP_PRICING = exchangesOf("solidly", "aerodrome", "pair", "algebra");

@@ -2,7 +2,7 @@ import type { Address, Hex } from "viem";
 import { DOUBLE_ESPRESSO, WETH } from "../src/config.ts";
 import * as h from "../fork/harness.ts";
 
-// The states `npm run qa` forks Base into. Each owner gets 0.1 ETH for gas; the first is signed as.
+// The states `npm run qa` forks Base into. Each owner gets 0.1 ETH for gas, and the wallet starts signing as the first.
 export type Owner = { address: Address; holds: string };
 export type Scenario = {
   name: string;

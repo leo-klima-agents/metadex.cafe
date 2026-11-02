@@ -1,7 +1,8 @@
 import { byKind, DEFAULT_OUTPUT, swapperOf, type Kind, type Output } from "./config.ts";
 
-// The page's addresses: `#app`, `#about`, `#hydrex`, `#hydrex/matcha-latte`, `#hydrex/9540`, `#swap/weth`, each with
-// an optional section that opens a popup, as `#hydrex/matcha-latte/check`. Anything else is Home.
+// The page's addresses, such as `#app`, `#about`, `#hydrex`, `#hydrex/matcha-latte`, `#hydrex/9540` and `#swap/weth`.
+// The app, automation and swap views take an optional section that opens a popup, such as `#hydrex/matcha-latte/check`.
+// Anything else is Home.
 export type Route =
   | { view: "home" | "about" | "hydrex" }
   | { view: "app"; section?: string }

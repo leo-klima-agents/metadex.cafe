@@ -145,8 +145,8 @@ function scan(): Got<Scan> {
   });
 }
 
-// The ticked tokens' routes, each its own, or found together, as Base runs them in order after their approvals:
-// whichever fetches more, net of gas. Without Base's answer, each token's own quote.
+// The ticked tokens' routes: each token's own, or the routes found for them together, whichever fetches more when Base
+// runs them in order after their approvals. Without an answer from Base, each token keeps its own quote.
 type Together = {
   parts: Map<string, { route: Route; out?: bigint | undefined }[]>;
   gas?: bigint | undefined;
@@ -157,7 +157,7 @@ function together(found: Scan): Got<Together> {
   const swapper = swapperShown();
   const rows = found.rows.filter(isTicked);
   const id = `${swapper.output} ${rows.map(({ token, amount }) => `${token.address}:${amount}`).join()}`;
-  // Ticks settle before they are routed.
+  // Route only once the ticks have stopped changing for 400 ms.
   if (id !== ticked.key) {
     ticked = { key: id, at: performance.now() };
     setTimeout(render, 400);
@@ -209,7 +209,7 @@ function together(found: Scan): Got<Together> {
   );
 }
 
-// The output's amounts, to as many places as a cent of it needs, with what they are worth.
+// Formats an amount of the output token to as many places as a cent of it needs, with its worth.
 function output(
   amount: bigint,
   swapper: Swapper,
@@ -376,8 +376,8 @@ actions.add = async (el) => {
   render();
 };
 
-// The review: run through Base with no minimums, each route then sets its own, under what it fetched; a route that
-// would not go through even so is left out.
+// Base runs the plan with no minimums, then each route's minimum is set under what it fetched. A route that fails even
+// without a minimum is left out.
 actions["review-swap"] = async (el) => {
   const connection = state.connection;
   const found = scan().value;
@@ -488,8 +488,7 @@ export async function reviewSwap(
   });
 }
 
-// The receipt: what each token fetched against its quote, the fee, what reached the wallet, and those skipped, which
-// stay in the wallet with their approval, which it offers to reset.
+// Skipped tokens stay in the wallet with their approval to the swapper still set, so the receipt offers to reset it.
 export function swapReceipt(
   receipts: Landed[],
   plan: Plan,

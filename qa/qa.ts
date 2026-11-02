@@ -1,6 +1,6 @@
-// `npm run qa [-- scenario]`, or `node qa/qa.ts --list`: the page against a fork of Base, as in the browser tests,
-// beside the QA wallet (qa.html), which signs as any address, asks before it acts if told to, and moves the fork on.
-// anvil forks through the browser tests' caches (fork/rpc-cache.ts), from BASE_RPC_URL; CHROMIUM names the browser.
+// `npm run qa [-- scenario]` or `node qa/qa.ts --list`. Opens the page against a fork of Base, as the browser tests do,
+// beside the QA wallet (qa.html), which signs as any address, can ask before it acts, and moves the fork on. anvil
+// forks from BASE_RPC_URL through the browser tests' caches (fork/rpc-cache.ts); CHROMIUM names the browser.
 import { readFileSync } from "node:fs";
 import { chromium, type BrowserContext, type Page, type Route } from "playwright-core";
 import { decodeFunctionData, erc20Abi, getAddress, isAddress, toHex, type Address, type Hex } from "viem";
@@ -30,7 +30,7 @@ import { cacheFileOf, forkUrl, serveCached, upstreamOf, type Cache } from "../fo
 import { SCENARIOS, type Owner, type Scenario } from "./scenarios.ts";
 
 const PANEL = readFileSync(new URL("qa.html", import.meta.url), "utf8");
-// The QA wallet's window, at the left of the screen: Chromium makes none narrower than about 500 pixels.
+// Width of the QA wallet's window, at the left of the screen: Chromium makes no window narrower than about 500 pixels.
 const PANEL_WIDTH = 520;
 const WINDOW = { viewport: null, colorScheme: null } as const;
 
@@ -79,7 +79,7 @@ type Session = {
   pages(): Page[];
   // Resolves once the first scenario has started, or failed to.
   started: Promise<void>;
-  // Resolves once the browser, or the QA wallet's window, has closed, and the fork's answers are kept.
+  // Resolves once the browser or the QA wallet's window has closed and the caches have saved the fork's answers.
   closed: Promise<void>;
   close(): Promise<void>;
 };
@@ -96,7 +96,8 @@ async function launch(first: Scenario, { headless = false } = {}): Promise<Sessi
       throw error;
     }
   }
-  // Ctrl-C closes the session rather than the browser, so that the fork's answers are kept: see close.
+  // Playwright would close the browser on Ctrl-C; the session closes it instead, so that the caches save the fork's
+  // answers (see `close`).
   const browser = await chromium.launch({
     headless,
     handleSIGINT: false,
@@ -140,7 +141,7 @@ async function launch(first: Scenario, { headless = false } = {}): Promise<Sessi
           }),
   };
   const handle = testWallet(wallet);
-  // Those not answered yet, which a scenario's start waits for, so that none reaches the next fork.
+  // Wallet requests not answered yet. A scenario's start waits for them, so that none reaches the next fork.
   const requests = new Set<Promise<unknown>>();
   async function respond(method: string, params: any[]) {
     const words = LOGGED.has(method) && requestWords(method, params, wallet.owner);
@@ -222,7 +223,7 @@ async function launch(first: Scenario, { headless = false } = {}): Promise<Sessi
             .catch(() => {});
   }
 
-  // Forks Base afresh, which undoes every change, with the wallet as it starts. Never throws: the panel says what failed.
+  // Forks Base afresh, undoing every change, and resets the wallet. Never throws: the panel shows what failed.
   async function start(next: Scenario): Promise<void> {
     busy = `Starting ${next.name}…`;
     failure = "";
@@ -280,7 +281,8 @@ async function launch(first: Scenario, { headless = false } = {}): Promise<Sessi
     note(`Moved Base's clock to ${new Date(at * 1000).toUTCString()}`);
   }
 
-  // The scenario's next transaction from Base, sent again as its sender; a failure on the fork moves on all the same.
+  // Sends the scenario's next transaction from Base again, as its sender. A failure on the fork still moves on to the
+  // next.
   async function replay(): Promise<void> {
     const next = current.replays?.[replayed];
     if (!next) throw new Error("No transaction is left to send.");
@@ -315,7 +317,7 @@ async function launch(first: Scenario, { headless = false } = {}): Promise<Sessi
     };
   }
 
-  // One at a time, so that none acts on a fork that a start replaces.
+  // Commands run one at a time, so that none acts on a fork that a start replaces.
   let queue: Promise<unknown> = Promise.resolve();
   function inTurn<T>(run: () => Promise<T>): Promise<T> {
     const result = queue.then(run);

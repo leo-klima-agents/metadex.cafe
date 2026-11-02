@@ -2,7 +2,7 @@ import { CURRENCIES, type Currency, type Fiat } from "./config.ts";
 
 const LANG = "en-GB";
 export const WEEK = 604_800;
-// Hydrex's epochs start on Thursday at 00:00 UTC, as did the Unix epoch.
+// Hydrex's epochs start on Thursday at 00:00 UTC, as the Unix epoch did, so each starts at a multiple of `WEEK`.
 export const weekStart = (time: number): number => time - (time % WEEK);
 
 const number = (options: Intl.NumberFormatOptions) => new Intl.NumberFormat(LANG, options);
@@ -23,7 +23,7 @@ export function figure(value: bigint, decimals: number): string {
   const n = Number(value) / 10 ** decimals;
   return n >= 10_000 ? whole.format(n) : fourDigits.format(n);
 }
-// Votes with an SI prefix: "897k", "1.17M".
+// Votes, which have 18 decimals, with an SI prefix: "897k", "1.17M".
 export function compact(value: bigint): string {
   const n = Number((Number(value / 10n ** 15n) / 1000).toPrecision(3));
   const [scale, suffix] = (
@@ -62,7 +62,8 @@ export const voteWords = (votes: bigint): string =>
 export const bps = (value: bigint): string => percent.format(Number(value) / 10_000);
 export const fraction = (value: number): string => roughPercent.format(value);
 
-// What prices are in (USDC when no dollar price was found), with each currency's price in dollars at their time.
+// The unit prices are in: USD, or USDC when no dollar price was found. `rates` gives each currency's price in dollars
+// at the prices' time.
 type Unit = "USD" | "USDC";
 export type Rates = Partial<Record<Fiat, number>>;
 export type Basis = { unit: Unit; rates?: Rates | undefined };
@@ -82,7 +83,8 @@ const FORMATS: Record<string, [Intl.NumberFormat, Intl.NumberFormat]> = {
   ...Object.fromEntries(CURRENCIES.map((c) => [c, [inCurrency(c, 2), inCurrency(c, 0)]])),
 };
 
-// The currency picked for the visit. A sum shows in it at the rate of its prices' time, else in what they are in.
+// The currency picked for this visit. A sum shows in it at the rate from its prices' time, or in its own unit when
+// there is no such rate.
 let picked: Currency = "USD";
 export const setCurrency = (currency: Currency): void => void (picked = currency);
 function shownOf({ unit, rates }: Basis): [string, number] {
@@ -93,10 +95,10 @@ const toCents = (sum: Money): number => {
   const [, rate] = shownOf(sum);
   return (Math.round((sum.value / rate) * 100) / 100) * rate;
 };
-// What lies between two sums as each shows, so that a column adds up as it reads.
+// The difference between two sums as each is shown, rounded to the cent, so that a column adds up as it reads.
 export const between = (from: Money, to: Money): Money => ({ ...to, value: toCents(to) - toCents(from) });
 
-// "≈ $692", "≈ −€0.69", "< £0.01", "≈ 0.77 USDC"; with `cents`, always to the cent, as in a column.
+// For example "≈ $692", "≈ −€0.69", "< £0.01" or "≈ 0.77 USDC". With `cents`, always to the cent, as in a column.
 export function money(sum: Money, cents = false): string {
   const [shown, rate] = shownOf(sum);
   const value = sum.value / rate;
@@ -132,7 +134,8 @@ export function until(seconds: number): string {
 }
 
 export const short = (hex: string): string => `${hex.slice(0, 6)}…${hex.slice(-4)}`;
-// Hex in groups of four: an address or a hash on one line; calldata as its selector, then a line per 32-byte word.
+// Hex in groups of four digits. An address or a hash fits on one line; calldata shows its selector, then one line per
+// 32-byte word.
 export function hexLines(hex: string): string[][] {
   const groups = (digits: string): string[] => digits.match(/.{1,4}/g) ?? [];
   if (hex.length === 42 || hex.length === 66) return [["0x", ...groups(hex.slice(2))]];
@@ -152,7 +155,7 @@ export const listWith = <T>(items: T[]): (T | string)[] =>
     .map(({ type, value }) => (type === "element" ? items[Number(value)]! : value));
 export const count = (n: number, one: string, other: string): string =>
   `${whole.format(n)} ${plurals.select(n) === "one" ? one : other}`;
-// Strips characters that are invisible or reorder text, which a name could use to pass for another.
+// Strips invisible and text-reordering characters, which a name could use to pass for another.
 export const clean = (text = ""): string =>
   text
     .replace(/\s+/g, " ")

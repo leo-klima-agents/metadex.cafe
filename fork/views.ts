@@ -83,7 +83,7 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
   });
 
   test("what votes earned last epoch: on the menu, for each account, and when all of Hydrex cannot be read", async () => {
-    // All of Hydrex, for its average, is refused: the rest of the page still shows.
+    // Refuse the reads of all of Hydrex, which its average needs; the rest of the page must still show.
     const everyPool = toFunctionSelector("function totalWeightAt(uint256)").slice(2);
     const { page, violations } = await h.connected(
       { owner: MEMBER },
@@ -151,7 +151,7 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
     await page.getByText(/moves the votes from Thu,? 29 Oct/).waitFor();
     await h.group(page, "in:matcha-latte").getByRole("link", { name: "Hydrex account #141" }).waitFor();
     await h.row(page, 141).getByText("Joining Matcha Latte:").waitFor({ state: "hidden" });
-    // Until Hydrex moves on, last epoch's payouts are not final; once someone calls its minter, the page reads them.
+    // Last epoch's payouts are final only once someone calls Hydrex's minter; the page then reads them.
     await h.row(page, 141).getByRole("link", { name: "Hydrex account #141" }).click();
     const standing = view(page, "account").locator("[data-list=standing] > article");
     await standing.getByText("Not final yet").waitFor();

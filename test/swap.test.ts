@@ -94,7 +94,7 @@ test("the swapper's twelve exchanges each have their place, and a route names it
   assert.equal(words(hop(4, WETH), hop(6)), "AVNT → WETH → USDC via Aero, Aerodrome");
 });
 
-test("Aero's classic pools win a hop only by more than 1%, as their tax is not in the quote", () => {
+test("Aero's basic pools win a hop only by more than 1%, as their tax is not in the quote", () => {
   const aero = { way: hop(2), out: 1_005n };
   const uniswap = { way: hop(10, USDC, 500), out: 1_000n };
   assert.equal(best([aero, uniswap]), uniswap);
@@ -128,7 +128,7 @@ test("routes split into as few swaps as keep each under 15 million gas", () => {
 });
 
 test("a swap is swap(routes, deadline, true), selling each token once, in as many routes as it has parts", () => {
-  // Written separately from src/swap.ts, from the verified source on Sourcify.
+  // From the verified source on Sourcify, not from `src/swap.ts`, so a wrong ABI there fails the test.
   const abi = parseAbi([
     "function swap((address token, uint256 amount, uint256 minPaid, (uint8 exchange, address pool, address tokenOut, uint24 fee, int24 tickSpacing)[] hops)[] routes, uint256 deadline, bool skipFailed) returns ((bool done, uint256 amountIn, uint256 amountOut, bytes reason)[] results, uint256 paid, uint256 fee)",
   ]);
@@ -142,7 +142,7 @@ test("a swap is swap(routes, deadline, true), selling each token once, in as man
 });
 
 test("each route's quote comes back to it, whatever the swapper and however the quotes are batched", async () => {
-  // Each swapper pays its place in the list, plus one, times the amount: a quote that comes back wrong shows.
+  // Each swapper pays the amount times its index in `SWAPPERS` plus one, so a quote returned to the wrong route shows.
   const rd: Read = async (calls): Promise<any> =>
     calls.map(({ address, args: [routes] }) => {
       const place = BigInt(SWAPPERS.findIndex((swapper) => swapper.address === address) + 1);
@@ -154,7 +154,8 @@ test("each route's quote comes back to it, whatever the swapper and however the 
   assert.deepEqual(quoted, expected);
 });
 
-// Slipstream factories' tick spacings, by exchange: every reader here answers the same, as prices.ts keeps the first.
+// Slipstream factories' tick spacings by exchange id. Every reader here must answer the same, because `prices.ts` keeps
+// the first answer it reads for the whole run.
 const SPACINGS: Record<number, number[]> = { 4: [1, 100], 6: [1], 7: [50], 8: [] };
 const spacingsAt = (address: Address) => SPACINGS[BY_ID.find(({ factory }) => same(factory, address))!.id];
 
@@ -166,7 +167,8 @@ test("a pair is looked up on every exchange, fee and spacing; a v4 pool counts o
       lookups++;
       if (functionName === "poolByPair") return POOL;
       if (functionName !== "extsload") return zeroAddress;
-      // Uniswap v4's pools by fee: none, priced without liquidity, liquid without a price, and one that is both.
+      // Uniswap v4's fee tiers answer, in turn: no pool, a price without liquidity, liquidity without a price, and
+      // both.
       const n = BigInt(slots++);
       return [n & 1n, 0n, 0n, n & 2n].map((word) => numberToHex(word, { size: 32 }));
     });
@@ -200,14 +202,16 @@ test("a plan runs through Base after one approval per token, and each item gets 
     const replies = calls.map(({ to, data }) => {
       if (to !== SWAPPER.address) return { status: "0x1", returnData: "0x", gasUsed: "0x1" };
       const sent = decodeFunctionData({ abi: swapperAbi, data }).args[0] as Route[];
-      // With no minimum, each route fetches what it can: but WETH's route of 18 is refused.
+      // The simulation succeeds only when no route has a minimum. Each route then fetches what it can, except WETH's
+      // route of 18, which its token refuses.
       const results = paid(sent, (amount) => amount !== 18n).map((r) => (r.done ? r : { ...r, reason: refused }));
       const returnData = encodeFunctionResult({ abi: swapperAbi, functionName: "swap", result: [results, 0n, 0n] });
       return { status: sent.every(({ minPaid }) => minPaid === 0n) ? "0x1" : "0x0", returnData, gasUsed: "0x10" };
     });
     return Response.json({ result: [{ calls: replies }] });
   });
-  // Twenty routes of a million gas each: two swaps. The first two are parts of AVNT, whose allowance is short.
+  // Twenty routes of about a million gas each make two swaps. The first two routes are parts of AVNT, whose allowance
+  // of 50 is short of their 100, so AVNT needs one approval.
   const item = (amount: bigint, address = AVNT, allowance = 50n) => ({
     token: TOKENS.get(key(address))!,
     route: { ...route(amount, [hop(0)], address), minPaid: 7n },

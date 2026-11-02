@@ -6,8 +6,8 @@ import { figure, money, moneyAt, type Basis, type Money, type Rates } from "./fo
 import { call, now, read, same, type Call, type Read } from "./rpc.ts";
 
 export type Token = { address: Address; decimals: number; symbol: string };
-// Per whole token, by lower-case address. `standIns` are today's prices of tokens none of whose pools kept a history
-// at a past time: only to weigh rewards against one another, never shown.
+// Prices per whole token, keyed by lower-case address. `standIns` holds current prices for tokens whose pools have no
+// history at the past time; they only weigh rewards against one another and are never shown.
 export type Prices = Basis & { of: Map<string, number>; standIns: Map<string, number> };
 export function key(address: Address): Address;
 export function key(address: string): string;
@@ -19,7 +19,7 @@ export const worthOf = (amount: bigint, decimals: number, price: number): number
   (Number(amount) / 10 ** decimals) * price;
 
 export type Hop = { exchange: number; pool: Address; tokenOut: Address; fee: number; tickSpacing: number };
-// `stable` is set for a pool of reserves: true on the stable curve.
+// `stable` is set only for reserve pools, and is true for those on the stable curve.
 export type Way = Hop & { tokenIn: Address; stable?: boolean };
 export const BY_ID = [...config.EXCHANGES].sort((a, b) => a.id - b.id);
 export const exchangeOf = (id: number): Exchange => BY_ID[id]!;
@@ -38,7 +38,7 @@ const factoryAbis = {
   v3: parseAbi(["function getPool(address, address, uint24 fee) view returns (address)"]),
   v4: parseAbi(["function extsload(bytes32 startSlot, uint256 nSlots) view returns (bytes32[])"]),
 } satisfies Record<ExchangeKind, Abi>;
-// Uniswap v4's standard pools without hooks, as [fee, tick spacing]; v3 takes the same fees.
+// Uniswap v4's standard hookless pools, as [fee, tick spacing]. Uniswap v3 uses the same fee tiers.
 const V4_POOLS = [
   [100, 1],
   [500, 10],
@@ -46,7 +46,7 @@ const V4_POOLS = [
   [10_000, 200],
 ] as const;
 
-// Where Uniswap v4's PoolManager keeps a pool's state: slot 6, by pool id.
+// The storage slot of a pool's state in Uniswap v4's PoolManager, whose pools mapping sits at slot 6, keyed by pool id.
 function v4Slot([a, b]: [Address, Address], fee: number, tickSpacing: number): Hex {
   const types = ["address", "address", "uint24", "int24", "address"].map((type) => ({ type }));
   const id = keccak256(encodeAbiParameters(types, [a, b, fee, tickSpacing, zeroAddress]));
@@ -55,7 +55,8 @@ function v4Slot([a, b]: [Address, Address], fee: number, tickSpacing: number): H
 
 type PoolFound = Omit<Way, "tokenIn" | "tokenOut">;
 type Lookup = { call: Call; found(reply: unknown): PoolFound | undefined };
-// An exchange's reads for a pair's pools, its tokens sorted: one per curve, fee tier or tick spacing.
+// The reads that find a pair's pools on an exchange, one per curve, fee tier or tick spacing. `pair` must be sorted by
+// address.
 function lookupsOn(exchange: Exchange, pair: [Address, Address], spacings: Map<number, number[]>): Lookup[] {
   const { id, factory, kind } = exchange;
   const abi: Abi = factoryAbis[kind];
@@ -83,7 +84,8 @@ function lookupsOn(exchange: Exchange, pair: [Address, Address], spacings: Map<n
     case "v3":
       return V4_POOLS.map(([fee]) => lookup("getPool", [fee], { fee }));
     case "v4":
-      // A pool is there once its price is set, and worth trying while it holds liquidity.
+      // A pool exists once its price is set, which makes slot0 non-zero, and is worth quoting while its liquidity, the
+      // low 128 bits of the fourth slot, is non-zero.
       return V4_POOLS.map(([fee, tickSpacing]) => ({
         call: call(factory, abi, "extsload", v4Slot(pair, fee, tickSpacing), 4n),
         found: (reply) => {
@@ -95,7 +97,8 @@ function lookupsOn(exchange: Exchange, pair: [Address, Address], spacings: Map<n
   }
 }
 
-// The pools found, by exchange and sorted pair, kept for the visit. A lookup that fails is asked again next time.
+// Pools found, keyed by exchange id and sorted pair, cached until the page reloads. A failed lookup is dropped, so the
+// next call retries it.
 export const pools = new Map<string, Promise<PoolFound[]>>();
 let spacingsRead: Promise<Map<number, number[]>> | undefined;
 function spacings(rd: Read): Promise<Map<number, number[]>> {
@@ -119,7 +122,8 @@ function spacings(rd: Read): Promise<Map<number, number[]>> {
   ));
 }
 
-// Each pair's pools on the exchanges given, in their order, by pairKey. Lookups not yet kept go in one read.
+// Each pair's pools, keyed by `pairKey` of the pair as given, in the order of `exchanges`. Lookups not yet cached go in
+// a single read.
 export async function waysFor(
   pairs: readonly (readonly [Address, Address])[],
   exchanges: Exchange[] = BY_ID,
@@ -168,8 +172,9 @@ export async function waysFor(
   );
 }
 
-// Pools are averaged over the half hour before the flip. A pool prices a token only if it holds at least $250 of each
-// side, and ten times the value priced. Classic pairs observe at most every half hour, when they trade.
+// Pools are averaged over the 30 minutes before the flip. A pool prices a token only if it holds at least $250 of each
+// side and ten times the value priced. Classic pairs record an observation at most every 30 minutes, and only when they
+// trade, so the observations around the window can lie further apart than `WINDOW`; `SPAN` is the most allowed.
 export const WINDOW = 1800;
 export const SPAN = 4 * WINDOW;
 const FLOOR = 250;
@@ -206,7 +211,8 @@ export const tickPrice = (tick: number, decimals0: number, decimals1: number): n
 // Token0's price in token1 from whole-token reserves: x × y = k, or x³y + xy³ = k if stable.
 export const pairPrice = (x: number, y: number, stable: boolean): number =>
   stable ? (3 * x * x * y + y ** 3) / (x ** 3 + 3 * x * y * y) : y / x;
-// Token0's average price in token1 between two observations, unless too far apart, or the pool held nothing.
+// Token0's average price in token1 between two observations. Undefined if they are out of order or more than `SPAN`
+// apart, or if the pool held nothing.
 export function observedPrice(
   first: Observation,
   last: Observation,
@@ -220,8 +226,8 @@ export function observedPrice(
   return x > 0 && y > 0 ? pairPrice(x, y, stable) : undefined;
 }
 
-// A search for the first index in [lo, hi) whose read passes, every later one passing too. It ends with hi there;
-// `seen` keeps the reads, those at hi - 1 and hi included. A failed read ends it.
+// A search for the first index in [lo, hi) whose read passes, given that every later index passes too. When it ends,
+// `hi` is that index and `seen` holds the reads, including those at `hi - 1` and `hi`. A failed read stops it.
 export type Search = {
   lo: number;
   hi: number;
@@ -257,8 +263,9 @@ export async function narrow(searches: Search[], rd: Read = read): Promise<void>
   }
 }
 
-// Chainlink's answers at `flip`, Infinity being now: the latest rounds, then a search for the rounds in effect at the
-// flip. A feed without a round of that time gives no price: a price from another time would pass for the flip's.
+// Chainlink's answers in effect at `flip`, or the latest when `flip` is Infinity. It reads the latest rounds, then
+// searches back for the rounds in effect at the flip. A feed with no round from that time gives no price, since a price
+// from another time would pass for the flip's.
 export async function feedsAt(feeds: Address[], flip: number, rd: Read = read): Promise<(number | undefined)[]> {
   const latest = await rd(feeds.map((feed) => call(feed, feedAbi, "latestRoundData")));
   const searchOf = (i: number): Search | undefined => {
@@ -302,8 +309,8 @@ const decimalsOf = (pool: Pool): [number, number] =>
   tokenFirst(pool) ? [pool.token.decimals, pool.anchor.decimals] : [pool.anchor.decimals, pool.token.decimals];
 const inAnchor = (pool: Pool, price0: number): number => (tokenFirst(pool) ? price0 : 1 / price0);
 
-// How a kind of pool prices: its reads now, reserves first; token0's price in token1 now; and the reads or searches
-// for its average over the window, with the average they give.
+// How a kind of pool prices. `state` lists its reads now, `getReserves` first; `spot` gives token0's price in token1
+// now; `history` gives the reads or searches for its average over the window, and the price they give.
 type History = { calls: Call[]; searches: Search[]; price(replies: unknown[]): number | undefined };
 type Pricing = {
   abi: Abi;
@@ -312,7 +319,7 @@ type Pricing = {
   history(entry: Measured, flip: number, ago: number): History;
 };
 const reservesSpot: Pricing["spot"] = (x, y, _, pool) => pairPrice(x, y, pool.stable);
-// Aero's basic pools read back their reserves' running sums at any time in their history.
+// Aero's basic pools return their cumulative reserves for any past time through `observe`.
 const aero: Pricing = {
   abi: pairAbi,
   state: ["getReserves"],
@@ -332,7 +339,8 @@ const aero: Pricing = {
     },
   }),
 };
-// Aerodrome's and Hydrex's classic pools: the last observation before the window, and the first after it, or now.
+// Aerodrome's and Hydrex's classic pools: the last observation before the window, and the first at or after the flip,
+// or the current sums if there is none yet.
 const classic: Pricing = {
   abi: pairAbi,
   state: ["getReserves", "observationLength", "currentCumulativePrices"],
@@ -427,9 +435,10 @@ async function atFlipIn(entries: Measured[], prices: Prices, flip: number, ago: 
   return found;
 }
 
-// Prices the tokens in their deepest pools against the anchors priced, of two as deep the first in `exchanges`. Now, a
-// pool whose history falls short gives its price now; at a past flip, the next deepest is tried, and without any, the
-// deepest's price now only stands in.
+// Prices each token from its deepest pool against an anchor already priced; of two pools equally deep, the one whose
+// exchange comes first in `exchanges` wins. When pricing now, a pool whose history falls short gives its spot price. At
+// a past flip, the next deepest pool is tried, and if none has a history, the deepest pool's spot price goes in
+// `standIns`.
 async function inPools(
   tokens: Token[],
   prices: Prices,
@@ -483,9 +492,9 @@ async function inPools(
   for (const token of prices.of.keys()) prices.standIns.delete(token);
 }
 
-// Prices per whole token at the flip, `time` being now. Anchors take their Chainlink feed, in dollars, with each
-// currency's rate; without any, prices are in USDC at 1 USDC each. Anchors without a price come next, then the others.
-// `amounts` is how much will be priced.
+// Prices per whole token at `flip`, where `time` is now. Anchors take their Chainlink USD feeds, and the fiat feeds
+// give each currency's rate; if no anchor feed answers, prices are in USDC, with USDC at 1. Pools then price the
+// anchors without a feed, then the other tokens. `amounts` is how much of each token will be priced.
 export async function pricesAt(
   tokens: Token[],
   amounts: Map<string, bigint>,
@@ -536,7 +545,7 @@ export const pricesAtFlip = (
   flip: number,
   rd: Read = read,
 ): Promise<Prices> => pricesAt(tokens, amounts, flip, now(), config.HYDREX_PRICING, rd);
-// The anchors' prices now, as gas needs ETH's: read at most once a minute.
+// The anchors' prices now, which include ETH's for gas costs; read at most once a minute.
 export const anchorsNow = (): Promise<Prices | undefined> =>
   memo("anchors", () => pricesNow([]), 60_000).catch(() => undefined);
 

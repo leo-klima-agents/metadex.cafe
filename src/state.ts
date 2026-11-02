@@ -5,11 +5,11 @@ import type { Connection } from "./wallet.ts";
 export const state: {
   route: Route;
   connection?: Connection | undefined;
-  // The Hydrex accounts the visitor ticked in each group, by the group's view and name.
+  // The Hydrex accounts the visitor ticked in each group, keyed by the group's view and name.
   picks: Map<string, Set<bigint>>;
 } = { route: { view: "home" }, picks: new Map() };
 
-// Everything shown is drawn again from what is known, at most once a frame, whenever anything changes.
+// Any change redraws everything shown from what is known, at most once a frame.
 const drawers: (() => void)[] = [];
 let due = false;
 export const onRender = (draw: () => void): void => void drawers.push(draw);

@@ -7,8 +7,8 @@ import { key, noPrices, pricesAtFlip, worthOf, type Prices, type Token } from ".
 import { call, read, readEach, required, type Read } from "./rpc.ts";
 import { tokensOf } from "./tokens.ts";
 
-// What votes earned in an epoch that has ended, from Hydrex's reward contracts: each pool's gauge has one for the
-// pool's fees and one for incentives, which keep each epoch's votes and rewards.
+// What votes earned in an ended epoch, from Hydrex's reward contracts. Each pool's gauge has two, one for the pool's
+// fees and one for incentives, and each keeps every epoch's votes and rewards.
 
 type Pool = { address: Address; name: string; votes: bigint };
 export type Reward = { pool: Address; contract: Address; token: Token; amount: bigint; fee: boolean };
@@ -21,8 +21,8 @@ const poolAbi = parseAbi([
   "function symbol() view returns (string)",
 ]);
 
-// An epoch's rewards are final only once Hydrex's own epoch has moved on, as it does once someone calls its minter:
-// so the last epoch to have ended is Hydrex's word.
+// An epoch's rewards are final only once Hydrex's own epoch moves on, which happens when someone calls its minter. So
+// Hydrex, not the clock, says which epoch ended last.
 export async function lastEpoch(): Promise<number> {
   const [active] = required(await read([voter("_epochTimestamp")]));
   return Number(active) - WEEK;
@@ -47,8 +47,9 @@ async function contractsOf(pools: Address[], rd: Read): Promise<Contract[]> {
     ];
   });
 }
-// Every pool's reward contracts: thousands of reads, made once, for the average and whoever voted again since an epoch
-// began. Hydrex only adds pools, so they hold every epoch up to the one under way when read.
+// Every pool's reward contracts, for the average and for voters who voted again after an epoch began. They take
+// thousands of reads, so they are read once. Hydrex only adds pools, so the list covers every epoch up to the one under
+// way when it was read.
 async function allContracts(start: number): Promise<Contract[]> {
   const readAll = async () => {
     const [length, active] = required(await read([voter("length"), voter("_epochTimestamp")]));
@@ -63,7 +64,8 @@ async function allContracts(start: number): Promise<Contract[]> {
 export const earnedBy = (perEpoch: bigint, supply: bigint, balance: bigint): bigint =>
   (((perEpoch * 10n ** 32n) / supply) * balance) / 10n ** 32n;
 
-// What a voter's votes, or all votes, earned in the epoch from `start` in the contracts, and the votes for each pool.
+// What `holder`'s votes, or all votes when `holder` is undefined, earned in these contracts in the epoch from `start`,
+// with the votes for each pool.
 async function rewardsOf(contracts: Contract[], start: number, holder: Address | undefined, rd: Read) {
   const at = BigInt(start);
   const totals = await readEach(
@@ -104,7 +106,7 @@ async function rewardsOf(contracts: Contract[], start: number, holder: Address |
     const known = named.get(key(token));
     return known ? [{ ...reward, token: known }] : [];
   });
-  // A vote for a pool counts in both of its contracts.
+  // A vote for a pool counts in both of its contracts, so keying by pool counts it once.
   return { rewards, votes: new Map(voted.map(({ pool, balance }) => [pool, balance])) };
 }
 
@@ -115,10 +117,10 @@ async function priced(start: number, votes: bigint, pools: Pool[], rewards: Rewa
   return { start, votes, pools, rewards, prices: await pricesAtFlip(tokens, amounts, start + WEEK, rd) };
 }
 
-// What a voter's votes earned in the epoch from `start`: an automation's, its pools named, or an owner's. Its rewards
-// go to the votes standing when the epoch starts. A voter that has not voted since the epoch before began, or had no
-// votes, earned nothing. Hydrex's Voter keeps only a voter's latest pools: until it votes again, as the automations do
-// just before each flip, after which they are found among every pool's.
+// What a voter earned in the epoch from `start`: an automation, whose pools are `named`, or an owner. Rewards go to the
+// votes standing when the epoch starts. A voter with no votes then, or that has not voted since the epoch before began,
+// earned nothing. Hydrex's Voter keeps only a voter's latest pools, so once it votes again, as the automations do just
+// before each flip, its pools are found among every pool's.
 export async function votesEarned(holder: Address, start: number, named: boolean, rd: Read = read): Promise<Earnings> {
   const [voted, length, votes] = required(
     await rd([
@@ -141,7 +143,7 @@ export async function votesEarned(holder: Address, start: number, named: boolean
   pools.sort((a, b) => (a.votes === b.votes ? 0 : a.votes > b.votes ? -1 : 1));
   return priced(start, votes, pools, rewards, rd);
 }
-// A pool goes by its two tokens; a classic pair by its own symbol; a vault by both.
+// Names a pool by its two tokens, a classic pair (`sAMM-`, `vAMM-`) by its own symbol, and a vault by both.
 async function withNames(used: [Address, bigint][], rd: Read): Promise<Pool[]> {
   const found = await readEach(
     used,
@@ -219,7 +221,7 @@ export const perThousandOf = (earnings: Earnings): Money => {
   const value = valueOf(earnings);
   return moneyAt(perThousand(value.total, earnings.votes), value);
 };
-// Some votes' earnings per 1,000 votes against all of Hydrex's, at the same prices so that they compare fairly.
+// The ratio of some votes' earnings per 1,000 votes to all of Hydrex's, both at `all`'s prices so they compare fairly.
 export function versus(earnings: Earnings, all: Earnings): number | undefined {
   const ratio =
     perThousand(valueOf(earnings, all.prices).total, earnings.votes) / perThousand(valueOf(all).total, all.votes);

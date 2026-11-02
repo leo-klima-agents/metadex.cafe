@@ -51,7 +51,7 @@ const PAID = 51_698_051;
 const t = (n: number) => BigInt(Math.round(n * 1e6)) * 10n ** 12n;
 const amount = (token: Address, amount: bigint) => ({ token, amount });
 
-// Logs in the order they were made, each in a transaction of its own unless said otherwise.
+// Each log follows the one made before it and has a transaction of its own, unless `tx` is given.
 let index = 0;
 function log(
   eventName: (typeof abi)[number]["name"],
@@ -109,14 +109,14 @@ test("each account's payout, with the retirement just before it in the same tran
   assert.deepEqual([tonnes, retiredKvcm], [0n, 0n], "a retirement only for the account it precedes");
 });
 
-// Base's blocks, two seconds apart from its first.
+// Base's genesis time; its blocks are two seconds apart.
 const GENESIS = 1_686_789_347;
 const timeOf = (block: number) => GENESIS + 2 * block;
 const SEP_17 = 1_789_603_200; // Thu 17 Sep 2026, 00:00 UTC
 const OCT_15 = SEP_17 + 4 * WEEK;
 const OCT_8 = OCT_15 - WEEK;
 const OCT_1 = OCT_15 - 2 * WEEK;
-const TOP = 52_694_000; // Fri 16 Oct 2026, 18:22 UTC
+const TOP = 52_694_000; // Fri 16 Oct 2026, 19:02 UTC
 
 test("an epoch's first block, from the blocks' own times, whatever the time between blocks", async () => {
   // Two seconds apart up to block 1,000,000, then one second apart, then three.
@@ -170,7 +170,8 @@ test("what amounts are worth: nothing for a token without a price or decimals, u
   assert.equal(valueAt(waiting, tokens, standIn, true), 6.5);
 });
 
-// Last epoch's rewards: $90 of USDC fees, $8 of WETH and $2 of kVCM bribes; the epoch before's, $60 and $40.
+// Last epoch's rewards are $90 of USDC fees, $8 of WETH bribes and $2 of kVCM bribes; the epoch before's are $60 of
+// fees and $40 of WETH bribes.
 const fees: Pair = { contract: FEES, token: USDC };
 const bribes: Pair = { contract: BRIBES, token: WETH };
 const PAIRS = [fees, bribes, { contract: BRIBES, token: KVCM }];
@@ -206,15 +207,15 @@ test("an account is paid up to last epoch until its payout, which a claim of a f
   ];
   const paidUpTo = { through: OCT_8, pair: fees };
   assert.deepEqual(due, { id: 1n, paidUpTo, paid: false, late: false, waiting, unknown: false });
-  // Its small bribes claimed since the flip, as by a stranger through Double Espresso: still due.
+  // A stranger claimed its small bribes through Double Espresso after the flip, so it is still due.
   assert.deepEqual(brief(of({ last: [OCT_8, OCT_15, OCT_15], before: [OCT_8, OCT_8] })), [OCT_8, fees, false, false]);
-  // Paid for most of last epoch's rewards: up to the flip, through the reward worth the most among those claimed.
+  // Claims took most of last epoch's rewards, so it is paid up to the flip, through the most valuable reward claimed.
   assert.deepEqual(brief(of({ last: [OCT_15, OCT_8, 0], before: [OCT_15, OCT_8] })), [OCT_15, fees, true, false]);
   assert.deepEqual(brief(of({ last: [OCT_15, OCT_15, OCT_15], before: [OCT_8, OCT_8] })), [OCT_15, fees, true, false]);
 });
 
 test("late, never paid, joined since, and what could not be read", () => {
-  // Not paid for the epoch from Oct 1: late, and paid up to its newest record from before then.
+  // Unpaid for the epoch from Oct 1, so it is late, and paid up to its newest record before then.
   assert.deepEqual(brief(of({ last: [SEP_17, OCT_15, 0], before: [SEP_17, 0] })), [SEP_17, fees, false, true]);
   assert.deepEqual(brief(of({})), [0, undefined, false, true]);
   const joined = of({ last: [OCT_8, 0, 0] }, { last: true, before: false });
@@ -235,7 +236,7 @@ test("each reward weighed at last epoch's prices, or its stand-in, today's; none
     { ...fees, value: 90 },
     { ...bribes, value: 0 },
   ]);
-  // Weighed at today's price, WETH keeps a claim of the USDC alone from passing for a payout.
+  // With WETH weighed at today's price, a claim of the USDC alone is not a payout.
   const pairs = weighed(rewards, prices({ [USDC]: 1 }, { [WETH]: 2_500 }));
   assert.equal(pairs[1]!.value, 2_500);
   assert.equal(paidFor(pairs, [OCT_15, 0], OCT_15), false);
@@ -259,7 +260,7 @@ test("records are read in one batch; what waits in batches of 20, and what lies 
     ["int128", "int128", "int128", "uint48"].map((type) => ({ type })),
     [0n, 0n, 0n, FIRST - 100 * WEEK],
   );
-  // An epoch past another 50, which owes nothing.
+  // 50 epochs after `OCT_15`, so past the first 50 that one asking reads; it owes nothing.
   const LATER = OCT_15 + 50 * WEEK;
   const batches: number[] = [];
   const past: unknown[] = [];
@@ -285,7 +286,8 @@ test("records are read in one batch; what waits in batches of 20, and what lies 
     batches.sort((a, b) => a - b),
     [2, 2, 2, 11, 20, 22],
   );
-  // earned() reads from a week before the first incentives: both epochs lie past its 50, and are read on their own.
+  // `earned()` reads 50 epochs from a week before the first incentives. Both epochs lie beyond those 50, so each is
+  // read on its own.
   assert.deepEqual(past, [
     [1n, USDC, OCT_8],
     [1n, USDC, OCT_15],
@@ -332,7 +334,7 @@ const walk = async (claimsAt: (block: number, ids: bigint[]) => Promise<ClaimLog
   (await walkClaims(new Map([[1n, { from, since }]]), claimsAt)).get(1n)!;
 
 test("an account's claims, newest first, back to the start of the epoch of its last one", async () => {
-  // Someone's claim at 1,000, after one at 400 in the epoch before; then a stranger's dust at 1,500.
+  // The epoch starts at block 900: a claim at 400 before it, one at 1,000 in it, then a stranger's dust at 1,500.
   const { claimsAt, reads } = doubleEspresso([
     claimed(1n, 400, 0, { [USDC]: 5_000_000n }),
     claimed(1n, 1_000, 400, { [USDC]: 12_000_000n, [WETH]: 10n ** 15n }),

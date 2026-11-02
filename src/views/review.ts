@@ -19,15 +19,15 @@ import {
 
 type Review = {
   name: string;
-  // The last page shows the calls too; one without a title is the calls'.
+  // The last page also shows the calls; a page without a title shows only the calls.
   pages: { title?: string; body?: Node }[];
-  // The calls; those `sending` are encoded then, with a fresh deadline.
+  // The calls. With `sending`, they are encoded to be sent, with a fresh deadline.
   steps: (sending?: boolean) => Slip[];
   atomic?: boolean;
-  // Calls too large for one transaction together, in groups that each fit one: counts of calls, in order.
+  // When the calls don't fit in one transaction: how many calls go in each transaction, in order.
   groups?: number[] | undefined;
   outcome?: (receipts: Landed[]) => Promise<Node | undefined>;
-  // What the calls wait for, if anything: they may change until then, so none is sent.
+  // What the calls wait for, if anything. They may change until then, so nothing is sent while this returns text.
   waiting?: () => string | undefined;
   // Where the page explains the calls, for a Safe's co-signers.
   checkHref: string;
@@ -35,7 +35,8 @@ type Review = {
 type Sending = Review & {
   page: number;
   capabilities?: Capabilities;
-  // Whether the calls go in one prompt: decided as the first is sent, from the wallet and the calls then.
+  // Whether the calls go in one prompt. Set when the first is sent, from the wallet's capabilities and the calls at
+  // that moment.
   batch?: boolean;
   done: Hex[];
   receipts: Landed[];
@@ -55,7 +56,7 @@ const batched = (review: Sending, steps = review.steps()): boolean =>
   review.batch ?? (!!review.capabilities?.batch && !apart(review) && steps.length > 1);
 
 export function openReview(review: Review): void {
-  // One opened from another, as the swap after a claim: what the other sent is read again.
+  // A review opened from another, such as the swap after a claim, first re-reads what the other one sent.
   if (current?.submitted && !current.sending) refreshAfter();
   const opened: Sending = {
     ...review,
@@ -163,8 +164,8 @@ function draw(): void {
         count: `${where}${steps.length > 1 ? ` ${i + 1} of ${steps.length}` : ""} · ${step.title}`,
         says: step.says,
       });
-      // What the wallet shows of the call: where it goes, the function, its fields, no ETH; and for a Safe, its data
-      // and, for a call alone, that it is a plain call.
+      // These fields mirror what the wallet shows: destination, function, arguments and a value of 0 ETH. A Safe also
+      // shows the data and, for a lone call, operation 0 (a plain call).
       const fields: Field[] = [
         { label: "To", description: step.on, code: step.to },
         { label: "Call", code: step.call },
@@ -210,7 +211,7 @@ async function finish(review: Sending): Promise<void> {
   say(review, n === 1 ? "It went through." : `All ${n} went through.`);
   announce(review.progress);
   const outcome = await review.outcome?.(review.receipts).catch((error: unknown) => void console.error(error));
-  // Kept in an element of its own: a fragment empties once shown, and would be shown empty the next time.
+  // Wrapped in an element because a fragment empties once inserted, and would show empty on the next draw.
   if (outcome) {
     const box = Object.assign(document.createElement("div"), { className: "stack" });
     box.append(outcome);
@@ -299,7 +300,7 @@ async function sendBatch(review: Sending): Promise<void> {
   finish(review);
 }
 
-// The wallet is asked at once, within the click: some wallets need it.
+// Asks the wallet within the click, before any `await`, because some wallets require that.
 actions.confirm = () => {
   const review = current;
   const connection = state.connection;
@@ -351,7 +352,8 @@ dialog.addEventListener("click", (event) => {
     open(anchor.href, "_blank", "noopener");
   } else closeReview();
 });
-// Once closed after sending, what the calls changed is read again; one under way is still followed.
+// Closing after sending re-reads what the calls changed. A review still sending keeps being followed, and re-reads when
+// it settles.
 dialog.addEventListener("close", () => {
   const review = current;
   current = undefined;

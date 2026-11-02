@@ -121,7 +121,8 @@
       let shown = {};
       let refused = "";
 
-      // Whether a part shows something new: a select is set only then, so that it stays as picked meanwhile.
+      // Whether a part has something new to show. A select is set only then, so that the next poll does not undo what
+      // was just picked.
       function changed(key, value) {
         const text = JSON.stringify(value);
         if (shown[key] === text) return false;
@@ -181,7 +182,7 @@
           if (command !== "state") refused = why;
           $("status").textContent = why;
           $("status").className = "failed";
-          // What was picked for a change that failed is set again as it is.
+          // Forget what was shown, so that the next render resets a control whose change failed.
           shown = {};
         }
       }

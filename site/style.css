@@ -1,4 +1,4 @@
-/* Subsets made by scripts/fonts.py. The build puts them inside this stylesheet, so its hash covers them too. */
+/* Font subsets made by `scripts/fonts.py`. The build inlines them into this stylesheet, so its hash covers them too. */
 @font-face {
   font-family: "Atkinson Hyperlegible Next";
   font-weight: 400;
@@ -193,7 +193,8 @@ legend {
 .loose {
   gap: var(--gap-l);
 }
-/* A section within a section's stack stands further apart, as does a list below a summary. */
+/* In a `.stack`, `.part` tops the gap up to `--gap-l` for a section within a section; `.below` spaces a list from the
+   summary above it. */
 .part {
   margin-block-start: calc(var(--gap-l) - var(--gap));
 }
@@ -409,7 +410,7 @@ button:not(.secondary)[aria-busy="true"]::after {
   inset: -0.5rem;
 }
 
-/* Status: a shape before the words, so that it never depends on colour alone. */
+/* Each status has a shape before its words, so it never relies on colour alone. */
 .shape {
   display: inline-block;
   inline-size: 0.75em;
@@ -457,7 +458,8 @@ button:not(.secondary)[aria-busy="true"]::after {
   background: var(--card);
 }
 
-/* Loading: a quiet bar in place of a figure, cards of bars in place of a list. Screen readers hear "Loading…". */
+/* A loading figure shows as a quiet bar, and a loading list as cards of bars. The text is only made transparent, so
+   screen readers still hear "Loading…". */
 [data-loading],
 .ghost::before {
   color: transparent;
@@ -500,7 +502,7 @@ button:not(.secondary)[aria-busy="true"]::after {
   }
 }
 @media (forced-colors: active) {
-  /* The shapes keep their fills, in the text's colour, so that each status stays apart from the others. */
+  /* Shapes keep their fills in forced colours, drawn in the text colour, so each status stays distinct. */
   .shape {
     forced-color-adjust: none;
     --accent: CanvasText;
@@ -533,7 +535,7 @@ button:not(.secondary)[aria-busy="true"]::after {
 .callout {
   background: var(--tint);
 }
-/* A card that leads somewhere is a link as large as the card. */
+/* The `.cover` link's `::after` stretches over its `.link` card, so the whole card is clickable. */
 .link {
   position: relative;
 }
@@ -655,8 +657,8 @@ dialog[open] {
 [data-section] {
   scroll-margin-block-start: 5rem;
 }
-/* The review's foot, sticky at its bottom, has its own padding: a padding of the popup's below it would show what
-   scrolls beneath. */
+/* The review has no bottom padding: under the sticky foot it would show content scrolling beneath, so the foot pads
+   itself. */
 .review {
   padding-block: var(--inset) 0;
 }
@@ -749,8 +751,8 @@ dialog[open] {
   text-align: end;
 }
 
-/* Hex in groups of four, apart by margins, so that a copy is the plain hex. An address breaks once, in the middle; one
-   as the wallet will show it takes three lines of four columns. */
+/* Groups of four hex digits are spaced by margins, not spaces, so a copy is plain hex. An address breaks once, in the
+   middle; one shown as the wallet shows it takes three lines of four groups. */
 .hex {
   display: inline-block;
   overflow-wrap: normal;
@@ -772,7 +774,7 @@ dialog[open] {
   padding-inline-start: 2ch;
 }
 
-/* Tables scroll on a narrow screen, so that their words stay whole. */
+/* Table cells don't wrap, so on a narrow screen a table scrolls sideways instead. */
 .scroll {
   overflow-x: auto;
 }

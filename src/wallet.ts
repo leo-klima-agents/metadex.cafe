@@ -21,14 +21,14 @@ export type Wallet = {
   name: string;
   icon?: string | undefined;
   provider: () => Promise<EIP1193Provider>;
-  // Only Safe{Wallet} has it: it proposes all the calls as one Safe transaction, for the owners to sign there.
+  // Only Safe{Wallet} has this. It proposes all the calls as one Safe transaction, for the owners to sign in
+  // Safe{Wallet}.
   propose?(txs: Tx[]): Promise<void>;
 };
 export type Connection = { wallet: Wallet; provider: EIP1193Provider; address: Address; chainId: number };
-// `tip`, the most priority fee to ask for, where the wallet lets the page set it.
+// `tip` is the highest priority fee per gas to ask for, in wei, where the wallet lets the page set one.
 export type Tx = { to: Address; data: Hex; tip?: bigint | undefined };
-// A call as the review shows it: what it is, the page's own words, the contract it goes to, and its fields.
-// `after`: words after the code; `calldata`: the code is a call's data, shown as a block.
+// `after` is text shown after `code`. `calldata` marks `code` as a call's data, shown as a block.
 export type Field = {
   label: string;
   code?: string | string[];
@@ -38,6 +38,8 @@ export type Field = {
   after?: string;
   calldata?: boolean;
 };
+// A call as the review shows it: `title` says what it is, `says` describes it in the page's own words, and `on` names
+// the contract it goes to.
 export type Slip = Tx & { title: string; says: string; on: string; call: string; fields: Field[] };
 
 type Announcement = { info: { name: string; icon: string; rdns: string }; provider: EIP1193Provider };
@@ -65,21 +67,22 @@ export function findWallets(found: (wallets: Wallet[]) => void): void {
   offer();
 }
 
-// Read only once picked: some wallets set window.ethereum late.
+// Read when the wallet is picked, not at load, because some wallets set `window.ethereum` late.
 async function injected(): Promise<EIP1193Provider> {
   const provider = window.ethereum;
   if (!provider) throw new NoWallet();
   return provider;
 }
 
-// Where Safe{Wallet} runs: the page asks no other frame, and takes answers from no other.
+// Safe{Wallet}'s origin. The page sends questions only to it and accepts answers only from it.
 export const SAFE_ORIGIN = "https://app.safe.global";
-// The Safe Apps SDK's version that the page's requests carry, as Safe{Wallet} expects of a Safe App.
+// The Safe Apps SDK version sent with each request, which Safe{Wallet} expects from a Safe App.
 const SAFE_APPS_VERSION = "9.1.0";
 
-// The origin of the page that frames this one, when the browser says. An opaque origin, "null", as a sandboxed frame or
-// one framed without a referrer has, says nothing: whether Safe{Wallet} answers decides then. Nor does a referrer of the
-// page's own origin, `own`, where the browser does not list the frame's ancestors: the frame navigated within itself.
+// The origin of the page that frames this one, when the browser gives it. A sandboxed frame, or one framed without a
+// referrer, has the opaque origin "null", which tells nothing; then only whether Safe{Wallet} answers decides. Without
+// `ancestorOrigins`, a referrer from the page's own origin (`own`) tells nothing either: the frame navigated within
+// itself.
 export function parentOrigin(ancestor: string | undefined, referrer: string, own?: string): string | undefined {
   const origin = ancestor ?? (referrer ? new URL(referrer).origin : "");
   if (ancestor === undefined && origin === own) return undefined;
@@ -87,13 +90,12 @@ export function parentOrigin(ancestor: string | undefined, referrer: string, own
 }
 
 type SafeAnswer = { id: string; success: boolean; data?: unknown; error?: string };
-// A question to Safe{Wallet}, and `stop`, which stops listening for its answers and drops the questions unanswered.
+// Asks Safe{Wallet} a question. `stop` stops listening for answers and drops the questions still waiting.
 type AskSafe = ((method: string, params?: unknown) => Promise<unknown>) & { stop(): void };
 
-// Asks Safe{Wallet}, the page's parent, as a Safe App does: a message of an id, a method, its params and the SDK's
-// version, sent to Safe{Wallet}'s origin only, which it answers with the same id. An answer counts only from the parent,
-// at that origin, to a question the page asked. Each id is random, as the SDK's were, so that an answer to a question
-// asked before the page loaded again cannot pass for the answer to one asked since.
+// Asks Safe{Wallet}, the parent frame, as a Safe App does. Each message goes to `SAFE_ORIGIN` only, and Safe{Wallet}
+// answers it with the same `id`. Only answers from the parent, at that origin, to a question still waiting count. Ids
+// are random, as in the SDK, so an answer to a question asked before a reload can't pass for one asked since.
 export function askSafe(
   parent: { postMessage(message: unknown, targetOrigin: string): void },
   events: Pick<EventTarget, "addEventListener"> = window,
@@ -133,8 +135,8 @@ export async function safeWallet(): Promise<Wallet | undefined> {
   return safeFrom(askSafe(window.parent), parent ? 10_000 : 1_000);
 }
 
-// Safe{Wallet} as a wallet, once it says which Safe it holds, within `wait` milliseconds. If it does not, the page stops
-// listening for it.
+// Safe{Wallet} as a `Wallet`, if it says which Safe it holds within `wait` milliseconds. If it doesn't, the page stops
+// listening to it.
 export async function safeFrom(ask: AskSafe, wait: number): Promise<Wallet | undefined> {
   const timeout = new Promise<undefined>((resolve) => setTimeout(resolve, wait));
   const info = (await Promise.race([ask("getSafeInfo"), timeout]).catch(() => undefined)) as
@@ -158,9 +160,10 @@ export async function safeFrom(ask: AskSafe, wait: number): Promise<Wallet | und
     name: "Safe{Wallet}",
     provider: async () => provider,
     async propose(txs) {
-      // Nothing to propose is refused before Safe{Wallet} is asked, as the SDK did.
+      // An empty list is refused before Safe{Wallet} is asked, as the Safe Apps SDK does.
       if (!txs.length) throw new Error("There is no transaction to propose.");
-      // Safe{Wallet} says "Transaction was rejected" when its window is closed.
+      // Safe{Wallet} answers "Transaction was rejected" when the user closes its window, so that counts as the user
+      // declining.
       await ask("sendTransactions", { txs: txs.map(({ to, data }) => ({ to, data, value: "0" })) }).catch(
         (error: Error) => {
           throw Object.assign(error, /rejected/i.test(error.message) ? { code: UserRejectedRequestError.code } : {});
@@ -208,7 +211,7 @@ export async function switchToBase(connection: Connection): Promise<void> {
   connection.chainId = Number(await provider.request({ method: "eth_chainId" }));
 }
 
-// The chain ID makes a wallet that is on another chain refuse the transaction.
+// `chainId` makes a wallet on another chain refuse the transaction.
 export const sendTransaction = ({ provider, address }: Connection, { to, data, tip }: Tx): Promise<Hex> =>
   provider.request({
     method: "eth_sendTransaction",
@@ -223,10 +226,10 @@ export const sendTransaction = ({ provider, address }: Connection, { to, data, t
     ],
   });
 
-// What a wallet can do beyond one transaction at a time, from EIP-5792's wallet_getCapabilities: send several calls in
-// one prompt, all or nothing (`atomic`), and list the tokens it holds (ERC-7811's `assets`). Asked once per wallet and
-// address: a wallet that does not know the method can do neither. One that failed otherwise, as while it was locked,
-// can do neither for now, and is asked again the next time.
+// What a wallet can do beyond one transaction at a time, from EIP-5792's `wallet_getCapabilities`: send several calls
+// in one prompt (`batch`), all or nothing (`atomic`), and list the tokens it holds (ERC-7811's `assets`). Asked once
+// per wallet and address. A wallet that doesn't know the method can do none of these. One that fails for another
+// reason, such as being locked, can do none of them for now and is asked again next time.
 export type Capabilities = { batch: boolean; atomic: boolean; assets: boolean };
 const NONE: Capabilities = { batch: false, atomic: false, assets: false };
 const asked = new WeakMap<EIP1193Provider, Map<string, Promise<Capabilities>>>();
@@ -244,7 +247,7 @@ export function capabilities({ wallet, provider, address }: Connection): Promise
       .then((all: ChainIdToCapabilities<ExtractCapabilities<"getCapabilities", "ReturnType">>) => {
         const base = { ...all["0x0"], ...all[CHAIN] };
         const atomic = base.atomic?.status === "supported" || base.atomic?.status === "ready";
-        // A wallet that answers sends calls together, even if not all or nothing.
+        // Any wallet that answers can send calls together, even if not atomically.
         return { batch: true, atomic, assets: base.assetDiscovery?.supported === true };
       })
       .catch((error: unknown) => {
@@ -256,7 +259,7 @@ export function capabilities({ wallet, provider, address }: Connection): Promise
   return found;
 }
 
-// Sends the calls in one prompt, with EIP-5792's wallet_sendCalls, and gives the batch's id.
+// Sends all the calls in one prompt with EIP-5792's `wallet_sendCalls`, and returns the batch id.
 export async function sendCalls({ provider, address }: Connection, txs: Tx[], atomic: boolean): Promise<string> {
   const { id } = await provider.request({
     method: "wallet_sendCalls",
@@ -273,8 +276,8 @@ export async function sendCalls({ provider, address }: Connection, txs: Tx[], at
   return id;
 }
 
-// A batch is pending (100), included (200, with each transaction's receipt), or failed. One confirmed whose receipts
-// have not come yet is still pending: they make its outcome.
+// EIP-5792 status 100 means pending and 200 means included, with each transaction's receipt; anything else means
+// failed. A 200 without receipts yet still counts as pending, since the receipts decide the outcome.
 type CallsStatus = { state: "pending" | "done" | "failed"; receipts: Landed[] };
 
 export async function callsStatus({ provider }: Connection, id: string): Promise<CallsStatus> {
@@ -292,7 +295,7 @@ export async function callsStatus({ provider }: Connection, id: string): Promise
   return { state, receipts };
 }
 
-// The ERC-20 tokens the wallet says it holds on Base, from ERC-7811's wallet_getAssets, where it offers it.
+// The ERC-20 tokens the wallet says it holds on Base, from ERC-7811's `wallet_getAssets`, if the wallet supports it.
 export async function walletAssets(connection: Connection): Promise<Address[]> {
   if (!(await capabilities(connection)).assets) return [];
   try {

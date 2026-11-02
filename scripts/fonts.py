@@ -1,6 +1,6 @@
-# Makes the fonts in site/fonts/ from Google Fonts' sources at a pinned commit: Latin subsets, as WOFF2, without hinting.
-# Needs Python 3 with fonttools 4.68.0 and brotli 1.2.1. Run it from the repository's root: python3 scripts/fonts.py
-# It gives the same files on every run.
+# Makes site/fonts/ from Google Fonts' sources at a pinned commit: Latin subsets as WOFF2, without hinting. Needs Python
+# 3 with fonttools 4.68.0 and brotli 1.2.1. Run it from the repository's root (`python3 scripts/fonts.py`); it gives the
+# same files on every run.
 
 import hashlib
 import io
@@ -33,7 +33,7 @@ FONTS = {
     "atkinson-hyperlegible-mono-600.woff2": ("mono", 600),
     "young-serif-400.woff2": ("serif", None),
 }
-# Latin, as Google Fonts subsets it, with the arrows and ≈ the page uses.
+# Google Fonts' Latin subset, plus the arrows and ≈ the page uses.
 UNICODES = [
     *range(0x0000, 0x0100),
     0x0131,

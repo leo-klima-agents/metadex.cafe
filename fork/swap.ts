@@ -22,10 +22,10 @@ import {
 } from "./harness.ts";
 
 const INTO_USDC = SWAPPERS[0]!;
-// What a reward contract owes an account, as the page asks it in its reads.
+// The selector the page's reads use to ask a reward contract what it owes an account.
 const EARNED = toFunctionSelector("function earned(uint256, address)").slice(2);
-// The pool Matcha Latte votes for most: its incentives contract began 54 epochs before the epoch claimed, past the 50
-// that earned() reads for an account that never claimed from it.
+// The pool Matcha Latte votes for most. Its incentives contract began 54 epochs before the epoch claimed, beyond the 50
+// that `earned()` reads for an account that never claimed from it.
 const POOL = "0x66352585BAD83DA857a020f739f1f7cA93209A1B";
 const says = (root: h.Opened["page"] | ReturnType<h.Opened["page"]["frameLocator"]>) =>
   review(root).locator("[data-text=says]").allTextContents();
@@ -79,7 +79,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     const calls = await says(page);
     assert.match(calls[0]!, /^Let the USDC swapper take [\d,.]+ \S+ from you$/);
     assert.match(calls[3]!, /^Sell 3 tokens for at least [\d,.]+ USDC$/);
-    // AVNT leaves the wallet before the swap: its route fails, and the swap skips it.
+    // Move AVNT out of the wallet before signing, so that its route fails and the swap skips it.
     const avnt = await balanceOf(AVNT, SELLER);
     await h.mined(SELLER, AVNT, encodeFunctionData({ abi: h.abi, functionName: "transfer", args: [STRANGER, avnt] }));
     const before = await balanceOf(INTO_USDC.token, SELLER);
@@ -143,7 +143,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       .getByText(/^[\d,.]+ USDC, at least [\d,.]+, from /)
       .waitFor();
     await review(page).getByRole("button", { name: "Continue" }).click();
-    // Its calls need more gas than one transaction may use: they go one at a time, and the swap follows.
+    // The claim's calls need more gas than one transaction may use, so they go one at a time, before the swap.
     const claims = await says(page);
     assert.ok(
       claims.length > 1 && claims.every((each) => /^Claims account #82774's rewards from /.test(each)),
@@ -195,10 +195,11 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     assert.deepEqual(violations, []);
   });
 
-  // Last, as it moves the fork's time on two weeks.
+  // Keep this test last: it moves the fork's time on two weeks.
   test("a claim past the 50 epochs earned() reads, and the swap of what it brings, go in one prompt", async () => {
-    // An epoch as anyone could stage it on Base: #141 joins Double Espresso, which votes for a pool that someone
-    // incentivises; half a day after the epoch, its payout is overdue, and owes one reward, past what earned() reads.
+    // Stages an epoch as anyone could on Base: #141 joins Double Espresso, which votes for a pool that someone
+    // incentivises. Half a day after that epoch, its payout is overdue and owes one reward beyond what `earned()`
+    // reads.
     await h.approveConduit(NEWCOMER, DOUBLE_ESPRESSO.address, 141n);
     await h.nextEpoch();
     await h.incentive(POOL, USDC, 100_000_000n);
@@ -215,10 +216,11 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       .getByText(/^[\d,.]+ WETH, at least [\d,.]+, from USDC$/)
       .waitFor();
     await review(page).getByRole("button", { name: "Continue" }).click();
-    // The review began with the claim's one call; it is the three, claim, approval and swap, that go together.
+    // The review began with the claim's one call; now the claim, the approval and the swap go together.
     await review(page).getByText("All 3 in one prompt, all or nothing").waitFor();
     assert.match((await says(page))[0]!, /^Claims account #141's rewards through Double Espresso/);
-    // One call asks the contract twice: the first asking moves earned() on 50 epochs, the second pays.
+    // The claim asks the incentives contract twice in one call: the first moves `earned()` on 50 epochs, the second
+    // pays.
     await review(page)
       .getByText(/incentives contracts that owe it; twice where one asking cannot reach all it owes/i)
       .waitFor();
@@ -226,9 +228,9 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await review(page).getByRole("button", { name: "Sign 3 transactions" }).click();
     await heading(review(page), "Done", 2).waitFor();
     assert.equal(sent.length, 3);
-    // The claim's receipt: what earned() alone did not show, less the 1% fee.
+    // The claim's receipt shows what `earned()` alone did not, less the 1% fee.
     await review(page).locator("[data-text=done]").getByText("4.27 USDC").first().waitFor();
-    // The swap's receipt, from the App, in WETH: its figures are the swap's output, not the swap page's.
+    // The receipt of the swap started from the App shows its output, WETH, not the swap page's own token.
     const swapped = review(page).locator("[data-text=done] .slip").filter({ hasText: "swap into WETH" });
     await swapped
       .locator("[data-text=total-value]")

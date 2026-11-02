@@ -21,12 +21,12 @@ const others = (conduits as { name: string; address: Address }[]).filter(({ addr
 export const otherName = (address: Address): string | undefined =>
   others.find((other) => same(other.address, address))?.name;
 
-// Epochs follow the calendar: joins count from the next Thursday, whenever Hydrex's Voter moves on.
+// Epochs follow the calendar: joins count from the next Thursday, however late Hydrex's Voter moves on.
 export type MatchaLatte = {
   epochStart: number;
   retireBps: bigint;
   tonnes: bigint;
-  // These read apart from the others, and may fail: the page then says so.
+  // These may fail to read without failing the rest; the page then says so.
   voted?: number | undefined;
   feeBps?: bigint | undefined;
   maxFeeBps?: bigint | undefined;
@@ -54,11 +54,12 @@ export async function readMatchaLatte(): Promise<MatchaLatte> {
     feeRecipient,
   };
 }
-// The share of a payout's kVCM that reaches the owner: Matcha Latte retires its share, then takes its fee from the rest.
+// The share of a payout's kVCM, in basis points, that reaches the owner. Matcha Latte retires its share first, then
+// takes its fee from the rest.
 export const paidBpsOf = ({ retireBps, feeBps }: MatchaLatte): bigint | undefined =>
   feeBps === undefined ? undefined : ((10_000n - retireBps) * (10_000n - feeBps)) / 10_000n;
 
-// When an automation last voted, or 0, as of an epoch.
+// When an automation last voted (0 if never), with the current epoch's start.
 type Freshness = { epochStart: number; voted: number };
 export async function readFreshness({ address }: Automation): Promise<Freshness> {
   const [time, voted] = required(await read([blockTime, voter("lastVoted", address)]));
@@ -75,7 +76,7 @@ export type Account = {
   votes: bigint;
   delegate: Address;
   delegateAtStart: Address;
-  // When the automation that holds its votes last voted, and when its owner did, or 0.
+  // When the automation holding its votes last voted, and when its owner did; 0 if never.
   delegateVoted: number;
   ownerVoted: number;
   claimer: Address;
@@ -86,8 +87,7 @@ async function othersVoted(): Promise<Map<Address, number>> {
   const found = await readEach(others, { voted: ({ address }) => voter("lastVoted", address) });
   return new Map(found.map(({ item, voted }) => [key(item.address), Number(voted ?? 0n)]));
 }
-// The accounts read for their owner. If the Voter cannot be read, an automation or an owner is just not known to have
-// stopped voting.
+// If the Voter cannot be read, no automation or owner is taken to have stopped voting.
 async function accountsOf(
   owner: Address,
   ids: bigint[],
@@ -141,8 +141,8 @@ export async function readAccounts(owner: Address): Promise<Holdings> {
   accounts.sort((a, b) => (a.votes === b.votes ? Number(a.id - b.id) : a.votes > b.votes ? -1 : 1));
   return { owner, accounts, epochStart };
 }
-// One account, whoever owns it; undefined if Hydrex has none of that number. ownerOf can fail for other reasons, so a
-// failed one is asked again on its own before the account is taken for gone.
+// One account, whoever owns it, or undefined if Hydrex has no account with that id. `ownerOf` can fail for other
+// reasons, so a failed call is retried on its own before the account is taken as gone.
 export async function readAccount(id: bigint): Promise<Holdings | undefined> {
   const [[first, time], lastVoted] = await Promise.all([read([escrow("ownerOf", id), blockTime]), othersVoted()]);
   const owner = first ?? (await read([escrow("ownerOf", id)]))[0];
@@ -168,8 +168,8 @@ const held = (account: Account, { address }: Automation) => ({
   votes: same(account.delegate, address),
   claims: same(account.claimer, address),
 });
-// Hydrex counts a vote only in the epoch it is cast: an automation that has not voted since last epoch began earns
-// nothing. One that never voted may be new.
+// Hydrex counts a vote only in the epoch it is cast, so an automation that has not voted since last epoch began earns
+// nothing. One that has never voted (0) may be new, so it does not count as stopped.
 export const hasStopped = (voted: number, epochStart: number): boolean => voted > 0 && voted < epochStart - WEEK;
 
 // Hydrex counts votes for whoever held them when the epoch began, so joins and leaves count from the next epoch.
@@ -205,11 +205,11 @@ export const canLeave = (account: Account, automation: Automation): boolean => {
   return votes || claims;
 };
 export const canLeaveOther = (account: Account): boolean => otherName(account.delegate) !== undefined;
-// An account with less than a vote needs nothing of its owner.
+// An account with less than one vote (10^18) needs no action from its owner.
 export const hasVotes = ({ votes }: Account): boolean => votes >= 10n ** 18n;
 
 export function groupOf(account: Account, status: Status): Group {
-  // Without a vote, it is folded away, unless one of the page's automations still holds approvals to take back.
+  // An account without a vote is folded away, unless one of the page's automations still holds approvals to revoke.
   const withoutVotes = (): Group => {
     const holder = AUTOMATIONS.find((automation) => canLeave(account, automation));
     return holder ? `in:${holder.kind}` : "closed";
@@ -254,7 +254,7 @@ function approval(
     ],
   };
 }
-// A join takes over the votes and the claims, which other automations may hold, the page's own included.
+// Joining takes over the votes and the claims from whichever automations hold them, the page's own included.
 export const join = (accounts: Account[], automation: Automation): Slip[] =>
   accounts.map((account) => {
     const holders = [account.delegate, account.claimer];
@@ -275,7 +275,8 @@ export const join = (accounts: Account[], automation: Automation): Slip[] =>
   });
 export const leave = (accounts: Account[], automation: Automation): Slip[] =>
   accounts.map((account) => approval(account, false, `leaves ${automation.name}.`, automation));
-// The same call, with the other automation's address: only those on Hydrex's list, so that each call names it.
+// Leaves another automation with the same call. Only automations on Hydrex's list are offered, so each call can name
+// the one it leaves.
 export const leaveOther = (accounts: Account[]): Slip[] =>
   accounts.flatMap((account) => {
     const name = otherName(account.delegate);
@@ -283,8 +284,8 @@ export const leaveOther = (accounts: Account[]): Slip[] =>
     return name ? [approval(account, false, `leaves ${target.name}.`, target)] : [];
   });
 
-// What gas costs for calls that differ only by account, from `from`: the first's estimate, plus the most Base charges
-// to post it to Ethereum, for each. With today's prices, to show it at.
+// Gas for calls that differ only by account, sent from `from`: the first call's estimate plus the most Base charges to
+// post it to Ethereum, times the number of calls. Also returns today's prices to show it in.
 export async function gasEstimate(steps: Tx[], from: Address): Promise<{ wei: bigint; prices: Prices | undefined }> {
   const [first] = steps;
   if (!first) return { wei: 0n, prices: undefined };

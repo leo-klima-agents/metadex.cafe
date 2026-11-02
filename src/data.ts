@@ -18,8 +18,8 @@ import {
 import { now, tagged } from "./rpc.ts";
 import { state } from "./state.ts";
 
-// What the views show from Base, each read once and kept: by wallet and by epoch, so that what was read for another
-// is never shown, and what is of an epoch that ended is read again.
+// What the views show from Base, each read once and cached. Keys name the wallet and the epoch, so nothing read for
+// another wallet is shown, and reads of an epoch that has ended are made again.
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const week = (): number => weekStart(now());
@@ -40,7 +40,8 @@ export function accountShown(id: bigint): { holdings: Got<Holdings | null>; own:
   return { holdings: { value: { ...own, accounts: own.accounts.filter((each) => each.id === id) } }, own: true };
 }
 
-// The last epoch Hydrex has ended: until it moves on after a flip, the epoch before's, read again every five minutes.
+// The start of the last epoch Hydrex has ended. Just after a flip it may still be the epoch before; until Hydrex moves
+// on, it is read again every five minutes.
 const epoch = () =>
   use(`epoch ${week()}`, lastEpoch, (start: number) => (start < week() - WEEK ? 5 * MINUTE : Infinity));
 const earningsKey = (automation: Automation, start: number) => `earnings ${automation.kind} ${start}`;
@@ -60,7 +61,8 @@ export const holderEarnings = (holder: Address): Got<Earnings> =>
   andThen(epoch(), (start) =>
     use(`voter ${holder} ${start}`, () => votesEarned(holder, start, false, tagged("shares"))),
   );
-// What an account's votes earned last epoch: its part of whoever held them, if they voted.
+// What an account's votes earned last epoch: its share of what their holder earned, or `null` if the holder did not
+// vote.
 export function accountEarned(holdings: Holdings, id: bigint): Got<Money | null> {
   return andThen(stakes(holdings), (all) => {
     const stake = all.get(id);
@@ -76,8 +78,8 @@ export function accountEarned(holdings: Holdings, id: bigint): Got<Money | null>
 }
 const holders = (holdings: Holdings) => andThen(stakes(holdings), (all) => ({ value: holdersOf(all.values()) }));
 
-// The payouts of the accounts in the automations, as of the last epoch Hydrex has ended: read again once it moves on,
-// and every five minutes while one due has not come.
+// The payouts of the accounts in the automations, as of the last epoch Hydrex has ended. Read again when Hydrex moves
+// on, and every five minutes while a due payout has not come.
 export function payouts(holdings: Holdings): Got<Payouts> {
   const key = holdings.accounts.map(({ id, delegate, claimer }) => `${id}:${delegate}:${claimer}`).join(" ");
   return andThen(epoch(), (start) =>

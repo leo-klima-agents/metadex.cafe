@@ -9,7 +9,7 @@ import { bundled, noticeOf, packagePart, partsOf } from "../scripts/notices.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
-// What the build bundles, as it does, without writing it.
+// Bundles what `scripts/build.ts` bundles, with the same options, without writing it to disk.
 const { metafile } = await esbuild.build({
   absWorkingDir: ROOT,
   entryPoints: { main: "src/main.ts", style: "site/style.css" },
@@ -33,7 +33,7 @@ test("the script's notices name each npm package it bundles, by its LICENSE, und
     assert.ok(copyright.length && copyright.every((line) => line.startsWith("Copyright ")), name);
   }
   assert.ok(!parts.some(({ name }) => name.startsWith("src/")));
-  // A package that ships no LICENSE with a copyright line stops it.
+  // A package without a LICENSE holding a copyright line stops the build, whatever its package.json says.
   const elsewhere = mkdtempSync(join(tmpdir(), "notices-"));
   mkdirSync(join(elsewhere, "node_modules/unknown"), { recursive: true });
   writeFileSync(
@@ -66,7 +66,7 @@ test("a notice is one comment: each license's parts by name, then its text verba
       "a@1.0.0:\n  Copyright (c) 2023 A\nb@2.0.0:\n  Copyright (c) 2024 B\n\n" +
       `Each under the MIT License:\n\n${readFileSync(`${ROOT}/LICENSES/MIT.txt`, "utf8")}*/\n`,
   );
-  // A license the page has no text or name for stops the build.
+  // The build has no name or text for Apache-2.0, so a part under it stops the build.
   assert.throws(
     () => noticeOf(ROOT, [{ name: "c@1.0.0", copyright: ["Copyright C"], license: "Apache-2.0" }]),
     /c@1\.0\.0 is under Apache-2\.0/,

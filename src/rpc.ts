@@ -23,7 +23,7 @@ export type Call<A extends Abi = Abi, N extends string = string> = {
   functionName: N;
   args: readonly unknown[];
 };
-// eth_call runs any function, so a read may call any of them.
+// `eth_call` can run any function, not only views, so reads accept every mutability.
 type Mutability = "pure" | "view" | "nonpayable" | "payable";
 type Args<A extends Abi, N extends ContractFunctionName<A>> =
   ContractFunctionArgs<A, Mutability, N> extends infer T extends readonly unknown[] ? T : never;
@@ -43,7 +43,7 @@ export const contract =
   <const A extends Abi>(address: Address, abi: A) =>
   <N extends ContractFunctionName<A>>(functionName: N, ...args: Args<A, N>): Call<A, N> =>
     call(address, abi, functionName, ...args);
-// Whether two addresses are the same, in any case. Unlike viem's isAddressEqual, it takes strings that are not addresses.
+// Compares addresses in any case. Unlike viem's `isAddressEqual`, it never throws on a string that isn't an address.
 export const same = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
 
@@ -59,8 +59,8 @@ export function sawBlock(time: number): void {
 }
 export const now = (): number => Math.floor(Date.now() / 1000) + drift;
 
-// What a read is for. Reads whose tag the page shown draws, or with no tag, go first; the others, which read ahead
-// what other pages show, take at most BEHIND of the MAX slots.
+// What a read is for. Reads with no tag, or with a tag the shown page draws, go first. The rest read ahead for other
+// pages and take at most `BEHIND` of the `MAX` slots.
 export type Tag = "earnings" | "average" | "shares" | "payouts" | "swap";
 const MAX = 6;
 const BEHIND = 4;
@@ -100,7 +100,7 @@ async function inSlot<T>(tag: Tag | undefined, ask: () => Promise<T>): Promise<T
   }
 }
 
-// Each RPC gets at most 25 requests a second, 5 of them for logs; one that is busy or out of reach rests a second.
+// Each RPC gets at most 25 requests a second, 5 of them for logs. One that is busy or out of reach rests for a second.
 const nextFree = new Map<string, number>();
 const restUntil = new Map<string, number>();
 async function pace(url: string, logs: boolean): Promise<void> {
@@ -115,8 +115,9 @@ type Reply = { result?: unknown; error?: { code?: number; message?: string } };
 const BUSY = /request limit|rate limit|too many requests/i;
 type Options<T> = { tag?: Tag | undefined; want?: (result: T) => boolean };
 
-// Asks the RPCs in turn until one gives an answer it `want`s, by default not null. When none does, the last answer
-// they gave is taken if not null. Those busy or out of reach are asked again, up to three more times, a little later.
+// Asks the RPCs in turn until one gives an answer that passes `want` (by default, any answer but null). If none does,
+// returns the last non-null answer. RPCs that were busy or out of reach are asked again a little later, up to three
+// more times.
 export function rpc<T>(
   method: string,
   params: unknown[],
@@ -165,7 +166,7 @@ type ReadOptions = { block?: number | "latest"; tag?: Tag | undefined; perBatch?
 // Each call's result, as its ABI types it, or undefined if it failed.
 type Results<C extends readonly Call[]> = { -readonly [K in keyof C]: Result<C[K]> | undefined };
 export type Read = <const C extends readonly Call[]>(calls: C, options?: ReadOptions) => Promise<Results<C>>;
-// Reads contracts through Multicall3, in batches of `perBatch`, as each eth_call runs within its own gas limit.
+// Reads through Multicall3 in batches of `perBatch`, because each `eth_call` has its own gas limit.
 export const read: Read = async (calls, { block = "latest", tag, perBatch = 200 } = {}) => {
   const batches: Promise<unknown[]>[] = [];
   for (let i = 0; i < calls.length; i += perBatch) batches.push(aggregate(calls.slice(i, i + perBatch), block, tag));
@@ -196,8 +197,8 @@ export const tagged =
     read(calls, { ...options, tag });
 // What one of an item's calls returned, or undefined if it failed or was not asked.
 type Field<F> = F extends (item: never) => infer C ? Result<C> | undefined : undefined;
-// Some calls of each item, read together: each item comes back with what each of its calls returned, by name, so that
-// nothing is matched up by index. A field left undefined is not asked.
+// Reads some calls of every item together. Each item comes back with its calls' results by field name, so nothing is
+// matched up by index. A field set to `undefined` is not read.
 export async function readEach<T, F extends Record<string, ((item: T) => Call) | undefined>>(
   items: readonly T[],
   fields: F,
@@ -242,10 +243,11 @@ export async function simulate(from: Address, txs: Tx[]): Promise<{ ok: boolean;
 }
 
 type Receipt = OpStackRpcTransactionReceipt;
-// What a receipt holds wherever it comes from: a wallet's, from EIP-5792's wallet_getCallsStatus, holds no more.
+// The fields every receipt has, wherever it comes from: a wallet's receipt, from EIP-5792's `wallet_getCallsStatus`,
+// has no more.
 export type Landed = WalletCallReceipt;
-// The receipts' logs, as parseEventLogs takes them. A wallet's hold only their address, data and topics, which is all
-// their events need, but not the block and index an RPC's logs also hold.
+// The receipts' logs, typed for `parseEventLogs`. A wallet's logs hold only address, data and topics, which is enough
+// to decode their events, but not the block and index that an RPC's logs also hold.
 export const logsIn = (receipts: Pick<Landed, "logs">[]): RpcLog[] => receipts.flatMap(({ logs }) => logs) as RpcLog[];
 export async function poll<T>(ask: () => Promise<T | undefined>): Promise<T | undefined> {
   for (const end = Date.now() + 600_000; Date.now() < end; await sleep(2_000)) {
@@ -266,7 +268,8 @@ export async function includedAt(receipts: Landed[]): Promise<number | undefined
   const found = block && (await rpc<RpcBlock>("eth_getBlockByNumber", [block, false]).catch(() => undefined));
   return found ? Number(found.timestamp) : undefined;
 }
-// What the transactions cost, L1 fee included, if `from` sent and paid for each: not a bundler or a sponsor.
+// What the transactions cost in wei, L1 fee included, or `undefined` unless `from` sent and paid for every one, rather
+// than a bundler or a sponsor.
 export async function gasPaid(hashes: Hex[], from: Address): Promise<bigint | undefined> {
   const receipts = await Promise.all(
     [...new Set(hashes)].map((hash) => rpc<Receipt>("eth_getTransactionReceipt", [hash]).catch(() => undefined)),
@@ -279,7 +282,7 @@ export async function gasPaid(hashes: Hex[], from: Address): Promise<bigint | un
   return receipts.length ? wei : undefined;
 }
 
-// The gas price, and the tip the page asks for, at most 1 gwei: above it, Aero's classic pools tax a swap.
+// The gas price and the tip to ask for. The tip is capped at 1 gwei because Aero's basic pools tax a swap that tips more.
 const MAX_TIP = 1_000_000_000n;
 export type Costs = { gasPrice: bigint; tip?: bigint | undefined };
 async function readCosts(): Promise<Costs> {

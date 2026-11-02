@@ -9,11 +9,12 @@ import { rewardsFor, type Reward } from "./rewards.ts";
 import { logsIn, same, type Landed } from "./rpc.ts";
 import type { Slip } from "./wallet.ts";
 
-// Claiming through Double Espresso, once a payout is overdue: anyone can claim(tokenId, feeAddresses, bribeAddresses,
-// tokens) for any account in it, and it pays the owner, less 1%. A claim asks every contract given for every token
-// given, each walking back up to 50 epochs, so the page passes only what earned() finds owed, split into calls that fit.
+// Once a payout is overdue, anyone can call Double Espresso's `claim(tokenId, feeAddresses, bribeAddresses, tokens)`
+// for any account in it, and it pays the owner less 1%. A claim asks every contract given for every token given, each
+// walking back up to 50 epochs, so the page passes only what `earned()` finds owed and splits it into calls that fit.
 
-// `passes`: how many times the claim asks each contract, to reach past the 50 epochs each asking reads: see readOwed.
+// `passes` is how many times the claim must ask the contract to reach past the 50 epochs one asking reads (see
+// `readOwed`).
 export type Claim = { id: bigint; owed: (Owed & { fee: boolean; passes: number })[] };
 const unique = (addresses: Address[]): Address[] => [
   ...new Map(addresses.map((address) => [key(address), address])).values(),
@@ -25,20 +26,22 @@ const asked = (owed: Claim["owed"]): Address[] =>
       contract,
     ),
   );
-// What a call costs at most, as traced on a fork: each asking of each contract walks each token up to 50 epochs.
+// Upper bound on a call's gas, from traces on a fork: each asking of each contract walks each token back up to 50
+// epochs.
 export function claimGas(owed: Claim["owed"]): bigint {
   const contracts = BigInt(asked(owed).length);
   const tokens = BigInt(new Set(owed.map(({ token }) => key(token))).size);
   return 100_000n + tokens * 80_000n + contracts * (50_000n + tokens * 400_000n);
 }
-// Each call is kept under its budget by the estimate, and under MAX_CLAIM_GAS as simulated. A Safe sends many calls in
-// one Safe transaction, so its claim splits into small calls, none asking a contract for a token it does not owe.
+// `claimGas` keeps each call under its budget, and simulation keeps it under `MAX_CLAIM_GAS`. A Safe sends many calls
+// in one transaction, so its claim splits into small calls, none asking a contract for a token it does not owe.
 export const CLAIM_CALL_GAS = 12_000_000n;
 export const SAFE_CLAIM_CALL_GAS = 1_500_000n;
 export const MAX_CLAIM_GAS = 15_000_000n;
 
-// An account's claim, as calls that each fit `budget`: contracts that owe the same tokens share one, and each other goes
-// where it adds the least, those that owe the most tokens first. One that owes too many for one call is asked in several.
+// Splits an account's claim into calls that each fit `budget`. A contract owing too many tokens for one call is split
+// across several. Pieces go, those owing the most tokens first, into the call they add the least gas to, so contracts
+// owing the same tokens share a call.
 export function claimCalls(claim: Claim, budget = CLAIM_CALL_GAS): Claim[] {
   const byContract = Map.groupBy(
     claim.owed.filter(({ amount }) => amount > 0n),
@@ -66,7 +69,7 @@ export function claimCalls(claim: Claim, budget = CLAIM_CALL_GAS): Claim[] {
   }
   return calls.map((owed) => ({ id: claim.id, owed }));
 }
-// How many of the calls, in order, go in each transaction, where one may hold several: as many as fit `budget`.
+// Groups consecutive calls into transactions of up to `budget` gas, and returns how many calls go in each.
 export function claimTransactions(gas: bigint[], budget = MAX_CLAIM_GAS): number[] {
   const groups: { size: number; gas: bigint }[] = [];
   for (const one of gas) {
@@ -86,7 +89,7 @@ export function claimArgs({ id, owed }: Claim): [bigint, Address[], Address[], A
     unique(owing.map(({ token }) => token)),
   ];
 }
-// What a claim takes and pays, token by token: the fee is 1% of what it receives of each, rounded down.
+// What a claim takes and pays, token by token. The fee is 1% of each token received, rounded down.
 export function paidBy(owed: Amount[]): { token: Address; earned: bigint; fee: bigint; paid: bigint }[] {
   return summed(owed)
     .filter(({ amount }) => amount > 0n)
@@ -98,13 +101,13 @@ export function paidBy(owed: Amount[]): { token: Address; earned: bigint; fee: b
     }));
 }
 
-// The call for a claim, or, `whole` false, for one of the calls a claim splits into.
+// Set `whole` to false for one of the calls a split claim makes.
 export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true): Slip {
   const args = claimArgs(claim);
   const [id, fees, bribes, claimed] = args;
   const contracts = unique([...fees, ...bribes]).length;
   const from = whole ? "" : ` from ${count(contracts, "reward contract", "reward contracts")}`;
-  // A contract listed again is asked again: what it owes lies past the 50 epochs one asking reads.
+  // A contract listed twice is asked twice, to reach what it owes beyond the 50 epochs one asking reads.
   const again = (listed: Address[]) =>
     unique(listed).length < listed.length ? "; twice where one asking cannot reach all it owes" : "";
   return {
@@ -127,9 +130,9 @@ export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true
   };
 }
 
-// What waits for each overdue account now: in the pools its automation voted for last epoch, and the epoch before's
-// when it is late for it too. Pools from further back are not read, so it is a floor. `unread`: how many reward
-// contracts Base did not say all they owe, which are left out.
+// What each overdue account can claim now, from the pools its automation voted for last epoch, plus the epoch before's
+// when it is late for that too. Older pools are not read, so this is a lower bound. `unread` counts the reward
+// contracts whose amounts could not all be read; they are left out.
 export async function owedOf(
   entries: Overdue[],
 ): Promise<{ claims: Claim[]; tokens: Map<string, Token>; unread: number }> {
@@ -165,8 +168,8 @@ export async function owedOf(
   return { claims, tokens, unread: unread.size };
 }
 
-// What the page's own claims received, took and paid, from their Claimed events. One that received nothing, as when
-// someone else claimed first, has none.
+// What claims by `caller` received, took and paid, from their `Claimed` events. A claim that received nothing, as when
+// someone else claimed first, gives empty lists.
 type Claimed = { id: bigint; received: Amount[]; fees: Amount[]; paid: Amount[] };
 export function claimedIn(receipts: Pick<Landed, "logs">[], ids: bigint[], caller: Address): Claimed[] {
   const logs = logsIn(receipts).filter((log) => same(log.address, DOUBLE_ESPRESSO.address));

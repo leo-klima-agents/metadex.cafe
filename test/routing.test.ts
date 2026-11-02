@@ -3,7 +3,8 @@ import { test } from "node:test";
 import { zeroAddress } from "viem";
 import { allocate, along, curveOf, worth, type Candidate, type Curve, type Model } from "../src/routing.ts";
 
-// A pool of reserves r and r, without a fee: what it pays for x; read at amounts halving from `range`.
+// `pays(r)` is what a fee-free constant-product pool with reserves r and r pays for x; `curve` reads it at amounts
+// halving from `range`.
 const pays = (r: number) => (x: number) => (r * x) / (r + x);
 const curve = (paid: (x: number) => number, range: number): Curve =>
   curveOf(

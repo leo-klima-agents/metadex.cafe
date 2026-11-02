@@ -86,7 +86,8 @@ function letGo(): void {
   render();
 }
 
-// A wallet's events: another account, another network, or locked.
+// Follows the wallet's account and network changes. An `accountsChanged` with no account means the wallet locked, so
+// the page lets it go.
 function listen(provider: EIP1193Provider): void {
   if (listening.has(provider)) return;
   listening.add(provider);

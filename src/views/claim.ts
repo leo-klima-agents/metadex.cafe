@@ -17,13 +17,13 @@ import { openReview } from "./review.ts";
 import { reviewSwap, swapLink, swapReceipt } from "./swap.ts";
 
 type Claiming = {
-  // The calls; those `sending` are encoded then, with a fresh deadline.
+  // The calls. With `sending`, they are encoded to be sent, with a fresh deadline.
   steps: (sending?: boolean) => Slip[];
   outcome: (receipts: Landed[]) => Promise<Node | undefined>;
   into: Value;
   gasWithSwap?: bigint | undefined;
   planned: number;
-  // Whether the swap is being routed: the review waits for it, as it changes the calls.
+  // Whether the swap is being routed. The review waits for it, because routing changes the calls.
   planning: boolean;
 };
 let claiming: Claiming | undefined;
@@ -41,7 +41,8 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
       checkHref,
     });
   const unanswered = "Base did not say what waits: try again in a moment.";
-  // Swaps wait for the checks, which say whether the RPCs serve Base.
+  // `checksRead()` is awaited though its result is unused: swaps wait for the checks, which say whether the RPCs serve
+  // Base.
   const [owed, gasCosts, caps, middles] = await Promise.all([
     claim.owedOf(entries).catch((error: unknown) => void console.error(error)),
     costsRead().catch(() => undefined),
@@ -139,8 +140,8 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
     });
     render();
   };
-  // While swaps are off, no swap; nor from a Safe whose claim takes several Safe transactions, as the swap follows
-  // the claim's receipts, which come once its owners sign.
+  // No swap while swaps are off, nor from a Safe whose claim takes several transactions: the swap needs the claim's
+  // receipts, which come only once the owners sign.
   const options = swapsOff() !== false ? [] : SWAPPERS;
   list(
     $("[data-list=option]", body),
@@ -158,7 +159,8 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
   into.disabled = select.disabled = !options.length || safeApart;
   if (into.disabled) current.into = safeApart ? "Swap them once the claims go through." : "Swaps are off.";
 
-  // Plans the swap into `swapper`: only tokens whose quote clears their gas twice over; the others stay as they are.
+  // Plans the swap into `swapper`. Only tokens whose quote is worth at least twice their gas are sold; the rest stay as
+  // they are.
   const planInto = async (swapper: Swapper, id: number) => {
     current.into = undefined;
     current.gasWithSwap = undefined;
@@ -175,7 +177,8 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
     };
     sayInto(sale.items);
     if (!sale.items.length) return draw();
-    // Apart, the claim goes first; once it has, its Done page offers the swap of what it brought, if asked.
+    // When the claim and swap can't go together, the claim goes first, and its Done page then offers to swap what it
+    // brought, if the visitor chose a swap.
     if (!together) {
       if (into.checked)
         current.outcome = async (receipts) =>
@@ -185,7 +188,7 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
           );
       return draw();
     }
-    // Run through Base after the claims, with no minimums: each route then sets its own.
+    // Base runs the swap after the claims with no minimums; each route's minimum then comes from what it fetched.
     let at = deadline();
     const run = await swap.simulatePlan(connection.address, calls, sale, tokens, at, true);
     if (id !== current.planned) return;
