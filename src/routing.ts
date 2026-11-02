@@ -49,7 +49,6 @@ const LADDER = [
 
 const poolKey = (way: Way): string =>
   `${way.exchange} ${key(way.pool)} ${way.fee} ${way.tickSpacing} ${pairKey(way.tokenIn, way.tokenOut)}`;
-// The pools of a sale's own route, each hop from what the one before paid.
 const ownKeys = ({ token, found }: Sale): string[] =>
   found.route.hops.map((hop, h) => poolKey({ ...hop, tokenIn: h ? found.route.hops[h - 1]!.tokenOut : token }));
 
@@ -163,7 +162,6 @@ export async function routeTogether(
   gasValue: (gas: bigint) => bigint,
 ): Promise<Route[][] | undefined> {
   const rd = tagged("swap");
-  // Which sales move their pools: the others are too small to matter, and keep their own routes.
   const probes = await quoteAll(
     sales.map(({ found, amount }) => ({
       swapper: output,
@@ -200,7 +198,6 @@ export async function routeTogether(
   );
   if (!step) return undefined;
 
-  // What each pool paid for each amount read.
   const read = new Map<string, Map<bigint, bigint | undefined>>();
   const readAll = async (asks: { way: Way; amounts: bigint[] }[]) => {
     const items = asks.flatMap(({ way, amounts }) => {
@@ -285,7 +282,6 @@ export async function routeTogether(
     [...kept.values()].flat().map((way) => [poolKey(way), curveOf([...read.get(poolKey(way))!], taxed(way))] as const),
   );
 
-  // Each sale's routes: every path, through every pool kept for each of its hops; its own route first.
   const candidates = heavy.map(({ sale }, s) => {
     const routes: Candidate[] = [];
     for (const path of paths[s]!) {
@@ -302,7 +298,6 @@ export async function routeTogether(
     const mine = ownKeys(sale);
     const own: Candidate = { pools: mine, hops: sale.found.route.hops, gas: Number(sale.found.gas) };
     const others = routes.filter(({ pools }) => pools.join() !== mine.join());
-    // The best alone, if there are too many.
     const alone = (route: Candidate) =>
       worth({ amounts: [Number(sale.amount)], candidates: [[route]], curves, gasPrice: 0 }, [[CHUNKS]]) ?? -Infinity;
     const best = others

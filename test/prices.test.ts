@@ -69,7 +69,6 @@ test("a search probes every point of a short range, and spreads its points over 
   assert.ok(spread.at(-1)! < 11_769);
 });
 
-// A list of timestamps, and a reader that counts the batches it reads.
 function history(times: number[], failAt?: number) {
   let batches = 0;
   const probe = (index: number): Call => ({ address: zeroAddress, abi: [], functionName: "at", args: [index] });
@@ -133,7 +132,6 @@ const TOKEN: Token = { address: "0x0000000000000000000000000000000000000001", de
 const LATE: Token = { address: "0xffffffffffffffffffffffffffffffffffffff01", decimals: 18, symbol: "LATE" };
 const USDC_TOKEN: Token = { address: USDC, decimals: 6, symbol: "USDC" };
 const EURC_TOKEN: Token = { address: EURC, decimals: 6, symbol: "EURC" };
-// Chainlink's answers, by token, last updated a month ago.
 const UPDATED = NOW - 30 * 86_400;
 const USDC_USD = 0.999;
 const EURC_USD = 1.15;
@@ -167,7 +165,6 @@ function market(pools: Fake[], answers = ANSWERS) {
   const asked = new Set<string>();
   const addressOf = (i: number): Address => `0x${(0xa0 + i).toString(16).padStart(40, "0")}`;
   const anchorOf = (pool: Fake) => ANCHORS.find(({ address }) => same(address, pool.anchor ?? USDC))!;
-  // A pool's reserves in its own order and units.
   const units = (pool: Fake, [token, anchor]: [number, number]) => {
     const amounts = [
       BigInt(token) * 10n ** BigInt(pool.token.decimals),

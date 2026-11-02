@@ -72,7 +72,6 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
       (window as unknown as { testWalletEmit: (e: string, v: unknown) => void }).testWalletEmit("accountsChanged", []),
     );
     await connectButton(hydrexFirst.page).waitFor();
-    // Without a wallet in the browser, the picker offers wallet apps.
     const none = await open(false);
     await connectButton(none.page).click();
     await none.page

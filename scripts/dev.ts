@@ -5,8 +5,6 @@ import { createServer } from "node:http";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// `npm run dev`: builds dist/, serves it at http://localhost:8000 (PORT names another port), and builds it again when
-// anything in site/ or src/ changes; reload the page to see it. The page reads Base through its own RPCs.
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DIST = join(ROOT, "dist");
 const TYPES: Record<string, string> = {

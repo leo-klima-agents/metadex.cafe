@@ -42,7 +42,6 @@ describe("payouts against a fork of Base", { timeout: 1_800_000 }, () => {
       .first()
       .waitFor();
     await h.shoot(page, "receipt-390-dark");
-    // Another's account: its page names its owner; one in no automation has no payouts.
     const other = await open(false, { url: `${SITE}/#hydrex/9540` });
     await standing(other.page)
       .getByText(/^Late · paid up to Thu,? 27 Aug/)

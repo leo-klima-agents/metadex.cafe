@@ -75,7 +75,6 @@ for (const popup of popups) {
   });
 }
 
-// One listener for each kind of event dispatches to the action an element names.
 function dispatch(el: HTMLElement | null, event: Event): void {
   const action = el?.dataset.action;
   if (el && action) actions[action]?.(el, event);

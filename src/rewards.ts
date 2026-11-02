@@ -168,7 +168,6 @@ async function withNames(used: [Address, bigint][], rd: Read): Promise<Pool[]> {
   });
 }
 
-// What all votes on Hydrex earned in the epoch, for the average.
 export async function allEarnings(start: number, rd: Read = read): Promise<Earnings> {
   const [[votes], found] = await Promise.all([
     rd([voter("totalWeightAt", BigInt(start))]).then(required),
@@ -178,13 +177,11 @@ export async function allEarnings(start: number, rd: Read = read): Promise<Earni
   return priced(start, votes, pools, found.rewards, rd);
 }
 
-// What an automation's votes earned in the epoch, reward by reward, unpriced, for the payouts.
 export async function rewardsFor(automation: Address, start: number, rd: Read = read): Promise<Reward[]> {
   const [votes] = required(await rd([escrow("getPastVotes", automation, BigInt(start))]));
   return votes ? (await rewardsOf(await allContracts(start), start, automation, rd)).rewards : [];
 }
 
-// Who held each account's votes when the epoch from `start` began, and how many.
 export type Stake = { delegate: Address; votes: bigint };
 export async function stakesOf(ids: bigint[], start: number, rd: Read = read): Promise<Map<bigint, Stake>> {
   const found = await readEach(
@@ -199,13 +196,10 @@ export async function stakesOf(ids: bigint[], start: number, rd: Read = read): P
     found.flatMap(({ item: id, delegate, votes }) => (delegate && votes ? [[id, { delegate, votes }]] : [])),
   );
 }
-// Whoever held the accounts' votes, other than the page's automations: mostly their owner. Each once.
 export const holdersOf = (stakes: Iterable<Stake>): Address[] => [
   ...new Set([...stakes].flatMap(({ delegate }) => (automationAt(delegate) ? [] : [getAddress(delegate)]))),
 ];
 
-// What was earned, in all and by pool, at the prices given, or the earnings' own. A token without a price counts for
-// nothing.
 export function valueOf({ rewards, prices: own }: Earnings, prices = own) {
   let [fees, incentives] = [0, 0];
   const byPool = new Map<string, number>();

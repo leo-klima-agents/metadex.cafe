@@ -74,7 +74,6 @@ function log(
     removed: false,
   };
 }
-// Amounts by token, as an event's two lists.
 type Amounts = Record<Address, bigint>;
 const lists = (amounts: Amounts) => [Object.keys(amounts), Object.values(amounts)];
 const retired = (...values: bigint[]) => log("CarbonRetired", { creditToken_: KVCM }, values, PAID, TX);
@@ -319,7 +318,6 @@ test("records are read in one batch; what waits in batches of 20, and what lies 
   assert.deepEqual([passesTo(OCT_1, OCT_15), passesTo(OCT_15 - 50 * WEEK, OCT_15)], [1, 2]);
 });
 
-// A fake Double Espresso: the claims' logs, read a block at a time for the accounts asked.
 function doubleEspresso(logs: ReturnType<typeof claimed>[]) {
   const reads: { block: number; ids: bigint[] }[] = [];
   const all = claimsOf(logs);

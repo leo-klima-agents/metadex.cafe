@@ -163,7 +163,6 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     await review(page).getByText("You said no in your wallet.").waitFor();
     await page.keyboard.press("Escape");
     assert.equal(await page.getByText("Wrong network.").isVisible(), false);
-    // A join that fails on Base, sent with too little gas.
     wallet.decline = false;
     wallet.failing = 1;
     await join.click();
@@ -171,7 +170,6 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     await review(page).getByRole("button", { name: "Sign transaction" }).click();
     await review(page).getByText("A transaction failed on Base.").waitFor();
     assert.equal(sent.length, 2);
-    // Back while the wallet asks closes the review, which still follows what it sent.
     let answer = () => {};
     const other = await connected({ owner: ELSEWHERE, sending: new Promise<void>((resolve) => (answer = resolve)) });
     await h.pick(other.page, 2435, 2439);
@@ -186,7 +184,6 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
       .getByText(/Joining Matcha Latte/)
       .waitFor();
     await expectApprovals([2435n], LOCK_MAXI, LOCK_MAXI);
-    // A wallet that cannot switch to Base says so.
     const stuck = await connected({ owner: NEWCOMER, chainId: 1, switches: false });
     await stuck.page.getByRole("button", { name: "Switch to Base" }).first().click();
     await stuck.page.getByText("Switch to Base in your wallet.").first().waitFor();

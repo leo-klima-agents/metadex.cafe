@@ -17,7 +17,6 @@ import type { OpStackRpcTransactionReceipt } from "viem/chains";
 import { memo, use, type Got } from "./cache.ts";
 import { MULTICALL3, RPCS } from "./config.ts";
 
-// A call of a contract's function, its name and arguments checked against its ABI, which also types what it returns.
 export type Call<A extends Abi = Abi, N extends string = string> = {
   address: Address;
   abi: A;
@@ -40,7 +39,6 @@ export const call = <const A extends Abi, N extends ContractFunctionName<A>>(
   functionName: N,
   ...args: Args<A, N>
 ): Call<A, N> => ({ address, abi, functionName, args });
-// One contract's calls, by function name.
 export const contract =
   <const A extends Abi>(address: Address, abi: A) =>
   <N extends ContractFunctionName<A>>(functionName: N, ...args: Args<A, N>): Call<A, N> =>
@@ -145,7 +143,6 @@ export function rpc<T>(
           reply = (await response.json()) as Reply;
           if (typeof reply !== "object" || reply === null) throw new Error("Not JSON-RPC.");
         } catch {
-          // Busy, out of reach, too slow, or answering other than JSON-RPC.
           busy.push(url);
           continue;
         }
@@ -250,7 +247,6 @@ export type Landed = WalletCallReceipt;
 // The receipts' logs, as parseEventLogs takes them. A wallet's hold only their address, data and topics, which is all
 // their events need, but not the block and index an RPC's logs also hold.
 export const logsIn = (receipts: Pick<Landed, "logs">[]): RpcLog[] => receipts.flatMap(({ logs }) => logs) as RpcLog[];
-// What `ask` gives, asked every two seconds for ten minutes until it gives something.
 export async function poll<T>(ask: () => Promise<T | undefined>): Promise<T | undefined> {
   for (const end = Date.now() + 600_000; Date.now() < end; await sleep(2_000)) {
     const answer = await ask();
@@ -265,7 +261,6 @@ export const waitForReceipt = (hash: Hex): Promise<Receipt | undefined> =>
       () => undefined,
     ),
   );
-// When Base included the last of the receipts.
 export async function includedAt(receipts: Landed[]): Promise<number | undefined> {
   const block = receipts.at(-1)?.blockNumber;
   const found = block && (await rpc<RpcBlock>("eth_getBlockByNumber", [block, false]).catch(() => undefined));

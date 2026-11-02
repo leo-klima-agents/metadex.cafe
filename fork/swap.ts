@@ -29,7 +29,6 @@ const EARNED = toFunctionSelector("function earned(uint256, address)").slice(2);
 const POOL = "0x66352585BAD83DA857a020f739f1f7cA93209A1B";
 const says = (root: h.Opened["page"] | ReturnType<h.Opened["page"]["frameLocator"]>) =>
   review(root).locator("[data-text=says]").allTextContents();
-// An answer as if the page's RPCs served another chain: Ethereum's id to eth_chainId.
 const elsewhere = (body: string): string | undefined => {
   const call = JSON.parse(body) as { id?: unknown; method?: string };
   return call.method === "eth_chainId"
@@ -37,7 +36,6 @@ const elsewhere = (body: string): string | undefined => {
     : undefined;
 };
 
-// Waits until each token has its quote, then ticks only those given.
 async function tickOnly(page: h.Opened["page"], symbols: string[]): Promise<void> {
   const swap = view(page, "swap");
   for (const symbol of symbols) await swap.getByRole("checkbox", { name: `Sell ${symbol}` }).waitFor();
@@ -126,7 +124,6 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     );
     const line = view(page, "app").locator("[data-list=need] > li").filter({ hasText: "#82774: payout overdue" });
     await line.filter({ hasText: /payout overdue, at least (≈|<)\s\$[\d,.]+ in \d+ tokens?/ }).waitFor();
-    // While Base does not say what waits, the claim says so, and can be asked again.
     refusing = true;
     await line.getByRole("button", { name: "Claim now" }).click();
     await review(page).getByText("Base did not say what waits: try again in a moment.").waitFor();

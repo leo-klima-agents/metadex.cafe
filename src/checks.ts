@@ -4,8 +4,6 @@ import { AUTOMATIONS, type Kind } from "./config.ts";
 import { escrow } from "./hydrex.ts";
 import { implementation, read, readEach, required, rpc, same } from "./rpc.ts";
 
-// What the page checks of Base before it lets anyone join an automation or swap, read again every hour.
-
 // The checks that fail, by the id of their message on the page, for each automation: whether the RPCs serve Base;
 // whether Hydrex's VotingEscrow and its approval logic are those the page knows, as an upgrade could change what
 // joining allows; and whether joining each automation is on, and approves its claims and votes only. A read that fails

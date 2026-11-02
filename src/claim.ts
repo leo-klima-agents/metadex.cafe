@@ -19,7 +19,6 @@ const unique = (addresses: Address[]): Address[] => [
   ...new Map(addresses.map((address) => [key(address), address])).values(),
 ];
 
-// Each contract asked, as many times as its claim must reach past the 50 epochs each asking reads: see readOwed.
 const asked = (owed: Claim["owed"]): Address[] =>
   unique(owed.map(({ contract }) => contract)).flatMap((contract) =>
     Array<Address>(Math.max(...owed.filter((each) => same(each.contract, contract)).map(({ passes }) => passes))).fill(

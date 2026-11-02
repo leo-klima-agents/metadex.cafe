@@ -56,7 +56,6 @@ const route = (amount: bigint, hops = [hop(10)], token = AVNT): Route => ({ toke
 const token = (address: Address, symbol: string, decimals: number) =>
   [key(address), { address, symbol, decimals }] as const;
 const TOKENS = new Map([token(AVNT, "AVNT", 18), token(WETH, "WETH", 18), token(USDC, "USDC", 6)]);
-// Each route paid twice what it sold, unless `done` says otherwise.
 const paid = (routes: readonly { amount: bigint }[], done = (_: bigint) => true): Result[] =>
   routes.map(({ amount }) => ({ done: done(amount), amountIn: amount, amountOut: 2n * amount, reason: "0x" }));
 

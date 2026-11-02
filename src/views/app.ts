@@ -12,7 +12,6 @@ import { change } from "./hydrex.ts";
 import { openClaim } from "./claim.ts";
 import { allowances, drawAllowances, swapLine } from "./swap.ts";
 
-// The App: what needs the wallet's owner, each with one action, then the products, and what the wallet allows.
 const view = $('[data-view="app"]');
 type Need = { key: string; shape: string; words: string; act: Value };
 
@@ -100,7 +99,6 @@ export function drawApp(): void {
     ({ key }) => key,
     (li, need) => fill(li, { words: frag(status(need.shape, ""), need.words), act: need.act }),
   );
-  // The Approvals popup: each account an automation holds, and each token approval to a swapper.
   const approvals = (holdings.value?.accounts ?? []).flatMap((account) => [
     ...AUTOMATIONS.filter((automation) => hydrex.canLeave(account, automation)).map((automation) => {
       const votes = same(account.delegate, automation.address);

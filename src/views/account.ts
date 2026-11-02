@@ -40,7 +40,6 @@ import { swapLink } from "./swap.ts";
 
 const view = $('[data-view="account"]');
 
-// What waits for some accounts, at prices now, read again every five minutes.
 function waiting(found: Payouts): Got<{ tokens: Map<string, Token>; prices: Prices }> {
   const amounts = new Map<Address, bigint>();
   for (const { standing } of found.entries)
@@ -150,7 +149,6 @@ function drawActions(own: Holdings | undefined, st: hydrex.Status): void {
   });
 }
 
-// Each account's standing in its automation's payouts, and the receipt of its last one.
 function drawStandings(found: Payouts, owner: Address, own: boolean): void {
   list(
     $("[data-list=standing]", view),
@@ -200,7 +198,6 @@ function waitingLine(standing: Standing, found: Payouts): string {
   return `${unknown ? "At least " : ""}${waitsWords(standing, found).replace(/^at least /, "")} waiting`;
 }
 
-// A receipt's tokens and prices at its flip.
 function priced(amounts: Amount[], flip: number): { tokens?: Map<string, Token>; prices?: Prices } {
   const addresses = [...new Set(amounts.map(({ token }) => key(token)))];
   const tokens = use(`tokens ${addresses.join()}`, () => tokensOf(addresses, tagged("payouts"))).value;
@@ -212,7 +209,6 @@ function priced(amounts: Amount[], flip: number): { tokens?: Map<string, Token>;
   ).value;
   return { tokens, prices };
 }
-// Each token by name, or by address in its smallest units if its decimals are unknown.
 function amounts(found: Amount[], tokens: Map<string, Token> | undefined, sign = "", none = "Nothing"): Value {
   if (!found.length) return none;
   return frag(
@@ -231,7 +227,6 @@ const worth = (found: Amount[], { tokens, prices }: ReturnType<typeof priced>): 
   const total = tokens && prices ? valueAt(found, tokens, prices) : 0;
   return total > 0 ? money(moneyAt(total, prices!), true) : "";
 };
-// Matcha Latte's receipt: what its payout claimed, swapped to kVCM, retired, took, and paid, to whoever owned it then.
 function payoutReceipt(payout: Payout, id: bigint, owner: Address, time: number, own: boolean): Node {
   const p = priced([...payout.earned, ...payout.paid], weekStart(time));
   const kvcm = (list: Amount[]) => list.find(({ token }) => same(token, KVCM))?.amount ?? 0n;
@@ -264,8 +259,6 @@ function payoutReceipt(payout: Payout, id: bigint, owner: Address, time: number,
   );
 }
 
-// A Double Espresso receipt: what its claims received, its fee, and what reached the owner. The claim's Done page shows
-// the same, of the claims it sent.
 export function claimReceipt(
   id: bigint,
   { received, fees, paid }: { received: Amount[]; fees: Amount[]; paid: Amount[] },

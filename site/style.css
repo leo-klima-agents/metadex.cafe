@@ -41,7 +41,6 @@
   --inset: 1.25rem;
   --small: 0.875rem;
   --label: 0.8125rem;
-  /* Each colour in light, then dark. */
   --paper: light-dark(#fdfcf9, #18120f);
   --card: light-dark(#ffffff, #211915);
   --ink: light-dark(#251a15, #f1eee9);
@@ -59,8 +58,6 @@
   line-height: 1.5;
 }
 
-/* What the page shows of its state: the wallet, the network, a product's kind, set on the root; and what a part shows of
-   its own reading, set on it. */
 :root:not([data-wallet]) [data-if~="wallet"],
 :root[data-wallet] [data-if~="no-wallet"],
 :root:not([data-wrong-chain]) [data-if~="wrong-chain"],
@@ -104,7 +101,6 @@ fieldset,
 figure {
   margin: 0;
 }
-/* No list has bullets, and an empty one takes no room. */
 ul,
 ol {
   padding: 0;
@@ -170,7 +166,6 @@ fieldset {
 legend {
   padding: 0;
 }
-/* Base styles of fields, which classes may change. */
 :where(input:not([type]), select) {
   min-block-size: 2.25rem;
   padding: 0.25rem 0.5rem;
@@ -187,7 +182,6 @@ legend {
   accent-color: var(--accent);
 }
 
-/* Primitives */
 .stack {
   display: grid;
   align-content: start;
@@ -223,13 +217,11 @@ legend {
 .description {
   color: var(--quiet);
 }
-/* Words beside a figure, in the page's face. */
 .aside {
   color: var(--quiet);
   font-family: var(--sans);
   font-weight: 400;
 }
-/* A label above a figure, and a term on a slip's line. */
 .label,
 .term {
   font-family: var(--mono);
@@ -262,7 +254,6 @@ legend {
   background: var(--paper);
 }
 
-/* Header, footer, views */
 .site-header {
   padding-block: var(--gap);
   border-block-end: 1px solid var(--line);
@@ -320,7 +311,6 @@ main {
   color: var(--quiet);
 }
 
-/* Buttons */
 button,
 .button {
   display: inline-flex;
@@ -521,7 +511,6 @@ button:not(.secondary)[aria-busy="true"]::after {
   }
 }
 
-/* Boxes */
 .card,
 .ghost,
 .table,
@@ -579,7 +568,6 @@ button:not(.secondary)[aria-busy="true"]::after {
   border-block-start: 1px solid var(--line);
 }
 
-/* Facts: a label above each figure; tiles give a page's key figures a box each. */
 .facts {
   display: flex;
   flex-wrap: wrap;
@@ -604,7 +592,6 @@ button:not(.secondary)[aria-busy="true"]::after {
   border-block-end: 1px solid var(--line);
 }
 
-/* Accounts and tokens: a box to tick, then what it is, across the whole card when there is no box. */
 .ticks {
   display: flex;
   align-items: flex-start;
@@ -636,7 +623,6 @@ button:not(.secondary)[aria-busy="true"]::after {
   background: var(--tint);
 }
 
-/* Popups: a panel over the page; on a phone, a sheet from the foot of the screen. */
 dialog {
   inline-size: min(36rem, 100% - 2rem);
   max-block-size: min(44rem, 100% - 3rem);
@@ -657,7 +643,6 @@ dialog[open] {
   align-content: start;
   gap: var(--gap);
 }
-/* A popup's title and close button stay at its top. */
 .bar {
   position: sticky;
   inset-block-start: 0;
@@ -683,7 +668,6 @@ dialog[open] {
   background: var(--paper);
 }
 
-/* Slips and receipts: the café's bill, in the mono face; on a page, a bill's width. */
 .narrow {
   max-inline-size: 32rem;
 }
@@ -712,7 +696,6 @@ dialog[open] {
   outline: 1px solid var(--accent);
   outline-offset: -2px;
 }
-/* A slip's parts, each below a dashed rule. */
 .ruled {
   display: grid;
   gap: 0.375rem;

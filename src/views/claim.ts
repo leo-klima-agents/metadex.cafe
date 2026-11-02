@@ -16,8 +16,6 @@ import { claimReceipt } from "./account.ts";
 import { openReview } from "./review.ts";
 import { reviewSwap, swapLink, swapReceipt } from "./swap.ts";
 
-// Claiming an overdue payout through Double Espresso, as it is or swapped into one token: in one prompt, all or
-// nothing, where the wallet can; else the claim first, then the swap of what it brought.
 type Claiming = {
   // The calls; those `sending` are encoded then, with a fresh deadline.
   steps: (sending?: boolean) => Slip[];
@@ -278,7 +276,6 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
   });
 }
 
-// Each account's claim receipt, from its Claimed events.
 function claimReceipts(
   receipts: Landed[],
   ids: bigint[],
@@ -299,7 +296,6 @@ function claimReceipts(
       ),
     );
 }
-// After a claim apart from its swap: the review of the swap planned, of what it brought.
 function swapLater(
   came: Amount[],
   sale: swap.Plan,
@@ -327,7 +323,6 @@ function swapLater(
   next.append(button);
   return next;
 }
-// After a claim as it is: a link to swap what it brought.
 function swapThese(came: Amount[]): Node {
   const p = document.createElement("p");
   if (came.length) p.append(swapLink(came, "button secondary"));

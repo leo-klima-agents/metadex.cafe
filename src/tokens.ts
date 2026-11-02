@@ -73,7 +73,6 @@ export async function holdingsOf(owner: Address, tokens: Address[], spender?: Ad
   return new Map(found.map(({ item, balance = 0n, allowance = 0n }) => [key(item), { balance, allowance }]));
 }
 
-// What the wallet allows each swapper to take of each token, where it is more than nothing.
 export type Allowance = { token: Address; spender: Address; amount: bigint };
 export async function allowancesOf(owner: Address, tokens: Address[], rd: Read = read): Promise<Allowance[]> {
   const pairs = tokens.flatMap((token) => SWAPPERS.map(({ address }) => ({ token, spender: address })));

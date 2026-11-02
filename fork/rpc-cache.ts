@@ -48,7 +48,6 @@ class Refused extends Error {
 }
 const failure = (error: unknown) => JSON.stringify({ jsonrpc: "2.0", id: null, error: { message: String(error) } });
 
-// The transactions a request runs, whose reads a prefetch fetches.
 function txsIn(body: string): Tx[] {
   try {
     return [JSON.parse(body) as Call | Call[]].flat().flatMap(({ method, params = [] }): Tx[] => {

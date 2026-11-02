@@ -111,7 +111,6 @@ function hopGas({ exchange }: Hop): bigint {
 export const routeGas = ({ hops }: { hops: Hop[] }): bigint => hops.reduce((sum, hop) => sum + hopGas(hop), 50_000n);
 export const swapGas = (routes: { hops: Hop[] }[]): bigint =>
   routes.reduce((sum, route) => sum + routeGas(route), 150_000n);
-// The routes, in order, in as few swaps as keep each under the limit.
 export function split<T extends { hops: Hop[] }>(routes: T[]): T[][] {
   const swaps: T[][] = [];
   for (const route of routes) {
@@ -185,7 +184,6 @@ export async function findRoute(
   while (open.length) {
     const legs = open.map(({ path, hops }) => [path[hops.length]!, path[hops.length + 1]!] as const);
     const ways = await waysFor(legs, undefined, rd);
-    // Legs that share their pair and amount share quotes.
     const asked = new Map<string, { way: Way; index: number }[]>();
     const items: { swapper: Swapper; route: Route }[] = [];
     open.forEach((partial, i) => {
@@ -276,7 +274,6 @@ export async function saleOf(
   return { plan: { swapper, items, margin }, left };
 }
 
-// The calls, as the review shows them.
 const symbolOf = (tokens: Map<string, Token>, address: Address): string => tokens.get(key(address))?.symbol ?? address;
 // "ZORA → WETH → USDC via Aerodrome, Uniswap": the wallet shows no pool's address, so neither does the page.
 const pathWords = (steps: string[], { hops }: Route): string =>
@@ -423,7 +420,6 @@ export function withMinimums(
   });
 }
 
-// Why a route failed, in words.
 export function reasonOf(reason: Hex): string {
   try {
     const name = decodeErrorResult({ abi: swapperAbi, data: reason }).errorName;

@@ -70,7 +70,6 @@ export async function carOf(dir: string): Promise<{ root: CID; car: Uint8Array }
   return { root, car: await written };
 }
 
-// Little-endian fields of a zip, each of 2 or 4 bytes.
 const le = (...fields: [2 | 4, number][]): Buffer =>
   Buffer.concat(
     fields.map(([bytes, value]) => {
@@ -134,7 +133,6 @@ export function zipOf(dir: string, folder: string): Uint8Array {
 // A CID as an ENS content hash, as EIP-1577 encodes it: the code of IPFS's namespace, 0xe3, as a varint, then the CID.
 export const contenthashOf = (cid: CID): string => `0x${Buffer.from([0xe3, 0x01, ...cid.bytes]).toString("hex")}`;
 
-// The Release's notes, in Markdown: its CID, and below, the same as the content hash ENS stores.
 export const notesOf = (root: CID): string =>
   `CID: ipfs://${root.toString(base32)}\n\nEIP-1577: ${contenthashOf(root)}\n`;
 

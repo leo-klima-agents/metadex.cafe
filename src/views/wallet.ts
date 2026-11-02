@@ -5,7 +5,6 @@ import { $, announce, fill, list } from "../ui.ts";
 import { NoWallet, connect, declined, findWallets, safeWallet, switchToBase, type Wallet } from "../wallet.ts";
 import { closeReview } from "./review.ts";
 
-// Connecting a wallet: at once when the browser has one, else from the list in the header's popup.
 let wallets: Wallet[] = [];
 let message = "";
 let missing = false;

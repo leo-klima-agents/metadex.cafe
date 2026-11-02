@@ -74,7 +74,6 @@ export function fill(root: ParentNode, values: Record<string, Value>): void {
   }
 }
 
-// A copy of the element a template of the page holds.
 export const fromTemplate = (id: string): HTMLElement =>
   $<HTMLTemplateElement>(`#${id}`).content.firstElementChild!.cloneNode(true) as HTMLElement;
 
@@ -120,7 +119,6 @@ export const stateOf = (got: Got<unknown>, empty?: boolean): Value => ({
   state: got.value !== undefined ? (empty ? "empty" : "ready") : got.failed ? "failed" : "loading",
 });
 
-// A bill, from the page's template: its lines, its sums, its total, and what goes under it.
 type Line = { symbol: string; amount: string; value: string; worth: string; route: string; note: Value };
 export function bill(
   label: Value,
@@ -188,7 +186,6 @@ export function hex(el: HTMLElement, value: string, wallet = false): void {
   el.dataset.hex = `${wallet} ${value}`;
   el.classList.add("hex");
   el.translate = false;
-  // In blocks, a line each; else two halves that break between them where they do not fit one line.
   const block = wallet || hexLines(value).length > 1;
   const lines = wallet
     ? walletLines(value)

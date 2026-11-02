@@ -43,7 +43,6 @@ export type Slip = Tx & { title: string; says: string; on: string; call: string;
 type Announcement = { info: { name: string; icon: string; rdns: string }; provider: EIP1193Provider };
 
 const CHAIN = numberToHex(CHAIN_ID);
-// A wallet that does not support a method, or does not know it.
 const UNKNOWN_METHOD: number[] = [UnsupportedProviderMethodError.code, MethodNotFoundRpcError.code];
 
 export class NoWallet extends Error {}
@@ -144,7 +143,6 @@ export async function safeFrom(ask: AskSafe, wait: number): Promise<Wallet | und
     ask.stop();
     return undefined;
   }
-  // A provider that says which Safe, on which chain, and that it does not support the rest.
   const provider = {
     async request({ method }: { method: string }) {
       if (method === "eth_requestAccounts") return [info.safeAddress];

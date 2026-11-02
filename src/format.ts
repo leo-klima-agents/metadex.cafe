@@ -16,11 +16,9 @@ const plurals = new Intl.PluralRules(LANG);
 const and = new Intl.ListFormat(LANG, { type: "conjunction" });
 const POINT = hundredths.formatToParts(0.5).find(({ type }) => type === "decimal")!.value;
 
-// A whole number of tokens with 18 decimals.
 export const units = (value: bigint): string => whole.format(value / 10n ** 18n);
 // Two decimals, so that a receipt's figures line up: "18,686.45", "< 0.01", "0".
 export const amount = (value: bigint, decimals: number): string => (value === 0n ? "0" : fixed(value, decimals, 2));
-// Four significant figures, or whole from 10,000: "0.000065", "41.2", "1,000,000".
 export function figure(value: bigint, decimals: number): string {
   const n = Number(value) / 10 ** decimals;
   return n >= 10_000 ? whole.format(n) : fourDigits.format(n);

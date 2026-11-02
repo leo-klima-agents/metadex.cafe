@@ -129,9 +129,7 @@ const clientOf = (url: string) =>
     .extend(testActions({ mode: "anvil" }))
     .extend(walletActions);
 export let anvil: ReturnType<typeof clientOf>;
-// A contract on the fork, read through the tests' ABI.
 export const at = (address: Address) => getContract({ address, abi, client: anvil });
-// Runs the page's own reads in Node, against the fork.
 async function onFork<T>(reads: () => Promise<T>): Promise<T> {
   globalThis.fetch = (_, init) => {
     prefetch(String(init?.body));
@@ -190,8 +188,6 @@ export async function moveOn(): Promise<void> {
   const minter = await at(VOTER).read.minter();
   await mined(STRANGER, minter, encodeFunctionData({ abi, functionName: "update_period" }));
 }
-// The fork moved on to the next Thursday 00:00 UTC, and `after` seconds more, and Hydrex with it; then a few blocks, as
-// the page reads a little behind the newest.
 export async function nextEpoch(after = 60): Promise<void> {
   const { timestamp } = await anvil.getBlock();
   await anvil.setNextBlockTimestamp({ timestamp: BigInt(weekStart(Number(timestamp)) + WEEK + after) });
@@ -218,7 +214,6 @@ export async function deployDoubleEspresso(): Promise<void> {
     DOUBLE_ESPRESSO.address,
   );
 }
-// Double Espresso with #82774 in it, claimed by someone and then by a stranger, a USDC reward each.
 export async function doubleEspressoReceipts(): Promise<Reward[]> {
   await deployDoubleEspresso();
   const { rewards } = await onFork(async () => votesEarned(CONDUIT, await lastEpoch(), true));
@@ -234,14 +229,12 @@ export async function doubleEspressoReceipts(): Promise<Reward[]> {
   await settle();
   return rewards;
 }
-// Double Espresso's claim of one reward for an account, as anyone may call it.
 export const claimOne = (id: bigint, { contract, token, fee }: Pick<Reward, "contract" | "token" | "fee">): Hex =>
   encodeFunctionData({
     abi,
     functionName: "claim",
     args: [id, fee ? [contract] : [], fee ? [] : [contract], [token.address]],
   });
-// Gives SELLER the fee recipient's whole balance of each token.
 export async function fund(tokens: Address[]): Promise<void> {
   for (const token of tokens)
     await mined(
@@ -531,14 +524,12 @@ export async function open(wallet: Partial<WalletOptions> | false, options: Open
   await page.goto(url);
   return { page, ...opened };
 }
-// Connected on Hydrex's page, unless `options` says where.
 export async function connected(wallet: Partial<WalletOptions>, options?: OpenOptions): Promise<Opened> {
   const opened = await open(wallet, { url: `${SITE}/#hydrex`, ...options });
   await connectButton(opened.page).click();
   return opened;
 }
 
-// The page's parts, by role and name where they have one.
 export const connectButton = (page: Page) => page.getByRole("banner").getByRole("button", { name: "Connect a wallet" });
 export const view = (page: Page | FrameLocator, name: string) => page.locator(`main > [data-view="${name}"]`);
 export const group = (page: Page, key: string, where = "hydrex") => view(page, where).locator(`[data-group="${key}"]`);
@@ -548,7 +539,6 @@ export const review = (page: Page | FrameLocator) => page.locator("#review");
 export const heading = (page: Page | FrameLocator | Locator, name: string | RegExp, level = 1) =>
   page.getByRole("heading", { name, level, exact: typeof name === "string" });
 export const text = (page: Page | Locator, key: string) => page.locator(`[data-text="${key}"]`);
-// What a call's slip says on the line of `label`: its value, or the words beside it.
 export const field = (slip: Locator, label: string, part: "value" | "description" = "value") =>
   slip
     .locator("[data-list=field] > div")
@@ -572,7 +562,6 @@ export async function toCalls(page: Page): Promise<void> {
   await heading(review(page), /^Transactions?$/, 2).waitFor();
 }
 const progress = (page: Page) => review(page).locator("[data-text=progress]").innerText();
-// Confirms the review's calls, one prompt, or one at a time, until they went through.
 export async function confirm(page: Page): Promise<void> {
   const done = heading(review(page), "Done", 2).or(review(page).getByText(/(It|All \d+) went through\./));
   const next = review(page)
@@ -597,8 +586,6 @@ export async function shoot(page: Page, name: string): Promise<void> {
   });
 }
 
-// A suite's fork of Base at `block`, through the cache fork/run.ts serves for it, and Chromium; each test's changes are
-// undone after it.
 export function fork(block: number, owners: Address[], setup?: () => Promise<unknown>): void {
   before(async () => {
     const cached = (JSON.parse(process.env.FORK_CACHES ?? "{}") as Record<string, string>)[block];

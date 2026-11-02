@@ -131,7 +131,6 @@ async function launch(first: Scenario, { headless = false } = {}): Promise<Sessi
     decline: false,
     switches: true,
     batch: false,
-    // As a wallet's window does, the QA wallet comes to the front with each request it asks about.
     ask: (method, params) =>
       !asks
         ? Promise.resolve(true)
@@ -161,7 +160,6 @@ async function launch(first: Scenario, { headless = false } = {}): Promise<Sessi
     return reply;
   }
 
-  // Safe{Wallet} holds the address signed as.
   const served = {
     origins: new Set<string>(),
     rpc: {},
@@ -171,7 +169,6 @@ async function launch(first: Scenario, { headless = false } = {}): Promise<Sessi
   };
   function routeSite(route: Route): Promise<void> {
     const request = route.request();
-    // A link out of the page opens as it would anywhere.
     if (request.isNavigationRequest() && ![SITE, SAFE_ORIGIN].includes(new URL(request.url()).origin))
       return route.continue();
     return serve(route, served).catch(() => route.abort().catch(() => {}));
@@ -185,7 +182,6 @@ async function launch(first: Scenario, { headless = false } = {}): Promise<Sessi
     if ((await anvil.getBalance({ address })) < FOR_GAS / 10n) await anvil.setBalance({ address, value: FOR_GAS });
   }
 
-  // A window with the test wallet, and one without, for Safe{Wallet} too. Each one's clock starts at the fork's time.
   const sites = new Map<"wallet" | "none", BrowserContext>();
   async function site(kind: "wallet" | "none"): Promise<BrowserContext> {
     const open = sites.get(kind);
@@ -217,7 +213,6 @@ async function launch(first: Scenario, { headless = false } = {}): Promise<Sessi
     await place(page, PANEL_WIDTH);
     await page.goto(kind === "safe" ? `${SAFE_ORIGIN}/` : `${SITE}/${current.hash}`);
   }
-  // The test wallet's events, to every window and frame.
   async function emit(event: string, value: unknown): Promise<void> {
     for (const context of sites.values())
       for (const page of context.pages())
@@ -274,7 +269,6 @@ async function launch(first: Scenario, { headless = false } = {}): Promise<Sessi
     await emit("accountsChanged", [owner]);
   }
 
-  // A minute into the next epoch, Thursday 00:00 UTC; the pages' clocks follow, and run their next half minute's timers.
   async function travel(): Promise<void> {
     const at = (Math.floor((await latest()).time / WEEK) + 1) * WEEK + 60;
     await anvil.setNextBlockTimestamp({ timestamp: BigInt(at) });
@@ -295,7 +289,6 @@ async function launch(first: Scenario, { headless = false } = {}): Promise<Sessi
     await gas(tx.from);
     replayed++;
     await included(await send({ from: tx.from, to: tx.to, data: tx.input, gas: tx.gas }), `What ${next.does}`);
-    // The page reads a few blocks behind the newest.
     await settle();
     note(`The operator ${next.does}`);
   }

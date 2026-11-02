@@ -172,7 +172,6 @@ test("moving between Matcha Latte and Double Espresso is one call, which takes t
   assert.deepEqual(txs(leave([account(inBoth(MAXI))], DOUBLE_ESPRESSO)), [approval(141n, false, MAXI)]);
 });
 
-// Answers Multicall3's aggregate3 call by call, and other methods by `other`.
 const multicall = parseAbi([
   "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
 ]);

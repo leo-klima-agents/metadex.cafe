@@ -2,7 +2,6 @@ import { onSettle } from "./cache.ts";
 import type { Route } from "./routes.ts";
 import type { Connection } from "./wallet.ts";
 
-// What the page knows besides what it reads from Base: where it is, the wallet, and what the visitor picked.
 export const state: {
   route: Route;
   connection?: Connection | undefined;

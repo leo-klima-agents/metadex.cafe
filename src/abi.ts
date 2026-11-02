@@ -1,8 +1,5 @@
 import { parseAbi } from "viem";
 
-// What the page calls on Hydrex's contracts and its automations', one ABI a contract. Pools, price feeds and the
-// swappers are called by prices.ts and swap.ts alone, which declare theirs.
-
 export const escrowAbi = parseAbi([
   "function balanceOf(address owner) view returns (uint256)",
   "function ownerOf(uint256 tokenId) view returns (address)",

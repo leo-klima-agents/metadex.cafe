@@ -86,7 +86,6 @@ export function partsOf(root: string, files: string[]): Part[] {
   return [...parts.values()];
 }
 
-// One comment: the parts under each license, by name, each license's text after them, verbatim from LICENSES/.
 export function noticeOf(root: string, parts: Part[]): string {
   if (!parts.length) return "";
   const licenses = [...new Set(parts.map(({ license }) => license))].sort();

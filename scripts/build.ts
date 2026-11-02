@@ -6,7 +6,6 @@ import { bundled, noticeOf, partsOf } from "./notices.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUT = `${ROOT}/dist`;
-// What the site serves, as it serves it: the page and its stylesheet, built; the other files there, copied.
 const SITE = `${ROOT}/site`;
 const { version } = JSON.parse(readFileSync(`${ROOT}/package.json`, "utf8")) as { version: string };
 

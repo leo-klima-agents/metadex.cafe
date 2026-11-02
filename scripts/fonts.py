@@ -26,7 +26,6 @@ SOURCES = {
         "42bb2602364b28569fdce5eeb6ab3d81cf8090ba81b211f1229ed69f33155523",
     ),
 }
-# Each file: its source, and the weight to take from a variable font.
 FONTS = {
     "atkinson-hyperlegible-next-400.woff2": ("next", 400),
     "atkinson-hyperlegible-next-700.woff2": ("next", 700),

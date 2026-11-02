@@ -32,7 +32,6 @@ test("the script's notices name each npm package it bundles, by its LICENSE, und
     assert.equal(license, "MIT", name);
     assert.ok(copyright.length && copyright.every((line) => line.startsWith("Copyright ")), name);
   }
-  // The café's own code is not among them.
   assert.ok(!parts.some(({ name }) => name.startsWith("src/")));
   // A package that ships no LICENSE with a copyright line stops it.
   const elsewhere = mkdtempSync(join(tmpdir(), "notices-"));

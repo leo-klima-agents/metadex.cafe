@@ -34,7 +34,6 @@ export const accounts = (): Got<Holdings> => {
 };
 export const timeOfBlock = (block: number) => use(`time ${block}`, () => readTime(block));
 const account = (id: bigint) => use(`account ${id} ${week()}`, async () => (await readAccount(id)) ?? null);
-// The account a page shows: from the wallet's own, if it is one, else read on its own.
 export function accountShown(id: bigint): { holdings: Got<Holdings | null>; own: boolean } {
   const own = accounts().value;
   if (!own?.accounts.some((each) => each.id === id)) return { holdings: account(id), own: false };
@@ -51,7 +50,6 @@ export const earnings = (automation: Automation): Got<Earnings> =>
   andThen(epoch(), (start) => use(earningsKey(automation, start), readEarnings(automation, start)));
 export const average = (): Got<Earnings> =>
   andThen(epoch(), (start) => use(`average ${start}`, () => allEarnings(start, tagged("average"))));
-// Who held the wallet's accounts' votes when the epoch began, and what each holder that is none of the automations earned.
 const stakes = (holdings: Holdings): Got<Map<bigint, Stake>> =>
   andThen(epoch(), (start) => {
     const ids = holdings.accounts.filter(({ amount }) => amount > 0n).map(({ id }) => id);
@@ -92,7 +90,6 @@ export function payouts(holdings: Holdings): Got<Payouts> {
   );
 }
 
-// Reads ahead what every view shows, so that each opens with it read, or under way.
 export function preload(): void {
   checks();
   matchaLatte();

@@ -84,7 +84,6 @@ test("a frame's parent is Safe{Wallet} only at its origin; an opaque origin or t
   assert.equal(parentOrigin(own, "", own), own);
 });
 
-// A frame's parent, as Safe{Wallet}: what the page sends it, and its answers, from its origin unless said otherwise.
 const framed = () => {
   const sent: { message: { id: string; method: string; params?: unknown; env: unknown }; origin: string }[] = [];
   const parent = {

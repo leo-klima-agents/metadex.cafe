@@ -82,7 +82,6 @@ export type Account = {
 };
 export type Holdings = { owner: Address; accounts: Account[]; epochStart: number };
 
-// When each of Hydrex's other automations last voted, by address; 0 if not known.
 async function othersVoted(): Promise<Map<Address, number>> {
   const found = await readEach(others, { voted: ({ address }) => voter("lastVoted", address) });
   return new Map(found.map(({ item, voted }) => [key(item.address), Number(voted ?? 0n)]));
@@ -231,7 +230,6 @@ export function groupOf(account: Account, status: Status): Group {
   }
 }
 
-// A call to setConduitApproval, for one of the page's automations or one of Hydrex's others.
 function approval(
   { id }: Account,
   approve: boolean,

@@ -17,8 +17,6 @@ import {
   type Slip,
 } from "../wallet.ts";
 
-// The review: the pages that say what a change does, then each call as a bill, as the wallet will show it; then the
-// wallet signs them, in one prompt where it can, one at a time where not, or as Safe transactions.
 type Review = {
   name: string;
   // The last page shows the calls too; one without a title is the calls'.
@@ -83,7 +81,6 @@ export function openReview(review: Review): void {
 export const closeReview = (): void => dialog.close();
 export const drawReview = (): void => void (current && draw());
 
-// A field's value: an address as the wallet shows it, a list of them, calldata, or words.
 function fieldValue({ code: value, tags = [], words, after, calldata }: Field): Node | string {
   if (words !== undefined) return words;
   const one = (text: string) => {
@@ -346,7 +343,6 @@ actions.back = () => {
     $("#review-title").focus();
   } else closeReview();
 };
-// A link within the review closes it, unless calls are under way: then it opens in a new tab.
 dialog.addEventListener("click", (event) => {
   const anchor = (event.target as Element).closest<HTMLAnchorElement>('a[href^="#"]');
   if (!anchor || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;

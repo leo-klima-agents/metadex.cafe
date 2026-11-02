@@ -9,7 +9,6 @@ const HYDX: Token = { address: "0x00000e7efa313F4E11Bfff432471eD9423AC6B30", dec
 const WFRAX: Token = { address: "0x0CEAC003B0d2479BebeC9f4b2EBAd0a803759bbf", decimals: 18, symbol: "WFRAX" };
 const POOL: Address = "0x605abD1873737CA9a9Ec1CFa52CDfc8ef62c2E1d";
 const OTHER: Address = "0x0BA69825c4C033e72309F6AC0Bde0023b15Cc97c";
-// POOL's rewards are fees, OTHER's incentives.
 const pay = (token: Token, amount: bigint, at = POOL) => ({ pool: at, contract: at, token, amount, fee: at === POOL });
 const PRICES = new Map(Object.entries({ [key(USDC.address)]: 1, [key(HYDX.address)]: 0.025 }));
 const round = (value: number) => Math.round(value * 1e6) / 1e6;

@@ -45,14 +45,12 @@ export type Records = { last: number[]; earned: (bigint | undefined)[]; before: 
 const sum = (values: number[]): number => values.reduce((total, value) => total + value, 0);
 const positive = (tokens: readonly Address[], values: readonly bigint[]): Amount[] =>
   tokens.map((token, i) => ({ token, amount: values[i] ?? 0n })).filter(({ amount }) => amount > 0n);
-// Amounts of the same token, added together.
 export function summed(amounts: Amount[]): Amount[] {
   const all = new Map<string, Amount>();
   for (const { token, amount } of amounts)
     all.set(key(token), { token, amount: (all.get(key(token))?.amount ?? 0n) + amount });
   return [...all.values()];
 }
-// What is left of each amount once `taken` is.
 const less = (amounts: Amount[], taken: Amount[]): Amount[] =>
   amounts
     .map(({ token, amount }) => ({
@@ -76,7 +74,6 @@ export function valueAt(
   );
 }
 
-// Each reward, weighed at the prices given: a token without a price then, at its stand-in.
 export const weighed = (rewards: Reward[], prices: Prices): Weighed[] =>
   rewards.map(({ contract, token, amount }) => ({
     contract,
@@ -131,7 +128,6 @@ export function standingOf(
       (found, { pair, stamp }) => (stamp > (found?.through ?? 0) && stamp <= cap ? { through: stamp, pair } : found),
       undefined,
     );
-  // The payout for an epoch, through the pair worth the most among those claimed since it ended.
   const payout = (rewards: Rewards) => {
     const claimed = held.filter((item) => item.rewards === rewards && item.stamp >= rewards.start + WEEK);
     const best = claimed.reduce<(typeof claimed)[number] | undefined>(
@@ -148,11 +144,9 @@ export function standingOf(
   return { id, paidUpTo, paid, late, waiting, unknown };
 }
 
-// Each account with each pair.
 const cellsOf = <P extends Pair>(ids: bigint[], pairs: P[]) => ids.flatMap((id) => pairs.map((pair) => ({ id, pair })));
 const stampOf = ({ id, pair }: { id: bigint; pair: Pair }) =>
   call(pair.contract, rewardsAbi, "tokenTimestamp", id, pair.token);
-// Each account's record in each pair, at a block.
 export async function readStamps(ids: bigint[], pairs: Pair[], block: number): Promise<Map<bigint, number[]>> {
   const found = await readEach(cellsOf(ids, pairs), { stamp: stampOf }, read, { block, tag: "payouts" });
   return new Map(
@@ -314,7 +308,6 @@ async function payoutBlocks(standings: Standing[], top: number, time: number): P
   return blocks;
 }
 
-// Decoded logs in the order Base made them.
 type Placed = { blockNumber: bigint; logIndex: number };
 const inOrder = (a: Placed, b: Placed): number => Number(a.blockNumber - b.blockNumber) || a.logIndex - b.logIndex;
 
@@ -396,7 +389,6 @@ export type ClaimLog = {
   block: number;
 };
 export type Walk = { claims: ClaimLog[]; stopped: boolean };
-// The Claimed events in some logs, in their order, with the log of each.
 export const claimed = (logs: RpcLog[]) =>
   parseEventLogs({ abi: doubleEspressoAbi, eventName: "Claimed", logs }).map((log) => ({
     log,
@@ -411,7 +403,6 @@ export const claimsOf = (logs: RpcLog[]): ClaimLog[] =>
   claimed(logs)
     .sort((a, b) => inOrder(b.log, a.log))
     .map(({ log, ...claim }) => ({ ...claim, tx: log.transactionHash, block: Number(log.blockNumber) }));
-// What claims received, took and paid, token by token.
 export function totals(claims: Pick<ClaimLog, "received" | "fees">[]) {
   const received = summed(claims.flatMap((claim) => claim.received));
   const fees = summed(claims.flatMap((claim) => claim.fees));
@@ -446,7 +437,6 @@ export async function walkClaims(
     for (const [id, current] of at) {
       const walk = walks.get(id)!;
       const mine = (found.get(current) ?? []).filter((claim) => claim.id === id && claim.block === current);
-      // A claim that received nothing moved nothing.
       walk.claims.push(...mine.filter(({ received }) => received.length));
       const before = Math.min(...mine.map(({ previous }) => previous).filter((previous) => previous < current));
       if (!Number.isFinite(before) || before === 0 || before < starts.get(id)!.since) continue;
@@ -599,7 +589,6 @@ export async function readPayouts(
         [automation, members.filter((member) => of(member) === automation).map(({ account }) => account.id)] as const,
     );
 
-  // An account's figures, or `early` when its automation's are not final yet.
   const found = new Map<bigint, { earnings?: Earnings; standing?: Standing | undefined; early?: true }>();
   const standings = Promise.all(
     groups(voterOf).map(async ([automation, these]) => {

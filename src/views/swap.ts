@@ -27,8 +27,6 @@ import { $, bill, busy, code, enable, fill, frag, link, list, shown, stateOf, ty
 import { walletAssets } from "../wallet.ts";
 import { openReview } from "./review.ts";
 
-// The swap: the wallet's tokens, each with what it fetches, those worth twice their gas ticked; then what the ticked
-// ones fetch together, routed together and run through Base, line by line.
 const view = $('[data-view="swap"]');
 const rd = tagged("swap");
 const ticks = new Map<string, boolean>();
@@ -39,8 +37,6 @@ let ticked = { key: "", at: 0 };
 let failedReview = "";
 
 const swapperShown = (): Swapper => swapperOf(state.route.view === "swap" ? state.route.output : "usdc")!;
-// The amounts a receipt's "Swap these" brings to the swap, until the visitor leaves it.
-// A link to the swap page with these amounts ticked.
 export function swapLink(amounts: Amount[], className = ""): HTMLAnchorElement {
   const a = Object.assign(link(hrefOf({ view: "swap", output: DEFAULT_OUTPUT }), "Swap these"), { className });
   a.addEventListener("click", () => prefill(amounts));
@@ -57,10 +53,7 @@ addEventListener("hashchange", () => {
   ticks.clear();
 });
 
-// What the scan reads: the wallet's tokens and their allowances to the swapper, their names, gas and prices now. Each
-// token's route is read again every five minutes, those ticked routed together again every minute.
 type Scan = { rows: Row[]; tokens: Map<string, Token>; prices: Prices; costs?: Costs | undefined; reading: boolean };
-// A token held, with its route once read, if it has one.
 type Row = {
   token: Token;
   amount: bigint;
@@ -71,7 +64,6 @@ type Row = {
   worth?: number | undefined;
   ticked: boolean;
 };
-// A row ticked, so routed.
 type Ticked = Row & { route: Routed };
 const isTicked = (row: Row): row is Ticked => row.ticked && !!row.route;
 function scan(): Got<Scan> {
@@ -235,7 +227,6 @@ function output(
     worthText: worth ? money(worth, true) : "",
   };
 }
-// How far a quote falls under the page's own price, where it falls more than 2% short.
 function underPrice(
   token: Token,
   amount: bigint,
@@ -315,7 +306,6 @@ export function drawSwap(): void {
       });
     },
   );
-  // What the ticked ones fetch together, line by line.
   const parts = picked.flatMap(partsOf);
   const going = parts.flatMap(({ out }) => (out === undefined ? [] : [out]));
   const out = going.reduce((sum, each) => sum + each, 0n);
@@ -568,7 +558,6 @@ export function swapReceipt(
   return node;
 }
 
-// What the wallet allows the swappers to take, with the calls that reset it.
 export const allowances = (): Got<Allowance[]> => {
   const owner = data.owner();
   return owner ? use(`allowances ${owner} ${known().length}`, () => allowancesOf(owner, known(), rd)) : {};
@@ -617,7 +606,6 @@ async function openReset(these: Allowance[]): Promise<void> {
   });
 }
 
-// The App's line: how many tokens the wallet could swap, and what they are worth.
 export function swapLine(): Value {
   const found = scan();
   return shown(found, ({ rows, reading, prices }) => {

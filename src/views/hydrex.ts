@@ -43,8 +43,6 @@ import { openReview } from "./review.ts";
 const hydrexView = $('[data-view="hydrex"]');
 const productView = $('[data-view="product"]');
 
-// Words for figures
-
 export const accountName = ({ name, id }: Account): string =>
   `${!name ? "Hydrex account" : /^hydrex\b/i.test(name) ? name : `Hydrex ${name}`} #${id}`;
 export const lockWords = ({ lockType, end }: Account): string =>
@@ -64,7 +62,6 @@ const versusWords = (ratio: number): Value =>
 const feeWords = (feeBps: bigint | undefined): string =>
   feeBps === 0n ? "" : feeBps === undefined ? ", fee not read yet" : `, ${bps(feeBps)} fee`;
 
-// An account's status, to its owner or to anyone.
 export function statusNode(s: Status, own: boolean, inGroup?: string): Value {
   const automationLink = (automation: Automation) =>
     link(hrefOf({ view: "product", kind: automation.kind }), automation.name);
@@ -97,7 +94,6 @@ export function statusNode(s: Status, own: boolean, inGroup?: string): Value {
   }
 }
 
-// What each automation's votes earned last epoch per 1,000 votes, and against Hydrex's average at the same prices.
 const record = (automation: Automation): Value =>
   shown(data.earnings(automation), (earnings) =>
     earnings.votes
@@ -107,7 +103,6 @@ const record = (automation: Automation): Value =>
         )
       : "No record yet",
   );
-// How some votes compare with Hydrex's average: hidden when there is nothing to compare, or it could not be read.
 const compared = (mine: Got<Earnings>): Value => {
   const got = andThen(mine, (earnings) =>
     !earnings.votes || !earnings.pools.length
@@ -117,7 +112,6 @@ const compared = (mine: Got<Earnings>): Value => {
   return got.failed ? null : shown(got, versusWords);
 };
 const recordVersus = (automation: Automation): Value => compared(data.earnings(automation));
-// The automation's state: whether joining is on, whether it voted in the epoch.
 function stateNode(automation: Automation): Value {
   const off = checks().value?.get(automation.kind)?.length;
   if (off) return status("failed", "Joining off");
@@ -135,7 +129,6 @@ function stateNode(automation: Automation): Value {
 }
 const matchaLatteValue = (text: (found: MatchaLatte) => Value): Value => shown(data.matchaLatte(), text);
 
-// The wallet's Hydrex accounts, each with its status and group.
 type Member = { account: Account; status: Status; group: hydrex.Group };
 const members = ({ owner, accounts, epochStart }: Holdings): Member[] =>
   accounts.map((account) => {
@@ -147,7 +140,6 @@ const overdueOf = (holdings: Holdings) => {
   const found = data.payouts(holdings).value;
   return found ? overdue(found) : [];
 };
-// What a group's buttons, or an account page's, can do for an account.
 export function can(action: string, account: Account, arg: string | undefined, holdings: Holdings): boolean {
   const automation = byKind(arg ?? "");
   if (action === "join") return !!automation && joinable(automation) && hydrex.canJoin(account, automation, now());
@@ -384,7 +376,6 @@ function performance(automation: Automation): Value {
     : `${automation.name}'s votes earned ${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "more" : "less"} than average last epoch.`;
 }
 
-// Picking accounts, then acting on those picked. A pick's group, by view, and its accounts, each with its box.
 function pickGroup(el: HTMLElement) {
   const section = el.closest<HTMLElement>("[data-group]")!;
   const rows = [...section.querySelectorAll<HTMLElement>("[data-list=account] > [data-key]")].map((row) => ({
@@ -404,7 +395,6 @@ actions["pick-all"] = (el) => {
   state.picks.set(key, new Set(all ? rows.filter(({ box }) => !box.hidden).map(({ id }) => id) : []));
   render();
 };
-// The accounts an action is for: those picked in the button's group, or the account shown.
 function chosen(el: HTMLElement): Account[] {
   const holdings = data.accounts().value;
   const view = el.closest<HTMLElement>("[data-view]")!;
@@ -431,7 +421,6 @@ actions.claim = (el) => {
     .finally(() => busy(el as HTMLButtonElement, false));
 };
 
-// The review of joining or leaving: what it does, the change's gas and what a week would pay, then its calls.
 export function change(accounts: Account[], action: "join" | "leave" | "self", automation?: Automation): void {
   const connection = state.connection;
   const holdings =

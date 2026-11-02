@@ -14,12 +14,9 @@ export function key(address: string): string;
 export function key(address: string): string {
   return address.toLowerCase();
 }
-// Prices of nothing, as for votes that earned nothing.
 export const noPrices = (): Prices => ({ unit: "USD", of: new Map(), standIns: new Map() });
 export const worthOf = (amount: bigint, decimals: number, price: number): number =>
   (Number(amount) / 10 ** decimals) * price;
-
-// Pools
 
 export type Hop = { exchange: number; pool: Address; tokenOut: Address; fee: number; tickSpacing: number };
 // `stable` is set for a pool of reserves: true on the stable curve.
@@ -171,8 +168,6 @@ export async function waysFor(
   );
 }
 
-// Prices
-
 // Pools are averaged over the half hour before the flip. A pool prices a token only if it holds at least $250 of each
 // side, and ten times the value priced. Classic pairs observe at most every half hour, when they trade.
 export const WINDOW = 1800;
@@ -242,7 +237,6 @@ export function points(lo: number, hi: number): number[] {
     ? Array.from({ length: n }, (_, i) => lo + i)
     : Array.from({ length: width }, (_, i) => lo + Math.floor((i * n) / width));
 }
-// Runs the searches together, one read a round.
 export async function narrow(searches: Search[], rd: Read = read): Promise<void> {
   for (;;) {
     const open = searches.filter((search) => search.lo < search.hi && !search.failed);
@@ -285,7 +279,6 @@ export async function feedsAt(feeds: Address[], flip: number, rd: Read = read): 
     searches.filter((search) => !!search),
     rd,
   );
-  // A search that a failed read ended runs once more.
   const retried = searches.map((search, i) => (search?.failed ? searchOf(i) : undefined));
   await narrow(
     retried.filter((search) => !!search),
@@ -413,7 +406,6 @@ async function measure(pools: Pool[], prices: Prices, amounts: Map<string, bigin
   });
 }
 
-// Each pool's price at the flip, from its history, in one read: undefined where it has none.
 async function atFlipIn(entries: Measured[], prices: Prices, flip: number, ago: number, rd: Read) {
   const found = new Map<Measured, number | undefined>();
   const histories = entries.map((entry) => pricingOf(entry.pool.exchange).history(entry, flip, ago));
@@ -520,7 +512,6 @@ export async function pricesAt(
   const prices: Prices = fed.length
     ? { unit: "USD", rates, of: new Map(fed), standIns: new Map() }
     : { unit: "USDC", rates: {}, of: new Map([[key(config.USDC), 1]]), standIns: new Map() };
-  // Anchors without a price first, then the others.
   const anchors = config.ANCHORS.map(({ address, decimals }) => ({ address, decimals, symbol: "" }));
   for (const each of [anchors, tokens])
     await inPools(
@@ -549,7 +540,6 @@ export const pricesAtFlip = (
 export const anchorsNow = (): Promise<Prices | undefined> =>
   memo("anchors", () => pricesNow([]), 60_000).catch(() => undefined);
 
-// What wei of ETH costs at the prices given, ETH's among them; gas in words, to the cent, or else in ETH.
 export function ethCost(wei: bigint, prices: Prices | undefined): Money | undefined {
   const eth = prices?.of.get(key(config.WETH));
   return prices && eth !== undefined ? moneyAt(worthOf(wei, 18, eth), prices) : undefined;
