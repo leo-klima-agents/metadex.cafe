@@ -1,44 +1,25 @@
-import { DEFAULT_OUTPUT, byKind, swapperOf, type Kind, type Output } from "./config.ts";
+import { byKind, DEFAULT_OUTPUT, swapperOf, type Kind, type Output } from "./config.ts";
 
-// The page's addresses. Each is a fragment, which never reaches a server: `#app`, `#about`, `#hydrex`,
-// `#hydrex/matcha-latte`, `#hydrex/9540`, `#swap`, `#swap/weth`. A page's section is one more part, such as
-// `#hydrex/matcha-latte/check` or `#swap/weth/check`. Anything else is Home.
-
+// The page's addresses, such as `#app`, `#about`, `#hydrex`, `#hydrex/matcha-latte`, `#hydrex/9540` and `#swap/weth`.
+// The app, automation and swap views take an optional section that opens a popup, such as `#hydrex/matcha-latte/check`.
+// Anything else is Home.
 export type Route =
-  | { view: "home" }
+  | { view: "home" | "about" | "hydrex" }
   | { view: "app"; section?: string }
-  | { view: "hydrex" }
-  | { view: "about" }
   | { view: "product"; kind: Kind; section?: string }
-  | { view: "position"; id: bigint }
+  | { view: "account"; id: bigint }
   | { view: "swap"; output: Output; section?: string };
+export type View = Route["view"];
 
-// The sections each page has, in the order they come. Most open a popup; some are a part of one, as "control" and
-// "check" are of "fees".
-export const APP_SECTIONS = ["allows"];
-export const PRODUCT_SECTIONS: Record<Kind, string[]> = {
-  "matcha-latte": ["fees", "control", "check", "record"],
-  "double-espresso": ["fees", "control", "check", "record"],
+const SECTIONS = {
+  app: ["allows"],
+  product: ["fees", "control", "check", "record"],
+  swap: ["fees", "check", "approvals"],
 };
-export const SWAP_SECTIONS = ["fees", "check", "approvals"];
-
-// Hydrex's accounts are numbered from 1. A number has at most 78 digits, as a uint256.
-const ACCOUNT = /^[1-9]\d{0,77}$/;
 
 const HOME: Route = { view: "home" };
-
-// The swap's output by its lower-case symbol, then a section: `#swap/check` is USDC's.
-function swapRoute(second: string | undefined, third: string | undefined): Route {
-  if (second === undefined) return { view: "swap", output: DEFAULT_OUTPUT };
-  const swapper = swapperOf(second);
-  if (swapper) {
-    if (third === undefined) return { view: "swap", output: swapper.output };
-    return SWAP_SECTIONS.includes(third) ? { view: "swap", output: swapper.output, section: third } : HOME;
-  }
-  return third === undefined && SWAP_SECTIONS.includes(second)
-    ? { view: "swap", output: DEFAULT_OUTPUT, section: second }
-    : HOME;
-}
+const sectioned = (route: Extract<Route, { view: keyof typeof SECTIONS }>, section: string | undefined): Route =>
+  section === undefined ? route : SECTIONS[route.view].includes(section) ? { ...route, section } : HOME;
 
 export function parse(hash: string): Route {
   let fragment = hash.replace(/^#/, "");
@@ -47,43 +28,33 @@ export function parse(hash: string): Route {
   } catch {}
   const [first = "", second, third, ...rest] = fragment.split("/");
   if (rest.length) return HOME;
-  if (first === "" && second === undefined) return HOME;
-  if (first === "app") {
-    if (second === undefined) return { view: "app" };
-    return third === undefined && APP_SECTIONS.includes(second) ? { view: "app", section: second } : HOME;
+  if (first === "about" && second === undefined) return { view: "about" };
+  if (first === "app" && third === undefined) return sectioned({ view: "app" }, second);
+  if (first === "swap") {
+    const swapper = second === undefined ? undefined : swapperOf(second);
+    if (swapper) return sectioned({ view: "swap", output: swapper.output }, third);
+    if (third === undefined) return sectioned({ view: "swap", output: DEFAULT_OUTPUT }, second);
   }
-  if (first === "about") return second === undefined ? { view: "about" } : HOME;
-  if (first === "swap") return swapRoute(second, third);
   if (first !== "hydrex") return HOME;
   if (second === undefined) return { view: "hydrex" };
-  if (ACCOUNT.test(second)) return third === undefined ? { view: "position", id: BigInt(second) } : HOME;
+  // Hydrex's accounts are numbered from 1, up to a uint256's 78 digits.
+  if (/^[1-9]\d{0,77}$/.test(second)) return third === undefined ? { view: "account", id: BigInt(second) } : HOME;
   const automation = byKind(second);
-  if (!automation) return HOME;
-  const { kind } = automation;
-  if (third === undefined) return { view: "product", kind };
-  return PRODUCT_SECTIONS[kind].includes(third) ? { view: "product", kind, section: third } : HOME;
+  return automation ? sectioned({ view: "product", kind: automation.kind }, third) : HOME;
 }
 
 export function hrefOf(route: Route): string {
+  const section = "section" in route && route.section ? [route.section] : [];
   switch (route.view) {
     case "home":
       return "#";
-    case "app":
-      return route.section ? `#app/${route.section}` : "#app";
-    case "hydrex":
-      return "#hydrex";
-    case "about":
-      return "#about";
-    case "product":
-      return `#hydrex/${route.kind}${route.section ? `/${route.section}` : ""}`;
-    case "position":
+    case "account":
       return `#hydrex/${route.id}`;
-    case "swap": {
-      const parts = [
-        ...(route.output === DEFAULT_OUTPUT ? [] : [route.output]),
-        ...(route.section ? [route.section] : []),
-      ];
-      return ["#swap", ...parts].join("/");
-    }
+    case "product":
+      return ["#hydrex", route.kind, ...section].join("/");
+    case "swap":
+      return ["#swap", ...(route.output === DEFAULT_OUTPUT ? [] : [route.output]), ...section].join("/");
+    default:
+      return [`#${route.view}`, ...section].join("/");
   }
 }

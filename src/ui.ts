@@ -1,257 +1,239 @@
 import type { Address, Hex } from "viem";
-import { day, hexLines, onCurrency, short, walletLines } from "./format.ts";
+import type { Got } from "./cache.ts";
+import { BASESCAN } from "./config.ts";
+import { hexLines, walletLines } from "./format.ts";
 
-const BASESCAN = "https://basescan.org";
+// What `fill()` does with each value for an element marked `data-text="key"`: a string sets its text; `undefined` shows
+// "Loading…" as a bar; `null` hides it; `true` shows it unchanged; a `Node` becomes its content; `{state}` sets
+// `data-state`, and CSS shows only the `[data-when]` children that match; `{href, text}` makes a link; `{address}`
+// links to Basescan, a hash as a transaction, and shows `text`, or else the hex in groups of four.
+export type Value =
+  | string
+  | undefined
+  | null
+  | true
+  | Node
+  | { state: "loading" | "failed" | "empty" | "ready" }
+  | { href: string; text: string; external?: boolean }
+  | { address: Address | Hex; text?: string };
 
-export const txUrl = (hash: Hex): string => `${BASESCAN}/tx/${hash}`;
+export const $ = <T extends Element = HTMLElement>(selector: string, root: ParentNode = document): T =>
+  root.querySelector<T>(selector)!;
 
-export function show(selector: string, shown = true, root: ParentNode = document): void {
-  for (const element of root.querySelectorAll<HTMLElement>(selector)) element.hidden = !shown;
+function setAttr(el: Element, name: string, value: string | null): void {
+  if (value === null) el.removeAttribute(name);
+  else if (el.getAttribute(name) !== value) el.setAttribute(name, value);
+}
+function setText(el: Element, text: string): void {
+  if (el.childNodes.length !== 1 || el.firstChild?.nodeType !== Node.TEXT_NODE || el.textContent !== text)
+    el.textContent = text;
 }
 
-// Whether a popup is open. A browser without popups shows them all in the page.
-export function isOpen(pop: HTMLElement): boolean {
-  try {
-    return pop.matches(":popover-open");
-  } catch {
-    return true;
+// Leaves `el` alone when it already holds equal nodes, so a redraw keeps focus where it is and a live region stays
+// quiet.
+function replace(el: Element, value: Node): void {
+  const nodes = value instanceof DocumentFragment ? [...value.childNodes] : [value];
+  const held = el.childNodes;
+  if (held.length !== nodes.length || nodes.some((node, i) => node !== held[i] && !node.isEqualNode(held[i]!)))
+    el.replaceChildren(...nodes);
+}
+
+function put(el: HTMLElement, value: Value): void {
+  el.hidden = value === null;
+  setAttr(el, "data-loading", value === undefined ? "" : null);
+  if (value === null || value === true) return;
+  if (value === undefined) return setText(el, "Loading…");
+  if (typeof value === "string") return setText(el, value);
+  if (value instanceof Node) return replace(el, value);
+  if ("state" in value) return setAttr(el, "data-state", value.state);
+  if ("address" in value) {
+    const link = Object.assign(document.createElement("a"), {
+      href: `${BASESCAN}/${value.address.length > 42 ? "tx" : "address"}/${value.address}`,
+    });
+    if (value.text === undefined) hex(link, value.address);
+    else link.textContent = value.text;
+    return replace(el, link);
+  }
+  if (el instanceof HTMLAnchorElement) {
+    setAttr(el, "href", value.href);
+    setAttr(el, "target", value.external ? "_blank" : null);
+    setAttr(el, "rel", value.external ? "noopener" : null);
+    return setText(el, value.text);
+  }
+  replace(el, Object.assign(document.createElement("a"), { href: value.href, textContent: value.text }));
+}
+
+// Fills `root` and its descendants, except the rows of lists inside it, which `list()` fills.
+export function fill(root: ParentNode, values: Record<string, Value>): void {
+  const all = [...root.querySelectorAll<HTMLElement>("[data-text]")];
+  for (const el of root instanceof HTMLElement && root.dataset.text ? [root, ...all] : all) {
+    const list = el.parentElement?.closest("[data-list]");
+    if (list && list !== root && root.contains(list)) continue;
+    const key = el.dataset.text!;
+    if (key in values) put(el, values[key]);
   }
 }
 
-// A template's copy. What it marks pending starts so, with the words screen readers say for it.
-export function clone(id: string): DocumentFragment {
-  const fragment = (document.getElementById(id) as HTMLTemplateElement).content.cloneNode(true) as DocumentFragment;
-  pendAll(fragment);
+export const fromTemplate = (id: string): HTMLElement =>
+  $<HTMLTemplateElement>(`#${id}`).content.firstElementChild!.cloneNode(true) as HTMLElement;
+
+// Draws a list's rows from its template, reusing each row by key so focus and ticks survive a redraw. The row saying
+// the list is empty has the key `""`.
+export function list<T>(
+  el: HTMLElement,
+  items: T[],
+  keyOf: (item: T, i: number) => string,
+  fillRow: (row: HTMLElement, item: T, i: number) => void,
+): void {
+  const old = new Map(
+    [...el.children].filter((row) => row instanceof HTMLElement).map((row) => [row.dataset.key ?? "", row]),
+  );
+  const empty = el.dataset.empty;
+  const rows = items.map((item, i) => {
+    const key = keyOf(item, i);
+    const row = old.get(key) ?? fromTemplate(el.dataset.list!);
+    row.dataset.key = key;
+    old.delete(key);
+    fillRow(row, item, i);
+    return row;
+  });
+  if (!items.length && empty)
+    rows.push(
+      old.get("") ?? Object.assign(document.createElement("li"), { className: "u-small u-quiet", textContent: empty }),
+    );
+  const focused = [...old.values()].some((row) => row.contains(document.activeElement));
+  rows.forEach((row, i) => el.children[i] !== row && el.insertBefore(row, el.children[i] ?? null));
+  for (const row of old.values()) row.remove();
+  // If a removed row held focus, move it to the heading of the row's section or dialog so it isn't lost.
+  const heading = focused ? el.closest("section, dialog")?.querySelector<HTMLElement>("h1, h2, h3") : undefined;
+  if (heading) {
+    heading.tabIndex = -1;
+    heading.focus();
+  }
+}
+
+// Turns a read into a `Value`: loading while it reads, "Not read" if it failed, hidden when it read `null` (nothing to
+// show).
+export const shown = <T>(got: Got<T>, text: (value: NonNullable<T>) => Value): Value =>
+  got.value === null ? null : got.value !== undefined ? text(got.value) : got.failed ? "Not read" : undefined;
+export const stateOf = (got: Got<unknown>, empty?: boolean): Value => ({
+  state: got.value !== undefined ? (empty ? "empty" : "ready") : got.failed ? "failed" : "loading",
+});
+
+type Line = { symbol: string; amount: string; value: string; worth: string; route: string; note: Value };
+export function bill(
+  label: Value,
+  day: Value,
+  lines: Line[],
+  sums: [string, Value, Value?][],
+  [total, value, worth, detail = null]: [Value, Value, Value, Value?],
+  foot: Value = null,
+  after: Value = null,
+): HTMLElement {
+  const node = fromTemplate("bill");
+  fill(node, {
+    label,
+    day,
+    total,
+    "total-value": value,
+    "total-worth": worth,
+    "total-detail": detail,
+    foot,
+    after,
+    closing: foot === null && after === null ? null : true,
+  });
+  list(
+    $("[data-list=line]", node),
+    lines,
+    (_, i) => String(i),
+    (li, line) => fill(li, { ...line }),
+  );
+  list(
+    $("[data-list=sum]", node),
+    sums,
+    (_, i) => String(i),
+    (row, [label, value, detail]) => fill(row, { label, value, detail: detail || null }),
+  );
+  return node;
+}
+
+// Puts a shape before the words so a status never relies on colour alone.
+export function status(shape: string, strong: string, ...rest: (string | Node)[]): HTMLElement {
+  const span = document.createElement("span");
+  const mark = Object.assign(document.createElement("span"), { className: "Shape" });
+  mark.dataset.shape = shape;
+  mark.setAttribute("aria-hidden", "true");
+  span.append(mark, Object.assign(document.createElement("strong"), { textContent: strong }), ...rest);
+  return span;
+}
+export const link = (href: string, text: string, external = false): HTMLAnchorElement =>
+  Object.assign(document.createElement("a"), {
+    href,
+    textContent: text,
+    ...(external && { target: "_blank", rel: "noopener" }),
+  });
+export const code = (text: string): HTMLElement =>
+  Object.assign(document.createElement("code"), { textContent: text, translate: false });
+export function frag(...parts: (string | Node)[]): DocumentFragment {
+  const fragment = document.createDocumentFragment();
+  fragment.append(...parts);
   return fragment;
 }
 
-// A figure being read from Base. Where it will show, a quiet bar of about its width keeps its place, from a moment
-// after the read starts, so that a quick read flashes nothing, and screen readers say "Loading" in its place: not
-// aria-busy on what holds it, which some screen readers hide whole until it is done. Whatever is written there next
-// takes its place. A figure that cannot be read never stays pending: it says so in words, or its line hides.
-export const PENDING: unique symbol = Symbol("pending");
-export type Text = string | typeof PENDING;
-
-// Writes text, or marks the element pending.
-function put(element: Element, text: Text): void {
-  if (text !== PENDING) {
-    element.textContent = text;
-    element.classList.remove("pending");
-  } else if (!element.classList.contains("pending")) {
-    const words = Object.assign(document.createElement("span"), {
-      className: "visually-hidden",
-      textContent: "Loading",
-    });
-    element.replaceChildren(words);
-    element.classList.add("pending");
-  }
-}
-
-// Ends the pending state of an element about to be written other than as text, as with an address.
-const unmark = (element: Element): void => void element.classList.remove("pending");
-
-// Marks pending what the page's markup, or a template's, marks so.
-export function pendAll(root: ParentNode): void {
-  for (const element of root.querySelectorAll(".pending")) {
-    element.classList.remove("pending");
-    put(element, PENDING);
-  }
-}
-
-// Text that shows money, with how to write it from what it shows: once another currency is picked, or what it shows
-// changes, as prices come, one call writes each again, wherever it is, in a view or a review. Plain text written over
-// it ends that. An element gone from memory leaves the set. Until what it shows is read, it may be pending.
-const writers = new WeakMap<Element, () => Text>();
-const written = new Set<WeakRef<Element>>();
-// Each element's one reference in the set, kept while it is there: plain text written over an element, then money
-// again, as a line between a pending figure and a sum, does not add another.
-const refs = new WeakMap<Element, WeakRef<Element>>();
-const gone = new FinalizationRegistry<WeakRef<Element>>((ref) => written.delete(ref));
-
-export function live(element: Element, write: () => Text): void {
-  if (!refs.has(element)) {
-    const ref = new WeakRef(element);
-    refs.set(element, ref);
-    written.add(ref);
-    gone.register(element, ref);
-  }
-  writers.set(element, write);
-  put(element, write());
-}
-
-export function rewrite(): void {
-  for (const ref of written) {
-    const element = ref.deref();
-    const write = element && writers.get(element);
-    if (write) put(element, write());
-    else {
-      written.delete(ref);
-      if (element) refs.delete(element);
-    }
-  }
-}
-
-onCurrency(rewrite);
-
-// An exact amount, then what it is worth, if known, quieter, under it: "0.01472 USDC", "≈ $0.01".
-export function showWorth(element: Element, exact: string, worth?: () => string): void {
-  writers.delete(element);
-  unmark(element);
-  const amount = Object.assign(document.createElement("span"), { className: "exact", textContent: exact });
-  if (!worth) return void element.replaceChildren(amount);
-  const quiet = Object.assign(document.createElement("span"), { className: "worth" });
-  live(quiet, worth);
-  element.replaceChildren(amount, " ", quiet);
-}
-
-// An amount and what it is worth, both waiting, under each other: a bar for each line, which screen readers hear once.
-export function pendWorth(element: Element): void {
-  if (element.querySelector(":scope > .exact.pending")) return;
-  writers.delete(element);
-  unmark(element);
-  const [amount, quiet] = ["exact", "worth"].map((className) =>
-    Object.assign(document.createElement("span"), { className }),
-  ) as [HTMLElement, HTMLElement];
-  put(amount, PENDING);
-  put(quiet, PENDING);
-  quiet.setAttribute("aria-hidden", "true");
-  element.replaceChildren(amount, " ", quiet);
-}
-
-// An exact amount and what it is worth, if known, each in an element of its own: as in a bill's line, where what it is
-// worth takes the second row, under the amount. Until the amount is read, both wait, each line in its place, and screen
-// readers hear it once.
-export function showWorthIn(exactElement: Element, worthElement: Element, exact: Text, worth?: () => string): void {
-  writers.delete(exactElement);
-  put(exactElement, exact);
-  if (exact === PENDING) worthElement.setAttribute("aria-hidden", "true");
-  else worthElement.removeAttribute("aria-hidden");
-  if (worth) live(worthElement, worth);
-  else {
-    writers.delete(worthElement);
-    put(worthElement, exact === PENDING ? PENDING : "");
-  }
-}
-
-// One element's text, or that it waits, pending.
-export function setText(element: Element, text: Text): void {
-  writers.delete(element);
-  put(element, text);
-}
-
-// Each element of each class gets its text, or, for money, how to write it, or waits, pending.
-export function fill(root: ParentNode, textByClass: Record<string, Text | (() => Text)>): void {
-  for (const [name, text] of Object.entries(textByClass)) {
-    for (const element of root.querySelectorAll(`.${name}`)) {
-      if (typeof text === "function") live(element, text);
-      else {
-        writers.delete(element);
-        put(element, text);
-      }
-    }
-  }
-}
-
-export function fillTime(root: ParentNode, name: string, time: number, format = day): void {
-  for (const element of root.querySelectorAll<HTMLTimeElement>(`time.${name}`)) {
-    element.dateTime = new Date(time * 1000).toISOString();
-    put(element, format(time));
-  }
-}
-
-// A button whose action is under way, as its review is prepared: it keeps its place, size and name, shows a spinner
-// over its words, and takes no second click. Its words are its own again once it is not.
-export function busy(button: HTMLButtonElement, on = true): void {
-  button.classList.toggle("busy", on);
-  button.disabled = on;
-  if (on) button.setAttribute("aria-busy", "true");
-  else button.removeAttribute("aria-busy");
-}
-
-// Writes hex in groups of four. CSS spaces the groups, so a copy is still the plain hex. An address or a hash is "0x" and
-// two halves, which wrap only between them, their groups one above the other; longer hex, such as calldata, a word a
-// line.
-export function showHex(element: Element, hex: string): void {
-  const fragment = document.createDocumentFragment();
-  const group = (text: string): HTMLSpanElement => Object.assign(document.createElement("span"), { textContent: text });
-  const lines = hexLines(hex);
-  if (lines.length === 1) {
-    const [prefix = "", ...groups] = lines[0]!;
-    const middle = Math.ceil(groups.length / 2);
-    [[prefix, ...groups.slice(0, middle)], groups.slice(middle)].forEach((half, i) => {
-      if (i) fragment.append(document.createElement("wbr"));
-      const span = Object.assign(document.createElement("span"), { className: "half" });
-      span.append(...half.map(group));
-      fragment.append(span);
-    });
-  } else fragment.append(linesOf(lines, true));
-  unmark(element);
-  element.classList.add("hex");
-  element.classList.remove("wallet");
-  element.classList.toggle("halves", lines.length === 1);
-  element.replaceChildren(fragment);
-}
-
-// Lines of groups, a span each; CSS starts a line at each "line" span. With `breaks`, a line wraps only after every
-// fourth group, so that calldata, a 32-byte word a line, shows 32 hex digits a line where they fit, as on a desktop, and
-// 16 where they do not.
-function linesOf(lines: string[][], breaks: boolean): DocumentFragment {
-  const fragment = document.createDocumentFragment();
-  lines.forEach((line, i) =>
-    line.forEach((text, j) => {
-      if (breaks && j && j % 4 === 0) fragment.append(document.createElement("wbr"));
-      const span = Object.assign(document.createElement("span"), { textContent: text });
-      if (i && !j) span.className = "line";
-      fragment.append(span);
+// Splits hex into spans of four digits that CSS spaces apart, so a copy is still plain hex. An address or hash splits
+// into two halves that break where one line doesn't fit; with `wallet`, an address takes three lines, as the wallet
+// shows it; calldata gets a line per 32-byte word.
+export function hex(el: HTMLElement, value: string, wallet = false): void {
+  if (el.dataset.hex === `${wallet} ${value}`) return;
+  el.dataset.hex = `${wallet} ${value}`;
+  const link = el instanceof HTMLAnchorElement;
+  el.classList.add("Hex");
+  el.classList.toggle("Hex--link", link);
+  el.translate = false;
+  const block = wallet || hexLines(value).length > 1;
+  const lines = wallet
+    ? walletLines(value)
+    : hexLines(value).length === 1
+      ? halves(hexLines(value)[0]!)
+      : hexLines(value);
+  el.replaceChildren(
+    ...lines.map((groups, i) => {
+      const className = !block
+        ? `Hex-half${link ? " Hex-half--link" : ""}`
+        : wallet && i === 0
+          ? "Hex-line Hex-line--indent"
+          : "Hex-line";
+      const line = Object.assign(document.createElement("span"), { className });
+      line.append(
+        ...groups.map((group) =>
+          Object.assign(document.createElement("span"), {
+            className: wallet ? "Hex-quad Hex-quad--wallet" : "Hex-quad",
+            textContent: group,
+          }),
+        ),
+      );
+      return line;
     }),
   );
-  return fragment;
 }
+const halves = (groups: string[]): string[][] => [
+  groups.slice(0, Math.ceil(groups.length / 2)),
+  groups.slice(Math.ceil(groups.length / 2)),
+];
 
-// Writes an address as the wallet will show it, on three lines, as hardware wallets do: see walletLines(). As with
-// showHex(), CSS lays out the groups, so a copy is still the plain address.
-export function showWalletAddress(element: Element, address: string): void {
-  unmark(element);
-  element.classList.add("hex", "wallet");
-  element.classList.remove("halves");
-  element.replaceChildren(linesOf(walletLines(address), false));
+// Announces a change in the page's one polite live region, `#status`. Never use it for loading.
+export function announce(text: string): void {
+  const region = $("#status");
+  region.textContent = "";
+  queueMicrotask(() => (region.textContent = text));
 }
-
-export function groupAllHex(root: ParentNode): void {
-  for (const element of root.querySelectorAll("code, code > a")) {
-    const text = element.childNodes.length === 1 ? element.firstChild : null;
-    if (text?.nodeType === Node.TEXT_NODE && /^0x([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/.test(text.textContent ?? "")) {
-      showHex(element, text.textContent!);
-    }
-  }
+// A busy button keeps its size and name under a spinner and stays disabled until its action is done. Draws set
+// `disabled` through `enable()`, which leaves a busy button disabled.
+export function busy(button: HTMLButtonElement, on = true): void {
+  button.disabled = on;
+  setAttr(button, "aria-busy", on ? "true" : null);
 }
-
-export function fillAddress(root: ParentNode, name: string, address: Address, text?: string): void {
-  for (const link of root.querySelectorAll<HTMLAnchorElement>(`a.${name}`)) {
-    link.href = `${BASESCAN}/address/${address}`;
-    if (text === undefined) showHex(link, address);
-    else put(link, text);
-  }
-}
-
-export function fillPlural(root: ParentNode, n: number): void {
-  for (const element of root.querySelectorAll<HTMLElement>("[data-one]")) {
-    element.textContent = (n === 1 ? element.dataset.one : element.dataset.many) ?? "";
-  }
-}
-
-// Words said to an account's owner, or about its owner to anyone else, from data-own and data-theirs, as fillPlural
-// does for counts. What only the owner can do has data-own-only.
-export function fillOwn(root: ParentNode, own: boolean): void {
-  for (const element of root.querySelectorAll<HTMLElement>("[data-own]")) {
-    element.textContent = (own ? element.dataset.own : element.dataset.theirs) ?? "";
-  }
-  for (const element of root.querySelectorAll<HTMLElement>("[data-own-only]")) element.hidden = !own;
-}
-
-export function txLink(hash: Hex): HTMLAnchorElement {
-  const link = document.createElement("a");
-  link.href = txUrl(hash);
-  link.textContent = short(hash);
-  return link;
-}
+export const enable = (button: HTMLButtonElement, can: boolean): void =>
+  void (button.disabled = !can || button.getAttribute("aria-busy") === "true");
+export const toggle = (name: string, on: boolean, value = ""): void =>
+  setAttr(document.documentElement, `data-${name}`, on ? value : null);

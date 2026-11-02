@@ -1,293 +1,314 @@
-import { now, same, sawBlock } from "../chain.ts";
-import { AUTOMATIONS } from "../config.ts";
-import { PENDING, fill, fillAddress, fillOwn, fillTime, live, setText, show } from "../dom.ts";
-import { money, short, voteFigure, weekStart } from "../format.ts";
+import type { Address } from "viem";
+import { use, type Got } from "../cache.ts";
+import { AUTOMATIONS, BASESCAN, KVCM, byKind } from "../config.ts";
+import * as data from "../data.ts";
 import {
-  canLeave,
-  gasCosts,
-  join,
-  readAccount,
-  readAccounts,
-  statusOf,
-  type Account,
-  type Holdings,
-  type Status,
-} from "../hydrex.ts";
-import { earnedByAccount, loadShares } from "../last-epoch.ts";
-import { payouts, type UnderWay } from "../last-payout.ts";
-import { reader, type Reader } from "../read.ts";
-import { gasWords } from "../swap-calls.ts";
+  WEEK,
+  amount,
+  bps,
+  count,
+  day,
+  listWith,
+  money,
+  moneyAt,
+  short,
+  utc,
+  voteFigure,
+  weekStart,
+} from "../format.ts";
+import * as hydrex from "../hydrex.ts";
+import type { Holdings } from "../hydrex.ts";
 import {
-  accountKind,
-  accountName,
-  act,
-  allows,
   automationOf,
-  buttons,
-  joinable,
-  showAccounts,
-  statusLine,
-} from "./accounts.ts";
-import { showRecords } from "./automations.ts";
-import { session, shown, viewerOwns, views } from "./page.ts";
-import { overdueEntry, owed, waitsLine } from "./payouts.ts";
-import { onRoute, route } from "./router.ts";
+  overdue,
+  totals,
+  underWay,
+  valueAt,
+  WALK_LIMIT,
+  type Payouts,
+  type Payout,
+  type Standing,
+  type Walk,
+} from "../payouts.ts";
+import { gasWords, key, noPrices, pricesAtFlip, pricesNow, type Prices, type Token } from "../prices.ts";
+import { now, same, tagged } from "../rpc.ts";
+import { state } from "../state.ts";
+import { tokensOf, type Amount } from "../tokens.ts";
+import { $, bill, code, fill, frag, fromTemplate, link, list, shown, stateOf, status, type Value } from "../ui.ts";
+import { accountName, can, lockWords, statusNode } from "./hydrex.ts";
+import { swapLink } from "./swap.ts";
 
-// An account's page: the wallet's own, or any read by its number, with its status, its lock, what it earned, what its
-// owner can do, and its payouts.
+const view = $('[data-view="account"]');
 
-const positionView = document.querySelector<HTMLElement>('.view[data-view="position"]')!;
-
-// The account whose page is shown: the wallet's own, or one read by its number, null if there is none, read each time
-// its page shows, again in each new epoch, and five minutes after a read that failed; and what its page showed last.
-type Viewing = { id: bigint; account: Reader<Holdings | null>; held?: Holdings | undefined };
-let viewing: Viewing | undefined;
-
-const pageName = (name: string): string => name || "Account";
-
-// An account's page that is not the wallet's tells a payout under way from its owner's other accounts, which it reads
-// once while the account awaits its payout.
-let ownerUnder: UnderWay | undefined;
-let ownerRead: string | undefined;
-const ownerPayouts = payouts(undefined, (_, underWay) => {
-  ownerUnder = underWay;
-  showPosition();
-});
-const positionPayouts = payouts(
-  positionView.querySelector<HTMLElement>(".position-payouts")!,
-  ({ entries }) => {
-    const target = onPage();
-    const owner = target && holdingsOf(target)?.owner;
-    const awaits = entries.some(
-      ({ due, standing }) => due && standing && !standing.paid && (standing.waiting.length > 0 || standing.unknown),
-    );
-    if (!target || !owner || ownHoldings(target.id) || !awaits || ownerRead === owner.toLowerCase()) return;
-    ownerRead = owner.toLowerCase();
-    readAccounts(owner).then(
-      (holdings) => onPage() === target && ownerPayouts.show(holdings),
-      (error) => {
-        // The payouts' next check tries again.
-        ownerRead = undefined;
-        console.error(error);
-      },
-    );
-  },
-  viewerOwns,
-);
-
-// What each account's votes earned last epoch: the wallet's, and that of the account whose page is shown, in an
-// automation or through whoever voted with it, mostly its owner. Then the wallet's own votes beside Hydrex's average.
-// Every page reads them once the epoch and the accounts are: a holder that voted this epoch takes thousands of reads,
-// which the pages that show them make first, and the others as slots free.
-export async function showShares(): Promise<void> {
-  const page = onPage();
-  const read = [shown(), page && holdingsOf(page)].flatMap((holdings) => (holdings ? [loadShares(holdings)] : []));
-  if (!(await Promise.all(read)).includes(true)) return;
-  showAccounts(true);
-  showPosition();
-  showRecords();
-}
-
-// The wallet's own account, as its holdings of that account alone.
-export function ownHoldings(id: bigint): Holdings | undefined {
-  const holdings = shown();
-  const account = holdings?.accounts.find((each) => each.id === id);
-  return holdings && account && { ...holdings, accounts: [account] };
-}
-
-// What an account's page shows: the wallet's own account, or what was read by its number.
-const holdingsOf = (target: Viewing): Holdings | undefined =>
-  ownHoldings(target.id) ?? target.account.value ?? undefined;
-
-// The account whose page is shown, if any. Its page reads and draws only while shown.
-function onPage(): Viewing | undefined {
-  const shownRoute = route();
-  return viewing && shownRoute.view === "position" && shownRoute.id === viewing.id ? viewing : undefined;
-}
-
-// The wallet's accounts were read again. On its page, an account that the wallet held when read is read again by its
-// number: it may have just left the wallet.
-export function syncPosition(): void {
-  const target = onPage();
-  const held = target?.held;
-  const holdings = shown();
-  if (target && !ownHoldings(target.id) && held && holdings && same(held.owner, holdings.owner)) loadPosition();
-  else showPosition();
-}
-
-// Reads the account shown, or joins the read under way. The wallet's own accounts are read already.
-export function loadPosition(): void {
-  const target = onPage();
-  if (!target) return;
-  if (!ownHoldings(target.id)) target.account.read().catch(() => {});
-  showPosition();
-}
-
-// What the read of an account by its number found, once it ends.
-function positionRead(target: Viewing): void {
-  const found = target.account.value;
-  if (found) sawBlock(found.time);
-  // An account that is gone, as when it was merged, has no payouts to follow.
-  if (found === null && onPage() === target) [positionPayouts, ownerPayouts].forEach((each) => each.forget());
-  void showShares();
-  showPosition();
-}
-
-// An account's page: its status, its lock, what it earned, what its owner can do, and its payouts.
-export function showPosition(): void {
-  const target = onPage();
-  if (!target) return;
-  const view = positionView;
-  const own = ownHoldings(target.id);
-  const read = target.account;
-  // Not the wallet's, or no longer, as once it is let go or another is connected, and never read by its number: read
-  // now, so that it never shows as read with no read under way.
-  if (!own && read.value === undefined && !read.reading && !read.failed) read.read().catch(() => {});
-  const holdings = holdingsOf(target);
-  target.held = holdings;
-  // A read under way shows as one, even after one that failed, as when Try again was clicked.
-  const failed = !own && read.failed && !read.reading;
-  const state = holdings ? "found" : !own && read.value === null ? "none" : failed ? "failed" : "reading";
-  for (const name of ["reading", "none", "failed", "found"]) show(`.position-${name}`, name === state, view);
-  // A read that failed says so, over what an earlier one found.
-  if (failed) show(".position-failed", true, view);
-  fill(view, { "position-id": `#${target.id}` });
-  const mine = own?.accounts[0];
-  showActions(mine, mine && statusOf(mine, own.owner, now(), own.epochStart));
-  if (!holdings) {
-    document.title = `Hydrex account #${target.id} · metaDEX Café`;
-    return void fill(view, { "position-name": pageName("") });
-  }
-  const account = holdings.accounts[0]!;
-  const { owner, epochStart } = holdings;
-  const status = statusOf(account, owner, now(), epochStart);
-  const name = accountName(account.name);
-  const theirs = !viewerOwns(owner);
-  document.title = `${name} #${account.id} · metaDEX Café`;
-  fill(view, {
-    "position-name": pageName(account.name),
-    "position-kind": account.amount === 0n ? "Empty" : accountKind(account),
-    "position-votes": voteFigure(account.votes),
-  });
-  view.querySelector(".position-status")!.replaceChildren(statusLine(status, !theirs));
-  // What its votes earned last epoch, its place kept while read.
-  const earned = earnedByAccount(account);
-  show(".position-earned-row", earned !== null, view);
-  if (earned !== null) fill(view, { "position-earned": earned === undefined ? PENDING : () => money(earned) });
-  show(".position-owner-row", theirs, view);
-  fillAddress(view, "position-owner", owner, short(owner));
-  show(".position-stopped", status.kind === "stopped", view);
-  // The wallet's own account in Double Espresso says when its payout is overdue, with Claim now among its actions.
-  const owing = own ? overdueEntry(account.id) : undefined;
-  show(".position-overdue", !!owing, view);
-  if (owing) fill(view, { "overdue-waits": waitsLine(owing) });
-  if (status.kind === "stopped") fillTime(view, "position-since", status.since);
-  const underWay = own ? owed.under : ownerUnder;
-  show(".position-underway", !!underWay?.left.some((entry) => entry.account.id === account.id), view);
-  fillOwn(view, !theirs);
-  positionPayouts.show(holdings);
-}
-
-// What the wallet can do with its own account, on its page. A join from one of the page's automations is a move.
-const actions = positionView.querySelector<HTMLElement>(".position-actions")!;
-
-// The gas of a change for an account that earns nothing: what moving it would cost, without projecting what it would
-// earn. Read again after a minute, as the gas price is, found or failed, or for another automation or wallet. Pending
-// until read for the account shown, rather than another account's.
-const changeGas = new Map<string, { at: number; words: Promise<() => string> }>();
-let changeGasShown: string | undefined;
-
-function showChangeGas(account: Account | undefined, status: Status | undefined): void {
-  const { connection } = session;
-  const line = actions.querySelector<HTMLElement>(".position-gas")!;
-  const automation = account && AUTOMATIONS.find((each) => joinable(account, each));
-  line.hidden = !connection || !automation || !status || !["stopped", "unvoted"].includes(status.kind);
-  if (line.hidden || !account || !automation || !connection) return;
-  const from = connection.address;
-  const key = `${account.id} ${automation.kind} ${from}`;
-  let found = changeGas.get(key);
-  if (!found || Date.now() - found.at >= 60_000) {
-    const words = gasCosts()(join([account], automation), from).then(
-      ({ wei, prices }) =>
-        () =>
-          gasWords(wei, prices),
-    );
-    changeGas.set(key, (found = { at: Date.now(), words }));
-    words.catch((error) => console.error(error));
-  }
-  const { words } = found;
-  const id = account.id;
-  const cost = line.querySelector(".change-gas")!;
-  if (changeGasShown !== key) setText(cost, PENDING);
-  words.then(
-    (text) => {
-      if (onPage()?.id !== id) return;
-      changeGasShown = key;
-      live(cost, text);
+function waiting(found: Payouts): Got<{ tokens: Map<string, Token>; prices: Prices }> {
+  const amounts = new Map<Address, bigint>();
+  for (const { standing } of found.entries)
+    for (const { token, amount } of standing?.waiting ?? [])
+      amounts.set(key(token), (amounts.get(key(token)) ?? 0n) + amount);
+  if (!amounts.size) return { value: { tokens: new Map(), prices: noPrices() } };
+  return use(
+    `waiting ${[...amounts].join()}`,
+    async () => {
+      const tokens = await tokensOf([...amounts.keys()], tagged("payouts"));
+      return { tokens, prices: await pricesNow([...tokens.values()], amounts, tagged("payouts")) };
     },
-    () => onPage()?.id === id && (line.hidden = true),
+    300_000,
   );
 }
+// Returns words such as "≈ $1.84 in 9 tokens", starting "at least " when the account is late, or when some tokens could
+// not be read or priced. With nothing waiting in last epoch's pools, it says "from the epoch before last".
+export function waitsWords(standing: Standing, found: Payouts): string {
+  const priced = waiting(found).value;
+  const tokens = new Set(standing.waiting.map(({ token }) => key(token)));
+  if (!tokens.size) return "from the epoch before last";
+  const worth = priced ? valueAt(standing.waiting, priced.tokens, priced.prices) : 0;
+  const partial = [...tokens].some((token) => !priced?.prices.of.has(token));
+  const words = count(tokens.size, "token", "tokens");
+  return `${standing.unknown || standing.late || (worth && partial) ? "at least " : ""}${worth ? `${money(moneyAt(worth, priced!.prices))} in ${words}` : words}`;
+}
 
-function showActions(account: Account | undefined, status?: Status): void {
-  const { connection } = session;
+export function drawAccount(): void {
+  if (state.route.view !== "account") return;
+  const id = state.route.id;
+  const { holdings, own } = data.accountShown(id);
+  const found = holdings.value;
+  const account = found?.accounts[0];
+  document.title = `${account ? accountName(account) : `Hydrex account #${id}`} · metaDEX Café`;
+  fill(view, {
+    name: account ? accountName(account) : `Hydrex account #${id}`,
+    account: stateOf(holdings, !account),
+  });
+  if (!found || !account) return;
+  const st = hydrex.statusOf(account, found.owner, now(), found.epochStart);
+  const earned = own ? data.accountEarned(found, id) : { value: null };
+  const payouts = data.payouts(found);
+  const entry = payouts.value?.entries.find((each) => each.account.id === id);
+  const late = own && payouts.value ? overdue(payouts.value).find((each) => each.account.id === id) : undefined;
+  const stopped = st.kind === "stopped";
+  fill(view, {
+    status: statusNode(st, own),
+    lock: account.amount === 0n ? "Empty" : lockWords(account),
+    votes: voteFigure(account.votes),
+    "earned-row": earned.value !== null || null,
+    earned: shown(earned, (worth) => money(worth)),
+    "owner-row": !own || null,
+    owner: { address: found.owner, text: short(found.owner) },
+    overdue:
+      late && payouts.value
+        ? frag(
+            Object.assign(document.createElement("strong"), { textContent: "Payout overdue: " }),
+            waitsWords(late.standing, payouts.value),
+          )
+        : null,
+    stopped: stopped || null,
+    since: stopped ? utc(st.since) : "",
+    leftovers: own || null,
+    underway:
+      own && payouts.value && underWay(payouts.value)?.left.some((each) => each.account.id === id)
+        ? "Payout under way."
+        : null,
+    payouts: automationOf(account) && (entry || !payouts.value) ? stateOf(payouts) : null,
+  });
+  drawActions(own ? found : undefined, st);
+  if (payouts.value) drawStandings(payouts.value, found.owner, own);
+}
+
+function drawActions(own: Holdings | undefined, st: hydrex.Status): void {
+  const account = own?.accounts[0];
+  const section = $("[data-text=actions]", view);
   let any = false;
-  showChangeGas(account, status);
-  const vote = actions.querySelector<HTMLElement>(".vote-on-hydrex")!;
-  vote.hidden = !connection || status?.kind !== "unvoted";
-  any ||= !vote.hidden;
-  for (const button of buttons(actions)) {
-    const allowed = !!connection && !!account && allows(button)(account);
-    const automation = automationOf(button);
+  for (const button of section.querySelectorAll<HTMLButtonElement>("button[data-action]")) {
+    const { action, arg } = button.dataset;
+    const automation = byKind(arg ?? "");
     if (automation) {
-      const moves = !!account && AUTOMATIONS.some((other) => other !== automation && canLeave(account, other));
+      const moves = !!account && AUTOMATIONS.some((other) => other !== automation && hydrex.canLeave(account, other));
       button.textContent = `${moves ? "Move to" : "Join"} ${automation.name}`;
-      // A move is a secondary action, as in the groups of Hydrex's page.
-      button.classList.toggle("secondary", moves);
+      button.classList.toggle("Button--secondary", moves);
     }
-    // Leaving an automation that stopped says so, as in its group on Hydrex's page.
-    if (button.dataset.action === "self")
-      button.textContent = status?.kind === "stopped" ? "Leave automation" : "Leave";
+    // Leaving one of Hydrex's other automations uses the "self" action, which also leaves the page's own.
+    if (action === "leave" || action === "self") {
+      button.textContent = st.kind === "stopped" ? "Leave automation" : "Leave";
+      button.dataset.action = account && hydrex.canLeaveOther(account) ? "self" : "leave";
+    }
+    const allowed = !!own && !!account && can(button.dataset.action ?? "", account, arg, own);
     button.hidden = !allowed;
     any ||= allowed;
   }
-  actions.hidden = !any;
-}
-
-// Reads again what an account's page shows, when due: the account, as each new epoch, and its payouts.
-export function catchUpPosition(): void {
-  const page = onPage();
-  if (!page) return;
-  if (!ownHoldings(page.id) && page.account.due()) loadPosition();
-  positionPayouts.check();
-  ownerPayouts.check();
-}
-
-// An account's page: read each time it shows, its buttons, and how it is drawn again.
-export function initPosition(): void {
-  views.position = showPosition;
-  // An account's page reads the account each time it shows, unless the wallet holds it.
-  onRoute((next) => {
-    if (next.view !== "position") return;
-    if (viewing?.id !== next.id) {
-      const { id } = next;
-      const target: Viewing = {
-        id,
-        account: reader(async () => (await readAccount(id)) ?? null, {
-          stale: (found) => !!found && weekStart(now()) > found.epochStart,
-          settled: () => positionRead(target),
-        }),
-      };
-      viewing = target;
-      [positionPayouts, ownerPayouts].forEach((each) => each.forget());
-      ownerUnder = ownerRead = undefined;
-    }
-    loadPosition();
+  const join = account && AUTOMATIONS.find((each) => hydrex.canJoin(account, each, now()));
+  const gas =
+    account && join && state.connection && (st.kind === "stopped" || st.kind === "unvoted")
+      ? use(
+          `gas ${account.id} ${join.kind}`,
+          () => hydrex.gasEstimate(hydrex.join([account], join), state.connection!.address),
+          60_000,
+        )
+      : undefined;
+  fill(section, {
+    actions: any || (!!own && st.kind === "unvoted") || null,
+    vote: (!!own && st.kind === "unvoted") || null,
+    gas: !gas || gas.failed ? null : gas.value && `A change costs ${gasWords(gas.value.wei, gas.value.prices)} in gas.`,
   });
-  for (const button of buttons(actions)) {
-    button.addEventListener("click", () =>
-      act(button, () => (viewing && ownHoldings(viewing.id)?.accounts) ?? [], showPosition),
-    );
-  }
-  positionView.querySelector(".position-again")!.addEventListener("click", loadPosition);
+}
+
+function drawStandings(found: Payouts, owner: Address, own: boolean): void {
+  list(
+    $("[data-list=standing]", view),
+    found.entries,
+    ({ account }) => String(account.id),
+    (article, entry) => {
+      const { automation, voter, account, standing, earnings, early, note, time } = entry;
+      const through = standing?.paidUpTo?.through ?? 0;
+      const waits = standing && earnings ? waitingLine(standing, found) : undefined;
+      const states = [
+        !earnings && !early && status("idle", "Not read yet"),
+        early && status("idle", "Not final yet"),
+        !!earnings && !standing && status("idle", "Nothing to pay"),
+        !!standing &&
+          !standing.late &&
+          (through ? status("running", `Paid up to ${utc(through)}`) : status("idle", "Not paid yet")),
+        !!standing?.late && status("stopped", "Late", ` · ${through ? `paid up to ${utc(through)}` : "never paid"}`),
+        waits,
+        !!standing &&
+          (standing.waiting.length > 0 || standing.unknown) &&
+          !same(account.claimer, voter.address) &&
+          `${voter.name} no longer claims it: claim on Hydrex.`,
+        note === "outside" &&
+          time !== undefined &&
+          `Last claimed outside ${automation.name} on ${day(time)}: no receipt.`,
+        note === "unclaimed" && `Never claimed through ${automation.name}.`,
+      ].filter((each) => each !== false && each !== undefined);
+      list(
+        $("[data-list=state]", article),
+        states,
+        (_, i) => String(i),
+        (li, words) => fill(li, { words }),
+      );
+      const receipt =
+        entry.payout && time !== undefined
+          ? payoutReceipt(entry.payout, account.id, owner, time, own)
+          : entry.walk?.claims.length
+            ? claimsReceipt(entry.walk, account.id, owner, own)
+            : null;
+      fill(article, { receipt });
+    },
+  );
+}
+function waitingLine(standing: Standing, found: Payouts): string {
+  const { waiting: owed, unknown } = standing;
+  if (!owed.length) return unknown ? "Waiting: not read" : "Nothing waiting";
+  return `${unknown ? "At least " : ""}${waitsWords(standing, found).replace(/^at least /, "")} waiting`;
+}
+
+function priced(amounts: Amount[], flip: number): { tokens?: Map<string, Token>; prices?: Prices } {
+  const addresses = [...new Set(amounts.map(({ token }) => key(token)))];
+  const tokens = use(`tokens ${addresses.join()}`, () => tokensOf(addresses, tagged("payouts"))).value;
+  if (!tokens) return {};
+  const most = new Map<string, bigint>();
+  for (const { token, amount: value } of amounts) if (value > (most.get(key(token)) ?? 0n)) most.set(key(token), value);
+  const prices = use(`flip prices ${flip} ${addresses.join()}`, () =>
+    pricesAtFlip([...tokens.values()], most, flip, tagged("payouts")),
+  ).value;
+  return { tokens, prices };
+}
+function amounts(found: Amount[], tokens: Map<string, Token> | undefined, sign = "", none = "Nothing"): Value {
+  if (!found.length) return none;
+  return frag(
+    sign,
+    ...listWith<Node | string>(
+      found.map(({ token, amount: value }) => {
+        const known = tokens?.get(key(token));
+        return known
+          ? `${amount(value, known.decimals)} ${known.symbol}`
+          : frag(`${value} base units of `, code(token));
+      }),
+    ),
+  );
+}
+const worth = (found: Amount[], { tokens, prices }: ReturnType<typeof priced>): Value => {
+  const total = tokens && prices ? valueAt(found, tokens, prices) : 0;
+  return total > 0 ? money(moneyAt(total, prices!), true) : "";
+};
+function payoutReceipt(payout: Payout, id: bigint, owner: Address, time: number, own: boolean): Node {
+  const p = priced([...payout.earned, ...payout.paid], weekStart(time));
+  const kvcm = (list: Amount[]) => list.find(({ token }) => same(token, KVCM))?.amount ?? 0n;
+  const all = kvcm(payout.paid) + kvcm(payout.fees) + payout.retiredKvcm;
+  const swapped = all - kvcm(payout.earned);
+  const share = (part: bigint) => (all ? bps((part * 10_000n + all / 2n) / all) : "");
+  const then = !same(payout.owner, owner);
+  const recipient = link(`${BASESCAN}/address/${payout.recipient}`, short(payout.recipient), true);
+  return bill(
+    `Receipt · Account #${id} · Matcha Latte`,
+    `${day(weekStart(time) - WEEK)} to ${day(weekStart(time))}`,
+    [],
+    [
+      ["Earned", worth(payout.earned, p), amounts(payout.earned, p.tokens)],
+      ["Swapped", `${amount(swapped > 0n ? swapped : 0n, 18)} kVCM`],
+      [
+        `Retired ${share(payout.retiredKvcm)}`,
+        `${payout.retiredKvcm ? "−" : ""}${amount(payout.retiredKvcm, 18)} kVCM`,
+        payout.tonnes ? frag(`${amount(payout.tonnes, 18)} t of carbon credits`, fromTemplate("klima")) : null,
+      ],
+      [`Fee ${share(kvcm(payout.fees))}`, amounts(payout.fees, p.tokens, payout.fees.length ? "−" : "", "0 kVCM")],
+    ],
+    [
+      then ? "Paid to its owner then" : own ? "Paid to you" : "Paid to its owner",
+      amounts(payout.paid, p.tokens, "", "0 kVCM"),
+      worth(payout.paid, p),
+      then || !same(payout.recipient, payout.owner) ? frag(`${then ? "To its owner then," : "To"} `, recipient) : null,
+    ],
+    frag(utc(time), " · ", link(`${BASESCAN}/tx/${payout.tx}`, "Transaction", true)),
+  );
+}
+
+export function claimReceipt(
+  id: bigint,
+  { received, fees, paid }: { received: Amount[]; fees: Amount[]; paid: Amount[] },
+  p: ReturnType<typeof priced>,
+  dates: string,
+  paidTo: string,
+  foot: Value = null,
+  after: Value = null,
+): HTMLElement {
+  return bill(
+    `Receipt · Account #${id} · Double Espresso`,
+    dates,
+    [],
+    [
+      ["Claimed", worth(received, p), amounts(received, p.tokens)],
+      [`Fee ${bps(100n)}`, worth(fees, p), amounts(fees, p.tokens, fees.length ? "−" : "")],
+    ],
+    [paidTo, amounts(paid, p.tokens), worth(paid, p)],
+    foot,
+    after,
+  );
+}
+
+// Double Espresso's receipt on an account's page: the claims in the last claim's epoch, with who sent each.
+function claimsReceipt({ claims, stopped }: Walk, id: bigint, owner: Address, own: boolean): Node {
+  const { received, fees, paid } = totals(claims);
+  const timeOf = (block: number) => data.timeOfBlock(block).value;
+  const first = claims[0] && timeOf(claims[0].block);
+  const flip = first === undefined ? undefined : weekStart(first);
+  const p = flip === undefined ? {} : priced(received, flip);
+  const you = (address: Address) => own && same(address, owner);
+  const node = claimReceipt(
+    id,
+    { received, fees, paid },
+    p,
+    flip === undefined ? "" : `${day(flip - WEEK)} to ${day(flip)}`,
+    claims.every((claim) => you(claim.owner)) ? "Paid to you" : "Paid to its owner",
+    stopped ? `Last ${WALK_LIMIT} blocks only` : null,
+    own ? swapLink(paid) : null,
+  );
+  list(
+    $("[data-list=claim]", node),
+    claims,
+    ({ tx }) => tx,
+    (row, { caller, owner: to, tx, block }) => {
+      const time = timeOf(block);
+      const words = `${time === undefined ? "" : utc(time)} · ${you(caller) ? "sent by you" : `sent by ${short(caller)}`}${same(to, owner) ? "" : `, to ${short(to)}`}`;
+      fill(row, { words, tx: { href: `${BASESCAN}/tx/${tx}`, text: "Transaction", external: true } });
+    },
+  );
+  return node;
 }

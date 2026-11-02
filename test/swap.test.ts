@@ -1,53 +1,63 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { beforeEach, test } from "node:test";
 import {
   decodeFunctionData,
   encodeAbiParameters,
-  encodeEventTopics,
   encodeErrorResult,
+  encodeEventTopics,
   encodeFunctionResult,
+  numberToHex,
+  erc20Abi,
   parseAbi,
-  toFunctionSelector,
+  parseAbiParameters,
   zeroAddress,
+  zeroHash,
   type Address,
   type Hex,
 } from "viem";
-import { EXCHANGES, HYDX, SWAPPERS, WETH } from "../src/config.ts";
+import { CBBTC, EXCHANGES, HYDX, SWAPPERS, USDC, WETH } from "../src/config.ts";
+import { BY_ID, key, pairKey, pools, waysFor, type Hop } from "../src/prices.ts";
+import { same, type Read } from "../src/rpc.ts";
 import {
   MAX_SWAP_GAS,
   best,
   candidatePaths,
   feeOf,
   findRoute,
+  hopsWords,
   minimumOf,
   paidOf,
   partOf,
   quoteAll,
-  venueOf,
-  refusedTransfer,
+  reasonOf,
   routeGas,
-  routeResults,
-  runInOrder,
+  simulatePlan,
   split,
-  swapCall,
   swapGas,
+  swapSlip,
   swappedIn,
   swapperAbi,
+  venueOf,
+  withMinimums,
+  type Plan,
+  type Result,
+  type Route,
 } from "../src/swap.ts";
-import { lookups, type Hop } from "../src/pools.ts";
-import { pricesIn } from "../src/prices.ts";
-import { ethCost, gasCost, hopsWords, swapSlip } from "../src/swap-calls.ts";
 
-const [USDC, , , CBBTC] = SWAPPERS.map(({ token }) => token) as [Address, Address, Address, Address];
+beforeEach(() => pools.clear());
+
 const AVNT: Address = "0x696F9436B67233384889472Cd7cD58A6fB5DF4f1";
 const POOL: Address = "0x0000000000000000000000000000000000000001";
-const hop = (exchange: number, tokenOut: Address = USDC, fee = 0, tickSpacing = 0): Hop => ({
-  exchange,
-  pool: POOL,
-  tokenOut,
-  fee,
-  tickSpacing,
-});
+const ME: Address = "0x00000000000000000000000000000000000000AA";
+const SWAPPER = SWAPPERS[0]!;
+const AERO = SWAPPERS[4]!.token;
+const hop = (exchange: number, tokenOut = USDC, fee = 0) => ({ exchange, pool: POOL, tokenOut, fee, tickSpacing: 0 });
+const route = (amount: bigint, hops = [hop(10)], token = AVNT): Route => ({ token, amount, minPaid: 0n, hops });
+const token = (address: Address, symbol: string, decimals: number) =>
+  [key(address), { address, symbol, decimals }] as const;
+const TOKENS = new Map([token(AVNT, "AVNT", 18), token(WETH, "WETH", 18), token(USDC, "USDC", 6)]);
+const paid = (routes: readonly { amount: bigint }[], done = (_: bigint) => true): Result[] =>
+  routes.map(({ amount }) => ({ done: done(amount), amountIn: amount, amountOut: 2n * amount, reason: "0x" }));
 
 test("a token's routes go to the output straight, or through WETH, USDC or cbBTC, and HYDX for Hydrex's tokens", () => {
   assert.deepEqual(candidatePaths(AVNT, USDC), [
@@ -55,422 +65,197 @@ test("a token's routes go to the output straight, or through WETH, USDC or cbBTC
     [AVNT, WETH, USDC],
     [AVNT, CBBTC, USDC],
   ]);
-  assert.deepEqual(candidatePaths(AVNT, USDC, true), [
-    [AVNT, USDC],
-    [AVNT, WETH, USDC],
-    [AVNT, CBBTC, USDC],
+  assert.deepEqual(candidatePaths(AVNT, USDC, true).slice(3), [
     [AVNT, HYDX, USDC],
     [AVNT, HYDX, WETH, USDC],
   ]);
-  // No route passes through the token itself or ends before the output, and none has more than three hops.
   assert.deepEqual(candidatePaths(WETH, USDC), [
     [WETH, USDC],
     [WETH, CBBTC, USDC],
   ]);
   assert.deepEqual(candidatePaths(USDC, USDC), []);
-  for (const path of candidatePaths(AVNT, WETH, true)) {
-    assert.ok(path.length <= 4);
-    assert.equal(path.at(-1), WETH);
-    assert.equal(new Set(path).size, path.length);
-  }
+  assert.deepEqual(candidatePaths(USDC, AERO, true).at(-1), [USDC, HYDX, WETH, AERO]);
+  for (const from of [AVNT, USDC, WETH, CBBTC, HYDX])
+    for (const to of [USDC, WETH, AERO])
+      for (const path of candidatePaths(from, to, true)) {
+        assert.ok(path.length <= 4 && path.at(-1) === to);
+        assert.equal(new Set(path).size, path.length, "no loop through the token sold");
+      }
 });
 
-test("each pair of tokens is looked up in every factory, every fee tier and every tick spacing", () => {
-  const spacings = new Map([
-    [4, [1, 100]],
-    [6, [1]],
-    [7, [50]],
-    [8, []],
-  ]);
-  const found = lookups(AVNT, USDC, spacings);
-  // Hydrex: Algebra, and classic volatile and stable; Aero: volatile, stable, two spacings; Aerodrome: volatile,
-  // stable, two spacings; Uniswap: v2, v3's four tiers, v4's four standard pools.
-  assert.equal(found.length, 1 + 2 + 1 + 1 + 2 + 2 + 1 + 1 + 0 + 1 + 4 + 4);
-  assert.ok(found.every(({ call }) => EXCHANGES.some(({ factory }) => factory === call.address)));
-  // A factory that has no pool answers the zero address, which is no pool.
-  assert.equal(found[0]!.way(zeroAddress), undefined);
-  assert.deepEqual(found[0]!.way(POOL), {
-    exchange: 0,
-    pool: POOL,
-    tokenIn: AVNT,
-    tokenOut: USDC,
-    fee: 0,
-    tickSpacing: 0,
-  });
-  // A v4 pool counts once its price is set and it holds liquidity.
-  const v4 = found.at(-1)!;
-  const word = (n: bigint) => `0x${n.toString(16).padStart(64, "0")}`;
-  assert.equal(v4.way([word(0n), word(0n), word(0n), word(5n)]), undefined);
-  assert.equal(v4.way([word(1n), word(0n), word(0n), word(0n)]), undefined);
-  assert.deepEqual(v4.way([word(1n), word(0n), word(0n), word(5n)]), {
-    exchange: 11,
-    pool: zeroAddress,
-    tokenIn: AVNT,
-    tokenOut: USDC,
-    fee: 10_000,
-    tickSpacing: 200,
-  });
+test("the swapper's twelve exchanges each have their place, and a route names its tokens, then each venue once", () => {
+  const ids = BY_ID.map(({ id }) => id);
+  assert.deepEqual(ids, [...Array(12).keys()]);
+  assert.deepEqual([...new Set(ids.map((id) => venueOf(hop(id))))], ["Hydrex", "Aero", "Aerodrome", "Uniswap"]);
+  const words = (...hops: Hop[]) => hopsWords(route(1n, hops), TOKENS);
+  assert.equal(words(hop(6)), "AVNT → USDC via Aerodrome");
+  assert.equal(words(hop(6, WETH), hop(8)), "AVNT → WETH → USDC via Aerodrome");
+  assert.equal(words(hop(6, WETH), hop(10, USDC, 500)), "AVNT → WETH → USDC via Aerodrome, Uniswap");
+  assert.equal(words(hop(4, WETH), hop(6)), "AVNT → WETH → USDC via Aero, Aerodrome");
 });
 
-test("the page lists each of the swapper's twelve exchanges once, by its place in the swapper's enum", () => {
-  assert.deepEqual(
-    EXCHANGES.map(({ id }) => id).sort((a, b) => a - b),
-    Array.from({ length: 12 }, (_, i) => i),
-  );
-  assert.deepEqual(
-    [...new Set(EXCHANGES.map(({ name }) => name))],
-    [
-      "Aero Basic Pools",
-      "Aero Slipstream",
-      "Aerodrome Basic Pools",
-      "Aerodrome Slipstream V3",
-      "Aerodrome Slipstream V2",
-      "Aerodrome Slipstream",
-      "Uniswap v4",
-      "Uniswap v3",
-      "Uniswap v2",
-      "Hydrex Classic Pools",
-      "Hydrex Integral",
-    ],
-  );
-});
-
-test("a bill's route: its tokens, then who runs its pools, each once, with Aero's and Aerodrome's apart", () => {
-  assert.deepEqual(
-    [...new Set(EXCHANGES.map((exchange) => venueOf(hop(exchange.id))))],
-    ["Aero", "Aerodrome", "Uniswap", "Hydrex"],
-  );
-  const tokens = new Map(
-    [
-      { address: AVNT, symbol: "AVNT", decimals: 18 },
-      { address: WETH, symbol: "WETH", decimals: 18 },
-      { address: USDC, symbol: "USDC", decimals: 6 },
-    ].map((token) => [token.address.toLowerCase(), token]),
-  );
-  const route = (...hops: Hop[]) => ({ token: AVNT, amount: 1n, minPaid: 1n, hops });
-  assert.equal(hopsWords(route(hop(6)), tokens), "AVNT → USDC via Aerodrome");
-  assert.equal(hopsWords(route(hop(6, WETH), hop(8)), tokens), "AVNT → WETH → USDC via Aerodrome");
-  assert.equal(hopsWords(route(hop(6, WETH), hop(10, USDC, 500)), tokens), "AVNT → WETH → USDC via Aerodrome, Uniswap");
-  assert.equal(hopsWords(route(hop(4, WETH), hop(6)), tokens), "AVNT → WETH → USDC via Aero, Aerodrome");
-});
-
-test("Aero's classic pools win a hop only by more than 1%, as their tax is not in the quote", () => {
+test("Aero's basic pools win a hop only by more than 1%, as their tax is not in the quote", () => {
   const aero = { way: hop(2), out: 1_005n };
   const uniswap = { way: hop(10, USDC, 500), out: 1_000n };
   assert.equal(best([aero, uniswap]), uniswap);
   assert.equal(best([{ ...aero, out: 1_011n }, uniswap])!.out, 1_011n);
-  assert.equal(best([aero])!.way.exchange, 2);
+  assert.equal(best([aero]), aero);
   assert.equal(best([{ ...uniswap, out: 0n }]), undefined);
   assert.equal(best([uniswap, { way: hop(9), out: 1_001n }])!.out, 1_001n);
 });
 
-test("the minimum is the quote, less the swap's 1% as its code rounds it, less the margin", () => {
-  assert.equal(feeOf(1_000_000n), 10_000n);
-  assert.equal(feeOf(99n), 0n);
-  assert.equal(paidOf(1_000_000n), 990_000n);
-  assert.equal(minimumOf(1_000_000n, 50n), 985_050n);
-  assert.equal(minimumOf(1_000_000n, 0n), 990_000n);
-  assert.equal(minimumOf(0n, 50n), 0n);
+test("the minimum is the quote, less the swap's 1% as its code rounds it, less the margin; a part shrinks it", () => {
+  assert.deepEqual(
+    [feeOf(1_000_000n), feeOf(99n), paidOf(1_000_000n), minimumOf(0n, 50n)],
+    [10_000n, 0n, 990_000n, 0n],
+  );
+  assert.deepEqual([minimumOf(1_000_000n, 50n), minimumOf(1_000_000n, 0n)], [985_050n, 990_000n]);
+  const item = { out: 1_000n, route: { ...route(100n), minPaid: 985n } };
+  assert.deepEqual(partOf(item, 60n, 100n), { out: 600n, route: { ...item.route, amount: 60n, minPaid: 591n } });
+  assert.deepEqual(partOf(item, 120n, 100n), { ...item, route: { ...item.route, amount: 120n } }, "not for more");
 });
 
 test("routes split into as few swaps as keep each under 15 million gas", () => {
   const algebra = { hops: [hop(0)] };
   const uniswap = { hops: [hop(9, WETH), hop(10, USDC, 500)] };
-  assert.equal(routeGas(algebra), 1_050_000n);
-  assert.equal(routeGas(uniswap), 210_000n);
+  assert.deepEqual([routeGas(algebra), routeGas(uniswap)], [1_050_000n, 210_000n]);
   assert.deepEqual(split([uniswap, uniswap]), [[uniswap, uniswap]]);
-  const many = Array.from({ length: 20 }, () => algebra);
-  const swaps = split(many);
-  assert.equal(swaps.length, 2);
-  assert.equal(swaps.flat().length, 20);
+  const swaps = split(Array.from({ length: 20 }, () => algebra));
+  const sizes = swaps.map(({ length }) => length);
+  assert.deepEqual(sizes, [14, 6]);
   for (const each of swaps) assert.ok(swapGas(each) <= MAX_SWAP_GAS);
   assert.deepEqual(split([]), []);
 });
 
-test("the swap's call is swap(routes, deadline, true), as the verified source declares it", () => {
-  // Written separately from src/swap.ts, from the verified source on Sourcify.
+test("a swap is swap(routes, deadline, true), selling each token once, in as many routes as it has parts", () => {
+  // From the verified source on Sourcify, not from `src/swap.ts`, so a wrong ABI there fails the test.
   const abi = parseAbi([
     "function swap((address token, uint256 amount, uint256 minPaid, (uint8 exchange, address pool, address tokenOut, uint24 fee, int24 tickSpacing)[] hops)[] routes, uint256 deadline, bool skipFailed) returns ((bool done, uint256 amountIn, uint256 amountOut, bytes reason)[] results, uint256 paid, uint256 fee)",
   ]);
-  const route = { token: AVNT, amount: 41n, minPaid: 7n, hops: [hop(0, WETH), hop(10, USDC, 500)] };
-  const { to, data } = swapCall(SWAPPERS[0]!, [route], 1_792_627_200n);
-  assert.equal(to, SWAPPERS[0]!.address);
-  const { args } = decodeFunctionData({ abi, data });
-  assert.deepEqual(args, [[route], 1_792_627_200n, true]);
-});
-
-test("no route loops through the token it sells, as WETH and USDC can be Hydrex's reward tokens", () => {
-  for (const [token, output] of [
-    [USDC, SWAPPERS[4]!.token],
-    [WETH, USDC],
-    [CBBTC, USDC],
-  ] as const) {
-    for (const path of candidatePaths(token, output, true)) assert.equal(new Set(path).size, path.length, `${path}`);
-  }
-  assert.deepEqual(candidatePaths(USDC, SWAPPERS[4]!.token, true).at(-1), [USDC, HYDX, WETH, SWAPPERS[4]!.token]);
+  const part = (exchange: number) => ({ ...route(10n ** 18n, [hop(exchange)]), minPaid: 10n ** 6n });
+  const slip = swapSlip(SWAPPER, [part(0), part(6)], 1_792_627_200n, TOKENS);
+  assert.equal(slip.to, SWAPPER.address);
+  assert.deepEqual(decodeFunctionData({ abi, data: slip.data }).args, [[part(0), part(6)], 1_792_627_200n, true]);
+  assert.equal(slip.says, "Sell 1 token for at least 2 USDC");
+  const labels = slip.fields.map(({ label }) => label);
+  assert.deepEqual(labels.slice(0, 3), ["Route 1", "Route 2", "Deadline"]);
 });
 
 test("each route's quote comes back to it, whatever the swapper and however the quotes are batched", async () => {
-  const multicall = parseAbi([
-    "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
-  ]);
-  const original = globalThis.fetch;
-  // Each swapper quotes a route as its amount times the swapper's place in the list, plus one, so that a quote that
-  // comes back to the wrong route, or from the wrong swapper, shows.
-  globalThis.fetch = async (_, init) => {
-    const { params } = JSON.parse(String(init?.body)) as { params: [{ data: Hex }] };
-    const { args } = decodeFunctionData({ abi: multicall, data: params[0].data });
-    const replies = args[0].map(({ target, callData }) => {
-      const place = BigInt(SWAPPERS.findIndex(({ address }) => address === target) + 1);
-      const { args: routes } = decodeFunctionData({ abi: swapperAbi, data: callData });
-      const results = (routes[0] as readonly { amount: bigint }[]).map(({ amount }) => ({
-        done: true,
-        amountIn: amount,
-        amountOut: amount * place,
-        reason: "0x" as Hex,
-      }));
-      return {
-        success: true,
-        returnData: encodeFunctionResult({ abi: swapperAbi, functionName: "quote", result: results }),
-      };
+  // Each swapper pays the amount times its index in `SWAPPERS` plus one, so a quote returned to the wrong route shows.
+  const rd: Read = async (calls): Promise<any> =>
+    calls.map(({ address, args: [routes] }) => {
+      const place = BigInt(SWAPPERS.findIndex((swapper) => swapper.address === address) + 1);
+      return paid(routes as Route[]).map((result) => ({ ...result, amountOut: result.amountIn * place }));
     });
-    const result = encodeFunctionResult({ abi: multicall, functionName: "aggregate3", result: replies });
-    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }));
-  };
-  try {
-    const items = Array.from({ length: 40 }, (_, i) => ({
-      swapper: SWAPPERS[i % 3]!,
-      route: { token: AVNT, amount: BigInt(i + 1), minPaid: 0n, hops: [hop(10)] },
-    }));
-    const results = await quoteAll(items);
-    assert.deepEqual(
-      results.map((result) => result?.amountOut),
-      items.map(({ route, swapper }) => route.amount * BigInt(SWAPPERS.indexOf(swapper) + 1)),
-    );
-  } finally {
-    globalThis.fetch = original;
-  }
+  const items = Array.from({ length: 40 }, (_, i) => ({ swapper: SWAPPERS[i % 3]!, route: route(BigInt(i + 1)) }));
+  const quoted = (await quoteAll(items, rd)).map((result) => result?.amountOut);
+  const expected = items.map(({ route, swapper }) => route.amount * BigInt(SWAPPERS.indexOf(swapper) + 1));
+  assert.deepEqual(quoted, expected);
+});
+
+// Slipstream factories' tick spacings by exchange id. Every reader here must answer the same, because `prices.ts` keeps
+// the first answer it reads for the whole run.
+const SPACINGS: Record<number, number[]> = { 4: [1, 100], 6: [1], 7: [50], 8: [] };
+const spacingsAt = (address: Address) => SPACINGS[BY_ID.find(({ factory }) => same(factory, address))!.id];
+
+test("a pair is looked up on every exchange, fee and spacing; a v4 pool counts once priced and liquid", async () => {
+  let [lookups, slots] = [0, 0];
+  const rd: Read = async (calls): Promise<any> =>
+    calls.map(({ address, functionName }) => {
+      if (functionName === "tickSpacings") return spacingsAt(address);
+      lookups++;
+      if (functionName === "poolByPair") return POOL;
+      if (functionName !== "extsload") return zeroAddress;
+      // Uniswap v4's fee tiers answer, in turn: no pool, a price without liquidity, liquidity without a price, and
+      // both.
+      const n = BigInt(slots++);
+      return [n & 1n, 0n, 0n, n & 2n].map((word) => numberToHex(word, { size: 32 }));
+    });
+  const ways = await waysFor([[AVNT, USDC]], undefined, rd);
+  assert.equal(lookups, 20, "Hydrex 3, Aero 4, Aerodrome 4, Uniswap v2 1, v3 4, v4 4");
+  const found = ways.get(pairKey(AVNT, USDC))!.map((way) => [way.exchange, way.pool, way.fee, way.tickSpacing]);
+  assert.deepEqual(found.flat(), [0, POOL, 0, 0, 11, zeroAddress, 10_000, 200]);
+});
+
+test("a route of one hop is quoted once, as its hop, and not again as a whole", async () => {
+  // The only pool is Uniswap v3's at 0.05% from AVNT to USDC.
+  const v3 = EXCHANGES.find(({ kind }) => kind === "v3")!;
+  let quoted = 0;
+  const rd: Read = async (calls): Promise<any> =>
+    calls.map(({ address, functionName, args }) => {
+      if (functionName === "quote") return ((quoted += (args[0] as Route[]).length), paid(args[0] as Route[]));
+      if (functionName === "tickSpacings") return spacingsAt(address);
+      if (functionName === "extsload") return Array(4).fill(zeroHash);
+      const found = same(address, v3.factory) && args[2] === 500 && [AVNT, USDC].every((t) => args.includes(t));
+      return found ? POOL : zeroAddress;
+    });
+  const found = await findRoute(AVNT, 1_000n, SWAPPER, false, undefined, rd);
+  assert.deepEqual([found?.out, found?.route.hops.length, quoted], [2_000n, 1, 1]);
+});
+
+test("a plan runs through Base after one approval per token, and each item gets its minimum", async (t) => {
+  const refused = encodeErrorResult({ abi: swapperAbi, errorName: "TokenCallFailed", args: [WETH] });
+  let calls: { to: Address; data: Hex }[] = [];
+  t.mock.method(globalThis, "fetch", async (_: unknown, init: RequestInit) => {
+    calls = JSON.parse(String(init.body)).params[0].blockStateCalls[0].calls;
+    const replies = calls.map(({ to, data }) => {
+      if (to !== SWAPPER.address) return { status: "0x1", returnData: "0x", gasUsed: "0x1" };
+      const sent = decodeFunctionData({ abi: swapperAbi, data }).args[0] as Route[];
+      // The simulation succeeds only when no route has a minimum. Each route then fetches what it can, except WETH's
+      // route of 18, which its token refuses.
+      const results = paid(sent, (amount) => amount !== 18n).map((r) => (r.done ? r : { ...r, reason: refused }));
+      const returnData = encodeFunctionResult({ abi: swapperAbi, functionName: "swap", result: [results, 0n, 0n] });
+      return { status: sent.every(({ minPaid }) => minPaid === 0n) ? "0x1" : "0x0", returnData, gasUsed: "0x10" };
+    });
+    return Response.json({ result: [{ calls: replies }] });
+  });
+  // Twenty routes of about a million gas each make two swaps. The first two routes are parts of AVNT, whose allowance
+  // of 50 is short of their 100, so AVNT needs one approval.
+  const item = (amount: bigint, address = AVNT, allowance = 50n) => ({
+    token: TOKENS.get(key(address))!,
+    route: { ...route(amount, [hop(0)], address), minPaid: 7n },
+    out: 0n,
+    allowance,
+  });
+  const items = [item(30n), item(70n), ...Array.from({ length: 18 }, (_, i) => item(BigInt(i + 1), WETH, 10n ** 18n))];
+  const plan: Plan = { swapper: SWAPPER, items, margin: 50n };
+  const run = (await simulatePlan(ME, [], plan, TOKENS, 1_792_627_200n))!;
+  assert.equal(calls.length, 1 + 2);
+  const approval = decodeFunctionData({ abi: erc20Abi, data: run.steps.approvals[0]!.data });
+  assert.deepEqual(approval.args, [SWAPPER.address, 100n]);
+  assert.equal(run.gas, 1n + 2n * 16n);
+  const found = withMinimums(plan, run.results).map(({ item, reason }) => [item.out, item.route.minPaid, reason]);
+  const outs = items.map(({ route }) => (route.amount === 18n ? 0n : 2n * route.amount));
+  const expected = outs.map((out) => [out, minimumOf(out, 50n), out ? undefined : "its token refused the transfer"]);
+  assert.deepEqual(found, expected);
+  const quoted = withMinimums(plan).map(({ item }) => item);
+  assert.deepEqual(quoted, items, "without Base's results, as quoted");
+});
+
+test("a failed route says why, in words", () => {
+  const error = (errorName: "TooLittle" | "Expired", args: unknown[]) =>
+    encodeErrorResult({ abi: swapperAbi, errorName, args } as never);
+  assert.equal(reasonOf(error("TooLittle", [0n, 1n, 2n])), "it would have fetched less than its minimum");
+  assert.equal(reasonOf(error("Expired", [])), "the swap's deadline had passed");
+  assert.equal(reasonOf("0x"), "a pool or its token refused it");
 });
 
 test("a swap's receipt counts only the caller's own routes", () => {
-  const swapper = SWAPPERS[0]!;
-  const ME: Address = "0x00000000000000000000000000000000000000AA";
   const THEM: Address = "0x00000000000000000000000000000000000000bb";
-  const log = (eventName: "RouteSwapped" | "Swapped", caller: Address, args: Record<string, unknown>) => ({
-    address: swapper.address,
-    topics: encodeEventTopics({ abi: swapperAbi, eventName, args: { caller } } as never) as Hex[],
-    data:
-      eventName === "Swapped"
-        ? encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }], [args.paid as bigint, args.fee as bigint])
-        : encodeAbiParameters(
-            [{ type: "uint256" }, { type: "address" }, { type: "uint256" }, { type: "uint256" }],
-            [0n, AVNT, args.amountIn as bigint, args.amountOut as bigint],
-          ),
+  const log = (eventName: "RouteSwapped" | "Swapped", caller: Address, types: string, values: unknown[]) => ({
+    address: SWAPPER.address,
+    topics: encodeEventTopics({ abi: swapperAbi, eventName, args: { caller } }) as Hex[],
+    data: encodeAbiParameters(parseAbiParameters(types), values),
   });
-  const receipt = {
-    transactionHash: "0x01" as Hex,
-    status: "0x1" as Hex,
-    logs: [
-      log("RouteSwapped", THEM, { amountIn: 5n, amountOut: 500n }),
-      log("Swapped", THEM, { paid: 495n, fee: 5n }),
-      log("RouteSwapped", ME, { amountIn: 1n, amountOut: 100n }),
-      log("Swapped", ME, { paid: 99n, fee: 1n }),
-    ],
-  };
-  assert.deepEqual(swappedIn([receipt], swapper, ME), {
-    swapped: [{ index: 0, token: AVNT, amountIn: 1n, amountOut: 100n }],
+  const routeSwapped = (caller: Address, amountIn: bigint) =>
+    log("RouteSwapped", caller, "uint256, address, uint256, uint256", [0n, AVNT, amountIn, 100n * amountIn]);
+  const swapped = (caller: Address, fee: bigint) => log("Swapped", caller, "uint256, uint256", [99n * fee, fee]);
+  const logs = [routeSwapped(THEM, 5n), swapped(THEM, 5n), routeSwapped(ME, 1n), swapped(ME, 1n)];
+  assert.deepEqual(swappedIn([{ logs }], SWAPPER, ME), {
+    swapped: [{ caller: ME, index: 0, token: AVNT, amountIn: 1n, amountOut: 100n }],
     failed: [],
     paid: 99n,
     fee: 1n,
   });
-});
-
-test("a route for part of what it was quoted for shrinks its quote and minimum in proportion, and not for more", () => {
-  const item = { out: 1_000n, route: { token: AVNT, amount: 100n, minPaid: 985n, hops: [hop(10)] } };
-  assert.deepEqual(partOf(item, 60n, 100n), { out: 600n, route: { ...item.route, amount: 60n, minPaid: 591n } });
-  assert.deepEqual(partOf(item, 100n, 100n), { ...item, route: { ...item.route, amount: 100n } });
-  assert.deepEqual(partOf(item, 120n, 100n), { ...item, route: { ...item.route, amount: 120n } });
-});
-
-test("a route of one hop is quoted once, as its hop, and not again as a whole", async () => {
-  const multicall = parseAbi([
-    "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
-  ]);
-  const v3 = EXCHANGES.find(({ kind }) => kind === "v3")!;
-  const v3Abi = parseAbi(["function getPool(address tokenA, address tokenB, uint24 fee) view returns (address)"]);
-  const quote = toFunctionSelector(
-    "function quote((address,uint256,uint256,(uint8,address,address,uint24,int24)[])[])",
-  );
-  const tickSpacings = toFunctionSelector("function tickSpacings()");
-  const extsload = toFunctionSelector("function extsload(bytes32,uint256)");
-  // The only pool is Uniswap v3's at 0.05% from AVNT to USDC, which pays twice what it takes.
-  let quoted = 0;
-  const original = globalThis.fetch;
-  globalThis.fetch = async (_, init) => {
-    const { params } = JSON.parse(String(init?.body)) as { params: [{ data: Hex }] };
-    const { args } = decodeFunctionData({ abi: multicall, data: params[0].data });
-    const replies = args[0].map(({ target, callData }) => {
-      const ok = (returnData: Hex) => ({ success: true, returnData });
-      if (callData.startsWith(quote)) {
-        const { args: routes } = decodeFunctionData({ abi: swapperAbi, data: callData });
-        const results = (routes[0] as readonly { amount: bigint }[]).map(({ amount }) => {
-          quoted++;
-          return { done: true, amountIn: amount, amountOut: 2n * amount, reason: "0x" as Hex };
-        });
-        return ok(encodeFunctionResult({ abi: swapperAbi, functionName: "quote", result: results }));
-      }
-      if (callData.startsWith(tickSpacings)) return ok(encodeAbiParameters([{ type: "int24[]" }], [[]]));
-      if (callData.startsWith(extsload))
-        return ok(encodeAbiParameters([{ type: "bytes32[]" }], [Array(4).fill(`0x${"0".repeat(64)}`)]));
-      let pool: Address = zeroAddress;
-      if (target.toLowerCase() === v3.factory.toLowerCase()) {
-        const {
-          args: [a, b, fee],
-        } = decodeFunctionData({ abi: v3Abi, data: callData });
-        if (a.toLowerCase() === AVNT.toLowerCase() && b.toLowerCase() === USDC.toLowerCase() && fee === 500)
-          pool = POOL;
-      }
-      return ok(encodeAbiParameters([{ type: "address" }], [pool]));
-    });
-    const result = encodeFunctionResult({ abi: multicall, functionName: "aggregate3", result: replies });
-    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }));
-  };
-  try {
-    const found = await findRoute(AVNT, 1_000n, SWAPPERS[0]!, false);
-    assert.equal(found?.out, 2_000n);
-    assert.equal(found?.route.hops.length, 1);
-    assert.equal(quoted, 1);
-  } finally {
-    globalThis.fetch = original;
-  }
-});
-
-test("gas is valued at the prices it is compared with, in their unit, and not without ETH's price", () => {
-  const eth = WETH.toLowerCase();
-  const costs = { gasPrice: 10_000_000n, tip: undefined };
-  // 200,000 gas at 0.01 gwei: 0.000002 ETH.
-  const inDollars = gasCost(200_000n, costs, pricesIn("USD", [[eth, 2_500]], { EUR: 1.12 }))!;
-  assert.ok(Math.abs(inDollars.value - 0.005) < 1e-12);
-  assert.deepEqual([inDollars.unit, inDollars.rates], ["USD", { EUR: 1.12 }]);
-  assert.equal(gasCost(200_000n, costs, pricesIn("USDC", [[eth, 2_490]]))!.unit, "USDC");
-  assert.equal(gasCost(200_000n, costs, pricesIn("USD")), undefined);
-  assert.equal(ethCost(10n ** 18n, undefined), undefined);
-});
-
-test("routes run in order after one approval a token, for all its parts; each route gets its own result back", async () => {
-  const swapper = SWAPPERS[0]!;
-  const ME: Address = "0x00000000000000000000000000000000000000AA";
-  const approveAbi = parseAbi(["function approve(address spender, uint256 amount) returns (bool)"]);
-  const algebra = (amount: bigint) => ({ token: AVNT, amount, minPaid: 7n, hops: [hop(0)] });
-  // Twenty routes of a million gas each: two swaps. The first two are parts of AVNT, the rest of WETH.
-  const routes = [
-    algebra(30n),
-    algebra(70n),
-    ...Array.from({ length: 18 }, (_, i) => ({ ...algebra(BigInt(i + 1)), token: WETH })),
-  ];
-  let calls: { to: Address; data: Hex }[] = [];
-  const original = globalThis.fetch;
-  globalThis.fetch = async (_, init) => {
-    const { params } = JSON.parse(String(init?.body)) as { params: [{ blockStateCalls: [{ calls: typeof calls }] }] };
-    calls = params[0].blockStateCalls[0].calls;
-    const replies = calls.map(({ to, data }) => {
-      if (to !== swapper.address) return { status: "0x1", returnData: "0x", gasUsed: "0x1" };
-      const { args } = decodeFunctionData({ abi: swapperAbi, data });
-      const sent = args[0] as readonly { amount: bigint; minPaid: bigint }[];
-      const results = sent.map(({ amount, minPaid }) => ({
-        done: minPaid === 0n,
-        amountIn: amount,
-        amountOut: 2n * amount,
-        reason: "0x" as Hex,
-      }));
-      return {
-        status: "0x1",
-        returnData: encodeFunctionResult({ abi: swapperAbi, functionName: "swap", result: [results, 0n, 0n] }),
-        gasUsed: "0x10",
-      };
-    });
-    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: [{ calls: replies }] }));
-  };
-  try {
-    const run = await runInOrder(ME, swapper, routes, (token) => (token === WETH ? 10n ** 18n : 50n));
-    // AVNT's allowance, 50, is less than its parts, 100: one approval, for all of them. WETH's is enough.
-    const approvals = calls.filter(({ to }) => to !== swapper.address);
-    assert.equal(approvals.length, 1);
-    assert.deepEqual(decodeFunctionData({ abi: approveAbi, data: approvals[0]!.data }).args, [swapper.address, 100n]);
-    assert.equal(calls.length, 1 + 2);
-    // With no minimum, each route's own result, in its order.
-    assert.deepEqual(
-      run!.results.map((result) => result?.amountOut),
-      routes.map(({ amount }) => 2n * amount),
-    );
-    assert.equal(run!.gas, 1n + 2n * 16n);
-  } finally {
-    globalThis.fetch = original;
-  }
-});
-
-test("a swap in parts sells each token once, in as many routes as it has parts", () => {
-  const tokens = new Map(
-    [
-      { address: AVNT, symbol: "AVNT", decimals: 18 },
-      { address: USDC, symbol: "USDC", decimals: 6 },
-    ].map((token) => [token.address.toLowerCase(), token]),
-  );
-  const part = (exchange: number) => ({ token: AVNT, amount: 10n ** 18n, minPaid: 10n ** 6n, hops: [hop(exchange)] });
-  const slip = swapSlip(SWAPPERS[0]!, [part(0), part(6)], 1_792_627_200n, tokens, undefined);
-  assert.equal(slip.says, "Sell 1 token for at least 2 USDC");
-  assert.deepEqual(
-    slip.fields.filter(({ name }) => name === "route").map(({ label }) => label),
-    ["Route 1", "Route 2"],
-  );
-});
-
-test("a run's results come back to their routes only if Base answered for every call and ran those before the swaps", () => {
-  const route = (amount: bigint) => ({ token: AVNT, amount, minPaid: 0n, hops: [hop(10)] });
-  const [a, b, c] = [route(1n), route(2n), route(3n)];
-  const swapped = (...amounts: bigint[]) => ({
-    ok: true,
-    gas: 1n,
-    returnData: encodeFunctionResult({
-      abi: swapperAbi,
-      functionName: "swap",
-      result: [
-        amounts.map((amount) => ({ done: true, amountIn: amount, amountOut: 2n * amount, reason: "0x" as Hex })),
-        0n,
-        0n,
-      ],
-    }),
-  });
-  const approved = { ok: true, gas: 1n, returnData: "0x" as Hex };
-  const found = routeResults([approved, swapped(1n, 2n), swapped(3n)], 1, [[a, b], [c]])!;
-  assert.deepEqual(
-    [a, b, c].map((each) => found.get(each)?.amountOut),
-    [2n, 4n, 6n],
-  );
-  // A reply short of a call, or a refused approval: nothing.
-  assert.equal(routeResults([approved, swapped(1n, 2n)], 1, [[a, b], [c]]), undefined);
-  assert.equal(routeResults([], 1, [[a, b], [c]]), undefined);
-  assert.equal(routeResults([{ ...approved, ok: false }, swapped(1n, 2n), swapped(3n)], 1, [[a, b], [c]]), undefined);
-  // A swap Base refused, or whose reply is not the swap's: no result for its routes, and the others' still.
-  const refused = routeResults([approved, { ...approved, ok: false }, { ...approved, returnData: "0x1234" }], 1, [
-    [a, b],
-    [c],
-  ])!;
-  assert.deepEqual(
-    [a, b, c].map((each) => refused.get(each)),
-    [undefined, undefined, undefined],
-  );
-  const one = routeResults([approved, swapped(1n, 2n), { ...approved, ok: false }], 1, [[a, b], [c]])!;
-  assert.deepEqual(
-    [a, b, c].map((each) => one.get(each)?.amountOut),
-    [2n, 4n, undefined],
-  );
-});
-
-test("a route whose token refused the transfer is told from one that fetched too little", () => {
-  const error = (name: "TokenCallFailed" | "TooLittle", args: unknown[]) =>
-    encodeErrorResult({ abi: swapperAbi, errorName: name, args } as never);
-  assert.equal(refusedTransfer(error("TokenCallFailed", [AVNT])), true);
-  assert.equal(refusedTransfer(error("TooLittle", [0n, 1n, 2n])), false);
-  assert.equal(refusedTransfer("0x"), false);
 });
