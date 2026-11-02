@@ -34,7 +34,7 @@ import { gasWords, key, noPrices, pricesAtFlip, pricesNow, type Prices, type Tok
 import { now, same, tagged } from "../rpc.ts";
 import { state } from "../state.ts";
 import { tokensOf, type Amount } from "../tokens.ts";
-import { $, bill, code, fill, frag, link, list, shown, stateOf, status, type Value } from "../ui.ts";
+import { $, bill, code, fill, frag, fromTemplate, link, list, shown, stateOf, status, type Value } from "../ui.ts";
 import { accountName, can, lockWords, statusNode } from "./hydrex.ts";
 import { swapLink } from "./swap.ts";
 
@@ -228,19 +228,6 @@ const worth = (found: Amount[], { tokens, prices }: ReturnType<typeof priced>): 
   const total = tokens && prices ? valueAt(found, tokens, prices) : 0;
   return total > 0 ? money(moneyAt(total, prices!), true) : "";
 };
-// Klima Protocol's guidelines set its mark at 24 px.
-function throughKlima(): HTMLElement {
-  const line = Object.assign(document.createElement("span"), { className: "Klima-line Klima-line--end" });
-  const mark = Object.assign(document.createElement("img"), {
-    className: "Klima",
-    src: "klima-protocol.svg",
-    alt: "",
-    width: 24,
-    height: 24,
-  });
-  line.append(mark, "Klima Protocol");
-  return line;
-}
 function payoutReceipt(payout: Payout, id: bigint, owner: Address, time: number, own: boolean): Node {
   const p = priced([...payout.earned, ...payout.paid], weekStart(time));
   const kvcm = (list: Amount[]) => list.find(({ token }) => same(token, KVCM))?.amount ?? 0n;
@@ -259,7 +246,7 @@ function payoutReceipt(payout: Payout, id: bigint, owner: Address, time: number,
       [
         `Retired ${share(payout.retiredKvcm)}`,
         `${payout.retiredKvcm ? "−" : ""}${amount(payout.retiredKvcm, 18)} kVCM`,
-        payout.tonnes ? frag(`${amount(payout.tonnes, 18)} t of carbon credits`, throughKlima()) : null,
+        payout.tonnes ? frag(`${amount(payout.tonnes, 18)} t of carbon credits`, fromTemplate("klima")) : null,
       ],
       [`Fee ${share(kvcm(payout.fees))}`, amounts(payout.fees, p.tokens, payout.fees.length ? "−" : "", "0 kVCM")],
     ],

@@ -590,7 +590,7 @@ dialog[open] {
   }
 }
 
-/* Klima's guidelines keep a third of the mark's size clear around it. */
+/* Klima's guidelines set its mark at 24 px, and keep a third of that clear around it. */
 .Klima-line {
   display: flex;
   align-items: center;
