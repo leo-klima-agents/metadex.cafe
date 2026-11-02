@@ -814,8 +814,7 @@ dialog[open] {
   align-items: flex-start;
   gap: 0.75rem;
 }
-/* A group of one hides its box but leaves it ticked, and its card isn't picked. */
-.Ticks:has(.Ticks-box:checked:not([hidden])) {
+.Ticks:has(.Ticks-box:checked) {
   border-color: var(--accent);
   background: var(--tint);
 }
@@ -837,9 +836,6 @@ dialog[open] {
   padding-block: 0.75rem;
   padding-inline-start: 1rem;
   cursor: pointer;
-}
-.Ticks-target:has(.Ticks-box[hidden]) {
-  display: none;
 }
 
 /* The negative margin undoes the popup's inset, 1.25rem, so that the bar reaches its edges. */
