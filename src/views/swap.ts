@@ -227,6 +227,16 @@ function output(
     worthText: worth ? money(worth, true) : "",
   };
 }
+// An amount, with what it is worth under it.
+function worthUnder(text: string, worth: string): Node {
+  const under = Object.assign(document.createElement("small"), { className: "worth", textContent: worth });
+  return worth ? frag(text, under) : frag(text);
+}
+// Gas is paid apart, in ETH: its amount, with what it is worth under it.
+function gasUnder(wei: bigint, prices: Prices | undefined): Node {
+  const cost = ethCost(wei, prices);
+  return worthUnder(`${figure(wei, 18)} ETH`, cost ? money(cost, true) : "");
+}
 function underPrice(
   token: Token,
   amount: bigint,
@@ -317,7 +327,7 @@ export function drawSwap(): void {
       swap.swapGas(parts.map(({ route }) => route));
   const line = (amount: bigint) => {
     const shown = output(amount, swapper, prices);
-    return `${shown.exact}${shown.worthText && `  ${shown.worthText}`}`;
+    return worthUnder(shown.exact, shown.worthText);
   };
   const waiting = !picked.length && found.value?.reading;
   const button = $<HTMLButtonElement>("[data-action=review-swap]", view);
@@ -331,7 +341,7 @@ export function drawSwap(): void {
     least: picked.length ? line(least) : undefined,
     gas:
       picked.length && found.value?.costs
-        ? gasWords(gas * found.value.costs.gasPrice, prices)
+        ? gasUnder(gas * found.value.costs.gasPrice, prices)
         : picked.length
           ? ""
           : undefined,
@@ -438,7 +448,7 @@ export async function reviewSwap(
   const value = (amount: bigint) => output(amount, plan.swapper, prices);
   const body = bill(
     frag("Quote · swap into ", code(plan.swapper.symbol)),
-    gasCosts ? `Estimated gas ${gasWords(gas * gasCosts.gasPrice, prices)}` : "",
+    gasCosts ? frag("Estimated gas ", gasUnder(gas * gasCosts.gasPrice, prices)) : "",
     lines.map(({ item, reason }) => {
       const under = reason ? undefined : underPrice(item.token, item.route.amount, item.out, plan.swapper, prices);
       return {
@@ -452,7 +462,7 @@ export async function reviewSwap(
     }),
     [
       ["Quote", value(out).exact, value(out).worthText],
-      ["Swap fee", value(-fee).exact],
+      ["Swap fee", value(-fee).exact, value(-fee).worthText],
       ["Reaches you", value(out - fee).exact, value(out - fee).worthText],
     ],
     [`Minimum at ${Number(plan.margin) / 100}% slippage`, value(least).exact, value(least).worthText],
@@ -608,9 +618,10 @@ async function openReset(these: Allowance[]): Promise<void> {
 export function swapLine(): Value {
   const found = scan();
   return shown(found, ({ rows, reading, prices }) => {
-    const worth = rows.reduce((sum, { worth = 0 }) => sum + worth, 0);
-    if (!rows.length) return reading ? undefined : "Nothing to swap";
-    return `${count(rows.length, "token", "tokens")} · ${money(moneyAt(worth, prices))}${reading ? " so far" : ""}`;
+    const swappable = rows.filter(({ route, reason }) => route && !reason);
+    const worth = swappable.reduce((sum, { worth = 0 }) => sum + worth, 0);
+    if (!swappable.length) return reading ? undefined : "Nothing to swap";
+    return `${count(swappable.length, "token", "tokens")} · ${money(moneyAt(worth, prices))}${reading ? " so far" : ""}`;
   });
 }
 export const preloadSwap = (): void => void scan();

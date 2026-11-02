@@ -187,6 +187,7 @@ export function hex(el: HTMLElement, value: string, wallet = false): void {
   if (el.dataset.hex === `${wallet} ${value}`) return;
   el.dataset.hex = `${wallet} ${value}`;
   el.classList.add("hex");
+  el.classList.toggle("wallet", wallet);
   el.translate = false;
   const block = wallet || hexLines(value).length > 1;
   const lines = wallet

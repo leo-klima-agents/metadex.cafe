@@ -1,9 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <title>metaDEX Café</title>
-  <rect width="32" height="32" fill="#251a15" />
-  <path d="M5.5 7.5 6.5 5h6l1 2.5zM4.5 10.5h10L13.3 22H5.7zM18.5 12.5l1-2.5h6l1 2.5zM17.5 15.5h10L26.3 27h-7.6z" fill="#fdfcf9" />
-  <rect x="3.5" y="7.5" width="12" height="2.5" rx="1.25" fill="#fdfcf9" />
-  <rect x="16.5" y="12.5" width="12" height="2.5" rx="1.25" fill="#fdfcf9" />
-  <path d="M4.81 13.5h9.38l-.52 5H5.33z" fill="#8aa83f" />
-  <path d="M17.81 18.5h9.38l-.52 5h-8.34z" fill="#e6b285" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#251a15" />
+  <rect x="24" y="14" width="26" height="7" rx="1.5" fill="#fdfcf9" />
+  <rect x="34" y="27" width="16" height="7" rx="1.5" fill="#fdfcf9" />
+  <rect x="14" y="42" width="36" height="9" rx="1.5" fill="#e6b285" />
 </svg>

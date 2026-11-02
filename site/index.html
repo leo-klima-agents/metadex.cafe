@@ -11,8 +11,9 @@
     <meta name="referrer" content="no-referrer" />
     <title>metaDEX Café</title>
     <meta name="description" content="Vote, claim and swap on Base." />
-    <link rel="icon" href="favicon.ico" sizes="32x32" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <!-- MetaMask reads a page's icon from "shortcut icon" only. -->
+    <link rel="shortcut icon" href="favicon.ico" sizes="32x32" />
     <link rel="stylesheet" href="style.css" integrity="%STYLE_INTEGRITY%" />
     <script type="module" src="main.js" integrity="%MAIN_INTEGRITY%"></script>
   </head>
@@ -82,7 +83,7 @@
           <p class="small" data-when="empty failed">Nothing right now.</p>
           <ul class="stack" data-when="ready" data-list="need"></ul>
         </section>
-        <ul class="stack" aria-label="Products">
+        <ul class="stack part" aria-label="Products">
           <li class="card link">
             <h2 class="title"><a class="cover" href="#swap">Swap</a></h2>
             <p class="small quiet">Sell many tokens for one</p>
@@ -98,7 +99,11 @@
             <p class="small quiet">Coming soon</p>
           </li>
         </ul>
-        <p data-if="no-wallet"><button type="button" data-action="connect">Connect a wallet</button></p>
+        <div class="card stack tight" data-if="no-wallet">
+          <p class="label">Connect a wallet</p>
+          <p class="row" data-list="wallet"></p>
+          <p class="small" role="status" data-text="connecting"></p>
+        </div>
         <dialog popover id="allows" data-section="allows" aria-labelledby="allows-title">
           <header class="spread bar">
             <h2 id="allows-title">Approvals</h2>
@@ -191,8 +196,12 @@
         <section class="stack part" aria-labelledby="yours-title" data-text="accounts" data-state="loading">
           <h2 id="yours-title">Your Hydrex accounts</h2>
           <p class="small" data-text="epoch"></p>
-          <p data-if="no-wallet"><button type="button" data-action="connect">Connect a wallet</button></p>
-          <ul class="skeleton" data-when="loading" aria-hidden="true">
+          <div class="card stack tight" data-if="no-wallet">
+            <p class="label">Connect a wallet</p>
+            <p class="row" data-list="wallet"></p>
+            <p class="small" role="status" data-text="connecting"></p>
+          </div>
+          <ul class="skeleton" data-when="loading" data-if="wallet" aria-hidden="true">
             <li class="ghost"></li>
             <li class="ghost"></li>
             <li class="ghost"></li>
@@ -202,13 +211,15 @@
             No Hydrex accounts.
             <a href="https://www.hydrex.fi/accounts" target="_blank" rel="noopener">Lock HYDX on Hydrex</a>
           </p>
-          <div class="stack" data-when="ready">
+          <div class="stack loose" data-when="ready">
             <section class="stack" data-group="needs:unvoted" aria-labelledby="g-unvoted">
               <header class="spread">
                 <h3 id="g-unvoted">Didn't vote last epoch <span class="count" data-text="count"></span></h3>
                 <span class="row small"
                   ><span data-text="picked"></span
-                  ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
+                  ><label class="with-box" data-text="all"
+                    ><input type="checkbox" data-action="pick-all" /> All</label
+                  ></span
                 >
               </header>
               <ul class="stack" data-list="account"></ul>
@@ -225,7 +236,9 @@
                 <h3 id="g-stopped">In a stopped automation <span class="count" data-text="count"></span></h3>
                 <span class="row small"
                   ><span data-text="picked"></span
-                  ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
+                  ><label class="with-box" data-text="all"
+                    ><input type="checkbox" data-action="pick-all" /> All</label
+                  ></span
                 >
               </header>
               <ul class="stack" data-list="account"></ul>
@@ -240,7 +253,9 @@
                 <h3 id="g-partly">Partly in an automation <span class="count" data-text="count"></span></h3>
                 <span class="row small"
                   ><span data-text="picked"></span
-                  ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
+                  ><label class="with-box" data-text="all"
+                    ><input type="checkbox" data-action="pick-all" /> All</label
+                  ></span
                 >
               </header>
               <ul class="stack" data-list="account"></ul>
@@ -255,7 +270,9 @@
                 <h3 id="g-matcha-latte">In Matcha Latte <span class="count" data-text="count"></span></h3>
                 <span class="row small"
                   ><span data-text="picked"></span
-                  ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
+                  ><label class="with-box" data-text="all"
+                    ><input type="checkbox" data-action="pick-all" /> All</label
+                  ></span
                 >
               </header>
               <ul class="stack" data-list="account"></ul>
@@ -271,7 +288,9 @@
                 <h3 id="g-double-espresso">In Double Espresso <span class="count" data-text="count"></span></h3>
                 <span class="row small"
                   ><span data-text="picked"></span
-                  ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
+                  ><label class="with-box" data-text="all"
+                    ><input type="checkbox" data-action="pick-all" /> All</label
+                  ></span
                 >
               </header>
               <ul class="stack" data-list="account"></ul>
@@ -288,7 +307,9 @@
                 <h3 id="g-other">Other Hydrex accounts <span class="count" data-text="count"></span></h3>
                 <span class="row small"
                   ><span data-text="picked"></span
-                  ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
+                  ><label class="with-box" data-text="all"
+                    ><input type="checkbox" data-action="pick-all" /> All</label
+                  ></span
                 >
               </header>
               <ul class="stack" data-list="account"></ul>
@@ -351,8 +372,8 @@
           <div class="tile" data-only="matcha-latte">
             <dt class="label">Retired</dt>
             <dd class="fact" data-text="tonnes"></dd>
-            <dd class="small quiet">
-              <img class="klima" src="klima-protocol.svg" alt="" width="16" height="16" /> Klima Protocol
+            <dd class="small quiet through">
+              <img class="klima" src="klima-protocol.svg" alt="" width="24" height="24" /> Klima Protocol
             </dd>
           </div>
           <div class="tile" data-only="double-espresso">
@@ -360,21 +381,27 @@
             <dd class="fact">Nobody</dd>
           </div>
         </dl>
-        <p data-if="no-wallet"><button type="button" data-action="connect">Connect a wallet</button></p>
-        <div class="stack" data-if="wallet" data-text="accounts" data-state="loading">
+        <div class="card stack tight" data-if="no-wallet">
+          <p class="label">Connect a wallet</p>
+          <p class="row" data-list="wallet"></p>
+          <p class="small" role="status" data-text="connecting"></p>
+        </div>
+        <div class="stack part" data-if="wallet" data-text="accounts" data-state="loading">
           <ul class="skeleton" data-when="loading" aria-hidden="true">
             <li class="ghost"></li>
             <li class="ghost"></li>
           </ul>
           <p class="small" data-when="failed">Your Hydrex accounts could not be read.</p>
           <p class="small" data-when="empty">No Hydrex account can join.</p>
-          <div class="stack" data-when="ready">
+          <div class="stack loose" data-when="ready">
             <section class="stack" data-group="in" aria-labelledby="g-in">
               <header class="spread">
                 <h2 id="g-in">Your Hydrex accounts</h2>
                 <span class="row small"
                   ><span data-text="picked"></span
-                  ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
+                  ><label class="with-box" data-text="all"
+                    ><input type="checkbox" data-action="pick-all" /> All</label
+                  ></span
                 >
               </header>
               <ul class="stack" data-list="account"></ul>
@@ -385,7 +412,9 @@
                 <h2 id="g-can">Can join</h2>
                 <span class="row small"
                   ><span data-text="picked"></span
-                  ><label data-text="all"><input type="checkbox" data-action="pick-all" /> All</label></span
+                  ><label class="with-box" data-text="all"
+                    ><input type="checkbox" data-action="pick-all" /> All</label
+                  ></span
                 >
               </header>
               <ul class="stack" data-list="account"></ul>
@@ -597,7 +626,7 @@
               </p>
               <p class="small" data-text="gas"></p>
             </section>
-            <section class="stack" aria-labelledby="payout-title" data-text="payouts" data-state="loading">
+            <section class="stack part" aria-labelledby="payout-title" data-text="payouts" data-state="loading">
               <h2 id="payout-title">Last payout</h2>
               <ul class="skeleton" data-when="loading" aria-hidden="true">
                 <li class="ghost"></li>
@@ -628,7 +657,11 @@
               Approvals
             </button>
           </header>
-          <p data-if="no-wallet"><button type="button" data-action="connect">Connect a wallet</button></p>
+          <div class="card stack tight" data-if="no-wallet">
+            <p class="label">Connect a wallet</p>
+            <p class="row" data-list="wallet"></p>
+            <p class="small" role="status" data-text="connecting"></p>
+          </div>
           <div class="stack" data-if="wallet" data-text="tokens" data-state="loading">
             <ul class="skeleton" data-when="loading" aria-hidden="true">
               <li class="ghost"></li>
@@ -671,7 +704,7 @@
               <dt class="term">Reaches you</dt>
               <dd class="end" data-text="paid"></dd>
             </div>
-            <div class="line">
+            <div class="line sum">
               <dt class="term">
                 <label
                   >Minimum at
@@ -829,7 +862,7 @@
       </div>
     </template>
     <template id="need">
-      <li class="card spread"><span data-text="words"></span><span data-text="act"></span></li>
+      <li class="card spread"><span class="hang" data-text="words"></span><span data-text="act"></span></li>
     </template>
     <template id="approval">
       <li class="spread">
@@ -847,10 +880,10 @@
       </li>
     </template>
     <template id="account">
-      <li class="card ticks">
-        <input class="tick" type="checkbox" data-action="pick" />
+      <li class="card ticks link">
+        <label class="pick"><input class="tick" type="checkbox" data-action="pick" /></label>
         <div class="grow">
-          <a data-text="link"></a>
+          <a class="cover title" data-text="link"></a>
           <p class="small quiet"><span data-text="votes"></span><span data-text="earned"></span></p>
           <p class="small" data-text="status"></p>
           <p class="small" data-text="late"></p>
@@ -871,14 +904,16 @@
       ></label>
     </template>
     <template id="token">
-      <li class="card ticks">
-        <input class="tick" type="checkbox" data-action="tick" />
-        <p class="spread grow">
-          <span><code data-text="symbol"></code> <span data-text="amount"></span></span>
-          <span class="tail"><span data-text="fetches"></span><small class="quiet" data-text="worth"></small></span>
-          <small class="quiet wide" data-text="note"></small>
-          <span class="small wide" data-text="warning"></span>
-        </p>
+      <li>
+        <label class="card ticks">
+          <input class="tick" type="checkbox" data-action="tick" />
+          <span class="spread grow">
+            <span><code class="strong" data-text="symbol"></code> <span data-text="amount"></span></span>
+            <span class="tail"><span data-text="fetches"></span><small class="worth" data-text="worth"></small></span>
+            <small class="quiet wide" data-text="note"></small>
+            <span class="small wide" data-text="warning"></span>
+          </span>
+        </label>
       </li>
     </template>
     <template id="standing">
@@ -907,13 +942,12 @@
       </div>
     </template>
     <template id="line">
-      <li>
-        <p class="spread">
-          <span><code data-text="symbol"></code> <span data-text="amount"></span></span><span data-text="value"></span>
-        </p>
-        <p class="end quiet" data-text="worth"></p>
-        <p class="quiet" data-text="route"></p>
-        <p data-text="note"></p>
+      <li class="bill-line">
+        <span><code class="strong" data-text="symbol"></code> <span data-text="amount"></span></span>
+        <span class="end" data-text="value"></span>
+        <span class="description quiet" data-text="route"></span>
+        <span class="end worth" data-text="worth"></span>
+        <span class="note" data-text="note"></span>
       </li>
     </template>
 
@@ -927,7 +961,7 @@
             >
           </p>
         </div>
-        <dl class="facts tiles">
+        <dl class="facts tiles two">
           <div class="tile">
             <dt class="label">Votes from</dt>
             <dd class="fact" data-text="next"></dd>

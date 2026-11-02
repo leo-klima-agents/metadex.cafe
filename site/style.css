@@ -106,7 +106,8 @@ ol {
   padding: 0;
   list-style: none;
 }
-:is(ul, ol):empty {
+:is(ul, ol):empty,
+[data-text="connecting"]:empty {
   display: none;
 }
 small {
@@ -151,8 +152,9 @@ a[target="_blank"]::after {
 }
 code,
 table,
-.fact,
-.slip {
+.slip,
+.hex,
+.tail {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
@@ -165,6 +167,35 @@ fieldset {
 }
 legend {
   padding: 0;
+}
+legend + * {
+  margin-block-start: var(--gap-s);
+}
+/* A fold's summary: quiet and small, after a chevron that turns as it opens. */
+summary {
+  color: var(--quiet);
+  list-style: none;
+  cursor: pointer;
+}
+summary:hover {
+  color: var(--ink);
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+summary::before {
+  content: "";
+  display: inline-block;
+  inline-size: 0.45em;
+  block-size: 0.45em;
+  margin-inline-end: 0.6em;
+  border-block-end: 2px solid currentColor;
+  border-inline-end: 2px solid currentColor;
+  vertical-align: middle;
+  transform: rotate(-45deg);
+}
+details[open] > summary::before {
+  transform: translateY(-0.2em) rotate(45deg);
 }
 :where(input:not([type]), select) {
   min-block-size: 2.25rem;
@@ -269,6 +300,9 @@ legend {
   text-decoration: none;
 }
 .logo {
+  flex: none;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
   border-radius: 22%;
   box-shadow: 0 0 0 1px var(--line);
 }
@@ -289,12 +323,22 @@ main {
   color: var(--quiet);
   font-size: var(--small);
 }
+/* Selects inside a line of small text, as the footer's currency and the swap's slippage, are as small as it. */
+.site-footer select,
+.term select {
+  min-block-size: 1.75rem;
+  padding-block: 0;
+  padding-inline: 0.25rem;
+  font-size: var(--small);
+}
 .home {
-  padding-block: 18vh;
-  text-align: center;
+  gap: var(--gap-l);
+  padding-block: 3rem;
 }
 .hero {
-  font-size: 2.5rem;
+  max-inline-size: 14ch;
+  font-size: 3rem;
+  line-height: 1.05;
 }
 .back {
   color: var(--quiet);
@@ -307,9 +351,15 @@ main {
 .lead {
   font-size: 1.125rem;
 }
+/* A count beside a heading is quiet and in the sans, whatever the heading: "Needs you · 2". */
+.count {
+  color: var(--quiet);
+  font-family: var(--sans);
+  font-size: 1rem;
+  font-weight: 400;
+}
 .count:not(:empty)::before {
   content: "· ";
-  color: var(--quiet);
 }
 
 button,
@@ -318,8 +368,8 @@ button,
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
-  min-block-size: 2.75rem;
-  padding: 0.5rem 1.25rem;
+  min-block-size: 2.5rem;
+  padding: 0.375rem 1rem;
   border: 1px solid var(--accent);
   border-radius: 999px;
   background: var(--accent);
@@ -489,6 +539,9 @@ button:not(.secondary)[aria-busy="true"]::after {
   dialog:popover-open {
     animation: rise 0.15s ease-out;
   }
+  summary::before {
+    transition: transform 0.15s;
+  }
 }
 @keyframes pulse {
   50% {
@@ -535,22 +588,6 @@ button:not(.secondary)[aria-busy="true"]::after {
 .callout {
   background: var(--tint);
 }
-/* The `.cover` link's `::after` stretches over its `.link` card, so the whole card is clickable. */
-.link {
-  position: relative;
-}
-.cover {
-  color: inherit;
-  text-decoration: none;
-}
-.cover::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-}
-.link:hover {
-  border-color: var(--accent);
-}
 .title {
   font-family: var(--sans);
   font-size: 1rem;
@@ -562,6 +599,7 @@ button:not(.secondary)[aria-busy="true"]::after {
 }
 .table {
   padding: 0;
+  overflow: hidden;
 }
 .entry {
   padding: 0.75rem var(--gap);
@@ -569,22 +607,102 @@ button:not(.secondary)[aria-busy="true"]::after {
 .entry:not(:first-child) {
   border-block-start: 1px solid var(--line);
 }
+/* A card that leads somewhere is a link as large as the card, its title in ink, with a chevron at its end: the
+   `.cover` link's `::after` stretches over its `.link` card. What else the card holds, such as a box to tick or a link
+   in its status, stays above the cover. */
+.link {
+  position: relative;
+  padding-inline-end: 3rem;
+}
+.link::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 1.25rem;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-block-start: 2px solid var(--quiet);
+  border-inline-end: 2px solid var(--quiet);
+  transform: translateY(-50%) rotate(45deg);
+}
+.cover {
+  color: inherit;
+  text-decoration: none;
+}
+.cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.link :is(a:not(.cover), button, label) {
+  position: relative;
+  z-index: 1;
+}
+.link:hover {
+  border-color: var(--quiet);
+}
+.link:hover::before {
+  border-color: var(--ink);
+}
+.table > .link:hover {
+  background: var(--tint);
+}
 
+/* Facts: a label above each figure, in columns. Tiles give a page's key figures a box each, their labels as tall as an
+   info button so that the figures line up. */
 .facts {
   display: flex;
   flex-wrap: wrap;
   gap: var(--gap-s) var(--gap-l);
+}
+.facts > div {
+  display: grid;
+  align-content: start;
+  gap: 0.125rem;
+}
+.table .facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-block-start: var(--gap-s);
 }
 .tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
   gap: var(--gap-s);
 }
+.tiles.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.tile > dt {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-s);
+  min-block-size: 1.5rem;
+}
 .fact {
-  font-weight: 600;
+  font-weight: 700;
+}
+.tile .fact {
+  font-size: 1.125rem;
+}
+/* "/ 1k votes, last epoch": the unit stays whole, beside the figure or under it. */
+.aside {
+  white-space: nowrap;
+}
+/* Klima's guidelines keep a third of the mark's size clear around it. */
+.through {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-s);
+  margin-block-start: var(--gap-s);
+}
+.end .through {
+  justify-content: flex-end;
 }
 .klima {
-  vertical-align: -0.2em;
+  flex: none;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
 }
 .pair {
   display: grid;
@@ -594,18 +712,44 @@ button:not(.secondary)[aria-busy="true"]::after {
   border-block-end: 1px solid var(--line);
 }
 
+/* A card with a box to tick: ticked, it takes the accent's edge and the tint. The box's target reaches the card's
+   edge; a token's whole card ticks it. */
 .ticks {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
 }
+.ticks:has(.tick:checked) {
+  border-color: var(--accent);
+  background: var(--tint);
+}
+label.ticks {
+  cursor: pointer;
+}
+label.ticks:has(.tick:disabled) {
+  cursor: default;
+}
 .tick {
   flex: none;
-  margin-block-start: 0.2rem;
+}
+.pick {
+  display: flex;
+  align-self: stretch;
+  margin-block: -0.75rem;
+  margin-inline-start: calc(-1 * var(--gap));
+  padding-block: 0.75rem;
+  padding-inline-start: var(--gap);
+  cursor: pointer;
+}
+.pick:has(> [hidden]) {
+  display: none;
 }
 .grow {
   flex: 1;
   min-inline-size: 0;
+}
+.ticks .spread {
+  align-items: flex-start;
 }
 .tail {
   display: grid;
@@ -614,15 +758,51 @@ button:not(.secondary)[aria-busy="true"]::after {
 .wide {
   flex-basis: 100%;
 }
-.choice {
+.strong {
+  font-weight: 600;
+}
+/* A label holding a box, as "All": the box and its word on one line. */
+.with-box {
   display: inline-flex;
-  gap: 0.375rem;
   align-items: center;
+  gap: 0.375rem;
   cursor: pointer;
+}
+.spread > .row:last-child {
+  margin-inline-start: auto;
+}
+/* A choice among pills, as the swap's output: the radio is hidden, and the chosen pill filled. */
+.choice {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.5rem;
+  padding-inline: var(--gap);
+  cursor: pointer;
+}
+.choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
 }
 .choice:has(:checked) {
   border-color: var(--accent);
-  background: var(--tint);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.choice:has(:focus-visible) {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.choice:has(:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* A need's words wrap under their words, not under their shape. */
+.hang {
+  flex: 1 1 16rem;
+  padding-inline-start: 1.125em;
+  text-indent: -1.125em;
 }
 
 dialog {
@@ -660,6 +840,7 @@ dialog[open] {
 /* The review has no bottom padding: under the sticky foot it would show content scrolling beneath, so the foot pads
    itself. */
 .review {
+  max-block-size: calc(100% - 2rem);
   padding-block: var(--inset) 0;
 }
 .foot {
@@ -721,6 +902,10 @@ dialog[open] {
   margin-inline-start: auto;
   text-align: end;
 }
+.ruled .end {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
 .description {
   display: block;
   font-family: var(--sans);
@@ -750,6 +935,35 @@ dialog[open] {
   font-weight: 400;
   text-align: end;
 }
+/* What an amount is worth, quieter, under it. */
+.worth {
+  display: block;
+  color: var(--quiet);
+  font-size: var(--label);
+  font-weight: 400;
+}
+/* A line on a bill: the token and its amount, then what it fetches; under them, its route, then what that is worth. */
+.bill-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--gap);
+  align-items: baseline;
+}
+.bill-line > .note {
+  grid-column: 1 / -1;
+}
+/* The sum the swap's slippage sets: between rules, as large as its words. */
+.ruled > .sum {
+  margin-block: 0.125rem;
+  padding-block: 0.375rem;
+  border-block: 1px solid var(--line);
+  font-weight: 700;
+}
+/* The time and the transaction close a receipt, under a dashed rule. */
+.slip > footer {
+  padding-block-start: 0.625rem;
+  border-block-start: 2px dashed var(--ink);
+}
 
 /* Groups of four hex digits are spaced by margins, not spaces, so a copy is plain hex. An address breaks once, in the
    middle; one shown as the wallet shows it takes three lines of four groups. */
@@ -763,8 +977,23 @@ dialog[open] {
   margin-inline-end: 0.4ch;
   white-space: nowrap;
 }
+.quad:last-child,
+.half:last-child {
+  margin-inline-end: 0;
+}
 .half {
   display: inline-block;
+}
+/* A link's underline doesn't reach into inline blocks: each half draws its own. */
+a.hex {
+  text-decoration: none;
+}
+a.hex > .half {
+  border-block-end: 1px solid currentColor;
+}
+/* As the wallet shows it, the groups stand apart in columns. */
+.hex.wallet .quad:not(:last-child) {
+  margin-inline-end: 1ch;
 }
 .hex-line {
   display: block;
@@ -796,6 +1025,20 @@ td:first-child {
 }
 
 @media (max-width: 30rem) {
+  h1 {
+    font-size: 1.75rem;
+  }
+  .hero {
+    font-size: 2.5rem;
+  }
+  /* The header stays on one line: the logo, the name and the button. */
+  .brand {
+    font-size: 1.125rem;
+  }
+  .logo {
+    inline-size: 1.5rem;
+    block-size: 1.5rem;
+  }
   dialog[popover] {
     inline-size: 100%;
     max-inline-size: none;
@@ -806,5 +1049,43 @@ td:first-child {
   .pair {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
+  }
+  /* An automation's figures, and a page's tiles, become rows: the label, then the figure at the end. */
+  .table .facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
+  }
+  .table .facts > div,
+  .facts.tiles > div {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: var(--gap-l);
+    align-items: baseline;
+  }
+  .table .facts dd,
+  .facts.tiles dd {
+    grid-column: 2;
+    text-align: end;
+  }
+  .facts.tiles {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--card);
+  }
+  .facts.tiles > div {
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+  .facts.tiles > div + div {
+    border-block-start: 1px solid var(--line);
+  }
+  .facts.tiles .fact {
+    font-size: 1rem;
+  }
+  .facts.tiles dd.small {
+    grid-column: 1 / -1;
   }
 }

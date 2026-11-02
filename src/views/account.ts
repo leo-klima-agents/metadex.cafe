@@ -228,6 +228,19 @@ const worth = (found: Amount[], { tokens, prices }: ReturnType<typeof priced>): 
   const total = tokens && prices ? valueAt(found, tokens, prices) : 0;
   return total > 0 ? money(moneyAt(total, prices!), true) : "";
 };
+// Klima Protocol's mark beside a retirement, at 24 px, as its guidelines ask.
+function throughKlima(): HTMLElement {
+  const line = Object.assign(document.createElement("span"), { className: "through" });
+  const mark = Object.assign(document.createElement("img"), {
+    className: "klima",
+    src: "klima-protocol.svg",
+    alt: "",
+    width: 24,
+    height: 24,
+  });
+  line.append(mark, "Klima Protocol");
+  return line;
+}
 function payoutReceipt(payout: Payout, id: bigint, owner: Address, time: number, own: boolean): Node {
   const p = priced([...payout.earned, ...payout.paid], weekStart(time));
   const kvcm = (list: Amount[]) => list.find(({ token }) => same(token, KVCM))?.amount ?? 0n;
@@ -246,7 +259,7 @@ function payoutReceipt(payout: Payout, id: bigint, owner: Address, time: number,
       [
         `Retired ${share(payout.retiredKvcm)}`,
         `${payout.retiredKvcm ? "−" : ""}${amount(payout.retiredKvcm, 18)} kVCM`,
-        payout.tonnes ? `${amount(payout.tonnes, 18)} t of carbon credits, through Klima Protocol` : null,
+        payout.tonnes ? frag(`${amount(payout.tonnes, 18)} t of carbon credits`, throughKlima()) : null,
       ],
       [`Fee ${share(kvcm(payout.fees))}`, amounts(payout.fees, p.tokens, payout.fees.length ? "−" : "", "0 kVCM")],
     ],

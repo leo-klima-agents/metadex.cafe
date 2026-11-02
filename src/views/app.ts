@@ -29,7 +29,9 @@ export function drawApp(): void {
     el.dataset.arg = arg;
     return el;
   };
-  const toHydrex = link(hrefOf({ view: "hydrex" }), "Change");
+  // A link that does a button's job is drawn as one.
+  const changeLink = (href: string) => Object.assign(link(href, "Change"), { className: "button secondary compact" });
+  const toHydrex = changeLink(hrefOf({ view: "hydrex" }));
   if (holdings.value) {
     const { owner, accounts, epochStart } = holdings.value;
     const statuses = accounts
@@ -49,7 +51,7 @@ export function drawApp(): void {
         key: "stopped",
         shape: "stopped",
         words: `${count(stopped, "Hydrex account", "Hydrex accounts")} in ${stopped === 1 ? "a stopped automation" : "stopped automations"}`,
-        act: link(hrefOf({ view: "hydrex" }), "Change"),
+        act: changeLink(hrefOf({ view: "hydrex" })),
       });
     for (const { account, status: st } of statuses)
       if (st.kind === "partly")
@@ -57,7 +59,7 @@ export function drawApp(): void {
           key: `partly ${account.id}`,
           shape: "stopped",
           words: `Hydrex account #${account.id} is partly in ${st.automation.name}`,
-          act: link(hrefOf({ view: "account", id: account.id }), "Change"),
+          act: changeLink(hrefOf({ view: "account", id: account.id })),
         });
     for (const entry of found ? overdue(found) : [])
       needs.push({

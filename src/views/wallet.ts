@@ -13,20 +13,22 @@ let switchFailed = false;
 const popup = $("#connect");
 const listening = new WeakSet<EIP1193Provider>();
 
+// The wallets in the browser: in the header's popup, and in the page wherever a view needs a wallet.
 export function drawWallets(): void {
-  list(
-    $("[data-list=wallet]", popup),
-    wallets,
-    ({ name }) => name,
-    (row, wallet) => {
-      fill(row, { name: wallet.name });
-      const icon = row.querySelector("img")!;
-      icon.hidden = !wallet.icon;
-      if (wallet.icon) icon.src = wallet.icon;
-    },
-  );
-  fill(popup, { connecting: message, "no-wallet": missing || null });
-  fill(document.body, { "switch-failed": switchFailed || null });
+  for (const el of document.querySelectorAll<HTMLElement>("[data-list=wallet]"))
+    list(
+      el,
+      wallets,
+      ({ name }) => name,
+      (row, wallet) => {
+        fill(row, { name: wallet.name });
+        const icon = row.querySelector("img")!;
+        icon.hidden = !wallet.icon;
+        if (wallet.icon) icon.src = wallet.icon;
+      },
+    );
+  fill(popup, { "no-wallet": missing || null });
+  fill(document.body, { connecting: message, "switch-failed": switchFailed || null });
 }
 
 export function startWallets(): void {
