@@ -78,11 +78,13 @@
 ::after {
   box-sizing: border-box;
 }
+/* The page is a column of 42rem, with its gutters outside it. */
 body {
+  box-sizing: content-box;
   display: flex;
   flex-direction: column;
   min-block-size: 100svh;
-  max-inline-size: calc(42rem + 2 * var(--inset));
+  max-inline-size: 42rem;
   margin: 0 auto;
   padding-inline: var(--inset);
   overflow-wrap: anywhere;
@@ -224,10 +226,10 @@ details[open] > summary::before {
 .loose {
   gap: var(--gap-l);
 }
-/* In a `.stack`, `.part` tops the gap up to `--gap-l` for a section within a section; `.below` spaces a list from the
-   summary above it. */
+/* In a `.stack`, `.part` adds a gap to the stack's own, `--gap-l` in all, for a section within a section; `.below`
+   spaces a list from the summary above it. */
 .part {
-  margin-block-start: calc(var(--gap-l) - var(--gap));
+  margin-block-start: var(--gap);
 }
 .below {
   margin-block-start: var(--gap);
@@ -732,13 +734,14 @@ label.ticks:has(.tick:disabled) {
 .tick {
   flex: none;
 }
+/* The box's target takes the card's padding, 0.75rem by 1rem, back to its edge. */
 .pick {
   display: flex;
   align-self: stretch;
   margin-block: -0.75rem;
-  margin-inline-start: calc(-1 * var(--gap));
+  margin-inline-start: -1rem;
   padding-block: 0.75rem;
-  padding-inline-start: var(--gap);
+  padding-inline-start: 1rem;
   cursor: pointer;
 }
 .pick:has(> [hidden]) {
@@ -805,9 +808,10 @@ label.ticks:has(.tick:disabled) {
   text-indent: -1.125em;
 }
 
+/* A dialog is 36rem wide. The review, a modal dialog, keeps the browser's limit, a little less than the screen. A popup
+   has none: its insets keep it 1rem from the screen's sides, and it is at most 44rem tall, or 90% of a short screen. */
 dialog {
-  inline-size: min(36rem, 100% - 2rem);
-  max-block-size: min(44rem, 100% - 3rem);
+  inline-size: 36rem;
   padding: 0 var(--inset) var(--inset);
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -815,6 +819,22 @@ dialog {
   color: var(--ink);
   box-shadow: 0 1rem 3rem rgb(0 0 0 / 0.25);
   overscroll-behavior: contain;
+}
+dialog[popover] {
+  inset-inline: 1rem;
+  inline-size: auto;
+  max-inline-size: 36rem;
+  max-block-size: 44rem;
+  padding-inline: 0;
+}
+@media (max-height: 47rem) {
+  dialog[popover] {
+    max-block-size: 90svh;
+  }
+}
+/* A popup's bar reaches its edges, and the rest keeps the inset. */
+dialog[popover] > :not(.bar) {
+  margin-inline: var(--inset);
 }
 dialog::backdrop {
   background: rgb(0 0 0 / 0.4);
@@ -829,7 +849,6 @@ dialog[open] {
   position: sticky;
   inset-block-start: 0;
   z-index: 1;
-  margin-inline: calc(-1 * var(--inset));
   padding: 0.5rem 0.5rem 0.5rem var(--inset);
   border-block-end: 1px solid var(--line);
   background: var(--paper);
@@ -840,7 +859,6 @@ dialog[open] {
 /* The review has no bottom padding: under the sticky foot it would show content scrolling beneath, so the foot pads
    itself. */
 .review {
-  max-block-size: calc(100% - 2rem);
   padding-block: var(--inset) 0;
 }
 .foot {
@@ -1040,7 +1058,7 @@ td:first-child {
     block-size: 1.5rem;
   }
   dialog[popover] {
-    inline-size: 100%;
+    inset-inline: 0;
     max-inline-size: none;
     margin-block-end: 0;
     border-end-start-radius: 0;
