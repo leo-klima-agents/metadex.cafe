@@ -1,4 +1,4 @@
-import { maxUint256, type Address } from "viem";
+import { isAddress, maxUint256, type Address } from "viem";
 import { then, use, type Got } from "../cache.ts";
 import { swapsOff } from "../checks.ts";
 import { AUTOMATIONS, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
@@ -7,7 +7,7 @@ import { count, fixed, figure, fraction, money, moneyAt, utc, type Money } from 
 import { ethCost, gasWords, key, noPrices, pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
 import { hrefOf, parse } from "../routes.ts";
 import { routeTogether, type Sale } from "../routing.ts";
-import { gasPaid, includedAt, now, readCosts, same, tagged, type Costs, type Receipt } from "../rpc.ts";
+import { gasPaid, includedAt, now, readCosts, same, tagged, type Costs, type Landed } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import * as swap from "../swap.ts";
 import type { Routed, Item, Plan, Route } from "../swap.ts";
@@ -346,7 +346,8 @@ export function drawSwap(): void {
 }
 
 actions.output = (el) => {
-  location.hash = hrefOf({ view: "swap", output: (el as HTMLInputElement).value as Swapper["output"] });
+  const swapper = swapperOf((el as HTMLInputElement).value);
+  if (swapper) location.hash = hrefOf({ view: "swap", output: swapper.output });
   ticks.clear();
 };
 actions.tick = (el) => {
@@ -358,14 +359,14 @@ actions.margin = (el) => {
   render();
 };
 actions.add = async (el) => {
-  const address = ((el as HTMLFormElement).elements.namedItem("address") as HTMLInputElement).value.trim();
   const input = (el as HTMLFormElement).elements.namedItem("address") as HTMLInputElement;
-  added = /^0x[0-9a-fA-F]{40}$/.test(address) ? "" : "That's not a token's address.";
-  if (!added) {
-    const found = await tokensOf([address as Address]).catch(() => new Map());
+  const address = input.value.trim();
+  if (!isAddress(address, { strict: false })) added = "That's not a token's address.";
+  else {
+    const found = await tokensOf([address]).catch(() => new Map());
     added = found.size ? "" : "No token at that address.";
     if (!added) {
-      know([address as Address]);
+      know([address]);
       input.value = "";
     }
   }
@@ -492,7 +493,7 @@ export async function reviewSwap(
 // The receipt: what each token fetched against its quote, the fee, what reached the wallet, and those skipped, which
 // stay in the wallet with their approval, which it offers to reset.
 export function swapReceipt(
-  receipts: Receipt[],
+  receipts: Landed[],
   plan: Plan,
   tokens: Map<string, Token>,
   prices: Prices | undefined,

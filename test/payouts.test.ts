@@ -263,30 +263,41 @@ test("records are read in one batch; what waits in batches of 20, and what lies 
   });
   const ids = Array.from({ length: 11 }, (_, i) => BigInt(i + 1));
   const stamps = await readStamps(ids, [fees, bribes], TOP);
-  assert.deepEqual(stamps[1], [SEP_17, SEP_17]);
+  assert.deepEqual(stamps.get(2n), [SEP_17, SEP_17]);
   batches.length = 0;
   const owed = await readOwed(ids, [fees, bribes], TOP, [OCT_8, OCT_15]);
   assert.deepEqual(
     batches.sort((a, b) => a - b),
-    [2, 2, 13, 20, 22],
+    [2, 2, 2, 11, 20, 22],
   );
   // earned() reads from a week before the first incentives: both epochs lie past its 50, and are read on their own.
   assert.deepEqual(past, [
     [1n, USDC, OCT_8],
     [1n, USDC, OCT_15],
   ]);
-  assert.deepEqual(owed[0], [
-    { amount: 19n, passes: 2, stamp: 0 },
-    { amount: 5n, passes: 1, stamp: SEP_17 },
-  ]);
-  assert.deepEqual(owed[1]![1], { amount: undefined, passes: 1, stamp: SEP_17 }, "a failed read is unknown");
+  assert.deepEqual(owed[0], {
+    id: 1n,
+    owing: [
+      { pair: fees, amount: 19n, passes: 2, stamp: 0 },
+      { pair: bribes, amount: 5n, passes: 1, stamp: SEP_17 },
+    ],
+  });
   assert.deepEqual(
-    owed.map((pairs) => pairs.map(({ stamp }) => stamp)),
+    owed[1]!.owing[1],
+    { pair: bribes, amount: undefined, passes: 1, stamp: SEP_17 },
+    "a failed read is unknown",
+  );
+  assert.deepEqual(
+    new Map(owed.map(({ id, owing }) => [id, owing.map(({ stamp }) => stamp)])),
     await readStamps(ids, [fees, bribes], TOP),
     "with the records it read",
   );
-  const first = (await readOwed([1n], [fees], TOP, [OCT_8, LATER]))[0]![0];
-  assert.deepEqual(first, { amount: 12n, passes: 2, stamp: 0 }, "asked as far as an epoch that owes something");
+  const [first] = await readOwed([1n], [fees], TOP, [OCT_8, LATER]);
+  assert.deepEqual(
+    first?.owing,
+    [{ pair: fees, amount: 12n, passes: 2, stamp: 0 }],
+    "asked as far as an epoch that owes something",
+  );
   assert.equal(windowStart(SEP_17, FIRST, 0), SEP_17, "from the last claim");
   assert.equal(windowStart(0, FIRST, OCT_1), OCT_1, "or from the account's creation, after the first incentives");
   assert.deepEqual([passesTo(OCT_1, OCT_15), passesTo(OCT_15 - 50 * WEEK, OCT_15)], [1, 2]);

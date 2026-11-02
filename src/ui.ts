@@ -77,18 +77,23 @@ export function fill(root: ParentNode, values: Record<string, Value>): void {
 }
 
 // A list's rows, from its template, kept by key so that focus and ticks survive each draw.
+// A copy of the element a template of the page holds.
+export const fromTemplate = (id: string): HTMLElement =>
+  $<HTMLTemplateElement>(`#${id}`).content.firstElementChild!.cloneNode(true) as HTMLElement;
+
 export function list<T>(
-  el: Element,
+  el: HTMLElement,
   items: T[],
   keyOf: (item: T, i: number) => string,
   fillRow: (row: HTMLElement, item: T, i: number) => void,
 ): void {
-  const template = document.getElementById((el as HTMLElement).dataset.list!) as HTMLTemplateElement;
-  const old = new Map([...el.children].map((row) => [(row as HTMLElement).dataset.key, row as HTMLElement]));
-  const empty = (el as HTMLElement).dataset.empty;
+  const old = new Map(
+    [...el.children].filter((row) => row instanceof HTMLElement).map((row) => [row.dataset.key, row]),
+  );
+  const empty = el.dataset.empty;
   const rows = items.map((item, i) => {
     const key = keyOf(item, i);
-    const row = old.get(key) ?? (template.content.firstElementChild!.cloneNode(true) as HTMLElement);
+    const row = old.get(key) ?? fromTemplate(el.dataset.list!);
     row.dataset.key = key;
     old.delete(key);
     fillRow(row, item, i);
@@ -127,7 +132,7 @@ export function bill(
   foot: Value = null,
   after: Value = null,
 ): HTMLElement {
-  const node = $<HTMLTemplateElement>("#bill").content.firstElementChild!.cloneNode(true) as HTMLElement;
+  const node = fromTemplate("bill");
   fill(node, { label, day, total, "total-value": value, "total-worth": worth, "total-detail": detail, foot, after });
   list(
     $("[data-list=line]", node),

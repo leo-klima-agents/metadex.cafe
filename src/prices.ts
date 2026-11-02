@@ -9,7 +9,11 @@ export type Token = { address: Address; decimals: number; symbol: string };
 // Per whole token, by lower-case address. `standIns` are today's prices of tokens none of whose pools kept a history
 // at a past time: only to weigh rewards against one another, never shown.
 export type Prices = Basis & { of: Map<string, number>; standIns: Map<string, number> };
-export const key = (address: string): string => address.toLowerCase();
+export function key(address: Address): Address;
+export function key(address: string): string;
+export function key(address: string): string {
+  return address.toLowerCase();
+}
 // Prices of nothing, as for votes that earned nothing.
 export const noPrices = (): Prices => ({ unit: "USD", of: new Map(), standIns: new Map() });
 export const worthOf = (amount: bigint, decimals: number, price: number): number =>
@@ -120,12 +124,12 @@ function spacings(rd: Read): Promise<Map<number, number[]>> {
 
 // Each pair's pools on the exchanges given, in their order, by pairKey. Lookups not yet kept go in one read.
 export async function waysFor(
-  pairs: [Address, Address][],
+  pairs: readonly (readonly [Address, Address])[],
   exchanges: Exchange[] = BY_ID,
   rd: Read = read,
 ): Promise<Map<string, Way[]>> {
   const sorted = (a: Address, b: Address): [Address, Address] => (key(a) < key(b) ? [a, b] : [b, a]);
-  const at = (exchange: Exchange, pair: [Address, Address]) => `${exchange.id} ${pairKey(...sorted(...pair))}`;
+  const at = (exchange: Exchange, pair: readonly [Address, Address]) => `${exchange.id} ${pairKey(...sorted(...pair))}`;
   const missing = [
     ...new Map(pairs.flatMap((pair) => exchanges.map((e) => [at(e, pair), [e, sorted(...pair)] as const]))).entries(),
   ].filter(([id]) => !pools.has(id));

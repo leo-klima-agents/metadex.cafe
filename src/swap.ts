@@ -175,7 +175,7 @@ export async function findRoute(
   let open: Partial[] = candidatePaths(token, output.token, hydrex).map((path) => ({ path, hops: [], amount }));
   const complete: Partial[] = [];
   while (open.length) {
-    const legs = open.map(({ path, hops }) => [path[hops.length]!, path[hops.length + 1]!] as [Address, Address]);
+    const legs = open.map(({ path, hops }) => [path[hops.length]!, path[hops.length + 1]!] as const);
     const ways = await waysFor(legs, undefined, rd);
     // Legs that share their pair and amount share quotes.
     const asked = new Map<string, { way: Way; index: number }[]>();

@@ -7,7 +7,7 @@ import { WEEK, weekStart } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { key, worthOf, type Prices } from "./prices.ts";
 import { rewardsFor, type Earnings, type Reward } from "./rewards.ts";
-import { blockTime, call, now, read, readLists, required, rpc, same } from "./rpc.ts";
+import { blockTime, call, now, read, readEach, required, rpc, same } from "./rpc.ts";
 
 // Hydrex's reward contracts record, for each account and token, the start of the epoch up to which they have paid it:
 // every claim sets it to the current epoch, even of nothing. An epoch counts as paid once the records of more than half
@@ -148,16 +148,15 @@ export function standingOf(
   return { id, paidUpTo, paid, late, waiting, unknown };
 }
 
-const pairReads = (ids: bigint[], pairs: Pair[], name: "tokenTimestamp" | "earned") =>
-  ids.flatMap((id) => pairs.map(({ contract, token }) => call(contract, rewardsAbi, name, id, token)));
-const byAccount = <T>(values: T[], ids: bigint[], pairs: Pair[]): T[][] =>
-  ids.map((_, a) => values.slice(a * pairs.length, (a + 1) * pairs.length));
+// Each account with each pair.
+const cellsOf = <P extends Pair>(ids: bigint[], pairs: P[]) => ids.flatMap((id) => pairs.map((pair) => ({ id, pair })));
+const stampOf = ({ id, pair }: { id: bigint; pair: Pair }) =>
+  call(pair.contract, rewardsAbi, "tokenTimestamp", id, pair.token);
 // Each account's record in each pair, at a block.
-export async function readStamps(ids: bigint[], pairs: Pair[], block: number): Promise<number[][]> {
-  return byAccount(
-    required(await read(pairReads(ids, pairs, "tokenTimestamp"), { block, tag: "payouts" })).map(Number),
-    ids,
-    pairs,
+export async function readStamps(ids: bigint[], pairs: Pair[], block: number): Promise<Map<bigint, number[]>> {
+  const found = await readEach(cellsOf(ids, pairs), { stamp: stampOf }, { block, tag: "payouts" });
+  return new Map(
+    ids.map((id) => [id, required(found.flatMap(({ item, stamp }) => (item.id === id ? [stamp] : []))).map(Number)]),
   );
 }
 // earned() reads at most 50 epochs: from the account's last claim from the contract, or, if it never claimed there, from
@@ -173,62 +172,62 @@ export const passesTo = (start: number, epoch: number): number =>
 // What each account can claim from each pair: what earned() reads, and, of the `epochs` given, those past it, each read
 // on its own; with the claim's passes, and the pair's record. If where earned() starts cannot be read, what it reads
 // alone. earned() adds up to 50 epochs, about a million gas each, so 20 a batch.
-type Owing = { amount: bigint | undefined; passes: number; stamp: number | undefined };
-export async function readOwed(
+type Owing<P> = { pair: P; amount: bigint | undefined; passes: number; stamp: number | undefined };
+export async function readOwed<P extends Pair>(
   ids: bigint[],
-  pairs: Pair[],
+  pairs: P[],
   block: number | "latest",
   epochs: number[],
-): Promise<Owing[][]> {
+): Promise<{ id: bigint; owing: Owing<P>[] }[]> {
+  const cells = cellsOf(ids, pairs);
   const contracts = [...new Map(pairs.map(({ contract }) => [key(contract), contract])).values()];
   const at = { block, tag: "payouts" } as const;
-  const [earned, stamps, context] = await Promise.all([
-    read(pairReads(ids, pairs, "earned"), { ...at, perBatch: 20 }),
-    read(pairReads(ids, pairs, "tokenTimestamp"), at),
-    readLists(
-      {
-        firsts: contracts.map((contract) => call(contract, rewardsAbi, "firstBribeTimestamp")),
-        points: ids.map((id) => escrow("getFirstEscrowPoint", id)),
-      },
-      at,
+  const [earned, stamps, firsts, points] = await Promise.all([
+    readEach(
+      cells,
+      { amount: ({ id, pair }) => call(pair.contract, rewardsAbi, "earned", id, pair.token) },
+      { ...at, perBatch: 20 },
     ),
+    readEach(cells, { stamp: stampOf }, at),
+    readEach(contracts, { first: (contract) => call(contract, rewardsAbi, "firstBribeTimestamp") }, at),
+    readEach(ids, { point: (id) => escrow("getFirstEscrowPoint", id) }, at),
   ]);
-  const firsts = new Map(contracts.map((contract, i) => [key(contract), context.firsts[i]]));
-  const created = context.points.map((point) => point?.[1]);
-  const starts = ids.flatMap((_, a) =>
-    pairs.map(({ contract }, p) => {
-      const [stamp, first] = [stamps[a * pairs.length + p], firsts.get(key(contract))];
-      if (stamp === undefined || first === undefined || (stamp < first && created[a] === undefined)) return undefined;
-      return windowStart(Number(stamp), Number(first), weekStart(created[a] ?? 0));
+  const stampOfCell = new Map(stamps.map(({ item, stamp }) => [item, stamp]));
+  const firstOf = new Map(firsts.map(({ item, first }) => [key(item), first]));
+  const createdOf = new Map(points.map(({ item, point }) => [item, point?.[1]]));
+  const rows = earned.map(({ item: cell, amount }) => {
+    const [stamp, first, created] = [
+      stampOfCell.get(cell),
+      firstOf.get(key(cell.pair.contract)),
+      createdOf.get(cell.id),
+    ];
+    const start =
+      stamp === undefined || first === undefined || (stamp < first && created === undefined)
+        ? undefined
+        : windowStart(Number(stamp), Number(first), weekStart(created ?? 0));
+    return { ...cell, amount, passes: 1, stamp: stamp === undefined ? undefined : Number(stamp), start };
+  });
+  const past = await readEach(
+    rows.flatMap((row) => {
+      const start = row.start;
+      return start === undefined
+        ? []
+        : epochs.filter((epoch) => epoch >= start + WINDOW).map((epoch) => ({ row, start, epoch }));
     }),
+    { hidden: ({ row, epoch }) => call(row.pair.contract, rewardsAbi, "earnedTokenId", row.id, row.pair.token, epoch) },
+    at,
   );
-  const past = starts.flatMap((start, i) =>
-    start === undefined
-      ? []
-      : epochs
-          .filter((epoch) => epoch >= start + WINDOW)
-          .map((epoch) => {
-            const [id, { contract, token }] = [ids[Math.floor(i / pairs.length)]!, pairs[i % pairs.length]!];
-            return { i, epoch, call: call(contract, rewardsAbi, "earnedTokenId", id, token, epoch) };
-          }),
-  );
-  const amounts = past.length
-    ? await read(
-        past.map((each) => each.call),
-        at,
-      )
-    : [];
-  const owing: Owing[] = earned.map((amount, i) => {
-    const stamp = stamps[i];
-    return { amount, passes: 1, stamp: stamp === undefined ? undefined : Number(stamp) };
-  });
-  past.forEach(({ i, epoch }, k) => {
-    const hidden = amounts[k];
-    const each = owing[i]!;
-    each.amount = each.amount === undefined || hidden === undefined ? undefined : each.amount + hidden;
-    if (hidden) each.passes = Math.max(each.passes, passesTo(starts[i]!, epoch));
-  });
-  return byAccount(owing, ids, pairs);
+  for (const { item, hidden } of past) {
+    const { row, start, epoch } = item;
+    row.amount = row.amount === undefined || hidden === undefined ? undefined : row.amount + hidden;
+    if (hidden) row.passes = Math.max(row.passes, passesTo(start, epoch));
+  }
+  return ids.map((id) => ({
+    id,
+    owing: rows.flatMap(({ id: of, pair, amount, passes, stamp }) =>
+      of === id ? [{ pair, amount, passes, stamp }] : [],
+    ),
+  }));
 }
 
 // The first block after `from`, up to `to`, at which each item has reached what it waits for, if it has by `to`. Each
@@ -459,19 +458,24 @@ export async function walkClaims(
   const walks = new Map<bigint, Walk>([...starts.keys()].map((id) => [id, { claims: [], stopped: false }]));
   let at = new Map([...starts].flatMap(([id, { from }]) => (from > 0 ? [[id, from] as const] : [])));
   for (let round = 1; at.size; round++) {
-    const blocks = [...new Set(at.values())];
-    const found = await Promise.all(
-      blocks.map((block) =>
-        claimsAt(
-          block,
-          [...at].flatMap(([id, current]) => (current === block ? [id] : [])),
+    const found = new Map(
+      await Promise.all(
+        [...new Set(at.values())].map(
+          async (block) =>
+            [
+              block,
+              await claimsAt(
+                block,
+                [...at].flatMap(([id, current]) => (current === block ? [id] : [])),
+              ),
+            ] as const,
         ),
       ),
     );
     const next = new Map<bigint, number>();
     for (const [id, current] of at) {
       const walk = walks.get(id)!;
-      const mine = found[blocks.indexOf(current)]!.filter((claim) => claim.id === id && claim.block === current);
+      const mine = (found.get(current) ?? []).filter((claim) => claim.id === id && claim.block === current);
       // A claim that received nothing moved nothing.
       walk.claims.push(...mine.filter(({ received }) => received.length));
       const before = Math.min(...mine.map(({ previous }) => previous).filter((previous) => previous < current));
@@ -543,53 +547,50 @@ async function matchaLatteParts(
   standings: Promise<(Standing | undefined)[]>,
   top: number,
   time: number,
-): Promise<Part[]> {
+): Promise<Map<bigint, Part>> {
   const blocks = await payoutBlocks(
     (await standings).filter((standing) => !!standing),
     top,
     time,
   );
+  const unique = [...new Set(blocks.values())];
   const [paid, times] = await Promise.all([
-    Promise.all([...new Set(blocks.values())].map(payoutsIn)),
-    Promise.all([...blocks.values()].map(timeOf)),
+    Promise.all(unique.map(payoutsIn)),
+    Promise.all(unique.map(async (block) => [block, await timeOf(block)] as const)).then((each) => new Map(each)),
   ]);
-  return ids.map((id) => {
-    const block = blocks.get(id);
-    if (block === undefined) return {};
-    const payout = paid
-      .flat()
-      .filter((each) => each.id === id && each.block === block)
-      .at(-1);
-    return { block, time: times[[...blocks.values()].indexOf(block)], payout, note: payout ? undefined : "outside" };
-  });
-}
-async function doubleEspressoParts(ids: bigint[], top: number): Promise<Part[]> {
-  const last = required(
-    await read(
-      ids.map((id) => call(DOUBLE_ESPRESSO.address, doubleEspressoAbi, "lastClaimBlock", id)),
-      { block: top, tag: "payouts" },
-    ),
-  ).map(Number);
-  const times = await Promise.all(last.map((block) => (block ? timeOf(block) : 0)));
-  const starts = await Promise.all(
-    ids.map(
-      async (id, i) =>
-        [
-          id,
-          { from: last[i]!, since: last[i] ? await epochBlock(weekStart(times[i]!), last[i]!, times[i]!) : 0 },
-        ] as const,
-    ),
+  return new Map(
+    ids.map((id): [bigint, Part] => {
+      const block = blocks.get(id);
+      if (block === undefined) return [id, {}];
+      const payout = paid
+        .flat()
+        .filter((each) => each.id === id && each.block === block)
+        .at(-1);
+      return [id, { block, time: times.get(block), payout, note: payout ? undefined : "outside" }];
+    }),
   );
-  const walks = await walkClaims(new Map(starts), claimsAt);
-  return ids.map((id, i) => {
-    const walk = walks.get(id)!;
-    return {
-      block: last[i] || undefined,
-      time: last[i] ? times[i] : undefined,
-      walk,
-      note: walk.claims.length ? undefined : "unclaimed",
-    };
-  });
+}
+async function doubleEspressoParts(ids: bigint[], top: number): Promise<Map<bigint, Part>> {
+  const found = await readEach(
+    ids,
+    { last: (id) => call(DOUBLE_ESPRESSO.address, doubleEspressoAbi, "lastClaimBlock", id) },
+    { block: top, tag: "payouts" },
+  );
+  const lasts = await Promise.all(
+    found.map(async ({ item: id, last }) => {
+      const block = Number(required([last])[0]);
+      const time = block ? await timeOf(block) : undefined;
+      const since = time === undefined ? 0 : await epochBlock(weekStart(time), block, time);
+      return { id, block, time, since };
+    }),
+  );
+  const walks = await walkClaims(new Map(lasts.map(({ id, block, since }) => [id, { from: block, since }])), claimsAt);
+  return new Map(
+    lasts.map(({ id, block, time }): [bigint, Part] => {
+      const walk = walks.get(id)!;
+      return [id, { block: block || undefined, time, walk, note: walk.claims.length ? undefined : "unclaimed" }];
+    }),
+  );
 }
 
 // The payouts of the accounts in the page's automations. `earningsOf` gives what an automation's votes earned last
@@ -603,14 +604,21 @@ export async function readPayouts(
   if (!members.length) return { epochStart, entries: [] };
   const ids = members.map(({ id }) => id);
   const top = Number(await rpc<Hex>("eth_blockNumber", [], { tag: "payouts" })) - SETTLED;
-  const delegates = (ago: number) => ids.map((id) => escrow("delegates", id, epochStart - ago * WEEK));
-  const held = await readLists(
-    { time: [blockTime], last: delegates(1), before: delegates(2) },
-    { block: top, tag: "payouts" },
-  );
-  const [time] = required(held.time);
+  const at = { block: top, tag: "payouts" } as const;
+  const [[time], held] = await Promise.all([
+    read([blockTime], at).then(required),
+    readEach(
+      ids,
+      {
+        last: (id) => escrow("delegates", id, epochStart - WEEK),
+        before: (id) => escrow("delegates", id, epochStart - 2 * WEEK),
+      },
+      at,
+    ),
+  ]);
+  const delegates = new Map(held.map(({ item, ...each }) => [item, each]));
   const votedWith = (automation: Automation, id: bigint, ago: 1 | 2): boolean =>
-    same((ago === 1 ? held.last : held.before)[ids.indexOf(id)] ?? "", automation.address);
+    same((ago === 1 ? delegates.get(id)?.last : delegates.get(id)?.before) ?? "", automation.address);
   const voterOf = (account: Account): Automation =>
     AUTOMATIONS.find((automation) => votedWith(automation, account.id, 1)) ?? automationOf(account)!;
   const groups = (of: (account: Account) => Automation) =>
@@ -628,24 +636,23 @@ export async function readPayouts(
       if (earnings.start < epochStart - WEEK) return these.forEach((id) => found.set(id, { early: true }));
       const last = { start: earnings.start, pairs: weighed(earnings.rewards, earnings.prices) };
       const votedBefore = these.filter((id) => votedWith(automation, id, 2));
-      const owing = await Promise.all([
-        readOwed(these, last.pairs, top, [last.start - WEEK, last.start]).then((owed) => ({
-          owed,
-          stamps: owed.map((pairs) => required(pairs.map(({ stamp }) => stamp))),
-        })),
+      const owed = await Promise.all([
+        readOwed(these, last.pairs, top, [last.start - WEEK, last.start]).then((rows) =>
+          rows.map(({ id, owing }) => ({
+            id,
+            earned: owing.map(({ amount }) => amount),
+            stamps: required(owing.map(({ stamp }) => stamp)),
+          })),
+        ),
         votedBefore.length ? rewardsFor(automation.address, earnings.start - WEEK) : [],
       ]).catch(() => undefined);
-      if (!owing) return;
-      const [{ owed, stamps }, rewards] = owing;
+      if (!owed) return;
+      const [rows, rewards] = owed;
       const before = { start: earnings.start - WEEK, pairs: weighed(rewards, earnings.prices) };
       const stampsBefore = await readStamps(votedBefore, before.pairs, top).catch(() => undefined);
       if (!stampsBefore) return;
-      these.forEach((id, i) => {
-        const records = {
-          last: stamps[i]!,
-          earned: owed[i]!.map(({ amount }) => amount),
-          before: stampsBefore[votedBefore.indexOf(id)] ?? [],
-        };
+      rows.forEach(({ id, earned, stamps }) => {
+        const records = { last: stamps, earned, before: stampsBefore.get(id) ?? [] };
         const voted = { last: votedWith(automation, id, 1), before: votedWith(automation, id, 2) };
         const standing =
           last.pairs.length || before.pairs.length ? standingOf(id, last, before, records, voted) : undefined;
@@ -662,7 +669,7 @@ export async function readPayouts(
           ? matchaLatteParts(these, theirs, top, Number(time))
           : doubleEspressoParts(these, top);
       const each = await reading.catch((error: unknown) => void console.error(error));
-      each?.forEach((part, i) => parts.set(these[i]!, part));
+      each?.forEach((part, id) => parts.set(id, part));
     }),
   );
   await standings;

@@ -3,7 +3,7 @@ import { SWAPPERS } from "./config.ts";
 import list from "./base-tokens.json" with { type: "json" };
 import { clean } from "./format.ts";
 import { key, type Token } from "./prices.ts";
-import { call, read, readLists, same, type Read } from "./rpc.ts";
+import { call, read, readEach, same, type Read } from "./rpc.ts";
 
 export { erc20Abi };
 // The tokens the page knows, whose balances it reads, as no RPC lists a wallet's tokens: Base's common tokens, and
@@ -34,20 +34,20 @@ export type Amount = { token: Address; amount: bigint };
 
 // Each token's symbol and decimals, by lower-case address, as its contract answers. Those without decimals are left out.
 export async function tokensOf(addresses: Address[], rd: Read = read): Promise<Map<string, Token>> {
-  const unique = [...new Set(addresses.map(key))] as Address[];
-  const found = await readLists(
+  const unique = [...new Set(addresses.map((address) => key(address)))];
+  const found = await readEach(
+    unique,
     {
-      symbols: unique.map((address) => call(address, erc20Abi, "symbol")),
-      decimals: unique.map((address) => call(address, erc20Abi, "decimals")),
+      symbol: (address) => call(address, erc20Abi, "symbol"),
+      decimals: (address) => call(address, erc20Abi, "decimals"),
     },
     {},
     rd,
   );
   return new Map(
-    unique.flatMap((address, i) => {
-      const [symbol, decimals] = [found.symbols[i], found.decimals[i]];
-      return decimals === undefined ? [] : [[address, { address, decimals, symbol: clean(symbol) || "?" }]];
-    }),
+    found.flatMap(({ item: address, symbol, decimals }) =>
+      decimals === undefined ? [] : [[address, { address, decimals, symbol: clean(symbol) || "?" }]],
+    ),
   );
 }
 // The same, the list's own first, each read once.
@@ -64,26 +64,27 @@ export async function describe(addresses: Address[]): Promise<Map<string, Token>
 
 // The wallet's balance of each token, and what it allows `spender` to take. A failed read counts as nothing.
 export async function holdingsOf(owner: Address, tokens: Address[], spender?: Address, rd: Read = read) {
-  const found = await readLists(
+  const found = await readEach(
+    tokens,
     {
-      balances: tokens.map((token) => call(token, erc20Abi, "balanceOf", owner)),
-      allowances: spender ? tokens.map((token) => call(token, erc20Abi, "allowance", owner, spender)) : [],
+      balance: (token) => call(token, erc20Abi, "balanceOf", owner),
+      allowance: spender ? (token) => call(token, erc20Abi, "allowance", owner, spender) : undefined,
     },
     {},
     rd,
   );
-  return new Map(
-    tokens.map((token, i) => [key(token), { balance: found.balances[i] ?? 0n, allowance: found.allowances[i] ?? 0n }]),
-  );
+  return new Map(found.map(({ item, balance = 0n, allowance = 0n }) => [key(item), { balance, allowance }]));
 }
 
 // What the wallet allows each swapper to take of each token, where it is more than nothing.
 export type Allowance = { token: Address; spender: Address; amount: bigint };
 export async function allowancesOf(owner: Address, tokens: Address[], rd: Read = read): Promise<Allowance[]> {
   const pairs = tokens.flatMap((token) => SWAPPERS.map(({ address }) => ({ token, spender: address })));
-  const replies = await rd(pairs.map(({ token, spender }) => call(token, erc20Abi, "allowance", owner, spender)));
-  return pairs.flatMap((pair, i) => {
-    const amount = replies[i];
-    return amount ? [{ ...pair, amount }] : [];
-  });
+  const found = await readEach(
+    pairs,
+    { amount: ({ token, spender }) => call(token, erc20Abi, "allowance", owner, spender) },
+    {},
+    rd,
+  );
+  return found.flatMap(({ item, amount }) => (amount ? [{ ...item, amount }] : []));
 }

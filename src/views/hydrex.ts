@@ -35,7 +35,7 @@ import { perThousand, perThousandOf, valueOf, versus, type Earnings } from "../r
 import { hrefOf } from "../routes.ts";
 import { now } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
-import { $, busy, enable, fill, frag, link, list, shown, stateOf, status, type Value } from "../ui.ts";
+import { $, busy, enable, fill, frag, fromTemplate, link, list, shown, stateOf, status, type Value } from "../ui.ts";
 import { openClaim } from "./claim.ts";
 import { openReview } from "./review.ts";
 
@@ -447,7 +447,7 @@ export function change(accounts: Account[], action: "join" | "leave" | "self", a
   const next = utc(holdings.epochStart + WEEK);
   const plural = (one: string, many: string) => (can.length === 1 ? one : many);
   if (action === "join" && automation) {
-    const body = $<HTMLTemplateElement>("#join").content.firstElementChild!.cloneNode(true) as HTMLElement;
+    const body = fromTemplate("join");
     const ml = automation === MATCHA_LATTE;
     const settings = data.matchaLatte().value;
     const fee =
@@ -514,7 +514,7 @@ export function change(accounts: Account[], action: "join" | "leave" | "self", a
       ...(action === "self" ? accounts.flatMap((account) => hydrex.otherName(account.delegate) ?? []) : []),
     ]),
   ];
-  const body = $<HTMLTemplateElement>("#leave").content.firstElementChild!.cloneNode(true) as HTMLElement;
+  const body = fromTemplate("leave");
   fill(body, { next });
   openReview({
     name: `Leave ${listWords(names)}`,
@@ -529,7 +529,7 @@ export function change(accounts: Account[], action: "join" | "leave" | "self", a
   });
 }
 function doneNode(words: string, vote = false): HTMLElement {
-  const done = $<HTMLTemplateElement>("#done").content.firstElementChild!.cloneNode(true) as HTMLElement;
+  const done = fromTemplate("done");
   fill(done, { words, vote: vote || null, "co-signers": null });
   return done;
 }

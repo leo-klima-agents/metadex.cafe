@@ -5,7 +5,7 @@ import { AUTOMATIONS } from "./config.ts";
 import { WEEK, clean, moneyAt, type Money } from "./format.ts";
 import { escrow, voter } from "./hydrex.ts";
 import { key, noPrices, pricesAtFlip, worthOf, type Prices, type Token } from "./prices.ts";
-import { blockTime, call, read, readLists, required, same, type Read } from "./rpc.ts";
+import { blockTime, call, read, readEach, required, same, type Read } from "./rpc.ts";
 import { tokensOf } from "./tokens.ts";
 
 // What votes earned in an epoch that has ended, from Hydrex's reward contracts: each pool's gauge has one for the
@@ -59,52 +59,39 @@ export const earnedBy = (perEpoch: bigint, supply: bigint, balance: bigint): big
 // What a voter's votes, or all votes, earned in the epoch from `start` in the contracts, and the votes for each pool.
 async function rewardsOf(contracts: Contract[], start: number, holder: Address | undefined, rd: Read) {
   const at = BigInt(start);
-  const totals = await readLists(
+  const totals = await readEach(
+    contracts,
     {
-      supplies: contracts.map(({ address }) => call(address, rewardsAbi, "totalSupplyAt", at)),
-      lengths: contracts.map(({ address }) => call(address, rewardsAbi, "rewardsListLength")),
-      balances: holder ? contracts.map(({ address }) => call(address, rewardsAbi, "balanceOfOwnerAt", holder, at)) : [],
+      supply: ({ address }) => call(address, rewardsAbi, "totalSupplyAt", at),
+      length: ({ address }) => call(address, rewardsAbi, "rewardsListLength"),
+      balance: holder ? ({ address }) => call(address, rewardsAbi, "balanceOfOwnerAt", holder, at) : undefined,
     },
     {},
     rd,
   );
-  const [supplies, lengths, balances] = [
-    required(totals.supplies),
-    required(totals.lengths),
-    required(totals.balances),
-  ];
-  const voted = contracts
-    .map((contract, i) => ({
-      ...contract,
-      supply: supplies[i]!,
-      length: Number(lengths[i]),
-      balance: holder ? balances[i]! : supplies[i]!,
-    }))
+  const voted = totals
+    .map(({ item, supply, length, balance }) => {
+      const [total, count] = required([supply, length]);
+      return { ...item, supply: total, length: Number(count), balance: holder ? required([balance])[0] : total };
+    })
     .filter(({ supply, balance }) => supply > 0n && balance > 0n);
-  const tokens = required(
-    await rd(
-      voted.flatMap(({ address, length }) =>
-        Array.from({ length }, (_, i) => call(address, rewardsAbi, "rewardTokens", BigInt(i))),
-      ),
-    ),
+  const listed = await readEach(
+    voted.flatMap((contract) => Array.from({ length: contract.length }, (_, index) => ({ contract, index }))),
+    { token: ({ contract, index }) => call(contract.address, rewardsAbi, "rewardTokens", BigInt(index)) },
+    {},
+    rd,
   );
-  let k = 0;
-  const listed = voted.map((contract) => ({ ...contract, tokens: tokens.slice(k, (k += contract.length)) }));
-  const data = required(
-    await rd(
-      listed.flatMap(({ address, tokens }) =>
-        tokens.map((token) => call(address, rewardsAbi, "rewardData", token, at)),
-      ),
-    ),
+  const perEpoch = await readEach(
+    listed.map(({ item: { contract }, token }) => ({ contract, token: required([token])[0] })),
+    { data: ({ contract, token }) => call(contract.address, rewardsAbi, "rewardData", token, at) },
+    {},
+    rd,
   );
-  k = 0;
-  const found = listed.flatMap(({ pool, address: contract, fee, supply, balance, tokens }) =>
-    tokens.flatMap((token) => {
-      const [, perEpoch] = data[k++]!;
-      const amount = holder ? earnedBy(perEpoch, supply, balance) : perEpoch;
-      return amount > 0n ? [{ pool, contract, token, amount, fee }] : [];
-    }),
-  );
+  const found = perEpoch.flatMap(({ item: { contract, token }, data }) => {
+    const [[, rewards]] = required([data]);
+    const amount = holder ? earnedBy(rewards, contract.supply, contract.balance) : rewards;
+    return amount > 0n ? [{ pool: contract.pool, contract: contract.address, token, amount, fee: contract.fee }] : [];
+  });
   const named = await tokensOf(
     found.map(({ token }) => token),
     rd,
@@ -151,22 +138,23 @@ export async function votesEarned(holder: Address, start: number, named: boolean
 }
 // A pool goes by its two tokens; a classic pair by its own symbol; a vault by both.
 async function withNames(used: [Address, bigint][], rd: Read): Promise<Pool[]> {
-  const found = await readLists(
+  const found = await readEach(
+    used,
     {
-      token0: used.map(([pool]) => call(pool, poolAbi, "token0")),
-      token1: used.map(([pool]) => call(pool, poolAbi, "token1")),
-      kinds: used.map(([pool]) => call(pool, poolAbi, "symbol")),
+      token0: ([pool]) => call(pool, poolAbi, "token0"),
+      token1: ([pool]) => call(pool, poolAbi, "token1"),
+      kind: ([pool]) => call(pool, poolAbi, "symbol"),
     },
     {},
     rd,
   );
   const symbols = await tokensOf(
-    [...found.token0, ...found.token1].filter((token) => token !== undefined),
+    found.flatMap(({ token0, token1 }) => [token0, token1]).filter((token) => token !== undefined),
     rd,
   );
   const symbol = (address: Address) => symbols.get(key(address))?.symbol ?? "?";
-  return used.map(([address, votes], i) => {
-    const [token0, token1, kind] = [found.token0[i], found.token1[i], clean(found.kinds[i])];
+  return found.map(({ item: [address, votes], token0, token1, kind: own }) => {
+    const kind = clean(own);
     const pair = token0 && token1 ? `${symbol(token0)} / ${symbol(token1)}` : "";
     return {
       address,
@@ -195,19 +183,17 @@ export async function rewardsFor(automation: Address, start: number, rd: Read = 
 // Who held each account's votes when the epoch from `start` began, and how many.
 export type Stake = { delegate: Address; votes: bigint };
 export async function stakesOf(ids: bigint[], start: number, rd: Read = read): Promise<Map<bigint, Stake>> {
-  const found = await readLists(
+  const found = await readEach(
+    ids,
     {
-      delegates: ids.map((id) => escrow("delegates", id, start)),
-      votes: ids.map((id) => escrow("balanceOfNFTAt", id, BigInt(start))),
+      delegate: (id) => escrow("delegates", id, start),
+      votes: (id) => escrow("balanceOfNFTAt", id, BigInt(start)),
     },
     {},
     rd,
   );
   return new Map(
-    ids.flatMap((id, i) => {
-      const [delegate, votes] = [found.delegates[i], found.votes[i]];
-      return delegate && votes ? [[id, { delegate, votes }]] : [];
-    }),
+    found.flatMap(({ item: id, delegate, votes }) => (delegate && votes ? [[id, { delegate, votes }]] : [])),
   );
 }
 // Whoever held the accounts' votes, other than the page's automations: mostly their owner. Each once.

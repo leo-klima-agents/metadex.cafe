@@ -1,6 +1,7 @@
 import { getAddress, type Address, type Hex } from "viem";
 import { CHAIN_ID, RPCS } from "./config.ts";
 import { clean } from "./format.ts";
+import type { Landed } from "./rpc.ts";
 
 export type Provider = {
   request(args: { method: string; params?: unknown }): Promise<unknown>;
@@ -256,19 +257,14 @@ export async function sendCalls({ provider, address }: Connection, txs: Tx[], at
   return typeof reply === "string" ? reply : String((reply as { id: string }).id);
 }
 
-type CallsReceipt = {
-  transactionHash: Hex;
-  status: Hex;
-  logs: { address: Address; data: Hex; topics: Hex[] }[];
-};
 // A batch is pending, included (with each transaction's receipt), or failed. Wallets of the first drafts answer in words.
 // One confirmed whose receipts have not come yet is still pending: they make its outcome.
-type CallsStatus = { state: "pending" | "done" | "failed"; receipts: CallsReceipt[] };
+type CallsStatus = { state: "pending" | "done" | "failed"; receipts: Landed[] };
 
 export async function callsStatus({ provider }: Connection, id: string): Promise<CallsStatus> {
   const reply = (await provider.request({ method: "wallet_getCallsStatus", params: [id] })) as {
     status: number | string;
-    receipts?: CallsReceipt[];
+    receipts?: Landed[];
   };
   const { status, receipts = [] } = reply;
   const state =

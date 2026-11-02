@@ -6,11 +6,11 @@ import { count, figure, listWords, money, moneyAt } from "../format.ts";
 import { summed, valueAt, type Overdue } from "../payouts.ts";
 import { gasWords, key, pricesNow, type Prices, type Token } from "../prices.ts";
 import { hrefOf } from "../routes.ts";
-import { costs, now, same, simulate, type Costs, type Receipt } from "../rpc.ts";
+import { costs, now, same, simulate, type Costs, type Landed } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import * as swap from "../swap.ts";
 import { describe, type Amount } from "../tokens.ts";
-import { $, fill, frag, list, type Value } from "../ui.ts";
+import { $, fill, frag, fromTemplate, list, type Value } from "../ui.ts";
 import { capabilities, type Slip } from "../wallet.ts";
 import { claimReceipt } from "./account.ts";
 import { openReview } from "./review.ts";
@@ -21,7 +21,7 @@ import { prefill, reviewSwap, swapReceipt } from "./swap.ts";
 type Claiming = {
   // The calls; those `sending` are encoded then, with a fresh deadline.
   steps: (sending?: boolean) => Slip[];
-  outcome: (receipts: Receipt[]) => Promise<Node | undefined>;
+  outcome: (receipts: Landed[]) => Promise<Node | undefined>;
   into: Value;
   gasWithSwap?: bigint | undefined;
   planned: number;
@@ -78,7 +78,7 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
   const together = (caps.atomic || !!connection.wallet.propose) && !apart;
   const totalGas = gas.reduce((sum, one) => sum + one, 0n);
 
-  const body = $<HTMLTemplateElement>("#claim-review").content.firstElementChild!.cloneNode(true) as HTMLElement;
+  const body = fromTemplate("claim-review");
   if (unread)
     body.prepend(
       Object.assign(document.createElement("p"), {
@@ -89,9 +89,9 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
   let prices: Prices | undefined;
   let settled = false;
   const ids = owing.map(({ id }) => id);
-  const brought = (receipts: Receipt[]): Amount[] =>
+  const brought = (receipts: Landed[]): Amount[] =>
     summed(claim.claimedIn(receipts, ids, connection.address).flatMap(({ paid }) => paid));
-  const asTheyAre = async (receipts: Receipt[]) =>
+  const asTheyAre = async (receipts: Landed[]) =>
     frag(...claimReceipts(receipts, ids, tokens, prices, connection.address), swapThese(brought(receipts)));
   const current: Claiming = { steps: () => calls, outcome: asTheyAre, into: "", planned: 0, planning: false };
   claiming = current;
@@ -129,7 +129,7 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
       [
         ["Earned", value(earned)],
         ["Fee 1%", value(fees)],
-      ] as [string, Value][],
+      ] satisfies [string, Value][],
       ([label]) => label,
       (row, [label, worth]) => fill(row, { label, value: worth, detail: null }),
     );
@@ -280,7 +280,7 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
 
 // Each account's claim receipt, from its Claimed events.
 function claimReceipts(
-  receipts: Receipt[],
+  receipts: Landed[],
   ids: bigint[],
   tokens: Map<string, Token>,
   prices: Prices | undefined,

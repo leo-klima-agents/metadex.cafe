@@ -144,19 +144,20 @@ export async function owedOf(
         ...new Map(rewards.map((reward) => [`${key(reward.contract)} ${key(reward.token.address)}`, reward])).values(),
       ];
       for (const { token } of pairs) tokens.set(key(token.address), token);
-      const [owing] = await readOwed(
+      const rows = await readOwed(
         [account.id],
-        pairs.map(({ contract, token }) => ({ contract, token: token.address })),
+        pairs.map(({ contract, token, fee }) => ({ contract, token: token.address, fee })),
         "latest",
         [earnings.start - WEEK, earnings.start],
       );
       return {
         id: account.id,
-        owed: pairs.flatMap(({ contract, token, fee }, i) => {
-          const { amount, passes } = owing![i]!;
-          if (amount === undefined) unread.add(key(contract));
-          return amount ? [{ contract, token: token.address, amount, fee, passes }] : [];
-        }),
+        owed: rows.flatMap(({ owing }) =>
+          owing.flatMap(({ pair, amount, passes }) => {
+            if (amount === undefined) unread.add(key(pair.contract));
+            return amount ? [{ ...pair, amount, passes }] : [];
+          }),
+        ),
       };
     }),
   );

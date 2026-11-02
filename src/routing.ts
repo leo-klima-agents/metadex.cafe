@@ -185,7 +185,7 @@ export async function routeTogether(
     ...new Map(
       paths.flat().flatMap((path) => path.slice(1).map((b, i) => [pairKey(path[i]!, b), [path[i]!, b]] as const)),
     ).values(),
-  ] as [Address, Address][];
+  ];
   const ways = await waysFor(pairs, undefined, rd);
   const poolsOf = (a: Address, b: Address) => ways.get(pairKey(a, b)) ?? [];
   const all = pairs.reduce((sum, [a, b]) => sum + poolsOf(a, b).length, 0);

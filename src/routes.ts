@@ -19,8 +19,11 @@ const SECTIONS = {
 };
 
 const HOME: Route = { view: "home" };
-const sectioned = (route: Route, section: string | undefined, sections: string[]): Route =>
-  section === undefined ? route : sections.includes(section) ? ({ ...route, section } as Route) : HOME;
+const sectioned = <R extends Extract<Route, { view: "app" | "product" | "swap" }>>(
+  route: R,
+  section: string | undefined,
+  sections: string[],
+): Route => (section === undefined ? route : sections.includes(section) ? { ...route, section } : HOME);
 
 export function parse(hash: string): Route {
   let fragment = hash.replace(/^#/, "");

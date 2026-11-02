@@ -46,6 +46,7 @@ export const HYDX: Address = "0x00000e7efa313F4E11Bfff432471eD9423AC6B30";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "CHF", "AUD", "CAD"] as const;
 export type Currency = (typeof CURRENCIES)[number];
+export const currencyOf = (name: string): Currency | undefined => CURRENCIES.find((each) => each === name);
 export type Fiat = Exclude<Currency, "USD">;
 // Chainlink feeds on Base, all with 8 decimals: each currency's price in dollars, and the anchors others are priced by.
 export const FIAT_FEEDS: Record<Fiat, Address> = {
@@ -73,8 +74,14 @@ export type Swapper = {
   places: number;
   address: Address;
 };
-const swapper = (output: Output, symbol: string, token: Address, decimals: number, places: number, address: Address) =>
-  ({ output, symbol, token, decimals, places, address }) as Swapper;
+const swapper = (
+  output: Output,
+  symbol: string,
+  token: Address,
+  decimals: number,
+  places: number,
+  address: Address,
+): Swapper => ({ output, symbol, token, decimals, places, address });
 export const SWAPPERS: Swapper[] = [
   swapper("usdc", "USDC", USDC, 6, 2, "0x31791f453d2100e728E012c9e189C0828adf4b6F"),
   swapper("eurc", "EURC", EURC, 6, 2, "0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E"),

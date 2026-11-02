@@ -2,7 +2,7 @@ import type { Hex } from "viem";
 import { refresh } from "../cache.ts";
 import { CHAIN_ID } from "../config.ts";
 import { count } from "../format.ts";
-import { sleep, waitForReceipt, type Receipt } from "../rpc.ts";
+import { sleep, waitForReceipt, type Landed } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import { $, announce, code, fill, frag, hex, link, list, BASESCAN } from "../ui.ts";
 import {
@@ -28,7 +28,7 @@ export type Review = {
   atomic?: boolean;
   // Calls too large for one transaction together, in groups that each fit one: counts of calls, in order.
   groups?: number[] | undefined;
-  outcome?: (receipts: Receipt[]) => Promise<Node | undefined>;
+  outcome?: (receipts: Landed[]) => Promise<Node | undefined>;
   // What the calls wait for, if anything: they may change until then, so none is sent.
   waiting?: () => string | undefined;
   // Where the page explains the calls, for a Safe's co-signers.
@@ -40,7 +40,7 @@ type Sending = Review & {
   // Whether the calls go in one prompt: decided as the first is sent, from the wallet and the calls then.
   batch?: boolean;
   done: Hex[];
-  receipts: Receipt[];
+  receipts: Landed[];
   proposed: number;
   sending: boolean;
   submitted: boolean;
@@ -290,7 +290,7 @@ async function sendBatch(review: Sending): Promise<void> {
     review.finished = true;
     review.done = status.receipts.map(({ transactionHash }) => transactionHash);
     if (status.state === "failed") return say(review, "The calls failed on Base, or your wallet did not send them.");
-    review.receipts = status.receipts as Receipt[];
+    review.receipts = status.receipts;
     return finish(review);
   }
   review.finished = true;

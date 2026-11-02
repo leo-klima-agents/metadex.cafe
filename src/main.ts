@@ -1,5 +1,5 @@
 import { failures, retry } from "./cache.ts";
-import { CHAIN_ID, type Currency } from "./config.ts";
+import { CHAIN_ID, currencyOf } from "./config.ts";
 import { preload } from "./data.ts";
 import { setCurrency, short } from "./format.ts";
 import { parse, type View } from "./routes.ts";
@@ -95,7 +95,8 @@ actions.skip = (_, event) => {
 };
 actions.retry = () => retry();
 actions.currency = (el) => {
-  setCurrency((el as HTMLSelectElement).value as Currency);
+  const currency = currencyOf((el as HTMLSelectElement).value);
+  if (currency) setCurrency(currency);
   render();
 };
 

@@ -98,7 +98,7 @@ export function drawApp(): void {
     $("[data-list=need]", view),
     needs,
     ({ key }) => key,
-    (li, need) => fill(li, { words: frag(status(need.shape, ""), need.words as string), act: need.act }),
+    (li, need) => fill(li, { words: frag(status(need.shape, ""), need.words), act: need.act }),
   );
   // The Approvals popup: each account an automation holds, and each token approval to a swapper.
   const approvals = (holdings.value?.accounts ?? []).flatMap((account) => [

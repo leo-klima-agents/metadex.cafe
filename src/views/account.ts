@@ -44,7 +44,7 @@ const view = $('[data-view="account"]');
 
 // What waits for some accounts, at prices now, read again every five minutes.
 export function waiting(found: Payouts): Got<{ tokens: Map<string, Token>; prices: Prices }> {
-  const amounts = new Map<string, bigint>();
+  const amounts = new Map<Address, bigint>();
   for (const { standing } of found.entries)
     for (const { token, amount } of standing?.waiting ?? [])
       amounts.set(key(token), (amounts.get(key(token)) ?? 0n) + amount);
@@ -52,7 +52,7 @@ export function waiting(found: Payouts): Got<{ tokens: Map<string, Token>; price
   return use(
     `waiting ${[...amounts].join()}`,
     async () => {
-      const tokens = await tokensOf([...amounts.keys()] as Address[], tagged("payouts"));
+      const tokens = await tokensOf([...amounts.keys()], tagged("payouts"));
       return { tokens, prices: await pricesNow([...tokens.values()], amounts, tagged("payouts")) };
     },
     300_000,
@@ -214,7 +214,7 @@ function waitingLine(standing: Standing, found: Payouts): string {
 
 // A receipt's tokens and prices at its flip.
 function priced(amounts: Amount[], flip: number): { tokens?: Map<string, Token>; prices?: Prices } {
-  const addresses = [...new Set(amounts.map(({ token }) => key(token)))] as Address[];
+  const addresses = [...new Set(amounts.map(({ token }) => key(token)))];
   const tokens = use(`tokens ${addresses.join()}`, () => tokensOf(addresses, tagged("payouts"))).value;
   if (!tokens) return {};
   const most = new Map<string, bigint>();
@@ -304,8 +304,9 @@ export function claimReceipt(
 // Double Espresso's receipt on an account's page: its claims in the epoch of the last one, and who sent each.
 function claimsReceipt({ claims, stopped }: Walk, id: bigint, owner: Address, own: boolean): Node {
   const { received, fees, paid } = totals(claims);
-  const times = claims.map(({ block }) => data.blockTime(block).value);
-  const flip = times[0] === undefined ? undefined : weekStart(times[0]);
+  const timeOf = (block: number) => data.blockTime(block).value;
+  const first = claims[0] && timeOf(claims[0].block);
+  const flip = first === undefined ? undefined : weekStart(first);
   const p = flip === undefined ? {} : priced(received, flip);
   const you = (address: Address) => own && same(address, owner);
   const node = claimReceipt(
@@ -321,8 +322,9 @@ function claimsReceipt({ claims, stopped }: Walk, id: bigint, owner: Address, ow
     $("[data-list=claim]", node),
     claims,
     ({ tx }) => tx,
-    (row, { caller, owner: to, tx }, i) => {
-      const words = `${times[i] === undefined ? "" : utc(times[i]!)} · ${you(caller) ? "sent by you" : `sent by ${short(caller)}`}${same(to, owner) ? "" : `, to ${short(to)}`}`;
+    (row, { caller, owner: to, tx, block }) => {
+      const time = timeOf(block);
+      const words = `${time === undefined ? "" : utc(time)} · ${you(caller) ? "sent by you" : `sent by ${short(caller)}`}${same(to, owner) ? "" : `, to ${short(to)}`}`;
       fill(row, { words, tx: { href: `${BASESCAN}/tx/${tx}`, text: "Transaction", external: true } });
     },
   );

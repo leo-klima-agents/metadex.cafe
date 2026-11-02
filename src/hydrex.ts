@@ -5,7 +5,7 @@ import { AUTOMATIONS, MATCHA_LATTE, type Automation, type Kind } from "./config.
 import { WEEK, clean, listWords, weekStart } from "./format.ts";
 import conduits from "./hydrex-conduits.json" with { type: "json" };
 import { anchorsNow, key, type Prices } from "./prices.ts";
-import { blockTime, call, contract, costs, read, readLists, required, rpc, same, sawBlock } from "./rpc.ts";
+import { blockTime, call, contract, costs, read, readEach, required, rpc, same, sawBlock } from "./rpc.ts";
 import type { Slip, Tx } from "./wallet.ts";
 
 const l1Abi = parseAbi(["function getL1FeeUpperBound(uint256 unsignedTxSize) view returns (uint256)"]);
@@ -84,37 +84,41 @@ export type Account = {
 };
 export type Holdings = { owner: Address; accounts: Account[]; epochStart: number };
 
-// The accounts read for their owner, with when each of Hydrex's other automations last voted. If the Voter cannot be
-// read, an automation or an owner is just not known to have stopped voting.
+// When each of Hydrex's other automations last voted, by address; 0 if not known.
+async function othersVoted(): Promise<Map<Address, number>> {
+  const found = await readEach(others, { voted: ({ address }) => voter("lastVoted", address) });
+  return new Map(found.map(({ item, voted }) => [key(item.address), Number(voted ?? 0n)]));
+}
+// The accounts read for their owner. If the Voter cannot be read, an automation or an owner is just not known to have
+// stopped voting.
 async function accountsOf(
   owner: Address,
   ids: bigint[],
   epochStart: number,
-  voted: (bigint | undefined)[],
+  lastVoted: Map<Address, number>,
 ): Promise<Account[]> {
-  const lastVoted = new Map(others.map(({ address }, i) => [key(address), Number(voted[i] ?? 0n)]));
-  const found = await readLists({
-    ownerVoted: [voter("lastVoted", owner)],
-    locks: ids.map((id) => escrow("lockDetails", id)),
-    votes: ids.map((id) => escrow("balanceOfNFT", id)),
-    delegates: ids.map((id) => escrow("getLockDelegatee", id)),
-    atStart: ids.map((id) => escrow("delegates", id, epochStart)),
-    claimers: ids.map((id) => escrow("getClaimRedirectApproved", id)),
-    names: [call(config.ACCOUNT_NAMES, namesAbi, "getBulkNames", ids)],
-  });
-  const ownerVoted = Number(found.ownerVoted[0] ?? BigInt(epochStart));
-  const names = found.names[0] ?? [];
-  return ids.map((id, i): Account => {
+  const [[ownerVoted], found] = await Promise.all([
+    read([voter("lastVoted", owner)]),
+    readEach(ids, {
+      lock: (id) => escrow("lockDetails", id),
+      votes: (id) => escrow("balanceOfNFT", id),
+      delegate: (id) => escrow("getLockDelegatee", id),
+      atStart: (id) => escrow("delegates", id, epochStart),
+      claimer: (id) => escrow("getClaimRedirectApproved", id),
+      names: (id) => call(config.ACCOUNT_NAMES, namesAbi, "getBulkNames", [id]),
+    }),
+  ]);
+  return found.map(({ item: id, names, ...each }): Account => {
     const [{ amount, endTime, lockType }, votes, delegate, delegateAtStart, claimer] = required([
-      found.locks[i],
-      found.votes[i],
-      found.delegates[i],
-      found.atStart[i],
-      found.claimers[i],
+      each.lock,
+      each.votes,
+      each.delegate,
+      each.atStart,
+      each.claimer,
     ]);
     return {
       id,
-      name: clean(names[i]),
+      name: clean(names?.[0]),
       amount,
       end: Number(endTime),
       lockType,
@@ -122,32 +126,32 @@ async function accountsOf(
       delegate,
       delegateAtStart,
       delegateVoted: lastVoted.get(key(delegate)) ?? 0,
-      ownerVoted,
+      ownerVoted: Number(ownerVoted ?? BigInt(epochStart)),
       claimer,
     };
   });
 }
-// With what the accounts read: the block's time, and when each of Hydrex's other automations last voted.
-const context = () => ({ time: [blockTime], voted: others.map(({ address }) => voter("lastVoted", address)) });
 
 export async function readAccounts(owner: Address): Promise<Holdings> {
-  const found = await readLists({ count: [escrow("balanceOf", owner)], ...context() });
-  const [count, time] = required([found.count[0], found.time[0]]);
+  const [[count, time], lastVoted] = await Promise.all([
+    read([escrow("balanceOf", owner), blockTime]).then(required),
+    othersVoted(),
+  ]);
   sawBlock(Number(time));
   const epochStart = weekStart(Number(time));
   const indexes = Array.from({ length: Number(count) }, (_, i) => escrow("tokenOfOwnerByIndex", owner, BigInt(i)));
-  const accounts = await accountsOf(owner, required(await read(indexes)), epochStart, found.voted);
+  const accounts = await accountsOf(owner, required(await read(indexes)), epochStart, lastVoted);
   accounts.sort((a, b) => (a.votes === b.votes ? Number(a.id - b.id) : a.votes > b.votes ? -1 : 1));
   return { owner, accounts, epochStart };
 }
 // One account, whoever owns it; undefined if Hydrex has none of that number. ownerOf can fail for other reasons, so a
 // failed one is asked again on its own before the account is taken for gone.
 export async function readAccount(id: bigint): Promise<Holdings | undefined> {
-  const found = await readLists({ owner: [escrow("ownerOf", id)], ...context() });
-  const owner = found.owner[0] ?? (await read([escrow("ownerOf", id)]))[0];
+  const [[first, time], lastVoted] = await Promise.all([read([escrow("ownerOf", id), blockTime]), othersVoted()]);
+  const owner = first ?? (await read([escrow("ownerOf", id)]))[0];
   if (!owner) return undefined;
-  const epochStart = weekStart(Number(required(found.time)[0]));
-  return { owner, accounts: await accountsOf(owner, [id], epochStart, found.voted), epochStart };
+  const epochStart = weekStart(Number(required([time])[0]));
+  return { owner, accounts: await accountsOf(owner, [id], epochStart, lastVoted), epochStart };
 }
 
 // "in", "partly", "joined" and "left" are about the page's own automations.

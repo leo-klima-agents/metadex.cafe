@@ -191,19 +191,25 @@ export const tagged =
   (tag: Tag): Read =>
   (calls, options) =>
     read(calls, { ...options, tag });
-// Named lists of calls, read together as one: each list comes back on its own, typed by its calls.
-export async function readLists<const R extends Record<string, readonly Call[]>>(
-  lists: R,
+// What one of an item's calls returned, or undefined if it failed or was not asked.
+type Field<F> = F extends (item: never) => infer C ? Result<C> | undefined : undefined;
+// Some calls of each item, read together: each item comes back with what each of its calls returned, by name, so that
+// nothing is matched up by index. A field left undefined is not asked.
+export async function readEach<T, F extends Record<string, ((item: T) => Call) | undefined>>(
+  items: readonly T[],
+  fields: F,
   options?: ReadOptions,
   rd: Read = read,
-): Promise<{ [K in keyof R]: Results<R[K]> }> {
-  const names = Object.keys(lists);
+): Promise<({ item: T } & { [K in keyof F]: Field<F[K]> })[]> {
+  const asked = Object.entries(fields).flatMap(([name, of]) => (of ? [[name, of] as const] : []));
   const all: unknown[] = await rd(
-    names.flatMap((name) => lists[name]!),
+    asked.flatMap(([, of]) => items.map((item) => of(item))),
     options,
   );
-  let at = 0;
-  return Object.fromEntries(names.map((name) => [name, all.slice(at, (at += lists[name]!.length))])) as never;
+  return items.map((item, i) => ({
+    item,
+    ...Object.fromEntries(asked.map(([name], n) => [name, all[n * items.length + i]])),
+  })) as never;
 }
 // Throws unless every call was read.
 export function required<const T extends readonly unknown[]>(
@@ -242,6 +248,8 @@ export type Receipt = {
   effectiveGasPrice?: Hex;
   l1Fee?: Hex;
 };
+// What a receipt holds wherever it comes from, a wallet's included.
+export type Landed = Pick<Receipt, "transactionHash" | "status" | "logs" | "blockNumber">;
 // The receipt, or undefined if Base has not included the transaction within ten minutes.
 export async function waitForReceipt(hash: Hex): Promise<Receipt | undefined> {
   for (const end = Date.now() + 600_000; Date.now() < end; await sleep(2_000)) {
@@ -252,7 +260,7 @@ export async function waitForReceipt(hash: Hex): Promise<Receipt | undefined> {
   }
 }
 // When Base included the last of the receipts.
-export async function includedAt(receipts: Receipt[]): Promise<number | undefined> {
+export async function includedAt(receipts: Landed[]): Promise<number | undefined> {
   const block = receipts.at(-1)?.blockNumber;
   const found = block && (await rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [block, false]).catch(() => undefined));
   return found ? Number(found.timestamp) : undefined;
