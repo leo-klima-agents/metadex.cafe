@@ -743,13 +743,6 @@ dialog[open] {
   block-size: 1em;
 }
 
-.SkipLink {
-  position: absolute;
-  inset-block-start: var(--gap-s);
-  padding: var(--gap-s);
-  background: var(--paper);
-}
-
 .Slip {
   padding: var(--inset);
   font-size: var(--small);
@@ -976,8 +969,7 @@ dialog[open] {
 .u-hideEmpty:empty {
   display: none;
 }
-.u-visuallyHidden,
-.SkipLink:not(:focus) {
+.u-visuallyHidden {
   position: absolute;
   inline-size: 1px;
   block-size: 1px;
