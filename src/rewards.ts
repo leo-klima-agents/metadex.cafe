@@ -3,7 +3,7 @@ import { rewardsAbi } from "./abi.ts";
 import { memo } from "./cache.ts";
 import { WEEK, clean, moneyAt, type Money } from "./format.ts";
 import { automationAt, escrow, voter } from "./hydrex.ts";
-import { key, noPrices, pricesAtFlip, worthOf, type Prices, type Token } from "./prices.ts";
+import { key, noPrices, pricesAtFlip, pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
 import { call, read, readEach, required, type Read } from "./rpc.ts";
 import { tokensOf } from "./tokens.ts";
 
@@ -12,8 +12,16 @@ import { tokensOf } from "./tokens.ts";
 
 type Pool = { address: Address; name: string; votes: bigint };
 export type Reward = { pool: Address; contract: Address; token: Token; amount: bigint; fee: boolean };
-// The epoch runs from start to start + WEEK; its prices are those at the flip that ended it.
-export type Earnings = { start: number; votes: bigint; pools: Pool[]; rewards: Reward[]; prices: Prices };
+// The epoch runs from start to start + WEEK; its prices are those at the flip that ended it. `standIns` holds today's
+// prices of tokens that had none then; they only weigh rewards against one another and are never shown.
+export type Earnings = {
+  start: number;
+  votes: bigint;
+  pools: Pool[];
+  rewards: Reward[];
+  prices: Prices;
+  standIns: Map<string, number>;
+};
 
 const poolAbi = parseAbi([
   "function token0() view returns (address)",
@@ -114,7 +122,11 @@ async function priced(start: number, votes: bigint, pools: Pool[], rewards: Rewa
   const amounts = new Map<string, bigint>();
   for (const { token, amount } of rewards) amounts.set(token.address, (amounts.get(token.address) ?? 0n) + amount);
   const tokens = [...new Map(rewards.map(({ token }) => [token.address, token])).values()];
-  return { start, votes, pools, rewards, prices: await pricesAtFlip(tokens, amounts, start + WEEK, rd) };
+  const prices = await pricesAtFlip(tokens, amounts, start + WEEK, rd);
+  const unpriced = tokens.filter(({ address }) => !prices.of.has(key(address)));
+  const today = unpriced.length ? await pricesNow(unpriced, amounts, rd).catch(() => noPrices()) : noPrices();
+  const standIns = new Map([...today.of].filter(([token]) => !prices.of.has(token)));
+  return { start, votes, pools, rewards, prices, standIns };
 }
 
 // What a voter earned in the epoch from `start`: an automation, whose pools are `named`, or an owner. Rewards go to the
@@ -129,7 +141,8 @@ export async function votesEarned(holder: Address, start: number, named: boolean
       escrow("getPastVotes", holder, BigInt(start)),
     ]),
   );
-  if (!votes || Number(voted) < start - WEEK) return { start, votes, pools: [], rewards: [], prices: noPrices() };
+  if (!votes || Number(voted) < start - WEEK)
+    return { start, votes, pools: [], rewards: [], prices: noPrices(), standIns: new Map() };
   const contracts =
     Number(voted) >= start + WEEK
       ? await allContracts(start)
@@ -202,24 +215,45 @@ export const holdersOf = (stakes: Iterable<Stake>): Address[] => [
   ...new Set([...stakes].flatMap(({ delegate }) => (automationAt(delegate) ? [] : [getAddress(delegate)]))),
 ];
 
-export function valueOf({ rewards, prices: own }: Earnings, prices = own) {
-  let [fees, incentives] = [0, 0];
+// A figure says "at least" when the rewards it leaves out for want of a price are worth, at today's prices, `SHORT` of
+// it or more. A token without a price today either has no market to speak of, so counts for nothing.
+const SHORT = 0.01;
+// `atLeast` tells which figures leave out that much: the total, the fees, the incentives, and which pools.
+export function valueOf({ rewards, prices: own, standIns }: Earnings, prices = own) {
+  const counted = { fees: 0, incentives: 0 };
+  const left = { fees: 0, incentives: 0 };
   const byPool = new Map<string, number>();
+  const leftByPool = new Map<string, number>();
   for (const { pool, token, amount, fee } of rewards) {
     const price = prices.of.get(key(token.address));
-    if (price === undefined) continue;
+    const part = fee ? "fees" : "incentives";
+    if (price === undefined) {
+      const today = worthOf(amount, token.decimals, standIns.get(key(token.address)) ?? 0);
+      left[part] += today;
+      leftByPool.set(key(pool), (leftByPool.get(key(pool)) ?? 0) + today);
+      continue;
+    }
     const value = worthOf(amount, token.decimals, price);
     byPool.set(key(pool), (byPool.get(key(pool)) ?? 0) + value);
-    if (fee) fees += value;
-    else incentives += value;
+    counted[part] += value;
   }
-  return { total: fees + incentives, fees, incentives, byPool, unit: prices.unit, rates: prices.rates };
+  const short = (missing: number, of: number) => missing > 0 && missing >= SHORT * of;
+  const total = counted.fees + counted.incentives;
+  const atLeast = {
+    total: short(left.fees + left.incentives, total),
+    fees: short(left.fees, counted.fees),
+    incentives: short(left.incentives, counted.incentives),
+    pools: new Set(
+      [...leftByPool].filter(([pool, missing]) => short(missing, byPool.get(pool) ?? 0)).map(([pool]) => pool),
+    ),
+  };
+  return { total, ...counted, byPool, atLeast, unit: prices.unit, rates: prices.rates };
 }
 // Per 1,000 votes, which have 18 decimals.
 export const perThousand = (value: number, votes: bigint): number => (votes > 0n ? value / (Number(votes) / 1e21) : 0);
 export const perThousandOf = (earnings: Earnings): Money => {
   const value = valueOf(earnings);
-  return moneyAt(perThousand(value.total, earnings.votes), value);
+  return moneyAt(perThousand(value.total, earnings.votes), value, value.atLeast.total);
 };
 // The ratio of some votes' earnings per 1,000 votes to all of Hydrex's, both at `all`'s prices so they compare fairly.
 export function versus(earnings: Earnings, all: Earnings): number | undefined {

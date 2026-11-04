@@ -32,7 +32,7 @@ import {
 import * as hydrex from "../hydrex.ts";
 import type { Account, Holdings, MatchaLatte, Status } from "../hydrex.ts";
 import { overdue, underWay } from "../payouts.ts";
-import { gasWords } from "../prices.ts";
+import { gasWords, key } from "../prices.ts";
 import { perThousand, perThousandOf, valueOf, versus, type Earnings } from "../rewards.ts";
 import { hrefOf } from "../routes.ts";
 import { now } from "../rpc.ts";
@@ -253,7 +253,10 @@ export function drawHydrex(): void {
       ? frag(...[...failed].map((id) => Object.assign(document.createElement("p"), { textContent: reasons[id] })))
       : null,
     underway: found && underWay(found) ? "Payout under way." : null,
-    average: shown(data.average(), (all) => money(moneyAt(perThousand(valueOf(all).total, all.votes), all.prices))),
+    average: shown(data.average(), (all) => {
+      const value = valueOf(all);
+      return money(moneyAt(perThousand(value.total, all.votes), value, value.atLeast.total));
+    }),
     own: shown(holdings, ownWords),
     "own-versus": holdings.value ? ownVersus(holdings.value) : null,
     epoch: state.connection ? epochWords() : null,
@@ -349,15 +352,27 @@ function performance(automation: Automation): Value {
   const all = data.average();
   const row = (prefix: string, earnings: Earnings | undefined, prices = earnings?.prices) => {
     const value = earnings && valueOf(earnings, prices);
-    const cents = (n: (v: NonNullable<typeof value>) => number) =>
-      value ? money(moneyAt(n(value), value), true) : all.failed ? "" : undefined;
+    const cents = (n: (v: NonNullable<typeof value>) => number, short: (v: NonNullable<typeof value>) => boolean) =>
+      value ? money(moneyAt(n(value), value, short(value)), true) : all.failed ? "" : undefined;
     return {
       [`${prefix}votes`]: earnings ? compact(earnings.votes) : all.failed ? "" : undefined,
       [`${prefix}pools`]: earnings ? count(earnings.pools.length, "pool", "pools") : all.failed ? "" : undefined,
-      [`${prefix}earned`]: cents((v) => v.total),
-      [`${prefix}fees`]: cents((v) => v.fees),
-      [`${prefix}incentives`]: cents((v) => v.incentives),
-      [`${prefix}per-thousand`]: cents((v) => perThousand(v.total, earnings!.votes)),
+      [`${prefix}earned`]: cents(
+        (v) => v.total,
+        (v) => v.atLeast.total,
+      ),
+      [`${prefix}fees`]: cents(
+        (v) => v.fees,
+        (v) => v.atLeast.fees,
+      ),
+      [`${prefix}incentives`]: cents(
+        (v) => v.incentives,
+        (v) => v.atLeast.incentives,
+      ),
+      [`${prefix}per-thousand`]: cents(
+        (v) => perThousand(v.total, earnings!.votes),
+        (v) => v.atLeast.total,
+      ),
     };
   };
   fill(productView, { ...row("", mine, all.value?.prices), ...row("all-", all.value) });
@@ -370,7 +385,10 @@ function performance(automation: Automation): Value {
       fill(tr, {
         pool: { address: pool.address, text: pool.name },
         share: fraction(Number(pool.votes) / Number(mine.votes)),
-        worth: money(moneyAt(value.byPool.get(pool.address.toLowerCase()) ?? 0, value), true),
+        worth: money(
+          moneyAt(value.byPool.get(key(pool.address)) ?? 0, value, value.atLeast.pools.has(key(pool.address))),
+          true,
+        ),
       }),
   );
   if (all.failed) return "All of Hydrex could not be read.";
@@ -452,18 +470,12 @@ export function change(accounts: Account[], action: "join" | "leave" | "self", a
       fill(body, {
         unclaimed: `Unclaimed rewards on ${plural("this Hydrex account", "these Hydrex accounts")} will be paid to you ${ml ? "in kVCM " : ""}with ${plural("its next payout", "their next payouts")}${ml ? `, less the share retired${fee}` : ", less the 1% fee"}.`,
         next,
-        weekly: shown(weekly, (earnings) =>
-          !earnings.votes
-            ? "No record yet"
-            : paid === undefined
-              ? "Not read"
-              : money(
-                  moneyAt(
-                    perThousandOf(earnings).value * (Number(votes) / 1e21) * (Number(paid) / 10_000),
-                    earnings.prices,
-                  ),
-                ),
-        ),
+        weekly: shown(weekly, (earnings) => {
+          if (!earnings.votes) return "No record yet";
+          if (paid === undefined) return "Not read";
+          const each = perThousandOf(earnings);
+          return money({ ...each, value: each.value * (Number(votes) / 1e21) * (Number(paid) / 10_000) });
+        }),
         gas: wei,
         takes: ml ? (settings ? `Up to ${bps(settings.retireBps)}` : "Not read") : "1%",
         "takes-note": ml ? (settings ? `retired${feeWords(settings.feeBps)}` : null) : "on claims",

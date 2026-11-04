@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Address } from "viem";
 import { key, type Token } from "../src/prices.ts";
-import { earnedBy, valueOf } from "../src/rewards.ts";
+import { earnedBy, perThousandOf, valueOf } from "../src/rewards.ts";
 
 const USDC: Token = { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, symbol: "USDC" };
 const HYDX: Token = { address: "0x00000e7efa313F4E11Bfff432471eD9423AC6B30", decimals: 18, symbol: "HYDX" };
@@ -23,7 +23,7 @@ test("a voter's share of a reward contract's rewards rounds down, as the contrac
 });
 
 test("earnings' value: fees and incentives apart, by pool, a token without a price counting for nothing", () => {
-  const { fees, incentives, total, byPool, unit } = valueOf({
+  const earnings = {
     start: 1_791_417_600,
     votes: 897_042n * 10n ** 18n,
     pools: [],
@@ -33,11 +33,33 @@ test("earnings' value: fees and incentives apart, by pool, a token without a pri
       pay(HYDX, 27n * 10n ** 18n),
       pay(WFRAX, 10n ** 17n, OTHER),
     ],
-    prices: { unit: "USD", of: PRICES, standIns: new Map() },
-  });
+    prices: { unit: "USD" as const, of: PRICES },
+    standIns: new Map<string, number>(),
+  };
+  const { fees, incentives, total, byPool, unit, atLeast } = valueOf(earnings);
   assert.deepEqual(
     [fees, incentives, total, ...byPool.values()].map(round),
     [14.774868, 663.16829, 677.943158, 14.774868, 663.16829],
   );
   assert.deepEqual([...byPool.keys(), unit], [key(POOL), key(OTHER), "USD"]);
+  // WFRAX has no price at the flip, nor today: it counts for nothing, and nothing says "at least".
+  assert.deepEqual(atLeast, { total: false, fees: false, incentives: false, pools: new Set() });
+});
+
+test("earnings say 'at least' where what they leave out is worth 1% or more at today's prices", () => {
+  const earnings = (wfrax: number) => ({
+    start: 1_791_417_600,
+    votes: 10n ** 21n,
+    pools: [],
+    rewards: [pay(USDC, 1_000_000_000n), pay(USDC, 50_000_000n, OTHER), pay(WFRAX, 10n ** 18n, OTHER)],
+    prices: { unit: "USD" as const, of: PRICES },
+    standIns: new Map([[key(WFRAX.address), wfrax]]),
+  });
+  // $1,000 of fees and $50 of incentives, and 1 WFRAX left out of the incentives.
+  const worth = (wfrax: number) => valueOf(earnings(wfrax)).atLeast;
+  assert.deepEqual(worth(20), { total: true, fees: false, incentives: true, pools: new Set([key(OTHER)]) });
+  assert.deepEqual(worth(1), { total: false, fees: false, incentives: true, pools: new Set([key(OTHER)]) });
+  assert.deepEqual(worth(0.4), { total: false, fees: false, incentives: false, pools: new Set() });
+  assert.equal(perThousandOf(earnings(20)).atLeast, true);
+  assert.equal(perThousandOf(earnings(1)).atLeast, undefined);
 });

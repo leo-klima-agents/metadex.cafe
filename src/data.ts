@@ -68,12 +68,11 @@ export function accountEarned(holdings: Holdings, id: bigint): Got<Money | null>
     const stake = all.get(id);
     if (!stake) return { value: null };
     const automation = automationAt(stake.delegate);
-    return andThen(automation ? earnings(automation) : holderEarnings(stake.delegate), (of) => ({
-      value:
-        of.votes && (automation || of.pools.length)
-          ? moneyAt((Number(stake.votes) / Number(of.votes)) * valueOf(of).total, of.prices)
-          : null,
-    }));
+    return andThen(automation ? earnings(automation) : holderEarnings(stake.delegate), (of) => {
+      if (!of.votes || (!automation && !of.pools.length)) return { value: null };
+      const value = valueOf(of);
+      return { value: moneyAt((Number(stake.votes) / Number(of.votes)) * value.total, value, value.atLeast.total) };
+    });
   });
 }
 const holders = (holdings: Holdings) => andThen(stakes(holdings), (all) => ({ value: holdersOf(all.values()) }));

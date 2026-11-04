@@ -10,7 +10,8 @@ A static page at <https://metadex.cafe/> for Hydrex accounts on Base:
 
 It has no server, holds no keys and stores nothing. It reads Base through three public RPCs, the only hosts its Content
 Security Policy lets it connect to: `https://mainnet.base.org`, `https://base.drpc.org` and
-`https://base-rpc.publicnode.com`. Before anyone can join, it checks Base against the contracts it trusts
+`https://base-rpc.publicnode.com`. Its prices are averages over the half hour before a block, read from past blocks, so
+they need an RPC that serves old ones. Before anyone can join, it checks Base against the contracts it trusts
 (`src/config.ts`). If a check fails, joining is turned off and the page says why; leaving always works.
 
 ## Develop
@@ -39,7 +40,7 @@ another folder). `CHROMIUM` sets the browser binary, and `SCREENSHOTS` a folder 
 | `src/rpc.ts`, `cache.ts`               | RPC requests (failover, pacing, the shown view's reads first), and the cache of every read.            |
 | `src/wallet.ts`                        | Wallets (EIP-6963, Safe{Wallet}), and sending calls one at a time or in one prompt.                    |
 | `src/tokens.ts`                        | The tokens the page knows, and an owner's balances and allowances.                                     |
-| `src/prices.ts`                        | Prices now and at an epoch's end, from pools on twelve exchanges and Chainlink's feeds.                |
+| `src/prices.ts`                        | Prices from Chainlink and pools: Aero's, Aerodrome's and Hydrex's now, Hydrex's at an epoch's end.     |
 | `src/rewards.ts`                       | What votes earned in an epoch, and Hydrex's average.                                                   |
 | `src/hydrex.ts`                        | Hydrex accounts, their statuses, joining and leaving.                                                  |
 | `src/payouts.ts`                       | How far each account has been paid, what is waiting, and its last receipt.                             |
