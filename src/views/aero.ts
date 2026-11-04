@@ -316,11 +316,12 @@ export function drawStake(): void {
             .join(" · "),
         ),
     paid: !market ? undefined : paid ? perDay(paid.value, paid.priced, market) : "Not enough history",
-    "paid-label": `Its pools, ${WINDOW[controls.hours].last}`,
     "paid-note": !market
       ? undefined
       : paid
-        ? [versusAverage(paid.value / average!.total), "with live incentives"].filter(Boolean).join(", ")
+        ? [`${WINDOW[controls.hours].last}, with live incentives`, versusAverage(paid.value / average!.total)]
+            .filter(Boolean)
+            .join(" · ")
         : null,
     "window-head": WINDOW[controls.hours].head,
   });
