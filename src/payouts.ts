@@ -5,7 +5,7 @@ import { memo } from "./cache.ts";
 import { AUTOMATIONS, DOUBLE_ESPRESSO, MATCHA_LATTE, type Automation } from "./config.ts";
 import { WEEK, moneyAt, weekStart, type Money } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
-import { key, quotesOf, worthOf, type Prices, type Token } from "./prices.ts";
+import { key, quotesOf, worthOf, type Prices } from "./prices.ts";
 import { rewardsFor, tokensIn, type Earnings, type Reward } from "./rewards.ts";
 import {
   SETTLED,
@@ -21,13 +21,12 @@ import {
   same,
   tagged,
   timeAt,
-  type Read,
 } from "./rpc.ts";
 
 // For each account and token, Hydrex's reward contracts record the start of the epoch they have paid it up to. Every
 // claim sets this to the current epoch, even a claim of nothing. An epoch counts as paid once the records holding more
-// than half of its rewards' worth have moved past its end. A search through past blocks then finds the last payout's
-// block, whose logs make its receipt. Matcha Latte pays each account in one transaction, which logs both the payout and
+// than half of its rewards' worth, at today's quotes, have moved past its end. A search through past blocks then finds
+// the last payout's block, whose logs make its receipt. Matcha Latte pays each account in one transaction, which logs both the payout and
 // the retirement. Double Espresso records each account's last claim block, and each claim logs the one before.
 
 // A payout takes up to half a day after each flip.
@@ -38,7 +37,8 @@ export const WALK_LIMIT = 10;
 
 export type Pair = { contract: Address; token: Address };
 export type Owed = Amount & { contract: Address };
-// One of an epoch's reward pairs, with `value` the worth of what it paid the automation's votes, or 0 if unknown.
+// One of an epoch's reward pairs, with `value` the worth of what it paid the automation's votes at today's quotes, or 0
+// if unknown.
 type Weighed = Pair & { value: number };
 type Rewards = { start: number; pairs: Weighed[] };
 export type Standing = {
@@ -74,7 +74,7 @@ const less = (amounts: Amount[], taken: Amount[]): Amount[] =>
     .filter(({ amount }) => amount > 0n);
 // A token without a price counts for nothing.
 type Decimals = Map<string, { decimals: number }>;
-export function valueAt(amounts: Amount[], decimals: Decimals, prices: Prices): number {
+export function valueAt(amounts: Amount[], decimals: Decimals, prices: Pick<Prices, "of">): number {
   return sum(
     amounts.map(({ token, amount }) => {
       const price = prices.of.get(key(token));
@@ -91,27 +91,16 @@ export function worthAt(amounts: Amount[], decimals: Decimals, prices: Prices): 
   return total > 0 ? moneyAt(total, prices, partial) : undefined;
 }
 
-// Prices for weighing rewards against one another, never for showing: the epoch's, with today's quotes standing in
-// for tokens that had none at the flip. `unread` if some quotes could not be read.
-export const withStandIns = (prices: Prices, standIns: Map<string, number>): Prices => ({
-  ...prices,
-  of: new Map([...standIns, ...prices.of]),
-});
-export async function weighingPrices(prices: Prices, tokens: Token[], rd: Read = tagged("payouts")): Promise<Prices> {
-  const quoted = await quotesOf(
-    tokens.filter(({ address }) => !prices.of.has(key(address))),
-    rd,
-  );
-  return { ...withStandIns(prices, quoted.of), ...(quoted.unread && { unread: true }) };
-}
 const pairsOf = (rewards: Reward[]): Pair[] =>
   rewards.map(({ contract, token }) => ({ contract, token: token.address }));
-export const weighed = (rewards: Reward[], prices: Prices): Weighed[] =>
+// Rewards weigh against one another at today's quotes, the same for every epoch.
+export const weighed = (rewards: Reward[], quotes: Pick<Prices, "of">): Weighed[] =>
   rewards.map(({ contract, token, amount }) => ({
     contract,
     token: token.address,
-    value: valueAt([{ token: token.address, amount }], new Map([[key(token.address), token]]), prices),
+    value: valueAt([{ token: token.address, amount }], new Map([[key(token.address), token]]), quotes),
   }));
+const quotesFor = (rewards: Reward[]) => quotesOf(tokensIn(rewards), tagged("payouts"));
 const weights = (pairs: Weighed[]): number[] =>
   pairs.some(({ value }) => value > 0) ? pairs.map(({ value }) => value) : pairs.map(() => 1);
 
@@ -624,15 +613,14 @@ export async function readPayouts(
       if (!earnings) return;
       if (earnings.start < epochStart - WEEK) return these.forEach((id) => found.set(id, { early: true }));
       const votedBefore = these.filter((id) => votedWith(automation, id, "before"));
-      // The epoch before's rewards weigh at last epoch's prices, and today's quotes for its other tokens. They are read,
-      // with their records and quotes, while what each account can claim is.
+      // The epoch before's rewards, records and quotes are read while what each account can claim is.
       const readBefore = async () => {
         const rewards = votedBefore.length ? await rewardsFor(automation.address, earnings.start - WEEK) : [];
-        const [stamps, weighing] = await Promise.all([
+        const [stamps, quotes] = await Promise.all([
           readStamps(votedBefore, pairsOf(rewards), top),
-          weighingPrices(earnings.prices, tokensIn(rewards)),
+          quotesFor(rewards),
         ]);
-        return { rewards, stamps, weighing };
+        return { rewards, stamps, quotes };
       };
       const owed = await Promise.all([
         readOwed(these, pairsOf(earnings.rewards), top, [earnings.start - WEEK, earnings.start]).then((rows) =>
@@ -643,13 +631,13 @@ export async function readPayouts(
           })),
         ),
         readBefore(),
-        weighingPrices(earnings.prices, tokensIn(earnings.rewards)),
+        quotesFor(earnings.rewards),
       ]).catch(() => undefined);
       if (!owed) return;
-      const [rows, epochBefore, weighing] = owed;
-      if (weighing.unread || epochBefore.weighing.unread) unweighed = true;
-      const last = { start: earnings.start, pairs: weighed(earnings.rewards, weighing) };
-      const before = { start: earnings.start - WEEK, pairs: weighed(epochBefore.rewards, epochBefore.weighing) };
+      const [rows, epochBefore, quotes] = owed;
+      if (quotes.unread || epochBefore.quotes.unread) unweighed = true;
+      const last = { start: earnings.start, pairs: weighed(earnings.rewards, quotes) };
+      const before = { start: earnings.start - WEEK, pairs: weighed(epochBefore.rewards, epochBefore.quotes) };
       const stampsBefore = epochBefore.stamps;
       rows.forEach(({ id, earned, stamps }) => {
         const records = { last: stamps, earned, before: stampsBefore.get(id) ?? [] };

@@ -3,8 +3,8 @@ import * as claim from "../claim.ts";
 import { DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
 import { checksRead, swapsOff } from "../checks.ts";
 import { count, figure, listWords, money, moneyAt } from "../format.ts";
-import { summed, valueAt, weighingPrices, type Overdue } from "../payouts.ts";
-import { gasWords, key, pricesNow, type Prices, type Token } from "../prices.ts";
+import { summed, valueAt, type Overdue } from "../payouts.ts";
+import { gasWords, key, pricesNow, quotesOf, type Prices, type Token } from "../prices.ts";
 import { hrefOf } from "../routes.ts";
 import { costsRead, now, same, simulate, type Costs, type Landed } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
@@ -60,9 +60,10 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
 
   const totals = claim.paidBy(owing.flatMap(({ owed }) => owed));
   const paid = totals.map(({ token, paid }) => ({ token, amount: paid }));
+  // The parts of a claim go most valuable first, at today's quotes.
   const owedTokens = owing.flatMap(({ owed }) => owed.flatMap(({ token }) => tokens.get(key(token)) ?? []));
-  const weighing = await weighingPrices(entries[0]!.earnings.prices, owedTokens);
-  const weight = ({ owed }: claim.Claim) => valueAt(owed, tokens, weighing);
+  const quotes = await quotesOf(owedTokens);
+  const weight = ({ owed }: claim.Claim) => valueAt(owed, tokens, quotes);
   const budget = connection.wallet.propose ? claim.SAFE_CLAIM_CALL_GAS : claim.CLAIM_CALL_GAS;
   const parts = owing.flatMap((each) => {
     const split = claim.claimCalls(each, budget).sort((a, b) => weight(b) - weight(a));

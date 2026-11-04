@@ -26,8 +26,6 @@ import {
   valueAt,
   walkClaims,
   weighed,
-  weighingPrices,
-  withStandIns,
   worthAt,
   windowStart,
   type ClaimLog,
@@ -203,22 +201,19 @@ test("late, never paid, joined since, and what could not be read", () => {
   assert.equal(partly.unknown, true);
 });
 
-test("each reward weighed at last epoch's prices, or today's for a token without one; none without either", () => {
+test("each reward weighed at today's quotes, and none without one", () => {
   const rewards = [
     { pool: FEES, contract: FEES, token: usdc, amount: 90_000_000n, fee: true },
     { pool: FEES, contract: BRIBES, token: weth, amount: 10n ** 18n, fee: false },
   ];
-  assert.deepEqual(weighed(rewards, prices({ [USDC]: 1 })), [
+  assert.deepEqual(weighed(rewards, { of: byKey({ [USDC]: 1 }) }), [
     { ...fees, value: 90 },
     { ...bribes, value: 0 },
   ]);
-  // With WETH weighed at today's price, a claim of the USDC alone is not a payout.
-  const standIn = withStandIns(prices({ [USDC]: 1 }), byKey({ [WETH]: 2_500 }));
-  const pairs = weighed(rewards, standIn);
+  // With WETH quoted at $2,500, a claim of the USDC alone is not a payout.
+  const pairs = weighed(rewards, { of: byKey({ [USDC]: 1, [WETH]: 2_500 }) });
   assert.equal(pairs[1]!.value, 2_500);
   assert.equal(paidFor(pairs, [OCT_15, 0], OCT_15), false);
-  const both = withStandIns(prices({ [WETH]: 2_000 }), byKey({ [WETH]: 2_500 }));
-  assert.equal(both.of.get(key(WETH)), 2_000, "last epoch's price comes first");
 });
 
 test("what amounts were worth: 'at least' when one had no price or decimals, and nothing when none counted", () => {
@@ -233,18 +228,6 @@ test("what amounts were worth: 'at least' when one had no price or decimals, and
     "nor kVCM decimals",
   );
   assert.equal(worthAt(waiting, tokens, prices({})), undefined);
-});
-
-test("weighing quotes only the tokens without an epoch price, and says when the quotes could not be read", async () => {
-  let asked = 0;
-  const failing = async (): Promise<never> => {
-    asked++;
-    throw new Error("No Base RPC answered eth_call.");
-  };
-  const priced = await weighingPrices(prices({ [USDC]: 1, [WETH]: 2_000 }), [usdc, weth], failing);
-  assert.deepEqual([asked, priced.of.get(key(WETH)), priced.unread], [0, 2_000, undefined]);
-  const quoted = await weighingPrices(prices({ [USDC]: 1 }), [usdc, weth], failing);
-  assert.deepEqual([asked > 0, quoted.of.has(key(WETH)), quoted.unread], [true, false, true]);
 });
 
 test("records are read in one batch; what waits in batches of 20, and what lies past earned()'s 50 epochs", async (t) => {
