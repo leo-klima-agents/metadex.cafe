@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 import { use, type Got } from "../cache.ts";
-import { AUTOMATIONS, BASESCAN, KVCM, PRICING, byKind } from "../config.ts";
+import { AUTOMATIONS, BASESCAN, KVCM, byKind } from "../config.ts";
 import * as data from "../data.ts";
 import {
   WEEK,
@@ -205,9 +205,8 @@ function priced(amounts: Amount[], flip: number): { tokens?: Map<string, Token>;
   if (!tokens) return {};
   const most = new Map<string, bigint>();
   for (const { token, amount: value } of amounts) if (value > (most.get(key(token)) ?? 0n)) most.set(key(token), value);
-  // A receipt holds few tokens, so they are priced from every exchange.
   const prices = use(`flip prices ${flip} ${addresses.join()}`, () =>
-    pricesAtFlip([...tokens.values()], most, flip, tagged("payouts"), PRICING),
+    pricesAtFlip([...tokens.values()], most, flip, tagged("payouts")),
   ).value;
   return { tokens, prices };
 }

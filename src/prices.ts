@@ -495,16 +495,15 @@ export async function pricesAt(
 
 export const pricesNow = (tokens: Token[], amounts = new Map<string, bigint>(), rd: Read = read): Promise<Prices> =>
   pricesAt(tokens, amounts, Infinity, rd);
-// An epoch's prices, from Hydrex's pools unless `exchanges` says otherwise: little of its rewards is priced only
+// An epoch's prices, for its earnings and receipts, from Hydrex's pools only: little of its rewards is priced only
 // elsewhere, and looking there too takes twice as long. They are kept, so a pool that could not be read fails them.
 export async function pricesAtFlip(
   tokens: Token[],
   amounts: Map<string, bigint>,
   flip: number,
   rd: Read = read,
-  exchanges = config.HYDREX_PRICING,
 ): Promise<Prices> {
-  const prices = await pricesAt(tokens, amounts, flip, rd, exchanges);
+  const prices = await pricesAt(tokens, amounts, flip, rd, config.HYDREX_PRICING);
   if (prices.unread) throw new Error("Some pools could not be read from Base.");
   return prices;
 }
