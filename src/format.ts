@@ -67,8 +67,14 @@ export const fraction = (value: number): string => roughPercent.format(value);
 type Unit = "USD" | "USDC";
 export type Rates = Partial<Record<Fiat, number>>;
 export type Basis = { unit: Unit; rates?: Rates | undefined };
-export type Money = Basis & { value: number };
-export const moneyAt = (value: number, { unit, rates }: Basis): Money => ({ value, unit, rates });
+// `atLeast` when some of what it sums had no price.
+export type Money = Basis & { value: number; atLeast?: true };
+export const moneyAt = (value: number, { unit, rates }: Basis, atLeast = false): Money => ({
+  value,
+  unit,
+  rates,
+  ...(atLeast && { atLeast: true }),
+});
 
 const inCurrency = (currency: Currency, digits: number) =>
   number({
@@ -98,8 +104,11 @@ const toCents = (sum: Money): number => {
 // The difference between two sums as each is shown, rounded to the cent, so that a column adds up as it reads.
 export const between = (from: Money, to: Money): Money => ({ ...to, value: toCents(to) - toCents(from) });
 
-// For example "≈ $692", "≈ −€0.69", "< £0.01" or "≈ 0.77 USDC". With `cents`, always to the cent, as in a column.
-export function money(sum: Money, cents = false): string {
+// For example "≈ $692", "≈ −€0.69", "< £0.01", "≈ 0.77 USDC" or "At least ≈ $3.10", which starts a value or follows a
+// "·". With `cents`, always to the cent, as in a column.
+export const money = (sum: Money, cents = false): string =>
+  `${sum.atLeast ? "At\u00a0least\u00a0" : ""}${figureOf(sum, cents)}`;
+function figureOf(sum: Money, cents: boolean): string {
   const [shown, rate] = shownOf(sum);
   const value = sum.value / rate;
   const [withCents, without] = FORMATS[shown]!;

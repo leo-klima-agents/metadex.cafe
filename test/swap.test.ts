@@ -16,7 +16,7 @@ import {
   type Hex,
 } from "viem";
 import { CBBTC, EXCHANGES, HYDX, SWAPPERS, USDC, WETH } from "../src/config.ts";
-import { BY_ID, key, pairKey, pools, waysFor, type Hop } from "../src/prices.ts";
+import { BY_ID, forget, key, pairKey, waysFor, type Hop } from "../src/prices.ts";
 import { same, type Read } from "../src/rpc.ts";
 import {
   MAX_SWAP_GAS,
@@ -44,7 +44,7 @@ import {
   type Route,
 } from "../src/swap.ts";
 
-beforeEach(() => pools.clear());
+beforeEach(forget);
 
 const AVNT: Address = "0x696F9436B67233384889472Cd7cD58A6fB5DF4f1";
 const POOL: Address = "0x0000000000000000000000000000000000000001";
