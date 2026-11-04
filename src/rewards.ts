@@ -3,7 +3,7 @@ import { rewardsAbi } from "./abi.ts";
 import { memo } from "./cache.ts";
 import { WEEK, clean, moneyAt, type Money } from "./format.ts";
 import { automationAt, escrow, voter } from "./hydrex.ts";
-import { key, noPrices, pricesAtFlip, worthOf, type Prices, type Token } from "./prices.ts";
+import { key, noPrices, pricesAt, worthOf, type Prices, type Token } from "./prices.ts";
 import { call, read, readEach, required, type Read } from "./rpc.ts";
 import { tokensOf } from "./tokens.ts";
 
@@ -114,7 +114,7 @@ async function priced(start: number, votes: bigint, pools: Pool[], rewards: Rewa
   const amounts = new Map<string, bigint>();
   for (const { token, amount } of rewards) amounts.set(token.address, (amounts.get(token.address) ?? 0n) + amount);
   const tokens = [...new Map(rewards.map(({ token }) => [token.address, token])).values()];
-  return { start, votes, pools, rewards, prices: await pricesAtFlip(tokens, amounts, start + WEEK, rd) };
+  return { start, votes, pools, rewards, prices: await pricesAt(tokens, amounts, start + WEEK, rd) };
 }
 
 // What a voter earned in the epoch from `start`: an automation, whose pools are `named`, or an owner. Rewards go to the
