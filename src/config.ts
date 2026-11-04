@@ -130,8 +130,6 @@ export const EXCHANGES: Exchange[] = [
   { id: 1, name: "Hydrex Classic Pools", kind: "pair", factory: "0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0" },
   { id: 0, name: "Hydrex Integral", kind: "algebra", factory: "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E" },
 ];
-const exchangesOf = (...kinds: ExchangeKind[]) => EXCHANGES.filter(({ kind }) => kinds.includes(kind));
-// Prices at an epoch's end come from Hydrex's pools only; current prices also use Aero's and Aerodrome's. Of two equally
-// deep pools, the first listed wins.
-export const HYDREX_PRICING = exchangesOf("pair", "algebra");
-export const SWAP_PRICING = exchangesOf("solidly", "slipstream", "aerodrome", "pair", "algebra");
+// Prices come from Aero's, Aerodrome's and Hydrex's pools. Of two equally deep pools, the first listed wins.
+const PRICED: ExchangeKind[] = ["solidly", "slipstream", "aerodrome", "pair", "algebra"];
+export const PRICING = EXCHANGES.filter(({ kind }) => PRICED.includes(kind));

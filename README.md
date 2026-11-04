@@ -40,7 +40,7 @@ another folder). `CHROMIUM` sets the browser binary, and `SCREENSHOTS` a folder 
 | `src/rpc.ts`, `cache.ts`               | RPC requests (failover, pacing, the shown view's reads first), and the cache of every read.            |
 | `src/wallet.ts`                        | Wallets (EIP-6963, Safe{Wallet}), and sending calls one at a time or in one prompt.                    |
 | `src/tokens.ts`                        | The tokens the page knows, and an owner's balances and allowances.                                     |
-| `src/prices.ts`                        | Prices now and at an epoch's end, from pools on twelve exchanges and Chainlink's feeds.                |
+| `src/prices.ts`                        | Prices now and at an epoch's end, from Aero's, Aerodrome's and Hydrex's pools and Chainlink's feeds.   |
 | `src/rewards.ts`                       | What votes earned in an epoch, and Hydrex's average.                                                   |
 | `src/hydrex.ts`                        | Hydrex accounts, their statuses, joining and leaving.                                                  |
 | `src/payouts.ts`                       | How far each account has been paid, what is waiting, and its last receipt.                             |

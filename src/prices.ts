@@ -142,7 +142,8 @@ function spacings(rd: Read): Promise<Map<number, number[]>> {
 }
 
 // Each pair's pools, keyed by `pairKey` of the pair as given, in the order of `exchanges`. Lookups not yet cached go in
-// a single read.
+// a single read, `LOOKUPS` calls to a batch since each is cheap.
+const LOOKUPS = 1_000;
 export async function waysFor(
   pairs: readonly (readonly [Address, Address])[],
   exchanges: Exchange[] = BY_ID,
@@ -157,7 +158,10 @@ export async function waysFor(
     const needsSpacings = missing.some(([, [exchange]]) => exchange.kind === "slipstream");
     const all = (needsSpacings ? spacings(rd) : Promise.resolve(new Map<number, number[]>())).then(async (known) => {
       const each = missing.map(([, [exchange, pair]]) => lookupsOn(exchange, pair, known));
-      const replies = await rd(each.flat().map(({ call }) => call));
+      const replies = await rd(
+        each.flat().map(({ call }) => call),
+        { perBatch: LOOKUPS },
+      );
       let next = 0;
       return each.map((lookups, i) => {
         const answers = lookups.map(() => replies[next++]);
@@ -346,24 +350,17 @@ async function measure(
 }
 
 // Prices each token from its deepest pool against an anchor already priced; of two pools equally deep, the one whose
-// exchange comes first in `exchanges` wins.
-async function inPools(
-  tokens: Token[],
-  prices: Prices,
-  amounts: Map<string, bigint>,
-  window: Window,
-  exchanges: Exchange[],
-  rd: Read,
-) {
+// exchange comes first in `PRICING` wins.
+async function inPools(tokens: Token[], prices: Prices, amounts: Map<string, bigint>, window: Window, rd: Read) {
   if (!tokens.length) return;
   const anchors = config.ANCHORS.filter(({ address }) => prices.of.has(key(address)));
   const pairs = tokens.flatMap((token) => anchors.map((anchor) => ({ token, anchor })));
   const ways = await waysFor(
     pairs.map(({ token, anchor }) => [token.address, anchor.address]),
-    exchanges,
+    config.PRICING,
     rd,
   );
-  const rank = (pool: Pool) => exchanges.findIndex(({ id }) => id === pool.exchange.id);
+  const rank = (pool: Pool) => config.PRICING.findIndex(({ id }) => id === pool.exchange.id);
   const candidates = pairs
     .flatMap(({ token, anchor }) =>
       ways.get(pairKey(token.address, anchor.address))!.map((way): Pool => ({
@@ -389,10 +386,8 @@ export async function pricesAt(
   tokens: Token[],
   amounts: Map<string, bigint>,
   time: number,
-  exchanges: Exchange[],
   rd: Read = read,
 ): Promise<Prices> {
-  exchanges.forEach(pricingOf);
   const [newest, newestTime] = required(await rd([blockNumber, blockTime])).map(Number) as [number, number];
   // Both ends are searched for from the newest block, and share the blocks they read.
   const times = new Map<number, Promise<number>>();
@@ -432,21 +427,13 @@ export async function pricesAt(
       prices,
       amounts,
       window,
-      exchanges,
       rd,
     );
   return prices;
 }
 
 export const pricesNow = (tokens: Token[], amounts = new Map<string, bigint>(), rd: Read = read): Promise<Prices> =>
-  pricesAt(tokens, amounts, Infinity, config.SWAP_PRICING, rd);
-// The 30 minutes before `flip`, in Hydrex's pools.
-export const pricesAtFlip = (
-  tokens: Token[],
-  amounts: Map<string, bigint>,
-  flip: number,
-  rd: Read = read,
-): Promise<Prices> => pricesAt(tokens, amounts, flip, config.HYDREX_PRICING, rd);
+  pricesAt(tokens, amounts, Infinity, rd);
 // The anchors' prices now, which include ETH's for gas costs; read at most once a minute.
 export const anchorsNow = (): Promise<Prices | undefined> =>
   memo("anchors", () => pricesNow([]), 60_000).catch(() => undefined);

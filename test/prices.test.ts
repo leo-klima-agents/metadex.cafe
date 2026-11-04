@@ -2,25 +2,8 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import { zeroAddress, type Address } from "viem";
 import { SETTLED, same, type Call } from "../src/rpc.ts";
-import {
-  ANCHORS,
-  FIAT_FEEDS,
-  EXCHANGES,
-  HYDREX_PRICING,
-  SWAP_PRICING,
-  swapperOf,
-  type Exchange,
-} from "../src/config.ts";
-import {
-  WINDOW,
-  pairPrice,
-  pools as poolCache,
-  pricesAt,
-  pricesAtFlip,
-  pricesNow,
-  tickPrice,
-  type Token,
-} from "../src/prices.ts";
+import { ANCHORS, FIAT_FEEDS, EXCHANGES, PRICING, swapperOf, type Exchange } from "../src/config.ts";
+import { WINDOW, pairPrice, pools as poolCache, pricesAt, pricesNow, tickPrice, type Token } from "../src/prices.ts";
 
 beforeEach(() => poolCache.clear());
 
@@ -45,9 +28,9 @@ test("a classic pair's price: the ratio of its reserves, or the slope of x³y + 
   assert.ok(pairPrice(90, 110, true) > 1);
 });
 
-test("the swap's page prices in Aero's, Aerodrome's and Hydrex's pools, in that order; the Hydrex pages in Hydrex's", () => {
+test("prices come from Aero's, Aerodrome's and Hydrex's pools, in that order", () => {
   assert.deepEqual(
-    SWAP_PRICING.map(({ name }) => name),
+    PRICING.map(({ name }) => name),
     [
       "Aero Basic Pools",
       "Aero Basic Pools",
@@ -59,10 +42,6 @@ test("the swap's page prices in Aero's, Aerodrome's and Hydrex's pools, in that 
       "Hydrex Classic Pools",
       "Hydrex Integral",
     ],
-  );
-  assert.deepEqual(
-    HYDREX_PRICING.map(({ name }) => name),
-    ["Hydrex Classic Pools", "Hydrex Integral"],
   );
 });
 
@@ -189,25 +168,23 @@ function market(pools: Fake[], answers = ANSWERS) {
   return { reader, asked, blocks };
 }
 
-const priceOf = async (pools: Fake[], token = TOKEN, exchanges = SWAP_PRICING) =>
-  (await pricesAt([token], new Map(), Infinity, exchanges, market(pools).reader)).of.get(token.address.toLowerCase());
+const priceOf = async (pools: Fake[], token = TOKEN, time = Infinity) =>
+  (await pricesAt([token], new Map(), time, market(pools).reader)).of.get(token.address.toLowerCase());
 
 test("USDC and EURC take Chainlink's prices, and a token priced in USDC takes USDC's", async () => {
   const { reader } = market([{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }]);
-  for (const exchanges of [SWAP_PRICING, HYDREX_PRICING]) {
-    const prices = await pricesAt([TOKEN], new Map(), Infinity, exchanges, reader);
-    assert.equal(prices.unit, "USD");
-    close(prices.of.get(USDC.toLowerCase())!, USDC_USD);
-    close(prices.of.get(EURC.toLowerCase())!, EURC_USD);
-    close(prices.of.get(TOKEN.address)!, 4 * USDC_USD);
-  }
+  const prices = await pricesAt([TOKEN], new Map(), Infinity, reader);
+  assert.equal(prices.unit, "USD");
+  close(prices.of.get(USDC.toLowerCase())!, USDC_USD);
+  close(prices.of.get(EURC.toLowerCase())!, EURC_USD);
+  close(prices.of.get(TOKEN.address)!, 4 * USDC_USD);
 });
 
 test("an anchor whose feed fails is priced like any other token", async () => {
   // 11,500 USDC against 10,000 EURC at $1.15 puts USDC at a dollar.
   const pools: Fake[] = [{ exchange: HYDREX, token: USDC_TOKEN, anchor: EURC, now: [11_500, 10_000] }];
   const answers = new Map([[EURC, EURC_USD]]);
-  const prices = await pricesAt([USDC_TOKEN], new Map(), Infinity, SWAP_PRICING, market(pools, answers).reader);
+  const prices = await pricesAt([USDC_TOKEN], new Map(), Infinity, market(pools, answers).reader);
   close(prices.of.get(USDC.toLowerCase())!, 1);
 });
 
@@ -218,7 +195,7 @@ test("an anchor whose feed fails is priced first, so that the tokens priced agai
     { exchange: HYDREX, token: TOKEN, anchor: EURC, now: [5_000, 10_000] },
   ];
   const answers = new Map([[USDC, USDC_USD]]);
-  const prices = await pricesAt([TOKEN], new Map(), Infinity, HYDREX_PRICING, market(pools, answers).reader);
+  const prices = await pricesAt([TOKEN], new Map(), Infinity, market(pools, answers).reader);
   assert.equal(prices.unit, "USD");
   close(prices.of.get(EURC.toLowerCase())!, 1.15 * USDC_USD);
   close(prices.of.get(TOKEN.address)!, 2 * 1.15 * USDC_USD);
@@ -229,7 +206,7 @@ test("without any of Chainlink's prices, prices are in USDC, from the pools alon
     { exchange: HYDREX, token: EURC_TOKEN, now: [10_000, 11_500] },
     { exchange: HYDREX, token: TOKEN, anchor: EURC, now: [5_000, 10_000] },
   ];
-  const prices = await pricesAt([TOKEN], new Map(), Infinity, HYDREX_PRICING, market(pools, new Map()).reader);
+  const prices = await pricesAt([TOKEN], new Map(), Infinity, market(pools, new Map()).reader);
   assert.equal(prices.unit, "USDC");
   assert.equal(prices.of.get(USDC.toLowerCase()), 1);
   close(prices.of.get(EURC.toLowerCase())!, 1.15);
@@ -252,15 +229,15 @@ test("each currency's rate goes with dollar prices, read with the anchors' feeds
       );
     };
   };
-  const inDollars = await pricesAt([TOKEN], new Map(), Infinity, HYDREX_PRICING, withRates());
+  const inDollars = await pricesAt([TOKEN], new Map(), Infinity, withRates());
   assert.equal(inDollars.unit, "USD");
   assert.deepEqual(inDollars.rates, { EUR: 1.12, GBP: 1.34 });
-  const inUsdc = await pricesAt([TOKEN], new Map(), Infinity, HYDREX_PRICING, withRates(new Map()));
+  const inUsdc = await pricesAt([TOKEN], new Map(), Infinity, withRates(new Map()));
   assert.equal(inUsdc.unit, "USDC");
   assert.deepEqual(inUsdc.rates, {});
 });
 
-test("the deepest pool wins: of all nine exchanges for the swap's page, of Hydrex's two for the Hydrex pages", async () => {
+test("the deepest pool wins, now and at a flip", async () => {
   // 2,000 USDC deep at 2 USDC in Aero, 15,000 at 3 in Aerodrome, 8,000 at 4 in Hydrex Classic.
   const pools: Fake[] = [
     { exchange: AERO, token: TOKEN, now: [1_000, 2_000] },
@@ -268,10 +245,26 @@ test("the deepest pool wins: of all nine exchanges for the swap's page, of Hydre
     { exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] },
   ];
   close((await priceOf(pools))!, 3 * USDC_USD);
-  const { reader, asked } = market(pools);
-  close((await pricesAt([TOKEN], new Map(), Infinity, HYDREX_PRICING, reader)).of.get(TOKEN.address)!, 4 * USDC_USD);
-  for (const { name, factory } of SWAP_PRICING.filter((each) => !HYDREX_PRICING.includes(each)))
-    assert.ok(!asked.has(factory.toLowerCase()), `the Hydrex pages do not look in ${name}`);
+  poolCache.clear();
+  close((await priceOf(pools, TOKEN, NOW - 7 * 86_400))!, 3 * USDC_USD);
+});
+
+test("pool lookups go 1,000 to a batch, since each is cheap; other reads go in smaller ones", async () => {
+  const { reader } = market([{ exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] }]);
+  const batches = new Map<string, Set<number | undefined>>();
+  const watched = async (
+    calls: readonly Call[],
+    options?: { block?: number | "latest"; perBatch?: number },
+  ): Promise<any> => {
+    for (const { address, functionName } of calls) {
+      const kind = EXCHANGES.some(({ factory }) => same(factory, address)) ? "lookup" : functionName;
+      batches.set(kind, (batches.get(kind) ?? new Set()).add(options?.perBatch));
+    }
+    return reader(calls, options);
+  };
+  await pricesAt([TOKEN], new Map(), Infinity, watched);
+  assert.deepEqual([...batches.get("lookup")!], [1_000]);
+  assert.deepEqual([...batches.get("currentCumulativePrices")!], [undefined]);
 });
 
 test("every kind of pool gives its average over the window, not what it holds at its end", async () => {
@@ -298,7 +291,7 @@ test("a concentrated pool's depth is what it holds of each token", async () => {
 test("sums are read at the block priced and the last block half an hour before the newest, reserves at the first", async () => {
   const pools: Fake[] = [{ exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] }];
   const { reader, blocks } = market(pools);
-  await pricesAt([TOKEN], new Map(), Infinity, SWAP_PRICING, reader);
+  await pricesAt([TOKEN], new Map(), Infinity, reader);
   assert.deepEqual([...blocks.get("getBlockNumber")!], ["latest"]);
   assert.deepEqual([...blocks.get("getCurrentBlockTimestamp")!].slice(0, 1), ["latest"]);
   assert.deepEqual([...blocks.get("latestRoundData")!], [PRICED]);
@@ -323,8 +316,8 @@ test("now is the newest block less a few; a flip, the last block before it, unle
   };
   assert.deepEqual(await feedBlocks((reader) => pricesNow([TOKEN], new Map(), reader)), [PRICED]);
   const flip = NOW - 7 * 86_400;
-  assert.deepEqual(await feedBlocks((reader) => pricesAtFlip([TOKEN], new Map(), flip, reader)), [blockOf(flip)]);
-  assert.deepEqual(await feedBlocks((reader) => pricesAtFlip([TOKEN], new Map(), NOW + 60, reader)), [PRICED]);
+  assert.deepEqual(await feedBlocks((reader) => pricesAt([TOKEN], new Map(), flip, reader)), [blockOf(flip)]);
+  assert.deepEqual(await feedBlocks((reader) => pricesAt([TOKEN], new Map(), NOW + 60, reader)), [PRICED]);
 });
 
 test("Aero's stable factory prices on the stable curve", async () => {
@@ -332,11 +325,4 @@ test("Aero's stable factory prices on the stable curve", async () => {
     const price = await priceOf([{ exchange: AERO_STABLE, token, now: [1_100, 900] }], token);
     close(price!, pairPrice(1_100, 900, true) * USDC_USD);
   }
-});
-
-test("an exchange whose pools cannot price is refused", async () => {
-  await assert.rejects(
-    pricesAt([TOKEN], new Map(), Infinity, [exchange("Uniswap v3")], market([]).reader),
-    /cannot price/,
-  );
 });
