@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import { zeroAddress, type Address } from "viem";
 import { SETTLED, same, type Call } from "../src/rpc.ts";
-import { ANCHORS, FIAT_FEEDS, EXCHANGES, PRICING, swapperOf, type Exchange } from "../src/config.ts";
+import { ANCHORS, FIAT_FEEDS, EXCHANGES, HYDREX_PRICING, PRICING, swapperOf, type Exchange } from "../src/config.ts";
 import {
   BY_ID,
   WINDOW,
   forget,
   pairPrice,
   pricesAt,
+  pricesAtFlip,
   pricesNow,
   tickPrice,
   waysFor,
@@ -38,7 +39,7 @@ test("a classic pair's price: the ratio of its reserves, or the slope of x³y + 
   assert.ok(pairPrice(90, 110, true) > 1);
 });
 
-test("prices come from Aero's, Aerodrome's and Hydrex's pools, in that order", () => {
+test("prices come from Aero's, Aerodrome's and Hydrex's pools, in that order, and an epoch's from Hydrex's", () => {
   assert.deepEqual(
     PRICING.map(({ name }) => name),
     [
@@ -52,6 +53,10 @@ test("prices come from Aero's, Aerodrome's and Hydrex's pools, in that order", (
       "Hydrex Classic Pools",
       "Hydrex Integral",
     ],
+  );
+  assert.deepEqual(
+    HYDREX_PRICING.map(({ name }) => name),
+    ["Hydrex Classic Pools", "Hydrex Integral"],
   );
 });
 
@@ -271,6 +276,19 @@ test("the deepest pool wins, now and at a flip", async () => {
   close((await priceOf(pools))!, 3 * USDC_USD);
   forget();
   close((await priceOf(pools, TOKEN, NOW - 7 * 86_400))!, 3 * USDC_USD);
+});
+
+test("an epoch's prices come from Hydrex's pools only; current ones from all", async () => {
+  // 15,000 USDC deep at 3 in Aerodrome, 8,000 at 4 in Hydrex Classic.
+  const pools: Fake[] = [
+    { exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] },
+    { exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] },
+  ];
+  const { reader, asked } = market(pools);
+  close((await pricesAtFlip([TOKEN], new Map(), NOW - 7 * 86_400, reader)).of.get(TOKEN.address)!, 4 * USDC_USD);
+  for (const { name, factory } of PRICING.filter((each) => !HYDREX_PRICING.includes(each)))
+    assert.ok(!asked.has(factory.toLowerCase()), `an epoch's prices do not look in ${name}`);
+  close((await pricesNow([TOKEN], new Map(), reader)).of.get(TOKEN.address)!, 3 * USDC_USD);
 });
 
 test("pool lookups go 1,000 to a batch, since each is cheap; other reads go in smaller ones", async () => {

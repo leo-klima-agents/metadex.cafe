@@ -30,7 +30,7 @@ import {
   type Standing,
   type Walk,
 } from "../payouts.ts";
-import { gasWords, key, noPrices, pricesAt, pricesNow, type Prices, type Token } from "../prices.ts";
+import { gasWords, key, noPrices, pricesAtFlip, pricesNow, type Prices, type Token } from "../prices.ts";
 import { now, same, tagged } from "../rpc.ts";
 import { state } from "../state.ts";
 import { tokensOf, type Amount } from "../tokens.ts";
@@ -206,7 +206,7 @@ function priced(amounts: Amount[], flip: number): { tokens?: Map<string, Token>;
   const most = new Map<string, bigint>();
   for (const { token, amount: value } of amounts) if (value > (most.get(key(token)) ?? 0n)) most.set(key(token), value);
   const prices = use(`flip prices ${flip} ${addresses.join()}`, () =>
-    pricesAt([...tokens.values()], most, flip, tagged("payouts")),
+    pricesAtFlip([...tokens.values()], most, flip, tagged("payouts")),
   ).value;
   return { tokens, prices };
 }

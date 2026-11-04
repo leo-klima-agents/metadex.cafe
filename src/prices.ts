@@ -377,17 +377,24 @@ async function measure(
 }
 
 // Prices each token from its deepest pool against an anchor already priced; of two pools equally deep, the one whose
-// exchange comes first in `config.PRICING` wins.
-async function inPools(tokens: Token[], prices: Prices, amounts: Map<string, bigint>, window: Window, rd: Read) {
+// exchange comes first in `exchanges` wins.
+async function inPools(
+  tokens: Token[],
+  prices: Prices,
+  amounts: Map<string, bigint>,
+  window: Window,
+  exchanges: Exchange[],
+  rd: Read,
+) {
   if (!tokens.length) return;
   const anchors = config.ANCHORS.filter(({ address }) => prices.of.has(key(address)));
   const pairs = tokens.flatMap((token) => anchors.map((anchor) => ({ token, anchor })));
   const ways = await waysFor(
     pairs.map(({ token, anchor }) => [token.address, anchor.address]),
-    config.PRICING,
+    exchanges,
     rd,
   );
-  const rank = (pool: Pool) => config.PRICING.findIndex(({ id }) => id === pool.exchange.id);
+  const rank = (pool: Pool) => exchanges.findIndex(({ id }) => id === pool.exchange.id);
   const candidates = pairs
     .flatMap(({ token, anchor }) =>
       ways.get(pairKey(token.address, anchor.address))!.map((way): Pool => ({
@@ -423,6 +430,7 @@ export async function pricesAt(
   amounts: Map<string, bigint>,
   time: number,
   rd: Read = read,
+  exchanges = config.PRICING,
 ): Promise<Prices> {
   const [newest, newestTime] = required(await rd([blockNumber, blockTime])).map(Number) as [number, number];
   const top = newest - SETTLED;
@@ -475,6 +483,7 @@ export async function pricesAt(
       prices,
       amounts,
       window,
+      exchanges,
       rd,
     );
   return prices;
@@ -482,6 +491,10 @@ export async function pricesAt(
 
 export const pricesNow = (tokens: Token[], amounts = new Map<string, bigint>(), rd: Read = read): Promise<Prices> =>
   pricesAt(tokens, amounts, Infinity, rd);
+// An epoch's prices, from Hydrex's pools only: little of its rewards is priced only elsewhere, and looking there too
+// takes twice as long.
+export const pricesAtFlip = (tokens: Token[], amounts: Map<string, bigint>, flip: number, rd: Read = read) =>
+  pricesAt(tokens, amounts, flip, rd, config.HYDREX_PRICING);
 // The anchors' prices now, which include ETH's for gas costs; read at most once a minute.
 export const anchorsNow = (): Promise<Prices | undefined> =>
   memo("anchors", () => pricesNow([]), 60_000).catch(() => undefined);
