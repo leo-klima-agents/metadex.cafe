@@ -104,7 +104,7 @@ const market = (gauges: Gauge[], of = PRICES): Market => ({
   unread: [],
   unknown: [],
 });
-// A read that answers each call from `answer`, and records each read's functions and the most calls it allows a batch.
+// Answers each call from `answer`, and records what each read asked.
 type Asked = { names: Set<string>; perBatch: number | undefined };
 function fake(answer: (call: Call) => unknown, asked: Asked[] = []): Read {
   return (async (calls: readonly Call[], options?: { perBatch?: number }) => {
@@ -132,7 +132,7 @@ test("a pool whose power dipped pays exactly what it paid, and is thin and weigh
   const steady = gauge({ perDay: 2 });
   const mixed = averageOver(market([steady, dipped]), 24);
   assert.ok(mixed.fees > 2 && mixed.fees < 12, `the dip weighs a hundredth: ${mixed.fees}`);
-  // Power that was lower for a while, but not next to nothing, leaves the pool as it is.
+  // Lower power, but not next to nothing, leaves it as it is.
   const lower = gauge();
   lower.windows[24] = { ...lower.windows[24], spread: 2_500_000 };
   assert.ok(!isThin(lower, 24) && weightOf(lower.windows[24]) === 2_500_000);
@@ -143,7 +143,7 @@ test("a pool whose power dipped pays exactly what it paid, and is thin and weigh
   assert.ok(Math.abs(found.spread! - 50_000) < 1e-6, String(found.spread));
   const idle = accruedFrom(start, NOW - 9 * DAY, { ...end(), share, zero: 43_200 });
   assert.ok(Math.abs(idle.spread! - 25_000) < 1e-6, "seconds without power do not count");
-  // A checkpoint four days before the window: the power since it is the window's start, and the mean covers the window.
+  // From a checkpoint four days before the window, the mean still covers only the window.
   const old: Start = { ...start, ts: NOW - 5 * DAY, time: NOW - DAY, supply: 8_000_000n * SAERO };
   const window = accruedFrom(old, NOW - 9 * DAY, {
     ...end(),

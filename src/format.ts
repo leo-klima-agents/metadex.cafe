@@ -61,8 +61,7 @@ export const voteWords = (votes: bigint): string =>
   `${voteFigure(votes)} ${votes > 0n && votes < 2n * 10n ** 18n ? "vote" : "votes"}`;
 export const bps = (value: bigint): string => percent.format(Number(value) / 10_000);
 export const fraction = (value: number): string => roughPercent.format(value);
-// How some earnings per unit compare with the average's: "about the average", "12.3% above the average"; "" when there
-// is no ratio.
+// "about the average", "12.3% above the average", or "" with no ratio.
 export const versusAverage = (ratio: number): string =>
   !Number.isFinite(ratio)
     ? ""
@@ -107,7 +106,7 @@ const toCents = (sum: Money): number => {
 export const between = (from: Money, to: Money): Money => ({ ...to, value: toCents(to) - toCents(from) });
 
 // For example "≈ $692", "≈ −€0.69", "< £0.01" or "≈ 0.77 USDC". With `cents`, always to the cent, as in a column.
-// With `floor`, the sum leaves something out, so it reads "≥ $692", and "≥ $0.00" when it rounds to nothing.
+// With `floor`, a sum that leaves something out: "≥ $692".
 export function money(sum: Money, cents = false, floor = false): string {
   const [shown, rate] = shownOf(sum);
   const value = sum.value / rate;

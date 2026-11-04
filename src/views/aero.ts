@@ -29,8 +29,7 @@ const aeroView = $('[data-view="aero"]');
 const stakeView = $('[data-view="stake"]');
 const poolView = $('[data-view="pool"]');
 
-// What the pools table shows, as the visitor last set it: the lookback, the sAERO they would add, thin pools, and
-// every pool rather than the first `LIMIT`.
+// As the visitor last set them. `all` shows every pool, not only the first `LIMIT`.
 const controls: { hours: Hours; amount: number; thin: boolean; all: boolean } = {
   hours: 48,
   amount: 0,
@@ -38,20 +37,18 @@ const controls: { hours: Hours; amount: number; thin: boolean; all: boolean } = 
   all: false,
 };
 const LIMIT = 20;
-// A record over less than this is too short to say anything.
+// A shorter record says nothing.
 const SHORTEST = 6 * 3_600;
-// Each window as the page words it: after a figure, as a column's head, after "over the", and as a row's name.
 const WINDOW: Record<Hours, { last: string; head: string; over: string; name: string }> = {
   24: { last: "last 24 h", head: "Last 24 h", over: "24 hours", name: "24 hours" },
   48: { last: "last 48 h", head: "Last 48 h", over: "48 hours", name: "48 hours" },
   168: { last: "last 7 days", head: "Last 7 days", over: "seven days", name: "7 days" },
 };
 
-// A sum a day per 10,000 sAERO, to the cent. One that leaves out tokens without a price is a floor.
+// To the cent, as a floor when it leaves out tokens without a price.
 const perDay = (value: number, priced: boolean, market: Market): string =>
   money(moneyAt(value, market.prices), true, !priced);
 const sAero = (amount: bigint): string => `${compact(amount)} sAERO`;
-// "47 hours", or "1 d 23 h 30 min" for a time that is not whole hours.
 const hoursWords = (seconds: number): string =>
   seconds % 3_600 === 0 ? count(seconds / 3_600, "hour", "hours") : until(seconds);
 
@@ -63,7 +60,6 @@ const lockWords = ({ permanent, end }: Stake): string =>
   permanent ? "Permanent" : `${end > now() ? "Ends" : "Ended"} ${date(end)}`;
 const poolsIn = (stake: Stake): number => stake.allocations.filter(({ gauge }) => !aero.isIdleGauge(gauge)).length;
 
-// Whether the stake can move now, and when its allocation on Base stops holding it.
 function holdNode(stake: Stake, market: Market | undefined): Value {
   if (!stake.onBase && !poolsIn(stake)) return status("idle", "Not allocated on Base");
   if (!market) return undefined;
@@ -80,9 +76,7 @@ function placeWords(stake: Stake): string {
     ...(stake.elsewhere ? [`${sAero(stake.elsewhere)} on other chains`] : []),
   ].join(" · ");
 }
-// Who may act for the stake, and so transfer it: the address approved for it alone, unless it is Aero's own module,
-// and Aero's module if its owner approved it for all their sAERO. Other addresses approved for all of them cannot be
-// listed without their logs, so `full` says so where there is room.
+// Of approvals for all of an owner's sAERO, only Aero's payments module's can be read: others would need logs.
 function approvalNode(stake: Stake, full = false): Value {
   if (!same(stake.approved, zeroAddress) && !same(stake.approved, PAYMENTS_MODULE))
     return status(
@@ -110,7 +104,7 @@ function pendingWords(stake: Stake, pending: Got<Map<bigint, Pending>>, market: 
     return `${words} to claim from its pools now, in ${count(found.amounts.size, "token", "tokens")}`;
   });
 }
-// The wallet's own stakes' rewards, read together; another stake's alone.
+// The wallet's own stakes are read together.
 function pendingFor(stake: Stake): Got<Map<bigint, Pending>> {
   const own = data.ownStakes().value;
   return data.pending(own?.some(({ id }) => id === stake.id) ? own : [stake]);
@@ -274,8 +268,7 @@ export function drawStake(): void {
   const own = !!state.connection && same(stake.owner, state.connection.address);
   const pilot = autopilotOf(stake);
   const shares = market ? aero.sharesOf(stake, market) : [];
-  // A record since the stake last allocated, once that is long enough ago to say something; it needs every gauge's
-  // snapshot from then.
+  // A record needs every gauge's snapshot from when the stake allocated, and a hold long enough.
   const held = market ? market.time - stake.lastAllocated : undefined;
   const soon = held !== undefined && held < SHORTEST;
   const since: Got<Map<string, aero.Start> | null> =
@@ -356,8 +349,6 @@ export function drawStake(): void {
   );
 }
 
-// A row's days: "Mon 2 Nov", or "Sat 31 Oct – Mon 2 Nov" when no checkpoint fell in some of them, with ", so far" for
-// the day under way.
 function daysWords(row: aero.Day, today: number): string {
   const last = row.day + (row.days - 1) * aero.DAY;
   const words = row.days > 1 ? `${day(row.day)} – ${day(last)}` : day(row.day);
@@ -462,7 +453,7 @@ actions["aero-window"] = (el) => {
 };
 actions["aero-amount"] = (el) => {
   const input = el as HTMLInputElement;
-  // Anything but an amount marks the box as invalid and leaves the table as it was.
+  // Anything else marks the box invalid and keeps the table.
   const value = aero.amountOf(input.value);
   input.setAttribute("aria-invalid", String(value === undefined));
   if (value === undefined) return;
@@ -477,7 +468,6 @@ actions["aero-more"] = () => {
   controls.all = !controls.all;
   render();
 };
-// The App's line for Aero.
 export function aeroLine(): Value {
   return shown(data.ownStakes(), (stakes) =>
     stakes.length

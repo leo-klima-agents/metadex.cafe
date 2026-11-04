@@ -93,8 +93,7 @@ export function payouts(holdings: Holdings): Got<Payouts> {
   );
 }
 
-// Aero's gauges on Base and what they pay, read again every five minutes, and the stakes shown, read again as often.
-// Its gauges, their pools and their tokens are read again as `universeReads` says.
+// Aero's reads last five minutes, and its universe as `universeReads` says.
 const MARKET = "aero market";
 const universes = aero.universeReads(() => aero.readUniverse(tagged("aero")));
 const universe = () => memo("aero universe", universes.read, universes.ttl);
@@ -115,7 +114,7 @@ export const autopilots = (): Got<aero.Stake[]> =>
       ),
     5 * MINUTE,
   );
-// A stake, from the wallet's own once they are read, so that one of them is not read twice.
+// Waits for the wallet's own stakes, so as not to read one twice.
 export function stakeShown(id: bigint): Got<aero.Stake | null> {
   const mine = ownStakes();
   const own = mine.value?.find((stake) => stake.id === id);
@@ -123,19 +122,18 @@ export function stakeShown(id: bigint): Got<aero.Stake | null> {
   if (owner() && mine.value === undefined && !mine.failed) return {};
   return use(`aero stake ${id}`, async () => (await aero.readStakes([id], tagged("aero")))[0] ?? null, 5 * MINUTE);
 }
-// What the stakes can claim from the gauges they are in, read again when they move.
+// Read again when a stake moves.
 export const pending = (stakes: aero.Stake[]): Got<Map<bigint, aero.Pending>> =>
   use(
     `aero pending ${stakes.map(({ id, lastAllocated }) => `${id}:${lastAllocated}`).join(" ")}`,
     async () => aero.pendingOf(stakes, await marketRead(), tagged("aero")),
     5 * MINUTE,
   );
-// Every gauge's snapshot at a past time, which does not change.
+// A past snapshot never changes.
 export const since = (time: number): Got<Map<string, aero.Start>> =>
   andThen(market(), () =>
     use(`aero since ${time}`, async () => aero.startsSince((await marketRead()).gauges, time, tagged("aero"))),
   );
-// A pool's last two weeks, day by day, read again with the market.
 const HISTORY_DAYS = 14;
 export const history = (gauge: Address): Got<aero.Day[] | null> =>
   andThen(market(), (found) => {

@@ -6,9 +6,8 @@ import { key, pairPrice, pricesNow, tickPrice, worthOf, type Prices, type Token 
 import { blockTime, contract, read, readEach, required, same, sawBlock, type Read } from "./rpc.ts";
 import { describe } from "./tokens.ts";
 
-// What Aero pays the sAERO allocated on Base, read from its contracts alone. Each gauge's rewards manager adds the fees
-// it pays per unit of allocated power to an accumulator, and keeps a snapshot of it at each checkpoint, so what one
-// sAERO earned there over any past window is the accumulator's growth over it. Prices are today's.
+// A gauge's rewards manager adds up the fees it pays per unit of power and snapshots the sum at each checkpoint, so
+// what sAERO earned over a window is the growth between two snapshots. Prices are today's.
 
 const escrow = contract(config.AERO_ESCROW, aeroEscrowAbi);
 const root = contract(config.AERO_VOTER, aeroVoterAbi);
@@ -18,29 +17,25 @@ const manager = (address: Address) => contract(address, rewardsManagerAbi);
 
 const HOUR = 3_600;
 export const DAY = 86_400;
-// The lookbacks the page offers, in hours.
 export const WINDOWS = [24, 48, 168] as const;
 export type Hours = (typeof WINDOWS)[number];
-// Yields are per 10,000 sAERO a day. A rewards manager credits fees × 1e24 / power, power having 18 decimals, so
-// 10,000 sAERO earn the accumulator's growth divided by 100, in the token's smallest units.
+// Rewards managers credit fees × 1e24 / power, so 10,000 sAERO earn the growth / 100, in the token's smallest units.
 export const PER = 10_000;
 const PER_UNITS = 100;
 const RATE = 1e18;
-// The scale of a rewards manager's supply accumulator, the sum of each second over the power then.
+// Rewards managers' supply accumulator is the sum of seconds × 1e42 / power.
 const SUPPLY_SCALE = 10n ** 42n;
-// Pools with less sAERO than this, in whole sAERO, are thin: one allocation changes what they pay.
+// Under this many sAERO, one allocation changes what a pool pays.
 export const THIN = 1_000_000;
-// Programs older than the newest this many of a gauge are not read; programs stream for days, not months.
+// Only a gauge's newest programs are read: programs run for days.
 export const PROGRAMS = 50;
-// A claim estimate walks at most this many of a stake's checkpoints in a rewards manager, and each such estimate is
-// heavy, so a read holds at most `HEAVY` of them.
+// Claim estimates walk at most this many checkpoints and are heavy, so a read holds at most `HEAVY`.
 const MAX_CHECKPOINTS = 500n;
 const HEAVY = 20;
-// A pool prices a token only if it holds at least this much of each side, in dollars.
+// In dollars, the least a pool must hold of each side to price a token.
 const POOL_FLOOR = 1_000;
 
-// A rewards manager's state at a time: its two fee accumulators, its supply accumulator and the seconds it had no
-// power, and its power. `share` is undefined if it could not be read.
+// `share` is the supply accumulator, undefined if unread, and `zero` the seconds without power.
 export type Point = {
   at: number;
   acc: readonly [bigint, bigint];
@@ -48,8 +43,7 @@ export type Point = {
   zero: number;
   power: bigint;
 };
-// The checkpoint at or before a time, as read: `index` 0 means there was none. `time` is the time itself, and `supply`
-// the power then; any other field is undefined if its read failed.
+// The checkpoint at or before `time`, `index` 0 if none, and the power at `time`. Fields are undefined if unread.
 export type Start = {
   index: bigint;
   time?: number | undefined;
@@ -59,9 +53,8 @@ export type Start = {
   zero: number | undefined;
   supply: bigint | undefined;
 };
-// A rewards manager's fees per unit of power, from one time to another: the growth of its two accumulators, from the
-// checkpoint at or before the start. `power` and `endPower` are what was allocated to it at each end, and `spread` the
-// harmonic mean of its power over the seconds between them that it had any, in whole sAERO, if it could be read.
+// Fee accumulator growth from a checkpoint to a later time. `spread` is the harmonic mean of the power between, in
+// sAERO, if read.
 export type Accrued = {
   from: number;
   to: number;
@@ -81,21 +74,19 @@ export type Gauge = {
   token0: Token;
   token1: Token;
   name: string;
-  // A gauge that is not activated, or whose emissions cap is zero, takes an allocation and pays nothing for it.
+  // Allocations to a gauge not activated, or capped at zero, earn nothing.
   activated: boolean;
   cap: bigint;
   power: bigint;
-  // Its state now, which every accrual runs to.
   end: Point;
-  // When its rewards manager first checkpointed, or 0 if it never has.
+  // When its rewards manager first checkpointed, or 0.
   first: number;
   windows: Record<Hours, Accrued>;
-  // The newest `PROGRAMS` of its `programCount` incentive programs.
+  // The newest `PROGRAMS` of its `programCount`.
   programs: Program[];
   programCount: number;
 };
-// `unread` lists the gauges left out because a read failed, and `unknown` the gauge factories the page does not know,
-// whose gauges are left out too.
+// `unread`: gauges left out after a failed read. `unknown`: gauge factories the page does not know.
 export type Market = {
   time: number;
   cooldown: number;
@@ -114,10 +105,9 @@ const KINDS: Record<GaugeKind, (spacing: number) => string> = {
   cl: (spacing) => `CL${spacing}`,
 };
 
-// Where an accrual starts, from the checkpoint at or before its time; index 0 means there was none, so it starts
-// from nothing at the first checkpoint. A snapshot that failed to read makes it start at its end, accruing nothing. A
-// power at the start that failed to read counts as the power at the end. Fees can be credited between checkpoints, so
-// they accrue from the checkpoint; the power has not changed since it, so its mean starts at the time itself.
+// Index 0 means no checkpoint yet, so it accrues from nothing at the first one. An unread snapshot accrues nothing.
+// Fees can be credited between checkpoints but power cannot change, so fees accrue from the checkpoint and the mean
+// power from `time`.
 export function accruedFrom(start: Start, first: number, end: Point): Accrued {
   const to = end.at;
   const { index, acc, ts, share, zero, supply } = start;
@@ -129,7 +119,6 @@ export function accruedFrom(start: Start, first: number, end: Point): Accrued {
         : undefined;
   const from = Math.min(at?.ts ?? to, to);
   const grown = (a: bigint, b: bigint | undefined) => (b !== undefined && a > b ? a - b : 0n);
-  // The supply accumulator and the seconds without power at the time itself, carried on from the checkpoint.
   const since = index !== 0n && start.time !== undefined && supply !== undefined ? Math.max(0, start.time - from) : 0;
   const meanFrom = Math.min(from + since, to);
   const startShare =
@@ -147,7 +136,7 @@ export function accruedFrom(start: Start, first: number, end: Point): Accrued {
     spread: seconds > 0 && shared > 0n ? Number((BigInt(seconds) * SUPPLY_SCALE) / shared) / 1e18 : undefined,
   };
 }
-// A rewards manager's state now, from its latest checkpoint and its power since.
+// Carried on from the latest checkpoint at the power since.
 function endOf(latest: Start, accumulator: readonly [bigint, bigint], power: bigint, now: number): Point {
   const since = Math.max(0, now - (latest.ts ?? now));
   const share = latest.index === 0n ? 0n : latest.share;
@@ -161,7 +150,6 @@ function endOf(latest: Start, accumulator: readonly [bigint, bigint], power: big
   };
 }
 
-// Each gauge's checkpoint at or before each of `times`, and its power then.
 type Found = { address: Address; index: bigint; supply: bigint | undefined; time?: number };
 async function indicesAt(rewards: Address[], times: bigint[], rd: Read): Promise<Found[]> {
   const found = await readEach(
@@ -179,7 +167,6 @@ async function indicesAt(rewards: Address[], times: bigint[], rd: Read): Promise
     time: Number(time),
   }));
 }
-// The snapshots at those checkpoints: their accumulators and time.
 async function snapshotsOf(found: Found[], rd: Read): Promise<Start[]> {
   const read = await readEach(
     found,
@@ -204,9 +191,8 @@ const startsAt = async (rewards: Address[], times: bigint[], rd: Read): Promise<
   snapshotsOf(await indicesAt(rewards, times, rd), rd);
 
 export type Quote = { token0: Token; token1: Token; price0: number; reserve0: number; reserve1: number };
-// Prices tokens from pools, from the prices already known outward: each round prices every token paired with one
-// priced before it, through its deepest such pool, if that pool holds at least `POOL_FLOOR` of each side. `price0` is
-// token0's price in token1, and the reserves are in whole tokens.
+// Prices tokens outward from those already priced, each through its deepest pool holding `POOL_FLOOR` of each side.
+// `price0` is token0's price in token1; reserves are in whole tokens.
 export function pricedByPools(prices: Prices, quotes: Quote[]): Prices {
   const of = new Map(prices.of);
   for (;;) {
@@ -229,8 +215,7 @@ export function pricedByPools(prices: Prices, quotes: Quote[]): Prices {
   }
 }
 
-// What changes only when Aero adds a gauge: each gauge, its pool, its rewards manager and their tokens. A gauge whose
-// reads fail is in `unread`, and a gauge factory the page does not know in `unknown`.
+// What changes only when Aero adds a gauge.
 export type Listed = {
   address: Address;
   kind: GaugeKind;
@@ -287,9 +272,7 @@ export async function readUniverse(rd: Read = read): Promise<Universe> {
   return { gauges, unread: listed.flatMap(({ address }) => (kept.has(address) ? [] : [address])), unknown };
 }
 
-// How long each read of the universe holds, in ms. Its gauges, pools and tokens change only when Aero adds a gauge, so
-// an hour; but while some gauges could not be read, five minutes for the next `RETRIES` reads in a row, in case that
-// passes, after which a gauge that never reads no longer keeps the universe on that cycle.
+// An hour, or five minutes for the next `RETRIES` reads while some gauges are unread.
 const RETRIES = 3;
 export function universeReads(read: () => Promise<Universe>) {
   let unreadTimes = 0;
@@ -303,9 +286,7 @@ export function universeReads(read: () => Promise<Universe>) {
   };
 }
 
-// What every gauge of `universe` paid over the windows, its live incentives, and prices for its tokens from Chainlink's
-// feeds and the gauges' own pools. A gauge whose reads fail is left out, and listed in `unread`. The universe may still
-// be on its way: what does not need it is read meanwhile.
+// A gauge whose reads fail is left out and listed in `unread`.
 export async function readMarket(from: Universe | Promise<Universe>, rd: Read = read): Promise<Market> {
   const [[time, cooldown, maxGauges], anchors, universe] = await Promise.all([
     rd([blockTime, leaf("allocationCooldown"), leaf("maxGauges")]).then(required),
@@ -346,7 +327,7 @@ export async function readMarket(from: Universe | Promise<Universe>, rd: Read = 
       rd,
     ),
   ]);
-  // Each gauge's windows' snapshots, then its latest one, which it has had its power since.
+  // The windows' checkpoints, then each gauge's latest.
   const starts = await snapshotsOf(
     [
       ...found,
@@ -489,7 +470,6 @@ export async function readMarket(from: Universe | Promise<Universe>, rd: Read = 
   };
 }
 
-// Every gauge's snapshot at `time`, by rewards manager, from which `sinceIn` gives what it paid since then.
 export async function startsSince(gauges: Gauge[], time: number, rd: Read = read): Promise<Map<string, Start>> {
   const rewards = gauges.map((gauge) => gauge.rewards);
   const starts = await startsAt(rewards, [BigInt(time)], rd);
@@ -502,10 +482,8 @@ export const sinceIn =
     return start && accruedFrom(start, gauge.first, gauge.end);
   };
 
-// A gauge's fees per unit of power over its last UTC days, from today so far back over the `days` before it, newest
-// first. Each accrual runs between the checkpoints at or before the starts of its days: `day` is its first day's start
-// and `days` how many days it covers, more than one when no checkpoint fell in a day. Its first day runs from its first
-// checkpoint; days before it are left out.
+// Newest first. A row covers several days when no checkpoint fell in some. The first starts at the gauge's first
+// checkpoint.
 export type Day = Accrued & { day: number; days: number };
 export async function historyOf(gauge: Gauge, days: number, rd: Read = read): Promise<Day[]> {
   const today = gauge.end.at - (gauge.end.at % DAY);
@@ -547,19 +525,15 @@ export function stitched(gauge: Gauge, bounds: number[], starts: Start[]): Day[]
   return rows;
 }
 
-// A gauge's power over an accrual: the least of its power at the start, at the end, and its harmonic mean between. A
-// gauge that held next to nothing for a while pays a great deal per unit of power then, which counts for little.
+// The least of start, end and mean power: a gauge that held next to nothing for a while pays a lot per unit then.
 export const weightOf = (accrued: Accrued): number =>
   Math.min(whole(accrued.power), whole(accrued.endPower), accrued.spread ?? Infinity);
-// A thin accrual, where one allocation changes the yield: under `THIN` sAERO at either end or on average between.
 export const thinOver = (accrued: Accrued): boolean => weightOf(accrued) < THIN;
-// A gauge's power over an accrual, for what it paid in all: its harmonic mean, by which the fees per unit of power give
-// what it paid when fees come evenly, whatever its power did, or else the least of its power at either end.
+// The harmonic mean, which times the fees per unit gives what was paid when fees come evenly.
 export const meanOf = (accrued: Accrued): number =>
   accrued.spread ?? Math.min(whole(accrued.power), whole(accrued.endPower));
 
-// What 10,000 sAERO allocated throughout an accrual earned a day, at `prices`: exactly what it paid per unit of power.
-// `priced` is false when a token that paid had no price, and counted for nothing.
+// `priced` is false if a token that paid has no price, which counts as 0.
 export type Yield = { value: number; priced: boolean };
 export function feesPerDay(gauge: Gauge, accrued: Accrued | undefined, prices: Prices): Yield | undefined {
   const span = accrued ? accrued.to - accrued.from : 0;
@@ -576,14 +550,12 @@ export function feesPerDay(gauge: Gauge, accrued: Accrued | undefined, prices: P
   }
   return { value: value / (span / DAY), priced };
 }
-// A window's fees, if the gauge's history covers most of it.
 export function windowFees(gauge: Gauge, hours: Hours, prices: Prices): Yield | undefined {
   const accrued = gauge.windows[hours];
   return accrued.to - accrued.from >= 0.9 * hours * HOUR ? feesPerDay(gauge, accrued, prices) : undefined;
 }
 
 export const isLive = (program: Program, time: number): boolean => program.start <= time && time < program.end;
-// What a gauge's live incentive programs stream a day, in all.
 export function streamPerDay(gauge: Gauge, time: number, prices: Prices): Yield {
   let [value, priced] = [0, true];
   for (const program of gauge.programs) {
@@ -595,8 +567,7 @@ export function streamPerDay(gauge: Gauge, time: number, prices: Prices): Yield 
   return { value, priced };
 }
 
-// What 10,000 sAERO would earn a day in a gauge if `amount` sAERO more joined it: its fees over the window and its
-// live incentives, both shared by more power. Undefined for a gauge without power or without enough history.
+// With `amount` more sAERO sharing the fees and incentives.
 export type Per10k = { fees: number; incentives: number; total: number; priced: boolean };
 export function per10k(gauge: Gauge, hours: Hours, time: number, prices: Prices, amount = 0): Per10k | undefined {
   const fees = windowFees(gauge, hours, prices);
@@ -610,9 +581,7 @@ export function per10k(gauge: Gauge, hours: Hours, time: number, prices: Prices,
 
 export const isThin = (gauge: Gauge, hours: Hours): boolean => thinOver(gauge.windows[hours]);
 
-// The power-weighted average of every gauge with power whose tokens all have prices, which is what Base's allocated
-// sAERO earned per 10,000. Gauges younger than the window count over their own history, and each weighs its mean power
-// over the accrual, so that fees paid while it held next to nothing barely count.
+// Weighed by mean power, over the gauges whose tokens all have prices.
 export type Average = Omit<Per10k, "priced">;
 export function average(market: Market, accrued: (gauge: Gauge) => Accrued | undefined, live = true): Average {
   let [weight, fees, stream] = [0, 0, 0];
@@ -631,9 +600,7 @@ export function average(market: Market, accrued: (gauge: Gauge) => Accrued | und
 }
 export const averageOver = (market: Market, hours: Hours): Average => average(market, (gauge) => gauge.windows[hours]);
 
-// Base's totals: its allocated power, the fees allocators earned a day over the last 24 hours, and the incentives
-// streaming to them now, each `priced` unless it leaves out tokens without a price. A program streaming to a gauge
-// with no power pays nobody: its creator takes it back.
+// Streams to a gauge with no power go back to their creator.
 export function totalsOf(market: Market) {
   let [power, fees, incentives] = [0n, { value: 0, priced: true }, { value: 0, priced: true }];
   for (const gauge of market.gauges) {
@@ -648,9 +615,8 @@ export function totalsOf(market: Market) {
   return { power, fees, incentives };
 }
 
-// A stake and its allocation on Base. `idle` is its power on no chain, which earns nothing; on Base, power on the zero
-// gauge earns nothing either. `approved` is the address approved for this stake alone, and `module` whether its owner
-// approved Aero's payments module for all their stakes.
+// `idle` is on no chain. `approved` is approved for this stake alone, and `module` says whether its owner approved
+// Aero's payments module for all their stakes.
 export type Allocation = { gauge: Address; amount: bigint };
 export type Stake = {
   id: bigint;
@@ -668,18 +634,17 @@ export type Stake = {
   allocations: Allocation[];
 };
 export const isIdleGauge = (gauge: Address): boolean => same(gauge, zeroAddress);
-// A market's gauge at an address, looked up in a map made once per market.
 const lookups = new WeakMap<Market, Map<string, Gauge>>();
 export function gaugeAt(market: Market, address: Address): Gauge | undefined {
   let found = lookups.get(market);
   if (!found) lookups.set(market, (found = new Map(market.gauges.map((gauge) => [key(gauge.address), gauge]))));
   return found.get(key(address));
 }
-// When the stake may allocate on Base again: 47 hours after it last did, less any reduction. 0 if it may now.
+// 0 if it can move now.
 export const movesAt = ({ lastAllocated, reduction }: Stake, cooldown: number): number =>
   lastAllocated ? Math.max(0, lastAllocated + cooldown - reduction) : 0;
 
-// The stakes, in the order given. An id with no stake is left out.
+// Ids with no stake are left out.
 export async function readStakes(ids: bigint[], rd: Read = read): Promise<Stake[]> {
   const found = await readEach(
     ids,
@@ -730,7 +695,7 @@ export async function readStakes(ids: bigint[], rd: Read = read): Promise<Stake[
     }),
   );
 }
-// A stake from its reads: `chains` holds its amount on each chain, CHAIN0, the chain of idle power, being 0.
+// In `chains`, CHAIN0, the chain of idle power, is 0.
 export type StakeReads = {
   id: bigint;
   staked: { amount: bigint; end: number; isPermanent: boolean };
@@ -779,10 +744,8 @@ export async function stakesOf(owner: Address, rd: Read = read): Promise<Stake[]
   return readStakes(ids, rd);
 }
 
-// What each stake can claim from the gauges it is allocated to now, by token: their fees and every incentive program
-// read for them. Rewards in gauges it has left are not counted. `partial` is set when some of what it can claim there
-// was not counted: a read failed, a gauge has programs older than those read, or the stake has more checkpoints since
-// it last claimed than an estimate walks.
+// What can be claimed from the gauges a stake is in now. `partial` if some was not counted: a failed read, older
+// programs, or more checkpoints than an estimate walks.
 export type Pending = { amounts: Map<string, { token: Token; amount: bigint }>; partial: boolean };
 export async function pendingOf(stakes: Stake[], market: Market, rd: Read = read): Promise<Map<bigint, Pending>> {
   const pairs = stakes.flatMap((stake) =>
@@ -848,7 +811,7 @@ export function worthPending({ amounts }: Pending, prices: Prices): Yield {
   return { value, priced };
 }
 
-// A stake's gauges on Base, each with its share of the stake's power there, which includes any on the zero gauge.
+// Shares include the zero gauge, which earns nothing.
 export type Share = { gauge: Gauge | undefined; address: Address; amount: bigint; share: number };
 export function sharesOf(stake: Stake, market: Market): Share[] {
   const total = stake.allocations.reduce((sum, { amount }) => sum + amount, 0n);
@@ -861,7 +824,6 @@ export function sharesOf(stake: Stake, market: Market): Share[] {
     }))
     .sort((a, b) => b.share - a.share);
 }
-// What 10,000 of a stake's sAERO on Base earned a day in fees over accruals, its idle power counting for nothing.
 export function earnedBy(shares: Share[], accrued: (gauge: Gauge) => Accrued | undefined, prices: Prices): Yield {
   let [value, priced] = [0, true];
   for (const { gauge, share } of shares) {
@@ -872,8 +834,7 @@ export function earnedBy(shares: Share[], accrued: (gauge: Gauge) => Accrued | u
   }
   return { value, priced };
 }
-// What its gauges paid 10,000 sAERO a day over a window, with their live incentives. Undefined when none of them has
-// enough history.
+// Undefined when none of its gauges has enough history.
 export function paidBy(shares: Share[], market: Market, hours: Hours): Yield | undefined {
   let [value, priced, any] = [0, true, false];
   for (const { gauge, share } of shares) {
@@ -884,8 +845,7 @@ export function paidBy(shares: Share[], market: Market, hours: Hours): Yield | u
   return any ? { value, priced } : undefined;
 }
 
-// An amount of sAERO as typed: digits with "." as the decimal mark, spaces ignored, or 0 for nothing. Undefined if it
-// is not one, such as "1,000" or "1e6".
+// Digits with "." for decimals, spaces ignored.
 export function amountOf(text: string): number | undefined {
   const cleaned = text.replace(/\s/g, "");
   if (!cleaned) return 0;

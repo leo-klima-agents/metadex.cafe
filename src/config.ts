@@ -42,8 +42,7 @@ export const APPROVAL_LOGIC: Address = "0x4B0BC0889EB524Dbae36d409fF733851E9B4f6
 export const VOTER: Address = "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b";
 export const ACCOUNT_NAMES: Address = "0x998cf40a742460b4eBbFB569A0D23eA91976c0d3";
 
-// Aero, whose root chain is Base. A stake is an sAERO, allocated to pools' gauges on Base by the LeafVoter. The
-// FactoryRegistry lists the gauges, each with its pool and the rewards manager that pays the sAERO allocated to it.
+// Aero, whose root chain is Base. The FactoryRegistry lists its gauges, each with its pool and rewards manager.
 export const AERO: Address = "0x3f5bF3EdAc59d650D8fDf9657a71F2f904A3a4Ee";
 export const AERO_ESCROW: Address = "0xBF7977E1521e9a3032bf7243Ee4712f311f13915";
 export const AERO_VOTER: Address = "0x49d7d4f17Ec56Ef8fA04E464AF5D1A4942CC31e6";
@@ -57,8 +56,7 @@ export const GAUGE_FACTORIES: { address: Address; kind: GaugeKind }[] = [
   { address: "0x1e0f776E88649285f99e65Fa599aD6e0f9D97800", kind: "stable" },
   { address: "0xf437f62053ACB121665b8fDBfeA8F214FB8E589d", kind: "cl" },
 ];
-// Aero's public Autopilots, Relays that pool sAERO and allocate it. Each is one stake, owned by its Relay; the page
-// shows it as an Autopilot only while that Relay owns it.
+// Aero's public Autopilots: each is a stake its Relay owns, shown only while it does.
 export type Autopilot = { id: bigint; name: string; relay: Address };
 export const AUTOPILOTS: Autopilot[] = [
   { id: 20365n, name: "Autopilot sAERO Maxi", relay: "0xf588F86577C472D83E5F84403951AA0B92fc1Dd6" },
