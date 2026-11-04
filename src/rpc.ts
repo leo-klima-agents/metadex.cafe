@@ -61,9 +61,9 @@ export const SETTLED = 5;
 export const timeAt = async (block: number, rd: Read = read): Promise<number> =>
   Number(required(await rd([blockTime], { block }))[0]);
 
-// The first block whose time is at least `time`, at or below block `top`, which must be at or after it. The first five
-// guesses interpolate between the closest blocks read so far, or, until one before `time` is read, go by the pace of the
-// last two read, starting with `top` and `above`, a newer block, if given; later ones halve the range.
+// The first block whose time is at least `time`, at or below `top`, which must be at or after it. The first five
+// guesses interpolate between the closest blocks read so far or, until one before `time` is read, follow the pace of
+// the last two read, starting from `top` and the newer `above`, if given. Later ones halve the range.
 export async function firstBlockAt(
   time: number,
   top: number,

@@ -26,8 +26,9 @@ import {
 // For each account and token, Hydrex's reward contracts record the start of the epoch they have paid it up to. Every
 // claim sets this to the current epoch, even a claim of nothing. An epoch counts as paid once the records holding more
 // than half of its rewards' worth, at today's quotes, have moved past its end. A search through past blocks then finds
-// the last payout's block, whose logs make its receipt. Matcha Latte pays each account in one transaction, which logs both the payout and
-// the retirement. Double Espresso records each account's last claim block, and each claim logs the one before.
+// the last payout's block, whose logs make its receipt. Matcha Latte pays each account in one transaction, which logs
+// both the payout and the retirement. Double Espresso records each account's last claim block, and each claim logs the
+// one before.
 
 // A payout takes up to half a day after each flip.
 const UNDER_WAY = 12 * 3600;
@@ -93,7 +94,6 @@ export function worthAt(amounts: Amount[], decimals: Decimals, prices: Prices): 
 
 const pairsOf = (rewards: Reward[]): Pair[] =>
   rewards.map(({ contract, token }) => ({ contract, token: token.address }));
-// Rewards weigh against one another at today's quotes, the same for every epoch.
 export const weighed = (rewards: Reward[], quotes: Pick<Prices, "of">): Weighed[] =>
   rewards.map(({ contract, token, amount }) => ({
     contract,
@@ -503,7 +503,7 @@ type Entry = {
   walk?: Walk | undefined;
   note?: "outside" | "unclaimed" | undefined;
 };
-// `unread` if some rewards could not be weighed for want of today's prices, so that the payouts are read again soon.
+// `unread` if some rewards could not be weighed, so that the payouts are read again soon.
 export type Payouts = { epochStart: number; entries: Entry[]; unread?: true };
 
 export const automationOf = ({ delegate, claimer, delegateAtStart }: Account): Automation | undefined =>
@@ -613,7 +613,6 @@ export async function readPayouts(
       if (!earnings) return;
       if (earnings.start < epochStart - WEEK) return these.forEach((id) => found.set(id, { early: true }));
       const votedBefore = these.filter((id) => votedWith(automation, id, "before"));
-      // The epoch before's rewards, records and quotes are read while what each account can claim is.
       const readBefore = async () => {
         const rewards = votedBefore.length ? await rewardsFor(automation.address, earnings.start - WEEK) : [];
         const [stamps, quotes] = await Promise.all([

@@ -62,9 +62,9 @@ test("prices come from Aero's, Aerodrome's and Hydrex's pools, in that order, an
 });
 
 const NOW = 1_792_800_000;
-// The block prices are read at now, the newest an RPC gives less those it may not have yet.
-// The fake chain makes a block every seven seconds, unlike Base, so nothing may count on Base's two; and the last block
-// half an hour before the newest is not half an hour before the one priced.
+// Prices now are read at the newest block less those an RPC may not have yet. The fake chain makes a block every seven
+// seconds, so nothing may count on Base's two, and its window starts half an hour before the newest block, not before
+// the one priced.
 const PACE = 7;
 const PRICED = 60_000_000;
 const NEWEST = PRICED + SETTLED;
@@ -406,7 +406,8 @@ test("an epoch's prices fail if a pool could not be read, rather than leave its 
 });
 
 test("a search for the window's start that fails after the pools are dropped is not left unhandled", async () => {
-  // USDC's feed fails, and its one pool holds 100 EURC, too little to price it; then every search for a past block fails.
+  // USDC's feed fails and its one pool, holding 100 EURC, is too thin to price it; then every search for a past block
+  // fails.
   const { reader } = market(
     [{ exchange: HYDREX, token: USDC_TOKEN, anchor: EURC, now: [115, 100] }],
     new Map([[EURC, EURC_USD]]),

@@ -110,7 +110,6 @@ async function rewardsOf(contracts: Contract[], start: number, holder: Address |
   return { rewards, votes: new Map(voted.map(({ pool, balance }) => [pool, balance])) };
 }
 
-// The tokens of some rewards, each once.
 export const tokensIn = (rewards: Reward[]): Token[] => [
   ...new Map(rewards.map(({ token }) => [key(token.address), token])).values(),
 ];

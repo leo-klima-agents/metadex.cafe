@@ -60,7 +60,6 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
 
   const totals = claim.paidBy(owing.flatMap(({ owed }) => owed));
   const paid = totals.map(({ token, paid }) => ({ token, amount: paid }));
-  // The parts of a claim go most valuable first, at today's quotes.
   const owedTokens = owing.flatMap(({ owed }) => owed.flatMap(({ token }) => tokens.get(key(token)) ?? []));
   const quotes = await quotesOf(owedTokens);
   const weight = ({ owed }: claim.Claim) => valueAt(owed, tokens, quotes);

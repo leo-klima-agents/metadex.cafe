@@ -27,8 +27,8 @@ import {
 } from "./rpc.ts";
 
 export type Token = { address: Address; decimals: number; symbol: string };
-// Prices per whole token, keyed by lower-case address. `unread` if some pools could not be read, so that some tokens
-// may lack a price they would have had.
+// Prices per whole token, keyed by lower-case address. `unread` if some pools could not be read, so some tokens may
+// lack a price.
 export type Prices = Basis & { of: Map<string, number>; unread?: true };
 export function key(address: Address): Address;
 export function key(address: string): string;
@@ -118,8 +118,8 @@ function lookupsOn(exchange: Exchange, pair: [Address, Address], spacings: Map<n
   }
 }
 
-// Pools found, keyed by exchange id and sorted pair, cached until the page reloads. A lookup that failed says so to
-// those waiting on it, and is dropped, so the next call retries it.
+// Pools found, keyed by exchange id and sorted pair, cached until the page reloads. A failed lookup says so to those
+// waiting on it, and is dropped so that the next call retries it.
 type Looked = { found: PoolFound[]; failed: boolean };
 const pools = new Map<string, Promise<Looked>>();
 let spacingsRead: Promise<Map<number, number[]>> | undefined;
@@ -339,9 +339,9 @@ function pricingOf({ kind, name }: Exchange): Pricing {
 
 const logged = (error: unknown): undefined => void console.error(error);
 // Each pool's average price over the window, in the prices' unit, and its depth at its end. Pools without an average,
-// such as those younger than the window, and pools too thin for the amount priced are dropped. A pool holding less than
-// `FLOOR` of its anchor is too thin whatever the token's price, so its sums are not read. Undefined if a read failed,
-// which leaves its pools unpriced rather than every token.
+// such as those younger than the window, and pools too thin for the amount priced are dropped; one holding less than
+// `FLOOR` of its anchor is dropped before its sums are read. Undefined if a read failed, which leaves only these pools
+// unpriced.
 async function measure(
   pools: Pool[],
   prices: Prices,
@@ -426,8 +426,8 @@ async function inPools(
     prices.of.set(token, pools.reduce((deepest, each) => (each.depth > deepest.depth ? each : deepest)).price);
 }
 
-// The last block at or before each time asked for, found or being found, for every pricing to share. Prices now start
-// from the newest block's time, which moves on, so only the latest such start is kept.
+// The last block at or before each time asked for, shared by every pricing. Prices now start from the newest block's
+// time, which moves on, so only the latest such start is kept.
 const blocksAt = new Map<number, Promise<number>>();
 let nowStart: number | undefined;
 // Forgets every pool, block and quote found, for tests.
@@ -518,8 +518,8 @@ export async function pricesAt(
 
 export const pricesNow = (tokens: Token[], amounts = new Map<string, bigint>(), rd: Read = read): Promise<Prices> =>
   pricesAt(tokens, amounts, Infinity, rd);
-// An epoch's prices, for its earnings and receipts, from Hydrex's pools only: little of its rewards is priced only
-// elsewhere, and looking there too takes twice as long. They are kept, so a pool that could not be read fails them.
+// An epoch's prices, from Hydrex's pools only: little of its rewards is priced only elsewhere, and looking there too
+// takes twice as long. They are kept for the epoch, so a pool that could not be read fails them.
 export async function pricesAtFlip(
   tokens: Token[],
   amounts: Map<string, bigint>,
@@ -530,8 +530,8 @@ export async function pricesAtFlip(
   if (prices.unread) throw new Error("Some pools could not be read from Base.");
   return prices;
 }
-// Prices now without amounts, as a market would quote them, for weighing rewards against one another rather than for
-// showing. Each token's quote is shared by every caller for five minutes; a read that fails is made again by the next.
+// Prices now without amounts, as a market would quote them, for weighing rewards against one another, not for showing.
+// Each token's quote is shared for five minutes; a failed read is made again by the next caller.
 const QUOTED = 5 * 60_000;
 const quotes = new Map<string, { at: number; reading: Promise<Prices> }>();
 export async function quotesOf(asked: Token[], rd: Read = read): Promise<Pick<Prices, "of" | "unread">> {
