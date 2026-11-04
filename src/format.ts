@@ -10,6 +10,7 @@ const whole = number({ maximumFractionDigits: 0 });
 const hundredths = number({ minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const percent = number({ style: "percent", maximumFractionDigits: 2 });
 const roughPercent = number({ style: "percent", maximumFractionDigits: 1 });
+const tenthsPercent = number({ style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const threeDigits = number({ maximumSignificantDigits: 3 });
 const fourDigits = number({ maximumSignificantDigits: 4 });
 const plurals = new Intl.PluralRules(LANG);
@@ -17,8 +18,8 @@ const and = new Intl.ListFormat(LANG, { type: "conjunction" });
 const POINT = hundredths.formatToParts(0.5).find(({ type }) => type === "decimal")!.value;
 
 export const units = (value: bigint): string => whole.format(value / 10n ** 18n);
-// Two decimals, so that a receipt's figures line up: "18,686.45", "< 0.01", "0".
-export const amount = (value: bigint, decimals: number): string => (value === 0n ? "0" : fixed(value, decimals, 2));
+// Two decimals, so that a receipt's figures line up: "18,686.45", "< 0.01", "0.00".
+export const amount = (value: bigint, decimals: number): string => fixed(value, decimals, 2);
 export function figure(value: bigint, decimals: number): string {
   const n = Number(value) / 10 ** decimals;
   return n >= 10_000 ? whole.format(n) : fourDigits.format(n);
@@ -60,7 +61,9 @@ export const voteFigure = (votes: bigint): string => (votes > 0n && votes < 10n 
 export const voteWords = (votes: bigint): string =>
   `${voteFigure(votes)} ${votes > 0n && votes < 2n * 10n ** 18n ? "vote" : "votes"}`;
 export const bps = (value: bigint): string => percent.format(Number(value) / 10_000);
-export const fraction = (value: number): string => roughPercent.format(value);
+// For example "16.7%" or "3%". With `column`, always to a tenth, as in a column: "3.0%", "< 0.1%".
+export const fraction = (value: number, column = false): string =>
+  !column ? roughPercent.format(value) : value > 0 && value < 0.0005 ? "< 0.1%" : tenthsPercent.format(value);
 
 // The unit prices are in: USD, or USDC when no dollar price was found. `rates` gives each currency's price in dollars
 // at the prices' time.

@@ -19,6 +19,11 @@ test("weeks, dates and durations", () => {
 test("numbers, votes, counts and lists", () => {
   assert.equal(f.bps(3333n), "33.33%");
   assert.equal(f.fraction(0.1667), "16.7%");
+  assert.deepEqual(
+    [0.1667, 0.03, 0, 0.0004].map((share) => f.fraction(share, true)),
+    ["16.7%", "3.0%", "0.0%", "< 0.1%"],
+    "in a column, always to a tenth",
+  );
   assert.equal(f.units(5_691_499_999_999_999_999_999n), "5,691");
   assert.equal(f.voteWords(897_043n * 10n ** 18n), "897,043 votes");
   assert.equal(f.voteWords(15n * 10n ** 17n), "1 vote");
@@ -49,7 +54,7 @@ test("token amounts to fixed places, rounded half away from zero, without floats
   assert.equal(f.fixed(5n, 0, 2), "5.00");
   assert.equal(f.rounded(-1_005_000n, 6, 2), -1_010_000n);
   assert.equal(f.amount(18_686_451_234_567_890_000_000n, 18), "18,686.45");
-  assert.equal(f.amount(0n, 18), "0");
+  assert.equal(f.amount(0n, 18), "0.00");
 });
 
 test("money, approximate, in the currency picked at the rate of its prices' time", () => {

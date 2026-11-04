@@ -211,6 +211,7 @@ function priced(amounts: Amount[], flip: number): { tokens?: Map<string, Token>;
   ).value;
   return { tokens, prices };
 }
+const noKvcm = `${amount(0n, 18)} kVCM`;
 function amounts(found: Amount[], tokens: Map<string, Token> | undefined, sign = "", none = "Nothing"): Value {
   if (!found.length) return none;
   return frag(
@@ -249,11 +250,11 @@ function payoutReceipt(payout: Payout, id: bigint, owner: Address, time: number,
         `${payout.retiredKvcm ? "−" : ""}${amount(payout.retiredKvcm, 18)} kVCM`,
         payout.tonnes ? frag(`${amount(payout.tonnes, 18)} t of carbon credits`, fromTemplate("klima")) : null,
       ],
-      [`Fee ${share(kvcm(payout.fees))}`, amounts(payout.fees, p.tokens, payout.fees.length ? "−" : "", "0 kVCM")],
+      [`Fee ${share(kvcm(payout.fees))}`, amounts(payout.fees, p.tokens, payout.fees.length ? "−" : "", noKvcm)],
     ],
     [
       then ? "Paid to its owner then" : own ? "Paid to you" : "Paid to its owner",
-      amounts(payout.paid, p.tokens, "", "0 kVCM"),
+      amounts(payout.paid, p.tokens, "", noKvcm),
       worth(payout.paid, p),
       then || !same(payout.recipient, payout.owner) ? frag(`${then ? "To its owner then," : "To"} `, recipient) : null,
     ],

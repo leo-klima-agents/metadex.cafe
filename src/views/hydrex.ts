@@ -369,7 +369,7 @@ function performance(automation: Automation): Value {
     (tr, pool) =>
       fill(tr, {
         pool: { address: pool.address, text: pool.name },
-        share: fraction(Number(pool.votes) / Number(mine.votes)),
+        share: fraction(Number(pool.votes) / Number(mine.votes), true),
         worth: money(moneyAt(value.byPool.get(key(pool.address)) ?? 0, value), true),
       }),
   );

@@ -3,7 +3,7 @@ import { andThen, use, type Got } from "../cache.ts";
 import { swapsOff } from "../checks.ts";
 import { AUTOMATIONS, DEFAULT_OUTPUT, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
 import * as data from "../data.ts";
-import { count, fixed, figure, fraction, money, moneyAt, utc, type Money } from "../format.ts";
+import { count, fixed, figure, fraction, money, moneyAt, utc } from "../format.ts";
 import { ethCost, gasWords, key, noPrices, pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
 import { hrefOf, parse } from "../routes.ts";
 import { routeTogether, type Sale } from "../routing.ts";
@@ -224,11 +224,7 @@ function together(found: Scan): Got<Together> {
 }
 
 // Formats an amount of the output token to as many places as a cent of it needs, with its worth.
-function output(
-  amount: bigint,
-  swapper: Swapper,
-  prices: Prices | undefined,
-): { exact: string; worth?: Money | undefined; worthText: string } {
+function output(amount: bigint, swapper: Swapper, prices: Prices | undefined): { exact: string; worthText: string } {
   const price = prices?.of.get(key(swapper.token));
   const places = Math.min(
     swapper.decimals,
@@ -237,7 +233,6 @@ function output(
   const worth = prices && price !== undefined ? moneyAt(worthOf(amount, swapper.decimals, price), prices) : undefined;
   return {
     exact: `${fixed(amount, swapper.decimals, places)} ${swapper.symbol}`,
-    worth,
     worthText: worth ? money(worth, true) : "",
   };
 }
@@ -319,7 +314,7 @@ export function drawSwap(): void {
         symbol: row.token.symbol,
         amount: figure(row.amount, row.token.decimals),
         fetches: row.reading ? undefined : (quote?.exact ?? ""),
-        worth: quote?.worth ? money(quote.worth) : "",
+        worth: quote?.worthText ?? "",
         note: row.reason ?? (skipped ? "Base would skip it" : null),
         warning: like
           ? `Not the usual ${like.symbol}`
