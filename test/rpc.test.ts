@@ -33,6 +33,13 @@ test("a time's first block, from the blocks' own times, whatever the time betwee
       [await firstBlockAt(time, 53_000_000, GENESIS + pace * 53_000_000, evenly), reads],
       [52_000_001, 3],
     );
+    reads = 0;
+    const above = [53_000_005, GENESIS + pace * 53_000_005] as const;
+    assert.deepEqual(
+      [await firstBlockAt(time, 53_000_000, GENESIS + pace * 53_000_000, evenly, above), reads],
+      [52_000_001, 2],
+      "with a newer block given, the pace needs no read",
+    );
   }
 });
 

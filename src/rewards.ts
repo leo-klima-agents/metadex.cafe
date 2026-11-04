@@ -3,7 +3,7 @@ import { rewardsAbi } from "./abi.ts";
 import { memo } from "./cache.ts";
 import { WEEK, clean, moneyAt, type Money } from "./format.ts";
 import { automationAt, escrow, voter } from "./hydrex.ts";
-import { key, noPrices, pricesAt, worthOf, type Prices, type Token } from "./prices.ts";
+import { key, noPrices, pricesAt, pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
 import { call, read, readEach, required, type Read } from "./rpc.ts";
 import { tokensOf } from "./tokens.ts";
 
@@ -12,8 +12,16 @@ import { tokensOf } from "./tokens.ts";
 
 type Pool = { address: Address; name: string; votes: bigint };
 export type Reward = { pool: Address; contract: Address; token: Token; amount: bigint; fee: boolean };
-// The epoch runs from start to start + WEEK; its prices are those at the flip that ended it.
-export type Earnings = { start: number; votes: bigint; pools: Pool[]; rewards: Reward[]; prices: Prices };
+// The epoch runs from start to start + WEEK; its prices are those at the flip that ended it. `standIns` holds today's
+// prices of tokens that had none then; they only weigh rewards against one another and are never shown.
+export type Earnings = {
+  start: number;
+  votes: bigint;
+  pools: Pool[];
+  rewards: Reward[];
+  prices: Prices;
+  standIns: Map<string, number>;
+};
 
 const poolAbi = parseAbi([
   "function token0() view returns (address)",
@@ -114,7 +122,11 @@ async function priced(start: number, votes: bigint, pools: Pool[], rewards: Rewa
   const amounts = new Map<string, bigint>();
   for (const { token, amount } of rewards) amounts.set(token.address, (amounts.get(token.address) ?? 0n) + amount);
   const tokens = [...new Map(rewards.map(({ token }) => [token.address, token])).values()];
-  return { start, votes, pools, rewards, prices: await pricesAt(tokens, amounts, start + WEEK, rd) };
+  const prices = await pricesAt(tokens, amounts, start + WEEK, rd);
+  const unpriced = tokens.filter(({ address }) => !prices.of.has(key(address)));
+  const today = unpriced.length ? await pricesNow(unpriced, amounts, rd).catch(() => noPrices()) : noPrices();
+  const standIns = new Map([...today.of].filter(([token]) => !prices.of.has(token)));
+  return { start, votes, pools, rewards, prices, standIns };
 }
 
 // What a voter earned in the epoch from `start`: an automation, whose pools are `named`, or an owner. Rewards go to the
@@ -129,7 +141,8 @@ export async function votesEarned(holder: Address, start: number, named: boolean
       escrow("getPastVotes", holder, BigInt(start)),
     ]),
   );
-  if (!votes || Number(voted) < start - WEEK) return { start, votes, pools: [], rewards: [], prices: noPrices() };
+  if (!votes || Number(voted) < start - WEEK)
+    return { start, votes, pools: [], rewards: [], prices: noPrices(), standIns: new Map() };
   const contracts =
     Number(voted) >= start + WEEK
       ? await allContracts(start)

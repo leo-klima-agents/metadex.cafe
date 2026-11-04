@@ -131,5 +131,6 @@ export const EXCHANGES: Exchange[] = [
   { id: 0, name: "Hydrex Integral", kind: "algebra", factory: "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E" },
 ];
 // Prices come from Aero's, Aerodrome's and Hydrex's pools. Of two equally deep pools, the first listed wins.
-const PRICED: ExchangeKind[] = ["solidly", "slipstream", "aerodrome", "pair", "algebra"];
-export const PRICING = EXCHANGES.filter(({ kind }) => PRICED.includes(kind));
+const PRICED = ["solidly", "slipstream", "aerodrome", "pair", "algebra"] as const;
+export type PricedKind = (typeof PRICED)[number];
+export const PRICING = EXCHANGES.filter(({ kind }) => (PRICED as readonly ExchangeKind[]).includes(kind));

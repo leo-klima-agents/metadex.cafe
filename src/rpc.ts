@@ -58,17 +58,20 @@ export const blockNumber = call(
 // The newest `SETTLED` blocks are skipped, since an RPC a little behind may not have them yet.
 export const SETTLED = 5;
 
+export const timeAt = async (block: number, rd: Read = read): Promise<number> =>
+  Number(required(await rd([blockTime], { block }))[0]);
+
 // The first block whose time is at least `time`, at or below block `top`, which must be at or after it. The first five
 // guesses interpolate between the closest blocks read so far, or, until one before `time` is read, go by the pace of the
-// last two read; later ones halve the range.
+// last two read, starting with `top` and `above`, a newer block, if given; later ones halve the range.
 export async function firstBlockAt(
   time: number,
   top: number,
   topTime: number,
   timeOf: (block: number) => Promise<number>,
+  [above, aboveTime]: readonly [number, number] = [top, topTime],
 ): Promise<number> {
   let [lo, loTime, hi, hiTime] = [-1, 0, top, topTime];
-  let [above, aboveTime] = [top, topTime];
   for (let step = 0; hi - lo > 1; step++) {
     const gap = lo >= 0 ? (hiTime - loTime) / (hi - lo) : above > hi ? (aboveTime - hiTime) / (above - hi) : 0;
     const placed = gap ? hi - Math.ceil((hiTime - time) / gap) : hi - 1;

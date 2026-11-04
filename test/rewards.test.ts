@@ -34,6 +34,7 @@ test("earnings' value: fees and incentives apart, by pool, a token without a pri
       pay(WFRAX, 10n ** 17n, OTHER),
     ],
     prices: { unit: "USD", of: PRICES },
+    standIns: new Map(),
   });
   assert.deepEqual(
     [fees, incentives, total, ...byPool.values()].map(round),

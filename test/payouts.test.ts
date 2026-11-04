@@ -26,6 +26,7 @@ import {
   valueAt,
   walkClaims,
   weighed,
+  weighingPrices,
   windowStart,
   type ClaimLog,
   type Pair,
@@ -200,7 +201,7 @@ test("late, never paid, joined since, and what could not be read", () => {
   assert.equal(partly.unknown, true);
 });
 
-test("each reward weighed at last epoch's prices; none for a token without one", () => {
+test("each reward weighed at last epoch's prices, or today's for a token without one; none without either", () => {
   const rewards = [
     { pool: FEES, contract: FEES, token: usdc, amount: 90_000_000n, fee: true },
     { pool: FEES, contract: BRIBES, token: weth, amount: 10n ** 18n, fee: false },
@@ -209,10 +210,13 @@ test("each reward weighed at last epoch's prices; none for a token without one",
     { ...fees, value: 90 },
     { ...bribes, value: 0 },
   ]);
-  // With WETH weighed too, a claim of the USDC alone is not a payout.
-  const pairs = weighed(rewards, prices({ [USDC]: 1, [WETH]: 2_500 }));
+  // With WETH weighed at today's price, a claim of the USDC alone is not a payout.
+  const standIn = weighingPrices({ prices: prices({ [USDC]: 1 }), standIns: byKey({ [WETH]: 2_500 }) });
+  const pairs = weighed(rewards, standIn);
   assert.equal(pairs[1]!.value, 2_500);
   assert.equal(paidFor(pairs, [OCT_15, 0], OCT_15), false);
+  const both = weighingPrices({ prices: prices({ [WETH]: 2_000 }), standIns: byKey({ [WETH]: 2_500 }) });
+  assert.equal(both.of.get(key(WETH)), 2_000, "last epoch's price comes first");
 });
 
 test("records are read in one batch; what waits in batches of 20, and what lies past earned()'s 50 epochs", async (t) => {

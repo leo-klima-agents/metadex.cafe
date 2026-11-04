@@ -10,7 +10,7 @@ import {
 } from "viem";
 import { memo } from "./cache.ts";
 import * as config from "./config.ts";
-import type { Anchor, Exchange, ExchangeKind, Fiat } from "./config.ts";
+import type { Anchor, Exchange, ExchangeKind, Fiat, PricedKind } from "./config.ts";
 import { figure, money, moneyAt, type Basis, type Money, type Rates } from "./format.ts";
 import {
   SETTLED,
@@ -21,6 +21,7 @@ import {
   read,
   required,
   same,
+  timeAt,
   type Call,
   type Read,
 } from "./rpc.ts";
@@ -142,7 +143,7 @@ function spacings(rd: Read): Promise<Map<number, number[]>> {
 }
 
 // Each pair's pools, keyed by `pairKey` of the pair as given, in the order of `exchanges`. Lookups not yet cached go in
-// a single read, `LOOKUPS` calls to a batch since each is cheap.
+// a single read, `LOOKUPS` calls to a batch since each is cheap, unless Uniswap v4's, which read more, are among them.
 const LOOKUPS = 1_000;
 export async function waysFor(
   pairs: readonly (readonly [Address, Address])[],
@@ -158,9 +159,10 @@ export async function waysFor(
     const needsSpacings = missing.some(([, [exchange]]) => exchange.kind === "slipstream");
     const all = (needsSpacings ? spacings(rd) : Promise.resolve(new Map<number, number[]>())).then(async (known) => {
       const each = missing.map(([, [exchange, pair]]) => lookupsOn(exchange, pair, known));
+      const light = missing.every(([, [exchange]]) => exchange.kind !== "v4");
       const replies = await rd(
         each.flat().map(({ call }) => call),
-        { perBatch: LOOKUPS },
+        light ? { perBatch: LOOKUPS } : {},
       );
       let next = 0;
       return each.map((lookups, i) => {
@@ -208,11 +210,15 @@ const pairAbi = parseAbi([
   "function currentCumulativePrices() view returns (uint256 reserve0Cumulative, uint256 reserve1Cumulative, uint256 blockTimestamp)",
 ]);
 const slipstreamAbi = parseAbi([
+  "function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16 observationIndex, uint16 observationCardinality, uint16 observationCardinalityNext, bool unlocked)",
+  "function liquidity() view returns (uint128)",
   "function observe(uint32[] secondsAgos) view returns (int56[] tickCumulatives, uint160[] secondsPerLiquidityCumulativeX128s)",
 ]);
 const algebraPoolAbi = parseAbi([
   "function getReserves() view returns (uint128 reserve0, uint128 reserve1)",
   "function plugin() view returns (address)",
+  "function globalState() view returns (uint160 price, int24 tick, uint16 lastFee, uint8 pluginConfig, uint16 communityFee, bool unlocked)",
+  "function liquidity() view returns (uint128)",
   "function getTimepoints(uint32[] secondsAgos) view returns (int56[] tickCumulatives, uint88[] volatilityCumulatives)",
 ]);
 const feedAbi = parseAbi([
@@ -261,6 +267,13 @@ const fromReserves = ([x, y]: number[], pool: Pool) => {
   return reserve0 > 0 && reserve1 > 0 ? pairPrice(reserve0, reserve1, pool.stable) : undefined;
 };
 const fromTick = ([tick]: number[], pool: Pool) => tickPrice(tick!, ...decimalsOf(pool));
+// A concentrated pool's reserves: what it holds of each token, but no more than a basic pool with its liquidity at its
+// price would hold, so that liquidity parked away from the price does not count.
+function inRange(held: readonly bigint[], sqrtPriceX96: bigint, liquidity: bigint): bigint[] {
+  if (!sqrtPriceX96) return [0n, 0n];
+  const near = [(liquidity << 96n) / sqrtPriceX96, (liquidity * sqrtPriceX96) >> 96n];
+  return near.map((each, i) => (held[i]! < each ? held[i]! : each));
+}
 
 // Aero's basic pools.
 const aero: Pricing = {
@@ -278,38 +291,44 @@ const classic: Pricing = {
   summed: (reply) => (reply as readonly bigint[] | undefined)?.slice(0, 2),
   price: fromReserves,
 };
-// Aero's and Aerodrome's concentrated pools, whose reserves are what they hold of each token.
+// Aero's and Aerodrome's concentrated pools.
 const slipstream: Pricing = {
-  state: (pool) => sides(pool).map((token) => call(token, erc20Abi, "balanceOf", pool.address)),
-  reserves: (balances) => balances as bigint[],
+  state: (pool) => [
+    ...sides(pool).map((token) => call(token, erc20Abi, "balanceOf", pool.address)),
+    call(pool.address, slipstreamAbi, "slot0"),
+    call(pool.address, slipstreamAbi, "liquidity"),
+  ],
+  reserves: ([held0, held1, slot0, liquidity]) =>
+    inRange([held0, held1] as bigint[], (slot0 as readonly [bigint])[0], liquidity as bigint),
   sums: ({ address }) => call(address, slipstreamAbi, "observe", [0]),
   summed: firstOfEach,
   price: fromTick,
 };
 // Hydrex Integral's concentrated pools, whose plugin keeps the sums.
 const algebra: Pricing = {
-  state: ({ address }) => [call(address, algebraPoolAbi, "getReserves"), call(address, algebraPoolAbi, "plugin")],
-  reserves: reservesIn,
+  state: ({ address }) => [
+    call(address, algebraPoolAbi, "getReserves"),
+    call(address, algebraPoolAbi, "plugin"),
+    call(address, algebraPoolAbi, "globalState"),
+    call(address, algebraPoolAbi, "liquidity"),
+  ],
+  reserves: ([reserves, , globalState, liquidity]) =>
+    inRange(reserves as bigint[], (globalState as readonly [bigint])[0], liquidity as bigint),
   sums: (_, [, plugin]) => call(plugin as Address, algebraPoolAbi, "getTimepoints", [0]),
   summed: firstOfEach,
   price: fromTick,
 };
-const PRICING: Partial<Record<ExchangeKind, Pricing>> = {
-  solidly: aero,
-  aerodrome: classic,
-  pair: classic,
-  slipstream,
-  algebra,
-};
+const KINDS: Record<PricedKind, Pricing> = { solidly: aero, aerodrome: classic, pair: classic, slipstream, algebra };
 function pricingOf({ kind, name }: Exchange): Pricing {
-  const found = PRICING[kind];
+  const found = (KINDS as Partial<Record<ExchangeKind, Pricing>>)[kind];
   if (!found) throw new Error(`${name} cannot price tokens.`);
   return found;
 }
 
 // Each pool's average price over the window, in the prices' unit, and its depth at its end. Pools without an average,
 // such as those younger than the window, and pools too thin for the amount priced are dropped. A pool holding less than
-// `FLOOR` of its anchor is too thin whatever the token's price, so its sums are not read.
+// `FLOOR` of its anchor is too thin whatever the token's price, so its sums are not read. A read that fails leaves its
+// pools unpriced, rather than every token.
 async function measure(
   pools: Pool[],
   prices: Prices,
@@ -320,7 +339,8 @@ async function measure(
   if (!pools.length) return [];
   const start = window.start();
   const asked = pools.map((pool) => pricingOf(pool.exchange).state(pool));
-  const replies = await rd(asked.flat(), { block: window.end });
+  const replies = await rd(asked.flat(), { block: window.end }).catch(() => undefined);
+  if (!replies) return [];
   let next = 0;
   const ready = pools.flatMap((pool, i) => {
     const state = replies.slice(next, (next += asked[i]!.length));
@@ -338,9 +358,10 @@ async function measure(
   if (!ready.length) return [];
   const sums = [...ready.map(({ pool, kind, state }) => kind.sums(pool, state)), blockTime];
   const [before, after] = await Promise.all([
-    start.then((block) => rd(sums, { block })),
-    rd(sums, { block: window.end }),
+    start.then((block) => rd(sums, { block })).catch(() => undefined),
+    rd(sums, { block: window.end }).catch(() => undefined),
   ]);
+  if (!before || !after) return [];
   const elapsed = Number(after.at(-1)) - Number(before.at(-1));
   if (!(elapsed > 0)) return [];
   return ready.flatMap(({ pool, kind, tokenReserve, anchorReserve, anchorPrice }, i): Measured[] => {
@@ -356,7 +377,7 @@ async function measure(
 }
 
 // Prices each token from its deepest pool against an anchor already priced; of two pools equally deep, the one whose
-// exchange comes first in `PRICING` wins.
+// exchange comes first in `config.PRICING` wins.
 async function inPools(tokens: Token[], prices: Prices, amounts: Map<string, bigint>, window: Window, rd: Read) {
   if (!tokens.length) return;
   const anchors = config.ANCHORS.filter(({ address }) => prices.of.has(key(address)));
@@ -383,6 +404,15 @@ async function inPools(tokens: Token[], prices: Prices, amounts: Map<string, big
     prices.of.set(token, pools.reduce((deepest, each) => (each.depth > deepest.depth ? each : deepest)).price);
 }
 
+// The last block at or before each past time found so far.
+const blocksAt = new Map<number, number>();
+// Forgets every pool and block found, for tests.
+export function forget(): void {
+  pools.clear();
+  spacingsRead = undefined;
+  blocksAt.clear();
+}
+
 // Prices per whole token over the 30 minutes up to `time`, or up to the newest block if that is earlier. Each end of
 // the window is the last block at or before its time, and the end at least `SETTLED` blocks back. Anchors take their
 // Chainlink USD feeds' answers at the end, and the fiat feeds give each currency's rate; if no anchor feed answers,
@@ -395,20 +425,32 @@ export async function pricesAt(
   rd: Read = read,
 ): Promise<Prices> {
   const [newest, newestTime] = required(await rd([blockNumber, blockTime])).map(Number) as [number, number];
-  // Both ends are searched for from the newest block, and share the blocks they read.
+  const top = newest - SETTLED;
+  // Both ends are searched for down from `top`, at first at the pace from it to the newest block, and share the blocks
+  // they read.
   const times = new Map<number, Promise<number>>();
   const timeOf = (block: number): Promise<number> => {
-    const known = times.get(block) ?? rd([blockTime], { block }).then((found) => Number(required(found)[0]));
+    const known = times.get(block) ?? timeAt(block, rd);
     times.set(block, known);
     return known;
   };
-  const lastBlockAt = async (at: number) =>
-    at >= newestTime ? newest : (await firstBlockAt(at + 1, newest, newestTime, timeOf)) - 1;
-  const priced = Math.min(time, newestTime);
+  const lastBlockAt = async (at: number): Promise<number> => {
+    const topTime = await timeOf(top);
+    if (at >= topTime) return top;
+    const found = blocksAt.get(at) ?? (await firstBlockAt(at + 1, top, topTime, timeOf, [newest, newestTime])) - 1;
+    blocksAt.set(at, found);
+    return found;
+  };
   let start: Promise<number> | undefined;
-  const startOf = () => (start ??= lastBlockAt(priced - WINDOW));
-  if (tokens.length) startOf().catch(() => undefined);
-  const window: Window = { end: Math.min(await lastBlockAt(priced), newest - SETTLED), start: startOf };
+  const startOf = (): Promise<number> => {
+    if (!start) {
+      start = lastBlockAt(Math.min(time, newestTime) - WINDOW);
+      start.catch(() => undefined);
+    }
+    return start;
+  };
+  if (tokens.some(({ address }) => !config.ANCHORS.some((anchor) => same(anchor.address, address)))) void startOf();
+  const window: Window = { end: time >= newestTime ? top : await lastBlockAt(time), start: startOf };
   const fiat = Object.entries(config.FIAT_FEEDS) as [Fiat, Address][];
   const feeds = [...config.ANCHORS.map(({ feed }) => feed), ...fiat.map(([, feed]) => feed)];
   const rounds = await rd(

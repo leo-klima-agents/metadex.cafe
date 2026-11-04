@@ -3,9 +3,19 @@ import { beforeEach, test } from "node:test";
 import { zeroAddress, type Address } from "viem";
 import { SETTLED, same, type Call } from "../src/rpc.ts";
 import { ANCHORS, FIAT_FEEDS, EXCHANGES, PRICING, swapperOf, type Exchange } from "../src/config.ts";
-import { WINDOW, pairPrice, pools as poolCache, pricesAt, pricesNow, tickPrice, type Token } from "../src/prices.ts";
+import {
+  BY_ID,
+  WINDOW,
+  forget,
+  pairPrice,
+  pricesAt,
+  pricesNow,
+  tickPrice,
+  waysFor,
+  type Token,
+} from "../src/prices.ts";
 
-beforeEach(() => poolCache.clear());
+beforeEach(forget);
 
 const close = (actual: number, expected: number, relative = 1e-9) =>
   assert.ok(Math.abs(actual - expected) <= Math.abs(expected) * relative, `${actual} is not ${expected}`);
@@ -81,7 +91,8 @@ const SPACING = 100;
 
 // A pool of `token` against `anchor` (USDC by default). `now` is what it holds at the block priced and `held` what it
 // held through the window before, if different, both in whole tokens with the token's first. A concentrated pool's
-// tick follows the price those give. A pool `since` a block has no state before it.
+// tick follows the price those give, and its `liquidity` at the price, by default plenty, is that of a basic pool
+// holding `inRange` times what it holds. A pool `since` a block has no state before it.
 type Fake = {
   exchange: Exchange;
   token: Token;
@@ -90,6 +101,7 @@ type Fake = {
   anchor?: Address;
   stable?: boolean;
   since?: number;
+  inRange?: number;
 };
 
 function market(pools: Fake[], answers = ANSWERS) {
@@ -108,6 +120,10 @@ function market(pools: Fake[], answers = ANSWERS) {
   };
   const reservesSums = (pool: Fake, block: number) =>
     units(pool, pool.held ?? pool.now).map((amount) => amount * BigInt(timeOf(block)));
+  const sqrtPriceOf = (pool: Fake) => {
+    const [x, y] = units(pool, pool.now).map(Number);
+    return BigInt(Math.round(Math.sqrt(y! / x!) * 2 ** 96));
+  };
   const tickSum = (pool: Fake, block: number) => {
     const [x, y] = units(pool, pool.held ?? pool.now).map(Number);
     return BigInt(Math.round((Math.log(y! / x!) / Math.log(1.0001)) * timeOf(block)));
@@ -161,6 +177,14 @@ function market(pools: Fake[], answers = ANSWERS) {
             : reservesSums(pool, at).map((sum) => [sum]);
         case "getTimepoints":
           return [[tickSum(pool, at)], [0n]];
+        case "slot0":
+        case "globalState":
+          return [sqrtPriceOf(pool), 0, 0, 0, 0, true];
+        case "liquidity": {
+          // A basic pool holding x and y at the price y / x has liquidity √(xy).
+          const [x, y] = units(pool, pool.now).map(Number);
+          return BigInt(Math.round(Math.sqrt(x! * y!) * (pool.inRange ?? 1_000)));
+        }
         case "currentCumulativePrices":
           return [...reservesSums(pool, at), BigInt(timeOf(at))];
       }
@@ -245,7 +269,7 @@ test("the deepest pool wins, now and at a flip", async () => {
     { exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] },
   ];
   close((await priceOf(pools))!, 3 * USDC_USD);
-  poolCache.clear();
+  forget();
   close((await priceOf(pools, TOKEN, NOW - 7 * 86_400))!, 3 * USDC_USD);
 });
 
@@ -257,7 +281,8 @@ test("pool lookups go 1,000 to a batch, since each is cheap; other reads go in s
     options?: { block?: number | "latest"; perBatch?: number },
   ): Promise<any> => {
     for (const { address, functionName } of calls) {
-      const kind = EXCHANGES.some(({ factory }) => same(factory, address)) ? "lookup" : functionName;
+      const lookup = functionName !== "tickSpacings" && EXCHANGES.some(({ factory }) => same(factory, address));
+      const kind = lookup ? "lookup" : functionName;
       batches.set(kind, (batches.get(kind) ?? new Set()).add(options?.perBatch));
     }
     return reader(calls, options);
@@ -271,7 +296,7 @@ test("every kind of pool gives its average over the window, not what it holds at
   // At 2 USDC at the end, and 2.5 through the window; as token0 and as token1.
   for (const kind of [AERO, AERO_CL, AERODROME, HYDREX, INTEGRAL])
     for (const token of [TOKEN, LATE]) {
-      poolCache.clear();
+      forget();
       const pool: Fake = { exchange: kind, token, now: [10_000, 20_000], held: [10_000, 25_000] };
       const price = await priceOf([pool], token);
       assert.ok(price !== undefined, `${kind.name} prices ${token.symbol}`);
@@ -315,6 +340,103 @@ test("a pool holding under $250 of its anchor is dropped before its sums are rea
   assert.equal(summed.size, 1, "only the Hydrex pool's sums are read");
 });
 
+test("a concentrated pool counts only the liquidity at its price, not what it parks away from it", async () => {
+  // The Slipstream pool holds 20,000 USDC, but its liquidity at the price is that of a basic pool holding 20 USDC; the
+  // Aero pool holds 3,000 USDC at 3.
+  const pools: Fake[] = [
+    { exchange: AERO, token: TOKEN, now: [1_000, 3_000] },
+    { exchange: AERO_CL, token: TOKEN, now: [10_000, 20_000], inRange: 0.001 },
+  ];
+  close((await priceOf(pools))!, 3 * USDC_USD, 1e-6);
+});
+
+test("a failed read of the pools, at either end of the window, leaves them unpriced and keeps Chainlink's prices", async () => {
+  const { reader } = market([{ exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] }]);
+  const failing =
+    (fails: (calls: readonly Call[], block: number | "latest") => boolean) =>
+    async (calls: readonly Call[], options?: { block?: number | "latest" }): Promise<any> => {
+      if (fails(calls, options?.block ?? "latest")) throw new Error("No Base RPC answered eth_call.");
+      return reader(calls, options);
+    };
+  const sums = failing(
+    (calls, block) => block === START && calls.some((c) => c.functionName === "currentCumulativePrices"),
+  );
+  const search = failing(
+    (calls, block) =>
+      typeof block === "number" && block < PRICED && calls[0]!.functionName === "getCurrentBlockTimestamp",
+  );
+  const reserves = failing((calls, block) => block === PRICED && calls.some((c) => c.functionName === "getReserves"));
+  for (const rd of [sums, search, reserves]) {
+    forget();
+    const prices = await pricesAt([TOKEN], new Map(), Infinity, rd);
+    close(prices.of.get(USDC.toLowerCase())!, USDC_USD);
+    assert.equal(prices.of.get(TOKEN.address), undefined);
+  }
+});
+
+test("a search for the window's start that fails after the pools are dropped is not left unhandled", async () => {
+  // USDC's feed fails, and its one pool holds 100 EURC, too little to price it; then every search for a past block fails.
+  const { reader } = market(
+    [{ exchange: HYDREX, token: USDC_TOKEN, anchor: EURC, now: [115, 100] }],
+    new Map([[EURC, EURC_USD]]),
+  );
+  const failing = async (calls: readonly Call[], options?: { block?: number | "latest" }): Promise<any> => {
+    if (typeof options?.block === "number" && calls[0]!.functionName === "getCurrentBlockTimestamp")
+      await new Promise((_, fail) => setTimeout(() => fail(new Error("No Base RPC answered eth_call.")), 10));
+    return reader(calls, options);
+  };
+  const unhandled: unknown[] = [];
+  const note = (reason: unknown) => unhandled.push(reason);
+  process.on("unhandledRejection", note);
+  try {
+    const prices = await pricesAt([], new Map(), Infinity, failing);
+    assert.equal(prices.of.get(USDC.toLowerCase()), undefined);
+    await new Promise((done) => setTimeout(done, 50));
+    assert.deepEqual(unhandled, []);
+  } finally {
+    process.off("unhandledRejection", note);
+  }
+});
+
+test("tokens that are all anchors with feeds read no past block", async () => {
+  const { reader, blocks } = market([{ exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] }]);
+  await pricesAt([USDC_TOKEN, EURC_TOKEN], new Map(), Infinity, reader);
+  assert.deepEqual([...blocks.get("getCurrentBlockTimestamp")!], ["latest"]);
+});
+
+test("searches read no block past the newest settled one, and find a past time's block once", async () => {
+  const { reader } = market([{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }]);
+  let probed: (number | "latest")[] = [];
+  const watched = async (calls: readonly Call[], options?: { block?: number | "latest" }): Promise<any> => {
+    if (calls.length === 1 && calls[0]!.functionName === "getCurrentBlockTimestamp")
+      probed.push(options?.block ?? "latest");
+    return reader(calls, options);
+  };
+  const flip = NOW - 7 * 86_400;
+  await pricesAt([TOKEN], new Map(), flip, watched);
+  assert.ok(
+    probed.length > 2 && probed.every((block) => block === PRICED || (typeof block === "number" && block < PRICED)),
+    String(probed),
+  );
+  probed = [];
+  await pricesAt([TOKEN], new Map(), flip, watched);
+  assert.deepEqual(probed, [PRICED], "only the newest settled block's time, to tell a past time from a recent one");
+});
+
+test("lookups among which Uniswap v4's are keep the usual batches", async () => {
+  const { reader } = market([]);
+  const batches: (number | undefined)[] = [];
+  const watched = async (
+    calls: readonly Call[],
+    options?: { block?: number | "latest"; perBatch?: number },
+  ): Promise<any> => {
+    if (calls.some(({ functionName }) => functionName === "extsload")) batches.push(options?.perBatch);
+    return reader(calls, options);
+  };
+  await waysFor([[TOKEN.address, USDC]], BY_ID, watched);
+  assert.deepEqual(batches, [undefined]);
+});
+
 test("a pool younger than the window gives no price, so the next deepest does", async () => {
   const young: Fake = { exchange: AERO, token: TOKEN, now: [10_000, 40_000], since: START + 1 };
   const older: Fake = { exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] };
@@ -325,7 +447,7 @@ test("a pool younger than the window gives no price, so the next deepest does", 
 test("now is the newest block less a few; a flip, the last block before it, unless that is newer", async () => {
   const pools: Fake[] = [{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }];
   const feedBlocks = async (price: (reader: any) => Promise<unknown>) => {
-    poolCache.clear();
+    forget();
     const { reader, blocks } = market(pools);
     await price(reader);
     return [...blocks.get("latestRoundData")!];

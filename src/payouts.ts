@@ -7,7 +7,21 @@ import { WEEK, weekStart } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { key, worthOf, type Prices } from "./prices.ts";
 import { rewardsFor, type Earnings, type Reward } from "./rewards.ts";
-import { SETTLED, blockTime, call, firstBlockAt, now, read, readEach, required, rpc, same } from "./rpc.ts";
+import {
+  SETTLED,
+  blockNumber,
+  blockTime,
+  call,
+  firstBlockAt,
+  now,
+  read,
+  readEach,
+  required,
+  rpc,
+  same,
+  tagged,
+  timeAt,
+} from "./rpc.ts";
 
 // For each account and token, Hydrex's reward contracts record the start of the epoch they have paid it up to. Every
 // claim sets this to the current epoch, even a claim of nothing. An epoch counts as paid once the records holding more
@@ -68,6 +82,12 @@ export function valueAt(amounts: Amount[], decimals: Map<string, { decimals: num
   );
 }
 
+// Earnings' prices, with today's standing in for tokens that had none at the flip: for weighing rewards against one
+// another, never for showing.
+export const weighingPrices = ({ prices, standIns }: Pick<Earnings, "prices" | "standIns">): Prices => ({
+  ...prices,
+  of: new Map([...standIns, ...prices.of]),
+});
 export const weighed = (rewards: Reward[], prices: Prices): Weighed[] =>
   rewards.map(({ contract, token, amount }) => ({
     contract,
@@ -257,10 +277,9 @@ export async function firstReached<T>(
   return found;
 }
 
-const blockTimeAt = async (block: number): Promise<number> =>
-  Number(required(await read([blockTime], { block, tag: "payouts" }))[0]);
-const epochBlock = (epoch: number, top: number, time: number): Promise<number> =>
-  memo(`first ${epoch}`, () => firstBlockAt(epoch, top, time, blockTimeAt));
+const blockTimeAt = (block: number): Promise<number> => timeAt(block, tagged("payouts"));
+const epochBlock = (epoch: number, top: number, time: number, above?: readonly [number, number]): Promise<number> =>
+  memo(`first ${epoch}`, () => firstBlockAt(epoch, top, time, blockTimeAt, above));
 export const readTime = async (block: number): Promise<number> =>
   Number(
     (await rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [numberToHex(block), false], { tag: "payouts" })).timestamp,
@@ -269,7 +288,12 @@ const timeOf = (block: number): Promise<number> => memo(`time ${block}`, () => r
 
 // Each account's last payout is the first block, from the start of epoch `paidUpTo.through`, in which `paidUpTo.pair`'s
 // record reaches that epoch. Accounts paid up to the same epoch are searched together.
-async function payoutBlocks(standings: Standing[], top: number, time: number): Promise<Map<bigint, number>> {
+async function payoutBlocks(
+  standings: Standing[],
+  top: number,
+  time: number,
+  newest: readonly [number, number],
+): Promise<Map<bigint, number>> {
   const blocks = new Map<bigint, number>();
   const paid = standings.flatMap(({ id, paidUpTo }) => (paidUpTo ? [{ id, ...paidUpTo }] : []));
   await Promise.all(
@@ -277,7 +301,7 @@ async function payoutBlocks(standings: Standing[], top: number, time: number): P
       const reached = async (block: number, items: typeof paid) =>
         required(await read(items.map(stampOf), { block, tag: "payouts" })).map((value) => value >= BigInt(epoch));
       const these = paid.filter(({ through }) => through === epoch);
-      const found = await firstReached(reached, these, (await epochBlock(epoch, top, time)) - 1, top);
+      const found = await firstReached(reached, these, (await epochBlock(epoch, top, time, newest)) - 1, top);
       for (const [{ id }, block] of found) blocks.set(id, block);
     }),
   );
@@ -484,11 +508,13 @@ async function matchaLatteParts(
   standings: Promise<(Standing | undefined)[]>,
   top: number,
   time: number,
+  newest: readonly [number, number],
 ): Promise<Map<bigint, Part>> {
   const blocks = await payoutBlocks(
     (await standings).filter((standing) => !!standing),
     top,
     time,
+    newest,
   );
   const unique = [...new Set(blocks.values())];
   const [paid, times] = await Promise.all([
@@ -544,7 +570,8 @@ export async function readPayouts(
   });
   if (!members.length) return { epochStart, entries: [] };
   const ids = members.map(({ account }) => account.id);
-  const top = Number(await rpc<Hex>("eth_blockNumber", [], { tag: "payouts" })) - SETTLED;
+  const newest = required(await read([blockNumber, blockTime], { tag: "payouts" })).map(Number) as [number, number];
+  const top = newest[0] - SETTLED;
   const at = { block: top, tag: "payouts" } as const;
   const [[time], held] = await Promise.all([
     read([blockTime], at).then(required),
@@ -576,7 +603,7 @@ export async function readPayouts(
       const earnings = await earningsOf(automation).catch(() => undefined);
       if (!earnings) return;
       if (earnings.start < epochStart - WEEK) return these.forEach((id) => found.set(id, { early: true }));
-      const last = { start: earnings.start, pairs: weighed(earnings.rewards, earnings.prices) };
+      const last = { start: earnings.start, pairs: weighed(earnings.rewards, weighingPrices(earnings)) };
       const votedBefore = these.filter((id) => votedWith(automation, id, "before"));
       const owed = await Promise.all([
         readOwed(these, last.pairs, top, [last.start - WEEK, last.start]).then((rows) =>
@@ -590,7 +617,7 @@ export async function readPayouts(
       ]).catch(() => undefined);
       if (!owed) return;
       const [rows, rewards] = owed;
-      const before = { start: earnings.start - WEEK, pairs: weighed(rewards, earnings.prices) };
+      const before = { start: earnings.start - WEEK, pairs: weighed(rewards, weighingPrices(earnings)) };
       const stampsBefore = await readStamps(votedBefore, before.pairs, top).catch(() => undefined);
       if (!stampsBefore) return;
       rows.forEach(({ id, earned, stamps }) => {
@@ -608,7 +635,7 @@ export async function readPayouts(
       const theirs = standings.then(() => these.map((id) => found.get(id)?.standing));
       const reading =
         automation === MATCHA_LATTE
-          ? matchaLatteParts(these, theirs, top, Number(time))
+          ? matchaLatteParts(these, theirs, top, Number(time), newest)
           : doubleEspressoParts(these, top);
       const each = await reading.catch((error: unknown) => void console.error(error));
       each?.forEach((part, id) => parts.set(id, part));
