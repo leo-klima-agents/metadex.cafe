@@ -224,9 +224,11 @@ function amounts(found: Amount[], tokens: Map<string, Token> | undefined, sign =
     ),
   );
 }
+// What some amounts were worth, "at least" if a token had no price.
 const worth = (found: Amount[], { tokens, prices }: ReturnType<typeof priced>): Value => {
   const total = tokens && prices ? valueAt(found, tokens, prices) : 0;
-  return total > 0 ? money(moneyAt(total, prices!), true) : "";
+  const partial = found.some(({ token }) => !prices?.of.has(key(token)));
+  return total > 0 ? money(moneyAt(total, prices!, partial), true) : "";
 };
 function payoutReceipt(payout: Payout, id: bigint, owner: Address, time: number, own: boolean): Node {
   const p = priced([...payout.earned, ...payout.paid], weekStart(time));

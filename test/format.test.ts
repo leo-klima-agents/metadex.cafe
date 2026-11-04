@@ -61,6 +61,12 @@ test("money, approximate, in the currency picked at the rate of its prices' time
   assert.equal(usd(-1.312), "≈ −$1.31");
   assert.equal(usd(692.4, true), "≈ $692.40");
   assert.equal(f.money({ value: 0.7724, unit: "USDC" }), "≈ 0.77 USDC");
+  assert.equal(
+    f.money(f.moneyAt(3.1, { unit: "USD" }, true)),
+    "At\u00a0least\u00a0≈ $3.10",
+    "when some of it had no price",
+  );
+  assert.deepEqual(f.moneyAt(3.1, { unit: "USD" }), { value: 3.1, unit: "USD", rates: undefined });
   const then = { unit: "USD", rates: { EUR: 1.25, GBP: 1.25, CHF: 1.25, AUD: 0.625, CAD: 0.625 } } as const;
   try {
     const shown = (currency: Currency, value = 10) => {

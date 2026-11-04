@@ -5,9 +5,24 @@ import { memo } from "./cache.ts";
 import { AUTOMATIONS, DOUBLE_ESPRESSO, MATCHA_LATTE, type Automation } from "./config.ts";
 import { WEEK, weekStart } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
-import { key, worthOf, type Prices } from "./prices.ts";
+import { key, noPrices, pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
 import { rewardsFor, type Earnings, type Reward } from "./rewards.ts";
-import { blockTime, call, now, read, readEach, required, rpc, same } from "./rpc.ts";
+import {
+  SETTLED,
+  blockNumber,
+  blockTime,
+  call,
+  firstBlockAt,
+  now,
+  read,
+  readEach,
+  required,
+  rpc,
+  same,
+  tagged,
+  timeAt,
+  type Read,
+} from "./rpc.ts";
 
 // For each account and token, Hydrex's reward contracts record the start of the epoch they have paid it up to. Every
 // claim sets this to the current epoch, even a claim of nothing. An epoch counts as paid once the records holding more
@@ -15,10 +30,6 @@ import { blockTime, call, now, read, readEach, required, rpc, same } from "./rpc
 // block, whose logs make its receipt. Matcha Latte pays each account in one transaction, which logs both the payout and
 // the retirement. Double Espresso records each account's last claim block, and each claim logs the one before.
 
-// Base makes a block every two seconds. The newest `SETTLED` blocks are skipped, since an RPC a little behind may not
-// have them yet.
-const BLOCK_TIME = 2;
-const SETTLED = 5;
 // A payout takes up to half a day after each flip.
 const UNDER_WAY = 12 * 3600;
 // Caps the blocks of Double Espresso claims read per account, since anyone can claim dust for an account as often as
@@ -61,27 +72,55 @@ const less = (amounts: Amount[], taken: Amount[]): Amount[] =>
       amount: amount - (taken.find((each) => same(each.token, token))?.amount ?? 0n),
     }))
     .filter(({ amount }) => amount > 0n);
-// A token without a price counts for nothing, unless `standIns` is set, when it is valued at today's price.
-export function valueAt(
-  amounts: Amount[],
-  decimals: Map<string, { decimals: number }>,
-  prices: Prices,
-  standIns = false,
-): number {
+// A token without a price counts for nothing.
+export function valueAt(amounts: Amount[], decimals: Map<string, { decimals: number }>, prices: Prices): number {
   return sum(
     amounts.map(({ token, amount }) => {
-      const price = prices.of.get(key(token)) ?? (standIns ? prices.standIns.get(key(token)) : undefined);
+      const price = prices.of.get(key(token));
       const known = decimals.get(key(token));
       return known && price !== undefined ? worthOf(amount, known.decimals, price) : 0;
     }),
   );
 }
 
+// Stand-ins: today's prices of reward tokens that had none at the flip, priced without amounts, as a market would quote
+// them. They are read by epoch and token, each once, and a read that fails is made again next time.
+const standInsRead = new Map<string, Promise<number | undefined>>();
+async function standInsOf(tokens: Token[], start: number, rd: Read): Promise<Map<string, number>> {
+  const at = (address: Address) => `${start} ${key(address)}`;
+  const missing = tokens.filter(({ address }) => !standInsRead.has(at(address)));
+  if (missing.length) {
+    const today = pricesNow(missing, new Map(), rd).catch((error: unknown): Prices => {
+      console.error(error);
+      return { ...noPrices(), unread: true };
+    });
+    void today.then(({ unread }) => unread && missing.forEach(({ address }) => standInsRead.delete(at(address))));
+    const priceOf = (address: Address) => today.then(({ of }) => of.get(key(address)));
+    for (const { address } of missing) standInsRead.set(at(address), priceOf(address));
+  }
+  const found = await Promise.all(tokens.map(({ address }) => standInsRead.get(at(address))!));
+  return new Map(tokens.flatMap(({ address }, i) => (found[i] === undefined ? [] : [[key(address), found[i]]])));
+}
+
+// Prices for weighing rewards against one another, never for showing: the epoch's, with stand-ins for tokens that had
+// none at the flip.
+export const withStandIns = (prices: Prices, standIns: Map<string, number>): Prices => ({
+  ...prices,
+  of: new Map([...standIns, ...prices.of]),
+});
+export async function weighingPrices(
+  { start, rewards, prices }: Earnings,
+  rd: Read = tagged("payouts"),
+): Promise<Prices> {
+  const tokens = [...new Map(rewards.map(({ token }) => [key(token.address), token])).values()];
+  const unpriced = tokens.filter(({ address }) => !prices.of.has(key(address)));
+  return withStandIns(prices, await standInsOf(unpriced, start, rd));
+}
 export const weighed = (rewards: Reward[], prices: Prices): Weighed[] =>
   rewards.map(({ contract, token, amount }) => ({
     contract,
     token: token.address,
-    value: valueAt([{ token: token.address, amount }], new Map([[key(token.address), token]]), prices, true),
+    value: valueAt([{ token: token.address, amount }], new Map([[key(token.address), token]]), prices),
   }));
 const weights = (pairs: Weighed[]): number[] =>
   pairs.some(({ value }) => value > 0) ? pairs.map(({ value }) => value) : pairs.map(() => 1);
@@ -266,30 +305,9 @@ export async function firstReached<T>(
   return found;
 }
 
-// The first block whose time is at least `time`, at or below block `top`, which must be at or after it. The first four
-// guesses interpolate between the closest blocks read so far, at two seconds a block until one before `time` is read;
-// later ones halve the range.
-export async function firstBlockAt(
-  time: number,
-  top: number,
-  topTime: number,
-  rd: (block: number) => Promise<number> = blockTimeAt,
-): Promise<number> {
-  let [lo, loTime, hi, hiTime] = [-1, 0, top, topTime];
-  for (let step = 0; hi - lo > 1; step++) {
-    const gap = lo < 0 ? BLOCK_TIME : (hiTime - loTime) / (hi - lo);
-    const placed = hi - Math.ceil((hiTime - time) / gap);
-    const guess = step < 4 ? Math.min(hi - 1, Math.max(lo + 1, placed)) : Math.floor((lo + hi) / 2);
-    const at = await rd(guess);
-    if (at >= time) [hi, hiTime] = [guess, at];
-    else [lo, loTime] = [guess, at];
-  }
-  return hi;
-}
-const blockTimeAt = async (block: number): Promise<number> =>
-  Number(required(await read([blockTime], { block, tag: "payouts" }))[0]);
-const epochBlock = (epoch: number, top: number, time: number): Promise<number> =>
-  memo(`first ${epoch}`, () => firstBlockAt(epoch, top, time));
+const blockTimeAt = (block: number): Promise<number> => timeAt(block, tagged("payouts"));
+const epochBlock = (epoch: number, top: number, time: number, above?: readonly [number, number]): Promise<number> =>
+  memo(`first ${epoch}`, () => firstBlockAt(epoch, top, time, blockTimeAt, above));
 export const readTime = async (block: number): Promise<number> =>
   Number(
     (await rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [numberToHex(block), false], { tag: "payouts" })).timestamp,
@@ -298,7 +316,12 @@ const timeOf = (block: number): Promise<number> => memo(`time ${block}`, () => r
 
 // Each account's last payout is the first block, from the start of epoch `paidUpTo.through`, in which `paidUpTo.pair`'s
 // record reaches that epoch. Accounts paid up to the same epoch are searched together.
-async function payoutBlocks(standings: Standing[], top: number, time: number): Promise<Map<bigint, number>> {
+async function payoutBlocks(
+  standings: Standing[],
+  top: number,
+  time: number,
+  newest: readonly [number, number],
+): Promise<Map<bigint, number>> {
   const blocks = new Map<bigint, number>();
   const paid = standings.flatMap(({ id, paidUpTo }) => (paidUpTo ? [{ id, ...paidUpTo }] : []));
   await Promise.all(
@@ -306,7 +329,7 @@ async function payoutBlocks(standings: Standing[], top: number, time: number): P
       const reached = async (block: number, items: typeof paid) =>
         required(await read(items.map(stampOf), { block, tag: "payouts" })).map((value) => value >= BigInt(epoch));
       const these = paid.filter(({ through }) => through === epoch);
-      const found = await firstReached(reached, these, (await epochBlock(epoch, top, time)) - 1, top);
+      const found = await firstReached(reached, these, (await epochBlock(epoch, top, time, newest)) - 1, top);
       for (const [{ id }, block] of found) blocks.set(id, block);
     }),
   );
@@ -513,11 +536,13 @@ async function matchaLatteParts(
   standings: Promise<(Standing | undefined)[]>,
   top: number,
   time: number,
+  newest: readonly [number, number],
 ): Promise<Map<bigint, Part>> {
   const blocks = await payoutBlocks(
     (await standings).filter((standing) => !!standing),
     top,
     time,
+    newest,
   );
   const unique = [...new Set(blocks.values())];
   const [paid, times] = await Promise.all([
@@ -573,7 +598,8 @@ export async function readPayouts(
   });
   if (!members.length) return { epochStart, entries: [] };
   const ids = members.map(({ account }) => account.id);
-  const top = Number(await rpc<Hex>("eth_blockNumber", [], { tag: "payouts" })) - SETTLED;
+  const newest = required(await read([blockNumber, blockTime], { tag: "payouts" })).map(Number) as [number, number];
+  const top = newest[0] - SETTLED;
   const at = { block: top, tag: "payouts" } as const;
   const [[time], held] = await Promise.all([
     read([blockTime], at).then(required),
@@ -605,10 +631,10 @@ export async function readPayouts(
       const earnings = await earningsOf(automation).catch(() => undefined);
       if (!earnings) return;
       if (earnings.start < epochStart - WEEK) return these.forEach((id) => found.set(id, { early: true }));
-      const last = { start: earnings.start, pairs: weighed(earnings.rewards, earnings.prices) };
+      const pairs = earnings.rewards.map(({ contract, token }) => ({ contract, token: token.address }));
       const votedBefore = these.filter((id) => votedWith(automation, id, "before"));
       const owed = await Promise.all([
-        readOwed(these, last.pairs, top, [last.start - WEEK, last.start]).then((rows) =>
+        readOwed(these, pairs, top, [earnings.start - WEEK, earnings.start]).then((rows) =>
           rows.map(({ id, owing }) => ({
             id,
             earned: owing.map(({ amount }) => amount),
@@ -616,10 +642,12 @@ export async function readPayouts(
           })),
         ),
         votedBefore.length ? rewardsFor(automation.address, earnings.start - WEEK) : [],
+        weighingPrices(earnings),
       ]).catch(() => undefined);
       if (!owed) return;
-      const [rows, rewards] = owed;
-      const before = { start: earnings.start - WEEK, pairs: weighed(rewards, earnings.prices) };
+      const [rows, rewards, weighing] = owed;
+      const last = { start: earnings.start, pairs: weighed(earnings.rewards, weighing) };
+      const before = { start: earnings.start - WEEK, pairs: weighed(rewards, weighing) };
       const stampsBefore = await readStamps(votedBefore, before.pairs, top).catch(() => undefined);
       if (!stampsBefore) return;
       rows.forEach(({ id, earned, stamps }) => {
@@ -637,7 +665,7 @@ export async function readPayouts(
       const theirs = standings.then(() => these.map((id) => found.get(id)?.standing));
       const reading =
         automation === MATCHA_LATTE
-          ? matchaLatteParts(these, theirs, top, Number(time))
+          ? matchaLatteParts(these, theirs, top, Number(time), newest)
           : doubleEspressoParts(these, top);
       const each = await reading.catch((error: unknown) => void console.error(error));
       each?.forEach((part, id) => parts.set(id, part));

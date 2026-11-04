@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Address } from "viem";
 import { key, type Token } from "../src/prices.ts";
-import { earnedBy, valueOf } from "../src/rewards.ts";
+import { earnedBy, perThousandOf, shareOf, valueOf, versus } from "../src/rewards.ts";
 
 const USDC: Token = { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, symbol: "USDC" };
 const HYDX: Token = { address: "0x00000e7efa313F4E11Bfff432471eD9423AC6B30", decimals: 18, symbol: "HYDX" };
@@ -23,7 +23,7 @@ test("a voter's share of a reward contract's rewards rounds down, as the contrac
 });
 
 test("earnings' value: fees and incentives apart, by pool, a token without a price counting for nothing", () => {
-  const { fees, incentives, total, byPool, unit } = valueOf({
+  const earnings = {
     start: 1_791_417_600,
     votes: 897_042n * 10n ** 18n,
     pools: [],
@@ -33,11 +33,36 @@ test("earnings' value: fees and incentives apart, by pool, a token without a pri
       pay(HYDX, 27n * 10n ** 18n),
       pay(WFRAX, 10n ** 17n, OTHER),
     ],
-    prices: { unit: "USD", of: PRICES, standIns: new Map() },
-  });
+    prices: { unit: "USD" as const, of: PRICES },
+  };
+  const { fees, incentives, total, byPool, unit } = valueOf(earnings);
   assert.deepEqual(
     [fees, incentives, total, ...byPool.values()].map(round),
     [14.774868, 663.16829, 677.943158, 14.774868, 663.16829],
   );
   assert.deepEqual([...byPool.keys(), unit], [key(POOL), key(OTHER), "USD"]);
+});
+
+test("what some votes earned at the rate of others', and per 1,000 votes, at their prices or another's", () => {
+  const PLAIN: Token = { address: "0x00000000000000000000000000000000000000aa", decimals: 18, symbol: "PLAIN" };
+  // An automation's 5 PLAIN were priced at $4, but all of Hydrex's 80 PLAIN were too many for PLAIN's pools.
+  const mine = {
+    start: 1_791_417_600,
+    votes: 4n * 10n ** 21n,
+    pools: [],
+    rewards: [pay(USDC, 1_000_000_000n), pay(USDC, 50_000_000n, OTHER), pay(PLAIN, 5n * 10n ** 18n)],
+    prices: { unit: "USD" as const, of: new Map([...PRICES, [key(PLAIN.address), 4]]) },
+  };
+  const all = {
+    ...mine,
+    votes: 4n * 10n ** 22n,
+    rewards: [pay(USDC, 10_500_000_000n), pay(PLAIN, 80n * 10n ** 18n)],
+    prices: { unit: "USD" as const, of: PRICES },
+  };
+  assert.equal(round(shareOf(mine, 10n ** 21n).value), 267.5, "a quarter of $1,070");
+  assert.equal(round(perThousandOf(mine).value), 267.5);
+  assert.equal(round(perThousandOf(mine, valueOf(mine, all.prices)).value), 262.5, "without PLAIN");
+  assert.equal(shareOf({ ...mine, votes: 0n }, 10n ** 21n).value, 0, "no votes, no rate");
+  assert.equal(perThousandOf(mine).atLeast, undefined, "and no figure says 'at least'");
+  assert.equal(versus(mine, all), 1, "compared at the same prices: $262.50 per 1,000 votes each");
 });

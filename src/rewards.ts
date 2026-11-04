@@ -202,25 +202,26 @@ export const holdersOf = (stakes: Iterable<Stake>): Address[] => [
   ...new Set([...stakes].flatMap(({ delegate }) => (automationAt(delegate) ? [] : [getAddress(delegate)]))),
 ];
 
+export type Value = ReturnType<typeof valueOf>;
+// A token without a price counts for nothing.
 export function valueOf({ rewards, prices: own }: Earnings, prices = own) {
-  let [fees, incentives] = [0, 0];
+  const counted = { fees: 0, incentives: 0 };
   const byPool = new Map<string, number>();
   for (const { pool, token, amount, fee } of rewards) {
     const price = prices.of.get(key(token.address));
     if (price === undefined) continue;
     const value = worthOf(amount, token.decimals, price);
     byPool.set(key(pool), (byPool.get(key(pool)) ?? 0) + value);
-    if (fee) fees += value;
-    else incentives += value;
+    counted[fee ? "fees" : "incentives"] += value;
   }
-  return { total: fees + incentives, fees, incentives, byPool, unit: prices.unit, rates: prices.rates };
+  return { total: counted.fees + counted.incentives, ...counted, byPool, unit: prices.unit, rates: prices.rates };
 }
 // Per 1,000 votes, which have 18 decimals.
 export const perThousand = (value: number, votes: bigint): number => (votes > 0n ? value / (Number(votes) / 1e21) : 0);
-export const perThousandOf = (earnings: Earnings): Money => {
-  const value = valueOf(earnings);
-  return moneyAt(perThousand(value.total, earnings.votes), value);
-};
+// What `votes` earned at the rate of these earnings' votes, by default at their own prices.
+export const shareOf = (earnings: Earnings, votes: bigint, value: Value = valueOf(earnings)): Money =>
+  moneyAt(earnings.votes > 0n ? (Number(votes) / Number(earnings.votes)) * value.total : 0, value);
+export const perThousandOf = (earnings: Earnings, value?: Value): Money => shareOf(earnings, 10n ** 21n, value);
 // The ratio of some votes' earnings per 1,000 votes to all of Hydrex's, both at `all`'s prices so they compare fairly.
 export function versus(earnings: Earnings, all: Earnings): number | undefined {
   const ratio =

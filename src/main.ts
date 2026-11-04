@@ -88,10 +88,6 @@ document.addEventListener("submit", (event) => {
   event.preventDefault();
   dispatch(event.target as HTMLElement, event);
 });
-actions.skip = (_, event) => {
-  event.preventDefault();
-  $("main > [data-view]:not([hidden]) h1").focus();
-};
 actions.retry = () => retry();
 actions.currency = (el) => {
   const currency = currencyOf((el as HTMLSelectElement).value);
