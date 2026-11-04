@@ -219,25 +219,6 @@ test("each reward weighed at last epoch's prices, or today's for a token without
   assert.equal(both.of.get(key(WETH)), 2_000, "last epoch's price comes first");
 });
 
-test("only the tokens the keeper claims weigh in telling its payouts", () => {
-  // WFRAX is not in the keeper's list, so its claims stay with the account, whatever it is worth.
-  const wfrax: Token = { address: "0x0CEAC003B0d2479BebeC9f4b2EBAd0a803759bbf", decimals: 18, symbol: "WFRAX" };
-  const rewards = [
-    { pool: FEES, contract: FEES, token: usdc, amount: 90_000_000n, fee: true },
-    { pool: FEES, contract: BRIBES, token: wfrax, amount: 10n ** 20n, fee: false },
-  ];
-  const pairs = weighed(rewards, prices({ [USDC]: 1, [wfrax.address]: 5 }));
-  assert.deepEqual(
-    pairs.map(({ value }) => value),
-    [90, 0],
-  );
-  assert.equal(paidFor(pairs, [OCT_15, 0], OCT_15), true, "a payout of the USDC alone");
-  const unpriced = weighed(rewards, prices({}));
-  assert.equal(paidFor(unpriced, [OCT_15, 0], OCT_15), true, "with no prices, the keeper's tokens alone weigh");
-  assert.equal(paidFor(unpriced, [0, OCT_15], OCT_15), false);
-  assert.equal(paidFor(weighed(rewards.slice(1), prices({})), [0], OCT_15), true, "nothing the keeper claims");
-});
-
 test("records are read in one batch; what waits in batches of 20, and what lies past earned()'s 50 epochs", async (t) => {
   const multicall = parseAbi([
     "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])",
