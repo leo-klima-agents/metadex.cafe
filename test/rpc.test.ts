@@ -2,13 +2,21 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { decodeFunctionData, encodeAbiParameters, encodeFunctionResult, erc20Abi, parseAbi } from "viem";
 import { RPCS } from "../src/config.ts";
-import { call, read, rpc, showTags } from "../src/rpc.ts";
+import { blockAt, call, read, rpc, showTags } from "../src/rpc.ts";
 
 type Handler = (url: string, body: { method: string; params: unknown[] }) => Response | Promise<Response>;
 const serve = (handler: Handler) => {
   globalThis.fetch = (async (url: string, init: RequestInit) => handler(url, JSON.parse(String(init.body)))) as never;
 };
 const reply = (result: unknown) => Response.json({ jsonrpc: "2.0", id: 1, result });
+
+test("a time gives the last block at or before it, Base making one every two seconds", () => {
+  // Block 53,505,157 is timed 1,793,799,661.
+  assert.equal(blockAt(1_793_799_661), 53_505_157);
+  assert.equal(blockAt(1_793_799_662), 53_505_157);
+  assert.equal(blockAt(1_793_799_660), 53_505_156);
+  assert.equal(blockAt(1_686_789_347), 0);
+});
 
 test("a busy RPC hands over to the next; an unwanted answer is taken only when none is wanted", async () => {
   const asked: string[] = [];

@@ -158,16 +158,13 @@ const usdc: Token = { address: USDC, decimals: 6, symbol: "USDC" };
 const weth: Token = { address: WETH, decimals: 18, symbol: "WETH" };
 const tokens = new Map([usdc, weth].map((token) => [key(token.address), token]));
 const byKey = (prices: object) => new Map(Object.entries(prices).map(([at, price]) => [key(at), price as number]));
-const prices = (of: object, standIns = {}): Prices => ({ unit: "USD", of: byKey(of), standIns: byKey(standIns) });
+const prices = (of: object): Prices => ({ unit: "USD", of: byKey(of) });
 
-test("what amounts are worth: nothing for a token without a price or decimals, unless ranked at a stand-in", () => {
+test("what amounts are worth: nothing for a token without a price or decimals", () => {
   const waiting = [amount(USDC, 2_500_000n), amount(WETH, 10n ** 15n)];
   assert.equal(valueAt(waiting, tokens, prices({ [USDC]: 1 })), 2.5);
   assert.equal(valueAt(waiting, tokens, prices({ [USDC]: 1, [WETH]: 4_000 })), 6.5);
   assert.equal(valueAt([amount(KVCM, 10n ** 18n)], tokens, prices({ [KVCM]: 1 })), 0);
-  const standIn = prices({ [USDC]: 1 }, { [WETH]: 4_000 });
-  assert.equal(valueAt(waiting, tokens, standIn), 2.5, "a stand-in is never shown");
-  assert.equal(valueAt(waiting, tokens, standIn, true), 6.5);
 });
 
 // Last epoch's rewards are $90 of USDC fees, $8 of WETH bribes and $2 of kVCM bribes; the epoch before's are $60 of
@@ -227,7 +224,7 @@ test("late, never paid, joined since, and what could not be read", () => {
   assert.equal(partly.unknown, true);
 });
 
-test("each reward weighed at last epoch's prices, or its stand-in, today's; none for a token without either", () => {
+test("each reward weighed at last epoch's prices; none for a token without one", () => {
   const rewards = [
     { pool: FEES, contract: FEES, token: usdc, amount: 90_000_000n, fee: true },
     { pool: FEES, contract: BRIBES, token: weth, amount: 10n ** 18n, fee: false },
@@ -236,8 +233,8 @@ test("each reward weighed at last epoch's prices, or its stand-in, today's; none
     { ...fees, value: 90 },
     { ...bribes, value: 0 },
   ]);
-  // With WETH weighed at today's price, a claim of the USDC alone is not a payout.
-  const pairs = weighed(rewards, prices({ [USDC]: 1 }, { [WETH]: 2_500 }));
+  // With WETH weighed too, a claim of the USDC alone is not a payout.
+  const pairs = weighed(rewards, prices({ [USDC]: 1, [WETH]: 2_500 }));
   assert.equal(pairs[1]!.value, 2_500);
   assert.equal(paidFor(pairs, [OCT_15, 0], OCT_15), false);
 });

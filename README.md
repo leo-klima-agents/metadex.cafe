@@ -10,7 +10,8 @@ A static page at <https://metadex.cafe/> for Hydrex accounts on Base:
 
 It has no server, holds no keys and stores nothing. It reads Base through three public RPCs, the only hosts its Content
 Security Policy lets it connect to: `https://mainnet.base.org`, `https://base.drpc.org` and
-`https://base-rpc.publicnode.com`. Before anyone can join, it checks Base against the contracts it trusts
+`https://base-rpc.publicnode.com`. Its prices are averages over the half hour before a block, read from past blocks, so
+they need an RPC that serves old ones. Before anyone can join, it checks Base against the contracts it trusts
 (`src/config.ts`). If a check fails, joining is turned off and the page says why; leaving always works.
 
 ## Develop

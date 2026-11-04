@@ -3,6 +3,7 @@ import {
   encodeFunctionData,
   multicall3Abi,
   numberToHex,
+  parseAbi,
   type Abi,
   type Address,
   type ContractFunctionArgs,
@@ -48,6 +49,19 @@ export const same = (a: string, b: string): boolean => a.toLowerCase() === b.toL
 const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
 
 export const blockTime = call(MULTICALL3, multicall3Abi, "getCurrentBlockTimestamp");
+export const blockNumber = call(
+  MULTICALL3,
+  parseAbi(["function getBlockNumber() view returns (uint256 blockNumber)"]),
+  "getBlockNumber",
+);
+
+// Base makes a block every two seconds from its first, so a time gives its block. The newest `SETTLED` blocks are
+// skipped, since an RPC a little behind may not have them yet.
+export const BLOCK_TIME = 2;
+export const SETTLED = 5;
+const FIRST_BLOCK_TIME = 1_686_789_347;
+// The last block at or before `time`.
+export const blockAt = (time: number): number => Math.floor((time - FIRST_BLOCK_TIME) / BLOCK_TIME);
 
 // Base's time, from the newest block read, in case the device's clock is wrong.
 let drift = 0;
