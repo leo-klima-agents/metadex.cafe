@@ -7,7 +7,7 @@ import { WEEK, weekStart } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { key, worthOf, type Prices } from "./prices.ts";
 import { rewardsFor, type Earnings, type Reward } from "./rewards.ts";
-import { blockTime, call, now, read, readEach, required, rpc, same } from "./rpc.ts";
+import { SETTLED, blockTime, call, firstBlockAt, now, read, readEach, required, rpc, same } from "./rpc.ts";
 
 // For each account and token, Hydrex's reward contracts record the start of the epoch they have paid it up to. Every
 // claim sets this to the current epoch, even a claim of nothing. An epoch counts as paid once the records holding more
@@ -15,10 +15,6 @@ import { blockTime, call, now, read, readEach, required, rpc, same } from "./rpc
 // block, whose logs make its receipt. Matcha Latte pays each account in one transaction, which logs both the payout and
 // the retirement. Double Espresso records each account's last claim block, and each claim logs the one before.
 
-// Base makes a block every two seconds. The newest `SETTLED` blocks are skipped, since an RPC a little behind may not
-// have them yet.
-const BLOCK_TIME = 2;
-const SETTLED = 5;
 // A payout takes up to half a day after each flip.
 const UNDER_WAY = 12 * 3600;
 // Caps the blocks of Double Espresso claims read per account, since anyone can claim dust for an account as often as
@@ -61,16 +57,11 @@ const less = (amounts: Amount[], taken: Amount[]): Amount[] =>
       amount: amount - (taken.find((each) => same(each.token, token))?.amount ?? 0n),
     }))
     .filter(({ amount }) => amount > 0n);
-// A token without a price counts for nothing, unless `standIns` is set, when it is valued at today's price.
-export function valueAt(
-  amounts: Amount[],
-  decimals: Map<string, { decimals: number }>,
-  prices: Prices,
-  standIns = false,
-): number {
+// A token without a price counts for nothing.
+export function valueAt(amounts: Amount[], decimals: Map<string, { decimals: number }>, prices: Prices): number {
   return sum(
     amounts.map(({ token, amount }) => {
-      const price = prices.of.get(key(token)) ?? (standIns ? prices.standIns.get(key(token)) : undefined);
+      const price = prices.of.get(key(token));
       const known = decimals.get(key(token));
       return known && price !== undefined ? worthOf(amount, known.decimals, price) : 0;
     }),
@@ -81,7 +72,7 @@ export const weighed = (rewards: Reward[], prices: Prices): Weighed[] =>
   rewards.map(({ contract, token, amount }) => ({
     contract,
     token: token.address,
-    value: valueAt([{ token: token.address, amount }], new Map([[key(token.address), token]]), prices, true),
+    value: valueAt([{ token: token.address, amount }], new Map([[key(token.address), token]]), prices),
   }));
 const weights = (pairs: Weighed[]): number[] =>
   pairs.some(({ value }) => value > 0) ? pairs.map(({ value }) => value) : pairs.map(() => 1);
@@ -266,30 +257,10 @@ export async function firstReached<T>(
   return found;
 }
 
-// The first block whose time is at least `time`, at or below block `top`, which must be at or after it. The first four
-// guesses interpolate between the closest blocks read so far, at two seconds a block until one before `time` is read;
-// later ones halve the range.
-export async function firstBlockAt(
-  time: number,
-  top: number,
-  topTime: number,
-  rd: (block: number) => Promise<number> = blockTimeAt,
-): Promise<number> {
-  let [lo, loTime, hi, hiTime] = [-1, 0, top, topTime];
-  for (let step = 0; hi - lo > 1; step++) {
-    const gap = lo < 0 ? BLOCK_TIME : (hiTime - loTime) / (hi - lo);
-    const placed = hi - Math.ceil((hiTime - time) / gap);
-    const guess = step < 4 ? Math.min(hi - 1, Math.max(lo + 1, placed)) : Math.floor((lo + hi) / 2);
-    const at = await rd(guess);
-    if (at >= time) [hi, hiTime] = [guess, at];
-    else [lo, loTime] = [guess, at];
-  }
-  return hi;
-}
 const blockTimeAt = async (block: number): Promise<number> =>
   Number(required(await read([blockTime], { block, tag: "payouts" }))[0]);
 const epochBlock = (epoch: number, top: number, time: number): Promise<number> =>
-  memo(`first ${epoch}`, () => firstBlockAt(epoch, top, time));
+  memo(`first ${epoch}`, () => firstBlockAt(epoch, top, time, blockTimeAt));
 export const readTime = async (block: number): Promise<number> =>
   Number(
     (await rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [numberToHex(block), false], { tag: "payouts" })).timestamp,
