@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 import { use, type Got } from "../cache.ts";
-import { AUTOMATIONS, BASESCAN, KVCM, byKind } from "../config.ts";
+import { AUTOMATIONS, BASESCAN, KVCM, PRICING, byKind } from "../config.ts";
 import * as data from "../data.ts";
 import {
   WEEK,
@@ -205,8 +205,9 @@ function priced(amounts: Amount[], flip: number): { tokens?: Map<string, Token>;
   if (!tokens) return {};
   const most = new Map<string, bigint>();
   for (const { token, amount: value } of amounts) if (value > (most.get(key(token)) ?? 0n)) most.set(key(token), value);
+  // A receipt holds few tokens, so they are priced from every exchange.
   const prices = use(`flip prices ${flip} ${addresses.join()}`, () =>
-    pricesAtFlip([...tokens.values()], most, flip, tagged("payouts")),
+    pricesAtFlip([...tokens.values()], most, flip, tagged("payouts"), PRICING),
   ).value;
   return { tokens, prices };
 }
@@ -224,9 +225,11 @@ function amounts(found: Amount[], tokens: Map<string, Token> | undefined, sign =
     ),
   );
 }
+// What some amounts were worth, "at least" if a token had no price.
 const worth = (found: Amount[], { tokens, prices }: ReturnType<typeof priced>): Value => {
   const total = tokens && prices ? valueAt(found, tokens, prices) : 0;
-  return total > 0 ? money(moneyAt(total, prices!), true) : "";
+  const partial = found.some(({ token }) => !prices?.of.has(key(token)));
+  return total > 0 ? money(moneyAt(total, prices!, partial), true) : "";
 };
 function payoutReceipt(payout: Payout, id: bigint, owner: Address, time: number, own: boolean): Node {
   const p = priced([...payout.earned, ...payout.paid], weekStart(time));

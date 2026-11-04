@@ -2,7 +2,7 @@ import { encodeEventTopics, numberToHex, parseEventLogs, type Address, type Hex,
 import { doubleEspressoAbi, matchaLatteAbi, rewardsAbi } from "./abi.ts";
 import type { Amount } from "./tokens.ts";
 import { memo } from "./cache.ts";
-import { AUTOMATIONS, DOUBLE_ESPRESSO, MATCHA_LATTE, type Automation } from "./config.ts";
+import { AUTOMATIONS, DOUBLE_ESPRESSO, KEEPER_TOKENS, MATCHA_LATTE, type Automation } from "./config.ts";
 import { WEEK, weekStart } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { key, worthOf, type Prices } from "./prices.ts";
@@ -25,9 +25,10 @@ import {
 
 // For each account and token, Hydrex's reward contracts record the start of the epoch they have paid it up to. Every
 // claim sets this to the current epoch, even a claim of nothing. An epoch counts as paid once the records holding more
-// than half of its rewards' worth have moved past its end. A search through past blocks then finds the last payout's
-// block, whose logs make its receipt. Matcha Latte pays each account in one transaction, which logs both the payout and
-// the retirement. Double Espresso records each account's last claim block, and each claim logs the one before.
+// than half of its rewards' worth, in the tokens the keeper claims, have moved past its end. A search through past
+// blocks then finds the last payout's block, whose logs make its receipt. Matcha Latte pays each account in one
+// transaction, which logs both the payout and the retirement. Double Espresso records each account's last claim block,
+// and each claim logs the one before.
 
 // A payout takes up to half a day after each flip.
 const UNDER_WAY = 12 * 3600;
@@ -37,7 +38,8 @@ export const WALK_LIMIT = 10;
 
 export type Pair = { contract: Address; token: Address };
 export type Owed = Amount & { contract: Address };
-// One of an epoch's reward pairs, with `value` the worth of what it paid the automation's votes, or 0 if unknown.
+// One of an epoch's reward pairs, with `value` the worth of what it paid the automation's votes, or 0 if unknown or in
+// a token the keeper does not claim.
 type Weighed = Pair & { value: number };
 type Rewards = { start: number; pairs: Weighed[] };
 export type Standing = {
@@ -88,20 +90,28 @@ export const weighingPrices = ({ prices, standIns }: Pick<Earnings, "prices" | "
   ...prices,
   of: new Map([...standIns, ...prices.of]),
 });
+// The keeper claims only the tokens of its list, so the others weigh nothing in telling its payouts.
+const keeperTokens = new Set(KEEPER_TOKENS.map(key));
+const keeperClaims = (token: Address): boolean => keeperTokens.has(key(token));
 export const weighed = (rewards: Reward[], prices: Prices): Weighed[] =>
   rewards.map(({ contract, token, amount }) => ({
     contract,
     token: token.address,
-    value: valueAt([{ token: token.address, amount }], new Map([[key(token.address), token]]), prices),
+    value: keeperClaims(token.address)
+      ? valueAt([{ token: token.address, amount }], new Map([[key(token.address), token]]), prices)
+      : 0,
   }));
 const weights = (pairs: Weighed[]): number[] =>
-  pairs.some(({ value }) => value > 0) ? pairs.map(({ value }) => value) : pairs.map(() => 1);
+  pairs.some(({ value }) => value > 0)
+    ? pairs.map(({ value }) => value)
+    : pairs.map(({ token }) => (keeperClaims(token) ? 1 : 0));
 
 // Whether claims since the epoch ended at `end` took more than half of what its rewards were worth. Half tells a payout
-// from a claim of a few small rewards, and still counts a payout that leaves some tokens out.
+// from a claim of a few small rewards, and still counts a payout that leaves some tokens out. With nothing the keeper
+// claims, there is no payout to wait for.
 export function paidFor(pairs: Weighed[], stamps: number[], end: number): boolean {
-  if (!pairs.length) return true;
   const weight = weights(pairs);
+  if (!sum(weight)) return true;
   return 2 * sum(weight.filter((_, i) => stamps[i]! >= end)) > sum(weight);
 }
 

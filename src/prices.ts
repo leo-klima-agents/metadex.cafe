@@ -27,8 +27,9 @@ import {
 } from "./rpc.ts";
 
 export type Token = { address: Address; decimals: number; symbol: string };
-// Prices per whole token, keyed by lower-case address.
-export type Prices = Basis & { of: Map<string, number> };
+// Prices per whole token, keyed by lower-case address. `unread` if some pools could not be read, so that some tokens
+// may lack a price they would have had.
+export type Prices = Basis & { of: Map<string, number>; unread?: true };
 export function key(address: Address): Address;
 export function key(address: string): string;
 export function key(address: string): string {
@@ -325,22 +326,23 @@ function pricingOf({ kind, name }: Exchange): Pricing {
   return found;
 }
 
+const logged = (error: unknown): undefined => void console.error(error);
 // Each pool's average price over the window, in the prices' unit, and its depth at its end. Pools without an average,
 // such as those younger than the window, and pools too thin for the amount priced are dropped. A pool holding less than
-// `FLOOR` of its anchor is too thin whatever the token's price, so its sums are not read. A read that fails leaves its
-// pools unpriced, rather than every token.
+// `FLOOR` of its anchor is too thin whatever the token's price, so its sums are not read. Undefined if a read failed,
+// which leaves its pools unpriced rather than every token.
 async function measure(
   pools: Pool[],
   prices: Prices,
   amounts: Map<string, bigint>,
   window: Window,
   rd: Read,
-): Promise<Measured[]> {
+): Promise<Measured[] | undefined> {
   if (!pools.length) return [];
   const start = window.start();
   const asked = pools.map((pool) => pricingOf(pool.exchange).state(pool));
-  const replies = await rd(asked.flat(), { block: window.end }).catch(() => undefined);
-  if (!replies) return [];
+  const replies = await rd(asked.flat(), { block: window.end }).catch(logged);
+  if (!replies) return undefined;
   let next = 0;
   const ready = pools.flatMap((pool, i) => {
     const state = replies.slice(next, (next += asked[i]!.length));
@@ -358,10 +360,10 @@ async function measure(
   if (!ready.length) return [];
   const sums = [...ready.map(({ pool, kind, state }) => kind.sums(pool, state)), blockTime];
   const [before, after] = await Promise.all([
-    start.then((block) => rd(sums, { block })).catch(() => undefined),
-    rd(sums, { block: window.end }).catch(() => undefined),
+    start.then((block) => rd(sums, { block })).catch(logged),
+    rd(sums, { block: window.end }).catch(logged),
   ]);
-  if (!before || !after) return [];
+  if (!before || !after) return undefined;
   const elapsed = Number(after.at(-1)) - Number(before.at(-1));
   if (!(elapsed > 0)) return [];
   return ready.flatMap(({ pool, kind, tokenReserve, anchorReserve, anchorPrice }, i): Measured[] => {
@@ -407,11 +409,12 @@ async function inPools(
     )
     .sort((a, b) => rank(a) - rank(b));
   const measured = await measure(candidates, prices, amounts, window, rd);
-  for (const [token, pools] of Map.groupBy(measured, ({ pool }) => key(pool.token.address)))
+  if (!measured) prices.unread = true;
+  for (const [token, pools] of Map.groupBy(measured ?? [], ({ pool }) => key(pool.token.address)))
     prices.of.set(token, pools.reduce((deepest, each) => (each.depth > deepest.depth ? each : deepest)).price);
 }
 
-// The last block at or before each past time found so far.
+// The last block at or before each past time asked for, found so far.
 const blocksAt = new Map<number, number>();
 // Forgets every pool and block found, for tests.
 export function forget(): void {
@@ -446,7 +449,8 @@ export async function pricesAt(
     const topTime = await timeOf(top);
     if (at >= topTime) return top;
     const found = blocksAt.get(at) ?? (await firstBlockAt(at + 1, top, topTime, timeOf, [newest, newestTime])) - 1;
-    blocksAt.set(at, found);
+    // Prices now start from the newest block's time, which moves on, so those blocks are not asked for again.
+    if (time < newestTime) blocksAt.set(at, found);
     return found;
   };
   let start: Promise<number> | undefined;
@@ -491,10 +495,19 @@ export async function pricesAt(
 
 export const pricesNow = (tokens: Token[], amounts = new Map<string, bigint>(), rd: Read = read): Promise<Prices> =>
   pricesAt(tokens, amounts, Infinity, rd);
-// An epoch's prices, from Hydrex's pools only: little of its rewards is priced only elsewhere, and looking there too
-// takes twice as long.
-export const pricesAtFlip = (tokens: Token[], amounts: Map<string, bigint>, flip: number, rd: Read = read) =>
-  pricesAt(tokens, amounts, flip, rd, config.HYDREX_PRICING);
+// An epoch's prices, from Hydrex's pools unless `exchanges` says otherwise: little of its rewards is priced only
+// elsewhere, and looking there too takes twice as long. They are kept, so a pool that could not be read fails them.
+export async function pricesAtFlip(
+  tokens: Token[],
+  amounts: Map<string, bigint>,
+  flip: number,
+  rd: Read = read,
+  exchanges = config.HYDREX_PRICING,
+): Promise<Prices> {
+  const prices = await pricesAt(tokens, amounts, flip, rd, exchanges);
+  if (prices.unread) throw new Error("Some pools could not be read from Base.");
+  return prices;
+}
 // The anchors' prices now, which include ETH's for gas costs; read at most once a minute.
 export const anchorsNow = (): Promise<Prices | undefined> =>
   memo("anchors", () => pricesNow([]), 60_000).catch(() => undefined);

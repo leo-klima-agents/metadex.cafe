@@ -389,7 +389,19 @@ test("a failed read of the pools, at either end of the window, leaves them unpri
     const prices = await pricesAt([TOKEN], new Map(), Infinity, rd);
     close(prices.of.get(USDC.toLowerCase())!, USDC_USD);
     assert.equal(prices.of.get(TOKEN.address), undefined);
+    assert.equal(prices.unread, true, "and say some pools went unread");
   }
+  assert.equal((await pricesAt([TOKEN], new Map(), Infinity, reader)).unread, undefined);
+});
+
+test("an epoch's prices fail if a pool could not be read, rather than leave its token out", async () => {
+  const { reader } = market([{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }]);
+  const failing = async (calls: readonly Call[], options?: { block?: number | "latest" }): Promise<any> => {
+    if (calls.some((c) => c.functionName === "currentCumulativePrices")) throw new Error("No Base RPC answered.");
+    return reader(calls, options);
+  };
+  await assert.rejects(pricesAtFlip([TOKEN], new Map(), NOW - 7 * 86_400, failing), /could not be read/);
+  close((await pricesAtFlip([TOKEN], new Map(), NOW - 7 * 86_400, reader)).of.get(TOKEN.address)!, 4 * USDC_USD);
 });
 
 test("a search for the window's start that fails after the pools are dropped is not left unhandled", async () => {
@@ -439,6 +451,11 @@ test("searches read no block past the newest settled one, and find a past time's
   probed = [];
   await pricesAt([TOKEN], new Map(), flip, watched);
   assert.deepEqual(probed, [PRICED], "only the newest settled block's time, to tell a past time from a recent one");
+  // The window of prices now ends at the newest block, which moves on, so its start is not kept.
+  await pricesNow([TOKEN], new Map(), watched);
+  probed = [];
+  await pricesNow([TOKEN], new Map(), watched);
+  assert.ok(probed.length > 1, String(probed));
 });
 
 test("lookups among which Uniswap v4's are keep the usual batches", async () => {

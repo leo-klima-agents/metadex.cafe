@@ -22,8 +22,8 @@ import {
   fraction,
   listWords,
   money,
-  moneyAt,
   short,
+  type Money,
   units,
   until,
   utc,
@@ -32,8 +32,8 @@ import {
 import * as hydrex from "../hydrex.ts";
 import type { Account, Holdings, MatchaLatte, Status } from "../hydrex.ts";
 import { overdue, underWay } from "../payouts.ts";
-import { gasWords, key } from "../prices.ts";
-import { perThousand, perThousandOf, valueOf, versus, type Earnings } from "../rewards.ts";
+import { gasWords } from "../prices.ts";
+import { partOf, perThousandOf, poolOf, shareOf, valueOf, versus, type Earnings } from "../rewards.ts";
 import { hrefOf } from "../routes.ts";
 import { now } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
@@ -253,10 +253,7 @@ export function drawHydrex(): void {
       ? frag(...[...failed].map((id) => Object.assign(document.createElement("p"), { textContent: reasons[id] })))
       : null,
     underway: found && underWay(found) ? "Payout under way." : null,
-    average: shown(data.average(), (all) => {
-      const value = valueOf(all);
-      return money(moneyAt(perThousand(value.total, all.votes), value, value.atLeast.total));
-    }),
+    average: shown(data.average(), (all) => money(perThousandOf(all))),
     own: shown(holdings, ownWords),
     "own-versus": holdings.value ? ownVersus(holdings.value) : null,
     epoch: state.connection ? epochWords() : null,
@@ -350,33 +347,20 @@ function performance(automation: Automation): Value {
   const mine = data.earnings(automation).value;
   if (!mine?.votes) return null;
   const all = data.average();
-  const row = (prefix: string, earnings: Earnings | undefined, prices = earnings?.prices) => {
-    const value = earnings && valueOf(earnings, prices);
-    const cents = (n: (v: NonNullable<typeof value>) => number, short: (v: NonNullable<typeof value>) => boolean) =>
-      value ? money(moneyAt(n(value), value, short(value)), true) : all.failed ? "" : undefined;
+  const pending = all.failed ? "" : undefined;
+  const row = (prefix: string, earnings: Earnings | undefined, value = earnings && valueOf(earnings)) => {
+    const cents = (sum: Money | undefined) => (sum ? money(sum, true) : pending);
     return {
-      [`${prefix}votes`]: earnings ? compact(earnings.votes) : all.failed ? "" : undefined,
-      [`${prefix}pools`]: earnings ? count(earnings.pools.length, "pool", "pools") : all.failed ? "" : undefined,
-      [`${prefix}earned`]: cents(
-        (v) => v.total,
-        (v) => v.atLeast.total,
-      ),
-      [`${prefix}fees`]: cents(
-        (v) => v.fees,
-        (v) => v.atLeast.fees,
-      ),
-      [`${prefix}incentives`]: cents(
-        (v) => v.incentives,
-        (v) => v.atLeast.incentives,
-      ),
-      [`${prefix}per-thousand`]: cents(
-        (v) => perThousand(v.total, earnings!.votes),
-        (v) => v.atLeast.total,
-      ),
+      [`${prefix}votes`]: earnings ? compact(earnings.votes) : pending,
+      [`${prefix}pools`]: earnings ? count(earnings.pools.length, "pool", "pools") : pending,
+      [`${prefix}earned`]: cents(value && partOf(value, "total")),
+      [`${prefix}fees`]: cents(value && partOf(value, "fees")),
+      [`${prefix}incentives`]: cents(value && partOf(value, "incentives")),
+      [`${prefix}per-thousand`]: cents(earnings && value && perThousandOf(earnings, value)),
     };
   };
-  fill(productView, { ...row("", mine, all.value?.prices), ...row("all-", all.value) });
   const value = valueOf(mine, all.value?.prices);
+  fill(productView, { ...row("", mine, value), ...row("all-", all.value) });
   list(
     $("[data-list=pool]", productView),
     mine.pools,
@@ -385,10 +369,7 @@ function performance(automation: Automation): Value {
       fill(tr, {
         pool: { address: pool.address, text: pool.name },
         share: fraction(Number(pool.votes) / Number(mine.votes)),
-        worth: money(
-          moneyAt(value.byPool.get(key(pool.address)) ?? 0, value, value.atLeast.pools.has(key(pool.address))),
-          true,
-        ),
+        worth: money(poolOf(value, pool.address), true),
       }),
   );
   if (all.failed) return "All of Hydrex could not be read.";
@@ -473,8 +454,8 @@ export function change(accounts: Account[], action: "join" | "leave" | "self", a
         weekly: shown(weekly, (earnings) => {
           if (!earnings.votes) return "No record yet";
           if (paid === undefined) return "Not read";
-          const each = perThousandOf(earnings);
-          return money({ ...each, value: each.value * (Number(votes) / 1e21) * (Number(paid) / 10_000) });
+          const each = shareOf(earnings, votes);
+          return money({ ...each, value: (each.value * Number(paid)) / 10_000 });
         }),
         gas: wei,
         takes: ml ? (settings ? `Up to ${bps(settings.retireBps)}` : "Not read") : "1%",

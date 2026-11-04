@@ -2,15 +2,15 @@ import type { Address } from "viem";
 import { memo, andThen, use, type Got } from "./cache.ts";
 import { checks } from "./checks.ts";
 import { AUTOMATIONS, type Automation } from "./config.ts";
-import { WEEK, moneyAt, weekStart, type Money } from "./format.ts";
+import { WEEK, weekStart, type Money } from "./format.ts";
 import { automationAt, readAccount, readAccounts, readFreshness, readMatchaLatte, type Holdings } from "./hydrex.ts";
 import { awaited, readPayouts, readTime, type Payouts } from "./payouts.ts";
 import {
   allEarnings,
   holdersOf,
   lastEpoch,
+  shareOf,
   stakesOf,
-  valueOf,
   votesEarned,
   type Earnings,
   type Stake,
@@ -70,8 +70,7 @@ export function accountEarned(holdings: Holdings, id: bigint): Got<Money | null>
     const automation = automationAt(stake.delegate);
     return andThen(automation ? earnings(automation) : holderEarnings(stake.delegate), (of) => {
       if (!of.votes || (!automation && !of.pools.length)) return { value: null };
-      const value = valueOf(of);
-      return { value: moneyAt((Number(stake.votes) / Number(of.votes)) * value.total, value, value.atLeast.total) };
+      return { value: shareOf(of, stake.votes) };
     });
   });
 }
