@@ -451,15 +451,20 @@ actions["aero-window"] = (el) => {
   controls.hours = WINDOWS.find((each) => each === hours) ?? 48;
   render();
 };
-actions["aero-amount"] = (el) => {
-  const input = el as HTMLInputElement;
-  // Anything else marks the box invalid and keeps the table.
+// The table follows each keystroke; the box is marked invalid only when left or on Enter, not while typing.
+function amountTyped(input: HTMLInputElement, done: boolean): void {
   const value = aero.amountOf(input.value);
-  input.setAttribute("aria-invalid", String(value === undefined));
-  if (value === undefined) return;
+  if (value === undefined) {
+    if (done) input.setAttribute("aria-invalid", "true");
+    return;
+  }
+  input.setAttribute("aria-invalid", "false");
   controls.amount = value;
   render();
-};
+}
+const amountBox = $<HTMLInputElement>("[data-action=aero-amount]", aeroView);
+amountBox.addEventListener("input", () => amountTyped(amountBox, false));
+actions["aero-amount"] = () => amountTyped(amountBox, true);
 actions["aero-thin"] = (el) => {
   controls.thin = (el as HTMLInputElement).checked;
   render();
