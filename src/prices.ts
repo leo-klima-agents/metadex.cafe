@@ -118,9 +118,10 @@ function lookupsOn(exchange: Exchange, pair: [Address, Address], spacings: Map<n
   }
 }
 
-// Pools found, keyed by exchange id and sorted pair, cached until the page reloads. A failed lookup is dropped, so the
-// next call retries it.
-export const pools = new Map<string, Promise<PoolFound[]>>();
+// Pools found, keyed by exchange id and sorted pair, cached until the page reloads. A lookup that failed says so to
+// those waiting on it, and is dropped, so the next call retries it.
+type Looked = { found: PoolFound[]; failed: boolean };
+const pools = new Map<string, Promise<Looked>>();
 let spacingsRead: Promise<Map<number, number[]>> | undefined;
 function spacings(rd: Read): Promise<Map<number, number[]>> {
   const slipstreams = BY_ID.filter(({ kind }) => kind === "slipstream");
@@ -146,11 +147,17 @@ function spacings(rd: Read): Promise<Map<number, number[]>> {
 // Each pair's pools, keyed by `pairKey` of the pair as given, in the order of `exchanges`. Lookups not yet cached go in
 // a single read, `LOOKUPS` calls to a batch since each is cheap, unless Uniswap v4's, which read more, are among them.
 const LOOKUPS = 1_000;
-export async function waysFor(
+export const waysFor = async (
   pairs: readonly (readonly [Address, Address])[],
   exchanges: Exchange[] = BY_ID,
   rd: Read = read,
-): Promise<Map<string, Way[]>> {
+): Promise<Map<string, Way[]>> => (await lookUp(pairs, exchanges, rd)).ways;
+// The same, and whether a lookup failed, leaving out pools it would have found.
+async function lookUp(
+  pairs: readonly (readonly [Address, Address])[],
+  exchanges: Exchange[],
+  rd: Read,
+): Promise<{ ways: Map<string, Way[]>; failed: boolean }> {
   const sorted = (a: Address, b: Address): [Address, Address] => (key(a) < key(b) ? [a, b] : [b, a]);
   const at = (exchange: Exchange, pair: readonly [Address, Address]) => `${exchange.id} ${pairKey(...sorted(...pair))}`;
   const missing = [
@@ -177,7 +184,7 @@ export async function waysFor(
       const found = all.then(
         (each) => {
           if (each[i]!.failed) pools.delete(id);
-          return each[i]!.found;
+          return each[i]!;
         },
         (error: unknown) => {
           pools.delete(id);
@@ -188,14 +195,18 @@ export async function waysFor(
     });
   }
   const unique = [...new Map(pairs.map((pair) => [pairKey(...pair), pair])).values()];
-  return new Map(
+  let failed = false;
+  const ways = new Map(
     await Promise.all(
       unique.map(async ([tokenIn, tokenOut]) => {
-        const found = await Promise.all(exchanges.map((exchange) => pools.get(at(exchange, [tokenIn, tokenOut]))!));
-        return [pairKey(tokenIn, tokenOut), found.flat().map((way) => ({ ...way, tokenIn, tokenOut }))] as const;
+        const looked = await Promise.all(exchanges.map((exchange) => pools.get(at(exchange, [tokenIn, tokenOut]))!));
+        if (looked.some((each) => each.failed)) failed = true;
+        const found = looked.flatMap((each) => each.found);
+        return [pairKey(tokenIn, tokenOut), found.map((way) => ({ ...way, tokenIn, tokenOut }))] as const;
       }),
     ),
   );
+  return { ways, failed };
 }
 
 // Prices are averages over the 30 minutes up to a block, from the running sums pools keep, read at either end of the
@@ -391,11 +402,12 @@ async function inPools(
   if (!tokens.length) return;
   const anchors = config.ANCHORS.filter(({ address }) => prices.of.has(key(address)));
   const pairs = tokens.flatMap((token) => anchors.map((anchor) => ({ token, anchor })));
-  const ways = await waysFor(
+  const { ways, failed } = await lookUp(
     pairs.map(({ token, anchor }) => [token.address, anchor.address]),
     exchanges,
     rd,
   );
+  if (failed) prices.unread = true;
   const rank = (pool: Pool) => exchanges.findIndex(({ id }) => id === pool.exchange.id);
   const candidates = pairs
     .flatMap(({ token, anchor }) =>
@@ -414,13 +426,17 @@ async function inPools(
     prices.of.set(token, pools.reduce((deepest, each) => (each.depth > deepest.depth ? each : deepest)).price);
 }
 
-// The last block at or before each past time asked for, found so far.
-const blocksAt = new Map<number, number>();
-// Forgets every pool and block found, for tests.
+// The last block at or before each time asked for, found or being found, for every pricing to share. Prices now start
+// from the newest block's time, which moves on, so only the latest such start is kept.
+const blocksAt = new Map<number, Promise<number>>();
+let nowStart: number | undefined;
+// Forgets every pool, block and quote found, for tests.
 export function forget(): void {
   pools.clear();
   spacingsRead = undefined;
   blocksAt.clear();
+  nowStart = undefined;
+  quotes.clear();
 }
 
 // Prices per whole token over the 30 minutes up to `time`, or up to the newest block if that is earlier. Each end of
@@ -435,6 +451,7 @@ export async function pricesAt(
   rd: Read = read,
   exchanges = config.PRICING,
 ): Promise<Prices> {
+  exchanges.forEach(pricingOf);
   const [newest, newestTime] = required(await rd([blockNumber, blockTime])).map(Number) as [number, number];
   const top = newest - SETTLED;
   // Both ends are searched for down from `top`, at first at the pace from it to the newest block, and share the blocks
@@ -448,9 +465,15 @@ export async function pricesAt(
   const lastBlockAt = async (at: number): Promise<number> => {
     const topTime = await timeOf(top);
     if (at >= topTime) return top;
-    const found = blocksAt.get(at) ?? (await firstBlockAt(at + 1, top, topTime, timeOf, [newest, newestTime])) - 1;
-    // Prices now start from the newest block's time, which moves on, so those blocks are not asked for again.
-    if (time < newestTime) blocksAt.set(at, found);
+    const known = blocksAt.get(at);
+    if (known) return known;
+    const found = firstBlockAt(at + 1, top, topTime, timeOf, [newest, newestTime]).then((first) => first - 1);
+    if (time >= newestTime) {
+      if (nowStart !== undefined) blocksAt.delete(nowStart);
+      nowStart = at;
+    }
+    blocksAt.set(at, found);
+    found.catch(() => blocksAt.get(at) === found && blocksAt.delete(at));
     return found;
   };
   let start: Promise<number> | undefined;
@@ -507,6 +530,39 @@ export async function pricesAtFlip(
   if (prices.unread) throw new Error("Some pools could not be read from Base.");
   return prices;
 }
+// Prices now without amounts, as a market would quote them, for weighing rewards against one another rather than for
+// showing. Each token's quote is shared by every caller for five minutes; a read that fails is made again by the next.
+const QUOTED = 5 * 60_000;
+const quotes = new Map<string, { at: number; reading: Promise<Prices> }>();
+export async function quotesOf(asked: Token[], rd: Read = read): Promise<Pick<Prices, "of" | "unread">> {
+  const tokens = [...new Map(asked.map((token) => [key(token.address), token])).values()];
+  const fresh = (address: Address) => {
+    const quote = quotes.get(key(address));
+    return quote && performance.now() - quote.at < QUOTED ? quote : undefined;
+  };
+  const missing = tokens.filter(({ address }) => !fresh(address));
+  if (missing.length) {
+    const reading = pricesNow(missing, new Map(), rd).catch((error: unknown): Prices => {
+      console.error(error);
+      return { ...noPrices(), unread: true };
+    });
+    const quote = { at: performance.now(), reading };
+    for (const { address } of missing) quotes.set(key(address), quote);
+    void reading.then(({ unread }) => {
+      if (unread)
+        for (const { address } of missing) if (quotes.get(key(address)) === quote) quotes.delete(key(address));
+    });
+  }
+  const readings = tokens.map(({ address }) => quotes.get(key(address))!.reading);
+  const found = await Promise.all(readings);
+  const of = new Map<string, number>();
+  tokens.forEach(({ address }, i) => {
+    const price = found[i]!.of.get(key(address));
+    if (price !== undefined) of.set(key(address), price);
+  });
+  return { of, ...(found.some(({ unread }) => unread) && { unread: true }) };
+}
+
 // The anchors' prices now, which include ETH's for gas costs; read at most once a minute.
 export const anchorsNow = (): Promise<Prices | undefined> =>
   memo("anchors", () => pricesNow([]), 60_000).catch(() => undefined);

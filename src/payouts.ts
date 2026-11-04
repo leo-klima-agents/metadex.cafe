@@ -3,10 +3,10 @@ import { doubleEspressoAbi, matchaLatteAbi, rewardsAbi } from "./abi.ts";
 import type { Amount } from "./tokens.ts";
 import { memo } from "./cache.ts";
 import { AUTOMATIONS, DOUBLE_ESPRESSO, MATCHA_LATTE, type Automation } from "./config.ts";
-import { WEEK, weekStart } from "./format.ts";
+import { WEEK, moneyAt, weekStart, type Money } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
-import { key, noPrices, pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
-import { rewardsFor, type Earnings, type Reward } from "./rewards.ts";
+import { key, quotesOf, worthOf, type Prices, type Token } from "./prices.ts";
+import { rewardsFor, tokensIn, type Earnings, type Reward } from "./rewards.ts";
 import {
   SETTLED,
   blockNumber,
@@ -73,7 +73,8 @@ const less = (amounts: Amount[], taken: Amount[]): Amount[] =>
     }))
     .filter(({ amount }) => amount > 0n);
 // A token without a price counts for nothing.
-export function valueAt(amounts: Amount[], decimals: Map<string, { decimals: number }>, prices: Prices): number {
+type Decimals = Map<string, { decimals: number }>;
+export function valueAt(amounts: Amount[], decimals: Decimals, prices: Prices): number {
   return sum(
     amounts.map(({ token, amount }) => {
       const price = prices.of.get(key(token));
@@ -83,39 +84,28 @@ export function valueAt(amounts: Amount[], decimals: Map<string, { decimals: num
   );
 }
 
-// Stand-ins: today's prices of reward tokens that had none at the flip, priced without amounts, as a market would quote
-// them. They are read by epoch and token, each once, and a read that fails is made again next time.
-const standInsRead = new Map<string, Promise<number | undefined>>();
-async function standInsOf(tokens: Token[], start: number, rd: Read): Promise<Map<string, number>> {
-  const at = (address: Address) => `${start} ${key(address)}`;
-  const missing = tokens.filter(({ address }) => !standInsRead.has(at(address)));
-  if (missing.length) {
-    const today = pricesNow(missing, new Map(), rd).catch((error: unknown): Prices => {
-      console.error(error);
-      return { ...noPrices(), unread: true };
-    });
-    void today.then(({ unread }) => unread && missing.forEach(({ address }) => standInsRead.delete(at(address))));
-    const priceOf = (address: Address) => today.then(({ of }) => of.get(key(address)));
-    for (const { address } of missing) standInsRead.set(at(address), priceOf(address));
-  }
-  const found = await Promise.all(tokens.map(({ address }) => standInsRead.get(at(address))!));
-  return new Map(tokens.flatMap(({ address }, i) => (found[i] === undefined ? [] : [[key(address), found[i]]])));
+// What amounts were worth, "at least" if one had no price or decimals; undefined if none counted.
+export function worthAt(amounts: Amount[], decimals: Decimals, prices: Prices): Money | undefined {
+  const total = valueAt(amounts, decimals, prices);
+  const partial = amounts.some(({ token }) => !prices.of.has(key(token)) || !decimals.has(key(token)));
+  return total > 0 ? moneyAt(total, prices, partial) : undefined;
 }
 
-// Prices for weighing rewards against one another, never for showing: the epoch's, with stand-ins for tokens that had
-// none at the flip.
+// Prices for weighing rewards against one another, never for showing: the epoch's, with today's quotes standing in
+// for tokens that had none at the flip. `unread` if some quotes could not be read.
 export const withStandIns = (prices: Prices, standIns: Map<string, number>): Prices => ({
   ...prices,
   of: new Map([...standIns, ...prices.of]),
 });
-export async function weighingPrices(
-  { start, rewards, prices }: Earnings,
-  rd: Read = tagged("payouts"),
-): Promise<Prices> {
-  const tokens = [...new Map(rewards.map(({ token }) => [key(token.address), token])).values()];
-  const unpriced = tokens.filter(({ address }) => !prices.of.has(key(address)));
-  return withStandIns(prices, await standInsOf(unpriced, start, rd));
+export async function weighingPrices(prices: Prices, tokens: Token[], rd: Read = tagged("payouts")): Promise<Prices> {
+  const quoted = await quotesOf(
+    tokens.filter(({ address }) => !prices.of.has(key(address))),
+    rd,
+  );
+  return { ...withStandIns(prices, quoted.of), ...(quoted.unread && { unread: true }) };
 }
+const pairsOf = (rewards: Reward[]): Pair[] =>
+  rewards.map(({ contract, token }) => ({ contract, token: token.address }));
 export const weighed = (rewards: Reward[], prices: Prices): Weighed[] =>
   rewards.map(({ contract, token, amount }) => ({
     contract,
@@ -524,7 +514,8 @@ type Entry = {
   walk?: Walk | undefined;
   note?: "outside" | "unclaimed" | undefined;
 };
-export type Payouts = { epochStart: number; entries: Entry[] };
+// `unread` if some rewards could not be weighed for want of today's prices, so that the payouts are read again soon.
+export type Payouts = { epochStart: number; entries: Entry[]; unread?: true };
 
 export const automationOf = ({ delegate, claimer, delegateAtStart }: Account): Automation | undefined =>
   AUTOMATIONS.find(({ address }) => same(delegate, address) || same(claimer, address)) ??
@@ -626,30 +617,40 @@ export async function readPayouts(
     );
 
   const found = new Map<bigint, { earnings?: Earnings; standing?: Standing | undefined; early?: true }>();
+  let unweighed = false;
   const standings = Promise.all(
     groups(voterOf).map(async ([automation, these]) => {
       const earnings = await earningsOf(automation).catch(() => undefined);
       if (!earnings) return;
       if (earnings.start < epochStart - WEEK) return these.forEach((id) => found.set(id, { early: true }));
-      const pairs = earnings.rewards.map(({ contract, token }) => ({ contract, token: token.address }));
       const votedBefore = these.filter((id) => votedWith(automation, id, "before"));
+      // The epoch before's rewards weigh at last epoch's prices, and today's quotes for its other tokens. They are read,
+      // with their records and quotes, while what each account can claim is.
+      const readBefore = async () => {
+        const rewards = votedBefore.length ? await rewardsFor(automation.address, earnings.start - WEEK) : [];
+        const [stamps, weighing] = await Promise.all([
+          readStamps(votedBefore, pairsOf(rewards), top),
+          weighingPrices(earnings.prices, tokensIn(rewards)),
+        ]);
+        return { rewards, stamps, weighing };
+      };
       const owed = await Promise.all([
-        readOwed(these, pairs, top, [earnings.start - WEEK, earnings.start]).then((rows) =>
+        readOwed(these, pairsOf(earnings.rewards), top, [earnings.start - WEEK, earnings.start]).then((rows) =>
           rows.map(({ id, owing }) => ({
             id,
             earned: owing.map(({ amount }) => amount),
             stamps: required(owing.map(({ stamp }) => stamp)),
           })),
         ),
-        votedBefore.length ? rewardsFor(automation.address, earnings.start - WEEK) : [],
-        weighingPrices(earnings),
+        readBefore(),
+        weighingPrices(earnings.prices, tokensIn(earnings.rewards)),
       ]).catch(() => undefined);
       if (!owed) return;
-      const [rows, rewards, weighing] = owed;
+      const [rows, epochBefore, weighing] = owed;
+      if (weighing.unread || epochBefore.weighing.unread) unweighed = true;
       const last = { start: earnings.start, pairs: weighed(earnings.rewards, weighing) };
-      const before = { start: earnings.start - WEEK, pairs: weighed(rewards, weighing) };
-      const stampsBefore = await readStamps(votedBefore, before.pairs, top).catch(() => undefined);
-      if (!stampsBefore) return;
+      const before = { start: earnings.start - WEEK, pairs: weighed(epochBefore.rewards, epochBefore.weighing) };
+      const stampsBefore = epochBefore.stamps;
       rows.forEach(({ id, earned, stamps }) => {
         const records = { last: stamps, earned, before: stampsBefore.get(id) ?? [] };
         const voted = { last: votedWith(automation, id, "last"), before: votedWith(automation, id, "before") };
@@ -691,7 +692,7 @@ export async function readPayouts(
   });
   if (entries.every(({ earnings, early }) => !earnings && !early))
     throw new Error("No automation's payouts could be read.");
-  return { epochStart, entries };
+  return { epochStart, entries, ...(unweighed ? { unread: true as const } : {}) };
 }
 
 // A payout is under way when some due accounts have been paid since the flip and others not yet, and the first known

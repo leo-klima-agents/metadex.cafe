@@ -110,11 +110,16 @@ async function rewardsOf(contracts: Contract[], start: number, holder: Address |
   return { rewards, votes: new Map(voted.map(({ pool, balance }) => [pool, balance])) };
 }
 
+// The tokens of some rewards, each once.
+export const tokensIn = (rewards: Reward[]): Token[] => [
+  ...new Map(rewards.map(({ token }) => [key(token.address), token])).values(),
+];
+
 async function priced(start: number, votes: bigint, pools: Pool[], rewards: Reward[], rd: Read): Promise<Earnings> {
   const amounts = new Map<string, bigint>();
-  for (const { token, amount } of rewards) amounts.set(token.address, (amounts.get(token.address) ?? 0n) + amount);
-  const tokens = [...new Map(rewards.map(({ token }) => [token.address, token])).values()];
-  return { start, votes, pools, rewards, prices: await pricesAtFlip(tokens, amounts, start + WEEK, rd) };
+  for (const { token, amount } of rewards)
+    amounts.set(key(token.address), (amounts.get(key(token.address)) ?? 0n) + amount);
+  return { start, votes, pools, rewards, prices: await pricesAtFlip(tokensIn(rewards), amounts, start + WEEK, rd) };
 }
 
 // What a voter earned in the epoch from `start`: an automation, whose pools are `named`, or an owner. Rewards go to the

@@ -11,6 +11,7 @@ import {
   pricesAt,
   pricesAtFlip,
   pricesNow,
+  quotesOf,
   tickPrice,
   waysFor,
   type Token,
@@ -451,11 +452,96 @@ test("searches read no block past the newest settled one, and find a past time's
   probed = [];
   await pricesAt([TOKEN], new Map(), flip, watched);
   assert.deepEqual(probed, [PRICED], "only the newest settled block's time, to tell a past time from a recent one");
-  // The window of prices now ends at the newest block, which moves on, so its start is not kept.
+  // Prices now share their window's start while the newest block stays the same, and search again once it moves on.
   await pricesNow([TOKEN], new Map(), watched);
   probed = [];
+  await Promise.all([pricesNow([TOKEN], new Map(), watched), pricesNow([TOKEN], new Map(), watched)]);
+  assert.deepEqual(probed, [PRICED, PRICED], "the start found before");
+  const later = async (calls: readonly Call[], options?: { block?: number | "latest" }): Promise<any> => {
+    if ((options?.block ?? "latest") !== "latest") return watched(calls, options);
+    const replies = await watched(calls, { ...options, block: NEWEST + 10 });
+    return calls.map((c, i) => (c.functionName === "getBlockNumber" ? BigInt(NEWEST + 10) : replies[i]));
+  };
+  probed = [];
+  await pricesNow([TOKEN], new Map(), later);
+  assert.ok(probed.length > 2, String(probed));
+  probed = [];
   await pricesNow([TOKEN], new Map(), watched);
-  assert.ok(probed.length > 1, String(probed));
+  assert.ok(probed.length > 2, `only the latest start is kept: ${probed}`);
+});
+
+test("pricings at one flip at once share their searches", async () => {
+  const { reader } = market([{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }]);
+  let probes = 0;
+  const watched = async (calls: readonly Call[], options?: { block?: number | "latest" }): Promise<any> => {
+    const block = options?.block ?? "latest";
+    if (calls[0]!.functionName === "getCurrentBlockTimestamp" && typeof block === "number" && block < PRICED) probes++;
+    return reader(calls, options);
+  };
+  const flip = NOW - 7 * 86_400;
+  await pricesAt([TOKEN], new Map(), flip, watched);
+  const once = probes;
+  forget();
+  probes = 0;
+  const each = await Promise.all([1, 2, 3].map(() => pricesAt([TOKEN], new Map(), flip, watched)));
+  assert.equal(probes, once, "as many past blocks as one pricing");
+  for (const prices of each) close(prices.of.get(TOKEN.address)!, 4 * USDC_USD);
+});
+
+test("an exchange whose pools cannot price is refused before anything is read", async () => {
+  const { reader } = market([{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }]);
+  let reads = 0;
+  const counting = async (calls: readonly Call[], options?: { block?: number | "latest" }): Promise<any> => {
+    reads++;
+    return reader(calls, options);
+  };
+  const v2 = EXCHANGES.find(({ kind }) => kind === "v2")!;
+  await assert.rejects(pricesAt([TOKEN], new Map(), Infinity, counting, [v2]), /Uniswap v2 cannot price tokens/);
+  assert.equal(reads, 0);
+});
+
+test("a failed lookup leaves its pools unpriced and says so, so an epoch's prices fail until it is read", async () => {
+  const { reader } = market([{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }]);
+  const failing = async (calls: readonly Call[], options?: { block?: number | "latest" }): Promise<any> => {
+    const replies = await reader(calls, options);
+    return calls.map((c, i) => (c.functionName === "getPair" ? undefined : replies[i]));
+  };
+  const now = await pricesAt([TOKEN], new Map(), Infinity, failing);
+  assert.equal(now.of.get(TOKEN.address), undefined);
+  assert.equal(now.unread, true);
+  await assert.rejects(pricesAtFlip([TOKEN], new Map(), NOW - 7 * 86_400, failing), /could not be read/);
+  close((await pricesAtFlip([TOKEN], new Map(), NOW - 7 * 86_400, reader)).of.get(TOKEN.address)!, 4 * USDC_USD);
+});
+
+test("quotes are prices now without amounts, read once for every caller, and read again after a failure", async () => {
+  // 2,000 TKN against 8,000 USDC is too thin to price 1,000 TKN, worth $4,000, but quotes TKN all the same.
+  const { reader } = market([{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }]);
+  let reads = 0;
+  const counting = async (calls: readonly Call[], options?: { block?: number | "latest" }): Promise<any> => {
+    reads++;
+    return reader(calls, options);
+  };
+  const lots = new Map([[TOKEN.address, 1_000n * 10n ** 18n]]);
+  assert.equal((await pricesNow([TOKEN], lots, reader)).of.get(TOKEN.address), undefined);
+  forget();
+  const quoted = await quotesOf([TOKEN], counting);
+  close(quoted.of.get(TOKEN.address)!, 4 * USDC_USD);
+  assert.equal(quoted.unread, undefined);
+  const once = reads;
+  await quotesOf([TOKEN], counting);
+  assert.equal(reads, once, "nothing read again");
+  forget();
+  reads = 0;
+  await Promise.all([quotesOf([TOKEN], counting), quotesOf([TOKEN], counting)]);
+  assert.equal(reads, once, "callers at once share one read");
+  forget();
+  const failing = async (calls: readonly Call[], options?: { block?: number | "latest" }): Promise<any> => {
+    if (calls.some((c) => c.functionName === "currentCumulativePrices")) throw new Error("No Base RPC answered.");
+    return reader(calls, options);
+  };
+  const failed = await quotesOf([TOKEN], failing);
+  assert.deepEqual([failed.of.size, failed.unread], [0, true]);
+  close((await quotesOf([TOKEN], reader)).of.get(TOKEN.address)!, 4 * USDC_USD);
 });
 
 test("lookups among which Uniswap v4's are keep the usual batches", async () => {

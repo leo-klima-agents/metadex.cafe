@@ -10,7 +10,7 @@ import {
 } from "viem";
 import type { Address, Hex, RpcLog } from "viem";
 import { MATCHA_LATTE } from "../src/config.ts";
-import { WEEK } from "../src/format.ts";
+import { WEEK, type Money } from "../src/format.ts";
 import { key, type Prices, type Token } from "../src/prices.ts";
 import {
   WALK_LIMIT,
@@ -26,7 +26,9 @@ import {
   valueAt,
   walkClaims,
   weighed,
+  weighingPrices,
   withStandIns,
+  worthAt,
   windowStart,
   type ClaimLog,
   type Pair,
@@ -217,6 +219,32 @@ test("each reward weighed at last epoch's prices, or today's for a token without
   assert.equal(paidFor(pairs, [OCT_15, 0], OCT_15), false);
   const both = withStandIns(prices({ [WETH]: 2_000 }), byKey({ [WETH]: 2_500 }));
   assert.equal(both.of.get(key(WETH)), 2_000, "last epoch's price comes first");
+});
+
+test("what amounts were worth: 'at least' when one had no price or decimals, and nothing when none counted", () => {
+  const waiting = [amount(USDC, 2_500_000n), amount(WETH, 10n ** 15n)];
+  const brief = (sum?: Money) => sum && [sum.value, !!sum.atLeast];
+  assert.deepEqual(brief(worthAt(waiting, tokens, prices({ [USDC]: 1, [WETH]: 4_000 }))), [6.5, false]);
+  assert.deepEqual(brief(worthAt(waiting, tokens, prices({ [USDC]: 1 }))), [2.5, true], "WETH had no price");
+  const kvcm = prices({ [USDC]: 1, [WETH]: 4_000, [KVCM]: 1 });
+  assert.deepEqual(
+    brief(worthAt([...waiting, amount(KVCM, 10n ** 18n)], tokens, kvcm)),
+    [6.5, true],
+    "nor kVCM decimals",
+  );
+  assert.equal(worthAt(waiting, tokens, prices({})), undefined);
+});
+
+test("weighing quotes only the tokens without an epoch price, and says when the quotes could not be read", async () => {
+  let asked = 0;
+  const failing = async (): Promise<never> => {
+    asked++;
+    throw new Error("No Base RPC answered eth_call.");
+  };
+  const priced = await weighingPrices(prices({ [USDC]: 1, [WETH]: 2_000 }), [usdc, weth], failing);
+  assert.deepEqual([asked, priced.of.get(key(WETH)), priced.unread], [0, 2_000, undefined]);
+  const quoted = await weighingPrices(prices({ [USDC]: 1 }), [usdc, weth], failing);
+  assert.deepEqual([asked > 0, quoted.of.has(key(WETH)), quoted.unread], [true, false, true]);
 });
 
 test("records are read in one batch; what waits in batches of 20, and what lies past earned()'s 50 epochs", async (t) => {
