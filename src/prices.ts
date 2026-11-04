@@ -12,7 +12,18 @@ import { memo } from "./cache.ts";
 import * as config from "./config.ts";
 import type { Anchor, Exchange, ExchangeKind, Fiat } from "./config.ts";
 import { figure, money, moneyAt, type Basis, type Money, type Rates } from "./format.ts";
-import { BLOCK_TIME, SETTLED, blockAt, blockNumber, call, read, required, same, type Call, type Read } from "./rpc.ts";
+import {
+  SETTLED,
+  blockNumber,
+  blockTime,
+  call,
+  firstBlockAt,
+  read,
+  required,
+  same,
+  type Call,
+  type Read,
+} from "./rpc.ts";
 
 export type Token = { address: Address; decimals: number; symbol: string };
 // Prices per whole token, keyed by lower-case address.
@@ -181,7 +192,8 @@ export async function waysFor(
 }
 
 // Prices are averages over the 30 minutes up to a block, from the running sums pools keep, read at either end of the
-// window. A pool prices a token only if it holds at least $250 of each side and ten times the value priced.
+// window with the blocks' times. A pool prices a token only if it holds at least $250 of each side and ten times the
+// value priced.
 export const WINDOW = 1800;
 const FLOOR = 250;
 const DEPTH = 10;
@@ -205,6 +217,8 @@ const feedAbi = parseAbi([
 
 type Pool = { address: Address; exchange: Exchange; stable: boolean; token: Token; anchor: Anchor };
 type Measured = { pool: Pool; price: number; depth: number };
+// The window's last block, and the search for its first.
+type Window = { start(): Promise<number>; end: number };
 const whole = (amount: bigint, decimals: number): number => Number(amount) / 10 ** decimals;
 
 // Token0's price in token1, in whole tokens, at a concentrated pool's tick.
@@ -289,27 +303,34 @@ function pricingOf({ kind, name }: Exchange): Pricing {
   return found;
 }
 
-// Each pool's average price over the window up to `block`, in the prices' unit, and its depth then. Pools without an
-// average, such as those younger than the window, and pools too thin for the amount priced are dropped.
+// Each pool's average price over the window, in the prices' unit, and its depth at its end. Pools without an average,
+// such as those younger than the window, and pools too thin for the amount priced are dropped.
 async function measure(
   pools: Pool[],
   prices: Prices,
   amounts: Map<string, bigint>,
-  block: number,
+  window: Window,
   rd: Read,
 ): Promise<Measured[]> {
+  if (!pools.length) return [];
+  const start = window.start();
   const asked = pools.map((pool) => pricingOf(pool.exchange).state(pool));
-  const replies = await rd(asked.flat(), { block });
+  const replies = await rd(asked.flat(), { block: window.end });
   let next = 0;
   const ready = pools.flatMap((pool, i) => {
     const state = replies.slice(next, (next += asked[i]!.length));
     return state.includes(undefined) ? [] : [{ pool, kind: pricingOf(pool.exchange), state }];
   });
-  const sums = ready.map(({ pool, kind, state }) => kind.sums(pool, state));
-  const [before, after] = await Promise.all([rd(sums, { block: block - WINDOW / BLOCK_TIME }), rd(sums, { block })]);
+  const sums = [...ready.map(({ pool, kind, state }) => kind.sums(pool, state)), blockTime];
+  const [before, after] = await Promise.all([
+    start.then((block) => rd(sums, { block })),
+    rd(sums, { block: window.end }),
+  ]);
+  const elapsed = Number(after.at(-1)) - Number(before.at(-1));
+  if (!(elapsed > 0)) return [];
   return ready.flatMap(({ pool, kind, state }, i): Measured[] => {
     const [first, last] = [kind.summed(before[i]), kind.summed(after[i])];
-    const perSecond = first && last && first.map((sum, j) => Number(last[j]! - sum) / WINDOW);
+    const perSecond = first && last && first.map((sum, j) => Number(last[j]! - sum) / elapsed);
     const price0 = perSecond && kind.price(perSecond, pool);
     const anchorPrice = prices.of.get(key(pool.anchor.address))!;
     const price = price0 && inAnchor(pool, price0) * anchorPrice;
@@ -330,7 +351,7 @@ async function inPools(
   tokens: Token[],
   prices: Prices,
   amounts: Map<string, bigint>,
-  block: number,
+  window: Window,
   exchanges: Exchange[],
   rd: Read,
 ) {
@@ -354,15 +375,16 @@ async function inPools(
       })),
     )
     .sort((a, b) => rank(a) - rank(b));
-  const measured = await measure(candidates, prices, amounts, block, rd);
+  const measured = await measure(candidates, prices, amounts, window, rd);
   for (const [token, pools] of Map.groupBy(measured, ({ pool }) => key(pool.token.address)))
     prices.of.set(token, pools.reduce((deepest, each) => (each.depth > deepest.depth ? each : deepest)).price);
 }
 
-// Prices per whole token over the 30 minutes up to `time`, or up to the newest block if that is earlier. Anchors take
-// their Chainlink USD feeds' answers at the end, and the fiat feeds give each currency's rate; if no anchor feed
-// answers, prices are in USDC, with USDC at 1. Pools then price the anchors without a feed, then the other tokens.
-// `amounts` is how much of each token will be priced.
+// Prices per whole token over the 30 minutes up to `time`, or up to the newest block if that is earlier. Each end of
+// the window is the last block at or before its time, and the end at least `SETTLED` blocks back. Anchors take their
+// Chainlink USD feeds' answers at the end, and the fiat feeds give each currency's rate; if no anchor feed answers,
+// prices are in USDC, with USDC at 1. Pools then price the anchors without a feed, then the other tokens. `amounts` is
+// how much of each token will be priced.
 export async function pricesAt(
   tokens: Token[],
   amounts: Map<string, bigint>,
@@ -371,13 +393,26 @@ export async function pricesAt(
   rd: Read = read,
 ): Promise<Prices> {
   exchanges.forEach(pricingOf);
-  const [newest] = required(await rd([blockNumber]));
-  const block = Math.min(blockAt(time), Number(newest) - SETTLED);
+  const [newest, newestTime] = required(await rd([blockNumber, blockTime])).map(Number) as [number, number];
+  // Both ends are searched for from the newest block, and share the blocks they read.
+  const times = new Map<number, Promise<number>>();
+  const timeOf = (block: number): Promise<number> => {
+    const known = times.get(block) ?? rd([blockTime], { block }).then((found) => Number(required(found)[0]));
+    times.set(block, known);
+    return known;
+  };
+  const lastBlockAt = async (at: number) =>
+    at >= newestTime ? newest : (await firstBlockAt(at + 1, newest, newestTime, timeOf)) - 1;
+  const priced = Math.min(time, newestTime);
+  let start: Promise<number> | undefined;
+  const startOf = () => (start ??= lastBlockAt(priced - WINDOW));
+  if (tokens.length) startOf().catch(() => undefined);
+  const window: Window = { end: Math.min(await lastBlockAt(priced), newest - SETTLED), start: startOf };
   const fiat = Object.entries(config.FIAT_FEEDS) as [Fiat, Address][];
   const feeds = [...config.ANCHORS.map(({ feed }) => feed), ...fiat.map(([, feed]) => feed)];
   const rounds = await rd(
     feeds.map((feed) => call(feed, feedAbi, "latestRoundData")),
-    { block },
+    { block: window.end },
   );
   const answers = rounds.map((round) => round && Number(round[1]) / 1e8);
   const [anchorFeeds, fiatFeeds] = [answers.slice(0, config.ANCHORS.length), answers.slice(config.ANCHORS.length)];
@@ -396,7 +431,7 @@ export async function pricesAt(
       each.filter(({ address }) => !prices.of.has(key(address))),
       prices,
       amounts,
-      block,
+      window,
       exchanges,
       rd,
     );

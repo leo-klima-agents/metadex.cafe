@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { decodeFunctionData, encodeAbiParameters, encodeFunctionResult, erc20Abi, parseAbi } from "viem";
 import { RPCS } from "../src/config.ts";
-import { blockAt, call, read, rpc, showTags } from "../src/rpc.ts";
+import { call, firstBlockAt, read, rpc, showTags } from "../src/rpc.ts";
 
 type Handler = (url: string, body: { method: string; params: unknown[] }) => Response | Promise<Response>;
 const serve = (handler: Handler) => {
@@ -10,12 +10,32 @@ const serve = (handler: Handler) => {
 };
 const reply = (result: unknown) => Response.json({ jsonrpc: "2.0", id: 1, result });
 
-test("a time gives the last block at or before it, Base making one every two seconds", () => {
-  // Block 53,505,157 is timed 1,793,799,661.
-  assert.equal(blockAt(1_793_799_661), 53_505_157);
-  assert.equal(blockAt(1_793_799_662), 53_505_157);
-  assert.equal(blockAt(1_793_799_660), 53_505_156);
-  assert.equal(blockAt(1_686_789_347), 0);
+test("a time's first block, from the blocks' own times, whatever the time between blocks", async () => {
+  // Two seconds apart up to block 1,000,000, then one second apart, then three.
+  const GENESIS = 1_686_789_347;
+  const timeAt = (block: number) =>
+    GENESIS + 2 * Math.min(block, 1e6) + Math.max(0, Math.min(block, 2e6) - 1e6) + 3 * Math.max(0, block - 2e6);
+  let reads = 0;
+  const reader = async (block: number) => (reads++, timeAt(block));
+  const top = 3_000_000;
+  for (const block of [10, 999_999, 1_000_000, 1_500_001, 2_000_000, 2_500_000, top]) {
+    reads = 0;
+    const time = timeAt(block);
+    assert.equal(await firstBlockAt(time, top, timeAt(top), reader), block, `block ${block}`);
+    const before = timeAt(block - 1) >= time - 1 ? block - 1 : block;
+    assert.equal(await firstBlockAt(time - 1, top, timeAt(top), reader), before);
+    assert.ok(reads <= 2 * 26, `${reads} reads for block ${block}, in two searches`);
+  }
+  // Where blocks keep one pace, as on Base, the two newest read give it, and it takes three reads.
+  for (const pace of [2, 1, 3, 12]) {
+    reads = 0;
+    const evenly = async (block: number) => (reads++, GENESIS + pace * block);
+    const time = GENESIS + pace * 52_000_001;
+    assert.deepEqual(
+      [await firstBlockAt(time, 53_000_000, GENESIS + pace * 53_000_000, evenly), reads],
+      [52_000_001, 3],
+    );
+  }
 });
 
 test("a busy RPC hands over to the next; an unwanted answer is taken only when none is wanted", async () => {

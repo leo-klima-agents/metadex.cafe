@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import { zeroAddress, type Address } from "viem";
-import { SETTLED, blockAt, same, type Call } from "../src/rpc.ts";
+import { SETTLED, same, type Call } from "../src/rpc.ts";
 import {
   ANCHORS,
   FIAT_FEEDS,
@@ -68,9 +68,14 @@ test("the swap's page prices in Aero's, Aerodrome's and Hydrex's pools, in that 
 
 const NOW = 1_792_800_000;
 // The block prices are read at now, the newest an RPC gives less those it may not have yet.
-const PRICED = blockAt(NOW);
+// The fake chain makes a block every seven seconds, unlike Base, so nothing may count on Base's two; and the last block
+// half an hour before the newest is not half an hour before the one priced.
+const PACE = 7;
+const PRICED = 60_000_000;
 const NEWEST = PRICED + SETTLED;
-const START = PRICED - WINDOW / 2;
+const timeOf = (block: number) => NOW + (block - PRICED) * PACE;
+const blockOf = (time: number) => PRICED + Math.floor((time - NOW) / PACE);
+const START = blockOf(timeOf(NEWEST) - WINDOW);
 const [USDC, EURC] = [swapperOf("usdc")!.token, swapperOf("eurc")!.token];
 // TOKEN sorts before every anchor, so it is token0 of its pools; LATE sorts after, so it is token1.
 const TOKEN: Token = { address: "0x0000000000000000000000000000000000000001", decimals: 18, symbol: "TKN" };
@@ -122,7 +127,6 @@ function market(pools: Fake[], answers = ANSWERS) {
     ];
     return tokenFirst(pool) ? amounts : amounts.reverse();
   };
-  const timeOf = (block: number) => NOW + (block - PRICED) * 2;
   const reservesSums = (pool: Fake, block: number) =>
     units(pool, pool.held ?? pool.now).map((amount) => amount * BigInt(timeOf(block)));
   const tickSum = (pool: Fake, block: number) => {
@@ -138,6 +142,7 @@ function market(pools: Fake[], answers = ANSWERS) {
       blocks.set(functionName, (blocks.get(functionName) ?? new Set()).add(block));
       const at = block === "latest" ? NEWEST : block;
       if (functionName === "getBlockNumber") return BigInt(NEWEST);
+      if (functionName === "getCurrentBlockTimestamp") return BigInt(timeOf(at));
       const fed = ANCHORS.find(({ feed }) => same(feed, address));
       if (fed) {
         const answer = answers.get(fed.address);
@@ -290,14 +295,15 @@ test("a concentrated pool's depth is what it holds of each token", async () => {
   close((await priceOf(pools))!, 3 * USDC_USD, 1e-6);
 });
 
-test("sums are read at the block priced and half an hour before it, and the reserves at the block", async () => {
+test("sums are read at the block priced and the last block half an hour before the newest, reserves at the first", async () => {
   const pools: Fake[] = [{ exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] }];
   const { reader, blocks } = market(pools);
   await pricesAt([TOKEN], new Map(), Infinity, SWAP_PRICING, reader);
   assert.deepEqual([...blocks.get("getBlockNumber")!], ["latest"]);
+  assert.deepEqual([...blocks.get("getCurrentBlockTimestamp")!].slice(0, 1), ["latest"]);
   assert.deepEqual([...blocks.get("latestRoundData")!], [PRICED]);
   assert.deepEqual([...blocks.get("getReserves")!], [PRICED]);
-  assert.deepEqual([...blocks.get("currentCumulativePrices")!], [START, PRICED]);
+  assert.deepEqual([...blocks.get("currentCumulativePrices")!].sort(), [START, PRICED]);
 });
 
 test("a pool younger than the window gives no price, so the next deepest does", async () => {
@@ -317,7 +323,7 @@ test("now is the newest block less a few; a flip, the last block before it, unle
   };
   assert.deepEqual(await feedBlocks((reader) => pricesNow([TOKEN], new Map(), reader)), [PRICED]);
   const flip = NOW - 7 * 86_400;
-  assert.deepEqual(await feedBlocks((reader) => pricesAtFlip([TOKEN], new Map(), flip, reader)), [blockAt(flip)]);
+  assert.deepEqual(await feedBlocks((reader) => pricesAtFlip([TOKEN], new Map(), flip, reader)), [blockOf(flip)]);
   assert.deepEqual(await feedBlocks((reader) => pricesAtFlip([TOKEN], new Map(), NOW + 60, reader)), [PRICED]);
 });
 

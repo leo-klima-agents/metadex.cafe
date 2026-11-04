@@ -55,13 +55,30 @@ export const blockNumber = call(
   "getBlockNumber",
 );
 
-// Base makes a block every two seconds from its first, so a time gives its block. The newest `SETTLED` blocks are
-// skipped, since an RPC a little behind may not have them yet.
-export const BLOCK_TIME = 2;
+// The newest `SETTLED` blocks are skipped, since an RPC a little behind may not have them yet.
 export const SETTLED = 5;
-const FIRST_BLOCK_TIME = 1_686_789_347;
-// The last block at or before `time`.
-export const blockAt = (time: number): number => Math.floor((time - FIRST_BLOCK_TIME) / BLOCK_TIME);
+
+// The first block whose time is at least `time`, at or below block `top`, which must be at or after it. The first five
+// guesses interpolate between the closest blocks read so far, or, until one before `time` is read, go by the pace of the
+// last two read; later ones halve the range.
+export async function firstBlockAt(
+  time: number,
+  top: number,
+  topTime: number,
+  timeOf: (block: number) => Promise<number>,
+): Promise<number> {
+  let [lo, loTime, hi, hiTime] = [-1, 0, top, topTime];
+  let [above, aboveTime] = [top, topTime];
+  for (let step = 0; hi - lo > 1; step++) {
+    const gap = lo >= 0 ? (hiTime - loTime) / (hi - lo) : above > hi ? (aboveTime - hiTime) / (above - hi) : 0;
+    const placed = gap ? hi - Math.ceil((hiTime - time) / gap) : hi - 1;
+    const guess = step < 5 ? Math.min(hi - 1, Math.max(lo + 1, placed)) : Math.floor((lo + hi) / 2);
+    const at = await timeOf(guess);
+    if (at >= time) [above, aboveTime, hi, hiTime] = [hi, hiTime, guess, at];
+    else [lo, loTime] = [guess, at];
+  }
+  return hi;
+}
 
 // Base's time, from the newest block read, in case the device's clock is wrong.
 let drift = 0;

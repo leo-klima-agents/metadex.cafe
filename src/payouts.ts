@@ -7,7 +7,7 @@ import { WEEK, weekStart } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { key, worthOf, type Prices } from "./prices.ts";
 import { rewardsFor, type Earnings, type Reward } from "./rewards.ts";
-import { BLOCK_TIME, SETTLED, blockTime, call, now, read, readEach, required, rpc, same } from "./rpc.ts";
+import { SETTLED, blockTime, call, firstBlockAt, now, read, readEach, required, rpc, same } from "./rpc.ts";
 
 // For each account and token, Hydrex's reward contracts record the start of the epoch they have paid it up to. Every
 // claim sets this to the current epoch, even a claim of nothing. An epoch counts as paid once the records holding more
@@ -257,30 +257,10 @@ export async function firstReached<T>(
   return found;
 }
 
-// The first block whose time is at least `time`, at or below block `top`, which must be at or after it. The first four
-// guesses interpolate between the closest blocks read so far, at two seconds a block until one before `time` is read;
-// later ones halve the range.
-export async function firstBlockAt(
-  time: number,
-  top: number,
-  topTime: number,
-  rd: (block: number) => Promise<number> = blockTimeAt,
-): Promise<number> {
-  let [lo, loTime, hi, hiTime] = [-1, 0, top, topTime];
-  for (let step = 0; hi - lo > 1; step++) {
-    const gap = lo < 0 ? BLOCK_TIME : (hiTime - loTime) / (hi - lo);
-    const placed = hi - Math.ceil((hiTime - time) / gap);
-    const guess = step < 4 ? Math.min(hi - 1, Math.max(lo + 1, placed)) : Math.floor((lo + hi) / 2);
-    const at = await rd(guess);
-    if (at >= time) [hi, hiTime] = [guess, at];
-    else [lo, loTime] = [guess, at];
-  }
-  return hi;
-}
 const blockTimeAt = async (block: number): Promise<number> =>
   Number(required(await read([blockTime], { block, tag: "payouts" }))[0]);
 const epochBlock = (epoch: number, top: number, time: number): Promise<number> =>
-  memo(`first ${epoch}`, () => firstBlockAt(epoch, top, time));
+  memo(`first ${epoch}`, () => firstBlockAt(epoch, top, time, blockTimeAt));
 export const readTime = async (block: number): Promise<number> =>
   Number(
     (await rpc<{ timestamp: Hex }>("eth_getBlockByNumber", [numberToHex(block), false], { tag: "payouts" })).timestamp,

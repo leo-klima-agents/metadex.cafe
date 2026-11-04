@@ -15,7 +15,6 @@ import { key, type Prices, type Token } from "../src/prices.ts";
 import {
   WALK_LIMIT,
   claimsOf,
-  firstBlockAt,
   firstReached,
   paidFor,
   payoutsOf,
@@ -109,34 +108,11 @@ test("each account's payout, with the retirement just before it in the same tran
   assert.deepEqual([tonnes, retiredKvcm], [0n, 0n], "a retirement only for the account it precedes");
 });
 
-// Base's genesis time; its blocks are two seconds apart.
-const GENESIS = 1_686_789_347;
-const timeOf = (block: number) => GENESIS + 2 * block;
 const SEP_17 = 1_789_603_200; // Thu 17 Sep 2026, 00:00 UTC
 const OCT_15 = SEP_17 + 4 * WEEK;
 const OCT_8 = OCT_15 - WEEK;
 const OCT_1 = OCT_15 - 2 * WEEK;
 const TOP = 52_694_000; // Fri 16 Oct 2026, 19:02 UTC
-
-test("an epoch's first block, from the blocks' own times, whatever the time between blocks", async () => {
-  // Two seconds apart up to block 1,000,000, then one second apart, then three.
-  const timeAt = (block: number) =>
-    GENESIS + 2 * Math.min(block, 1e6) + Math.max(0, Math.min(block, 2e6) - 1e6) + 3 * Math.max(0, block - 2e6);
-  let reads = 0;
-  const reader = async (block: number) => (reads++, timeAt(block));
-  const top = 3_000_000;
-  for (const block of [10, 999_999, 1_000_000, 1_500_001, 2_000_000, 2_500_000, top]) {
-    reads = 0;
-    const time = timeAt(block);
-    assert.equal(await firstBlockAt(time, top, timeAt(top), reader), block, `block ${block}`);
-    const before = timeAt(block - 1) >= time - 1 ? block - 1 : block;
-    assert.equal(await firstBlockAt(time - 1, top, timeAt(top), reader), before);
-    assert.ok(reads <= 2 * 26, `${reads} reads for block ${block}, in two searches`);
-  }
-  reads = 0;
-  const first = await firstBlockAt(SEP_17, TOP, timeOf(TOP), async (block) => (reads++, timeOf(block)));
-  assert.deepEqual([first, reads], [(SEP_17 + 1 - GENESIS) / 2, 2], "on Base, in two reads");
-});
 
 test("each item's first block to reach what it waits for, those reaching it together read together", async () => {
   const steps: Record<string, number> = { a: 105, b: 105, c: 180, d: 1_000 };
