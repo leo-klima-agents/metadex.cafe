@@ -4,7 +4,7 @@ import { BASESCAN, CHAIN_ID } from "../config.ts";
 import { count } from "../format.ts";
 import { poll, waitForReceipt, type Landed } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
-import { $, announce, code, fill, frag, hex, link, list } from "../ui.ts";
+import { $, announce, asWritten, code, fill, frag, hex, link, list } from "../ui.ts";
 import {
   callsStatus,
   capabilities,
@@ -116,7 +116,7 @@ function draw(): void {
   const atomic = !!review.atomic && !!review.capabilities?.atomic;
   const waiting = review.finished ? undefined : review.waiting?.();
   fill(dialog, {
-    step: `${review.name}${pages.length > 1 ? ` · ${review.page + 1} of ${pages.length}` : ""}`,
+    step: asWritten(`${review.name}${pages.length > 1 ? ` · ${review.page + 1} of ${pages.length}` : ""}`),
     title: review.result ? "Done" : (shown.title ?? callsName),
     page: review.result ? null : (shown.body ?? null),
     calls: (!review.result && last && steps.length > 0) || null,
@@ -162,7 +162,7 @@ function draw(): void {
       const g = groupOf[i] ?? 0;
       const where = safe ? `${apart(review) ? `Safe ${g + 1} of ${groups.length}` : "Safe"} · Call` : "Transaction";
       fill(row, {
-        count: `${where}${steps.length > 1 ? ` ${i + 1} of ${steps.length}` : ""} · ${step.title}`,
+        count: asWritten(`${where}${steps.length > 1 ? ` ${i + 1} of ${steps.length}` : ""} · ${step.title}`),
         says: step.says,
       });
       // These fields mirror what the wallet shows: destination, function, arguments and a value of 0 ETH. A Safe also
