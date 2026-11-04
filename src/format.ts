@@ -104,8 +104,8 @@ const toCents = (sum: Money): number => {
 // The difference between two sums as each is shown, rounded to the cent, so that a column adds up as it reads.
 export const between = (from: Money, to: Money): Money => ({ ...to, value: toCents(to) - toCents(from) });
 
-// For example "≈ $692", "≈ −€0.69", "< £0.01", "≈ 0.77 USDC" or "At least ≈ $3.10", which starts a value or follows a
-// "·". With `cents`, always to the cent, as in a column.
+// For example "≈ $692", "≈ −€0.69", "< £0.01", "≈ 0.77 USDC" or, for a receipt with a token that had no price,
+// "At least ≈ $3.10". With `cents`, always to the cent, as in a column.
 export const money = (sum: Money, cents = false): string =>
   `${sum.atLeast ? "At\u00a0least\u00a0" : ""}${figureOf(sum, cents)}`;
 function figureOf(sum: Money, cents: boolean): string {

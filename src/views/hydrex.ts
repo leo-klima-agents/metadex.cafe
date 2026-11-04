@@ -22,6 +22,7 @@ import {
   fraction,
   listWords,
   money,
+  moneyAt,
   short,
   type Money,
   units,
@@ -32,8 +33,8 @@ import {
 import * as hydrex from "../hydrex.ts";
 import type { Account, Holdings, MatchaLatte, Status } from "../hydrex.ts";
 import { overdue, underWay } from "../payouts.ts";
-import { gasWords } from "../prices.ts";
-import { partOf, perThousandOf, poolOf, shareOf, valueOf, versus, type Earnings } from "../rewards.ts";
+import { gasWords, key } from "../prices.ts";
+import { perThousandOf, shareOf, valueOf, versus, type Earnings } from "../rewards.ts";
 import { hrefOf } from "../routes.ts";
 import { now } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
@@ -353,9 +354,9 @@ function performance(automation: Automation): Value {
     return {
       [`${prefix}votes`]: earnings ? compact(earnings.votes) : pending,
       [`${prefix}pools`]: earnings ? count(earnings.pools.length, "pool", "pools") : pending,
-      [`${prefix}earned`]: cents(value && partOf(value, "total")),
-      [`${prefix}fees`]: cents(value && partOf(value, "fees")),
-      [`${prefix}incentives`]: cents(value && partOf(value, "incentives")),
+      [`${prefix}earned`]: cents(value && moneyAt(value.total, value)),
+      [`${prefix}fees`]: cents(value && moneyAt(value.fees, value)),
+      [`${prefix}incentives`]: cents(value && moneyAt(value.incentives, value)),
       [`${prefix}per-thousand`]: cents(earnings && value && perThousandOf(earnings, value)),
     };
   };
@@ -369,7 +370,7 @@ function performance(automation: Automation): Value {
       fill(tr, {
         pool: { address: pool.address, text: pool.name },
         share: fraction(Number(pool.votes) / Number(mine.votes)),
-        worth: money(poolOf(value, pool.address), true),
+        worth: money(moneyAt(value.byPool.get(key(pool.address)) ?? 0, value), true),
       }),
   );
   if (all.failed) return "All of Hydrex could not be read.";

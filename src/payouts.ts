@@ -5,7 +5,7 @@ import { memo } from "./cache.ts";
 import { AUTOMATIONS, DOUBLE_ESPRESSO, MATCHA_LATTE, type Automation } from "./config.ts";
 import { WEEK, weekStart } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
-import { key, worthOf, type Prices } from "./prices.ts";
+import { key, noPrices, pricesNow, worthOf, type Prices, type Token } from "./prices.ts";
 import { rewardsFor, type Earnings, type Reward } from "./rewards.ts";
 import {
   SETTLED,
@@ -21,6 +21,7 @@ import {
   same,
   tagged,
   timeAt,
+  type Read,
 } from "./rpc.ts";
 
 // For each account and token, Hydrex's reward contracts record the start of the epoch they have paid it up to. Every
@@ -82,12 +83,39 @@ export function valueAt(amounts: Amount[], decimals: Map<string, { decimals: num
   );
 }
 
-// Earnings' prices, with today's standing in for tokens that had none at the flip: for weighing rewards against one
-// another, never for showing.
-export const weighingPrices = ({ prices, standIns }: Pick<Earnings, "prices" | "standIns">): Prices => ({
+// Stand-ins: today's prices of reward tokens that had none at the flip, priced without amounts, as a market would quote
+// them. They are read by epoch and token, each once, and a read that fails is made again next time.
+const standInsRead = new Map<string, Promise<number | undefined>>();
+async function standInsOf(tokens: Token[], start: number, rd: Read): Promise<Map<string, number>> {
+  const at = (address: Address) => `${start} ${key(address)}`;
+  const missing = tokens.filter(({ address }) => !standInsRead.has(at(address)));
+  if (missing.length) {
+    const today = pricesNow(missing, new Map(), rd).catch((error: unknown): Prices => {
+      console.error(error);
+      return { ...noPrices(), unread: true };
+    });
+    void today.then(({ unread }) => unread && missing.forEach(({ address }) => standInsRead.delete(at(address))));
+    const priceOf = (address: Address) => today.then(({ of }) => of.get(key(address)));
+    for (const { address } of missing) standInsRead.set(at(address), priceOf(address));
+  }
+  const found = await Promise.all(tokens.map(({ address }) => standInsRead.get(at(address))!));
+  return new Map(tokens.flatMap(({ address }, i) => (found[i] === undefined ? [] : [[key(address), found[i]]])));
+}
+
+// Prices for weighing rewards against one another, never for showing: the epoch's, with stand-ins for tokens that had
+// none at the flip.
+export const withStandIns = (prices: Prices, standIns: Map<string, number>): Prices => ({
   ...prices,
   of: new Map([...standIns, ...prices.of]),
 });
+export async function weighingPrices(
+  { start, rewards, prices }: Earnings,
+  rd: Read = tagged("payouts"),
+): Promise<Prices> {
+  const tokens = [...new Map(rewards.map(({ token }) => [key(token.address), token])).values()];
+  const unpriced = tokens.filter(({ address }) => !prices.of.has(key(address)));
+  return withStandIns(prices, await standInsOf(unpriced, start, rd));
+}
 export const weighed = (rewards: Reward[], prices: Prices): Weighed[] =>
   rewards.map(({ contract, token, amount }) => ({
     contract,
@@ -603,10 +631,10 @@ export async function readPayouts(
       const earnings = await earningsOf(automation).catch(() => undefined);
       if (!earnings) return;
       if (earnings.start < epochStart - WEEK) return these.forEach((id) => found.set(id, { early: true }));
-      const last = { start: earnings.start, pairs: weighed(earnings.rewards, weighingPrices(earnings)) };
+      const pairs = earnings.rewards.map(({ contract, token }) => ({ contract, token: token.address }));
       const votedBefore = these.filter((id) => votedWith(automation, id, "before"));
       const owed = await Promise.all([
-        readOwed(these, last.pairs, top, [last.start - WEEK, last.start]).then((rows) =>
+        readOwed(these, pairs, top, [earnings.start - WEEK, earnings.start]).then((rows) =>
           rows.map(({ id, owing }) => ({
             id,
             earned: owing.map(({ amount }) => amount),
@@ -614,10 +642,12 @@ export async function readPayouts(
           })),
         ),
         votedBefore.length ? rewardsFor(automation.address, earnings.start - WEEK) : [],
+        weighingPrices(earnings),
       ]).catch(() => undefined);
       if (!owed) return;
-      const [rows, rewards] = owed;
-      const before = { start: earnings.start - WEEK, pairs: weighed(rewards, weighingPrices(earnings)) };
+      const [rows, rewards, weighing] = owed;
+      const last = { start: earnings.start, pairs: weighed(earnings.rewards, weighing) };
+      const before = { start: earnings.start - WEEK, pairs: weighed(rewards, weighing) };
       const stampsBefore = await readStamps(votedBefore, before.pairs, top).catch(() => undefined);
       if (!stampsBefore) return;
       rows.forEach(({ id, earned, stamps }) => {

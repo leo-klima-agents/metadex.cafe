@@ -60,7 +60,7 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
 
   const totals = claim.paidBy(owing.flatMap(({ owed }) => owed));
   const paid = totals.map(({ token, paid }) => ({ token, amount: paid }));
-  const weighing = weighingPrices(entries[0]!.earnings);
+  const weighing = await weighingPrices(entries[0]!.earnings);
   const weight = ({ owed }: claim.Claim) => valueAt(owed, tokens, weighing);
   const budget = connection.wallet.propose ? claim.SAFE_CLAIM_CALL_GAS : claim.CLAIM_CALL_GAS;
   const parts = owing.flatMap((each) => {
