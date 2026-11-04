@@ -42,6 +42,29 @@ export const APPROVAL_LOGIC: Address = "0x4B0BC0889EB524Dbae36d409fF733851E9B4f6
 export const VOTER: Address = "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b";
 export const ACCOUNT_NAMES: Address = "0x998cf40a742460b4eBbFB569A0D23eA91976c0d3";
 
+// Aero, whose root chain is Base. A stake is an sAERO, allocated to pools' gauges on Base by the LeafVoter. The
+// FactoryRegistry lists the gauges, each with its pool and the rewards manager that pays the sAERO allocated to it.
+export const AERO: Address = "0x3f5bF3EdAc59d650D8fDf9657a71F2f904A3a4Ee";
+export const AERO_ESCROW: Address = "0xBF7977E1521e9a3032bf7243Ee4712f311f13915";
+export const AERO_VOTER: Address = "0x49d7d4f17Ec56Ef8fA04E464AF5D1A4942CC31e6";
+export const LEAF_VOTER: Address = "0x382409fad8503FbCdbB27A4211551fa03e884078";
+export const FACTORY_REGISTRY: Address = "0x7b2A2c12dC5Ea2a31455952a05031C3E4BB28F3E";
+// Aero's own module, which stakes approve when they join a Relay.
+export const PAYMENTS_MODULE: Address = "0xBe8e5149Dc0fE28d124dE4222b7Fb332De99AA79";
+export type GaugeKind = "volatile" | "stable" | "cl";
+export const GAUGE_FACTORIES: { address: Address; kind: GaugeKind }[] = [
+  { address: "0x9FBCf2Df0DC553ce40Ef63963Bff465b76792B7E", kind: "volatile" },
+  { address: "0x1e0f776E88649285f99e65Fa599aD6e0f9D97800", kind: "stable" },
+  { address: "0xf437f62053ACB121665b8fDBfeA8F214FB8E589d", kind: "cl" },
+];
+// Aero's public Autopilots, Relays that pool sAERO and allocate it. Each is one stake, owned by its Relay; the page
+// shows it as an Autopilot only while that Relay owns it.
+export type Autopilot = { id: bigint; name: string; relay: Address };
+export const AUTOPILOTS: Autopilot[] = [
+  { id: 20365n, name: "Autopilot sAERO Maxi", relay: "0xf588F86577C472D83E5F84403951AA0B92fc1Dd6" },
+  { id: 20366n, name: "Autopilot USDC Maxi", relay: "0xAfa7cA53e0A63d94218728842ED286308435DD86" },
+];
+
 export const WETH: Address = "0x4200000000000000000000000000000000000006";
 export const USDC: Address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 export const CBBTC: Address = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";

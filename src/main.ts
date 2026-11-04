@@ -2,10 +2,11 @@ import { failures, retry } from "./cache.ts";
 import { CHAIN_ID, currencyOf } from "./config.ts";
 import { preload } from "./data.ts";
 import { setCurrency, short } from "./format.ts";
-import { parse, type View } from "./routes.ts";
+import { hrefOf, parse, type View } from "./routes.ts";
 import { showTags, type Tag } from "./rpc.ts";
 import { actions, onRender, render, state } from "./state.ts";
 import { $, fill, toggle } from "./ui.ts";
+import { drawAero, drawPool, drawStake } from "./views/aero.ts";
 import { drawApp } from "./views/app.ts";
 import { drawAccount } from "./views/account.ts";
 import { drawHydrex, drawProduct } from "./views/hydrex.ts";
@@ -18,11 +19,14 @@ import { drawWallets, startWallets } from "./views/wallet.ts";
 const TAGS: Record<View, Tag[]> = {
   home: [],
   about: [],
-  app: ["earnings", "payouts", "swap"],
+  app: ["earnings", "payouts", "swap", "aero"],
   hydrex: ["earnings", "average", "shares", "payouts"],
   product: ["earnings", "average", "shares", "payouts"],
   account: ["earnings", "shares", "payouts"],
   swap: ["earnings", "swap"],
+  aero: ["aero"],
+  stake: ["aero"],
+  pool: ["aero"],
 };
 const DRAW: Partial<Record<View, () => void>> = {
   app: drawApp,
@@ -30,6 +34,9 @@ const DRAW: Partial<Record<View, () => void>> = {
   product: drawProduct,
   account: drawAccount,
   swap: drawSwap,
+  aero: drawAero,
+  stake: drawStake,
+  pool: drawPool,
 };
 const views = [...document.querySelectorAll<HTMLElement>("main > [data-view]")];
 const popups = [...document.querySelectorAll<HTMLElement>("[popover]")];
@@ -37,15 +44,19 @@ const popups = [...document.querySelectorAll<HTMLElement>("[popover]")];
 function show(first: boolean): void {
   const before = state.route;
   const route = (state.route = parse(location.hash));
-  const moved =
-    route.view !== before.view ||
-    (route.view === "account" && before.view === "account" && route.id !== before.id) ||
-    first;
+  // Another account, stake or pool is another page.
+  const other = (view: View) => route.view === view && before.view === view && hrefOf(route) !== hrefOf(before);
+  const moved = route.view !== before.view || other("account") || other("stake") || other("pool") || first;
   const view = views.find(({ dataset }) => dataset.view === route.view)!;
   for (const each of views) each.hidden = each !== view;
   toggle("view", true, route.view);
   toggle("kind", route.view === "product", route.view === "product" ? route.kind : "");
-  document.title = route.view === "account" ? `Hydrex account #${route.id} · metaDEX Café` : view.dataset.title!;
+  document.title =
+    route.view === "account"
+      ? `Hydrex account #${route.id} · metaDEX Café`
+      : route.view === "stake"
+        ? `sAERO #${route.id} · metaDEX Café`
+        : view.dataset.title!;
   const chip = $("[data-text=chip]");
   if (route.view === "app") chip.setAttribute("aria-current", "page");
   else chip.removeAttribute("aria-current");

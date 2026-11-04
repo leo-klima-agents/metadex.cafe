@@ -62,3 +62,60 @@ export const doubleEspressoAbi = parseAbi([
 ]);
 
 export const namesAbi = parseAbi(["function getBulkNames(uint256[] tokenIds) view returns (string[])"]);
+
+export const aeroEscrowAbi = parseAbi([
+  "function balanceOf(address owner) view returns (uint256)",
+  "function ownerOf(uint256 tokenId) view returns (address)",
+  "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
+  "function getApproved(uint256 tokenId) view returns (address)",
+  "function isApprovedForAll(address owner, address operator) view returns (bool)",
+  "function staked(uint256 tokenId) view returns ((uint128 amount, uint48 end, bool isPermanent))",
+]);
+
+export const aeroVoterAbi = parseAbi([
+  "function allocationChainIds(uint256 tokenId) view returns (uint256[])",
+  "function allocationChainAmounts(uint256 tokenId, uint256 chainId) view returns (uint128)",
+]);
+
+export const leafVoterAbi = parseAbi([
+  "function allocationCooldown() view returns (uint48)",
+  "function maxGauges() view returns (uint256)",
+  "function isActivated(address gauge) view returns (bool)",
+  "function tokenStates(uint256 tokenId) view returns (address operator, uint48 lastAllocated, bool canVoteForZeroCapGauges, uint128 chainAllocation)",
+  "function accumulatedCooldownReduction(uint256 tokenId) view returns (uint48)",
+  "function allocatedGauges(uint256 tokenId) view returns (address[])",
+  "function allocations(uint256 tokenId, address gauge) view returns (uint128)",
+]);
+
+export const registryAbi = parseAbi([
+  "function gaugeFactories() view returns (address[])",
+  "function factoryToGauges(address factory) view returns (address[])",
+  "function gaugeToTarget(address gauge) view returns (address)",
+  "function gaugeToRewards(address gauge) view returns (address)",
+  "function emissionCap(address gauge) view returns (uint128)",
+]);
+
+export const rewardsManagerAbi = parseAbi([
+  "function token0() view returns (address)",
+  "function token1() view returns (address)",
+  "function totalSupply() view returns (uint256)",
+  "function supplyAt(uint256 timestamp) view returns (uint256)",
+  "function feeRewardPerVotingPower() view returns (uint256, uint256, uint256, uint256)",
+  "function feeRewardPerVotingPowerAt(uint256 index) view returns (uint256, uint256, uint256, uint256)",
+  "function getPriorSupplyIndex(uint256 timestamp) view returns (uint256)",
+  "function globalRewardPointHistory(uint256 index) view returns ((int128 bias, int128 slope, uint48 ts, uint128 permanentStakeBalance, uint48 zeroSupplySeconds))",
+  "function supplyAccumulatorAt(uint256 index) view returns (uint256 sharePerVote, uint256 weightedSharePerVote)",
+  "function globalCheckpointIndex() view returns (uint256)",
+  "function userRewardCheckpointIndex(uint256 tokenId) view returns (uint256)",
+  "function feeClaimState(uint256 tokenId) view returns ((uint64 lastGlobalCp, uint64 lastUserCp))",
+  "function incentiveCount() view returns (uint256)",
+  "function incentive(uint256 programId) view returns ((address token, uint256 amount, uint256 rate, uint48 start, uint48 end, address creator))",
+  "function earnedFees(uint256 tokenId, uint256 maxCheckpoints) view returns (uint256, uint256)",
+  "function earnedIncentives(uint256 tokenId, uint256 programId, uint256 maxCheckpoints) view returns (uint256)",
+]);
+
+export const aeroPoolAbi = parseAbi([
+  "function getReserves() view returns (uint256 reserve0, uint256 reserve1, uint256 blockTimestampLast)",
+  "function tickSpacing() view returns (int24)",
+  "function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16 observationIndex, uint16 observationCardinality, uint16 observationCardinalityNext, bool unlocked)",
+]);

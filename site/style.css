@@ -228,6 +228,16 @@ button:disabled,
   cursor: not-allowed;
 }
 
+.Amount {
+  inline-size: 8rem;
+  min-block-size: 1.75rem;
+  padding-block: 0;
+  font-size: var(--small);
+}
+.Amount[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
 .Back {
   color: var(--quiet);
   font-size: var(--small);
@@ -329,10 +339,6 @@ button,
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--card);
-}
-.Card--soon {
-  border-style: dashed;
-  color: var(--quiet);
 }
 .Card-title {
   font-family: var(--sans);

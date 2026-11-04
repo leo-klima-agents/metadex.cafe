@@ -61,6 +61,14 @@ export const voteWords = (votes: bigint): string =>
   `${voteFigure(votes)} ${votes > 0n && votes < 2n * 10n ** 18n ? "vote" : "votes"}`;
 export const bps = (value: bigint): string => percent.format(Number(value) / 10_000);
 export const fraction = (value: number): string => roughPercent.format(value);
+// How some earnings per unit compare with the average's: "about the average", "12.3% above the average"; "" when there
+// is no ratio.
+export const versusAverage = (ratio: number): string =>
+  !Number.isFinite(ratio)
+    ? ""
+    : Math.abs(ratio - 1) < 0.005
+      ? "about the average"
+      : `${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "above" : "below"} the average`;
 
 // The unit prices are in: USD, or USDC when no dollar price was found. `rates` gives each currency's price in dollars
 // at the prices' time.
@@ -98,16 +106,21 @@ const toCents = (sum: Money): number => {
 // The difference between two sums as each is shown, rounded to the cent, so that a column adds up as it reads.
 export const between = (from: Money, to: Money): Money => ({ ...to, value: toCents(to) - toCents(from) });
 
-// For example "≈ $692", "≈ −€0.69", "< £0.01" or "≈ 0.77 USDC". With `cents`, always to the cent, as in a column.
-export function money(sum: Money, cents = false): string {
+// For example "≈ $692", "≈ −€0.69", "< £0.01" or "≈ 0.77 USDC". With `cents`, always to the cent, as in a column.
+// With `floor`, the sum leaves something out, so it reads "≥ $692", and "≥ $0.00" when it rounds to nothing.
+export function money(sum: Money, cents = false, floor = false): string {
   const [shown, rate] = shownOf(sum);
   const value = sum.value / rate;
   const [withCents, without] = FORMATS[shown]!;
   const of = (text: string) => (shown === "USDC" ? `${text} USDC` : text);
   const [sign, magnitude] = value < 0 ? ["−", -value] : ["", value];
-  if (value === 0) return of((cents ? withCents : without).format(0));
-  if (magnitude < 0.005) return `${sign ? ">" : "<"} ${sign}${of(withCents.format(0.01))}`;
-  return `≈ ${sign}${of((magnitude >= 100 && !cents ? without : withCents).format(magnitude))}`;
+  const at = floor ? "≥ " : "";
+  if (value === 0) return `${at}${of((cents ? withCents : without).format(0))}`;
+  if (magnitude < 0.005)
+    return floor && !sign
+      ? `${at}${of(withCents.format(0))}`
+      : `${sign ? ">" : "<"} ${sign}${of(withCents.format(0.01))}`;
+  return `${at || "≈ "}${sign}${of((magnitude >= 100 && !cents ? without : withCents).format(magnitude))}`;
 }
 
 const dateFormat = (options: Intl.DateTimeFormatOptions) =>
