@@ -308,7 +308,8 @@ function pricingOf({ kind, name }: Exchange): Pricing {
 }
 
 // Each pool's average price over the window, in the prices' unit, and its depth at its end. Pools without an average,
-// such as those younger than the window, and pools too thin for the amount priced are dropped.
+// such as those younger than the window, and pools too thin for the amount priced are dropped. A pool holding less than
+// `FLOOR` of its anchor is too thin whatever the token's price, so its sums are not read.
 async function measure(
   pools: Pool[],
   prices: Prices,
@@ -323,8 +324,18 @@ async function measure(
   let next = 0;
   const ready = pools.flatMap((pool, i) => {
     const state = replies.slice(next, (next += asked[i]!.length));
-    return state.includes(undefined) ? [] : [{ pool, kind: pricingOf(pool.exchange), state }];
+    if (state.includes(undefined)) return [];
+    const kind = pricingOf(pool.exchange);
+    const [decimals0, decimals1] = decimalsOf(pool);
+    const [reserve0, reserve1] = kind.reserves(state);
+    const [x, y] = [whole(reserve0!, decimals0), whole(reserve1!, decimals1)];
+    const [tokenReserve, anchorReserve] = tokenFirst(pool) ? [x, y] : [y, x];
+    const anchorPrice = prices.of.get(key(pool.anchor.address))!;
+    return anchorReserve * anchorPrice >= FLOOR
+      ? [{ pool, kind, state, tokenReserve, anchorReserve, anchorPrice }]
+      : [];
   });
+  if (!ready.length) return [];
   const sums = [...ready.map(({ pool, kind, state }) => kind.sums(pool, state)), blockTime];
   const [before, after] = await Promise.all([
     start.then((block) => rd(sums, { block })),
@@ -332,17 +343,12 @@ async function measure(
   ]);
   const elapsed = Number(after.at(-1)) - Number(before.at(-1));
   if (!(elapsed > 0)) return [];
-  return ready.flatMap(({ pool, kind, state }, i): Measured[] => {
+  return ready.flatMap(({ pool, kind, tokenReserve, anchorReserve, anchorPrice }, i): Measured[] => {
     const [first, last] = [kind.summed(before[i]), kind.summed(after[i])];
     const perSecond = first && last && first.map((sum, j) => Number(last[j]! - sum) / elapsed);
     const price0 = perSecond && kind.price(perSecond, pool);
-    const anchorPrice = prices.of.get(key(pool.anchor.address))!;
     const price = price0 && inAnchor(pool, price0) * anchorPrice;
     if (!price || !Number.isFinite(price)) return [];
-    const [decimals0, decimals1] = decimalsOf(pool);
-    const [reserve0, reserve1] = kind.reserves(state);
-    const [x, y] = [whole(reserve0!, decimals0), whole(reserve1!, decimals1)];
-    const [tokenReserve, anchorReserve] = tokenFirst(pool) ? [x, y] : [y, x];
     const depth = Math.min(tokenReserve * price, anchorReserve * anchorPrice);
     const value = whole(amounts.get(key(pool.token.address)) ?? 0n, pool.token.decimals) * price;
     return depth >= Math.max(FLOOR, DEPTH * value) ? [{ pool, price, depth }] : [];

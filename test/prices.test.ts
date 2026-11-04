@@ -299,6 +299,22 @@ test("sums are read at the block priced and the last block half an hour before t
   assert.deepEqual([...blocks.get("currentCumulativePrices")!].sort(), [START, PRICED]);
 });
 
+test("a pool holding under $250 of its anchor is dropped before its sums are read", async () => {
+  // 200 USDC in Aerodrome, at 2 USDC; 4,000 USDC in Hydrex Classic, at 4.
+  const { reader } = market([
+    { exchange: AERODROME, token: TOKEN, now: [100, 200] },
+    { exchange: HYDREX, token: TOKEN, now: [1_000, 4_000] },
+  ]);
+  const summed = new Set<string>();
+  const watched = async (calls: readonly Call[], options?: { block?: number | "latest" }): Promise<any> => {
+    for (const { address, functionName } of calls)
+      if (functionName === "currentCumulativePrices") summed.add(address.toLowerCase());
+    return reader(calls, options);
+  };
+  close((await pricesAt([TOKEN], new Map(), Infinity, watched)).of.get(TOKEN.address)!, 4 * USDC_USD);
+  assert.equal(summed.size, 1, "only the Hydrex pool's sums are read");
+});
+
 test("a pool younger than the window gives no price, so the next deepest does", async () => {
   const young: Fake = { exchange: AERO, token: TOKEN, now: [10_000, 40_000], since: START + 1 };
   const older: Fake = { exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] };
