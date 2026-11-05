@@ -50,7 +50,7 @@
   --warn: light-dark(#944e00, #efb062);
   --info: light-dark(#234e82, #85b6e9);
   --danger: light-dark(#ab331f, #ef816b);
-  /* A chart's lines, each its own entity's: stepped for each surface, and checked for colour blindness. */
+  /* Chart lines, checked for colour blindness on each surface. */
   --series-1: light-dark(#2a78d6, #3987e5);
   --series-2: light-dark(#eb6834, #d95926);
   --series-3: light-dark(#1baf7a, #199e70);
@@ -361,8 +361,7 @@ button,
   content: "· ";
 }
 
-/* A line chart drawn at its own width, so its text keeps its size. Grid and axes stay quiet; the lines are 2px, and
-   their dots ringed in the paper's colour where lines cross. Text wears the text's colours, never a line's. */
+/* Chart text keeps the text's colours, never a line's. */
 .Chart {
   margin: 0;
 }
@@ -687,7 +686,6 @@ dialog[open] {
   padding-inline-start: 2ch;
 }
 
-/* The one figure a page leads with. */
 .Headline {
   margin: 0;
   font-size: 2rem;
@@ -956,7 +954,6 @@ dialog[open] {
   text-align: end;
 }
 
-/* A word set apart beside a name, such as "hindsight"; under it in a table's head. */
 .Tag {
   display: inline-block;
   margin-inline-start: 0.375rem;
@@ -1004,7 +1001,7 @@ th .Tag {
   cursor: pointer;
 }
 
-/* One column, which a wide table in it scrolls within instead of widening. */
+/* So that a wide table scrolls instead of widening the page. */
 .u-stack,
 .u-stackTight,
 .u-stackLoose {
@@ -1057,7 +1054,7 @@ th .Tag {
 .u-narrow {
   max-inline-size: 32rem;
 }
-/* Positioned, so that what it holds hidden for screen readers scrolls with it rather than widening the page. */
+/* Positioned, so that visually hidden text in it stays in it. */
 .u-scroll {
   position: relative;
   overflow-x: auto;
@@ -1228,7 +1225,6 @@ th .Tag {
   }
 }
 
-/* A pool's share, typed in a table row. */
 .Amount--share {
   inline-size: 4.5rem;
   text-align: end;

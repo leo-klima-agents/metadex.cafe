@@ -95,9 +95,8 @@ export function sawBlock(time: number): void {
 }
 export const now = (): number => Math.floor(Date.now() / 1000) + drift;
 
-// What a read is for. Reads with no tag, or with a tag the shown page draws, go first. The rest read ahead for other
-// pages and take at most `BEHIND` of the `MAX` slots, which they keep until they are answered, so that the shown page,
-// whose reads often wait on one another, always has the other four for its next ones.
+// What a read is for. Untagged reads, and those tagged for the shown page, go first. The rest hold at most `BEHIND` of
+// the `MAX` slots, so the shown page, whose reads often wait on one another, always has the others.
 export type Tag = "earnings" | "average" | "shares" | "payouts" | "swap" | "aero";
 const MAX = 6;
 const BEHIND = 2;
@@ -137,8 +136,8 @@ async function inSlot<T>(tag: Tag | undefined, ask: () => Promise<T>): Promise<T
   }
 }
 
-// A request may take 5 seconds, and longer the more it sends: as long as `MAX` of them take to send together at
-// 1 Mbit/s, so that on a slow upload a request is not given up, and sent again, while it is still being sent.
+// 5 seconds, plus as long as `MAX` such requests take to send together at 1 Mbit/s, so that a slow upload is not given
+// up and sent again.
 export const timeoutFor = (bytes: number): number => 5_000 + Math.ceil((bytes * MAX) / 125);
 
 // Each RPC gets at most 25 requests a second, 5 of them for logs. One that is busy or out of reach rests for a second.
@@ -211,8 +210,8 @@ export type CodeAt = (addresses: readonly Address[]) => Promise<(boolean | undef
 export type Read = (<const C extends readonly Call[]>(calls: C, options?: ReadOptions) => Promise<Results<C>>) & {
   codeAt?: CodeAt;
 };
-// Reads through Multicall3 in batches of `perBatch`, because each `eth_call` has its own gas limit, and of at most
-// `BATCH_BYTES` of calldata, so that none takes long to send. Multicall3 pads each call's own to 32 bytes and adds 160.
+// Reads through Multicall3 in batches of at most `perBatch` calls, since each `eth_call` has its own gas limit, and
+// `BATCH_BYTES` of calldata, so that none takes long to send. Multicall3 pads each call to 32 bytes and adds 160.
 export const BATCH_BYTES = 100_000;
 const CALL_BYTES = 160;
 export const read: Read = async (calls, { block = "latest", tag, perBatch = 200 } = {}) => {

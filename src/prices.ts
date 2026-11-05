@@ -123,9 +123,9 @@ function lookupsOn(exchange: Exchange, pair: [Address, Address], spacings: Map<n
   }
 }
 
-// A Slipstream factory makes each pool a clone of its implementation (EIP-1167), with CREATE2 and the salt
-// keccak256(abi.encode(token0, token1, tickSpacing)), so where a pool would be is known without asking the factory.
-// `pair` must be sorted by address.
+// A Slipstream factory makes each pool an EIP-1167 clone of its implementation, with CREATE2 and the salt
+// keccak256(abi.encode(token0, token1, tickSpacing)), so a pool's address is known without asking. `pair` must be
+// sorted by address.
 export function slipstreamPool(factory: Address, implementation: Address, pair: [Address, Address], spacing: number) {
   const salt = keccak256(
     encodeAbiParameters([{ type: "address" }, { type: "address" }, { type: "int24" }], [...pair, spacing]),
@@ -203,8 +203,8 @@ async function lookUp(
   ].filter(([id]) => !pools.has(id));
   if (missing.length) {
     const needsSpacings = missing.some(([, [exchange]]) => exchange.kind === "slipstream");
-    // A read that knows which addresses hold code finds Slipstream pools where their factories would make them, all
-    // in one ask, rather than asking each factory for each pair and tick spacing.
+    // With `codeAt`, Slipstream pools are found at their computed addresses in one ask, rather than by asking each
+    // factory for each pair and tick spacing.
     const { codeAt } = rd;
     const all = Promise.all([
       needsSpacings ? spacings(rd) : new Map<number, number[]>(),
@@ -503,12 +503,11 @@ export function forget(): void {
   quotes.clear();
 }
 
-// Prices per whole token over the 30 minutes up to `time`, or up to the newest block if that is earlier. Each end of
-// the window is the last block at or before its time, and the end at least `SETTLED` blocks back. Anchors take their
-// Chainlink USD feeds' answers at the end, and the fiat feeds give each currency's rate; if no anchor feed answers,
-// prices are in USDC, with USDC at 1. Pools then price the anchors without a feed, then the other tokens. `amounts` is
-// how much of each token will be priced; given as a promise, pools are read meanwhile and only judged deep enough once
-// it is known. `tiers` lists the exchanges to look in, each tier only for what those before left unpriced.
+// Prices per whole token over the 30 minutes up to `time`, or up to the newest block if earlier, ending at least
+// `SETTLED` blocks back. Anchors take their Chainlink feeds' answers and fiat feeds give each currency's rate; with no
+// anchor feed, prices are in USDC, at 1. Pools then price the anchors without a feed, then the other tokens. `amounts`,
+// how much of each token will be priced, may be a promise: pools are read meanwhile and judged once it is known.
+// `tiers` are searched in order, each only for what those before left unpriced.
 export async function pricesAt(
   tokens: Token[],
   amounts: Amounts,

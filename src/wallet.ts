@@ -28,8 +28,8 @@ export type Wallet = {
 export type Connection = { wallet: Wallet; provider: EIP1193Provider; address: Address; chainId: number };
 // `tip` is the highest priority fee per gas to ask for, in wei, where the wallet lets the page set one.
 export type Tx = { to: Address; data: Hex; tip?: bigint | undefined };
-// `after` is text shown after `code`. `calldata` marks `code` as a call's data, shown as a block. `lines` shows a list
-// one item a line, each tag at the start and its value at the end.
+// `after` is text shown after `code`. `calldata` marks `code` as a call's data, shown as a block. `lines` shows one
+// item a line, its tag first and its value last.
 export type Field = {
   label: string;
   code?: string | string[];

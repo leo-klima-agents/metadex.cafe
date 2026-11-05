@@ -48,8 +48,8 @@ async function contractsOf(pools: Address[], rd: Read): Promise<Contract[]> {
   });
 }
 // Every pool's reward contracts, for the average and for voters who voted again after an epoch began. They take
-// thousands of reads, so they are read once, with the first caller's read and so for its page. Hydrex only adds pools,
-// so the list covers every epoch up to the one under way when it was read.
+// thousands of reads, so they are read once, at the priority of the page that first asks. Hydrex only adds pools, so
+// the list covers every epoch up to the one under way when it was read.
 async function allContracts(start: number, rd: Read): Promise<Contract[]> {
   const readAll = async () => {
     const [length, active] = required(await rd([voter("length"), voter("_epochTimestamp")]));
@@ -104,7 +104,7 @@ async function paidIn(contracts: Contract[], start: number, rd: Read): Promise<P
     })),
   }));
 }
-// Every pool's, read once for each epoch: every voter takes its share of these, as the epoch's prices need them all.
+// Read once an epoch: every voter takes its share of these, and the epoch's prices need them all.
 const allPaid = (start: number, rd: Read) =>
   memo(`paid ${start}`, async () => paidIn(await allContracts(start, rd), start, rd));
 
@@ -151,7 +151,6 @@ export const tokensIn = (rewards: Reward[]): Token[] => [
   ...new Map(rewards.map(({ token }) => [key(token.address), token])).values(),
 ];
 
-// Every vote's rewards in the epoch from `start`, read once.
 const allRewards = (start: number, rd: Read) => memo(`all rewards ${start}`, () => rewardsOf(start, undefined, rd));
 // The epoch's prices, which every voter's earnings in it share, deep enough for all of each token the epoch paid.
 const epochPrices = (start: number, rd: Read): Promise<Prices> =>

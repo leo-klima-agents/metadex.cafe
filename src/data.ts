@@ -95,7 +95,7 @@ export function payouts(holdings: Holdings): Got<Payouts> {
 const MARKET = "aero market";
 const universes = aero.universeReads(() => aero.readUniverse(tagged("aero")));
 const universe = () => memo("aero universe", universes.read, universes.ttl);
-// The pools' snapshots on the grid's whole hours never change, so each set is read once, unless some could not be.
+// Snapshots on the grid's whole hours never change, so each set is read once, unless some could not be.
 const startsOf: aero.StartsOf = (rewards, times) =>
   memo(
     `aero starts ${times.join()} ${rewards.join()}`,
@@ -119,7 +119,7 @@ export const autopilots = (): Got<aero.Stake[]> =>
       ),
     5 * MINUTE,
   );
-// Every pool's snapshots at the times a strategy needs beyond the grid's, as a longer window does, read when chosen.
+// Snapshots beyond the grid's, which a longer window needs, read when it is chosen.
 export function pastFor(times: number[]): Got<aero.Past> {
   if (!times.length) return { value: { times: [], starts: new Map() } };
   return andThen(market(), (found) => {
@@ -129,8 +129,7 @@ export function pastFor(times: number[]): Got<aero.Past> {
     );
   });
 }
-// The first Autopilot as it actually allocated over the record's steps: its moves back to the oldest step, and its
-// pools' snapshots at each. Read again when it moves.
+// The first Autopilot's moves back to the oldest step and its pools' snapshots at each, read again when it moves.
 export type AutopilotRecord = { stake: aero.Stake; moves: aero.Move[]; past: aero.Past };
 export const autopilotRecord = (): Got<AutopilotRecord | null> =>
   andThen(market(), (found) =>

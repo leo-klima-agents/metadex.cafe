@@ -1,9 +1,7 @@
 import { render } from "../state.ts";
 
-// A line chart of a few series over a few positions, such as a record's steps: 2px lines with 8px markers, a recessive
-// grid, each line's newest value at its end where it fits, and one tooltip for every series at the position under the
-// pointer or the keyboard's focus. A value a series lacks breaks its line. It is drawn at its own width, so text keeps
-// its size on a phone, where the positions take their `brief` names.
+// A line chart of a few series over a few positions, drawn at its own width so that its text keeps its size. A missing
+// value breaks a line.
 export type Series = { id: string; name: string; color: string; dashed?: boolean; values: (number | undefined)[] };
 export type Plot = {
   positions: string[];
@@ -17,7 +15,7 @@ const NS = "http://www.w3.org/2000/svg";
 const HEIGHT = 240;
 const [TOP, BOTTOM, LEFT, RIGHT] = [12, 28, 48, 72];
 const LABEL = 14;
-// Narrower positions take the brief names.
+// Under this many pixels a position, the positions take their brief names.
 const ROOM = 96;
 // What each chart shows and where its pointer or focus is.
 const charts = new WeakMap<SVGSVGElement, { plot: Plot; tip: HTMLElement; at: number | undefined }>();
@@ -89,8 +87,7 @@ export function drawChart(svg: SVGSVGElement, tip: HTMLElement, plot: Plot): voi
     const last = values.findLastIndex((value) => value !== undefined);
     if (last >= 0) ends.push({ x: x(last) + 10, y: y(values[last]!) + 4, text: plot.value(values[last]!) });
   }
-  // Labels at the lines' ends, in the series' order; one that would touch a label already placed is left to the legend
-  // and the tooltip.
+  // End labels, in the series' order; one that would touch another is left to the legend and the tooltip.
   const placed: number[] = [];
   for (const end of ends) {
     if (placed.some((at) => Math.abs(at - end.y) < LABEL)) continue;
@@ -132,7 +129,6 @@ function listen(svg: SVGSVGElement): void {
   });
 }
 
-// The tooltip lists every series at the position, its value first, keyed by a short stroke of its line.
 function showTip(svg: SVGSVGElement): void {
   const { plot, tip, at } = charts.get(svg)!;
   tip.hidden = at === undefined;

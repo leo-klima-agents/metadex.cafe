@@ -134,7 +134,6 @@ const market = (gauges: Gauge[], of = PRICES): Market => ({
   unknown: [],
   past: { times: [], starts: new Map() },
 });
-// Answers each call from `answer`, and records what each read asked.
 type Asked = { names: Set<string>; perBatch: number | undefined };
 function fake(answer: (call: Call) => unknown, asked: Asked[] = []): Read {
   return (async (calls: readonly Call[], options?: { perBatch?: number }) => {
@@ -684,9 +683,8 @@ test("the windows and the record's picks lie on one grid of 48 hours, counted ba
   assert.ok(unreadStart({ ...read, acc: undefined }), "a checkpoint whose snapshot failed");
 });
 
-// Pools that paid as `pays` says over the grid's steps, oldest first, the last ending now, in dollars to 10,000 sAERO
-// a day; with their snapshots at the grid's times, and at `extra` times. 10,000 sAERO earn $1 for a growth of
-// 100 × 10^6 USDC units, whatever the power.
+// Pools paying `pays` per 10,000 sAERO a day over the grid's steps, oldest first, the last ending now; with snapshots
+// at the grid's times and at `extra`.
 function history(pays: number[], extra: number[] = [], fields: Partial<Gauge> = {}, supply = 5_000_000n * SAERO) {
   const bounds = pays.map((_, i) => NOW - (pays.length - i) * STEP);
   const accAt = (time: number): bigint => {
@@ -714,7 +712,6 @@ const pastOfAll = (all: History[]): Past => ({
   times: all[0]!.times,
   starts: new Map(all.map(({ gauge, starts }) => [key(gauge.rewards), starts])),
 });
-// A past at fewer of its times.
 const only = (past: Past, times: number[]): Past => ({
   times,
   starts: new Map([...past.starts].map(([id, starts]) => [id, times.map((time) => starts[past.times.indexOf(time)])])),
@@ -727,8 +724,8 @@ const MEMED = prices([
   [aero, 0.6],
   [meme, 0.1],
 ]);
-// A pays well in every other step, and B in the others; A is a blue chip, B is not. The market holds the grid's
-// snapshots; `past`, those at `extra` times too.
+// A pays well in every other step and B in the others; only A is a blue chip. `m.past` holds the grid's snapshots,
+// `past` also those at `extra`.
 function twoPools(extra: number[] = [], more: (extra: number[]) => History[] = () => []) {
   const a = history([1, 10, 1, 10, 1], extra);
   const b = history([10, 1, 10, 1, 10], extra, { token1: meme });

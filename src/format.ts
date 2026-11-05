@@ -129,7 +129,7 @@ function figureOf(sum: Money, cents: boolean): string {
   return `≈ ${sign}${of((magnitude >= 100 && !cents ? without : withCents).format(magnitude))}`;
 }
 
-// A chart's scale in the currency shown: what each value is in it, and a tick's label, to the cent and without "≈".
+// In the currency shown; ticks to the cent, without "≈".
 export function axisOf(basis: Basis): { of: (value: number) => number; tick: (shown: number) => string } {
   const [shown, rate] = shownOf(basis);
   const [withCents] = FORMATS[shown]!;
