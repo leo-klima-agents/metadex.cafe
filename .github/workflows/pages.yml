@@ -1,7 +1,4 @@
-# Deploys dev to this fork's GitHub Pages, by hand: Actions, pages-dev, Run workflow, from dev. It checks and builds the
-# site as ci's node job does, but without the browser tests, then checks that Pages serves each file. It does nothing
-# in any other repository, such as ldeso/metadex.cafe, whose site deploys only from release tags (ci.yml).
-name: pages-dev
+name: pages
 
 on:
   workflow_dispatch:
@@ -11,7 +8,6 @@ permissions:
 
 jobs:
   build:
-    if: github.repository == 'leo-klima-agents/metadex.cafe'
     runs-on: ubuntu-26.04
     steps:
       - if: github.ref != 'refs/heads/dev'
