@@ -484,10 +484,6 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
   );
   const [can, words] = allocateWords(stake, stakes, rows, market);
   enable($<HTMLButtonElement>("[data-action=aero-allocate]", aeroView), can);
-  const moved = leaving
-    ? 1 -
-      rows.reduce((sum, { gauge, percent }) => sum + Math.min(percent / 100, (mine.get(key(gauge)) ?? 0) / amount), 0)
-    : undefined;
   fill(aeroView, {
     "share-total": fraction(total / 100, true),
     "total-amount": amount ? compact(BigInt(Math.round((amount * total) / 100)) * 10n ** 18n) : "–",
@@ -497,19 +493,6 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
     edited: plan.rows ? true : null,
     current: mine.size ? true : null,
     "allocate-why": words,
-    "plan-note": [
-      incentives
-        ? `Each pool's share is its part of the top pools' exchange revenue: their fees over the last ${WINDOW[controls.hours].over}, and the incentives already scheduled for the next ${hoursWords(hold)}.`
-        : `Each pool's share is its part of the top pools' fees over the last ${WINDOW[controls.hours].over}.`,
-      `Thin pools, and pools paying a token without a price, are left out, as in the record. Daily revenue: the pool's fees over the last ${WINDOW[controls.hours].over} and its incentives over the next ${hoursWords(hold)}, a day. Current APR: what your share would earn there in a year if that came again, at current prices, each sAERO counted as one AERO.`,
-      amount
-        ? `It takes into account that adding ${stake ? `the ${power(aero.budgetOf(stake))} of ${stakeName(stake, stake.id)}` : wholePower(amount)} to a pool lowers what each sAERO in it earns.`
-        : "",
-      moved === undefined ? "" : `${fraction(moved)} of it would move to different pools.`,
-      stake?.elsewhere ? `The ${power(stake.elsewhere)} it has on other chains isn't affected.` : "",
-    ]
-      .filter(Boolean)
-      .join(" "),
   });
 }
 
