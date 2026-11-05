@@ -9,7 +9,7 @@ import {
   byKind,
   type Automation,
 } from "../config.ts";
-import { andThen, type Got } from "../cache.ts";
+import type { Got } from "../cache.ts";
 import { checks } from "../checks.ts";
 import * as data from "../data.ts";
 import {
@@ -28,14 +28,13 @@ import {
   units,
   until,
   utc,
-  versusAverage,
   voteWords,
 } from "../format.ts";
 import * as hydrex from "../hydrex.ts";
 import type { Account, Holdings, MatchaLatte, Status } from "../hydrex.ts";
 import { overdue, underWay } from "../payouts.ts";
 import { gasWords, key } from "../prices.ts";
-import { perThousandOf, shareOf, valueOf, versus, type Earnings } from "../rewards.ts";
+import { aprOf, shareOf, valueOf, type Earnings } from "../rewards.ts";
 import { hrefOf } from "../routes.ts";
 import { now } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
@@ -58,10 +57,6 @@ export const lockWords = ({ lockType, end }: Account): string =>
         : "Flex";
 const inYear = (time: number): string =>
   new Date(time * 1000).getUTCFullYear() === new Date(now() * 1000).getUTCFullYear() ? day(time) : date(time);
-const versusWords = (ratio: number): Value => {
-  const words = versusAverage(ratio);
-  return words.charAt(0).toUpperCase() + words.slice(1);
-};
 const feeWords = (feeBps: bigint | undefined): string =>
   feeBps === 0n ? "" : feeBps === undefined ? ", payout fee not read yet" : ` and ${bps(feeBps)} payout fee`;
 
@@ -97,19 +92,21 @@ export function statusNode(s: Status, own: boolean, inGroup?: string): Value {
   }
 }
 
+// To a tenth of a point.
+const aprWords = (apr: number | undefined): string => (apr === undefined ? "No price for HYDX" : fraction(apr, true));
 const record = (automation: Automation): Value =>
-  shown(data.earnings(automation), (earnings) =>
-    earnings.votes ? frag(money(perThousandOf(earnings)), fromTemplate("per-1k")) : "No record yet",
-  );
-const compared = (mine: Got<Earnings>): Value => {
-  const got = andThen(mine, (earnings) =>
-    !earnings.votes || !earnings.pools.length
-      ? { value: null }
-      : andThen(data.average(), (all) => ({ value: versus(earnings, all) ?? null })),
-  );
-  return got.failed ? null : shown(got, versusWords);
-};
-const recordVersus = (automation: Automation): Value => compared(data.earnings(automation));
+  shown(data.earnings(automation), (earnings) => {
+    if (!earnings.votes) return "No record yet";
+    const apr = aprOf(earnings);
+    return apr === undefined ? aprWords(apr) : frag(aprWords(apr), fromTemplate("apr"));
+  });
+// Shown next to an automation's record.
+function averageNote(): Value {
+  const all = data.average();
+  return all.failed
+    ? null
+    : shown(all, (found) => (aprOf(found) === undefined ? null : `Hydrex average: ${aprWords(aprOf(found))}`));
+}
 function stateNode(automation: Automation): Value {
   const off = checks().value?.get(automation.kind)?.length;
   if (off) return status("failed", "Joining off");
@@ -235,7 +232,7 @@ export function drawHydrex(): void {
       takes: matchaLatteValue(({ retireBps }) => `Up to ${bps(retireBps)}`),
       "takes-note": matchaLatteValue(({ feeBps }) => `retired${feeWords(feeBps)}`),
       record: record(automation),
-      versus: recordVersus(automation),
+      "record-average": averageNote(),
     });
   }
   const failed = new Set([...(checks().value?.values() ?? [])].flat());
@@ -255,9 +252,9 @@ export function drawHydrex(): void {
       ? frag(...[...failed].map((id) => Object.assign(document.createElement("p"), { textContent: reasons[id] })))
       : null,
     underway: found && underWay(found) ? "Payout under way." : null,
-    average: shown(data.average(), (all) => money(perThousandOf(all))),
+    average: shown(data.average(), (all) => aprWords(aprOf(all))),
+    "average-aside": data.average().value && aprOf(data.average().value!) === undefined ? null : true,
     own: shown(holdings, ownWords),
-    "own-versus": holdings.value ? ownVersus(holdings.value) : null,
     epoch: state.connection ? epochWords() : null,
     accounts: stateOf(holdings, !holdings.value?.accounts.some(({ amount }) => amount > 0n)),
   });
@@ -270,17 +267,18 @@ function epochWords(): Value {
   const end = found.epochStart + WEEK;
   return `A change made now moves the votes from ${utc(end)}${now() < end ? `, in ${until(end - now())}` : ""}.`;
 }
-// Last epoch's earnings per 1,000 votes, for the votes the wallet casts itself; votes cast through others don't count.
+// Last epoch's APR, for the votes the wallet casts itself; votes cast through others don't count.
 function ownWords(holdings: Holdings): Value {
   return shown(data.holderEarnings(holdings.owner), (own) =>
     !own.votes
       ? "No votes of your own"
       : !own.pools.length
         ? "Didn't vote"
-        : `${money(perThousandOf(own))} / 1k votes, last epoch`,
+        : aprOf(own) === undefined
+          ? aprWords(undefined)
+          : `${aprWords(aprOf(own))} APR, last epoch`,
   );
 }
-const ownVersus = (holdings: Holdings): Value => compared(data.holderEarnings(holdings.owner));
 
 export function drawProduct(): void {
   const automation = byKind(state.route.view === "product" ? state.route.kind : "")!;
@@ -293,14 +291,16 @@ export function drawProduct(): void {
     "retired-share": matchaLatteValue(({ retireBps }) => `Up to ${bps(retireBps)}`),
     takes: matchaLatteValue(({ feeBps }) => `retired${feeWords(feeBps)}`),
     record: record(automation),
-    versus: recordVersus(automation),
+    "record-average": averageNote(),
     tonnes: matchaLatteValue(({ tonnes }) => `${units(tonnes)} t`),
     "retire-cost": matchaLatteValue(({ retireBps }) => `Up to ${bps(retireBps)} of each payout`),
     "fee-cost": matchaLatteValue(({ feeBps }) => (feeBps === undefined ? "Not read" : bps(feeBps))),
-    "max-fee": matchaLatteValue(({ maxFeeBps }) => (maxFeeBps === undefined ? "" : ` (up to ${bps(maxFeeBps)})`)),
+    "max-fee": matchaLatteValue(({ maxFeeBps }) =>
+      maxFeeBps === undefined ? " (its maximum not read)" : ` (up to ${bps(maxFeeBps)})`,
+    ),
     join: `Join ${automation.name}`,
     performance: stateOf(earnings, !earnings.value?.votes),
-    "versus-words": performance(automation),
+    "performance-note": performance(automation),
   });
   const ml = automation === MATCHA_LATTE;
   const recipient = data.matchaLatte().value?.feeRecipient;
@@ -343,14 +343,15 @@ export function drawProduct(): void {
     );
 }
 
-// Fills the "Performance" popup, valuing the automation and all of Hydrex at the average's prices, and returns the
-// words comparing them.
+// Fills the "Performance" popup, valuing the automation and all of Hydrex at the average's prices, and returns why all
+// of Hydrex is missing, if it is.
 function performance(automation: Automation): Value {
   const mine = data.earnings(automation).value;
   if (!mine?.votes) return null;
   const all = data.average();
   const pending = all.failed ? "" : undefined;
-  const row = (prefix: string, earnings: Earnings | undefined, value = earnings && valueOf(earnings)) => {
+  const row = (prefix: string, earnings: Earnings | undefined, prices = earnings?.prices) => {
+    const value = earnings && valueOf(earnings, prices);
     const cents = (sum: Money | undefined) => (sum ? money(sum, true) : pending);
     return {
       [`${prefix}votes`]: earnings ? compact(earnings.votes) : pending,
@@ -358,11 +359,11 @@ function performance(automation: Automation): Value {
       [`${prefix}earned`]: cents(value && moneyAt(value.total, value)),
       [`${prefix}fees`]: cents(value && moneyAt(value.fees, value)),
       [`${prefix}incentives`]: cents(value && moneyAt(value.incentives, value)),
-      [`${prefix}per-thousand`]: cents(earnings && value && perThousandOf(earnings, value)),
+      [`${prefix}apr`]: earnings ? aprWords(aprOf(earnings, prices)) : pending,
     };
   };
   const value = valueOf(mine, all.value?.prices);
-  fill(productView, { ...row("", mine, value), ...row("all-", all.value) });
+  fill(productView, { ...row("", mine, all.value?.prices), ...row("all-", all.value) });
   list(
     $("[data-list=pool]", productView),
     mine.pools,
@@ -375,11 +376,7 @@ function performance(automation: Automation): Value {
       }),
   );
   if (all.failed) return "All of Hydrex could not be read.";
-  const ratio = all.value && versus(mine, all.value);
-  if (ratio === undefined) return all.value ? null : "Loading all of Hydrex… This can take a minute.";
-  return Math.abs(ratio - 1) < 0.005
-    ? `${automation.name}'s votes earned about the average last epoch.`
-    : `${automation.name}'s votes earned ${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "more" : "less"} than the average last epoch.`;
+  return all.value ? null : "Loading all of Hydrex… This can take a minute.";
 }
 
 function pickGroup(el: HTMLElement) {

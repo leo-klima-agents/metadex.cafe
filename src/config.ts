@@ -66,8 +66,10 @@ export const AUTOPILOTS: Autopilot[] = [
 export const WETH: Address = "0x4200000000000000000000000000000000000006";
 export const USDC: Address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 export const CBBTC: Address = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
-const EURC: Address = "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42";
+export const EURC: Address = "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42";
 export const HYDX: Address = "0x00000e7efa313F4E11Bfff432471eD9423AC6B30";
+// A pool is a blue chip when both its tokens are among these.
+export const BLUE_CHIPS: Address[] = [USDC, EURC, WETH, CBBTC, AERO];
 
 export const CURRENCIES = ["USD", "EUR", "GBP", "CHF", "AUD", "CAD"] as const;
 export type Currency = (typeof CURRENCIES)[number];
@@ -127,7 +129,7 @@ export const SWAPPERS: Swapper[] = [
 export const DEFAULT_OUTPUT: Output = "usdc";
 export const swapperOf = (output: string): Swapper | undefined => SWAPPERS.find((each) => each.output === output);
 
-// The swappers' exchanges, in the order the page lists them. `id` is the value of the swapper's `Exchange` enum. For
+// The swappers' exchanges, in the order pricing prefers them. `id` is the value of the swapper's `Exchange` enum. For
 // Uniswap v4, `factory` is the PoolManager.
 export type ExchangeKind = "algebra" | "pair" | "solidly" | "slipstream" | "aerodrome" | "v2" | "v3" | "v4";
 export type Exchange = { id: number; name: string; kind: ExchangeKind; factory: Address; stable?: boolean };
@@ -151,9 +153,9 @@ export const EXCHANGES: Exchange[] = [
   { id: 1, name: "Hydrex Classic Pools", kind: "pair", factory: "0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0" },
   { id: 0, name: "Hydrex Integral", kind: "algebra", factory: "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E" },
 ];
-// Prices come from Aero's, Aerodrome's and Hydrex's pools, and at an epoch's end from Hydrex's only, in tiers: a token
-// is looked for in a tier only if those before cannot price it. Aerodrome's Slipstream pools, which take a lookup for
-// each tick spacing on each of three factories, come last. Of two equally deep pools in a tier, the first listed wins.
+// Prices come from Aero's, Aerodrome's and Hydrex's pools, and at an epoch's end from Hydrex's only, in tiers, each
+// searched only for what those before left unpriced. Aerodrome's Slipstream pools, the costliest to look up, come last.
+// Of two equally deep pools in a tier, the first listed wins.
 const PRICED = ["solidly", "slipstream", "aerodrome", "pair", "algebra"] as const;
 export type PricedKind = (typeof PRICED)[number];
 const priced = EXCHANGES.filter(({ kind }) => (PRICED as readonly ExchangeKind[]).includes(kind));

@@ -33,8 +33,8 @@ const ask = (method: string, params: unknown[]): Call => ({ jsonrpc: "2.0", id: 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const upstreamFetch = globalThis.fetch;
 
-// An upstream refusal, passed on to anvil with its status and body as they came. `again` means the upstream was busy or
-// out of reach, so the request may be retried.
+// An upstream refusal, passed on to anvil with its body as it came, and its status, or 429 or 503 if it came as 200.
+// `again` means the upstream was busy or out of reach, so the request may be retried.
 class Refused extends Error {
   status: number;
   body: string;

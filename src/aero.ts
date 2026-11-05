@@ -11,12 +11,24 @@ import {
 import * as config from "./config.ts";
 import { ANCHORS, CHAIN_ID, GAUGE_FACTORIES, PAYMENTS_MODULE, PRICING, type GaugeKind } from "./config.ts";
 import { key, pricesNow, waysFor, worthOf, type Prices, type Token } from "./prices.ts";
-import { blockTime, contract, read, readEach, required, same, sawBlock, type Read, type Tx } from "./rpc.ts";
+import {
+  blockNumber,
+  blockTime,
+  contract,
+  firstBlockAt,
+  read,
+  readEach,
+  required,
+  same,
+  sawBlock,
+  timeAt,
+  type Read,
+  type Tx,
+} from "./rpc.ts";
 import { describe } from "./tokens.ts";
 
-// A gauge's rewards manager adds up the fees it pays per unit of power and snapshots the sum at each checkpoint, so
-// what sAERO earned over a window is the growth between two snapshots. Prices are the page's averages over the last half
-// hour (`prices.ts`), from pools deep enough for a day of what the gauges pay.
+// A gauge's rewards manager sums the fees it pays per unit of power and snapshots the sum at each checkpoint, so what
+// sAERO earned between two times is the growth between two snapshots.
 
 const escrow = contract(config.AERO_ESCROW, aeroEscrowAbi);
 const root = contract(config.AERO_VOTER, aeroVoterAbi);
@@ -26,8 +38,19 @@ const manager = (address: Address) => contract(address, rewardsManagerAbi);
 
 const HOUR = 3_600;
 export const DAY = 86_400;
-export const WINDOWS = [24, 48, 168] as const;
+// In hours. The windows and the record lie on one 48-hour grid (`gridOf`), so they share snapshots.
+export const WINDOWS = [48, 96, 192] as const;
 export type Hours = (typeof WINDOWS)[number];
+// An allocation holds 47 hours, so a strategy can move every 48.
+export const STEP = 48 * HOUR;
+export const PICKS = 4;
+// Snapshot times, newest first, on the whole hour so that one read serves for the hour.
+export function gridOf(time: number): { windows: number[]; record: number[]; times: number[] } {
+  const hour = time - (time % HOUR);
+  const windows = WINDOWS.map((hours) => hour - hours * HOUR);
+  const record = Array.from({ length: PICKS + 1 }, (_, k) => hour - (k + 1) * STEP);
+  return { windows, record, times: [...new Set([...windows, ...record])].sort((a, b) => b - a) };
+}
 // Rewards managers credit fees × 1e24 / power, so 10,000 sAERO earn the growth / 100, in the token's smallest units.
 export const PER = 10_000;
 const PER_UNITS = 100;
@@ -52,7 +75,7 @@ export type Point = {
 };
 // The checkpoint at or before `time`, `index` 0 if none, and the power at `time`. Fields are undefined if unread.
 export type Start = {
-  index: bigint;
+  index: bigint | undefined;
   time?: number | undefined;
   acc: readonly bigint[] | undefined;
   ts: number | undefined;
@@ -60,8 +83,8 @@ export type Start = {
   zero: number | undefined;
   supply: bigint | undefined;
 };
-// Fee accumulator growth from a checkpoint to a later time. `spread` is the harmonic mean of the power between, in
-// sAERO, if read.
+// Fee accumulator growth from a checkpoint to a later time. `spread` is the harmonic mean of the power, in sAERO, from
+// the start's `time` (or else the checkpoint) to `to`, if read.
 export type Accrued = {
   from: number;
   to: number;
@@ -93,7 +116,8 @@ export type Gauge = {
   programs: Program[];
   programCount: number;
 };
-// `unread`: gauges left out after a failed read. `unknown`: gauge factories the page does not know.
+// `unread`: gauges left out after a failed read. `unknown`: gauge factories the page does not know. `past`: every
+// pool's snapshots on the grid.
 export type Market = {
   time: number;
   cooldown: number;
@@ -102,12 +126,12 @@ export type Market = {
   prices: Prices;
   unread: Address[];
   unknown: Address[];
+  past: Past;
 };
 export const routable = (gauge: Gauge): boolean => gauge.activated && gauge.cap > 0n;
 const whole = (power: bigint): number => Number(power) / 1e18;
 
-// Pools by the names Aero gives them: a Slipstream pool by its tick spacing, as in "CL50-WETH/USDC", and a basic pool
-// by its curve, as in "vAMM-AERO/USDC".
+// Aero's names, such as "CL50-WETH/USDC" and "vAMM-AERO/USDC".
 const PREFIXES: Record<GaugeKind, (tickSpacing: number) => string> = {
   volatile: () => "vAMM",
   stable: () => "sAMM",
@@ -147,7 +171,6 @@ export function accruedFrom(start: Start, first: number, end: Point): Accrued {
     spread: seconds > 0 && shared > 0n ? Number((BigInt(seconds) * SUPPLY_SCALE) / shared) / 1e18 : undefined,
   };
 }
-// Carried on from the latest checkpoint at the power since.
 function endOf(latest: Start, accumulator: readonly [bigint, bigint], power: bigint, now: number): Point {
   const since = Math.max(0, now - (latest.ts ?? now));
   const share = latest.index === 0n ? 0n : latest.share;
@@ -161,7 +184,7 @@ function endOf(latest: Start, accumulator: readonly [bigint, bigint], power: big
   };
 }
 
-type Found = { address: Address; index: bigint; supply: bigint | undefined; time?: number };
+type Found = { address: Address; index: bigint | undefined; supply: bigint | undefined; time?: number };
 async function indicesAt(rewards: Address[], times: bigint[], rd: Read): Promise<Found[]> {
   const found = await readEach(
     rewards.flatMap((address) => times.map((time) => ({ address, time }))),
@@ -173,14 +196,15 @@ async function indicesAt(rewards: Address[], times: bigint[], rd: Read): Promise
   );
   return found.map(({ item: { address, time }, index, supply }) => ({
     address,
-    index: index ?? 0n,
+    index,
     supply,
     time: Number(time),
   }));
 }
 async function snapshotsOf(found: Found[], rd: Read): Promise<Start[]> {
+  const known = found.filter((each): each is Found & { index: bigint } => each.index !== undefined);
   const read = await readEach(
-    found,
+    known,
     {
       acc: ({ address, index }) => manager(address)("feeRewardPerVotingPowerAt", index),
       point: ({ address, index }) => manager(address)("globalRewardPointHistory", index),
@@ -188,18 +212,26 @@ async function snapshotsOf(found: Found[], rd: Read): Promise<Start[]> {
     },
     rd,
   );
-  return read.map(({ item: { index, supply, time }, acc, point, share }) => ({
-    index,
-    time,
-    acc,
-    ts: point && Number(point.ts),
-    share: share?.[0],
-    zero: point && Number(point.zeroSupplySeconds),
-    supply,
-  }));
+  const of = new Map<Found, (typeof read)[number]>(read.map((each) => [each.item, each]));
+  return found.map((item) => {
+    const { acc, point, share } = of.get(item) ?? {};
+    return {
+      index: item.index,
+      time: item.time,
+      acc,
+      ts: point && Number(point.ts),
+      share: share?.[0],
+      zero: point && Number(point.zeroSupplySeconds),
+      supply: item.supply,
+    };
+  });
 }
-const startsAt = async (rewards: Address[], times: bigint[], rd: Read): Promise<Start[]> =>
+// By manager, then time.
+export const startsAt = async (rewards: Address[], times: bigint[], rd: Read): Promise<Start[]> =>
   snapshotsOf(await indicesAt(rewards, times, rd), rd);
+export type StartsOf = (rewards: Address[], times: number[]) => Promise<Start[]>;
+// A snapshot that should exist but could not be read.
+export const unreadStart = ({ index, acc, ts }: Start): boolean => index !== 0n && (!acc || ts === undefined);
 
 // What changes only when Aero adds a gauge.
 export type Listed = {
@@ -272,7 +304,6 @@ export function universeReads(read: () => Promise<Universe>) {
   };
 }
 
-// The tokens the gauges pay.
 const tokensIn = (gauges: (Listed & { programs?: Program[] })[]): Token[] => [
   ...new Map(
     gauges
@@ -280,8 +311,8 @@ const tokensIn = (gauges: (Listed & { programs?: Program[] })[]): Token[] => [
       .flatMap((token) => (token ? [[key(token.address), token] as const] : [])),
   ).values(),
 ];
-// How much of each token a day of the gauges pays: each gauge's fees at the most a window paid in a day, and a day of
-// its live streams. The figures here are a day's, so pools must be deep enough for a day.
+// A day of each token the gauges pay: each gauge's fees at the most a window paid in a day, and a day of its live
+// streams. Pricing needs pools deep enough for that.
 export function dayOf(gauges: Gauge[], time: number): Map<string, bigint> {
   const amounts = new Map<string, bigint>();
   const add = (token: Token | undefined, amount: bigint) => {
@@ -309,14 +340,19 @@ export function dayOf(gauges: Gauge[], time: number): Map<string, bigint> {
   return amounts;
 }
 
-// A gauge whose reads fail is left out and listed in `unread`.
-export async function readMarket(from: Universe | Promise<Universe>, rd: Read = read): Promise<Market> {
+// A gauge whose state cannot be read is left out and listed in `unread`. A failed read of its snapshots or programs
+// leaves out only those.
+export async function readMarket(
+  from: Universe | Promise<Universe>,
+  rd: Read = read,
+  startsOf: StartsOf = (rewards, times) => startsAt(rewards, times.map(BigInt), rd),
+): Promise<Market> {
   const [[time, cooldown, maxGauges], universe] = await Promise.all([
     rd([blockTime, leaf("allocationCooldown"), leaf("maxGauges")]).then(required),
     from,
   ]);
   const listed = universe.gauges;
-  // Pricing finds the pools of its first tier against anchors, looked up while the gauges are read.
+  // Pricing looks up pools while the gauges are read; only its depth check waits for what they pay.
   const pairs = listed
     .flatMap(({ token0, token1 }) => [token0.address, token1.address])
     .filter((token) => !ANCHORS.some(({ address }) => same(address, token)))
@@ -324,13 +360,11 @@ export async function readMarket(from: Universe | Promise<Universe>, rd: Read = 
   void waysFor(pairs, PRICING[0], rd).catch(() => undefined);
   const now = Number(time);
   sawBlock(now);
-  // The pools' tokens are priced while the gauges are read: only whether a pool is deep enough for a day of what the
-  // gauges pay waits for them. Programs can pay other tokens, priced once the programs are read.
-  const reading = gaugesOf(listed, now, rd);
-  const sized = reading.then((gauges) => dayOf(gauges, now));
+  const reading = gaugesOf(listed, now, rd, startsOf);
+  const sized = reading.then(({ gauges }) => dayOf(gauges, now));
   sized.catch(() => undefined);
   const pooled = tokensIn(listed);
-  const [gauges, early] = await Promise.all([reading, pricesNow(pooled, sized, rd)]);
+  const [{ gauges, past }, early] = await Promise.all([reading, pricesNow(pooled, sized, rd)]);
   const rest = tokensIn(gauges).filter(({ address }) => !pooled.some((token) => same(token.address, address)));
   const late = rest.length ? await pricesNow(rest, sized, rd) : undefined;
   const kept = new Set(gauges.map(({ address }) => address));
@@ -340,15 +374,26 @@ export async function readMarket(from: Universe | Promise<Universe>, rd: Read = 
     maxGauges: Number(maxGauges),
     gauges,
     prices: late
-      ? { ...early, of: new Map([...early.of, ...late.of]), ...((early.unread || late.unread) && { unread: true }) }
+      ? {
+          ...early,
+          of: new Map([...early.of, ...late.of]),
+          sources: new Map([...(early.sources ?? []), ...(late.sources ?? [])]),
+          ...((early.unread || late.unread) && { unread: true }),
+        }
       : early,
     unread: [...universe.unread, ...listed.flatMap(({ address }) => (kept.has(address) ? [] : [address]))],
     unknown: universe.unknown,
+    past,
   };
 }
-async function gaugesOf(listed: Listed[], now: number, rd: Read): Promise<Gauge[]> {
-  const times = WINDOWS.map((hours) => BigInt(now - hours * HOUR));
-  const [states, found] = await Promise.all([
+async function gaugesOf(
+  listed: Listed[],
+  now: number,
+  rd: Read,
+  startsOf: StartsOf,
+): Promise<{ gauges: Gauge[]; past: Past }> {
+  const grid = gridOf(now);
+  const [states, starts] = await Promise.all([
     readEach(
       listed,
       {
@@ -362,27 +407,23 @@ async function gaugesOf(listed: Listed[], now: number, rd: Read): Promise<Gauge[
       },
       rd,
     ),
-    indicesAt(
+    startsOf(
       listed.map(({ rewards }) => rewards),
-      times,
-      rd,
+      grid.times,
     ),
   ]);
-  // The windows' checkpoints, then each gauge's latest.
-  const starts = await snapshotsOf(
-    [
-      ...found,
-      ...states.map(({ item: { rewards: address }, latest, power }) => ({
-        address,
-        index: latest ?? 0n,
-        supply: power,
-      })),
-    ],
+  const latests = await snapshotsOf(
+    states.map(({ item: { rewards: address }, latest, power }) => ({ address, index: latest ?? 0n, supply: power })),
     rd,
   );
-  const latests = starts.slice(found.length);
+  const at = (i: number, time: number) => starts[i * grid.times.length + grid.times.indexOf(time)]!;
   const read0 = states.flatMap(({ item, cap, activated, power, accumulator, count, first, latest }, i) =>
-    cap !== undefined && activated !== undefined && power !== undefined && accumulator && latest !== undefined
+    cap !== undefined &&
+    activated !== undefined &&
+    power !== undefined &&
+    accumulator &&
+    count !== undefined &&
+    latest !== undefined
       ? [
           {
             ...item,
@@ -390,9 +431,10 @@ async function gaugesOf(listed: Listed[], now: number, rd: Read): Promise<Gauge[
             activated,
             power,
             accumulator: [accumulator[0], accumulator[1]] as const,
-            count: count ?? 0n,
+            count,
             first: first ? Number(first.ts) : 0,
-            starts: starts.slice(i * times.length, (i + 1) * times.length),
+            starts: grid.windows.map((time) => at(i, time)),
+            record: grid.record.map((time) => at(i, time)),
             latest: latests[i]!,
           },
         ]
@@ -451,7 +493,10 @@ async function gaugesOf(listed: Listed[], now: number, rd: Read): Promise<Gauge[
       programCount: Number(each.count),
     };
   });
-  return gauges;
+  return {
+    gauges,
+    past: { times: grid.record, starts: new Map(read0.map(({ rewards, record }) => [key(rewards), record])) },
+  };
 }
 
 export async function startsSince(gauges: Gauge[], time: number, rd: Read = read): Promise<Map<string, Start>> {
@@ -466,8 +511,8 @@ export const sinceIn =
     return start && accruedFrom(start, gauge.first, gauge.end);
   };
 
-// Newest first. A row covers several days when no checkpoint fell in some. The first starts at the gauge's first
-// checkpoint.
+// Newest first. A row covers several days when no checkpoint fell in some. The oldest starts at the gauge's first
+// checkpoint, if `days` reach back to it. Rows stop at an unread snapshot.
 export type Day = Accrued & { day: number; days: number };
 export async function historyOf(gauge: Gauge, days: number, rd: Read = read): Promise<Day[]> {
   const today = gauge.end.at - (gauge.end.at % DAY);
@@ -485,6 +530,7 @@ export function stitched(gauge: Gauge, bounds: number[], starts: Start[]): Day[]
   let last: bigint | undefined;
   for (const [k, start] of starts.entries()) {
     const bound = bounds[k]!;
+    if (start.index === undefined) break;
     if (start.index !== 0n && start.index === last) {
       const row = rows.at(-1)!;
       [row.day, row.days] = [bound, row.days + 1];
@@ -551,7 +597,6 @@ export function streamPerDay(gauge: Gauge, time: number, prices: Prices): Yield 
   return { value, priced };
 }
 
-// With `amount` more sAERO sharing the fees and incentives.
 export type Per10k = { fees: number; incentives: number; total: number; priced: boolean };
 export function per10k(gauge: Gauge, hours: Hours, time: number, prices: Prices, amount = 0): Per10k | undefined {
   const fees = windowFees(gauge, hours, prices);
@@ -565,7 +610,7 @@ export function per10k(gauge: Gauge, hours: Hours, time: number, prices: Prices,
 
 export const isThin = (gauge: Gauge, hours: Hours): boolean => thinOver(gauge.windows[hours]);
 
-// Weighed by mean power, over the gauges whose tokens all have prices.
+// Weighed by mean power, leaving out gauges without power or paying a token without a price.
 export type Average = Omit<Per10k, "priced">;
 export function average(market: Market, accrued: (gauge: Gauge) => Accrued | undefined, live = true): Average {
   let [weight, fees, stream] = [0, 0, 0];
@@ -584,32 +629,9 @@ export function average(market: Market, accrued: (gauge: Gauge) => Accrued | und
 }
 export const averageOver = (market: Market, hours: Hours): Average => average(market, (gauge) => gauge.windows[hours]);
 
-// Streams to a gauge with no power go back to their creator. `left` counts the pools whose fees, or whose live
-// streams, pay a token without a price, which counts for nothing.
-export function totalsOf(market: Market) {
-  let power = 0n;
-  const [fees, incentives] = [
-    { value: 0, left: 0 },
-    { value: 0, left: 0 },
-  ];
-  for (const gauge of market.gauges) {
-    power += gauge.power;
-    const day = feesPerDay(gauge, gauge.windows[24], market.prices);
-    if (day) {
-      fees.value += (day.value * meanOf(gauge.windows[24])) / PER;
-      if (!day.priced) fees.left++;
-    }
-    if (!gauge.power) continue;
-    const stream = streamPerDay(gauge, market.time, market.prices);
-    incentives.value += stream.value;
-    if (!stream.priced) incentives.left++;
-  }
-  return { power, fees, incentives };
-}
-
-// `idle` is on no chain. `approved` is approved for this stake alone, and `module` says whether its owner approved
-// Aero's payments module for all their stakes.
 export type Allocation = { gauge: Address; amount: bigint };
+// `idle` is on no chain; `approved` is approved for this stake alone; `module` says whether its owner approved Aero's
+// payments module for all their stakes.
 export type Stake = {
   id: bigint;
   owner: Address;
@@ -632,7 +654,7 @@ export function gaugeAt(market: Market, address: Address): Gauge | undefined {
   if (!found) lookups.set(market, (found = new Map(market.gauges.map((gauge) => [key(gauge.address), gauge]))));
   return found.get(key(address));
 }
-// 0 if it can move now.
+// 0 if it never allocated.
 export const movesAt = ({ lastAllocated, reduction }: Stake, cooldown: number): number =>
   lastAllocated ? Math.max(0, lastAllocated + cooldown - reduction) : 0;
 
@@ -773,7 +795,15 @@ export async function pendingOf(stakes: Stake[], market: Market, rd: Read = read
       rd,
     ),
   ]);
-  const found = new Map(stakes.map(({ id }): [bigint, Pending] => [id, { amounts: new Map(), partial: false }]));
+  const found = new Map(
+    stakes.map(({ id, allocations }): [bigint, Pending] => [
+      id,
+      {
+        amounts: new Map(),
+        partial: allocations.some(({ gauge }) => !isIdleGauge(gauge) && !gaugeAt(market, gauge)),
+      },
+    ]),
+  );
   const add = (id: bigint, token: Token | undefined, amount: bigint | undefined) => {
     const pending = found.get(id)!;
     if (amount === undefined || !token) pending.partial = true;
@@ -826,7 +856,6 @@ export function earnedBy(shares: Share[], accrued: (gauge: Gauge) => Accrued | u
   }
   return { value, priced };
 }
-// Undefined when none of its gauges has enough history.
 export function paidBy(shares: Share[], market: Market, hours: Hours): Yield | undefined {
   let [value, priced, any] = [0, true, false];
   for (const { gauge, share } of shares) {
@@ -837,13 +866,7 @@ export function paidBy(shares: Share[], market: Market, hours: Hours): Yield | u
   return any ? { value, priced } : undefined;
 }
 
-// A simple allocation rule: take the top pools by what they pay all their sAERO a day, and give each a share of the
-// sAERO in proportion to what it pays. Over the window it was picked from, it always earns at least the sAERO-weighed
-// average of its pools, which flatters it, so it is also judged ahead (`paysNext`) and as it would have done if
-// followed, each pick made only from what was known then (`recordOf`).
-
-// What a pool pays all its sAERO a day, by token, shared by `power` sAERO. A value is undefined if its token has no
-// price or could not be read.
+// What a pool pays all its sAERO a day, by token. A value is undefined if its token has no price.
 export type Flow = { token: Token | undefined; value: number | undefined };
 export type Paying = { fees: Flow[]; incentives: Flow[]; power: number };
 const valueOf = (token: Token | undefined, units: number, prices: Prices): number | undefined => {
@@ -862,7 +885,6 @@ function feeFlows(gauge: Gauge, accrued: Accrued, prices: Prices): Flow[] {
     growth ? [{ token, value: valueOf(token, ((Number(growth) / 1e6) * mean) / days, prices) }] : [],
   );
 }
-// What the programs `counted` stream a day between `from` and `to`.
 function streamFlows(gauge: Gauge, from: number, to: number, prices: Prices, counted = (_: Program) => true): Flow[] {
   const days = (to - from) / DAY;
   return gauge.programs.flatMap((program) => {
@@ -876,8 +898,7 @@ function streamFlows(gauge: Gauge, from: number, to: number, prices: Prices, cou
 // Coming from a checkpoint before the window, a span is shorter only for a gauge younger than the window.
 const covers = (accrued: Accrued, seconds: number): boolean => accrued.to - accrued.from >= 0.9 * seconds;
 
-// What a pool paid over an accrual: its fees, and what its programs streamed meanwhile, at its mean power. Undefined
-// without time or power.
+// Undefined without time or power.
 export function paidOver(gauge: Gauge, accrued: Accrued | undefined, prices: Prices): Paying | undefined {
   if (!accrued || accrued.to <= accrued.from) return undefined;
   const power = meanOf(accrued);
@@ -888,11 +909,8 @@ export function paidOver(gauge: Gauge, accrued: Accrued | undefined, prices: Pri
     power,
   };
 }
-// What a pool paid over the last `hours`, if its history covers them.
-export const paidLately = (gauge: Gauge, hours: Hours, prices: Prices): Paying | undefined =>
-  covers(gauge.windows[hours], hours * HOUR) ? paidOver(gauge, gauge.windows[hours], prices) : undefined;
-// What a pool would pay over the `hold` seconds after the market's time, shared by its sAERO now: its fees as the
-// window paid them, if they come again, and what its programs stream over the hold, prorated to their ends.
+// What a pool would pay a day over the next `hold` seconds, shared by its sAERO now: the window's fees again, and what
+// its programs stream over the hold.
 export function paysNext(gauge: Gauge, hours: Hours, market: Market, hold: number): Paying | undefined {
   const accrued = gauge.windows[hours];
   if (!covers(accrued, hours * HOUR) || !(meanOf(accrued) > 0)) return undefined;
@@ -909,7 +927,12 @@ function sumOf(flows: Flow[]): Yield {
   return { value, priced };
 }
 export const totalOf = (paying: Paying): number => sumOf(paying.fees).value + sumOf(paying.incentives).value;
-// What 10,000 sAERO earn a day from a pool paying so, with `added` sAERO more, or fewer if negative.
+// A rate per 10,000 sAERO a day as an APR, each sAERO counted as one AERO at its price; undefined without one.
+export function aprOf(per10k: number, prices: Prices): number | undefined {
+  const price = prices.of.get(key(config.AERO));
+  return price ? (per10k * 365) / (PER * price) : undefined;
+}
+// With `added` sAERO more, or fewer if negative.
 export function per10kOf(paying: Paying, added = 0): Per10k | undefined {
   const power = paying.power + added;
   if (!(power > 0)) return undefined;
@@ -918,21 +941,21 @@ export function per10kOf(paying: Paying, added = 0): Per10k | undefined {
   return { fees: f, incentives: i, total: f + i, priced: fees.priced && incentives.priced };
 }
 
-// The rule's picks: the first `count` pools by what they pay, each weighed by its share of what they pay together.
 export type Holding = { gauge: Gauge | undefined; weight: number };
+// The top `count` pools by what they pay, or by their fees alone without `incentives`, each weighed by its share of
+// that.
 export type Pick = { gauge: Gauge; weight: number; paying: Paying };
-export function picksOf(pools: { gauge: Gauge; paying: Paying }[], count: number): Pick[] {
+export function picksOf(pools: { gauge: Gauge; paying: Paying }[], count: number, incentives = true): Pick[] {
   const top = pools
-    .map((each) => ({ ...each, total: totalOf(each.paying) }))
+    .map((each) => ({ ...each, total: incentives ? totalOf(each.paying) : sumOf(each.paying.fees).value }))
     .filter(({ total }) => total > 0)
     .sort((a, b) => b.total - a.total)
     .slice(0, Math.max(0, count));
   const sum = top.reduce((all, { total }) => all + total, 0);
   return top.map(({ gauge, paying, total }) => ({ gauge, paying, weight: total / sum }));
 }
-// What 10,000 of `amount` sAERO held as `holdings` earn a day, each pool paying as `payingOf` says and taking its
-// weight of `amount` more, less what `mine` (whole sAERO by gauge) already holds there. A holding without a gauge, or
-// in a pool without an answer, earns nothing. Undefined when no pool has an answer.
+// What 10,000 of `amount` sAERO held as `holdings` earn a day. Each pool takes its weight of `amount`, less what `mine`
+// (whole sAERO by gauge) already holds there. Undefined when no pool has an answer.
 export function heldOver(
   holdings: Holding[],
   payingOf: (gauge: Gauge) => Paying | undefined,
@@ -949,8 +972,7 @@ export function heldOver(
   }
   return any ? { fees, incentives, total: fees + incentives, priced } : undefined;
 }
-// What 10,000 sAERO earn a day on average: all the pools pay, over all the sAERO they are shared by, leaving out
-// pools paying tokens without a price.
+// All the pools pay over all their sAERO, leaving out pools paying tokens without a price.
 export function marketOver(gauges: Gauge[], payingOf: (gauge: Gauge) => Paying | undefined): Average {
   let [power, fees, incentives] = [0, 0, 0];
   for (const gauge of gauges) {
@@ -963,48 +985,19 @@ export function marketOver(gauges: Gauge[], payingOf: (gauge: Gauge) => Paying |
   const [f, i] = power ? [(fees * PER) / power, (incentives * PER) / power] : [0, 0];
   return { fees: f, incentives: i, total: f + i };
 }
-// What `amount` sAERO held as the picks would be paid in, by token, a day, largest first; an undefined value has no
-// price.
-export function paidIn(picks: Pick[], amount: number, mine?: Map<string, number>): Flow[] {
-  const by = new Map<string, Flow>();
-  for (const { gauge, weight, paying } of picks) {
-    const added = amount * weight - (mine?.get(key(gauge.address)) ?? 0);
-    const power = paying.power + added;
-    if (!(power > 0)) continue;
-    for (const { token, value } of [...paying.fees, ...paying.incentives]) {
-      const id = token ? key(token.address) : "";
-      const was = by.get(id);
-      const share = value === undefined ? undefined : (value * weight * PER) / power;
-      by.set(id, {
-        token,
-        value: share === undefined || (was && was.value === undefined) ? undefined : (was?.value ?? 0) + share,
-      });
-    }
-  }
-  return [...by.values()].sort((a, b) => (b.value ?? -1) - (a.value ?? -1));
-}
-
-// The rule as it would have been followed: picked at each of `times`, newest first, from what each pool paid since
-// the time before and what its live programs would stream over the hold, then held until the next time, or now.
-export type Past = { times: number[]; starts: Map<string, Start[]> };
-export type Period = { from: number; to: number; rule: Per10k | undefined; market: Average; picked: number };
-// A pick at 00:00 UTC every few days, as often as an allocation's hold allows, newest first. The newest is still held
-// now, so one more covers at least `span` however long it has been held.
-export function pastTimes(time: number, cooldown: number, span = 7 * DAY): number[] {
-  const step = Math.ceil(cooldown / DAY) * DAY;
-  const latest = time - (time % step);
-  return Array.from({ length: Math.ceil(span / step) + 2 }, (_, k) => latest - k * step);
-}
-export async function readPast(market: Market, times: number[], rd: Read = read): Promise<Past> {
-  const rewards = market.gauges.map(({ rewards }) => rewards);
-  const found = await startsAt(
-    rewards,
-    times.map((time) => BigInt(time)),
-    rd,
-  );
+// Pools' snapshots at `times`, newest first, by rewards manager.
+export type Past = { times: number[]; starts: Map<string, (Start | undefined)[]> };
+export const pastOf = (rewards: Address[], times: number[], starts: Start[]): Past => ({
+  times,
+  starts: new Map(rewards.map((address, i) => [key(address), starts.slice(i * times.length, (i + 1) * times.length)])),
+});
+export function mergePast(a: Past, b: Past): Past {
+  const times = [...new Set([...a.times, ...b.times])].sort((x, y) => y - x);
+  const of = (past: Past, id: string, time: number) => past.starts.get(id)?.[past.times.indexOf(time)];
+  const ids = new Set([...a.starts.keys(), ...b.starts.keys()]);
   return {
     times,
-    starts: new Map(rewards.map((address, i) => [key(address), found.slice(i * times.length, (i + 1) * times.length)])),
+    starts: new Map([...ids].map((id) => [id, times.map((time) => of(a, id, time) ?? of(b, id, time))])),
   };
 }
 // A checkpoint read as a past end. Fees credited after it count in the time after.
@@ -1018,58 +1011,217 @@ const pointOf = (start: Start | undefined): Point | undefined =>
         power: start.supply ?? 0n,
       }
     : undefined;
-export function recordOf(market: Market, past: Past, count: number, amount = 0): Period[] {
-  const { times } = past;
-  // From `times[k]` to the time after, or to now.
-  const accrual = (gauge: Gauge, k: number): Accrued | undefined => {
-    const starts = past.starts.get(key(gauge.rewards));
-    const end = k === 0 ? gauge.end : pointOf(starts?.[k - 1]);
-    return starts?.[k] && end && accruedFrom(starts[k], gauge.first, end);
-  };
-  return times.slice(0, -1).map((time, k) => {
-    const to = k === 0 ? market.time : times[k - 1]!;
-    const step = time - times[k + 1]!;
-    const pools = market.gauges.filter(routable).flatMap((gauge) => {
-      const before = accrual(gauge, k + 1);
-      if (!before || before.to <= before.from || before.from > times[k + 1]! + 0.1 * step || !(meanOf(before) > 0))
+// To one of the past's times, or to now.
+export function accrualOf(gauge: Gauge, past: Past, from: number, to: number, market: Market): Accrued | undefined {
+  const starts = past.starts.get(key(gauge.rewards));
+  const start = starts?.[past.times.indexOf(from)];
+  const end = to >= market.time ? gauge.end : pointOf(starts?.[past.times.indexOf(to)]);
+  return start && end ? accruedFrom(start, gauge.first, end) : undefined;
+}
+// Newest first; the newest ends now.
+export type Step = { from: number; to: number };
+export const stepsOf = (market: Market): Step[] =>
+  market.past.times.slice(0, PICKS).map((from, k) => ({ from, to: k ? market.past.times[k - 1]! : market.time }));
+// `prices` value the step: the market's, or the mean of the prices at its two ends.
+export type Paid = Step & { paid: Per10k | undefined; prices: Prices };
+// Prices at the record's step starts, by time.
+export type Then = Map<number, Prices>;
+const pricedAt = (market: Market, then: Then | undefined, time: number): Prices =>
+  (time >= market.time ? market.prices : then?.get(time)) ?? market.prices;
+// The mean of the prices at a step's two ends, or either's where the other has none; the market's without `then`.
+export function pricesOver(market: Market, then: Then | undefined, { from, to }: Step): Prices {
+  const [a, b] = [then?.get(from), pricedAt(market, then, to)];
+  if (!a) return market.prices;
+  const of = new Map<string, number>();
+  for (const token of new Set([...a.of.keys(), ...b.of.keys()])) {
+    const [x, y] = [a.of.get(token), b.of.get(token)];
+    of.set(token, x === undefined ? y! : y === undefined ? x : (x + y) / 2);
+  }
+  return { unit: market.prices.unit, rates: market.prices.rates, of, ...((a.unread || b.unread) && { unread: true }) };
+}
+
+// The top `count` pools, of all or of blue chips, by the fees they paid over the `hours` before each pick and, unless
+// `incentives` is false, what their live programs stream over the next step, each given its share; picked again every
+// step (`again`), or once at the oldest step's start.
+export type Strategy = { count: number; hours: Hours; again: boolean; blueChips: boolean; incentives?: boolean };
+export const isBlueChip = ({ token0, token1 }: Gauge): boolean =>
+  [token0, token1].every(({ address }) => config.BLUE_CHIPS.some((chip) => same(chip, address)));
+// False for thin pools and pools paying a token without a price, which the strategy and the suggestion leave out.
+export const weighable = (accrued: Accrued, paying: Paying): boolean =>
+  !thinOver(accrued) && !!per10kOf(paying)?.priced;
+// From what each pool paid over the `hours` before `time`, and what its programs live then would stream over the next
+// step, at `prices`, those of `time`.
+export function picksAt(
+  market: Market,
+  past: Past,
+  time: number,
+  { count, hours, blueChips, incentives }: Strategy,
+  prices = market.prices,
+): Pick[] {
+  const since = time - hours * HOUR;
+  const pools = market.gauges
+    .filter((gauge) => routable(gauge) && (!blueChips || isBlueChip(gauge)))
+    .flatMap((gauge) => {
+      const before = accrualOf(gauge, past, since, time, market);
+      if (!before || before.to <= before.from || before.from > since + 0.1 * (time - since) || !(meanOf(before) > 0))
         return [];
+      const live = (program: Program) => program.start <= time;
       const paying = {
-        fees: feeFlows(gauge, before, market.prices),
-        incentives: streamFlows(gauge, time, time + step, market.prices, (program) => program.start <= time),
+        fees: feeFlows(gauge, before, prices),
+        incentives: streamFlows(gauge, time, time + STEP, prices, live),
         power: meanOf(before),
       };
-      return [{ gauge, paying }];
+      return weighable(before, paying) ? [{ gauge, paying }] : [];
     });
-    const picks = picksOf(pools, count);
-    const held = (gauge: Gauge) => paidOver(gauge, accrual(gauge, k), market.prices);
+  return picksOf(pools, count, incentives);
+}
+// The snapshots a strategy needs beyond the grid's.
+export function timesFor(market: Market, { again, hours }: Strategy): number[] {
+  const steps = stepsOf(market);
+  const picks = again ? steps.map(({ from }) => from) : steps.slice(-1).map(({ from }) => from);
+  return picks.map((time) => time - hours * HOUR).filter((time) => !market.past.times.includes(time));
+}
+const paidDuring = (market: Market, past: Past, step: Step, prices: Prices) => (gauge: Gauge) =>
+  paidOver(gauge, accrualOf(gauge, past, step.from, step.to, market), prices);
+const heldSteps = (
+  market: Market,
+  past: Past,
+  holdingsAt: (step: Step) => Holding[],
+  amount = 0,
+  then?: Then,
+): Paid[] =>
+  stepsOf(market).map((step) => {
+    const prices = pricesOver(market, then, step);
+    return { ...step, paid: heldOver(holdingsAt(step), paidDuring(market, past, step, prices), amount), prices };
+  });
+// Each pick at the prices when it was made.
+export function strategySteps(market: Market, past: Past, strategy: Strategy, amount = 0, then?: Then): Paid[] {
+  const pick = (time: number) => picksAt(market, past, time, strategy, pricedAt(market, then, time));
+  const once = strategy.again ? undefined : pick(stepsOf(market).at(-1)!.from);
+  return heldSteps(market, past, (step) => once ?? pick(step.from), amount, then);
+}
+// Shares chosen now, held over every step: hindsight.
+export const customSteps = (market: Market, past: Past, holdings: Holding[], amount = 0, then?: Then): Paid[] =>
+  heldSteps(market, past, () => holdings, amount, then);
+// The Base average: all the pools paid in each step over all their sAERO, leaving out pools paying a token without a
+// price.
+export const averageSteps = (market: Market, past: Past, then?: Then): Paid[] =>
+  stepsOf(market).map((step) => {
+    const prices = pricesOver(market, then, step);
+    const { fees, incentives, total } = marketOver(market.gauges, paidDuring(market, past, step, prices));
+    return { ...step, paid: total > 0 ? { fees, incentives, total, priced: true } : undefined, prices };
+  });
+
+// A stake's allocations, newest first, each read at the block before the next, back to the first at or before `since`,
+// at most `most` of them.
+export type Move = { at: number; allocations: Allocation[] };
+export async function movesOf(stake: Stake, since: number, rd: Read = read, most = 12): Promise<Move[]> {
+  const moves: Move[] = [{ at: stake.lastAllocated, allocations: stake.allocations }];
+  const [newest, newestTime] = required(await rd([blockNumber, blockTime])).map(Number) as [number, number];
+  const times = new Map<number, Promise<number>>();
+  const timeOf = (block: number): Promise<number> => {
+    const known = times.get(block) ?? timeAt(block, rd);
+    times.set(block, known);
+    return known;
+  };
+  for (let at = stake.lastAllocated; at > since && moves.length < most;) {
+    const block = (await firstBlockAt(at, newest, newestTime, timeOf)) - 1;
+    const [state, gauges] = required(
+      await rd([leaf("tokenStates", stake.id), leaf("allocatedGauges", stake.id)], { block }),
+    );
+    const amounts = required(
+      await rd(
+        gauges.map((gauge) => leaf("allocations", stake.id, gauge)),
+        { block },
+      ),
+    );
+    const before = Number(state[1]);
+    if (!before || before >= at) break;
+    moves.push({
+      at: before,
+      allocations: gauges.flatMap((gauge, i) => (amounts[i] ? [{ gauge, amount: amounts[i] }] : [])),
+    });
+    at = before;
+  }
+  return moves;
+}
+// So that steps can be cut where the allocation changed.
+export async function movesPast(moves: Move[], market: Market, since: number, rd: Read = read): Promise<Past> {
+  const times = moves.map(({ at }) => at).filter((at) => at > since && at < market.time);
+  const rewards = [
+    ...new Set(
+      moves.flatMap(({ allocations }) => allocations.flatMap(({ gauge }) => gaugeAt(market, gauge)?.rewards ?? [])),
+    ),
+  ];
+  if (!times.length || !rewards.length) return { times: [], starts: new Map() };
+  return pastOf(rewards, times, await startsAt(rewards, times.map(BigInt), rd));
+}
+// Each step cut where the stake moved, each part held as its allocation was then. A step it held no allocation for
+// half of has no answer, rather than one that a few hours stand for.
+export function movedSteps(market: Market, past: Past, moves: Move[], then?: Then): Paid[] {
+  return stepsOf(market).map((step) => {
+    const prices = pricesOver(market, then, step);
+    const inside = moves.map(({ at }) => at).filter((at) => at > step.from && at < step.to);
+    const cuts = [step.from, ...inside.sort((a, b) => a - b), step.to];
+    let [fees, incentives, seconds, priced] = [0, 0, 0, true];
+    for (let i = 0; i + 1 < cuts.length; i++) {
+      const part = { from: cuts[i]!, to: cuts[i + 1]! };
+      const move = moves.find(({ at }) => at <= part.from);
+      const total = move?.allocations.reduce((sum, { amount }) => sum + amount, 0n) ?? 0n;
+      if (!move || !total) continue;
+      const holdings = move.allocations.map(({ gauge, amount }) => ({
+        gauge: gaugeAt(market, gauge),
+        weight: Number(amount) / Number(total),
+      }));
+      const paid = heldOver(holdings, paidDuring(market, past, part, prices));
+      if (!paid) continue;
+      const length = part.to - part.from;
+      [fees, incentives, seconds, priced] = [
+        fees + paid.fees * length,
+        incentives + paid.incentives * length,
+        seconds + length,
+        priced && paid.priced,
+      ];
+    }
     return {
-      from: time,
-      to,
-      rule: heldOver(picks, held, amount),
-      market: marketOver(market.gauges, held),
-      picked: picks.length,
+      ...step,
+      paid:
+        seconds && seconds >= (step.to - step.from) / 2
+          ? { fees: fees / seconds, incentives: incentives / seconds, total: (fees + incentives) / seconds, priced }
+          : undefined,
+      prices,
     };
   });
 }
-// Each period weighed by its length.
-export function overall(periods: Period[]): { rule: number; market: number; from: number; to: number } | undefined {
-  const counted = periods.filter(({ rule }) => rule);
+// Over the steps with an answer, each weighed by its length.
+export function overallOf(steps: Paid[]): Per10k | undefined {
+  const counted = steps.filter(({ paid }) => paid);
   const seconds = counted.reduce((sum, { from, to }) => sum + to - from, 0);
   if (!seconds) return undefined;
-  const mean = (of: (period: Period) => number) =>
-    counted.reduce((sum, period) => sum + of(period) * (period.to - period.from), 0) / seconds;
+  const mean = (of: (paid: Per10k) => number) =>
+    counted.reduce((sum, { from, to, paid }) => sum + of(paid!) * (to - from), 0) / seconds;
   return {
-    rule: mean(({ rule }) => rule!.total),
-    market: mean(({ market }) => market.total),
-    from: Math.min(...counted.map(({ from }) => from)),
-    to: Math.max(...counted.map(({ to }) => to)),
+    fees: mean(({ fees }) => fees),
+    incentives: mean(({ incentives }) => incentives),
+    total: mean(({ total }) => total),
+    priced: counted.every(({ paid }) => paid!.priced),
   };
 }
+// The APR over the steps with an answer, each at its own prices and weighed by its length.
+export function aprOver(steps: Paid[]): { apr: number; priced: boolean } | undefined {
+  let [sum, seconds, priced] = [0, 0, true];
+  for (const { from, to, paid, prices } of steps) {
+    const apr = paid && aprOf(paid.total, prices);
+    if (apr === undefined) continue;
+    [sum, seconds, priced] = [sum + apr * (to - from), seconds + to - from, priced && paid!.priced];
+  }
+  return seconds ? { apr: sum / seconds, priced } : undefined;
+}
 
-// Allocating. Aero's Voter takes a stake's whole list for Base at once, replacing the last: each pool's amount in
-// sAERO's smallest units, above zero, the gauges strictly ascending, adding up to exactly what the stake has on Base.
-// What it has on no chain moves onto Base in the same call. Base is Aero's root chain, so the LeafVoter takes the list
-// in the same transaction, with no gas limit and no fee, and reverts it while the stake holds.
+// Aero's Voter takes a stake's whole list for Base at once, replacing the last: amounts in sAERO's smallest units,
+// above zero, gauges strictly ascending, adding up to exactly what the stake has on Base. What it has on no chain moves
+// onto Base in the same call. Base is Aero's root chain, so the LeafVoter takes the list in the same transaction, with
+// no gas limit and no fee, and reverts it while the stake holds.
 export type Allotment = { gauge: Address; amount: bigint };
 export const budgetOf = ({ onBase, idle }: Stake): bigint => onBase + idle;
 // The weights need not add up to 1. Rounding goes to the largest amount; one that rounds to nothing is left out.
@@ -1095,7 +1247,6 @@ export function allocateCall(stake: Stake, allotments: Allotment[], refundTo: Ad
     }),
   };
 }
-// Why a stake cannot allocate now, if it cannot.
 export type Blocked = { why: "ended" } | { why: "empty" } | { why: "held"; until: number };
 export function blockedOf(stake: Stake, cooldown: number, time: number): Blocked | undefined {
   if (!stake.permanent && stake.end <= time) return { why: "ended" };

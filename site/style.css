@@ -50,6 +50,11 @@
   --warn: light-dark(#944e00, #efb062);
   --info: light-dark(#234e82, #85b6e9);
   --danger: light-dark(#ab331f, #ef816b);
+  /* Chart lines, checked for colour blindness on both surfaces. The third is under 3:1 on light paper, so a chart
+     using it also needs labels or a table. */
+  --series-1: light-dark(#2a78d6, #3987e5);
+  --series-2: light-dark(#eb6834, #d95926);
+  --series-3: light-dark(#1baf7a, #199e70);
   color-scheme: light dark;
   font-family: var(--sans);
   line-height: 1.5;
@@ -357,8 +362,108 @@ button,
   content: "· ";
 }
 
+.Chart {
+  margin: 0;
+}
+.Chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem var(--gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.Chart-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.Chart-swatch {
+  inline-size: 1.5rem;
+  block-size: 0.5rem;
+  flex: none;
+  overflow: visible;
+}
+.Chart-swatch line {
+  stroke: var(--key);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.Chart-key[data-dashed] .Chart-swatch line {
+  stroke-dasharray: 4 3;
+}
+.Chart-frame {
+  position: relative;
+}
+.Chart-plot {
+  display: block;
+  inline-size: 100%;
+  overflow: visible;
+  touch-action: pan-y;
+}
+.Chart-plot:focus-visible {
+  outline-offset: 4px;
+}
+.Chart-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.Chart-axis,
+.Chart-end {
+  fill: var(--quiet);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.Chart-end {
+  fill: var(--ink);
+}
+.Chart-cross {
+  stroke: var(--quiet);
+  stroke-width: 1;
+}
+.Chart-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.Chart-dot {
+  stroke: var(--paper);
+  stroke-width: 2;
+}
+.Chart-tip {
+  position: absolute;
+  inset-block-start: 0;
+  display: grid;
+  gap: 0.125rem;
+  min-inline-size: 11rem;
+  max-inline-size: 16rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+  pointer-events: none;
+}
+.Chart-tip p {
+  margin: 0;
+}
+.Chart-tipRow {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.Chart-tipRow strong {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.Chart-skeleton {
+  block-size: 240px;
+}
+
 /* The review is a modal dialog, which the browser keeps a little under the screen's size. Popups get no such limit,
-   so their insets keep them off the screen's edges. */
+   so their insets keep them off the screen's edges, except on a phone, where they sit full width at its foot. */
 dialog {
   inline-size: var(--popup);
   padding: 0 var(--inset) var(--inset);
@@ -500,6 +605,10 @@ dialog[open] {
   border-block-start: 1px solid var(--line);
   color: var(--quiet);
   font-size: var(--small);
+}
+.Footer-note {
+  flex-basis: 100%;
+  margin: 0;
 }
 
 .Header {
@@ -709,7 +818,8 @@ dialog[open] {
   background: var(--accent);
 }
 .Shape[data-shape="elsewhere"] {
-  background: var(--quiet);
+  border: 2px solid var(--quiet);
+  background: radial-gradient(circle, var(--quiet) 0 30%, transparent 36%);
 }
 .Shape[data-shape="joining"] {
   border: 2px solid var(--info);
@@ -724,7 +834,7 @@ dialog[open] {
   border: 2px solid var(--quiet);
 }
 .Shape[data-shape="checking"] {
-  border-color: var(--line);
+  border-style: dotted;
 }
 .Shape[data-shape="stopped"] {
   border-radius: 0;
@@ -864,10 +974,12 @@ dialog[open] {
   cursor: pointer;
 }
 
+/* One column that never grows past its container, so a wide table scrolls in its `.u-scroll` instead. */
 .u-stack,
 .u-stackTight,
 .u-stackLoose {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
 }
 .u-stack {
@@ -915,7 +1027,9 @@ dialog[open] {
 .u-narrow {
   max-inline-size: 32rem;
 }
+/* Positioned, so that it also clips `.u-visuallyHidden` text, which would otherwise widen the page. */
 .u-scroll {
+  position: relative;
   overflow-x: auto;
 }
 .u-small {
@@ -933,11 +1047,13 @@ dialog[open] {
 .u-sans {
   font-family: var(--sans);
 }
+/* In a table, a note wraps rather than widening its column. */
 .u-detail {
   display: block;
   color: var(--quiet);
   font-family: var(--sans);
   font-size: var(--label);
+  white-space: normal;
 }
 /* "/ 1k votes, last epoch": the unit stays whole, beside the figure or under it. */
 .u-aside {
@@ -1084,13 +1200,7 @@ dialog[open] {
   }
 }
 
-/* A pool's share, typed in a table row. */
 .Amount--share {
   inline-size: 4.5rem;
   text-align: end;
-}
-.Button--drop {
-  inline-size: 1.75rem;
-  min-block-size: 1.75rem;
-  font-size: 1.25rem;
 }

@@ -34,8 +34,8 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Your wallet");
     assert.deepEqual(await view(page, "app").getByRole("heading", { level: 2 }).allInnerTexts(), [
       "Swap",
-      "Hydrex",
       "Aero",
+      "Hydrex",
     ]);
     await page.goBack();
     await heading(page, "Vote, claim and swap on Base").waitFor();
@@ -91,13 +91,13 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
     );
     await h
       .row(page, 9540)
-      .getByText(/≈\s\$6\.1\d last epoch/)
+      .getByText(/\$6\.1\d last epoch/)
       .waitFor();
     const menu = view(page, "hydrex").locator('[data-kind="matcha-latte"]');
-    await menu.getByText(/^≈\s\$\d+\.\d\d \/ 1k votes$/).waitFor();
+    await menu.getByText(/^[\d,]+\.\d% APR$/).waitFor();
     await menu.getByText("Yours: 1 Hydrex account").waitFor();
     await h.text(view(page, "hydrex"), "average").getByText("Not read", { exact: true }).waitFor();
-    assert.equal(await h.text(menu, "versus").isVisible(), false, "nothing to compare with");
+    assert.equal(await h.text(menu, "record-average").isVisible(), false, "no average to show beside it");
     await page.getByText("Some figures could not be read.").waitFor();
     await h.shoot(page, "member-390");
     await page.goto(`${SITE}/#hydrex/matcha-latte/record`);

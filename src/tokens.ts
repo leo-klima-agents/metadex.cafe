@@ -31,8 +31,8 @@ export const lookalike = (token: Token): Listed | undefined =>
 // An amount of a token, in its smallest units.
 export type Amount = { token: Address; amount: bigint };
 
-// Each token's symbol and decimals as its contract gives them, keyed by lower-case address. A token whose `decimals`
-// read fails is left out.
+// Each token's decimals as its contract gives them, and its symbol cleaned, or "?" if unread, keyed by lower-case
+// address. A token whose `decimals` read fails is left out.
 export async function tokensOf(addresses: Address[], rd: Read = read): Promise<Map<string, Token>> {
   const unique = [...new Set(addresses.map((address) => key(address)))];
   const found = await readEach(

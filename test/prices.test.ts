@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import { zeroAddress, type Address } from "viem";
-import { SETTLED, same, type Call } from "../src/rpc.ts";
-import { ANCHORS, FIAT_FEEDS, EXCHANGES, HYDREX_PRICING, PRICING, swapperOf, type Exchange } from "../src/config.ts";
+import { SETTLED, same, type Call, type Read } from "../src/rpc.ts";
+import {
+  ANCHORS,
+  FIAT_FEEDS,
+  EXCHANGES,
+  HYDREX_PRICING,
+  PRICING,
+  USDC as USDC_ON_BASE,
+  WETH,
+  swapperOf,
+  type Exchange,
+} from "../src/config.ts";
 import {
   BY_ID,
   WINDOW,
@@ -10,8 +20,10 @@ import {
   pairPrice,
   pricesAt,
   pricesAtFlip,
+  pricesFrom,
   pricesNow,
   quotesOf,
+  slipstreamPool,
   tickPrice,
   waysFor,
   type Token,
@@ -278,6 +290,29 @@ test("the deepest pool wins, now and at a flip", async () => {
   close((await priceOf(pools))!, 3 * USDC_USD);
   forget();
   close((await priceOf(pools, TOKEN, NOW - 7 * 86_400))!, 3 * USDC_USD);
+});
+
+test("prices at another time come from the pools that priced each token, without searching again", async () => {
+  // 2,000 USDC deep at 2 USDC in Aero, 15,000 at 3 in Aerodrome.
+  const pools: Fake[] = [
+    { exchange: AERO, token: TOKEN, now: [1_000, 2_000] },
+    { exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] },
+  ];
+  const { sources } = await pricesNow([TOKEN], new Map(), market(pools).reader);
+  forget();
+  const { reader, asked } = market(pools);
+  close((await pricesFrom(sources!, new Map(), NOW - 2 * 86_400, reader)).of.get(TOKEN.address)!, 3 * USDC_USD);
+  for (const { name, factory } of PRICING.flat()) assert.ok(!asked.has(factory.toLowerCase()), `no lookup in ${name}`);
+  assert.ok(!asked.has(`0x${"a0".padStart(40, "0")}`), "nor a read of the shallower pool");
+  // A pool younger than the time has no price then.
+  const young = [{ ...pools[1]!, since: NOW - 86_400 }];
+  forget();
+  assert.equal(
+    (await pricesFrom(sources!, new Map(), NOW - 2 * 86_400, market([pools[0]!, ...young]).reader)).of.get(
+      TOKEN.address,
+    ),
+    undefined,
+  );
 });
 
 test("an epoch's prices come from Hydrex's pools only; current ones from all", async () => {
@@ -628,4 +663,68 @@ test("Aero's stable factory prices on the stable curve", async () => {
     const price = await priceOf([{ exchange: AERO_STABLE, token, now: [1_100, 900] }], token);
     close(price!, pairPrice(1_100, 900, true) * USDC_USD);
   }
+});
+
+test("a Slipstream pool is a clone of its factory's implementation, where CREATE2 puts it for its pair and spacing", () => {
+  // WETH / USDC at a tick spacing of 100, as getPool gives them on Base.
+  const pair: [Address, Address] = [WETH, USDC_ON_BASE];
+  assert.equal(
+    slipstreamPool(AERO_CL.factory, "0x1642634C8CB1C9f1B84c9a1a08534F8c3F4E89f8", pair, 100),
+    "0x2A430bEbD2082d8e05D56d64DEDE8944279bbC24",
+    "Aero Slipstream",
+  );
+  assert.equal(
+    slipstreamPool(exchange("Aerodrome Slipstream").factory, "0xeC8E5342B19977B4eF8892e02D8DAEcfa1315831", pair, 100),
+    "0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59",
+    "Aerodrome Slipstream",
+  );
+});
+
+test("a read that knows which addresses hold code finds Slipstream pools in one ask, and asks again after a failure", async () => {
+  const implementation: Address = "0x00000000000000000000000000000000000000c1";
+  const slipstreams = BY_ID.filter(({ kind }) => kind === "slipstream");
+  const pair: [Address, Address] = [TOKEN.address, USDC];
+  // Two pools: Aero Slipstream's at a spacing of 100, and Aerodrome Slipstream V3's at 1.
+  const held = [
+    slipstreamPool(AERO_CL.factory, implementation, pair, 100),
+    slipstreamPool(AERODROME_CL.factory, implementation, pair, 1),
+  ];
+  const asked: string[] = [];
+  const checked: (readonly Address[])[] = [];
+  let failing = true;
+  const rd: Read = async (calls): Promise<any> =>
+    calls.map(({ address, functionName }) => {
+      asked.push(`${address} ${functionName}`);
+      if (functionName === "tickSpacings") return [1, 100];
+      if (functionName === "poolImplementation") return implementation;
+      return functionName === "extsload" ? Array(4).fill(`0x${"0".repeat(64)}`) : zeroAddress;
+    });
+  rd.codeAt = async (addresses) => {
+    checked.push(addresses);
+    return addresses.map((address, i) => (failing && i === 0 ? undefined : held.some((pool) => same(pool, address))));
+  };
+  const found = async () =>
+    (await waysFor([pair], BY_ID, rd))
+      .get(`${TOKEN.address} ${USDC.toLowerCase()}`)!
+      .map(({ exchange, pool, tickSpacing }) => [exchange, pool, tickSpacing]);
+  // Aero Slipstream's first check failed: its pool at 100 is found all the same, but it is asked again next time.
+  assert.deepEqual(await found(), [
+    [AERO_CL.id, held[0], 100],
+    [AERODROME_CL.id, held[1], 1],
+  ]);
+  assert.equal(checked.length, 1, "one ask");
+  assert.equal(checked[0]!.length, slipstreams.length * 2, "each Slipstream factory's two spacings");
+  assert.ok(
+    !asked.some((each) => slipstreams.some(({ factory }) => each === `${factory} getPool`)),
+    "no Slipstream factory is asked for a pool",
+  );
+  failing = false;
+  assert.deepEqual(await found(), [
+    [AERO_CL.id, held[0], 100],
+    [AERODROME_CL.id, held[1], 1],
+  ]);
+  assert.equal(checked.length, 2);
+  assert.equal(checked[1]!.length, 2, "only Aero Slipstream's spacings, whose check failed, are asked again");
+  await found();
+  assert.equal(checked.length, 2, "and then none, all found");
 });
