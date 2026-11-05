@@ -50,7 +50,8 @@
   --warn: light-dark(#944e00, #efb062);
   --info: light-dark(#234e82, #85b6e9);
   --danger: light-dark(#ab331f, #ef816b);
-  /* Chart lines, checked for colour blindness on each surface. */
+  /* Chart lines, checked for colour blindness on both surfaces. The third is under 3:1 on light paper, so a chart
+     using it also needs labels or a table. */
   --series-1: light-dark(#2a78d6, #3987e5);
   --series-2: light-dark(#eb6834, #d95926);
   --series-3: light-dark(#1baf7a, #199e70);
@@ -361,7 +362,6 @@ button,
   content: "· ";
 }
 
-/* Chart text keeps the text's colours, never a line's. */
 .Chart {
   margin: 0;
 }
@@ -1001,7 +1001,7 @@ th .Tag {
   cursor: pointer;
 }
 
-/* So that a wide table scrolls instead of widening the page. */
+/* One column that never grows past its container, so a wide table scrolls in its `.u-scroll` instead. */
 .u-stack,
 .u-stackTight,
 .u-stackLoose {
@@ -1054,7 +1054,7 @@ th .Tag {
 .u-narrow {
   max-inline-size: 32rem;
 }
-/* Positioned, so that visually hidden text in it stays in it. */
+/* Positioned, so that it also clips `.u-visuallyHidden` text, which would otherwise widen the page. */
 .u-scroll {
   position: relative;
   overflow-x: auto;
