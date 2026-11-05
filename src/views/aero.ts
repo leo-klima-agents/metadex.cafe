@@ -17,21 +17,7 @@ import { andThen, type Got } from "../cache.ts";
 import * as config from "../config.ts";
 import { AUTOPILOTS, BASESCAN, PAYMENTS_MODULE } from "../config.ts";
 import * as data from "../data.ts";
-import {
-  compact,
-  count,
-  date,
-  day,
-  figure,
-  fixed,
-  fraction,
-  money,
-  moneyAt,
-  short,
-  until,
-  utc,
-  versusAverage,
-} from "../format.ts";
+import { compact, count, date, day, figure, fixed, fraction, money, moneyAt, short, until, utc } from "../format.ts";
 import { key } from "../prices.ts";
 import { hrefOf } from "../routes.ts";
 import { now, same, simulate } from "../rpc.ts";
@@ -295,30 +281,12 @@ function periodOf(steps: Paid[]): string {
     ? `the last ${count(days, "day", "days")}`
     : `${days} of the last ${RECORD_DAYS} days`;
 }
-// Over the steps both have an answer for.
-function versus(a: Paid[], b: Paid[]): { ratio: number | undefined; both: Paid[] } {
-  const both = a.map((step, k) => (b[k]?.paid ? step : { ...step, paid: undefined }));
-  const [x, y] = [
-    aero.overallOf(both),
-    aero.overallOf(b.map((step, k) => (a[k]?.paid ? step : { ...step, paid: undefined }))),
-  ];
-  return { ratio: x && y && y.total > 0 ? x.total / y.total : undefined, both };
-}
-// Names the steps it covers when fewer than the first record's.
-function versusWords(a: Paid[], b: Paid[], what: string): string {
-  const { ratio, both } = versus(a, b);
-  if (ratio === undefined) return "";
-  const words =
-    Math.abs(ratio - 1) < 0.005
-      ? `about the same as ${what}`
-      : `${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "above" : "below"} ${what}`;
-  return secondsOf(both) < secondsOf(a) ? `${words} over ${periodOf(both)}` : words;
-}
-// "Over the last 6 days: 7.2% above the Base average, and …", the period only when given.
-function noteOf(period: string, comparisons: string[]): string | null {
-  const words = comparisons.filter(Boolean).join(", and ");
-  if (!period) return words ? `${words[0]!.toUpperCase()}${words.slice(1)}.` : null;
-  return words ? `${period}: ${words}.` : `${period}.`;
+// The strategy as the controls set it, and that it is picked from only what was known then.
+function introOf({ count: top, hours, again, blueChips }: aero.Strategy): string {
+  const pools = `the top ${count(top, "pool", "pools")}${blueChips ? " of blue chips" : ""} by exchange revenue over the ${WINDOW[hours].over} before`;
+  return again
+    ? `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools} each pick, picked again every ${hoursWords(aero.STEP)}. Without hindsight: each pick knows only what was known then.`
+    : `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools} that, and kept since. Without hindsight: the pick knows only what was known then.`;
 }
 const beganOf = (market: Market): number =>
   Math.min(...market.gauges.filter((gauge) => routable(gauge) && gauge.first > 0).map(({ first }) => first));
@@ -326,8 +294,15 @@ const beganOf = (market: Market): number =>
 function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined): void {
   const market = got.value;
   const extra = andThen(got, (found) => data.pastFor(aero.timesFor(found, strategyOf(found))));
+  fill(aeroView, {
+    "record-intro": introOf(
+      market
+        ? strategyOf(market)
+        : { count: plan.count, hours: controls.hours, again: plan.again, blueChips: plan.blueChips },
+    ),
+  });
   if (!market || !extra.value) return void fill(aeroView, { plan: stateOf(extra) });
-  const { count: top, hours, again, blueChips } = strategyOf(market);
+  const { hours, again } = strategyOf(market);
   const past = aero.mergePast(market.past, extra.value);
   const strategy = aero.strategySteps(market, past, strategyOf(market), amount);
   const custom = plan.rows && aero.customSteps(market, market.past, holdingsOf(plan.rows, market), amount);
@@ -352,24 +327,29 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   const ofCustom = custom && aero.overallOf(custom);
   const ofPilot = pilot.value && aero.overallOf(pilot.value);
   const ofAverage = aero.overallOf(average);
-  const period = periodOf(strategy);
   const what = stake
     ? `the ${power(aero.budgetOf(stake))} of ${stakeName(stake, stake.id)} on Base`
     : wholePower(amount);
-  const yours = (overall.total * amount) / aero.PER;
+  // Over fewer days than the record's.
+  const shorter = (steps: Paid[]) => (steps.every(({ paid }) => paid) ? "" : ` over ${periodOf(steps)}`);
+  const earned = money(
+    moneyAt((overall.total * amount * secondsOf(strategy)) / aero.PER / aero.DAY, market.prices, !overall.priced),
+  );
+  const figure = (found: Per10k | undefined) => (found ? `${apr(found.total, found.priced, market)} APR` : "–");
   fill(aeroView, {
-    headline: `${apr(overall.total, overall.priced, market)} APR`,
-    "headline-note": noteOf(strategy.every(({ paid }) => paid) ? "" : `Over ${period}`, [
-      versusWords(strategy, average, "the Base average"),
-      pilot.value ? versusWords(strategy, pilot.value, "the Autopilot") : "",
-    ]),
-    "headline-yours":
+    "average-apr": figure(ofAverage),
+    "pilot-apr": shown(pilot, () => figure(ofPilot)),
+    "pilot-note": shown(
+      pilot,
+      (steps) => `${pilotName}, as it allocated${ofPilot && shorter(steps) ? `,${shorter(steps)}` : ""}`,
+    ),
+    "strategy-apr": figure(overall),
+    "strategy-note":
       amount > 0
-        ? `For ${what}: ${money(moneyAt(yours, market.prices, !overall.priced), true)} a day, ${money(moneyAt((yours * secondsOf(strategy)) / aero.DAY, market.prices, !overall.priced))} in all.`
-        : null,
-    "headline-custom": ofCustom
-      ? `Your custom allocation: ${apr(ofCustom.total, ofCustom.priced, market)} APR, in hindsight.`
-      : null,
+        ? `${earned}${shorter(strategy)} for ${stake ? stakeName(stake, stake.id) : wholePower(amount)}`
+        : shorter(strategy).trim() || null,
+    "custom-tile": custom ? true : null,
+    "custom-apr": figure(ofCustom),
   });
   drawLines(market, [
     { id: "average", name: "Base average", color: "var(--series-3)", steps: average },
@@ -379,25 +359,14 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       ? [{ id: "custom", name: "Custom allocation", color: "var(--series-1)", dashed: true, steps: custom }]
       : []),
   ]);
-  const pools = `the top ${count(top, "pool", "pools")}${blueChips ? " of blue chips" : ""} by exchange revenue over the ${WINDOW[hours].over} before`;
   fill(aeroView, {
     "legend-note": custom
-      ? "Custom allocation: these shares were set today, knowing how the pools did, then held as they are throughout. Your strategy is picked each time from only what was known then."
+      ? "Custom allocation: shares set today, knowing how the pools did, then held as they are throughout: hindsight."
       : null,
-    "chart-note": `Each line's APR in each step of ${hoursWords(aero.STEP)}. Your strategy: ${
-      again
-        ? `${pools} each pick, picked again every ${hoursWords(aero.STEP)}.`
-        : `${pools} ${RECORD_DAYS} days ago, picked then and kept.`
-    }`,
+    "chart-note": `Each line's APR in each step of ${hoursWords(aero.STEP)}.`,
+    "custom-head": custom ? true : null,
   });
   const cell = (paid: Per10k | undefined) => (paid ? apr(paid.total, paid.priced, market) : "–");
-  fill(aeroView, {
-    "custom-head": custom ? true : null,
-    "all-strategy": cell(overall),
-    "all-custom": custom ? cell(ofCustom) : null,
-    "all-pilot": shown(pilot, () => cell(ofPilot)),
-    "all-average": cell(ofAverage),
-  });
   list(
     $("[data-list=step]", aeroView),
     strategy,
@@ -416,17 +385,17 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   fill(aeroView, {
     "record-note": [
       again
-        ? `Each step's picks use only what was known as it began: each pool's fees over the ${WINDOW[hours].over} before, and the incentives running then. They are kept until the next step, as an allocation holds for ${hoursWords(market.cooldown)}.`
-        : `Picked once, ${RECORD_DAYS} days ago, from only what was known then: each pool's fees over the ${WINDOW[hours].over} before, and the incentives running then.`,
+        ? `Each pick knows each pool's fees over the ${WINDOW[hours].over} before it and the incentives running then, and is kept until the next, as an allocation holds for ${hoursWords(market.cooldown)}.`
+        : `The pick knows each pool's fees over the ${WINDOW[hours].over} before it and the incentives running then.`,
       short
         ? `${history}, too recently for ${short === 1 ? "the oldest step's pick" : `the oldest ${short} steps' picks`} from the ${WINDOW[hours].over} before.`
         : "",
       first !== undefined && first > since
-        ? `${pilotName} first allocated on Base ${until(market.time - first)} ago: its total, and the comparisons with it, cover only its steps.`
+        ? `${pilotName} first allocated on Base ${until(market.time - first)} ago: its figures cover only its steps.`
         : "",
       "Everything is valued at current prices, and each unit of allocation power counted as one AERO.",
       amount
-        ? `Adding ${what} to the pools is taken into account in your strategy and your custom allocation, not in the other columns.`
+        ? `Adding ${what} to the pools is taken into account in your strategy and your custom allocation, not in the Base average or the Autopilot.`
         : "",
     ]
       .filter(Boolean)
@@ -736,18 +705,15 @@ export function drawStake(): void {
       : shown(record, ({ earned }) => `${apr(earned.value, earned.priced, market!)} APR`),
     "since-note": soon
       ? "Too soon for a record"
-      : shown(record, ({ earned, average }) =>
-          [`fees since ${utc(stake.lastAllocated)}`, versusAverage(earned.value / average.fees)]
-            .filter(Boolean)
-            .join(" · "),
+      : shown(
+          record,
+          ({ average }) => `fees since ${utc(stake.lastAllocated)} · Base average ${apr(average.fees, true, market!)}`,
         ),
     paid: !market ? undefined : paid ? `${apr(paid.value, paid.priced, market)} APR` : "Not enough history",
     "paid-note": !market
       ? undefined
       : paid
-        ? [`${WINDOW[controls.hours].last}, with live incentives`, versusAverage(paid.value / average!.total)]
-            .filter(Boolean)
-            .join(" · ")
+        ? `${WINDOW[controls.hours].last}, with live incentives · Base average ${apr(average!.total, true, market)}`
         : null,
     "window-head": WINDOW[controls.hours].head,
   });

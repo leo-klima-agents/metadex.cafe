@@ -104,14 +104,14 @@
             <p class="u-small" data-text="swap-yours"></p>
           </li>
           <li class="Card Linked">
-            <h2 class="Card-title"><a class="Linked-cover" href="#hydrex">Hydrex</a></h2>
-            <p class="u-small u-quiet">Automations that vote with your Hydrex accounts</p>
-            <p class="u-small" data-text="hydrex-yours"></p>
-          </li>
-          <li class="Card Linked">
             <h2 class="Card-title"><a class="Linked-cover" href="#aero">Aero</a></h2>
             <p class="u-small u-quiet">What sAERO's allocation power earns in each pool on Base</p>
             <p class="u-small" data-text="aero-yours"></p>
+          </li>
+          <li class="Card Linked">
+            <h2 class="Card-title"><a class="Linked-cover" href="#hydrex">Hydrex</a></h2>
+            <p class="u-small u-quiet">Automations that vote with your Hydrex accounts</p>
+            <p class="u-small" data-text="hydrex-yours"></p>
           </li>
         </ul>
         <div class="Card u-stackTight" data-if="no-wallet">
@@ -169,7 +169,7 @@
                 <div class="Facts-item">
                   <dt class="u-label">Last epoch</dt>
                   <dd class="Facts-value Facts-figure" data-text="record"></dd>
-                  <dd class="Facts-value u-small u-quiet" data-text="versus"></dd>
+                  <dd class="Facts-value u-small u-quiet" data-text="record-average"></dd>
                 </div>
               </dl>
             </li>
@@ -192,7 +192,7 @@
                 <div class="Facts-item">
                   <dt class="u-label">Last epoch</dt>
                   <dd class="Facts-value Facts-figure" data-text="record"></dd>
-                  <dd class="Facts-value u-small u-quiet" data-text="versus"></dd>
+                  <dd class="Facts-value u-small u-quiet" data-text="record-average"></dd>
                 </div>
               </dl>
             </li>
@@ -212,7 +212,6 @@
             <div class="Facts-tile" data-if="wallet">
               <dt class="u-label Facts-tileLabel">Your votes</dt>
               <dd class="Facts-value Facts-figure" data-text="own"></dd>
-              <dd class="Facts-tileNote u-small u-quiet" data-text="own-versus"></dd>
             </div>
           </dl>
           <p>
@@ -404,7 +403,7 @@
               <button type="button" class="Button--info" popovertarget="record" aria-label="Performance">i</button>
             </dt>
             <dd class="Facts-value Facts-figure" data-text="record"></dd>
-            <dd class="Facts-tileNote u-small u-quiet" data-text="versus"></dd>
+            <dd class="Facts-tileNote u-small u-quiet" data-text="record-average"></dd>
           </div>
           <div class="Facts-tile" data-only="matcha-latte">
             <dt class="u-label Facts-tileLabel">Retired</dt>
@@ -549,7 +548,7 @@
             <p class="u-small" data-when="failed">Last epoch could not be read.</p>
             <p class="u-small" data-when="empty">No record yet.</p>
             <div class="u-stack" data-when="ready">
-              <p class="u-small" data-text="versus-words"></p>
+              <p class="u-small" data-text="performance-note"></p>
               <div class="u-scroll">
                 <table>
                   <caption class="u-visuallyHidden">
@@ -754,21 +753,41 @@
           </div>
         </fieldset>
         <section class="u-stack u-gapAbove" aria-labelledby="aero-record-title" data-text="plan" data-state="loading">
-          <h2 id="aero-record-title">Over the last 8 days</h2>
+          <h2 id="aero-record-title">If you had started 8 days ago</h2>
+          <p class="u-small u-quiet" data-text="record-intro"></p>
           <div class="u-stack" data-when="loading" aria-hidden="true">
-            <p class="Skeleton-item Headline-skeleton"></p>
+            <ul class="Facts Facts--tiles">
+              <li class="Facts-tile Skeleton-item"></li>
+              <li class="Facts-tile Skeleton-item"></li>
+              <li class="Facts-tile Skeleton-item"></li>
+            </ul>
             <div class="Skeleton-item Chart-skeleton"></div>
           </div>
           <p class="u-small" data-when="failed">The pools could not be read.</p>
           <p class="u-small" data-when="empty" data-text="record-empty">No pool has enough history yet.</p>
           <div class="u-stack" data-when="ready">
-            <div class="u-stackTight">
-              <p class="u-label">Your strategy</p>
-              <p class="Headline"><span class="Headline-figure" data-text="headline"></span></p>
-              <p data-text="headline-note"></p>
-              <p class="u-small" data-text="headline-yours"></p>
-              <p class="u-small" data-text="headline-custom"></p>
-            </div>
+            <dl class="Facts Facts--tiles">
+              <div class="Facts-tile">
+                <dt class="u-label Facts-tileLabel">Base average</dt>
+                <dd class="Facts-value Facts-figure" data-text="average-apr"></dd>
+                <dd class="Facts-tileNote u-small u-quiet">every pool on Base</dd>
+              </div>
+              <div class="Facts-tile">
+                <dt class="u-label Facts-tileLabel">Autopilot</dt>
+                <dd class="Facts-value Facts-figure" data-text="pilot-apr"></dd>
+                <dd class="Facts-tileNote u-small u-quiet" data-text="pilot-note"></dd>
+              </div>
+              <div class="Facts-tile">
+                <dt class="u-label Facts-tileLabel">Your strategy</dt>
+                <dd class="Facts-value Facts-figure" data-text="strategy-apr"></dd>
+                <dd class="Facts-tileNote u-small u-quiet" data-text="strategy-note"></dd>
+              </div>
+              <div class="Facts-tile" data-text="custom-tile">
+                <dt class="u-label Facts-tileLabel">Custom allocation</dt>
+                <dd class="Facts-value Facts-figure" data-text="custom-apr"></dd>
+                <dd class="Facts-tileNote u-small u-quiet">in hindsight</dd>
+              </div>
+            </dl>
             <figure class="Chart u-stackTight">
               <ul class="Chart-legend u-small" data-list="legend"></ul>
               <p class="u-small u-quiet" data-text="legend-note"></p>
@@ -799,15 +818,6 @@
                   </tr>
                 </thead>
                 <tbody data-list="step"></tbody>
-                <tfoot>
-                  <tr>
-                    <th scope="row">8 days</th>
-                    <td class="u-figures" data-text="all-average"></td>
-                    <td class="u-figures" data-text="all-pilot"></td>
-                    <td class="u-figures u-strong" data-text="all-strategy"></td>
-                    <td class="u-figures" data-text="all-custom"></td>
-                  </tr>
-                </tfoot>
               </table>
             </div>
             <p class="u-small u-quiet" data-text="record-note"></p>
@@ -1065,8 +1075,8 @@
               </dl>
               <p class="u-small u-quiet">
                 APR, each unit of allocation power counted as one AERO. Since it allocated: the fees its pools paid
-                since then, exactly, against every pool's over the same time. Its pools: their exchange revenue lately,
-                which it did not earn if it just moved there.
+                since then, exactly, and every pool's on average over the same time. Its pools: their exchange revenue
+                lately, which it did not earn if it just moved there.
               </p>
               <div class="u-scroll">
                 <table>

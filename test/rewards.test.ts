@@ -16,7 +16,7 @@ import { ANCHORS, FIAT_FEEDS, WETH } from "../src/config.ts";
 import { WEEK } from "../src/format.ts";
 import { key, type Token } from "../src/prices.ts";
 import { read, type Read } from "../src/rpc.ts";
-import { allEarnings, earnedBy, aprOf, shareOf, valueOf, versus, votesEarned, type Earnings } from "../src/rewards.ts";
+import { allEarnings, earnedBy, aprOf, shareOf, valueOf, votesEarned, type Earnings } from "../src/rewards.ts";
 
 const USDC: Token = { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, symbol: "USDC" };
 const HYDX: Token = { address: "0x00000e7efa313F4E11Bfff432471eD9423AC6B30", decimals: 18, symbol: "HYDX" };
@@ -86,7 +86,6 @@ test("what some votes earned at the rate of others', and their APR, at their pri
   assert.equal(aprOf(mine, unpriced), undefined, "no price for HYDX, no APR");
   assert.equal(aprOf({ ...mine, votes: 0n }), undefined, "no votes, no APR");
   assert.equal(shareOf({ ...mine, votes: 0n }, 10n ** 21n).value, 0, "no votes, no rate");
-  assert.equal(versus(mine, all), 1, "compared at the same prices: $262.50 per 1,000 votes each");
 });
 
 test("an epoch's rewards are read once for every voter, on its own pools or not, each reading its votes, and priced once", async (t) => {

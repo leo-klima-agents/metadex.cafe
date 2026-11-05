@@ -690,19 +690,6 @@ dialog[open] {
   padding-inline-start: 2ch;
 }
 
-.Headline {
-  margin: 0;
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1.2;
-}
-.Headline-skeleton {
-  max-inline-size: 18rem;
-}
-.Skeleton-item.Headline-skeleton::before {
-  block-size: 2rem;
-}
-
 .Home {
   padding-block: 3rem;
 }

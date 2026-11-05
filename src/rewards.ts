@@ -273,8 +273,6 @@ export function valueOf({ rewards, prices: own }: Earnings, prices = own) {
   }
   return { total: counted.fees + counted.incentives, ...counted, byPool, unit: prices.unit, rates: prices.rates };
 }
-// Per 1,000 votes, which have 18 decimals.
-export const perThousand = (value: number, votes: bigint): number => (votes > 0n ? value / (Number(votes) / 1e21) : 0);
 // What `votes` earned at the rate of these earnings' votes, by default at their own prices.
 export const shareOf = (earnings: Earnings, votes: bigint, value: Value = valueOf(earnings)): Money =>
   moneyAt(earnings.votes > 0n ? (Number(votes) / Number(earnings.votes)) * value.total : 0, value);
@@ -284,10 +282,4 @@ export function aprOf(earnings: Earnings, prices = earnings.prices): number | un
   const hydx = prices.of.get(key(HYDX));
   const votes = Number(earnings.votes) / 1e18;
   return hydx && votes > 0 ? ((valueOf(earnings, prices).total / votes) * (365 / 7)) / hydx : undefined;
-}
-// The ratio of some votes' earnings per 1,000 votes to all of Hydrex's, both at `all`'s prices so they compare fairly.
-export function versus(earnings: Earnings, all: Earnings): number | undefined {
-  const ratio =
-    perThousand(valueOf(earnings, all.prices).total, earnings.votes) / perThousand(valueOf(all).total, all.votes);
-  return earnings.start === all.start && Number.isFinite(ratio) ? ratio : undefined;
 }
