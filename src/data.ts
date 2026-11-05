@@ -132,6 +132,12 @@ export const since = (time: number): Got<Map<string, aero.Start>> =>
   andThen(market(), () =>
     use(`aero since ${time}`, async () => aero.startsSince((await marketRead()).gauges, time, tagged("aero"))),
   );
+// Every pool's snapshots at each of the rule's picks over the last week or so. A pick's are read once.
+export const past = (): Got<aero.Past> =>
+  andThen(market(), (found) => {
+    const times = aero.pastTimes(found.time, found.cooldown);
+    return use(`aero past ${times.join()}`, async () => aero.readPast(await marketRead(), times, tagged("aero")));
+  });
 const HISTORY_DAYS = 14;
 export const history = (gauge: Address): Got<aero.Day[] | null> =>
   andThen(market(), (found) => {

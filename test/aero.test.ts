@@ -11,6 +11,16 @@ import {
   averageOver,
   dayOf,
   earnedBy,
+  heldOver,
+  marketOver,
+  overall,
+  paidIn,
+  paidOver,
+  pastTimes,
+  paysNext,
+  per10kOf,
+  picksOf,
+  recordOf,
   feesPerDay,
   isThin,
   movesAt,
@@ -542,4 +552,161 @@ test("a universe with unread gauges is read again soon three times in a row, the
   assert.equal(ttl(await read()), HOUR, "all read");
   answer = answers[0]!;
   assert.equal(ttl(await read()), MINUTES_5, "a new failure starts over");
+});
+
+// In USDC units a second, scaled by 1e18.
+const streaming = (perDay: number, start: number, end: number): Program => ({
+  id: 1n,
+  token: usdc,
+  rate: (BigInt(perDay) * 10n ** 24n) / BigInt(DAY),
+  start,
+  end,
+});
+const HOLD = 169_200;
+const near = (a: number, b: number, what = "") => assert.ok(Math.abs(a - b) < 1e-6, `${what} ${a} ≠ ${b}`);
+
+test("ahead, a pool pays its window's fees again, shared by its sAERO now, and only the incentives that stream over the hold", () => {
+  // $2 per 10k a day at 5M sAERO is $1,000 a day in all; now it has 10M.
+  const g = gauge({ perDay: 2, power: 10_000_000n * SAERO, programs: [streaming(1_000, NOW - DAY, NOW + DAY / 2)] });
+  const next = paysNext(g, 48, market([g]), HOLD)!;
+  const found = per10kOf(next)!;
+  near(found.fees, 1, "fees halve as the sAERO doubles");
+  // Half a day of $1,000 over a 47-hour hold.
+  near(found.incentives, ((1_000 * 0.5) / (HOLD / DAY)) * (10_000 / 10_000_000), "incentives prorated");
+  near(per10kOf(next, 10_000_000)!.fees, 0.5, "and dilute with more");
+  const young = gauge({ windows: { ...gauge().windows, 48: accrued(1n, 1) } });
+  assert.equal(paysNext(young, 48, market([young]), HOLD), undefined, "too young for the window");
+});
+
+test("the rule weighs its top pools by what they pay in all, and leaves out those that pay nothing", () => {
+  const [big, mid, small, none] = [
+    gauge({ perDay: 3 }),
+    gauge({ perDay: 2 }),
+    gauge({ perDay: 1 }),
+    gauge({ perDay: 0 }),
+  ];
+  const pools = [small, none, big, mid].map((each) => ({
+    gauge: each,
+    paying: paidOver(each, each.windows[48], PRICES)!,
+  }));
+  const picks = picksOf(pools, 2);
+  assert.deepEqual(
+    picks.map(({ gauge, weight }) => [gauge.address, weight]),
+    [
+      [big.address, 0.6],
+      [mid.address, 0.4],
+    ],
+  );
+  assert.equal(picksOf(pools, 10).length, 3);
+});
+
+test("the rule over its own window earns at least the average of its pools, and less as its sAERO dilutes them", () => {
+  // Same fees, but one pool has a fifth of the sAERO.
+  const crowded = gauge({ perDay: 1 });
+  const quiet = gauge({ perDay: 5, power: 1_000_000n * SAERO });
+  quiet.windows[48] = { ...quiet.windows[48], power: 1_000_000n * SAERO, endPower: 1_000_000n * SAERO };
+  const m = market([crowded, quiet]);
+  const lately = (each: Gauge) => paidOver(each, each.windows[48], PRICES);
+  const picks = picksOf(
+    [crowded, quiet].map((each) => ({ gauge: each, paying: lately(each)! })),
+    2,
+  );
+  const rule = heldOver(picks, lately)!;
+  const base = marketOver(m.gauges, lately);
+  near(base.total, ((2 * 500) / 6_000_000) * 10_000, "all the fees over all the sAERO");
+  near(rule.total, 0.5 * 1 + 0.5 * 5, "half in each, since each pays $500 a day");
+  assert.ok(rule.total > base.total);
+  // 1M more sAERO: 500k into each pool.
+  const diluted = heldOver(picks, lately, 1_000_000)!;
+  near(diluted.total, 0.5 * (500 / 5_500_000) * 10_000 + 0.5 * (500 / 1_500_000) * 10_000);
+  // The same 1M already there does not dilute again.
+  const mine = new Map([
+    [key(crowded.address), 500_000],
+    [key(quiet.address), 500_000],
+  ]);
+  near(heldOver(picks, lately, 1_000_000, mine)!.total, rule.total, "already in");
+  assert.deepEqual(heldOver([{ gauge: undefined, weight: 1 }], lately), undefined, "idle earns nothing");
+  const half = heldOver(
+    [
+      { gauge: undefined, weight: 0.5 },
+      { gauge: quiet, weight: 0.5 },
+    ],
+    lately,
+  )!;
+  near(half.total, 2.5, "half idle earns half");
+});
+
+test("the rule's pay comes in its pools' tokens, largest first, and a token without a price says so", () => {
+  const paid = gauge({ perDay: 1, programs: [{ ...streaming(1_000, NOW - DAY, NOW + 9 * DAY), token: other }] });
+  const g = gauge({ perDay: 3 });
+  const m = market([paid, g]);
+  const picks = picksOf(
+    m.gauges.map((each) => ({ gauge: each, paying: paysNext(each, 48, m, HOLD)! })),
+    2,
+  );
+  const flows = paidIn(picks, 0);
+  assert.equal(flows.length, 2);
+  assert.equal(flows[0]!.token?.symbol, "USDC");
+  assert.equal(flows[1]!.value, undefined, "OTHER has no price");
+});
+
+test("the rule picks at 00:00 UTC as often as an allocation's hold allows, over at least a week", () => {
+  const times = pastTimes(NOW, HOLD);
+  assert.ok(times.every((time) => time % DAY === 0) && times[0]! <= NOW && NOW - times[0]! < 2 * DAY);
+  assert.ok(
+    times.slice(1).every((time, k) => times[k]! - time === 2 * DAY),
+    "every other day for a 47-hour hold",
+  );
+  assert.ok(NOW - times.at(-2)! >= 7 * DAY, "the holds cover a week");
+});
+
+test("followed, each pick comes from the hold before it, and earns what its pools paid after", () => {
+  const [t0, t1, t2] = [TODAY - DAY, TODAY - 3 * DAY, TODAY - 5 * DAY];
+  // 10,000 sAERO earn $1 for a growth of 100 × 10^6 USDC units.
+  const grown = (perDay: number, days: number) => BigInt(Math.round(perDay * days * 1e6)) * 100n;
+  const at = (index: bigint, time: number, acc: bigint): Start => ({
+    index,
+    time,
+    acc: [acc, 0n],
+    ts: time,
+    share: undefined,
+    zero: 0,
+    supply: 5_000_000n * SAERO,
+  });
+  // A paid well, then little; B the other way round.
+  const past = (each: [number, number, number]) => {
+    const a1 = grown(each[0], 2);
+    const a0 = a1 + grown(each[1], 2);
+    return { starts: [at(3n, t0, a0), at(2n, t1, a1), at(1n, t2, 0n)], end: a0 + grown(each[2], (NOW - t0) / DAY) };
+  };
+  const [pa, pb] = [past([1, 10, 1]), past([10, 2, 10])];
+  const a = gauge({ end: { ...end(), acc: [pa.end, 0n] } });
+  const b = gauge({ end: { ...end(), acc: [pb.end, 0n] } });
+  const m = market([a, b]);
+  const record = recordOf(
+    m,
+    {
+      times: [t0, t1, t2],
+      starts: new Map([
+        [key(a.rewards), pa.starts],
+        [key(b.rewards), pb.starts],
+      ]),
+    },
+    1,
+  );
+  assert.deepEqual(
+    record.map(({ from, to }) => [from, to]),
+    [
+      [t0, NOW],
+      [t1, t0],
+    ],
+  );
+  // At t0, A paid more since t1, so the rule holds A, which then pays $1; at t1, B, which then pays $2.
+  near(record[0]!.rule!.total, 1, "A after t0");
+  near(record[0]!.market.total, (1 + 10) / 2, "both after t0");
+  near(record[1]!.rule!.total, 2, "B after t1");
+  near(record[1]!.market.total, (10 + 2) / 2);
+  const all = overall(record)!;
+  const [first, second] = [NOW - t0, t0 - t1];
+  near(all.rule, (1 * first + 2 * second) / (first + second), "weighed by time");
 });
