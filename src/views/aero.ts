@@ -70,13 +70,12 @@ const stepWords = (k: number): string =>
   k === 0 ? `Last ${STEP_DAYS} days` : `${k * STEP_DAYS}–${(k + 1) * STEP_DAYS} days ago`;
 const stepBrief = (k: number): string => `${k * STEP_DAYS}–${(k + 1) * STEP_DAYS} d`;
 
-// To the cent, and "At least" when it leaves out tokens without a price, or counts some only in part.
+// To the cent, and "At least" when it leaves out tokens without a price.
 const perDay = (value: number, priced: boolean, market: Market): string =>
   money(moneyAt(value, market.prices, !priced), true);
-// A tile's total leaves out what a few small pools pay in tokens without a price, or counts it only in part, which its
-// note says.
+// A tile's total leaves out what a few small pools pay in tokens without a price, which its note says.
 const leftOut = (note: string, left: number | undefined, what: string): string =>
-  left ? `${note} · ${count(left, "pool's", "pools'")} ${what} not all counted` : note;
+  left ? `${note} · ${count(left, "pool's", "pools'")} unpriced ${what} left out` : note;
 const sAero = (amount: bigint): string => `${compact(amount)} sAERO`;
 const hoursWords = (seconds: number): string =>
   seconds % 3_600 === 0 ? count(seconds / 3_600, "hour", "hours") : until(seconds);
@@ -565,7 +564,7 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
     current: mine.size ? true : null,
     "allocate-why": words,
     "plan-note": [
-      `Each pool's share is its part of what the top pools paid together over the last ${WINDOW[controls.hours].over}, with the incentives already scheduled for the next ${hoursWords(hold)}. Thin pools, and pools of whose pay less than 90% counts, are left out, as in the record. Per 10k a day: what 10,000 sAERO would earn a day there if those fees came again, at current prices.`,
+      `Each pool's share is its part of what the top pools paid together over the last ${WINDOW[controls.hours].over}, with the incentives already scheduled for the next ${hoursWords(hold)}. Thin pools, and pools paying a token without a price, are left out, as in the record. Per 10k a day: what 10,000 sAERO would earn a day there if those fees came again, at current prices.`,
       amount
         ? `It takes into account that adding ${stake ? `the ${sAero(aero.budgetOf(stake))} of ${stakeName(stake, stake.id)}` : wholeSAero(amount)} to a pool lowers what each sAERO in it earns.`
         : "",
@@ -753,7 +752,7 @@ export function drawPools(): void {
             ? `The pools of ${count(unknown, "gauge factory", "gauge factories")} this page does not know are left out.`
             : "",
           shownRows.some(({ paid }) => !paid.priced)
-            ? "At least: some tokens it pays have no price and count for nothing, or have no pool deep enough for all of them and count only in part."
+            ? "At least: some tokens it pays have no price, and count for nothing."
             : "",
         ]
           .filter(Boolean)
@@ -949,11 +948,10 @@ export function drawPool(): void {
     ({ id }) => String(id),
     (li, program) => {
       const perDayUnits = (program.rate * BigInt(aero.DAY)) / 10n ** 18n;
-      const found = aero.priceIn(program.token, market.prices);
-      const worth = found && (Number(perDayUnits) / 10 ** program.token!.decimals) * found.price * found.share;
+      const price = program.token && market.prices.of.get(key(program.token.address));
       fill(li, {
         words: program.token
-          ? `${figure(perDayUnits, program.token.decimals)} ${program.token.symbol} a day${worth === undefined ? "" : `, ${money(moneyAt(worth, market.prices, found!.share < 1))}`}`
+          ? `${figure(perDayUnits, program.token.decimals)} ${program.token.symbol} a day${price === undefined ? "" : `, ${money(moneyAt((Number(perDayUnits) / 10 ** program.token.decimals) * price, market.prices))}`}`
           : "A token that could not be read",
         until: `until ${utc(program.end)}`,
       });
