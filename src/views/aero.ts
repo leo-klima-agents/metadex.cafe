@@ -275,15 +275,6 @@ function drawControls(stakes: Stake[], stake: Stake | undefined): void {
   $<HTMLInputElement>("[data-action=aero-incentives]", aeroView).checked = plan.incentives;
 }
 
-const secondsOf = (steps: Paid[]): number => steps.reduce((sum, { from, to, paid }) => sum + (paid ? to - from : 0), 0);
-// "the last 6 days", or "6 of the last 8 days" when the steps with an answer are not the newest.
-function periodOf(steps: Paid[]): string {
-  const days = Math.round(secondsOf(steps) / aero.DAY);
-  const gap = steps.findIndex(({ paid }) => !paid);
-  return gap < 0 || steps.slice(gap).every(({ paid }) => !paid)
-    ? `the last ${count(days, "day", "days")}`
-    : `${days} of the last ${RECORD_DAYS} days`;
-}
 // The strategy as the controls set it, and that it is picked from only what was known then.
 function introOf({ count: top, hours, again, blueChips, incentives }: aero.Strategy): string {
   const pools = `the top ${count(top, "pool", "pools")}${blueChips ? " of blue chips" : ""} by exchange revenue${incentives ? "" : " without incentives"} over the ${WINDOW[hours].over} before`;
@@ -337,13 +328,6 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       : "No pool has enough history yet.",
   });
   if (!overall) return;
-  const first = record.value?.moves.at(-1)?.at;
-  const since = strategy.at(-1)!.from;
-  // Over fewer days than the record's.
-  const shorter = (steps: Paid[]) => (steps.every(({ paid }) => paid) ? "" : ` over ${periodOf(steps)}`);
-  const earned = money(
-    moneyAt((overall.total * amount * secondsOf(strategy)) / aero.PER / aero.DAY, market.prices, !overall.priced),
-  );
   const figure = (steps: Paid[]) => {
     const found = aero.aprOver(steps);
     return found ? `${aprWords(found.apr, found.priced)} APR` : "–";
@@ -351,16 +335,13 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   fill(aeroView, {
     "average-apr": figure(average),
     "pilot-apr": shown(pilot, figure),
-    "pilot-note": shown(pilot, () =>
-      first !== undefined && first > since
-        ? `${pilotName}'s actual allocations, since it first allocated on Base ${until(market.time - first)} ago`
-        : `${pilotName}'s actual allocations`,
-    ),
+    // The tile already says Autopilot.
+    "pilot-note": `${pilotName.replace(/^Autopilot /, "")}'s actual allocations`,
     "strategy-apr": figure(strategy),
     "strategy-note":
       amount > 0
-        ? `${earned}${shorter(strategy)} for ${stake ? stakeName(stake, stake.id) : wholePower(amount)}`
-        : shorter(strategy).trim() || null,
+        ? `${money(moneyAt((overall.total * amount) / aero.PER, market.prices, !overall.priced), true)} a day for ${stake ? stakeName(stake, stake.id) : wholePower(amount)}`
+        : null,
     "custom-tile": custom ? true : null,
     "custom-apr": custom ? figure(custom) : null,
   });

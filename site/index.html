@@ -775,7 +775,6 @@
               <div class="Facts-tile">
                 <dt class="u-label Facts-tileLabel">Base average</dt>
                 <dd class="Facts-value Facts-figure" data-text="average-apr"></dd>
-                <dd class="Facts-tileNote u-small u-quiet">the average allocator on Base</dd>
               </div>
               <div class="Facts-tile">
                 <dt class="u-label Facts-tileLabel">Autopilot</dt>
@@ -794,8 +793,8 @@
               </div>
             </dl>
             <p class="Notice" data-text="edited">
-              Edited: shown on the chart as your custom allocation, in hindsight. Its shares were set today, knowing how
-              the pools did, and are held as they are throughout.
+              The dashed line is your custom allocation: the shares you edited, held through all 8 days. It's hindsight,
+              as you chose them knowing how the pools did.
             </p>
             <figure class="Chart u-stackTight">
               <ul class="Chart-legend u-small" data-list="legend"></ul>
@@ -883,14 +882,6 @@
                 <button
                   type="button"
                   class="Button--secondary Button--compact"
-                  data-action="aero-scale"
-                  data-text="scale"
-                >
-                  Make the shares add up to 100%
-                </button>
-                <button
-                  type="button"
-                  class="Button--secondary Button--compact"
                   data-action="aero-current"
                   data-text="current"
                   data-if="wallet"
@@ -904,6 +895,14 @@
                   data-text="edited"
                 >
                   Back to your strategy
+                </button>
+                <button
+                  type="button"
+                  class="Button--secondary Button--compact"
+                  data-action="aero-scale"
+                  data-text="scale"
+                >
+                  Make the shares add up to 100%
                 </button>
               </div>
               <div class="u-row" data-if="wallet">
