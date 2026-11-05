@@ -394,7 +394,6 @@ actions.add = async (el) => {
   render();
 };
 
-// A route that fails even without a minimum is left out.
 actions["review-swap"] = async (el) => {
   const connection = state.connection;
   const found = scan().value;
@@ -406,7 +405,7 @@ actions["review-swap"] = async (el) => {
   const items: Item[] = found.rows.filter(isTicked).flatMap((row) =>
     (routed?.parts.get(key(row.token.address)) ?? [{ route: row.route.route, out: row.route.out }]).map(
       ({ route, out }) => {
-        // A part without its own quote takes its share of the token's.
+        // A part Base would skip has no quote of its own, so it takes its share of the token's.
         const quote = out ?? (row.route.out * route.amount) / row.amount;
         return {
           token: row.token,
@@ -442,6 +441,7 @@ export async function reviewSwap(
     return simulated.refused < simulated.steps.approvals.length
       ? `Base refused “${simulated.steps.slips[simulated.refused]!.says}” Nothing was sent.`
       : "Base refused the swap: the quotes may have moved. Nothing was sent.";
+  // A route that fails even without a minimum is left out; if Base cannot say, all stay.
   const lines = swap.withMinimums(plan, simulated?.results);
   const going = { ...plan, items: lines.flatMap(({ item, reason }) => (reason ? [] : [item])) };
   if (!going.items.length) return "Base would skip every token: none can be swapped now. Nothing was sent.";

@@ -52,8 +52,8 @@ const ownKeys = ({ token, found }: Sale): string[] =>
   found.route.hops.map((hop, h) => poolKey({ ...hop, tokenIn: h ? found.route.hops[h - 1]!.tokenOut : token }));
 
 // What a pool pays: linear between the amounts it was quoted at, then at half the last segment's rate up to `cap`, the
-// smallest amount it refused. Aero's basic pools pay 1% less, since their MEV tax is not in the quote. Plain numbers
-// are precise enough, as the model only compares routes.
+// smallest amount it refused above those it paid for. Aero's basic pools pay 1% less, since their MEV tax is not in the
+// quote. Plain numbers are precise enough, as the model only compares routes.
 export type Curve = { xs: number[]; ys: number[]; cap: number };
 
 export function curveOf(read: [bigint, bigint | undefined][], haircut = false): Curve {

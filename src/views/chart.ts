@@ -26,7 +26,7 @@ const el = <K extends keyof SVGElementTagNameMap>(name: K, attributes: Record<st
   for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
   return node;
 };
-// Ticks at 1, 2 or 5 times a power of ten, about four of them up to the highest value.
+// Ticks from zero, a step of 1, 2 or 5 times a power of ten apart, up to the first at or above the highest value.
 function ticksOf(most: number): number[] {
   if (!(most > 0)) return [0, 1];
   const rough = most / 4;

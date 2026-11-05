@@ -164,7 +164,7 @@ function spacings(rd: Read): Promise<Map<number, number[]>> {
   ));
 }
 
-// Each Slipstream factory's pool implementation, by exchange id, read once.
+// Each Slipstream factory's pool implementation, by exchange id, read once, and again after a failure.
 let implementationsRead: Promise<Map<number, Address>> | undefined;
 function implementations(rd: Read): Promise<Map<number, Address>> {
   const slipstreams = BY_ID.filter(({ kind }) => kind === "slipstream");

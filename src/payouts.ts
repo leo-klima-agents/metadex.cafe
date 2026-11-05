@@ -73,7 +73,7 @@ const less = (amounts: Amount[], taken: Amount[]): Amount[] =>
       amount: amount - (taken.find((each) => same(each.token, token))?.amount ?? 0n),
     }))
     .filter(({ amount }) => amount > 0n);
-// A token without a price counts for nothing.
+// A token without a price or decimals counts for nothing.
 type Decimals = Map<string, { decimals: number }>;
 export function valueAt(amounts: Amount[], decimals: Decimals, prices: Pick<Prices, "of">): number {
   return sum(
@@ -104,8 +104,9 @@ const quotesFor = (rewards: Reward[]) => quotesOf(tokensIn(rewards), tagged("pay
 const weights = (pairs: Weighed[]): number[] =>
   pairs.some(({ value }) => value > 0) ? pairs.map(({ value }) => value) : pairs.map(() => 1);
 
-// Whether claims since the epoch ended at `end` took more than half of what its rewards were worth. Half tells a payout
-// from a claim of a few small rewards, and still counts a payout that leaves some tokens out.
+// Whether claims since the epoch ended at `end` took more than half of what its rewards were worth, or more than half
+// its pairs if none has a known worth; an epoch without rewards counts as paid. Half tells a payout from a claim of a
+// few small rewards, and still counts a payout that leaves some tokens out.
 export function paidFor(pairs: Weighed[], stamps: number[], end: number): boolean {
   if (!pairs.length) return true;
   const weight = weights(pairs);
@@ -175,8 +176,8 @@ export async function readStamps(ids: bigint[], pairs: Pair[], block: number): P
   );
 }
 // `earned()` reads at most 50 epochs from the account's last claim from the contract or, if it never claimed there,
-// from the later of the week before the contract's first incentives and the account's creation, as the contract does.
-// Each claim moves this window on by up to 50 epochs.
+// from the account's creation if that came after the contract's first incentives, or else from the week before them, as
+// the contract does. Each claim moves this window on by up to 50 epochs.
 const WINDOW = 50 * WEEK;
 export const windowStart = (stamp: number, first: number, created: number): number =>
   stamp >= first ? stamp : created > first ? created : first - WEEK;
@@ -484,14 +485,15 @@ async function claimsAt(block: number, ids: bigint[]): Promise<ClaimLog[]> {
 }
 
 // An account in one of the page's automations, as `automation`, which it may be joining or leaving. `voter` is the
-// automation it voted with last epoch, whose pools hold its rewards and set its `standing`. Its last payout's receipt
-// is `payout` or `walk`; `note` says why there is none.
+// automation it voted with last epoch, or else `automation`, whose pools hold its rewards and set its `standing`. Its
+// last payout's receipt is `payout` or `walk`; `note`, if set, says why there is none.
 type Entry = {
   automation: Automation;
   voter: Automation;
   account: Account;
   standing?: Standing | undefined;
-  // Undefined when the voter's figures could not be read, or are not final yet, which `early` marks.
+  // Undefined when the voter's figures or the automation's payouts could not be read, or the figures are not final yet,
+  // which `early` marks.
   earnings?: Earnings | undefined;
   early: boolean;
   // It voted with the automation last epoch and the automation still holds its claims, so a payout is due.

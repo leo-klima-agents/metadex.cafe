@@ -156,8 +156,8 @@ const BUSY = /request limit|rate limit|too many requests/i;
 type Options<T> = { tag?: Tag | undefined; want?: (result: T) => boolean };
 
 // Asks the RPCs in turn until one gives an answer that passes `want` (by default, any answer but null). If none does,
-// returns the last non-null answer. RPCs that were busy or out of reach are asked again a little later, up to three
-// more times.
+// returns the last non-null answer, or throws if there is none. RPCs that were busy or out of reach are asked again a
+// little later, up to three more times.
 export function rpc<T>(
   method: string,
   params: unknown[],
@@ -270,8 +270,7 @@ export function tagged(tag: Tag): Read {
 //   1e  EXTCODESIZE ISZERO ISZERO DUP4 DUP3 ADD MSTORE8            1 if its code size is not 0, after the addresses
 //   25  PUSH1 1 ADD PUSH1 0x0e JUMP                                i += 1
 //   2b  JUMPDEST POP SWAP1 RETURN                                the n bytes
-// What a creation returns is its contract's code, which may not exceed 24,576 bytes nor start with 0xEF, so a call
-// asks about `CODE_BATCH` addresses at most, which cost 2,600 gas each.
+// A creation's code may not exceed 49,152 bytes, so a call asks about `CODE_BATCH` addresses at most, 2,600 gas each.
 const CODE_AT: Hex = "0x602f80380380915f39601481045f5b81811015602b57806014025160601c3b151583820153600101600e565b5090f3";
 const CODE_BATCH = 2_000;
 const FLAGS: Record<string, boolean> = { "00": false, "01": true };
@@ -309,7 +308,6 @@ export async function readEach<T, F extends Record<string, ((item: T) => Call) |
     ...Object.fromEntries(asked.map(([name], n) => [name, all[n * items.length + i]])),
   })) as never;
 }
-// Throws unless every call was read.
 export function required<const T extends readonly unknown[]>(
   values: T,
 ): { -readonly [K in keyof T]: Exclude<T[K], undefined> } {

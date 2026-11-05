@@ -129,7 +129,7 @@ export const SWAPPERS: Swapper[] = [
 export const DEFAULT_OUTPUT: Output = "usdc";
 export const swapperOf = (output: string): Swapper | undefined => SWAPPERS.find((each) => each.output === output);
 
-// The swappers' exchanges, in the order the page lists them. `id` is the value of the swapper's `Exchange` enum. For
+// The swappers' exchanges, in the order pricing prefers them. `id` is the value of the swapper's `Exchange` enum. For
 // Uniswap v4, `factory` is the PoolManager.
 export type ExchangeKind = "algebra" | "pair" | "solidly" | "slipstream" | "aerodrome" | "v2" | "v3" | "v4";
 export type Exchange = { id: number; name: string; kind: ExchangeKind; factory: Address; stable?: boolean };

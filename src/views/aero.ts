@@ -128,9 +128,9 @@ function pendingFor(stake: Stake): Got<Map<bigint, Pending>> {
   return data.pending(own?.some(({ id }) => id === stake.id) ? own : [stake]);
 }
 
+type Part = { gauge: Address; percent: number };
 // `rows` undefined follows the suggestion; `stake` undefined is the wallet's first; `amount` counts only without a
 // stake.
-type Part = { gauge: Address; percent: number };
 const plan: {
   count: number;
   again: boolean;
@@ -435,8 +435,8 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   });
 }
 
-// Oldest step on the left, in the currency shown.
 type Line = { id: string; name: string; color: string; dashed?: boolean; steps: Paid[] };
+// `steps` come newest first; the chart puts the oldest on the left, in the currency shown.
 function drawLines(market: Market, lines: Line[]): void {
   const axis = axisOf(market.prices);
   const series: Series[] = lines.map(({ steps, ...line }) => ({
@@ -1005,7 +1005,7 @@ const planBox = $<HTMLInputElement>("[data-action=aero-plan-amount]", aeroView);
 const setPlanAmount = (value: number) => void (plan.amount = value);
 planBox.addEventListener("input", () => typed(planBox, false, setPlanAmount));
 actions["aero-plan-amount"] = () => typed(planBox, true, setPlanAmount);
-// A share follows each keystroke; its box is marked invalid only when left.
+// A share follows each keystroke; its box is marked invalid only when left or on Enter.
 $("[data-list=pick]", aeroView).addEventListener("input", (event) => {
   const input = event.target as HTMLInputElement;
   const gauge = input.closest<HTMLElement>("[data-key]")?.dataset.key;

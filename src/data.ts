@@ -19,8 +19,8 @@ import {
 import { now, tagged } from "./rpc.ts";
 import { state } from "./state.ts";
 
-// What the views show from Base, each read once and cached. Keys name the wallet and the epoch, so nothing read for
-// another wallet is shown, and reads of an epoch that has ended are made again.
+// What the views show from Base, cached by key. Keys name the wallet and the epoch, so nothing read for another wallet
+// is shown, and reads of an epoch that has ended are made again.
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const week = (): number => weekStart(now());
@@ -91,7 +91,7 @@ export function payouts(holdings: Holdings): Got<Payouts> {
   );
 }
 
-// Aero's reads last five minutes, and its universe as `universeReads` says.
+// Aero's reads of the present last five minutes, and its universe as `universeReads` says.
 const MARKET = "aero market";
 const universes = aero.universeReads(() => aero.readUniverse(tagged("aero")));
 const universe = () => memo("aero universe", universes.read, universes.ttl);
@@ -129,7 +129,8 @@ export function pastFor(times: number[]): Got<aero.Past> {
     );
   });
 }
-// The first Autopilot's moves back to the oldest step and its pools' snapshots at each, read again when it moves.
+// The first Autopilot its Relay still owns: its moves back to the oldest step and its pools' snapshots at each, read
+// again when it moves.
 export type AutopilotRecord = { stake: aero.Stake; moves: aero.Move[]; past: aero.Past };
 export const autopilotRecord = (): Got<AutopilotRecord | null> =>
   andThen(market(), (found) =>
