@@ -10,7 +10,7 @@ import {
 } from "./abi.ts";
 import * as config from "./config.ts";
 import { ANCHORS, CHAIN_ID, GAUGE_FACTORIES, PAYMENTS_MODULE, PRICING, type GaugeKind } from "./config.ts";
-import { key, pricesNow, waysFor, worthOf, type Prices, type Token } from "./prices.ts";
+import { key, pricesNow, waysFor, worthOf, type Partly, type Prices, type Token } from "./prices.ts";
 import {
   blockNumber,
   blockTime,
@@ -378,7 +378,12 @@ export async function readMarket(
     maxGauges: Number(maxGauges),
     gauges,
     prices: late
-      ? { ...early, of: new Map([...early.of, ...late.of]), ...((early.unread || late.unread) && { unread: true }) }
+      ? {
+          ...early,
+          of: new Map([...early.of, ...late.of]),
+          partly: new Map([...(early.partly ?? []), ...(late.partly ?? [])]),
+          ...((early.unread || late.unread) && { unread: true }),
+        }
       : early,
     unread: [...universe.unread, ...listed.flatMap(({ address }) => (kept.has(address) ? [] : [address]))],
     unknown: universe.unknown,
@@ -557,7 +562,13 @@ export const thinOver = (accrued: Accrued): boolean => weightOf(accrued) < THIN;
 export const meanOf = (accrued: Accrued): number =>
   accrued.spread ?? Math.min(whole(accrued.power), whole(accrued.endPower));
 
-// `priced` is false if a token that paid has no price, which counts as 0.
+// A token's price, and the share of what it pays that counts: under 1 when no pool of it is deep enough for a day of
+// what the gauges pay in it, so that only what its deepest pool bears counts.
+export function priceIn(token: Token | undefined, prices: Prices): Partly | undefined {
+  const price = token && prices.of.get(key(token.address));
+  return !token ? undefined : price !== undefined ? { price, share: 1 } : prices.partly?.get(key(token.address));
+}
+// `priced` is false if a token that paid has no price, which counts as 0, or counts only in part.
 export type Yield = { value: number; priced: boolean };
 export function feesPerDay(gauge: Gauge, accrued: Accrued | undefined, prices: Prices): Yield | undefined {
   const span = accrued ? accrued.to - accrued.from : 0;
@@ -568,9 +579,9 @@ export function feesPerDay(gauge: Gauge, accrued: Accrued | undefined, prices: P
     [accrued.fees1, gauge.token1],
   ] as const) {
     if (amount === 0n) continue;
-    const price = prices.of.get(key(token.address));
-    if (price === undefined) priced = false;
-    else value += worthOf(amount, token.decimals, price) / PER_UNITS;
+    const found = priceIn(token, prices);
+    if (!found || found.share < 1) priced = false;
+    if (found) value += (worthOf(amount, token.decimals, found.price) * found.share) / PER_UNITS;
   }
   return { value: value / (span / DAY), priced };
 }
@@ -584,9 +595,9 @@ export function streamPerDay(gauge: Gauge, time: number, prices: Prices): Yield 
   let [value, priced] = [0, true];
   for (const program of gauge.programs) {
     if (!isLive(program, time) || program.rate === 0n) continue;
-    const price = program.token && prices.of.get(key(program.token.address));
-    if (price === undefined) priced = false;
-    else value += (Number(program.rate) / RATE / 10 ** program.token!.decimals) * DAY * price;
+    const found = priceIn(program.token, prices);
+    if (!found || found.share < 1) priced = false;
+    if (found) value += (Number(program.rate) / RATE / 10 ** program.token!.decimals) * DAY * found.price * found.share;
   }
   return { value, priced };
 }
@@ -836,9 +847,9 @@ export async function pendingOf(stakes: Stake[], market: Market, rd: Read = read
 export function worthPending({ amounts }: Pending, prices: Prices): Yield {
   let [value, priced] = [0, true];
   for (const { token, amount } of amounts.values()) {
-    const price = prices.of.get(key(token.address));
-    if (price === undefined) priced = false;
-    else value += worthOf(amount, token.decimals, price);
+    const found = priceIn(token, prices);
+    if (!found || found.share < 1) priced = false;
+    if (found) value += worthOf(amount, token.decimals, found.price) * found.share;
   }
   return { value, priced };
 }
@@ -883,13 +894,15 @@ export function paidBy(shares: Share[], market: Market, hours: Hours): Yield | u
 // followed, each pick made only from what was known then (`recordOf`).
 
 // What a pool pays all its sAERO a day, by token, shared by `power` sAERO. A value is undefined if its token has no
-// price or could not be read.
-export type Flow = { token: Token | undefined; value: number | undefined };
+// price or could not be read; it counts only what the token's pools bear, and `left` is the rest, at its price.
+export type Flow = { token: Token | undefined; value: number | undefined; left?: number };
 export type Paying = { fees: Flow[]; incentives: Flow[]; power: number };
-const valueOf = (token: Token | undefined, units: number, prices: Prices): number | undefined => {
-  const price = token && prices.of.get(key(token.address));
-  return token && price !== undefined ? (units / 10 ** token.decimals) * price : undefined;
-};
+function worthIn(token: Token | undefined, units: number, prices: Prices): Omit<Flow, "token"> {
+  const found = priceIn(token, prices);
+  if (!token || !found) return { value: undefined };
+  const worth = (units / 10 ** token.decimals) * found.price;
+  return found.share < 1 ? { value: worth * found.share, left: worth * (1 - found.share) } : { value: worth };
+}
 // All the sAERO at the accrual's mean power earned the growth × mean / 1e6, in the token's smallest units.
 function feeFlows(gauge: Gauge, accrued: Accrued, prices: Prices): Flow[] {
   const [days, mean] = [(accrued.to - accrued.from) / DAY, meanOf(accrued)];
@@ -899,7 +912,7 @@ function feeFlows(gauge: Gauge, accrued: Accrued, prices: Prices): Flow[] {
       [gauge.token1, accrued.fees1],
     ] as const
   ).flatMap(([token, growth]) =>
-    growth ? [{ token, value: valueOf(token, ((Number(growth) / 1e6) * mean) / days, prices) }] : [],
+    growth ? [{ token, ...worthIn(token, ((Number(growth) / 1e6) * mean) / days, prices) }] : [],
   );
 }
 // What the programs `counted` stream a day between `from` and `to`.
@@ -909,7 +922,7 @@ function streamFlows(gauge: Gauge, from: number, to: number, prices: Prices, cou
     const overlap = Math.min(to, program.end) - Math.max(from, program.start);
     if (overlap <= 0 || !program.rate || !counted(program)) return [];
     return [
-      { token: program.token, value: valueOf(program.token, ((Number(program.rate) / RATE) * overlap) / days, prices) },
+      { token: program.token, ...worthIn(program.token, ((Number(program.rate) / RATE) * overlap) / days, prices) },
     ];
   });
 }
@@ -945,7 +958,8 @@ export function paysNext(gauge: Gauge, hours: Hours, market: Market, hold: numbe
 
 function sumOf(flows: Flow[]): Yield {
   let [value, priced] = [0, true];
-  for (const flow of flows) [value, priced] = [value + (flow.value ?? 0), priced && flow.value !== undefined];
+  for (const flow of flows)
+    [value, priced] = [value + (flow.value ?? 0), priced && flow.value !== undefined && !flow.left];
   return { value, priced };
 }
 export const totalOf = (paying: Paying): number => sumOf(paying.fees).value + sumOf(paying.incentives).value;
@@ -1072,10 +1086,21 @@ export type Paid = Step & { paid: Per10k | undefined };
 export type Strategy = { count: number; hours: Hours; again: boolean; blueChips: boolean };
 export const isBlueChip = ({ token0, token1 }: Gauge): boolean =>
   [token0, token1].every(({ address }) => config.BLUE_CHIPS.some((chip) => same(chip, address)));
-// The strategy, the suggestion and the market weigh only pools that are not thin, which one allocation changes, and
-// that pay only tokens with a price, as what is known then shows them: the window before a pick, or the step itself.
+// Of what a pool pays, the share that counts; undefined if a token it pays has no price at all, so that its share
+// cannot be known.
+export function countedOf({ fees, incentives }: Paying): number | undefined {
+  let [counted, left] = [0, 0];
+  for (const flow of [...fees, ...incentives]) {
+    if (flow.value === undefined) return undefined;
+    [counted, left] = [counted + flow.value, left + (flow.left ?? 0)];
+  }
+  return counted + left > 0 ? counted / (counted + left) : 1;
+}
+// The strategy, the suggestion and the market weigh only pools that are not thin, which one allocation changes, and of
+// whose pay at least 90% counts, as what is known then shows them: the window before a pick, or the step itself.
+export const COUNTED = 0.9;
 export const weighable = (accrued: Accrued, paying: Paying): boolean =>
-  !thinOver(accrued) && !!per10kOf(paying)?.priced;
+  !thinOver(accrued) && (countedOf(paying) ?? 0) >= COUNTED;
 // The picks at `time`, from what each pool paid over the `hours` before it and what its programs live then would
 // stream over the next 48 hours.
 export function picksAt(market: Market, past: Past, time: number, { count, hours, blueChips }: Strategy): Pick[] {

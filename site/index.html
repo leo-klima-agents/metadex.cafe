@@ -951,8 +951,8 @@
               <dt class="u-small u-quiet">Left out</dt>
               <dd>
                 From your strategy and the market alike: thin pools, with less than 1M sAERO at either end or on
-                average, and pools paying a token without a price. Your strategy judges them by the window before each
-                pick, the market by each step itself
+                average, and pools of whose pay less than 90% counts. Your strategy judges them by the window before
+                each pick, the market by each step itself
               </dd>
             </div>
             <div class="Pair">
@@ -962,8 +962,9 @@
             <div class="Pair">
               <dt class="u-small u-quiet">Prices</dt>
               <dd>
-                Averages over the last half hour, from Chainlink and from pools deep enough for a day of these fees and
-                incentives; a token without one counts for nothing
+                Averages over the last half hour, from Chainlink and from pools. A pool must hold ten times a day of
+                these fees and incentives in a token for all of them to count, and counts a tenth of what it holds
+                otherwise; a token without any pool counts for nothing
               </dd>
             </div>
             <div class="Pair">

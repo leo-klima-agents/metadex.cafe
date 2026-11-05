@@ -30,8 +30,10 @@ import {
 
 export type Token = { address: Address; decimals: number; symbol: string };
 // Prices per whole token, keyed by lower-case address. `unread` if some pools could not be read, so some tokens may
-// lack a price.
-export type Prices = Basis & { of: Map<string, number>; unread?: true };
+// lack a price. `partly` holds the tokens whose deepest pool is too shallow for all of the amount priced: its price,
+// and the share of the amount it bears, under 1. `of` leaves them out, so a page that needs a full price sees none.
+export type Prices = Basis & { of: Map<string, number>; unread?: true; partly?: Map<string, Partly> };
+export type Partly = { price: number; share: number };
 export function key(address: Address): Address;
 export function key(address: string): string;
 export function key(address: string): string {
@@ -272,8 +274,8 @@ async function lookUp(
 }
 
 // Prices are averages over the 30 minutes up to a block, from the running sums pools keep, read at either end of the
-// window with the blocks' times. A pool prices a token only if it holds at least $250 of each side and ten times the
-// value priced.
+// window with the blocks' times. A pool prices a token only if it holds at least $250 of each side, and all of the
+// value priced only if it holds ten times as much: a tenth of it, otherwise.
 export const WINDOW = 1800;
 const FLOOR = 250;
 const DEPTH = 10;
@@ -300,7 +302,8 @@ const feedAbi = parseAbi([
 ]);
 
 type Pool = { address: Address; exchange: Exchange; stable: boolean; token: Token; anchor: Anchor };
-type Measured = { pool: Pool; price: number; depth: number };
+// `share`: of the amount priced, the most the pool bears, which may be over 1.
+type Measured = { pool: Pool; price: number; depth: number; share: number };
 // The window's last block, and the search for its first.
 type Window = { start(): Promise<number>; end: number };
 const whole = (amount: bigint, decimals: number): number => Number(amount) / 10 ** decimals;
@@ -400,10 +403,10 @@ function pricingOf({ kind, name }: Exchange): Pricing {
 }
 
 const logged = (error: unknown): undefined => void console.error(error);
-// Each pool's average price over the window, in the prices' unit, and its depth at its end. Pools without an average,
-// such as those younger than the window, and pools too thin for the amount priced are dropped; one holding less than
-// `FLOOR` of its anchor is dropped before its sums are read. Undefined if a read failed, which leaves only these pools
-// unpriced.
+// Each pool's average price over the window, in the prices' unit, its depth at its end, and the share of the amount
+// priced it bears. Pools without an average, such as those younger than the window, and pools under `FLOOR` deep are
+// dropped; one holding less than `FLOOR` of its anchor is dropped before its sums are read. Undefined if a read failed,
+// which leaves only these pools unpriced.
 async function measure(
   pools: Pool[],
   prices: Prices,
@@ -448,12 +451,13 @@ async function measure(
     if (!price || !Number.isFinite(price)) return [];
     const depth = Math.min(tokenReserve * price, anchorReserve * anchorPrice);
     const value = whole(sized.get(key(pool.token.address)) ?? 0n, pool.token.decimals) * price;
-    return depth >= Math.max(FLOOR, DEPTH * value) ? [{ pool, price, depth }] : [];
+    return depth >= FLOOR ? [{ pool, price, depth, share: value > 0 ? depth / (DEPTH * value) : Infinity }] : [];
   });
 }
 
-// Prices each token from its deepest pool against an anchor already priced; of two pools equally deep, the one whose
-// exchange comes first in `exchanges` wins.
+// Prices each token from its deepest pool against an anchor already priced that bears all of the amount priced; of two
+// pools equally deep, the one whose exchange comes first in `exchanges` wins. A token no pool bears in full is priced in
+// part by the one that bears the most, unless an earlier tier's bore more.
 async function inPools(
   tokens: Token[],
   prices: Prices,
@@ -485,8 +489,18 @@ async function inPools(
     .sort((a, b) => rank(a) - rank(b));
   const measured = await measure(candidates, prices, amounts, window, rd);
   if (!measured) prices.unread = true;
-  for (const [token, pools] of Map.groupBy(measured ?? [], ({ pool }) => key(pool.token.address)))
-    prices.of.set(token, pools.reduce((deepest, each) => (each.depth > deepest.depth ? each : deepest)).price);
+  for (const [token, pools] of Map.groupBy(measured ?? [], ({ pool }) => key(pool.token.address))) {
+    const full = pools.filter(({ share }) => share >= 1);
+    if (full.length) {
+      prices.of.set(token, full.reduce((deepest, each) => (each.depth > deepest.depth ? each : deepest)).price);
+      prices.partly?.delete(token);
+      continue;
+    }
+    const most = pools.reduce((best, each) => (each.share > best.share ? each : best));
+    const known = prices.partly?.get(token);
+    if (!known || most.share > known.share)
+      (prices.partly ??= new Map()).set(token, { price: most.price, share: most.share });
+  }
 }
 
 // The last block at or before each time asked for, shared by every pricing. Prices now start from the newest block's

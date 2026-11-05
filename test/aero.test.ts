@@ -57,6 +57,8 @@ import {
   timesFor,
   totalOf,
   accrualOf,
+  countedOf,
+  weighable,
   type Accrued,
   type Gauge,
   type Market,
@@ -821,6 +823,38 @@ test("the strategy leaves out the pools the market does, as the window before ea
     }
     nearAll(totals(strategySteps(m, m.past, top)), [1, 1, 1, 1], `${what} left out`);
     nearAll(totals(marketSteps(m, m.past)), [101 / 11, 101 / 11, 101 / 11, 101 / 11], `${what} left out of the market`);
+  }
+});
+
+test("a token no pool is deep enough for counts in part, and a pool counts if at least 90% of its pay does", () => {
+  // A token priced at $1 whose deepest pool bears only part of a day of it.
+  const half: Token = { address: "0x00000000000000000000000000000000000000cc", decimals: 6, symbol: "HALF" };
+  const at = (share: number): Prices => ({ ...MEMED, partly: new Map([[key(half.address), { price: 1, share }]]) });
+  const g = gauge({ perDay: 2, token0: half });
+  const paying = (share: number) => paidOver(g, g.windows[48], at(share))!;
+  // Fees of $2 per 10k a day count for $1.90 at 95%, and say so.
+  near(per10kOf(paying(0.95))!.total, 1.9);
+  assert.equal(per10kOf(paying(0.95))!.priced, false, "at least");
+  near(feesPerDay(g, g.windows[48], at(0.95))!.value, 1.9);
+  assert.equal(feesPerDay(g, g.windows[48], at(0.95))!.priced, false);
+  near(countedOf(paying(0.95))!, 0.95);
+  assert.equal(countedOf(paidOver(g, g.windows[48], MEMED)!), undefined, "no price at all: not known");
+  assert.ok(weighable(g.windows[48], paying(0.95)) && !weighable(g.windows[48], paying(0.5)));
+  // A third pool, paying ten times as much as A or B in all, in that token: picked, and in the market, at 95%; at 50%,
+  // left out of both.
+  for (const [share, picked] of [
+    [0.95, true],
+    [0.5, false],
+  ] as const) {
+    const { m: plain } = twoPools([], (extra) => [history([100, 100, 100, 100, 100], extra, { token0: half })]);
+    const m = { ...plain, prices: at(share) };
+    const top = { count: 1, hours: 48, again: true, blueChips: false } as const;
+    nearAll(totals(strategySteps(m, m.past, top)), picked ? [95, 95, 95, 95] : [1, 1, 1, 1], `strategy at ${share}`);
+    const base = totals(marketSteps(m, m.past));
+    assert.ok(
+      base.every((each) => (picked ? each! > 50 : Math.abs(each! - 101 / 11) < 1e-6)),
+      `market at ${share}`,
+    );
   }
 });
 

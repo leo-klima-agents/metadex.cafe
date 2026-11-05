@@ -358,8 +358,23 @@ test("Aerodrome's Slipstream pools price only what the others cannot", async () 
   forget();
   found = lookedIn([basic, aerodromeCl]);
   const thousand = new Map([[TOKEN.address, 1_000n * 10n ** 18n]]);
-  close((await pricesNow([TOKEN], thousand, found.watched)).of.get(TOKEN.address)!, 4 * USDC_USD, 1e-6);
+  const both = await pricesNow([TOKEN], thousand, found.watched);
+  close(both.of.get(TOKEN.address)!, 4 * USDC_USD, 1e-6);
+  assert.equal(both.partly?.get(TOKEN.address), undefined, "priced in full, not in part");
   assert.equal(found.last(), true);
+  // When no tier bears all of it, the pool that bears the most prices it in part: $3,000 deep bears 15% of $2,000 at 2,
+  // and $8,000 deep, 20% of $4,000 at 4; but $1,000 deep at 2, only 5%.
+  const shallow: [Fake, number, number][] = [
+    [{ exchange: AERODROME_CL, token: TOKEN, now: [2_000, 8_000] }, 4, 0.2],
+    [{ exchange: AERODROME_CL, token: TOKEN, now: [500, 1_000] }, 2, 0.15],
+  ];
+  for (const [later, price, share] of shallow) {
+    forget();
+    const partly = await pricesNow([TOKEN], thousand, market([basic, later]).reader);
+    assert.equal(partly.of.get(TOKEN.address), undefined);
+    close(partly.partly!.get(TOKEN.address)!.price, price * USDC_USD, 1e-6);
+    close(partly.partly!.get(TOKEN.address)!.share, share, 1e-6);
+  }
   // Aero's Slipstream pools are in the first tier: of the Aero pool and Aero's Slipstream pool, the deeper prices.
   forget();
   close((await priceOf([basic, { exchange: AERO_CL, token: TOKEN, now: [10_000, 30_000] }]))!, 3 * USDC_USD, 1e-6);
@@ -380,9 +395,18 @@ test("with amounts to come, pools are read meanwhile and judged deep enough once
       await new Promise((done) => setTimeout(done, 0));
     }
     settle(new Map([[TOKEN.address, count * 10n ** 18n]]));
-    const price = (await pricing).of.get(TOKEN.address);
-    if (priced) close(price!, 3 * USDC_USD, 1e-6);
-    else assert.equal(price, undefined);
+    const found = await pricing;
+    const price = found.of.get(TOKEN.address);
+    if (priced) {
+      close(price!, 3 * USDC_USD, 1e-6);
+      assert.equal(found.partly?.get(TOKEN.address), undefined);
+    } else {
+      assert.equal(price, undefined, "no full price");
+      // $15,000 deep bears a tenth of it: $1,500 of the $3,000 priced.
+      const partly = found.partly?.get(TOKEN.address);
+      close(partly!.price, 3 * USDC_USD, 1e-6);
+      close(partly!.share, 0.5, 1e-6);
+    }
   }
 });
 
