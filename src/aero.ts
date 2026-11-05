@@ -26,8 +26,22 @@ const manager = (address: Address) => contract(address, rewardsManagerAbi);
 
 const HOUR = 3_600;
 export const DAY = 86_400;
-export const WINDOWS = [24, 48, 168] as const;
+// The windows a pool's pay is read over, in hours, and the record's picks lie on one grid of 48 hours, counted back
+// from the last whole hour, so that they share their snapshots (`gridOf`).
+export const WINDOWS = [48, 96, 192] as const;
 export type Hours = (typeof WINDOWS)[number];
+// The record picks every 48 hours, as often as an allocation's hold allows, from the 48 hours before each pick, and
+// holds until the next, the newest until now.
+export const STEP = 48 * HOUR;
+export const PICKS = 4;
+// The times to read every pool's snapshot at, newest first: the windows' starts, and the record's picks with the
+// start of the oldest one's 48 hours. On the whole hour, so that a read of them serves for the hour.
+export function gridOf(time: number): { windows: number[]; record: number[]; times: number[] } {
+  const hour = time - (time % HOUR);
+  const windows = WINDOWS.map((hours) => hour - hours * HOUR);
+  const record = Array.from({ length: PICKS + 1 }, (_, k) => hour - (k + 1) * STEP);
+  return { windows, record, times: [...new Set([...windows, ...record])].sort((a, b) => b - a) };
+}
 // Rewards managers credit fees × 1e24 / power, so 10,000 sAERO earn the growth / 100, in the token's smallest units.
 export const PER = 10_000;
 const PER_UNITS = 100;
@@ -93,7 +107,8 @@ export type Gauge = {
   programs: Program[];
   programCount: number;
 };
-// `unread`: gauges left out after a failed read. `unknown`: gauge factories the page does not know.
+// `unread`: gauges left out after a failed read. `unknown`: gauge factories the page does not know. `past`: every
+// pool's snapshots at the record's times.
 export type Market = {
   time: number;
   cooldown: number;
@@ -102,6 +117,7 @@ export type Market = {
   prices: Prices;
   unread: Address[];
   unknown: Address[];
+  past: Past;
 };
 export const routable = (gauge: Gauge): boolean => gauge.activated && gauge.cap > 0n;
 const whole = (power: bigint): number => Number(power) / 1e18;
@@ -198,8 +214,13 @@ async function snapshotsOf(found: Found[], rd: Read): Promise<Start[]> {
     supply,
   }));
 }
-const startsAt = async (rewards: Address[], times: bigint[], rd: Read): Promise<Start[]> =>
+// Each rewards manager's snapshot at each time, by manager then time.
+export const startsAt = async (rewards: Address[], times: bigint[], rd: Read): Promise<Start[]> =>
   snapshotsOf(await indicesAt(rewards, times, rd), rd);
+// How the market reads snapshots, which `data.ts` keeps for the hour.
+export type StartsOf = (rewards: Address[], times: number[]) => Promise<Start[]>;
+// A snapshot that should exist but could not be read.
+export const unreadStart = ({ index, acc, ts }: Start): boolean => index !== 0n && (!acc || ts === undefined);
 
 // What changes only when Aero adds a gauge.
 export type Listed = {
@@ -310,7 +331,11 @@ export function dayOf(gauges: Gauge[], time: number): Map<string, bigint> {
 }
 
 // A gauge whose reads fail is left out and listed in `unread`.
-export async function readMarket(from: Universe | Promise<Universe>, rd: Read = read): Promise<Market> {
+export async function readMarket(
+  from: Universe | Promise<Universe>,
+  rd: Read = read,
+  startsOf: StartsOf = (rewards, times) => startsAt(rewards, times.map(BigInt), rd),
+): Promise<Market> {
   const [[time, cooldown, maxGauges], universe] = await Promise.all([
     rd([blockTime, leaf("allocationCooldown"), leaf("maxGauges")]).then(required),
     from,
@@ -326,11 +351,11 @@ export async function readMarket(from: Universe | Promise<Universe>, rd: Read = 
   sawBlock(now);
   // The pools' tokens are priced while the gauges are read: only whether a pool is deep enough for a day of what the
   // gauges pay waits for them. Programs can pay other tokens, priced once the programs are read.
-  const reading = gaugesOf(listed, now, rd);
-  const sized = reading.then((gauges) => dayOf(gauges, now));
+  const reading = gaugesOf(listed, now, rd, startsOf);
+  const sized = reading.then(({ gauges }) => dayOf(gauges, now));
   sized.catch(() => undefined);
   const pooled = tokensIn(listed);
-  const [gauges, early] = await Promise.all([reading, pricesNow(pooled, sized, rd)]);
+  const [{ gauges, past }, early] = await Promise.all([reading, pricesNow(pooled, sized, rd)]);
   const rest = tokensIn(gauges).filter(({ address }) => !pooled.some((token) => same(token.address, address)));
   const late = rest.length ? await pricesNow(rest, sized, rd) : undefined;
   const kept = new Set(gauges.map(({ address }) => address));
@@ -344,11 +369,17 @@ export async function readMarket(from: Universe | Promise<Universe>, rd: Read = 
       : early,
     unread: [...universe.unread, ...listed.flatMap(({ address }) => (kept.has(address) ? [] : [address]))],
     unknown: universe.unknown,
+    past,
   };
 }
-async function gaugesOf(listed: Listed[], now: number, rd: Read): Promise<Gauge[]> {
-  const times = WINDOWS.map((hours) => BigInt(now - hours * HOUR));
-  const [states, found] = await Promise.all([
+async function gaugesOf(
+  listed: Listed[],
+  now: number,
+  rd: Read,
+  startsOf: StartsOf,
+): Promise<{ gauges: Gauge[]; past: Past }> {
+  const grid = gridOf(now);
+  const [states, starts] = await Promise.all([
     readEach(
       listed,
       {
@@ -362,25 +393,17 @@ async function gaugesOf(listed: Listed[], now: number, rd: Read): Promise<Gauge[
       },
       rd,
     ),
-    indicesAt(
+    startsOf(
       listed.map(({ rewards }) => rewards),
-      times,
-      rd,
+      grid.times,
     ),
   ]);
-  // The windows' checkpoints, then each gauge's latest.
-  const starts = await snapshotsOf(
-    [
-      ...found,
-      ...states.map(({ item: { rewards: address }, latest, power }) => ({
-        address,
-        index: latest ?? 0n,
-        supply: power,
-      })),
-    ],
+  // Each gauge's latest checkpoint, read while the grid's snapshots are.
+  const latests = await snapshotsOf(
+    states.map(({ item: { rewards: address }, latest, power }) => ({ address, index: latest ?? 0n, supply: power })),
     rd,
   );
-  const latests = starts.slice(found.length);
+  const at = (i: number, time: number) => starts[i * grid.times.length + grid.times.indexOf(time)]!;
   const read0 = states.flatMap(({ item, cap, activated, power, accumulator, count, first, latest }, i) =>
     cap !== undefined && activated !== undefined && power !== undefined && accumulator && latest !== undefined
       ? [
@@ -392,7 +415,8 @@ async function gaugesOf(listed: Listed[], now: number, rd: Read): Promise<Gauge[
             accumulator: [accumulator[0], accumulator[1]] as const,
             count: count ?? 0n,
             first: first ? Number(first.ts) : 0,
-            starts: starts.slice(i * times.length, (i + 1) * times.length),
+            starts: grid.windows.map((time) => at(i, time)),
+            record: grid.record.map((time) => at(i, time)),
             latest: latests[i]!,
           },
         ]
@@ -451,7 +475,10 @@ async function gaugesOf(listed: Listed[], now: number, rd: Read): Promise<Gauge[
       programCount: Number(each.count),
     };
   });
-  return gauges;
+  return {
+    gauges,
+    past: { times: grid.record, starts: new Map(read0.map(({ rewards, record }) => [key(rewards), record])) },
+  };
 }
 
 export async function startsSince(gauges: Gauge[], time: number, rd: Read = read): Promise<Map<string, Start>> {
@@ -594,9 +621,9 @@ export function totalsOf(market: Market) {
   ];
   for (const gauge of market.gauges) {
     power += gauge.power;
-    const day = feesPerDay(gauge, gauge.windows[24], market.prices);
+    const day = feesPerDay(gauge, gauge.windows[48], market.prices);
     if (day) {
-      fees.value += (day.value * meanOf(gauge.windows[24])) / PER;
+      fees.value += (day.value * meanOf(gauge.windows[48])) / PER;
       if (!day.priced) fees.left++;
     }
     if (!gauge.power) continue;
@@ -988,25 +1015,6 @@ export function paidIn(picks: Pick[], amount: number, mine?: Map<string, number>
 // the time before and what its live programs would stream over the hold, then held until the next time, or now.
 export type Past = { times: number[]; starts: Map<string, Start[]> };
 export type Period = { from: number; to: number; rule: Per10k | undefined; market: Average; picked: number };
-// A pick at 00:00 UTC every few days, as often as an allocation's hold allows, newest first. The newest is still held
-// now, so one more covers at least `span` however long it has been held.
-export function pastTimes(time: number, cooldown: number, span = 7 * DAY): number[] {
-  const step = Math.ceil(cooldown / DAY) * DAY;
-  const latest = time - (time % step);
-  return Array.from({ length: Math.ceil(span / step) + 2 }, (_, k) => latest - k * step);
-}
-export async function readPast(market: Market, times: number[], rd: Read = read): Promise<Past> {
-  const rewards = market.gauges.map(({ rewards }) => rewards);
-  const found = await startsAt(
-    rewards,
-    times.map((time) => BigInt(time)),
-    rd,
-  );
-  return {
-    times,
-    starts: new Map(rewards.map((address, i) => [key(address), found.slice(i * times.length, (i + 1) * times.length)])),
-  };
-}
 // A checkpoint read as a past end. Fees credited after it count in the time after.
 const pointOf = (start: Start | undefined): Point | undefined =>
   start && start.index !== 0n && start.acc && start.ts !== undefined

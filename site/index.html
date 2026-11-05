@@ -719,7 +719,7 @@
           <div class="Facts-tile">
             <dt class="u-label Facts-tileLabel">Fees</dt>
             <dd class="Facts-value Facts-figure" data-text="fees"></dd>
-            <dd class="Facts-tileNote u-small u-quiet" data-text="fees-note">a day to allocators, last 24 h</dd>
+            <dd class="Facts-tileNote u-small u-quiet" data-text="fees-note">a day to allocators, last 48 h</dd>
           </div>
           <div class="Facts-tile">
             <dt class="u-label Facts-tileLabel">Incentives</dt>
@@ -765,9 +765,9 @@
             <label
               >by what they paid over the last
               <select class="u-smallSelect" data-action="aero-window">
-                <option value="24">24 hours</option>
                 <option value="48" selected>48 hours</option>
-                <option value="168">7 days</option>
+                <option value="96">4 days</option>
+                <option value="192">8 days</option>
               </select></label
             >
             <label data-text="stake-row"
@@ -891,9 +891,9 @@
                     <tr>
                       <th scope="col">Per 10k a day</th>
                       <th scope="col" data-text="next-head">Next, expected</th>
-                      <th scope="col">Last 24 h</th>
-                      <th scope="col">Last 48 h</th>
-                      <th scope="col">Last 7 days</th>
+                      <th scope="col" data-text="w0-head">Last 48 h</th>
+                      <th scope="col" data-text="w1-head">Last 4 days</th>
+                      <th scope="col" data-text="w2-head">Last 8 days</th>
                     </tr>
                   </thead>
                   <tbody data-list="versus"></tbody>
@@ -919,7 +919,7 @@
                     </caption>
                     <thead>
                       <tr>
-                        <th scope="col">Picked on</th>
+                        <th scope="col">Held</th>
                         <th scope="col">Suggested</th>
                         <th scope="col">Base average</th>
                         <th scope="col">Difference</th>
@@ -955,9 +955,9 @@
             <label
               >Over
               <select class="u-smallSelect" data-action="aero-window">
-                <option value="24">24 hours</option>
                 <option value="48" selected>48 hours</option>
-                <option value="168">7 days</option>
+                <option value="96">4 days</option>
+                <option value="192">8 days</option>
               </select></label
             >
             <span class="u-withBox"
@@ -1638,9 +1638,9 @@
       <tr>
         <td><a data-text="name"></a><small class="u-detail" data-text="note"></small></td>
         <td class="u-figures u-strong" data-text="next"></td>
-        <td class="u-figures" data-text="w24"></td>
-        <td class="u-figures" data-text="w48"></td>
-        <td class="u-figures" data-text="w168"></td>
+        <td class="u-figures" data-text="w0"></td>
+        <td class="u-figures" data-text="w1"></td>
+        <td class="u-figures" data-text="w2"></td>
       </tr>
     </template>
     <template id="hold">

@@ -95,7 +95,14 @@ export function payouts(holdings: Holdings): Got<Payouts> {
 const MARKET = "aero market";
 const universes = aero.universeReads(() => aero.readUniverse(tagged("aero")));
 const universe = () => memo("aero universe", universes.read, universes.ttl);
-const readAero = () => aero.readMarket(universe(), tagged("aero"));
+// The pools' snapshots on the grid's whole hours never change, so each set is read once, unless some could not be.
+const startsOf: aero.StartsOf = (rewards, times) =>
+  memo(
+    `aero starts ${times.join()} ${rewards.join()}`,
+    () => aero.startsAt(rewards, times.map(BigInt), tagged("aero")),
+    (found: aero.Start[]) => (found.some(aero.unreadStart) ? 0 : Infinity),
+  );
+const readAero = () => aero.readMarket(universe(), tagged("aero"), startsOf);
 export const market = (): Got<aero.Market> => use(MARKET, readAero, 5 * MINUTE);
 const marketRead = (): Promise<aero.Market> => memo(MARKET, readAero, 5 * MINUTE);
 export const ownStakes = (): Got<aero.Stake[]> => {
@@ -132,12 +139,6 @@ export const since = (time: number): Got<Map<string, aero.Start>> =>
   andThen(market(), () =>
     use(`aero since ${time}`, async () => aero.startsSince((await marketRead()).gauges, time, tagged("aero"))),
   );
-// Every pool's snapshots at each of the rule's picks over the last week or so. A pick's are read once.
-export const past = (): Got<aero.Past> =>
-  andThen(market(), (found) => {
-    const times = aero.pastTimes(found.time, found.cooldown);
-    return use(`aero past ${times.join()}`, async () => aero.readPast(await marketRead(), times, tagged("aero")));
-  });
 const HISTORY_DAYS = 14;
 export const history = (gauge: Address): Got<aero.Day[] | null> =>
   andThen(market(), (found) => {

@@ -21,7 +21,9 @@ import {
   overall,
   paidIn,
   paidOver,
-  pastTimes,
+  gridOf,
+  unreadStart,
+  STEP,
   paysNext,
   per10kOf,
   picksOf,
@@ -104,7 +106,7 @@ function gauge(fields: Partial<Gauge> & { perDay?: number } = {}): Gauge {
     power: 5_000_000n * SAERO,
     end: end(),
     first: NOW - 30 * DAY,
-    windows: { 24: grown(1), 48: grown(2), 168: grown(7) },
+    windows: { 48: grown(2), 96: grown(4), 192: grown(8) },
     programs: [],
     programCount: 0,
     ...rest,
@@ -118,6 +120,7 @@ const market = (gauges: Gauge[], of = PRICES): Market => ({
   prices: of,
   unread: [],
   unknown: [],
+  past: { times: [], starts: new Map() },
 });
 // Answers each call from `answer`, and records what each read asked.
 type Asked = { names: Set<string>; perBatch: number | undefined };
@@ -140,17 +143,17 @@ test("fees per 10,000 sAERO a day come from the accumulator's growth over the ti
 test("a pool whose power dipped pays exactly what it paid, and is thin and weighs little for it", () => {
   // 5M sAERO at both ends, but a harmonic mean of 50k over the day: a dip to dust.
   const dipped = gauge({ perDay: 1_000 });
-  dipped.windows[24] = { ...dipped.windows[24], spread: 50_000 };
-  assert.equal(feesPerDay(dipped, dipped.windows[24], PRICES)!.value, 1_000, "exactly what it paid");
-  assert.ok(isThin(dipped, 24) && !isThin(gauge(), 24));
-  assert.equal(weightOf(dipped.windows[24]), 50_000);
+  dipped.windows[48] = { ...dipped.windows[48], spread: 50_000 };
+  assert.equal(feesPerDay(dipped, dipped.windows[48], PRICES)!.value, 1_000, "exactly what it paid");
+  assert.ok(isThin(dipped, 48) && !isThin(gauge(), 48));
+  assert.equal(weightOf(dipped.windows[48]), 50_000);
   const steady = gauge({ perDay: 2 });
-  const mixed = averageOver(market([steady, dipped]), 24);
+  const mixed = averageOver(market([steady, dipped]), 48);
   assert.ok(mixed.fees > 2 && mixed.fees < 12, `the dip weighs a hundredth: ${mixed.fees}`);
   // Lower power, but not next to nothing, leaves it as it is.
   const lower = gauge();
-  lower.windows[24] = { ...lower.windows[24], spread: 2_500_000 };
-  assert.ok(!isThin(lower, 24) && weightOf(lower.windows[24]) === 2_500_000);
+  lower.windows[48] = { ...lower.windows[48], spread: 2_500_000 };
+  assert.ok(!isThin(lower, 48) && weightOf(lower.windows[48]) === 2_500_000);
   // From the accumulators: a day at 50k sAERO adds 86,400 × 1e42 / (50k × 1e18).
   const share = (86_400n * 10n ** 42n) / (50_000n * SAERO);
   const start: Start = { index: 3n, acc: [0n, 0n], ts: NOW - DAY, share: 0n, zero: 0, supply: 5_000_000n * SAERO };
@@ -169,8 +172,8 @@ test("a pool whose power dipped pays exactly what it paid, and is thin and weigh
 });
 
 test("a window counts only if the gauge's history covers most of it", () => {
-  const young = gauge({ windows: { ...gauge().windows, 168: accrued(3_000_000n, 3) } });
-  assert.equal(windowFees(young, 168, PRICES), undefined);
+  const young = gauge({ windows: { ...gauge().windows, 192: accrued(3_000_000n, 3) } });
+  assert.equal(windowFees(young, 192, PRICES), undefined);
   assert.deepEqual(windowFees(young, 48, PRICES), { value: 1, priced: true });
 });
 
@@ -278,8 +281,8 @@ const stake = (fields: Partial<Stake> = {}): Stake => ({
 
 test("Base's fees count each pool at its mean power, its incentives only those paid to some sAERO, and what they leave out", () => {
   const growing = gauge({ perDay: 10 });
-  growing.windows[24] = {
-    ...growing.windows[24],
+  growing.windows[48] = {
+    ...growing.windows[48],
     power: 2_000_000n * SAERO,
     endPower: 4_000_000n * SAERO,
     spread: 3e6,
@@ -294,8 +297,8 @@ test("Base's fees count each pool at its mean power, its incentives only those p
   assert.ok(Math.abs(totals.fees.value - (10 * 300 + 1 * 500)) < 1e-6, `fees ${totals.fees.value}`);
   assert.ok(Math.abs(totals.incentives.value - 1_000) < 1e-6, `incentives ${totals.incentives.value}`);
   assert.deepEqual([totals.fees.left, totals.incentives.left], [1, 1]);
-  assert.equal(meanOf(growing.windows[24]), 3e6);
-  assert.equal(meanOf({ ...growing.windows[24], spread: undefined }), 2e6, "else the least of either end");
+  assert.equal(meanOf(growing.windows[48]), 3e6);
+  assert.equal(meanOf({ ...growing.windows[48], spread: undefined }), 2e6, "else the least of either end");
 });
 
 test("a stake moves 47 hours after it last allocated, less any reduction, or now if it never did", () => {
@@ -349,7 +352,7 @@ test("a stake earns its pools' yields by its share in each, and its power on the
     ],
   );
   assert.deepEqual(
-    earnedBy(shares, (g) => g.windows[24], PRICES),
+    earnedBy(shares, (g) => g.windows[48], PRICES),
     { value: 2 + 0.25, priced: true },
   );
   assert.ok(Math.abs(paidBy(shares, m, 48)!.value - 2.25) < 1e-9);
@@ -411,7 +414,7 @@ test("pools must be deep enough for a day of what the gauges pay: the most a win
   const steady = gauge();
   // A busier last day: 4 USDC per 10k sAERO, and 1 a day over the week.
   const busy = gauge({ perDay: 1 });
-  busy.windows[24] = accrued(4_000_000n);
+  busy.windows[48] = accrued(4_000_000n);
   const program = (rate: bigint, start: number, end: number): Program => ({ id: 1n, token: aero, rate, start, end });
   // 2 AERO a second while live, and one that ended.
   steady.programs = [program(2n * 10n ** 18n * 10n ** 18n, NOW - DAY, NOW + DAY), program(10n ** 36n, 0, NOW - 1)];
@@ -449,7 +452,9 @@ test("each gauge's windows run from its own snapshots to its own latest checkpoi
       tickSpacing: 1,
     };
   });
-  // Gauge i has power (i + 1)M, its window k starts at checkpoint 10i + 2 + k, and its latest is 10i + 9, a day old.
+  // Gauge i has power (i + 1)M, its snapshot at the grid's time k is checkpoint 10i + 2 + k, and its latest is
+  // 10i + 9, a day old.
+  const grid = gridOf(NOW);
   const n = (address: string) => listed.findIndex((each) => same(each.rewards, address));
   const power = (i: number) => BigInt(i + 1) * 1_000_000n * SAERO;
   const at = (index: bigint) => Number(index % 10n);
@@ -480,14 +485,14 @@ test("each gauge's windows run from its own snapshots to its own latest checkpoi
       case "globalCheckpointIndex":
         return BigInt(10 * i + 9);
       case "getPriorSupplyIndex":
-        return BigInt(10 * i + 2 + WINDOWS.findIndex((hours) => BigInt(NOW - hours * 3_600) === args[0]));
+        return BigInt(10 * i + 2 + grid.times.indexOf(Number(args[0])));
       case "supplyAt":
         return power(i);
       case "feeRewardPerVotingPowerAt":
         return [BigInt(100 * at(args[0] as bigint) + 7 * i), 0n, 0n, 0n];
       case "globalRewardPointHistory": {
         const index = args[0] as bigint;
-        const ts = index === 1n ? NOW - 30 * DAY : at(index) === 9 ? NOW - DAY : NOW - WINDOWS[at(index) - 2]! * 3_600;
+        const ts = index === 1n ? NOW - 30 * DAY : at(index) === 9 ? NOW - DAY : grid.times[at(index) - 2]!;
         return { bias: 0n, slope: 0n, ts, permanentStakeBalance: 0n, zeroSupplySeconds: 0 };
       }
       case "supplyAccumulatorAt":
@@ -502,15 +507,24 @@ test("each gauge's windows run from its own snapshots to its own latest checkpoi
   for (const [i, gauge] of found.gauges.entries()) {
     const shared = 9n * 10n ** 30n + BigInt(i) * 10n ** 29n + (BigInt(DAY) * 10n ** 42n) / power(i);
     assert.deepEqual([gauge.end.at, gauge.end.share, gauge.end.power], [NOW, shared, power(i)], `gauge ${i}'s end`);
-    for (const [k, hours] of WINDOWS.entries()) {
+    for (const hours of WINDOWS) {
       const window = gauge.windows[hours];
+      const k = grid.times.indexOf(NOW - hours * 3_600);
       assert.deepEqual(
         [window.from, window.fees0],
         [NOW - hours * 3_600, BigInt(1_000 * (i + 1) - 100 * (k + 2) - 7 * i)],
         `gauge ${i}, ${hours} h`,
       );
     }
+    // The record's snapshots are the same reads.
+    assert.deepEqual(
+      found.past.starts.get(gauge.rewards.toLowerCase())!.map(({ index }) => index),
+      grid.record.map((time) => BigInt(10 * i + 2 + grid.times.indexOf(time))),
+    );
   }
+  assert.deepEqual(found.past.times, grid.record);
+  const snapshots = asked.filter(({ names }) => names.has("getPriorSupplyIndex")).length;
+  assert.equal(snapshots, 1, "every time's snapshots in one read");
 });
 
 test("a Slipstream gauge whose tick spacing cannot be read is unread, not named CL0", async () => {
@@ -657,14 +671,19 @@ test("the rule's pay comes in its pools' tokens, largest first, and a token with
   assert.equal(flows[1]!.value, undefined, "OTHER has no price");
 });
 
-test("the rule picks at 00:00 UTC as often as an allocation's hold allows, over at least a week", () => {
-  const times = pastTimes(NOW, HOLD);
-  assert.ok(times.every((time) => time % DAY === 0) && times[0]! <= NOW && NOW - times[0]! < 2 * DAY);
-  assert.ok(
-    times.slice(1).every((time, k) => times[k]! - time === 2 * DAY),
-    "every other day for a 47-hour hold",
+test("the windows and the record's picks lie on one grid of 48 hours, counted back from the last whole hour", () => {
+  // NOW is on the hour.
+  const { windows, record, times } = gridOf(NOW + 1_234);
+  assert.deepEqual(windows, [NOW - 48 * 3_600, NOW - 96 * 3_600, NOW - 192 * 3_600]);
+  assert.deepEqual(
+    record,
+    [1, 2, 3, 4, 5].map((k) => NOW - k * 48 * 3_600),
   );
-  assert.ok(NOW - times.at(-2)! >= 7 * DAY, "the holds cover a week");
+  assert.deepEqual(times, record, "each window starts at one of the record's times");
+  assert.ok(STEP >= HOLD, "a pick can be followed: an allocation holds 47 hours");
+  const read: Start = { index: 3n, acc: [0n, 0n], ts: NOW, share: 0n, zero: 0, supply: 0n };
+  assert.ok(!unreadStart(read) && !unreadStart({ ...read, index: 0n, acc: undefined, ts: undefined }));
+  assert.ok(unreadStart({ ...read, acc: undefined }), "a checkpoint whose snapshot failed");
 });
 
 test("followed, each pick comes from the hold before it, and earns what its pools paid after", () => {

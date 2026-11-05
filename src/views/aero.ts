@@ -56,10 +56,11 @@ const controls: { hours: Hours; amount: number; thin: boolean; all: boolean } = 
 const LIMIT = 20;
 // A shorter record says nothing.
 const SHORTEST = 6 * 3_600;
+const STEP_DAYS = aero.STEP / aero.DAY;
 const WINDOW: Record<Hours, { last: string; head: string; over: string; name: string }> = {
-  24: { last: "last 24 h", head: "Last 24 h", over: "24 hours", name: "24 hours" },
   48: { last: "last 48 h", head: "Last 48 h", over: "48 hours", name: "48 hours" },
-  168: { last: "last 7 days", head: "Last 7 days", over: "seven days", name: "7 days" },
+  96: { last: "last 4 days", head: "Last 4 days", over: "four days", name: "4 days" },
+  192: { last: "last 8 days", head: "Last 8 days", over: "eight days", name: "8 days" },
 };
 
 // To the cent, and "At least" when it leaves out tokens without a price.
@@ -142,7 +143,7 @@ export function drawAero(): void {
     allocated: shown(got, () => sAero(totals!.power)),
     "allocated-note": shown(got, () => `in ${count(market!.gauges.length, "pool", "pools")}`),
     fees: shown(got, () => money(moneyAt(totals!.fees.value, market!.prices))),
-    "fees-note": leftOut("a day to allocators, last 24 h", totals?.fees.left, "fees"),
+    "fees-note": leftOut("a day to allocators, last 48 h", totals?.fees.left, "fees"),
     incentives: shown(got, () => money(moneyAt(totals!.incentives.value, market!.prices))),
     "incentives-note": leftOut("a day, streaming now", totals?.incentives.left, "streams"),
     cooldown: shown(got, () => until(market!.cooldown)),
@@ -507,7 +508,10 @@ function drawVersus(
     const found = aero.heldOver(row.holdings, payingOf, row.amount, row.mine);
     return found ? perDay(found.total, found.priced, market) : "–";
   };
-  fill(aeroView, { "next-head": `Next ${hoursWords(market.cooldown)}, expected` });
+  fill(aeroView, {
+    "next-head": `Next ${hoursWords(market.cooldown)}, expected`,
+    ...Object.fromEntries(WINDOWS.map((hours, i) => [`w${i}-head`, WINDOW[hours].head])),
+  });
   list(
     $("[data-list=versus]", aeroView),
     rows,
@@ -517,16 +521,14 @@ function drawVersus(
         name: row.name,
         note: row.note,
         next: cell(row, next),
-        w24: cell(row, lately[24]),
-        w48: cell(row, lately[48]),
-        w168: cell(row, lately[168]),
+        ...Object.fromEntries(WINDOWS.map((hours, i) => [`w${i}`, cell(row, lately[hours])])),
       }),
   );
 }
 
 function drawRecord(market: Market, amount: number): void {
   const top = Math.min(plan.count, market.maxGauges);
-  const periods = andThen(data.past(), (past) => ({ value: aero.recordOf(market, past, top, amount) }));
+  const periods: Got<aero.Period[]> = { value: aero.recordOf(market, market.past, top, amount) };
   const found = periods.value && aero.overall(periods.value);
   const priced = !!periods.value?.every(({ rule }) => !rule || rule.priced);
   fill(aeroView, {
@@ -542,25 +544,24 @@ function drawRecord(market: Market, amount: number): void {
             .join(" · ")
         : null,
     ),
-    "record-note": shown(periods, (all) => {
-      const days = count(all[0] && all[1] ? (all[0].from - all[1].from) / aero.DAY : 0, "day", "days");
-      return [
-        `Every ${days} at 00:00 UTC, the suggestion is worked out again using only what was known at the time: each pool's fees over the previous ${days} and the incentives running then.`,
+    "record-note": shown(periods, () =>
+      [
+        `Every ${hoursWords(aero.STEP)}, counted back from the last whole hour, the suggestion is worked out again using only what was known at the time: each pool's fees over the ${hoursWords(aero.STEP)} before and the incentives running then.`,
         `Its pools are kept until the next time, since an allocation can't be changed for ${hoursWords(market.cooldown)}.`,
         "Everything is valued at current prices.",
         amount ? `Adding ${wholeSAero(amount)} to the pools is taken into account.` : "",
       ]
         .filter(Boolean)
-        .join(" ");
-    }),
+        .join(" "),
+    ),
   });
   list(
     $("[data-list=hold]", aeroView),
     periods.value ?? [],
     ({ from }) => String(from),
-    (tr, { from, rule, market: base }, k) =>
+    (tr, { rule, market: base }, k) =>
       fill(tr, {
-        when: k === 0 ? `${day(from)}, so far` : day(from),
+        when: k === 0 ? `Last ${STEP_DAYS} days` : `${k * STEP_DAYS}–${(k + 1) * STEP_DAYS} days ago`,
         rule: rule ? perDay(rule.total, rule.priced, market) : "–",
         market: perDay(base.total, true, market),
         difference: rule ? signed(rule.total / base.total) : "–",
