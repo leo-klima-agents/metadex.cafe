@@ -624,29 +624,6 @@ export function average(market: Market, accrued: (gauge: Gauge) => Accrued | und
 }
 export const averageOver = (market: Market, hours: Hours): Average => average(market, (gauge) => gauge.windows[hours]);
 
-// Streams to a gauge with no power go back to their creator. `left` counts the pools whose fees, or whose live
-// streams, pay a token without a price, which counts for nothing.
-export function totalsOf(market: Market) {
-  let power = 0n;
-  const [fees, incentives] = [
-    { value: 0, left: 0 },
-    { value: 0, left: 0 },
-  ];
-  for (const gauge of market.gauges) {
-    power += gauge.power;
-    const day = feesPerDay(gauge, gauge.windows[48], market.prices);
-    if (day) {
-      fees.value += (day.value * meanOf(gauge.windows[48])) / PER;
-      if (!day.priced) fees.left++;
-    }
-    if (!gauge.power) continue;
-    const stream = streamPerDay(gauge, market.time, market.prices);
-    incentives.value += stream.value;
-    if (!stream.priced) incentives.left++;
-  }
-  return { power, fees, incentives };
-}
-
 export type Allocation = { gauge: Address; amount: bigint };
 // `idle` is on no chain; `approved` is approved for this stake alone; `module` says whether its owner approved Aero's
 // payments module for all their stakes.
@@ -945,6 +922,11 @@ function sumOf(flows: Flow[]): Yield {
   return { value, priced };
 }
 export const totalOf = (paying: Paying): number => sumOf(paying.fees).value + sumOf(paying.incentives).value;
+// A rate per 10,000 sAERO a day as an APR, each sAERO counted as one AERO at its price; undefined without one.
+export function aprOf(per10k: number, prices: Prices): number | undefined {
+  const price = prices.of.get(key(config.AERO));
+  return price ? (per10k * 365) / (PER * price) : undefined;
+}
 // With `added` sAERO more, or fewer if negative.
 export function per10kOf(paying: Paying, added = 0): Per10k | undefined {
   const power = paying.power + added;
@@ -1137,7 +1119,8 @@ export async function movesPast(moves: Move[], market: Market, since: number, rd
   if (!times.length || !rewards.length) return { times: [], starts: new Map() };
   return pastOf(rewards, times, await startsAt(rewards, times.map(BigInt), rd));
 }
-// Each step cut where the stake moved, each part held as its allocation was then.
+// Each step cut where the stake moved, each part held as its allocation was then. A step it held no allocation for
+// half of has no answer, rather than one that a few hours stand for.
 export function movedSteps(market: Market, past: Past, moves: Move[]): Paid[] {
   return stepsOf(market).map((step) => {
     const inside = moves.map(({ at }) => at).filter((at) => at > step.from && at < step.to);
@@ -1164,9 +1147,10 @@ export function movedSteps(market: Market, past: Past, moves: Move[]): Paid[] {
     }
     return {
       ...step,
-      paid: seconds
-        ? { fees: fees / seconds, incentives: incentives / seconds, total: (fees + incentives) / seconds, priced }
-        : undefined,
+      paid:
+        seconds && seconds >= (step.to - step.from) / 2
+          ? { fees: fees / seconds, incentives: incentives / seconds, total: (fees + incentives) / seconds, priced }
+          : undefined,
     };
   });
 }

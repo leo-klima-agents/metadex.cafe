@@ -123,7 +123,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       { url: `${SITE}/#app`, refuse: (body) => refusing && body.includes(EARNED) },
     );
     const line = view(page, "app").locator("[data-list=need] > li").filter({ hasText: "#82774: payout overdue" });
-    await line.filter({ hasText: /payout overdue, at least (≈|<)\s\$[\d,.]+ in \d+ tokens?/ }).waitFor();
+    await line.filter({ hasText: /payout overdue, at least (<\s)?\$[\d,.]+ in \d+ tokens?/ }).waitFor();
     refusing = true;
     await line.getByRole("button", { name: "Claim now" }).click();
     await review(page).getByText("Base did not say what waits: try again in a moment.").waitFor();

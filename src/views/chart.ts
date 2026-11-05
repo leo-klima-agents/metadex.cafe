@@ -87,9 +87,9 @@ export function drawChart(svg: SVGSVGElement, tip: HTMLElement, plot: Plot): voi
     const last = values.findLastIndex((value) => value !== undefined);
     if (last >= 0) ends.push({ x: x(last) + 10, y: y(values[last]!) + 4, text: plot.value(values[last]!) });
   }
-  // End labels, in the series' order; one that would touch another is left to the legend and the tooltip.
+  // End labels, the series drawn on top first; one that would touch another is left to the legend and the tooltip.
   const placed: number[] = [];
-  for (const end of ends) {
+  for (const end of ends.toReversed()) {
     if (placed.some((at) => Math.abs(at - end.y) < LABEL)) continue;
     placed.push(end.y);
     const label = el("text", { class: "Chart-end", x: end.x, y: end.y });

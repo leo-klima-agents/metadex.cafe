@@ -18,7 +18,6 @@ import * as config from "../config.ts";
 import { AUTOPILOTS, BASESCAN, PAYMENTS_MODULE } from "../config.ts";
 import * as data from "../data.ts";
 import {
-  axisOf,
   compact,
   count,
   date,
@@ -43,18 +42,11 @@ import { drawChart, type Series } from "./chart.ts";
 import { openReview } from "./review.ts";
 
 const aeroView = $('[data-view="aero"]');
-const poolsView = $('[data-view="pools"]');
 const stakeView = $('[data-view="stake"]');
 const poolView = $('[data-view="pool"]');
 
-// As the visitor set them. `all` shows every pool rather than the first `LIMIT`.
-const controls: { hours: Hours; amount: number; thin: boolean; all: boolean } = {
-  hours: 48,
-  amount: 0,
-  thin: false,
-  all: false,
-};
-const LIMIT = 20;
+// As the visitor set it on the Aero page; the stake and pool pages show the same window.
+const controls: { hours: Hours } = { hours: 48 };
 // A shorter record says nothing.
 const SHORTEST = 6 * 3_600;
 const STEP_DAYS = aero.STEP / aero.DAY;
@@ -72,8 +64,11 @@ const stepBrief = (k: number): string => `${k * STEP_DAYS}–${(k + 1) * STEP_DA
 // To the cent, and "At least" when some tokens have no price.
 const perDay = (value: number, priced: boolean, market: Market): string =>
   money(moneyAt(value, market.prices, !priced), true);
-const leftOut = (note: string, left: number | undefined, what: string): string =>
-  left ? `${note} · ${count(left, "pool's", "pools'")} unpriced ${what} left out` : note;
+// What 10,000 sAERO earn a day as an APR, to a tenth of a point, and "At least" when some tokens have no price.
+function apr(per10k: number, priced: boolean, market: Market): string {
+  const found = aero.aprOf(per10k, market.prices);
+  return found === undefined ? "–" : `${priced ? "" : "At\u00a0least\u00a0"}${fraction(found, true)}`;
+}
 const sAero = (amount: bigint): string => `${compact(amount)} sAERO`;
 const hoursWords = (seconds: number): string =>
   seconds % 3_600 === 0 ? count(seconds / 3_600, "hour", "hours") : until(seconds);
@@ -130,7 +125,8 @@ function pendingFor(stake: Stake): Got<Map<bigint, Pending>> {
 
 type Part = { gauge: Address; percent: number };
 // `rows` undefined follows the suggestion; `stake` undefined is the wallet's first; `amount` counts only without a
-// stake.
+// stake. `all` shows every other pool in the table too, in `order`, kept while they show so that a row whose share is
+// typed keeps its place and its focus.
 const plan: {
   count: number;
   again: boolean;
@@ -138,7 +134,18 @@ const plan: {
   amount: number;
   stake: bigint | undefined;
   rows: Part[] | undefined;
-} = { count: 10, again: true, blueChips: false, amount: 0, stake: undefined, rows: undefined };
+  all: boolean;
+  order: string[] | undefined;
+} = {
+  count: 10,
+  again: false,
+  blueChips: false,
+  amount: 0,
+  stake: undefined,
+  rows: undefined,
+  all: false,
+  order: undefined,
+};
 // The rows as last drawn, which the actions edit.
 let drawn: Part[] = [];
 const wholeOf = (amount: bigint): number => Number(amount) / 1e18;
@@ -346,8 +353,8 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
     : wholeSAero(amount);
   const yours = (overall.total * amount) / aero.PER;
   fill(aeroView, {
-    headline: `${perDay(overall.total, overall.priced, market)} a day`,
-    "headline-note": `for 10,000 sAERO over ${period}${[
+    headline: `${apr(overall.total, overall.priced, market)} APR`,
+    "headline-note": `over ${period}${[
       versusWords(strategy, average, "the Base average"),
       pilot.value ? versusWords(strategy, pilot.value, "the Autopilot") : "",
     ]
@@ -359,29 +366,27 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
         ? `For ${what}: ${money(moneyAt(yours, market.prices, !overall.priced), true)} a day, ${money(moneyAt((yours * secondsOf(strategy)) / aero.DAY, market.prices, !overall.priced))} over ${period}.`
         : null,
     "headline-custom": ofCustom
-      ? `Your custom shares: ${perDay(ofCustom.total, ofCustom.priced, market)} a day over the last ${RECORD_DAYS} days, in hindsight.`
+      ? `Your custom shares: ${apr(ofCustom.total, ofCustom.priced, market)} APR over the last ${RECORD_DAYS} days, in hindsight.`
       : null,
   });
   drawLines(market, [
-    { id: "strategy", name: "Your strategy", color: "var(--series-1)", steps: strategy },
-    ...(custom
-      ? [{ id: "custom", name: "Your custom shares", color: "var(--series-1)", dashed: true, steps: custom }]
-      : []),
-    { id: "pilot", name: pilotName, color: "var(--series-2)", steps: pilot.value ?? [] },
     { id: "average", name: "Base average", color: "var(--series-3)", steps: average },
+    { id: "pilot", name: pilotName, color: "var(--series-2)", steps: pilot.value ?? [] },
+    { id: "strategy", name: "Your strategy", color: "var(--series-1)", steps: strategy },
+    ...(custom ? [{ id: "custom", name: "Custom", color: "var(--series-1)", dashed: true, steps: custom }] : []),
   ]);
   const pools = `the top ${count(top, "pool", "pools")}${blueChips ? " of blue chips" : ""} by rewards over the ${WINDOW[hours].over} before`;
   fill(aeroView, {
     "legend-note": custom
       ? `Custom: these shares were set today, with the last ${RECORD_DAYS} days in view, then held as they are over them. The strategy line is picked each time from only what was known then.`
       : null,
-    "chart-note": `What 10,000 sAERO earned a day in each step of ${hoursWords(aero.STEP)}. Your strategy: ${
+    "chart-note": `Each line's APR in each step of ${hoursWords(aero.STEP)}. Your strategy: ${
       again
         ? `${pools} each pick, picked again every ${hoursWords(aero.STEP)}.`
         : `${pools} ${RECORD_DAYS} days ago, picked then and kept.`
     }`,
   });
-  const cell = (paid: Per10k | undefined) => (paid ? perDay(paid.total, paid.priced, market) : "–");
+  const cell = (paid: Per10k | undefined) => (paid ? apr(paid.total, paid.priced, market) : "–");
   const ratio = (a: Per10k | undefined, b: Per10k | undefined) =>
     a && b && b.total > 0 ? signed(a.total / b.total) : "–";
   const overallRatio = (other: Paid[]) => {
@@ -425,7 +430,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       first !== undefined && first > since
         ? `${pilotName} first allocated on Base ${until(market.time - first)} ago: its total, and the comparisons with it, cover only its steps.`
         : "",
-      "Everything is valued at current prices.",
+      "Everything is valued at current prices, and each sAERO counted as one AERO.",
       amount
         ? `Adding ${what} to the pools is taken into account in your strategy and your custom shares, not in the other columns.`
         : "",
@@ -436,14 +441,13 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
 }
 
 type Line = { id: string; name: string; color: string; dashed?: boolean; steps: Paid[] };
-// `steps` come newest first; the chart puts the oldest on the left, in the currency shown.
+// `steps` come newest first; the chart puts the oldest on the left. Each line is drawn over those before it.
 function drawLines(market: Market, lines: Line[]): void {
-  const axis = axisOf(market.prices);
   const series: Series[] = lines.map(({ steps, ...line }) => ({
     ...line,
     values: Array.from({ length: aero.PICKS }, (_, i) => {
       const paid = steps[aero.PICKS - 1 - i]?.paid;
-      return paid && axis.of(paid.total);
+      return paid && aero.aprOf(paid.total, market.prices);
     }),
   }));
   const ks = Array.from({ length: aero.PICKS }, (_, i) => aero.PICKS - 1 - i);
@@ -451,17 +455,17 @@ function drawLines(market: Market, lines: Line[]): void {
     positions: ks.map(stepWords),
     brief: ks.map(stepBrief),
     series,
-    value: axis.tick,
-    tick: axis.tick,
+    value: (n) => fraction(n, true),
+    tick: (n) => fraction(n),
   });
   list(
     $("[data-list=legend]", aeroView),
     lines,
     ({ id }) => id,
-    (li, { id, name, color, dashed }) => {
+    (li, { name, color, dashed }) => {
       li.style.setProperty("--key", color);
       li.toggleAttribute("data-dashed", !!dashed);
-      fill(li, { name, tag: id === "custom" ? "Custom · hindsight" : null });
+      fill(li, { name });
     },
   );
 }
@@ -489,11 +493,30 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
   const rows = (drawn = plan.rows ?? ruleRows(picks));
   const total = totalOf(rows);
   const expected = aero.heldOver(holdingsOf(rows, market), next, amount, leaving);
+  const inRows = new Set(rows.map(({ gauge }) => key(gauge)));
+  const pays = (gauge: Gauge) => {
+    const found = next(gauge);
+    return found ? aero.totalOf(found) : -1;
+  };
+  const others = market.gauges
+    .filter((gauge) => routable(gauge) && !inRows.has(key(gauge.address)))
+    .sort((a, b) => pays(b) - pays(a));
+  let shownRows = rows;
+  if (plan.all) {
+    const extra = others.map(({ address }): Part => ({ gauge: address, percent: 0 }));
+    const order = (plan.order ??= [...rows, ...extra].map(({ gauge }) => key(gauge)));
+    const place = (row: Part) => {
+      const at = order.indexOf(key(row.gauge));
+      return at < 0 ? Infinity : at;
+    };
+    shownRows = [...rows, ...extra].sort((a, b) => place(a) - place(b));
+  }
   list(
     $("[data-list=pick]", aeroView),
-    rows,
+    shownRows,
     ({ gauge }) => gauge,
     (tr, row) => {
+      const extra = !inRows.has(key(row.gauge));
       const gauge = aero.gaugeAt(market, row.gauge);
       const found = gauge && next(gauge);
       const weight = row.percent / 100;
@@ -506,42 +529,15 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
       $("button", tr).setAttribute("aria-label", `Remove ${name}`);
       fill(tr, {
         pool: gauge ? { href: hrefOf({ view: "pool", gauge: gauge.address }), text: name } : name,
-        note: row.percent > 0 ? flagsOf(gauge, market, hold) : "Not included at 0%",
-        amount: amount ? compact(BigInt(Math.round(amount * weight)) * 10n ** 18n) : "–",
+        note: row.percent > 0 || extra ? flagsOf(gauge, market, hold) : "Not included at 0%",
+        share: fraction(weight, true),
+        amount: amount && weight ? compact(BigInt(Math.round(amount * weight)) * 10n ** 18n) : "–",
         pays: found ? money(moneyAt(aero.totalOf(found), market.prices, !all?.priced)) : "–",
-        per: here ? perDay(here.total, here.priced, market) : "Not enough history",
+        per: here ? apr(here.total, here.priced, market) : "Not enough history",
+        drop: extra ? null : true,
       });
     },
   );
-  const inRows = new Set(rows.map(({ gauge }) => key(gauge)));
-  const full = rows.length >= market.maxGauges;
-  const addable = full
-    ? []
-    : market.gauges
-        .filter((gauge) => routable(gauge) && !inRows.has(key(gauge.address)))
-        .map((gauge) => {
-          const found = next(gauge);
-          return { gauge, pays: found ? aero.totalOf(found) : -1 };
-        })
-        .sort((a, b) => b.pays - a.pays);
-  list(
-    $("[data-list=add-option]", aeroView),
-    [undefined, ...addable],
-    (each) => each?.gauge.address ?? "none",
-    (option, each) => {
-      fill(option, {
-        name: each
-          ? `${each.gauge.name}${each.pays >= 0 ? ` · ${money(moneyAt(each.pays, market.prices))} a day` : ""}`
-          : full
-            ? `At most ${market.maxGauges} pools`
-            : "Add a pool…",
-      });
-      (option as HTMLOptionElement).value = each?.gauge.address ?? "";
-    },
-  );
-  const adder = $<HTMLSelectElement>("[data-action=aero-add]", aeroView);
-  adder.value = "";
-  adder.disabled = full;
   const [can, words] = allocateWords(stake, stakes, rows, market);
   enable($<HTMLButtonElement>("[data-action=aero-allocate]", aeroView), can);
   const moved = leaving
@@ -551,13 +547,14 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
   fill(aeroView, {
     "share-total": fraction(total / 100, true),
     "total-amount": amount ? compact(BigInt(Math.round((amount * total) / 100)) * 10n ** 18n) : "–",
-    "total-per": expected ? perDay(expected.total, expected.priced, market) : "–",
+    "total-per": expected ? apr(expected.total, expected.priced, market) : "–",
+    all: plan.all ? "Show fewer pools" : `Show all ${count(rows.length + others.length, "pool", "pools")}`,
     scale: (!whole(total) && total > 0) || null,
     edited: plan.rows ? true : null,
     current: mine.size ? true : null,
     "allocate-why": words,
     "plan-note": [
-      `Each pool's share is its part of what the top pools paid together over the last ${WINDOW[controls.hours].over}, with the incentives already scheduled for the next ${hoursWords(hold)}. Thin pools, and pools paying a token without a price, are left out, as in the record. Per 10k a day: what 10,000 sAERO would earn a day there if those fees came again, at current prices.`,
+      `Each pool's share is its part of what the top pools paid together over the last ${WINDOW[controls.hours].over}, with the incentives already scheduled for the next ${hoursWords(hold)}. Thin pools, and pools paying a token without a price, are left out, as in the record. APR: what it would earn there in a year if those fees came again, at current prices, each sAERO counted as one AERO.`,
       amount
         ? `It takes into account that adding ${stake ? `the ${sAero(aero.budgetOf(stake))} of ${stakeName(stake, stake.id)}` : wholeSAero(amount)} to a pool lowers what each sAERO in it earns.`
         : "",
@@ -693,81 +690,6 @@ async function allocateNow(): Promise<void> {
   });
 }
 
-type Row = { gauge: Gauge; paid: Per10k };
-export function drawPools(): void {
-  const got = data.market();
-  const market = got.value;
-  const totals = market && aero.totalsOf(market);
-  const average = market && aero.averageOver(market, controls.hours);
-  fill(poolsView, {
-    "hold-time": market ? hoursWords(market.cooldown) : true,
-    average: shown(got, () => money(moneyAt(average!.total, market!.prices), true)),
-    "average-note": `/ 10k sAERO a day, ${WINDOW[controls.hours].last}`,
-    allocated: shown(got, () => sAero(totals!.power)),
-    "allocated-note": shown(got, () => `in ${count(market!.gauges.length, "pool", "pools")}`),
-    fees: shown(got, () => money(moneyAt(totals!.fees.value, market!.prices))),
-    "fees-note": leftOut("a day to allocators, last 48 h", totals?.fees.left, "fees"),
-    incentives: shown(got, () => money(moneyAt(totals!.incentives.value, market!.prices))),
-    "incentives-note": leftOut("a day, streaming now", totals?.incentives.left, "streams"),
-  });
-  const all = market ? market.gauges.filter(routable) : [];
-  const rows: Row[] = market
-    ? all
-        .filter((gauge) => controls.thin || !isThin(gauge, controls.hours))
-        .flatMap((gauge) => {
-          const paid = aero.per10k(gauge, controls.hours, market.time, market.prices, controls.amount);
-          return paid ? [{ gauge, paid }] : [];
-        })
-        .sort((a, b) => b.paid.total - a.paid.total)
-    : [];
-  const thin = all.filter((gauge) => isThin(gauge, controls.hours)).length;
-  const shownRows = controls.all ? rows : rows.slice(0, LIMIT);
-  const closed = market ? market.gauges.length - all.length : 0;
-  const unread = market?.unread.length ?? 0;
-  const unknown = market?.unknown.length ?? 0;
-  fill(poolsView, {
-    pools: stateOf(got, !rows.length),
-    "pools-count": market ? String(rows.length) : "",
-    "more-row": rows.length > LIMIT || null,
-    more: controls.all ? "Show fewer" : `Show all ${rows.length}`,
-    "pools-note": market
-      ? [
-          `Fees each pool paid its sAERO over the ${WINDOW[controls.hours].over}, and the incentives it streams now, at the last half hour's prices.`,
-          controls.amount ? `Your ${wholeSAero(controls.amount)} would share them.` : "",
-          !controls.thin && thin
-            ? `${count(thin, "thin pool", "thin pools")}, with less than 1M sAERO at either end or on average, not shown.`
-            : "",
-          closed ? `${count(closed, "pool takes", "pools take")} no allocation: a cap of zero, or not activated.` : "",
-          unread ? `${count(unread, "pool", "pools")} could not be read.` : "",
-          unknown
-            ? `The pools of ${count(unknown, "gauge factory", "gauge factories")} this page does not know are left out.`
-            : "",
-          shownRows.some(({ paid }) => !paid.priced)
-            ? "At least: some tokens it pays have no price, and count for nothing."
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" ")
-      : null,
-  });
-  list(
-    $("[data-list=gauge]", poolsView),
-    shownRows,
-    ({ gauge }) => gauge.address,
-    (tr, { gauge, paid }) =>
-      fill(tr, {
-        pool: { href: hrefOf({ view: "pool", gauge: gauge.address }), text: gauge.name },
-        note: isThin(gauge, controls.hours) ? "Thin" : null,
-        power: compact(gauge.power),
-        fees: perDay(paid.fees, paid.priced, market!),
-        incentives: paid.incentives ? perDay(paid.incentives, paid.priced, market!) : "–",
-        total: perDay(paid.total, paid.priced, market!),
-      }),
-  );
-  $<HTMLSelectElement>("[data-action=aero-window]", poolsView).value = String(controls.hours);
-  $<HTMLInputElement>("[data-action=aero-thin]", poolsView).checked = controls.thin;
-}
-
 export function drawStake(): void {
   if (state.route.view !== "stake") return;
   const id = state.route.id;
@@ -820,7 +742,7 @@ export function drawStake(): void {
     record: poolsIn(stake) ? true : null,
     since: soon
       ? `Allocated ${until(held!)} ago`
-      : shown(record, ({ earned }) => perDay(earned.value, earned.priced, market!)),
+      : shown(record, ({ earned }) => `${apr(earned.value, earned.priced, market!)} APR`),
     "since-note": soon
       ? "Too soon for a record"
       : shown(record, ({ earned, average }) =>
@@ -828,7 +750,7 @@ export function drawStake(): void {
             .filter(Boolean)
             .join(" · "),
         ),
-    paid: !market ? undefined : paid ? perDay(paid.value, paid.priced, market) : "Not enough history",
+    paid: !market ? undefined : paid ? `${apr(paid.value, paid.priced, market)} APR` : "Not enough history",
     "paid-note": !market
       ? undefined
       : paid
@@ -856,8 +778,8 @@ export function drawStake(): void {
             : { address, text: short(address) },
         share: fraction(share),
         power: compact(amount),
-        since: earned ? perDay(earned.value, earned.priced, market!) : "–",
-        window: window ? perDay(window.total, window.priced, market!) : "–",
+        since: earned ? apr(earned.value, earned.priced, market!) : "–",
+        window: window ? apr(window.total, window.priced, market!) : "–",
       });
     },
   );
@@ -895,8 +817,8 @@ export function drawPool(): void {
       : status("stopped", "Pays nothing", gauge.activated ? ": its emissions cap is zero" : ": not activated"),
     power: sAero(gauge.power),
     thin: isThin(gauge, controls.hours) ? "Thin: one allocation changes what it pays" : null,
-    paid: paid ? perDay(paid.total, paid.priced, market) : "Not enough history",
-    "paid-note": `/ 10k sAERO a day, ${WINDOW[controls.hours].last}`,
+    paid: paid ? `${apr(paid.total, paid.priced, market)} APR` : "Not enough history",
+    "paid-note": WINDOW[controls.hours].last,
     stream: live.length ? perDay(stream.value, stream.priced, market) : "None",
     programs: live.length ? `a day, from ${count(live.length, "live program", "live programs")}` : "no live program",
     cap: aeroPrice === undefined ? aeroAmount(capPerDay * 7) : money(moneyAt(capPerDay * 7 * aeroPrice, market.prices)),
@@ -910,9 +832,9 @@ export function drawPool(): void {
       const found = aero.per10k(gauge, hours, market.time, market.prices);
       fill(tr, {
         window: WINDOW[hours].name,
-        fees: found ? perDay(found.fees, found.priced, market) : "–",
-        incentives: found?.incentives ? perDay(found.incentives, found.priced, market) : "–",
-        total: found ? perDay(found.total, found.priced, market) : "Not enough history",
+        fees: found ? apr(found.fees, found.priced, market) : "–",
+        incentives: found?.incentives ? apr(found.incentives, found.priced, market) : "–",
+        total: found ? apr(found.total, found.priced, market) : "Not enough history",
       });
     },
   );
@@ -929,7 +851,7 @@ export function drawPool(): void {
         day: daysWords(row, today),
         note: aero.thinOver(row) ? "Thin" : null,
         power: compact(row.power),
-        fees: found ? perDay(found.value, found.priced, market) : "–",
+        fees: found ? apr(found.value, found.priced, market) : "–",
       });
     },
   );
@@ -960,11 +882,11 @@ export function drawPool(): void {
   );
 }
 
-// On the Aero page the window also sets the strategy, so the suggestion comes back.
+// The window sets the strategy, so the suggestion comes back.
 actions["aero-window"] = (el) => {
   const hours = Number((el as HTMLSelectElement).value);
   controls.hours = WINDOWS.find((each) => each === hours) ?? 48;
-  if (aeroView.contains(el)) plan.rows = undefined;
+  plan.rows = undefined;
   render();
 };
 // The table follows each keystroke; the box is marked invalid only when left or on Enter.
@@ -978,10 +900,6 @@ function typed(input: HTMLInputElement, done: boolean, set: (value: number) => v
   set(value);
   render();
 }
-const amountBox = $<HTMLInputElement>("[data-action=aero-amount]", poolsView);
-const setAmount = (value: number) => void (controls.amount = value);
-amountBox.addEventListener("input", () => typed(amountBox, false, setAmount));
-actions["aero-amount"] = () => typed(amountBox, true, setAmount);
 actions["aero-count"] = (el) => {
   plan.count = Number((el as HTMLSelectElement).value) || 10;
   plan.rows = undefined;
@@ -1012,18 +930,21 @@ $("[data-list=pick]", aeroView).addEventListener("input", (event) => {
   const value = aero.amountOf(input.value);
   if (input.dataset.action !== "aero-share" || !gauge || value === undefined) return;
   input.setAttribute("aria-invalid", "false");
-  edit((rows) => rows.map((row) => (row.gauge === gauge ? { ...row, percent: value } : row)));
+  edit((rows) =>
+    rows.some((row) => row.gauge === gauge)
+      ? rows.map((row) => (row.gauge === gauge ? { ...row, percent: value } : row))
+      : [...rows, { gauge: gauge as Address, percent: value }],
+  );
 });
 actions["aero-share"] = (el) => {
   const input = el as HTMLInputElement;
   input.setAttribute("aria-invalid", aero.amountOf(input.value) === undefined ? "true" : "false");
   render();
 };
-actions["aero-add"] = (el) => {
-  const select = el as HTMLSelectElement;
-  const gauge = select.value as Address;
-  select.value = "";
-  if (gauge) edit((rows) => [...rows, { gauge, percent: Math.max(0, 100 - totalOf(rows)) }]);
+actions["aero-all"] = () => {
+  plan.all = !plan.all;
+  plan.order = undefined;
+  render();
 };
 actions["aero-drop"] = (el) => {
   const gauge = el.closest<HTMLElement>("[data-key]")?.dataset.key;
@@ -1055,14 +976,6 @@ actions["aero-allocate"] = (el) => {
       busy(button, false);
       render();
     });
-};
-actions["aero-thin"] = (el) => {
-  controls.thin = (el as HTMLInputElement).checked;
-  render();
-};
-actions["aero-more"] = () => {
-  controls.all = !controls.all;
-  render();
 };
 export function aeroLine(): Value {
   return shown(data.ownStakes(), (stakes) =>

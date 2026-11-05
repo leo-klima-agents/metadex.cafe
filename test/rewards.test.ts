@@ -6,6 +6,7 @@ import {
   erc20Abi,
   multicall3Abi,
   parseAbi,
+  zeroAddress,
   type Abi,
   type Address,
   type Hex,
@@ -15,16 +16,7 @@ import { ANCHORS, FIAT_FEEDS, WETH } from "../src/config.ts";
 import { WEEK } from "../src/format.ts";
 import { key, type Token } from "../src/prices.ts";
 import { read, type Read } from "../src/rpc.ts";
-import {
-  allEarnings,
-  earnedBy,
-  perThousandOf,
-  shareOf,
-  valueOf,
-  versus,
-  votesEarned,
-  type Earnings,
-} from "../src/rewards.ts";
+import { allEarnings, earnedBy, aprOf, shareOf, valueOf, versus, votesEarned, type Earnings } from "../src/rewards.ts";
 
 const USDC: Token = { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, symbol: "USDC" };
 const HYDX: Token = { address: "0x00000e7efa313F4E11Bfff432471eD9423AC6B30", decimals: 18, symbol: "HYDX" };
@@ -65,7 +57,7 @@ test("earnings' value: fees and incentives apart, by pool, a token without a pri
   assert.deepEqual([...byPool.keys(), unit], [key(POOL), key(OTHER), "USD"]);
 });
 
-test("what some votes earned at the rate of others', and per 1,000 votes, at their prices or another's", () => {
+test("what some votes earned at the rate of others', and their APR, at their prices or another's", () => {
   const PLAIN: Token = { address: "0x00000000000000000000000000000000000000aa", decimals: 18, symbol: "PLAIN" };
   // An automation's 5 PLAIN were priced at $4, but all of Hydrex's 80 PLAIN were too many for PLAIN's pools.
   const mine = {
@@ -82,10 +74,18 @@ test("what some votes earned at the rate of others', and per 1,000 votes, at the
     prices: { unit: "USD" as const, of: PRICES },
   };
   assert.equal(round(shareOf(mine, 10n ** 21n).value), 267.5, "a quarter of $1,070");
-  assert.equal(round(perThousandOf(mine).value), 267.5);
-  assert.equal(round(perThousandOf(mine, valueOf(mine, all.prices)).value), 262.5, "without PLAIN");
+  // A week's $0.2675 a vote, or $0.2625 without PLAIN, for a year of weeks, over HYDX at $0.025.
+  const near = (a: number | undefined, b: number) =>
+    assert.ok(a !== undefined && Math.abs(a - b) < 1e-9, `${a} ≠ ${b}`);
+  near(aprOf(mine), ((1_070 / 4_000) * (365 / 7)) / 0.025);
+  near(aprOf(mine, all.prices), ((1_050 / 4_000) * (365 / 7)) / 0.025);
+  const unpriced = {
+    ...mine.prices,
+    of: new Map([...mine.prices.of].filter(([token]) => token !== key(HYDX.address))),
+  };
+  assert.equal(aprOf(mine, unpriced), undefined, "no price for HYDX, no APR");
+  assert.equal(aprOf({ ...mine, votes: 0n }), undefined, "no votes, no APR");
   assert.equal(shareOf({ ...mine, votes: 0n }, 10n ** 21n).value, 0, "no votes, no rate");
-  assert.equal(perThousandOf(mine).atLeast, undefined, "and no figure says 'at least'");
   assert.equal(versus(mine, all), 1, "compared at the same prices: $262.50 per 1,000 votes each");
 });
 
@@ -142,6 +142,8 @@ test("an epoch's rewards are read once for every voter, on its own pools or not,
   const more = parseAbi([
     "function latestRoundData() view returns (uint80, int256, uint256, uint256, uint80)",
     "function getBlockNumber() view returns (uint256)",
+    "function getPair(address, address, bool stable) view returns (address)",
+    "function poolByPair(address, address) view returns (address)",
   ]);
   const abi = [...voterAbi, ...escrowAbi, ...rewardsAbi, ...erc20Abi, ...multicall3Abi, ...more] as Abi;
   const asked = new Map<string, number>();
@@ -152,6 +154,10 @@ test("an epoch's rewards are read once for every voter, on its own pools or not,
     switch (functionName) {
       case "getBlockNumber":
         return BigInt(NEWEST);
+      // HYDX, which APRs need, has no pool here.
+      case "getPair":
+      case "poolByPair":
+        return zeroAddress;
       case "getCurrentBlockTimestamp":
         return BigInt(time);
       case "latestRoundData": {

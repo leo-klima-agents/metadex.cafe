@@ -114,7 +114,7 @@ const toCents = (sum: Money): number => {
 // The difference between two sums as each is shown, rounded to the cent, so that a column adds up as it reads.
 export const between = (from: Money, to: Money): Money => ({ ...to, value: toCents(to) - toCents(from) });
 
-// For example "≈ $692", "≈ −€0.69", "< £0.01", "≈ 0.77 USDC" or "At least ≈ $3.10". With `cents`, always to the cent,
+// For example "$692", "−€0.69", "< £0.01", "0.77 USDC" or "At least $3.10". With `cents`, always to the cent,
 // as in a column.
 export const money = (sum: Money, cents = false): string =>
   `${sum.atLeast ? "At\u00a0least\u00a0" : ""}${figureOf(sum, cents)}`;
@@ -126,14 +126,7 @@ function figureOf(sum: Money, cents: boolean): string {
   const [sign, magnitude] = value < 0 ? ["−", -value] : ["", value];
   if (value === 0) return of((cents ? withCents : without).format(0));
   if (magnitude < 0.005) return `${sign ? ">" : "<"} ${sign}${of(withCents.format(0.01))}`;
-  return `≈ ${sign}${of((magnitude >= 100 && !cents ? without : withCents).format(magnitude))}`;
-}
-
-// In the currency shown; ticks to the cent, without "≈".
-export function axisOf(basis: Basis): { of: (value: number) => number; tick: (shown: number) => string } {
-  const [shown, rate] = shownOf(basis);
-  const [withCents] = FORMATS[shown]!;
-  return { of: (value) => value / rate, tick: (value) => withCents.format(value) };
+  return `${sign}${of((magnitude >= 100 && !cents ? without : withCents).format(magnitude))}`;
 }
 
 const dateFormat = (options: Intl.DateTimeFormatOptions) =>

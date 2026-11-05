@@ -7,6 +7,7 @@ import {
   THIN,
   WINDOWS,
   accruedFrom,
+  aprOf,
   allocateCall,
   allotmentsOf,
   amountOf,
@@ -41,7 +42,6 @@ import {
   startsAt,
   stitched,
   streamPerDay,
-  totalsOf,
   meanOf,
   nameOf,
   weightOf,
@@ -291,26 +291,17 @@ const stake = (fields: Partial<Stake> = {}): Stake => ({
   ...fields,
 });
 
-test("Base's fees count each pool at its mean power, its incentives only those paid to some sAERO, and what they leave out", () => {
-  const growing = gauge({ perDay: 10 });
-  growing.windows[48] = {
-    ...growing.windows[48],
-    power: 2_000_000n * SAERO,
-    endPower: 4_000_000n * SAERO,
-    spread: 3e6,
-  };
-  const rate = (BigInt(1_000) * 10n ** 24n) / BigInt(DAY);
-  const program = { id: 1n, token: usdc, rate, start: NOW - DAY, end: NOW + DAY };
-  const empty = gauge({ perDay: 0, power: 0n, programs: [program] });
-  const paid = gauge({ programs: [program] });
-  // A pool paid only in a token without a price adds nothing, and is counted as left out, for its fees and its stream.
-  const unpriced = gauge({ token0: other, programs: [{ ...program, token: other }] });
-  const totals = totalsOf(market([growing, empty, paid, unpriced]));
-  assert.ok(Math.abs(totals.fees.value - (10 * 300 + 1 * 500)) < 1e-6, `fees ${totals.fees.value}`);
-  assert.ok(Math.abs(totals.incentives.value - 1_000) < 1e-6, `incentives ${totals.incentives.value}`);
-  assert.deepEqual([totals.fees.left, totals.incentives.left], [1, 1]);
-  assert.equal(meanOf(growing.windows[48]), 3e6);
-  assert.equal(meanOf({ ...growing.windows[48], spread: undefined }), 2e6, "else the least of either end");
+test("an APR is a year of what 10,000 sAERO earn a day, over what 10,000 AERO are worth", () => {
+  // $2 a day, a year of days, over 10,000 AERO at $0.60.
+  near(aprOf(2, PRICES)!, (2 * 365) / (10_000 * 0.6));
+  assert.equal(aprOf(2, prices([[usdc, 1]])), undefined, "without a price for AERO");
+});
+
+test("a pool's mean power is the harmonic mean of its sAERO, else the least of either end", () => {
+  const growing = gauge().windows[48];
+  const window = { ...growing, power: 2_000_000n * SAERO, endPower: 4_000_000n * SAERO, spread: 3e6 };
+  assert.equal(meanOf(window), 3e6);
+  assert.equal(meanOf({ ...window, spread: undefined }), 2e6, "else the least of either end");
 });
 
 test("a stake moves 47 hours after it last allocated, less any reduction, or now if it never did", () => {
@@ -902,6 +893,18 @@ test("an allocation as it actually moved is cut where it moved, and earns nothin
   nearAll(totals(movedSteps(m, mergePast(m.past, past), moves)), [10, (5 + 1) / 2, 0.5, undefined], "moved");
   const record = movedSteps(m, mergePast(m.past, past), moves);
   near(overallOf(record)!.total, (10 + 3 + 0.5) / 3, "over its steps with an answer, each weighed by its length");
+  // First allocated a quarter of the way before the end of a step: that step has no answer.
+  const late = [NOW - 1.5 * STEP, NOW - 2.25 * STEP];
+  const q = twoPools(late);
+  const after: Move[] = [
+    { at: late[0]!, allocations: [{ gauge: q.b.gauge.address, amount: SAERO }] },
+    { at: late[1]!, allocations: [{ gauge: q.a.gauge.address, amount: SAERO }] },
+  ];
+  nearAll(
+    totals(movedSteps(q.m, mergePast(q.m.past, q.past), after)),
+    [10, (10 + 1) / 2, undefined, undefined],
+    "late",
+  );
 });
 
 test("an allocation's moves are read at the block before each, back to the first at or before the record", async () => {

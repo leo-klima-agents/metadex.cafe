@@ -17,7 +17,7 @@ describe("payouts against a fork of Base", { timeout: 1_800_000 }, () => {
     await heading(page, "Hydrex account #82774").waitFor();
     const article = standing(page);
     await article.getByText(/^Late · paid up to Thu,? 17 Sept?, 00:00 UTC$/).waitFor();
-    await article.getByText(/^(At least )?≈\s\$\d[\d,.]* in \d+ tokens waiting$/).waitFor();
+    await article.getByText(/^(At least )?\$\d[\d,.]* in \d+ tokens waiting$/).waitFor();
     const bill = article.locator("article.Slip");
     await bill.getByText("Receipt · Account #82774 · Matcha Latte").waitFor();
     const text = await bill.innerText();
@@ -37,10 +37,7 @@ describe("payouts against a fork of Base", { timeout: 1_800_000 }, () => {
       await bill.getByRole("link", { name: "Transaction" }).getAttribute("href"),
       `https://basescan.org/tx/${PAID_TX}`,
     );
-    await bill
-      .getByText(/^≈\s\$\d/)
-      .first()
-      .waitFor();
+    await bill.getByText(/^\$\d/).first().waitFor();
     await h.shoot(page, "receipt-390-dark");
     const other = await open(false, { url: `${SITE}/#hydrex/9540` });
     await standing(other.page)

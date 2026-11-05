@@ -606,6 +606,10 @@ dialog[open] {
   color: var(--quiet);
   font-size: var(--small);
 }
+.Footer-note {
+  flex-basis: 100%;
+  margin: 0;
+}
 
 .Header {
   padding-block: var(--gap);
@@ -953,25 +957,6 @@ dialog[open] {
   font-size: var(--small);
   font-weight: 400;
   text-align: end;
-}
-
-.Tag {
-  display: inline-block;
-  margin-inline-start: 0.375rem;
-  padding-inline: 0.375rem;
-  border: 1px solid var(--line);
-  border-radius: 0.25rem;
-  color: var(--quiet);
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  font-weight: 400;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-th .Tag {
-  display: block;
-  inline-size: fit-content;
-  margin-inline: auto 0;
 }
 
 .Ticks {

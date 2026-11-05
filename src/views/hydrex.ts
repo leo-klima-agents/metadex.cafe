@@ -35,7 +35,7 @@ import * as hydrex from "../hydrex.ts";
 import type { Account, Holdings, MatchaLatte, Status } from "../hydrex.ts";
 import { overdue, underWay } from "../payouts.ts";
 import { gasWords, key } from "../prices.ts";
-import { perThousandOf, shareOf, valueOf, versus, type Earnings } from "../rewards.ts";
+import { aprOf, shareOf, valueOf, versus, type Earnings } from "../rewards.ts";
 import { hrefOf } from "../routes.ts";
 import { now } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
@@ -97,10 +97,14 @@ export function statusNode(s: Status, own: boolean, inGroup?: string): Value {
   }
 }
 
+// To a tenth of a point.
+const aprWords = (apr: number | undefined): string => (apr === undefined ? "No price for HYDX" : fraction(apr, true));
 const record = (automation: Automation): Value =>
-  shown(data.earnings(automation), (earnings) =>
-    earnings.votes ? frag(money(perThousandOf(earnings)), fromTemplate("per-1k")) : "No record yet",
-  );
+  shown(data.earnings(automation), (earnings) => {
+    if (!earnings.votes) return "No record yet";
+    const apr = aprOf(earnings);
+    return apr === undefined ? aprWords(apr) : frag(aprWords(apr), fromTemplate("apr"));
+  });
 const compared = (mine: Got<Earnings>): Value => {
   const got = andThen(mine, (earnings) =>
     !earnings.votes || !earnings.pools.length
@@ -255,7 +259,8 @@ export function drawHydrex(): void {
       ? frag(...[...failed].map((id) => Object.assign(document.createElement("p"), { textContent: reasons[id] })))
       : null,
     underway: found && underWay(found) ? "Payout under way." : null,
-    average: shown(data.average(), (all) => money(perThousandOf(all))),
+    average: shown(data.average(), (all) => aprWords(aprOf(all))),
+    "average-aside": data.average().value && aprOf(data.average().value!) === undefined ? null : true,
     own: shown(holdings, ownWords),
     "own-versus": holdings.value ? ownVersus(holdings.value) : null,
     epoch: state.connection ? epochWords() : null,
@@ -270,14 +275,16 @@ function epochWords(): Value {
   const end = found.epochStart + WEEK;
   return `A change made now moves the votes from ${utc(end)}${now() < end ? `, in ${until(end - now())}` : ""}.`;
 }
-// Last epoch's earnings per 1,000 votes, for the votes the wallet casts itself; votes cast through others don't count.
+// Last epoch's APR, for the votes the wallet casts itself; votes cast through others don't count.
 function ownWords(holdings: Holdings): Value {
   return shown(data.holderEarnings(holdings.owner), (own) =>
     !own.votes
       ? "No votes of your own"
       : !own.pools.length
         ? "Didn't vote"
-        : `${money(perThousandOf(own))} / 1k votes, last epoch`,
+        : aprOf(own) === undefined
+          ? aprWords(undefined)
+          : `${aprWords(aprOf(own))} APR, last epoch`,
   );
 }
 const ownVersus = (holdings: Holdings): Value => compared(data.holderEarnings(holdings.owner));
@@ -352,7 +359,8 @@ function performance(automation: Automation): Value {
   if (!mine?.votes) return null;
   const all = data.average();
   const pending = all.failed ? "" : undefined;
-  const row = (prefix: string, earnings: Earnings | undefined, value = earnings && valueOf(earnings)) => {
+  const row = (prefix: string, earnings: Earnings | undefined, prices = earnings?.prices) => {
+    const value = earnings && valueOf(earnings, prices);
     const cents = (sum: Money | undefined) => (sum ? money(sum, true) : pending);
     return {
       [`${prefix}votes`]: earnings ? compact(earnings.votes) : pending,
@@ -360,11 +368,11 @@ function performance(automation: Automation): Value {
       [`${prefix}earned`]: cents(value && moneyAt(value.total, value)),
       [`${prefix}fees`]: cents(value && moneyAt(value.fees, value)),
       [`${prefix}incentives`]: cents(value && moneyAt(value.incentives, value)),
-      [`${prefix}per-thousand`]: cents(earnings && value && perThousandOf(earnings, value)),
+      [`${prefix}apr`]: earnings ? aprWords(aprOf(earnings, prices)) : pending,
     };
   };
   const value = valueOf(mine, all.value?.prices);
-  fill(productView, { ...row("", mine, value), ...row("all-", all.value) });
+  fill(productView, { ...row("", mine, all.value?.prices), ...row("all-", all.value) });
   list(
     $("[data-list=pool]", productView),
     mine.pools,

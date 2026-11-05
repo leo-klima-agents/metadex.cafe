@@ -6,7 +6,7 @@ import { hrefOf, parse, type View } from "./routes.ts";
 import { showTags, type Tag } from "./rpc.ts";
 import { actions, onRender, render, state } from "./state.ts";
 import { $, fill, toggle } from "./ui.ts";
-import { drawAero, drawPool, drawPools, drawStake } from "./views/aero.ts";
+import { drawAero, drawPool, drawStake } from "./views/aero.ts";
 import { drawApp } from "./views/app.ts";
 import { drawAccount } from "./views/account.ts";
 import { drawHydrex, drawProduct } from "./views/hydrex.ts";
@@ -25,7 +25,6 @@ const TAGS: Record<View, Tag[]> = {
   account: ["earnings", "shares", "payouts"],
   swap: ["earnings", "swap"],
   aero: ["aero"],
-  pools: ["aero"],
   stake: ["aero"],
   pool: ["aero"],
 };
@@ -36,7 +35,6 @@ const DRAW: Partial<Record<View, () => void>> = {
   account: drawAccount,
   swap: drawSwap,
   aero: drawAero,
-  pools: drawPools,
   stake: drawStake,
   pool: drawPool,
 };

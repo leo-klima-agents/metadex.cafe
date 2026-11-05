@@ -50,7 +50,7 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     await review(page).getByText("Join Matcha Latte · 1 of 2").waitFor();
     assert.match(await review(page).innerText(), /Votes from\s+Thu,? 22 Oct,? 00:00 UTC/i);
     await review(page)
-      .getByText(/^(≈|<)\s\$[\d.]+$/)
+      .getByText(/^(<\s)?\$[\d.]+$/)
       .first()
       .waitFor();
     await h.toCalls(page);

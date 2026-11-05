@@ -1,6 +1,7 @@
 import { getAddress, parseAbi, type Address } from "viem";
 import { rewardsAbi } from "./abi.ts";
 import { memo } from "./cache.ts";
+import { HYDX } from "./config.ts";
 import { WEEK, clean, moneyAt, type Money } from "./format.ts";
 import { automationAt, escrow, voter } from "./hydrex.ts";
 import { key, noPrices, pricesAtFlip, worthOf, type Prices, type Token } from "./prices.ts";
@@ -159,7 +160,11 @@ const epochPrices = (start: number, rd: Read): Promise<Prices> =>
     const amounts = new Map<string, bigint>();
     for (const { token, amount } of rewards)
       amounts.set(key(token.address), (amounts.get(key(token.address)) ?? 0n) + amount);
-    return pricesAtFlip(tokensIn(rewards), amounts, start + WEEK, rd);
+    // HYDX too, which APRs need.
+    const tokens = tokensIn(rewards);
+    if (!tokens.some(({ address }) => key(address) === key(HYDX)))
+      tokens.push({ address: HYDX, decimals: 18, symbol: "HYDX" });
+    return pricesAtFlip(tokens, amounts, start + WEEK, rd);
   });
 const priced = async (start: number, votes: bigint, pools: Pool[], rewards: Reward[], rd: Read): Promise<Earnings> => ({
   start,
@@ -273,7 +278,13 @@ export const perThousand = (value: number, votes: bigint): number => (votes > 0n
 // What `votes` earned at the rate of these earnings' votes, by default at their own prices.
 export const shareOf = (earnings: Earnings, votes: bigint, value: Value = valueOf(earnings)): Money =>
   moneyAt(earnings.votes > 0n ? (Number(votes) / Number(earnings.votes)) * value.total : 0, value);
-export const perThousandOf = (earnings: Earnings, value?: Value): Money => shareOf(earnings, 10n ** 21n, value);
+// A year of what the votes earned in an epoch, over what they stand for: a vote of a permanent lock is one HYDX, at the
+// same prices. Undefined without votes or a price for HYDX.
+export function aprOf(earnings: Earnings, prices = earnings.prices): number | undefined {
+  const hydx = prices.of.get(key(HYDX));
+  const votes = Number(earnings.votes) / 1e18;
+  return hydx && votes > 0 ? ((valueOf(earnings, prices).total / votes) * (365 / 7)) / hydx : undefined;
+}
 // The ratio of some votes' earnings per 1,000 votes to all of Hydrex's, both at `all`'s prices so they compare fairly.
 export function versus(earnings: Earnings, all: Earnings): number | undefined {
   const ratio =
