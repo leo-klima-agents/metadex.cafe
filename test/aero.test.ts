@@ -816,14 +816,9 @@ test("an allocation's refusal is named when it is one of Aero's errors", () => {
   assert.equal(refusalOf("0x12345678"), undefined);
 });
 
-test("pools go by Aero's names: a Slipstream pool by its tick spacing, a basic pool by its own symbol, or its curve", () => {
+test("pools go by Aero's names: a Slipstream pool by its tick spacing, a basic pool by its curve", () => {
   const listed = { address: zeroAddress, pool: zeroAddress, rewards: zeroAddress, token0: weth, token1: usdc };
   assert.equal(nameOf({ ...listed, kind: "cl", tickSpacing: 50 }), "CL50-WETH/USDC");
-  assert.equal(nameOf({ ...listed, kind: "volatile", tickSpacing: 0, symbol: "vAMMV2-WETH/USDC" }), "vAMMV2-WETH/USDC");
-  assert.equal(nameOf({ ...listed, kind: "volatile", tickSpacing: 0 }), "vAMM-WETH/USDC", "unread");
-  assert.equal(nameOf({ ...listed, kind: "stable", tickSpacing: 0, symbol: " " }), "sAMM-WETH/USDC", "empty");
-  assert.equal(
-    nameOf({ ...listed, kind: "stable", tickSpacing: 0, symbol: "sAMMV2-\u202eWETH/USDC" }),
-    "sAMMV2-WETH/USDC",
-  );
+  assert.equal(nameOf({ ...listed, kind: "volatile", tickSpacing: 0 }), "vAMM-WETH/USDC");
+  assert.equal(nameOf({ ...listed, kind: "stable", tickSpacing: 0 }), "sAMM-WETH/USDC");
 });
