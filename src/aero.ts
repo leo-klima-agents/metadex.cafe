@@ -1072,6 +1072,10 @@ export type Paid = Step & { paid: Per10k | undefined };
 export type Strategy = { count: number; hours: Hours; again: boolean; blueChips: boolean };
 export const isBlueChip = ({ token0, token1 }: Gauge): boolean =>
   [token0, token1].every(({ address }) => config.BLUE_CHIPS.some((chip) => same(chip, address)));
+// The strategy, the suggestion and the market weigh only pools that are not thin, which one allocation changes, and
+// that pay only tokens with a price, as what is known then shows them: the window before a pick, or the step itself.
+export const weighable = (accrued: Accrued, paying: Paying): boolean =>
+  !thinOver(accrued) && !!per10kOf(paying)?.priced;
 // The picks at `time`, from what each pool paid over the `hours` before it and what its programs live then would
 // stream over the next 48 hours.
 export function picksAt(market: Market, past: Past, time: number, { count, hours, blueChips }: Strategy): Pick[] {
@@ -1088,7 +1092,7 @@ export function picksAt(market: Market, past: Past, time: number, { count, hours
         incentives: streamFlows(gauge, time, time + STEP, market.prices, live),
         power: meanOf(before),
       };
-      return [{ gauge, paying }];
+      return weighable(before, paying) ? [{ gauge, paying }] : [];
     });
   return picksOf(pools, count);
 }
@@ -1113,15 +1117,15 @@ export function strategySteps(market: Market, past: Past, strategy: Strategy, am
 // Shares chosen now, held over every step: hindsight.
 export const customSteps = (market: Market, past: Past, holdings: Holding[], amount = 0): Paid[] =>
   heldSteps(market, past, () => holdings, amount);
-// The market: every pool that takes allocations, is not thin, and paid only tokens with a price, weighed in each step
-// by what it paid in that step itself, as if allocations followed rewards with no delay.
+// The market: every pool that takes allocations and is weighable over the step, weighed in each step by what it paid
+// in that step itself, as if allocations followed rewards with no delay.
 export const marketSteps = (market: Market, past: Past): Paid[] =>
   stepsOf(market).map((step) => {
     const paid = paidDuring(market, past, step);
     const pools = market.gauges.filter(routable).flatMap((gauge) => {
       const accrued = accrualOf(gauge, past, step.from, step.to, market);
-      const paying = accrued && !thinOver(accrued) ? paid(gauge) : undefined;
-      return paying && per10kOf(paying)?.priced ? [{ gauge, paying }] : [];
+      const paying = accrued && paid(gauge);
+      return paying && weighable(accrued, paying) ? [{ gauge, paying }] : [];
     });
     return { ...step, paid: heldOver(picksOf(pools, Infinity), paid) };
   });

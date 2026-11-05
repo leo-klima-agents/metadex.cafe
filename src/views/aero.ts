@@ -488,7 +488,7 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
       .filter((gauge) => routable(gauge) && (!blueChips || isBlueChip(gauge)))
       .flatMap((gauge) => {
         const paying = next(gauge);
-        return paying ? [{ gauge, paying }] : [];
+        return paying && aero.weighable(gauge.windows[controls.hours], paying) ? [{ gauge, paying }] : [];
       }),
     top,
   );
@@ -564,7 +564,7 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
     current: mine.size ? true : null,
     "allocate-why": words,
     "plan-note": [
-      `Each pool's share is its part of what the top pools paid together over the last ${WINDOW[controls.hours].over}, with the incentives already scheduled for the next ${hoursWords(hold)}. Per 10k a day: what 10,000 sAERO would earn a day there if those fees came again, at current prices.`,
+      `Each pool's share is its part of what the top pools paid together over the last ${WINDOW[controls.hours].over}, with the incentives already scheduled for the next ${hoursWords(hold)}. Thin pools, and pools paying a token without a price, are left out, as in the record. Per 10k a day: what 10,000 sAERO would earn a day there if those fees came again, at current prices.`,
       amount
         ? `It takes into account that adding ${stake ? `the ${sAero(aero.budgetOf(stake))} of ${stakeName(stake, stake.id)}` : wholeSAero(amount)} to a pool lowers what each sAERO in it earns.`
         : "",

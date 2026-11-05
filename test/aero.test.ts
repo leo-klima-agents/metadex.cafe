@@ -55,6 +55,8 @@ import {
   stepsOf,
   strategySteps,
   timesFor,
+  totalOf,
+  accrualOf,
   type Accrued,
   type Gauge,
   type Market,
@@ -796,6 +798,30 @@ test("a strategy picks at each step from only the window before it, and earns wh
   // 5M sAERO more halves what each earns, at 5M already there.
   nearAll(totals(strategySteps(m, m.past, top, 5_000_000)), [0.5, 0.5, 0.5, 0.5], "diluted");
   near(overallOf(strategySteps(m, m.past, { ...top, again: false }))!.total, 5.5, "over the 8 days");
+});
+
+test("the strategy leaves out the pools the market does, as the window before each pick shows them", () => {
+  // Each would top the picks by what it pays in all: a thin pool, and one streaming a token without a price.
+  const thin = (extra: number[]) => [history([1_000, 1_000, 1_000, 1_000, 1_000], extra, {}, 100_000n * SAERO)];
+  const unpriced = (extra: number[]) => [
+    history([100, 100, 100, 100, 100], extra, {
+      programs: [{ ...streaming(1_000, NOW - 20 * DAY, NOW + DAY), token: other }],
+    }),
+  ];
+  const top = { count: 1, hours: 48, again: true, blueChips: false } as const;
+  for (const [more, what] of [
+    [thin, "thin"],
+    [unpriced, "unpriced"],
+  ] as const) {
+    const { m } = twoPools([], more);
+    // In the 48 hours before every pick, it paid more in all than A or B.
+    for (const { from } of stepsOf(m)) {
+      const paid = (gauge: Gauge) => totalOf(paidOver(gauge, accrualOf(gauge, m.past, from - STEP, from, m), MEMED)!);
+      assert.ok(paid(m.gauges[2]!) > Math.max(paid(m.gauges[0]!), paid(m.gauges[1]!)), `${what} pays the most`);
+    }
+    nearAll(totals(strategySteps(m, m.past, top)), [1, 1, 1, 1], `${what} left out`);
+    nearAll(totals(marketSteps(m, m.past)), [101 / 11, 101 / 11, 101 / 11, 101 / 11], `${what} left out of the market`);
+  }
 });
 
 test("a longer window needs snapshots before the grid's, read for it alone", () => {

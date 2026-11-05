@@ -943,8 +943,16 @@
             <div class="Pair">
               <dt class="u-small u-quiet">Market</dt>
               <dd>
-                Every pool that takes allocations, is not thin and pays only tokens with a price, weighed in each step
-                by what it paid in that step: rewards followed with no delay, which no allocation can do
+                Every pool that takes allocations, weighed in each step by what it paid in that step: rewards followed
+                with no delay, which no allocation can do
+              </dd>
+            </div>
+            <div class="Pair">
+              <dt class="u-small u-quiet">Left out</dt>
+              <dd>
+                From your strategy and the market alike: thin pools, with less than 1M sAERO at either end or on
+                average, and pools paying a token without a price. Your strategy judges them by the window before each
+                pick, the market by each step itself
               </dd>
             </div>
             <div class="Pair">
