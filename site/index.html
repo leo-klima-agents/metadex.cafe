@@ -699,7 +699,7 @@
         <nav aria-label="Back"><a class="Back" href="#app">Your wallet</a></nav>
         <header class="u-row">
           <h1 tabindex="-1">Aero</h1>
-          <button type="button" class="Button--info" popovertarget="aero-info" aria-label="Contracts">i</button>
+          <button type="button" class="Button--info" popovertarget="aero-info" aria-label="How it works">i</button>
         </header>
         <p class="u-small u-quiet">
           Your sAERO earns a share of the exchange revenue of each pool it is allocated to. Set your strategy, see how
@@ -919,7 +919,7 @@
         </section>
         <dialog popover id="aero-info" data-section="how" aria-labelledby="aero-info-title">
           <header class="u-spread Dialog-bar">
-            <h2 id="aero-info-title">Contracts</h2>
+            <h2 id="aero-info-title">How it works</h2>
             <button
               type="button"
               class="Button--close"
@@ -930,7 +930,42 @@
               ×
             </button>
           </header>
-          <section class="u-stack" data-section="check" aria-labelledby="aero-info-title">
+          <dl class="u-stackTight">
+            <div class="Pair">
+              <dt class="u-small u-quiet">Blue chips</dt>
+              <dd>Pools whose two tokens are both among USDC, EURC, WETH, cbBTC and AERO</dd>
+            </div>
+            <div class="Pair">
+              <dt class="u-small u-quiet">Base average</dt>
+              <dd>
+                What the average allocator on Base earned: all the pools' exchange revenue in each step, over all their
+                sAERO weight, leaving out pools paying a token without a price
+              </dd>
+            </div>
+            <div class="Pair">
+              <dt class="u-small u-quiet">Autopilot</dt>
+              <dd>
+                Aero's Autopilot sAERO Maxi, as it actually allocated: its allocations, read from Base at each move
+              </dd>
+            </div>
+            <div class="Pair">
+              <dt class="u-small u-quiet">APR</dt>
+              <dd>
+                A day's exchange revenue per sAERO, times 365, over the price of one AERO, counting each sAERO as one
+                AERO. The last 8 days use the prices of each step; the allocation table uses today's, as if the chosen
+                window's fees came again with the incentives already scheduled.
+              </dd>
+            </div>
+            <div class="Pair">
+              <dt class="u-small u-quiet">Other chains</dt>
+              <dd>
+                Not counted: pools on Aero's other chains aren't shown, and allocating here leaves a stake's sAERO
+                weight on them as it is
+              </dd>
+            </div>
+          </dl>
+          <section class="u-stack" data-section="check" aria-labelledby="aero-check-title">
+            <h3 class="u-label" id="aero-check-title">Contract</h3>
             <dl class="u-stackTight" data-list="contract"></dl>
           </section>
         </dialog>
