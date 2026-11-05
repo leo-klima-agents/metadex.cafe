@@ -699,7 +699,7 @@
         <nav aria-label="Back"><a class="Back" href="#app">Your wallet</a></nav>
         <header class="u-row">
           <h1 tabindex="-1">Aero</h1>
-          <button type="button" class="Button--info" popovertarget="aero-info" aria-label="How it works">i</button>
+          <button type="button" class="Button--info" popovertarget="aero-info" aria-label="Contracts">i</button>
         </header>
         <p class="u-small u-quiet">
           Your sAERO earns a share of the exchange revenue of each pool it is allocated to. Set your strategy, see how
@@ -919,7 +919,7 @@
         </section>
         <dialog popover id="aero-info" data-section="how" aria-labelledby="aero-info-title">
           <header class="u-spread Dialog-bar">
-            <h2 id="aero-info-title">How it works</h2>
+            <h2 id="aero-info-title">Contracts</h2>
             <button
               type="button"
               class="Button--close"
@@ -930,91 +930,7 @@
               ×
             </button>
           </header>
-          <h3 class="u-label">Allocating</h3>
-          <dl class="u-stackTight">
-            <div class="Pair">
-              <dt class="u-small u-quiet">On Base</dt>
-              <dd>One list of up to <span data-text="max-gauges"></span> pools, which replaces the last</dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">It holds</dt>
-              <dd><span data-text="cooldown"></span>: no other list until then</dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">It earns</dt>
-              <dd>
-                Each pool's exchange revenue, its fees and incentives, by the second, shared by the sAERO weight on it
-              </dd>
-            </div>
-          </dl>
-          <h3 class="u-label">The last 8 days</h3>
-          <dl class="u-stackTight">
-            <div class="Pair">
-              <dt class="u-small u-quiet">Steps</dt>
-              <dd>Four steps of 48 hours, counted back from the last whole hour; the newest ends now</dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Your strategy</dt>
-              <dd>
-                The top pools by exchange revenue, with or without incentives, over the chosen window before each pick,
-                each given weight in proportion, picked only from what was known then: again every 48 hours, or once, 8
-                days ago, and kept
-              </dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Blue chips</dt>
-              <dd>Pools whose two tokens are both among USDC, EURC, WETH, cbBTC and AERO</dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Autopilot</dt>
-              <dd>Aero's Autopilot sAERO Maxi, as it actually allocated, cut where it moved</dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Base average</dt>
-              <dd>
-                What the average allocator on Base earned: all the pools' exchange revenue in each step, over all their
-                sAERO weight, leaving out pools paying a token without a price
-              </dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Left out</dt>
-              <dd>
-                From your strategy and its suggestion: thin pools, with less than 1M sAERO weight at either end or on
-                average, and pools paying a token without a price, as the window before each pick shows them
-              </dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Custom allocation</dt>
-              <dd>
-                Shares you edited, held as they are throughout: hindsight, since you chose them knowing how the pools
-                did
-              </dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">APR</dt>
-              <dd>
-                A year of this exchange revenue, over what the sAERO weight is worth, each sAERO counted as one AERO
-              </dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Prices</dt>
-              <dd>
-                Averages over the half hour before, from Chainlink and from pools deep enough for a day of this exchange
-                revenue; a past step takes the mean of the prices at its start and its end, from the pools that price
-                each token now, and a pick those when it was made; a token without one counts for nothing
-              </dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Your sAERO</dt>
-              <dd>Shares each pool's exchange revenue with the sAERO weight already there, so each sAERO earns less</dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Not counted</dt>
-              <dd>Other chains</dd>
-            </div>
-          </dl>
-          <section class="u-stack" data-section="check" aria-labelledby="aero-check-title">
-            <h3 class="u-label" id="aero-check-title">Contracts</h3>
+          <section class="u-stack" data-section="check" aria-labelledby="aero-info-title">
             <dl class="u-stackTight" data-list="contract"></dl>
           </section>
         </dialog>

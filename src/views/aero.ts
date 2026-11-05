@@ -228,25 +228,16 @@ function allocateWords(stake: Stake | undefined, stakes: Stake[], rows: Part[], 
 
 export function drawAero(): void {
   const got = data.market();
-  const market = got.value;
   const stakes = data.ownStakes().value ?? [];
   const stake = stakeFor(stakes);
   const amount = stake ? wholeOf(aero.budgetOf(stake)) : plan.amount;
-  fill(aeroView, {
-    cooldown: shown(got, () => until(market!.cooldown)),
-    "max-gauges": shown(got, () => String(market!.maxGauges)),
-  });
   drawControls(stakes, stake);
   drawRecord(got, amount, stake);
   drawAllocation(got, amount, stake, stakes);
   list(
     $("[data-list=contract]", aeroView),
-    [
-      ["VotingEscrow (sAERO)", config.AERO_ESCROW],
-      ["Voter", config.AERO_VOTER],
-      ["LeafVoter", config.LEAF_VOTER],
-      ["FactoryRegistry", config.FACTORY_REGISTRY],
-    ] as const,
+    // The one that allocating calls.
+    [["Voter", config.AERO_VOTER]] as const,
     ([name]) => name,
     (row, [name, address]) => fill(row, { name, address: { address } }),
   );
