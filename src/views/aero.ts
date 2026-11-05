@@ -248,6 +248,7 @@ function drawControls(stakes: Stake[], stake: Stake | undefined): void {
     "stake-row": stakes.length ? true : null,
     "stake-link": stake ? { href: hrefOf({ view: "stake", id: stake.id }), text: "Its allocation now" } : null,
     "amount-row": stakes.length ? null : true,
+    "plan-window": WINDOW[controls.hours].over,
   });
   list(
     $("[data-list=stake-option]", aeroView),
@@ -484,7 +485,6 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
     edited: plan.rows ? true : null,
     current: mine.size ? true : null,
     "allocate-why": words,
-    "plan-window": WINDOW[controls.hours].over,
   });
 }
 
