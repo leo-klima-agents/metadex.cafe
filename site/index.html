@@ -740,6 +740,7 @@
               class="Amount"
               data-action="aero-plan-amount"
               inputmode="decimal"
+              value="10000"
               placeholder="0"
               autocomplete="off"
               spellcheck="false"
@@ -785,24 +786,24 @@
                 <thead>
                   <tr>
                     <th scope="col">APR</th>
-                    <th scope="col" data-text="strategy-head">Your strategy</th>
-                    <th scope="col" data-text="custom-head">Custom</th>
-                    <th scope="col" data-text="pilot-head">Autopilot</th>
                     <th scope="col">Base average</th>
-                    <th scope="col">vs Autopilot</th>
+                    <th scope="col">Autopilot</th>
+                    <th scope="col">Your strategy</th>
+                    <th scope="col" data-text="custom-head">Custom</th>
                     <th scope="col">vs average</th>
+                    <th scope="col">vs Autopilot</th>
                   </tr>
                 </thead>
                 <tbody data-list="step"></tbody>
                 <tfoot>
                   <tr>
                     <th scope="row">8 days</th>
+                    <td class="u-figures" data-text="all-average"></td>
+                    <td class="u-figures" data-text="all-pilot"></td>
                     <td class="u-figures u-strong" data-text="all-strategy"></td>
                     <td class="u-figures" data-text="all-custom"></td>
-                    <td class="u-figures" data-text="all-pilot"></td>
-                    <td class="u-figures" data-text="all-average"></td>
-                    <td class="u-figures" data-text="all-vs-pilot"></td>
                     <td class="u-figures" data-text="all-vs-average"></td>
+                    <td class="u-figures" data-text="all-vs-pilot"></td>
                   </tr>
                 </tfoot>
               </table>
@@ -837,7 +838,7 @@
                       <th scope="col">sAERO</th>
                       <th scope="col">Pool pays a day</th>
                       <th scope="col">APR</th>
-                      <th scope="col" data-if="wallet"><span class="u-visuallyHidden">Remove</span></th>
+                      <th scope="col"><span class="u-visuallyHidden">Set to 0%</span></th>
                     </tr>
                   </thead>
                   <tbody data-list="pick"></tbody>
@@ -848,37 +849,40 @@
                       <td class="u-figures" data-text="total-amount"></td>
                       <td></td>
                       <td class="u-figures u-strong" data-text="total-per"></td>
-                      <td data-if="wallet"></td>
+                      <td></td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
-              <div class="u-row u-small" data-if="wallet">
+              <div class="u-row u-small">
                 <button
                   type="button"
                   class="Button--secondary Button--compact"
-                  data-action="aero-all"
-                  data-text="all"
-                ></button>
+                  data-action="aero-more"
+                  data-text="more"
+                >
+                  Show more pools
+                </button>
                 <button
                   type="button"
                   class="Button--secondary Button--compact"
                   data-action="aero-scale"
                   data-text="scale"
                 >
-                  Scale to 100%
+                  Make the shares add up to 100%
                 </button>
                 <button
                   type="button"
                   class="Button--secondary Button--compact"
                   data-action="aero-current"
                   data-text="current"
+                  data-if="wallet"
                 >
                   Use the current allocation
                 </button>
               </div>
               <p class="Notice u-row" data-text="edited">
-                <span>Edited: shown on the chart as custom, in hindsight.</span>
+                <span>Edited: shown on the chart as your custom allocation, in hindsight.</span>
                 <button type="button" class="Button--secondary Button--compact" data-action="aero-rule">
                   Back to your strategy
                 </button>
@@ -955,7 +959,7 @@
               </dd>
             </div>
             <div class="Pair">
-              <dt class="u-small u-quiet">Custom</dt>
+              <dt class="u-small u-quiet">Custom allocation</dt>
               <dd>Shares you edited, held as they are over the 8 days: hindsight, since you chose them knowing them</dd>
             </div>
             <div class="Pair">
@@ -1451,12 +1455,12 @@
     <template id="step">
       <tr>
         <td data-text="when"></td>
+        <td class="u-figures" data-text="average"></td>
+        <td class="u-figures" data-text="pilot"></td>
         <td class="u-figures u-strong" data-text="strategy"></td>
         <td class="u-figures" data-text="custom"></td>
-        <td class="u-figures" data-text="pilot"></td>
-        <td class="u-figures" data-text="average"></td>
-        <td class="u-figures" data-text="vs-pilot"></td>
         <td class="u-figures" data-text="vs-average"></td>
+        <td class="u-figures" data-text="vs-pilot"></td>
       </tr>
     </template>
     <template id="legend">
@@ -1469,22 +1473,19 @@
       <tr>
         <td><a data-text="pool"></a><small class="u-detail" data-text="note"></small></td>
         <td class="u-figures">
-          <span data-if="no-wallet" data-text="share"></span
-          ><span data-if="wallet"
-            ><input
-              class="Amount Amount--share"
-              data-action="aero-share"
-              inputmode="decimal"
-              autocomplete="off"
-              spellcheck="false"
-            />
-            %</span
-          >
+          <input
+            class="Amount Amount--share"
+            data-action="aero-share"
+            inputmode="decimal"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          %
         </td>
         <td class="u-figures" data-text="amount"></td>
         <td class="u-figures" data-text="pays"></td>
         <td class="u-figures u-strong" data-text="per"></td>
-        <td data-if="wallet">
+        <td>
           <button type="button" class="Button--close Button--drop" data-action="aero-drop" data-text="drop">×</button>
         </td>
       </tr>
