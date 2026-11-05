@@ -473,10 +473,6 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
       const input = $<HTMLInputElement>("input", tr);
       if (document.activeElement !== input) input.value = row.percent.toFixed(1);
       input.setAttribute("aria-label", `Share of ${name}`);
-      const drop = $("[data-action=aero-drop]", tr);
-      drop.setAttribute("aria-label", `Set ${name} to 0%`);
-      // Kept in place, so that the share boxes line up.
-      drop.toggleAttribute("data-off", !(row.percent > 0));
       fill(tr, {
         pool: gauge ? { href: hrefOf({ view: "pool", gauge: gauge.address }), text: name } : name,
         note: flagsOf(gauge, market, hold),
@@ -898,11 +894,6 @@ actions["aero-share"] = (el) => {
 actions["aero-more"] = () => {
   plan.more = [...plan.more, ...nextPools];
   render();
-};
-// Its row stays, at 0%, so that its share can be typed again.
-actions["aero-drop"] = (el) => {
-  const gauge = el.closest<HTMLElement>("[data-key]")?.dataset.key;
-  edit((rows) => rows.map((row) => (row.gauge === gauge ? { ...row, percent: 0 } : row)));
 };
 actions["aero-scale"] = () =>
   edit((rows) => {
