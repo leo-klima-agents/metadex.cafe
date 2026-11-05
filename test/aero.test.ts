@@ -152,7 +152,7 @@ test("fees per 10,000 sAERO a day come from the accumulator's growth over the ti
 });
 
 test("a pool whose power dipped pays exactly what it paid, and is thin and weighs little for it", () => {
-  // 5M sAERO at both ends, but a harmonic mean of 50k over the day: a dip to dust.
+  // 5M sAERO at both ends, but a harmonic mean of 50k over the 48 hours: a dip to dust.
   const dipped = gauge({ perDay: 1_000 });
   dipped.windows[48] = { ...dipped.windows[48], spread: 50_000 };
   assert.equal(feesPerDay(dipped, dipped.windows[48], PRICES)!.value, 1_000, "exactly what it paid");
@@ -683,7 +683,7 @@ test("the windows and the record's picks lie on one grid of 48 hours, counted ba
   assert.ok(unreadStart({ ...read, acc: undefined }), "a checkpoint whose snapshot failed");
 });
 
-// Pools paying `pays` per 10,000 sAERO a day over the grid's steps, oldest first, the last ending now; with snapshots
+// A pool paying `pays` per 10,000 sAERO a day over the grid's steps, oldest first, the last ending now; with snapshots
 // at the grid's times and at `extra`.
 function history(pays: number[], extra: number[] = [], fields: Partial<Gauge> = {}, supply = 5_000_000n * SAERO) {
   const bounds = pays.map((_, i) => NOW - (pays.length - i) * STEP);

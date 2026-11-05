@@ -247,7 +247,8 @@ test("an epoch's rewards are read once for every voter, on its own pools or not,
     a.pools.map(({ address, votes }) => [address, votes]),
     [[P1, 40n]],
   );
-  // Every pool's rewards are read once, and each voter reads its own votes in each of its contracts.
+  // Every pool's rewards are read once; A, which voted again, reads its votes in every pool's contracts, and B in its
+  // own pools'.
   assert.deepEqual(
     ["totalSupplyAt", "rewardsListLength", "rewardTokens", "rewardData", "balanceOfOwnerAt"].map((name) =>
       asked.get(name),

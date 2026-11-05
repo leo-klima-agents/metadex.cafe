@@ -463,7 +463,7 @@ button,
 }
 
 /* The review is a modal dialog, which the browser keeps a little under the screen's size. Popups get no such limit,
-   so their insets keep them off the screen's edges. */
+   so their insets keep them off the screen's edges, except on a phone, where they sit full width at its foot. */
 dialog {
   inline-size: var(--popup);
   padding: 0 var(--inset) var(--inset);
@@ -1214,7 +1214,8 @@ th .Tag {
   }
 }
 @media (forced-colors: active) {
-  /* Shapes keep their fills in forced colours, drawn in the text colour, so each status stays distinct. */
+  /* Shapes keep their fills in forced colours, drawn in the text colour. Running and elsewhere, both filled circles,
+     then look alike, and checking keeps its `--line` ring. */
   .Shape {
     forced-color-adjust: none;
     --accent: CanvasText;
