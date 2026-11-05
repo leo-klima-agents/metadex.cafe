@@ -1,0 +1,60 @@
+# Deploys dev to this fork's GitHub Pages, by hand: Actions, pages-dev, Run workflow, from dev. It checks and builds the
+# site as ci's node job does, but without the browser tests, then checks that Pages serves each file. It does nothing
+# in any other repository, such as ldeso/metadex.cafe, whose site deploys only from release tags (ci.yml).
+name: pages-dev
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.repository == 'leo-klima-agents/metadex.cafe'
+    runs-on: ubuntu-26.04
+    steps:
+      - if: github.ref != 'refs/heads/dev'
+        run: |
+          echo "::error::Run this workflow from dev, not $GITHUB_REF_NAME."
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx prettier --check .
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-26.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    # Shared with ci's pages job, so that two deployments never overlap.
+    concurrency: pages
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: github-pages
+      - env:
+          URL: ${{ steps.deploy.outputs.page_url }}
+        run: |
+          mkdir site
+          tar -xf artifact.tar -C site
+          cd site
+          for file in $(find . -type f | sort); do
+            curl -fsS --retry 5 "$URL${file#./}?$GITHUB_SHA" | cmp - "$file"
+          done
