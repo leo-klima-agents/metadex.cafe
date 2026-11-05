@@ -28,6 +28,7 @@ import {
   units,
   until,
   utc,
+  versusAverage,
   voteWords,
 } from "../format.ts";
 import * as hydrex from "../hydrex.ts";
@@ -57,10 +58,10 @@ export const lockWords = ({ lockType, end }: Account): string =>
         : "Flex";
 const inYear = (time: number): string =>
   new Date(time * 1000).getUTCFullYear() === new Date(now() * 1000).getUTCFullYear() ? day(time) : date(time);
-const versusWords = (ratio: number): Value =>
-  Math.abs(ratio - 1) < 0.005
-    ? "About the average"
-    : `${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "above" : "below"} the average`;
+const versusWords = (ratio: number): Value => {
+  const words = versusAverage(ratio);
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
 const feeWords = (feeBps: bigint | undefined): string =>
   feeBps === 0n ? "" : feeBps === undefined ? ", payout fee not read yet" : ` and ${bps(feeBps)} payout fee`;
 

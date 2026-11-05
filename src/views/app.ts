@@ -8,6 +8,7 @@ import { now, same } from "../rpc.ts";
 import { actions, state } from "../state.ts";
 import { $, fill, frag, link, list, shown, stateOf, status, type Value } from "../ui.ts";
 import { waitsWords } from "./account.ts";
+import { aeroLine } from "./aero.ts";
 import { change } from "./hydrex.ts";
 import { openClaim } from "./claim.ts";
 import { allowances, drawAllowances, swapLine } from "./swap.ts";
@@ -82,6 +83,7 @@ export function drawApp(): void {
     needs: stateOf(holdings, !needs.length),
     "needs-count": needs.length ? String(needs.length) : "",
     "swap-yours": state.connection ? swapLine() : null,
+    "aero-yours": state.connection ? aeroLine() : null,
     "hydrex-yours": !state.connection
       ? null
       : shown(holdings, ({ owner, accounts, epochStart }) => {

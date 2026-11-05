@@ -97,10 +97,12 @@ export function list<T>(
     fillRow(row, item, i);
     return row;
   });
-  if (!items.length && empty)
+  if (!items.length && empty) {
     rows.push(
       old.get("") ?? Object.assign(document.createElement("li"), { className: "u-small u-quiet", textContent: empty }),
     );
+    old.delete("");
+  }
   const focused = [...old.values()].some((row) => row.contains(document.activeElement));
   rows.forEach((row, i) => el.children[i] !== row && el.insertBefore(row, el.children[i] ?? null));
   for (const row of old.values()) row.remove();

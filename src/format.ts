@@ -64,6 +64,13 @@ export const bps = (value: bigint): string => percent.format(Number(value) / 10_
 // For example "16.7%" or "3%". With `column`, always to a tenth, as in a column: "3.0%", "< 0.1%".
 export const fraction = (value: number, column = false): string =>
   !column ? roughPercent.format(value) : value > 0 && value < 0.0005 ? "< 0.1%" : tenthsPercent.format(value);
+// "about the average", "12.3% above the average", or "" with no ratio.
+export const versusAverage = (ratio: number): string =>
+  !Number.isFinite(ratio)
+    ? ""
+    : Math.abs(ratio - 1) < 0.005
+      ? "about the average"
+      : `${fraction(Math.abs(ratio - 1))} ${ratio > 1 ? "above" : "below"} the average`;
 
 // The unit prices are in: USD, or USDC when no dollar price was found. `rates` gives each currency's price in dollars
 // at the prices' time.

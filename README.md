@@ -1,12 +1,15 @@
 # metaDEX Café
 
-A static page at <https://metadex.cafe/> for Hydrex accounts on Base:
+A static page at <https://metadex.cafe/> for Hydrex accounts and Aero stakes on Base:
 
 - join or leave **Matcha Latte**, Hydrex's automation, and **Double Espresso**, an automation nobody controls;
 - claim Double Espresso's rewards when a payout is late;
 - see what votes earned last epoch compared with Hydrex's average, and each account's last payout as a receipt;
 - swap many tokens into one through **ImmutableSwapper**, routed together and simulated on Base before the wallet asks
-  to sign.
+  to sign;
+- see what sAERO earns a day in each Aero pool on Base over 24 hours, 48 hours or seven days, and what an added amount
+  would dilute it to; each stake's pools, when it can move, what it can claim and its record since it last allocated;
+  Aero's public Autopilots; and each pool's history, day by day.
 
 It has no server, holds no keys and stores nothing. It reads Base through three public RPCs, the only hosts its Content
 Security Policy lets it connect to: `https://mainnet.base.org`, `https://base.drpc.org` and
@@ -35,7 +38,7 @@ another folder). `CHROMIUM` sets the browser binary, and `SCREENSHOTS` a folder 
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `site/`                                | The files the site serves: the page with every view, popup and row template, the styles and the icons. |
 | `src/main.ts`, `routes.ts`, `state.ts` | The page's start, its addresses, and the state every view is drawn from.                               |
-| `src/config.ts`, `abi.ts`              | What the page trusts: contracts, RPCs, feeds, swap contracts; and Hydrex's ABIs.                       |
+| `src/config.ts`, `abi.ts`              | What the page trusts: contracts, RPCs, feeds, swap contracts; and Hydrex's and Aero's ABIs.            |
 | `src/checks.ts`                        | The checks of Base that run before joining or swapping.                                                |
 | `src/rpc.ts`, `cache.ts`               | RPC requests (failover, pacing, the shown view's reads first), and the cache of every read.            |
 | `src/wallet.ts`                        | Wallets (EIP-6963, Safe{Wallet}), and sending calls one at a time or in one prompt.                    |
@@ -45,6 +48,7 @@ another folder). `CHROMIUM` sets the browser binary, and `SCREENSHOTS` a folder 
 | `src/hydrex.ts`                        | Hydrex accounts, their statuses, joining and leaving.                                                  |
 | `src/payouts.ts`                       | How far each account has been paid, what is waiting, and its last receipt.                             |
 | `src/claim.ts`                         | Claims through Double Espresso, split to fit transactions.                                             |
+| `src/aero.ts`                          | Aero's pools on Base, what each paid per sAERO, and stakes and their records.                          |
 | `src/swap.ts`, `routing.ts`            | Routes, quotes, simulation and minimums; `routing.ts` routes the ticked tokens together.               |
 | `src/data.ts`, `views/`                | What each view reads (`data.ts`), and how it fills the page (`views/`).                                |
 | `src/ui.ts`, `format.ts`               | Filling the page's templates, and how figures, sums, dates and hex are written.                        |
