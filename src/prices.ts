@@ -36,6 +36,8 @@ export function key(address: string): string {
   return address.toLowerCase();
 }
 export const noPrices = (): Prices => ({ unit: "USD", of: new Map() });
+// How much of each token will be priced, keyed by lower-case address.
+export type Amounts = Map<string, bigint> | Promise<Map<string, bigint>>;
 export const worthOf = (amount: bigint, decimals: number, price: number): number =>
   (Number(amount) / 10 ** decimals) * price;
 
@@ -345,7 +347,7 @@ const logged = (error: unknown): undefined => void console.error(error);
 async function measure(
   pools: Pool[],
   prices: Prices,
-  amounts: Map<string, bigint>,
+  amounts: Amounts,
   window: Window,
   rd: Read,
 ): Promise<Measured[] | undefined> {
@@ -377,6 +379,7 @@ async function measure(
   if (!before || !after) return undefined;
   const elapsed = Number(after.at(-1)) - Number(before.at(-1));
   if (!(elapsed > 0)) return [];
+  const sized = await amounts;
   return ready.flatMap(({ pool, kind, tokenReserve, anchorReserve, anchorPrice }, i): Measured[] => {
     const [first, last] = [kind.summed(before[i]), kind.summed(after[i])];
     const perSecond = first && last && first.map((sum, j) => Number(last[j]! - sum) / elapsed);
@@ -384,7 +387,7 @@ async function measure(
     const price = price0 && inAnchor(pool, price0) * anchorPrice;
     if (!price || !Number.isFinite(price)) return [];
     const depth = Math.min(tokenReserve * price, anchorReserve * anchorPrice);
-    const value = whole(amounts.get(key(pool.token.address)) ?? 0n, pool.token.decimals) * price;
+    const value = whole(sized.get(key(pool.token.address)) ?? 0n, pool.token.decimals) * price;
     return depth >= Math.max(FLOOR, DEPTH * value) ? [{ pool, price, depth }] : [];
   });
 }
@@ -394,7 +397,7 @@ async function measure(
 async function inPools(
   tokens: Token[],
   prices: Prices,
-  amounts: Map<string, bigint>,
+  amounts: Amounts,
   window: Window,
   exchanges: Exchange[],
   rd: Read,
@@ -443,11 +446,11 @@ export function forget(): void {
 // the window is the last block at or before its time, and the end at least `SETTLED` blocks back. Anchors take their
 // Chainlink USD feeds' answers at the end, and the fiat feeds give each currency's rate; if no anchor feed answers,
 // prices are in USDC, with USDC at 1. Pools then price the anchors without a feed, then the other tokens. `amounts` is
-// how much of each token will be priced. `tiers` lists the exchanges to look in, each tier only for what those before
-// left unpriced.
+// how much of each token will be priced; given as a promise, pools are read meanwhile and only judged deep enough once
+// it is known. `tiers` lists the exchanges to look in, each tier only for what those before left unpriced.
 export async function pricesAt(
   tokens: Token[],
-  amounts: Map<string, bigint>,
+  amounts: Amounts,
   time: number,
   rd: Read = read,
   tiers = config.PRICING,
@@ -518,7 +521,7 @@ export async function pricesAt(
   return prices;
 }
 
-export const pricesNow = (tokens: Token[], amounts = new Map<string, bigint>(), rd: Read = read): Promise<Prices> =>
+export const pricesNow = (tokens: Token[], amounts: Amounts = new Map(), rd: Read = read): Promise<Prices> =>
   pricesAt(tokens, amounts, Infinity, rd);
 // An epoch's prices, from Hydrex's pools only: little of its rewards is priced only elsewhere, and looking there too
 // takes twice as long. They are kept for the epoch, so a pool that could not be read fails them.

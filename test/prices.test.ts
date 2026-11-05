@@ -354,6 +354,27 @@ test("Aerodrome's Slipstream pools price only what the others cannot", async () 
   close((await priceOf([basic, { exchange: AERO_CL, token: TOKEN, now: [10_000, 30_000] }]))!, 3 * USDC_USD, 1e-6);
 });
 
+test("with amounts to come, pools are read meanwhile and judged deep enough once they are known", async () => {
+  // 15,000 USDC deep at 3: enough for 100 TKN, about $300, but not for 1,000, which needs $30,000 on each side.
+  for (const [count, priced] of [
+    [100n, true],
+    [1_000n, false],
+  ] as const) {
+    forget();
+    const { reader, blocks } = market([{ exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] }]);
+    let settle!: (amounts: Map<string, bigint>) => void;
+    const pricing = pricesNow([TOKEN], new Promise((done) => (settle = done)), reader);
+    for (let tick = 0; (blocks.get("currentCumulativePrices")?.size ?? 0) < 2; tick++) {
+      assert.ok(tick < 1_000, "the sums are read at both ends before the amounts are known");
+      await new Promise((done) => setTimeout(done, 0));
+    }
+    settle(new Map([[TOKEN.address, count * 10n ** 18n]]));
+    const price = (await pricing).of.get(TOKEN.address);
+    if (priced) close(price!, 3 * USDC_USD, 1e-6);
+    else assert.equal(price, undefined);
+  }
+});
+
 test("sums are read at the block priced and the last block half an hour before the newest, reserves at the first", async () => {
   const pools: Fake[] = [{ exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] }];
   const { reader, blocks } = market(pools);
