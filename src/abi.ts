@@ -136,4 +136,7 @@ export const rewardsManagerAbi = parseAbi([
   "function earnedIncentives(uint256 tokenId, uint256 programId, uint256 maxCheckpoints) view returns (uint256)",
 ]);
 
-export const aeroPoolAbi = parseAbi(["function tickSpacing() view returns (int24)"]);
+export const aeroPoolAbi = parseAbi([
+  "function tickSpacing() view returns (int24)",
+  "function symbol() view returns (string)",
+]);
