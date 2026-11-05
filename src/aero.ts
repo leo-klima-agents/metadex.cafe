@@ -1,9 +1,17 @@
-import { zeroAddress, type Address } from "viem";
-import { aeroEscrowAbi, aeroPoolAbi, aeroVoterAbi, leafVoterAbi, registryAbi, rewardsManagerAbi } from "./abi.ts";
+import { decodeErrorResult, encodeFunctionData, zeroAddress, type Address, type Hex } from "viem";
+import {
+  aeroEscrowAbi,
+  aeroPoolAbi,
+  aeroVoterAbi,
+  allocateErrorsAbi,
+  leafVoterAbi,
+  registryAbi,
+  rewardsManagerAbi,
+} from "./abi.ts";
 import * as config from "./config.ts";
 import { ANCHORS, CHAIN_ID, GAUGE_FACTORIES, PAYMENTS_MODULE, PRICING, type GaugeKind } from "./config.ts";
 import { key, pricesNow, waysFor, worthOf, type Prices, type Token } from "./prices.ts";
-import { blockTime, contract, read, readEach, required, same, sawBlock, type Read } from "./rpc.ts";
+import { blockTime, contract, read, readEach, required, same, sawBlock, type Read, type Tx } from "./rpc.ts";
 import { describe } from "./tokens.ts";
 
 // A gauge's rewards manager adds up the fees it pays per unit of power and snapshots the sum at each checkpoint, so
@@ -1052,6 +1060,52 @@ export function overall(periods: Period[]): { rule: number; market: number; from
     from: Math.min(...counted.map(({ from }) => from)),
     to: Math.max(...counted.map(({ to }) => to)),
   };
+}
+
+// Allocating. Aero's Voter takes a stake's whole list for Base at once, replacing the last: each pool's amount in
+// sAERO's smallest units, above zero, the gauges strictly ascending, adding up to exactly what the stake has on Base.
+// What it has on no chain moves onto Base in the same call. Base is Aero's root chain, so the LeafVoter takes the list
+// in the same transaction, with no gas limit and no fee, and reverts it while the stake holds.
+export type Allotment = { gauge: Address; amount: bigint };
+export const budgetOf = ({ onBase, idle }: Stake): bigint => onBase + idle;
+// The weights need not add up to 1. Rounding goes to the largest amount; one that rounds to nothing is left out.
+export function allotmentsOf(weights: { gauge: Address; weight: number }[], budget: bigint): Allotment[] {
+  const units = weights.map(({ gauge, weight }) => ({ gauge, units: BigInt(Math.max(0, Math.round(weight * 1e9))) }));
+  const total = units.reduce((sum, each) => sum + each.units, 0n);
+  if (!total || budget <= 0n) return [];
+  const found = units.map(({ gauge, units }) => ({ gauge, amount: (budget * units) / total }));
+  const largest = found.reduce((best, each) => (each.amount > best.amount ? each : best));
+  largest.amount += budget - found.reduce((sum, { amount }) => sum + amount, 0n);
+  return found.filter(({ amount }) => amount > 0n).sort((a, b) => (BigInt(a.gauge) < BigInt(b.gauge) ? -1 : 1));
+}
+const BASE = BigInt(CHAIN_ID);
+export function allocateCall(stake: Stake, allotments: Allotment[], refundTo: Address): Tx {
+  const chains = stake.idle ? [{ chainId: BASE, delta: stake.idle, gasLimit: 0n, value: 0n }] : [];
+  const gauges = allotments.map(({ gauge, amount }) => ({ gauge, allocated: amount, data: "0x" as Hex }));
+  return {
+    to: config.AERO_VOTER,
+    data: encodeFunctionData({
+      abi: aeroVoterAbi,
+      functionName: "allocate",
+      args: [stake.id, chains, [{ chainId: BASE, gasLimit: 0n, value: 0n, gauges }], refundTo],
+    }),
+  };
+}
+// Why a stake cannot allocate now, if it cannot.
+export type Blocked = { why: "ended" } | { why: "empty" } | { why: "held"; until: number };
+export function blockedOf(stake: Stake, cooldown: number, time: number): Blocked | undefined {
+  if (!stake.permanent && stake.end <= time) return { why: "ended" };
+  if (!budgetOf(stake)) return { why: "empty" };
+  const until = movesAt(stake, cooldown);
+  return until > time ? { why: "held", until } : undefined;
+}
+// The name of the error an allocation reverted with, if it is one of Aero's.
+export function refusalOf(data: Hex): string | undefined {
+  try {
+    return decodeErrorResult({ abi: allocateErrorsAbi, data }).errorName;
+  } catch {
+    return undefined;
+  }
 }
 
 // Digits with "." for decimals, spaces ignored.

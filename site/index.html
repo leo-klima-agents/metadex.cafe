@@ -744,14 +744,14 @@
           <ul class="u-stack" data-when="ready" data-list="stake"></ul>
         </section>
         <section class="u-stack u-gapAbove" aria-labelledby="plan-title">
-          <h2 id="plan-title">Allocate by rewards <span class="Pill u-small">Prototype</span></h2>
+          <h2 id="plan-title">Allocate</h2>
           <p class="u-small u-quiet">
-            A simple rule: take the pools that pay out the most each day, and split your sAERO between them in
-            proportion to what each pays out.
+            Start from a simple rule: the pools that pay out the most each day, each given sAERO in proportion to what
+            it pays out. Then change the shares, add or remove pools, and allocate.
           </p>
           <div class="u-row u-small">
             <label
-              >Top
+              >Start from the top
               <select class="u-smallSelect" data-action="aero-count">
                 <option value="1">1</option>
                 <option value="3">3</option>
@@ -763,14 +763,18 @@
               pools</label
             >
             <label
-              >Based on the last
+              >based on the last
               <select class="u-smallSelect" data-action="aero-window">
                 <option value="24">24 hours</option>
                 <option value="48" selected>48 hours</option>
                 <option value="168">7 days</option>
               </select></label
             >
-            <span class="u-withBox"
+            <label data-text="stake-row"
+              >For
+              <select class="u-smallSelect" data-action="aero-stake" data-list="stake-option"></select
+            ></label>
+            <span class="u-withBox" data-text="amount-row"
               ><label for="aero-plan-amount">Amount</label
               ><input
                 id="aero-plan-amount"
@@ -804,7 +808,7 @@
                   <dd class="Facts-tileNote u-small u-quiet" data-text="yours-note"></dd>
                 </div>
                 <div class="Facts-tile">
-                  <dt class="u-label Facts-tileLabel">If you had followed it</dt>
+                  <dt class="u-label Facts-tileLabel">If you had followed the rule</dt>
                   <dd class="Facts-value Facts-figure" data-text="followed"></dd>
                   <dd class="Facts-tileNote u-small u-quiet" data-text="followed-note"></dd>
                 </div>
@@ -817,7 +821,7 @@
               <div class="u-scroll">
                 <table>
                   <caption class="u-visuallyHidden">
-                    The pools the rule picks, and what each would pay
+                    The pools to allocate to, their shares, and what each would pay
                   </caption>
                   <thead>
                     <tr>
@@ -826,10 +830,56 @@
                       <th scope="col">sAERO</th>
                       <th scope="col">Pool pays a day</th>
                       <th scope="col">Per 10k a day</th>
+                      <th scope="col"><span class="u-visuallyHidden">Remove</span></th>
                     </tr>
                   </thead>
                   <tbody data-list="pick"></tbody>
+                  <tfoot>
+                    <tr>
+                      <th scope="row">Total</th>
+                      <td class="u-figures u-strong" data-text="share-total"></td>
+                      <td class="u-figures" data-text="total-amount"></td>
+                      <td></td>
+                      <td></td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
                 </table>
+              </div>
+              <div class="u-row u-small">
+                <label
+                  ><span class="u-visuallyHidden">Add a pool</span
+                  ><select class="u-smallSelect" data-action="aero-add" data-list="add-option"></select
+                ></label>
+                <button
+                  type="button"
+                  class="Button--secondary Button--compact"
+                  data-action="aero-scale"
+                  data-text="scale"
+                >
+                  Scale to 100%
+                </button>
+                <button
+                  type="button"
+                  class="Button--secondary Button--compact"
+                  data-action="aero-rule"
+                  data-text="rule"
+                >
+                  Back to the rule
+                </button>
+                <button
+                  type="button"
+                  class="Button--secondary Button--compact"
+                  data-action="aero-current"
+                  data-text="current"
+                >
+                  Start from where it is now
+                </button>
+              </div>
+              <p class="Notice" data-text="total-notice"></p>
+              <div class="u-row">
+                <button type="button" data-action="aero-allocate">Allocate</button>
+                <p class="u-small u-hang" data-text="allocate-why"></p>
               </div>
               <p class="u-small u-quiet" data-text="plan-note"></p>
               <h3 class="u-label u-gapAbove">How it compares</h3>
@@ -853,9 +903,9 @@
               <p class="u-small u-quiet">
                 Each allocation as it stands today. The first column is a forecast: each pool's recent fees, repeated,
                 plus the incentives already scheduled. The other columns show what the same pools actually paid. They
-                flatter this rule, which picked its pools because they paid well recently; the table below does not.
+                flatter the rule, which picked its pools because they paid well recently; the table below does not.
               </p>
-              <h3 class="u-label u-gapAbove">If you had followed it</h3>
+              <h3 class="u-label u-gapAbove">If you had followed the rule</h3>
               <div class="u-stack" data-text="record" data-state="loading">
                 <ul class="Skeleton" data-when="loading" aria-hidden="true">
                   <li class="Skeleton-item"></li>
@@ -871,7 +921,7 @@
                     <thead>
                       <tr>
                         <th scope="col">Picked on</th>
-                        <th scope="col">This rule</th>
+                        <th scope="col">The rule</th>
                         <th scope="col">Base average</th>
                         <th scope="col">Difference</th>
                       </tr>
@@ -1538,12 +1588,53 @@
     <template id="pick">
       <tr>
         <td><a data-text="pool"></a><small class="u-detail" data-text="note"></small></td>
-        <td class="u-figures" data-text="share"></td>
+        <td class="u-figures">
+          <input
+            class="Amount Amount--share"
+            data-action="aero-share"
+            inputmode="decimal"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          %
+        </td>
         <td class="u-figures" data-text="amount"></td>
         <td class="u-figures" data-text="pays"></td>
         <td class="u-figures u-strong" data-text="per"></td>
+        <td><button type="button" class="Button--close Button--drop" data-action="aero-drop">×</button></td>
       </tr>
     </template>
+    <template id="stake-option"><option data-text="name"></option></template>
+    <template id="add-option"><option data-text="name"></option></template>
+    <template id="allocate-review">
+      <div class="u-stack">
+        <p data-text="summary"></p>
+        <div class="u-scroll">
+          <table>
+            <caption class="u-visuallyHidden">
+              The pools this allocation goes to
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Pool</th>
+                <th scope="col">Share</th>
+                <th scope="col">sAERO</th>
+              </tr>
+            </thead>
+            <tbody data-list="allot"></tbody>
+          </table>
+        </div>
+        <ul class="u-stackTight u-small" data-list="allot-note"></ul>
+      </div>
+    </template>
+    <template id="allot">
+      <tr>
+        <td data-text="pool"></td>
+        <td class="u-figures" data-text="share"></td>
+        <td class="u-figures" data-text="amount"></td>
+      </tr>
+    </template>
+    <template id="allot-note"><li data-text="words"></li></template>
     <template id="versus">
       <tr>
         <td><a data-text="name"></a><small class="u-detail" data-text="note"></small></td>

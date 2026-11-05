@@ -9,8 +9,9 @@ A static page at <https://metadex.cafe/> for Hydrex accounts and Aero stakes on 
   to sign;
 - see what sAERO earns a day in each Aero pool on Base over 24 hours, 48 hours or seven days, and what an added amount
   would dilute it to; each stake's pools, when it can move, what it can claim and its record since it last allocated;
-  Aero's public Autopilots; each pool's history, day by day; and, as a prototype, a simple allocation across the pools
-  that pay the most, with what it should earn next and what it would have earned if followed.
+  Aero's public Autopilots; each pool's history, day by day; and allocating a stake on Base: start from the pools that
+  pay the most, change the shares, see what it should earn next and what the rule would have earned, and send it,
+  simulated on Base before the wallet asks to sign.
 
 It has no server, holds no keys and stores nothing. It reads Base through three public RPCs, the only hosts its Content
 Security Policy lets it connect to: `https://mainnet.base.org`, `https://base.drpc.org` and
