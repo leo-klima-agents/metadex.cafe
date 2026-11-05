@@ -394,8 +394,7 @@ actions.add = async (el) => {
   render();
 };
 
-// Base runs the plan with no minimums, then each route's minimum is set under what it fetched. A route that fails even
-// without a minimum is left out.
+// A route that fails even without a minimum is left out.
 actions["review-swap"] = async (el) => {
   const connection = state.connection;
   const found = scan().value;

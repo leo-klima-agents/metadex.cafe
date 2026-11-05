@@ -23,12 +23,12 @@ import {
   timeAt,
 } from "./rpc.ts";
 
-// For each account and token, Hydrex's reward contracts record the start of the epoch they have paid it up to. Every
-// claim sets this to the current epoch, even a claim of nothing. An epoch counts as paid once the records holding more
-// than half of its rewards' worth, at today's quotes, have moved past its end. A search through past blocks then finds
-// the last payout's block, whose logs make its receipt. Matcha Latte pays each account in one transaction, which logs
-// both the payout and the retirement. Double Espresso records each account's last claim block, and each claim logs the
-// one before.
+// For each account and token, Hydrex's reward contracts record the start of the epoch they have paid it up to; every
+// claim, even of nothing, sets it to the current epoch. An epoch counts as paid once the records holding more than half
+// its rewards' worth, at today's quotes, have moved past its end. A search through past blocks then finds the last
+// payout's block, whose logs make its receipt: Matcha Latte pays each account in one transaction that logs both the
+// payout and the retirement; Double Espresso records each account's last claim block, and each claim logs the one
+// before.
 
 // A payout takes up to half a day after each flip.
 const UNDER_WAY = 12 * 3600;
@@ -174,9 +174,9 @@ export async function readStamps(ids: bigint[], pairs: Pair[], block: number): P
     ids.map((id) => [id, required(found.flatMap(({ item, stamp }) => (item.id === id ? [stamp] : []))).map(Number)]),
   );
 }
-// `earned()` reads at most 50 epochs, starting from the account's last claim from the contract. If it never claimed
-// there, it starts from the week before the contract's first incentives, or from the account's creation if that came
-// after them, as the reward contract does. Each claim moves this window on by up to 50 epochs.
+// `earned()` reads at most 50 epochs from the account's last claim from the contract or, if it never claimed there,
+// from the later of the week before the contract's first incentives and the account's creation, as the contract does.
+// Each claim moves this window on by up to 50 epochs.
 const WINDOW = 50 * WEEK;
 export const windowStart = (stamp: number, first: number, created: number): number =>
   stamp >= first ? stamp : created > first ? created : first - WEEK;
@@ -184,10 +184,9 @@ export const windowStart = (stamp: number, first: number, created: number): numb
 export const passesTo = (start: number, epoch: number): number =>
   epoch < start ? 1 : Math.floor((epoch - start) / WINDOW) + 1;
 
-// What each account can claim from each pair: `earned()`, plus `earnedTokenId` for each of the given `epochs` beyond
-// its 50-epoch window. Each row also carries the claim's passes and the pair's record. If the window's start cannot be
-// read, only `earned()` counts. Each `earned()` call sums up to 50 epochs and costs about a million gas, so calls go 20
-// to a batch.
+// What each account can claim from each pair: `earned()`, plus `earnedTokenId` for each of `epochs` beyond its 50-epoch
+// window, or only `earned()` if the window's start cannot be read. Each `earned()` sums up to 50 epochs and costs about
+// a million gas, so calls go 20 to a batch.
 type Owing<P> = { pair: P; amount: bigint | undefined; passes: number; stamp: number | undefined };
 export async function readOwed<P extends Pair>(
   ids: bigint[],
