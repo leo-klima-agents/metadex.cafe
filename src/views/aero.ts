@@ -237,7 +237,7 @@ export function drawAero(): void {
   list(
     $("[data-list=contract]", aeroView),
     // The one that allocating calls.
-    [["Voter", config.AERO_VOTER]] as const,
+    [["Voter contract", config.AERO_VOTER]] as const,
     ([name]) => name,
     (row, [name, address]) => fill(row, { name, address: { address } }),
   );
