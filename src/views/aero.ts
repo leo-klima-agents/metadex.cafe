@@ -328,6 +328,13 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       : "No pool has enough history yet.",
   });
   if (!overall) return;
+  // What the amount or stake would have earned a day, on average over the steps with an answer.
+  const daily = (steps: Paid[]) => {
+    const found = aero.overallOf(steps);
+    return amount > 0 && found
+      ? `${money(moneyAt((found.total * amount) / aero.PER, market.prices, !found.priced), true)} a day for ${stake ? stakeName(stake, stake.id) : wholePower(amount)}`
+      : null;
+  };
   const figure = (steps: Paid[]) => {
     const found = aero.aprOver(steps);
     return found ? `${aprWords(found.apr, found.priced)} APR` : "–";
@@ -335,13 +342,9 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   fill(aeroView, {
     "average-apr": figure(average),
     "pilot-apr": shown(pilot, figure),
-    // The tile already says Autopilot.
-    "pilot-note": `${pilotName.replace(/^Autopilot /, "")}'s actual allocations`,
+    "pilot-note": shown(pilot, daily),
     "strategy-apr": figure(strategy),
-    "strategy-note":
-      amount > 0
-        ? `${money(moneyAt((overall.total * amount) / aero.PER, market.prices, !overall.priced), true)} a day for ${stake ? stakeName(stake, stake.id) : wholePower(amount)}`
-        : null,
+    "strategy-note": daily(strategy),
     "custom-tile": custom ? true : null,
     "custom-apr": custom ? figure(custom) : null,
   });
