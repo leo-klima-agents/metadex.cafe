@@ -793,7 +793,6 @@
                     <th scope="col">Base average</th>
                     <th scope="col">vs Autopilot</th>
                     <th scope="col">vs average</th>
-                    <th scope="col">No delay <span class="Tag">hindsight</span></th>
                   </tr>
                 </thead>
                 <tbody data-list="step"></tbody>
@@ -806,7 +805,6 @@
                     <td class="u-figures" data-text="all-average"></td>
                     <td class="u-figures" data-text="all-vs-pilot"></td>
                     <td class="u-figures" data-text="all-vs-average"></td>
-                    <td class="u-figures" data-text="all-market"></td>
                   </tr>
                 </tfoot>
               </table>
@@ -950,19 +948,10 @@
               </dd>
             </div>
             <div class="Pair">
-              <dt class="u-small u-quiet">No delay</dt>
-              <dd>
-                Every pool that takes allocations, weighed in each step by what it paid in that step: rewards followed
-                with no delay, which no allocation can do. Its gap to your strategy is roughly what picking from the
-                past costs
-              </dd>
-            </div>
-            <div class="Pair">
               <dt class="u-small u-quiet">Left out</dt>
               <dd>
-                From your strategy and the no-delay column alike: thin pools, with less than 1M sAERO at either end or
-                on average, and pools paying a token without a price. Your strategy judges them by the window before
-                each pick, the no-delay column by each step itself
+                From your strategy and its suggestion: thin pools, with less than 1M sAERO at either end or on average,
+                and pools paying a token without a price, as the window before each pick shows them
               </dd>
             </div>
             <div class="Pair">
@@ -1560,7 +1549,6 @@
         <td class="u-figures" data-text="average"></td>
         <td class="u-figures" data-text="vs-pilot"></td>
         <td class="u-figures" data-text="vs-average"></td>
-        <td class="u-figures" data-text="market"></td>
       </tr>
     </template>
     <template id="legend">

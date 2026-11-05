@@ -316,7 +316,7 @@ const beganOf = (market: Market): number =>
   Math.min(...market.gauges.filter((gauge) => routable(gauge) && gauge.first > 0).map(({ first }) => first));
 
 // How the strategy would have done over the last 8 days, against the Autopilot as it allocated and the Base average,
-// the edited shares held over them in hindsight, and, in the table only, rewards followed with no delay.
+// and the edited shares held over them, in hindsight.
 function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined): void {
   const market = got.value;
   const extra = andThen(got, (found) => data.pastFor(aero.timesFor(found, strategyOf(found))));
@@ -325,7 +325,6 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   const past = aero.mergePast(market.past, extra.value);
   const strategy = aero.strategySteps(market, past, strategyOf(market), amount);
   const custom = plan.rows && aero.customSteps(market, market.past, holdingsOf(plan.rows, market), amount);
-  const benchmark = aero.marketSteps(market, market.past);
   const average = aero.averageSteps(market, market.past);
   const record = data.autopilotRecord();
   const pilot: Got<Paid[]> = andThen(record, (found) => ({
@@ -346,7 +345,6 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   if (!overall) return;
   const ofCustom = custom && aero.overallOf(custom);
   const ofPilot = pilot.value && aero.overallOf(pilot.value);
-  const ofMarket = aero.overallOf(benchmark);
   const ofAverage = aero.overallOf(average);
   const period = periodOf(strategy);
   const what = stake
@@ -403,7 +401,6 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
     "all-custom": custom ? cell(ofCustom) : null,
     "all-pilot": shown(pilot, () => cell(ofPilot)),
     "all-average": cell(ofAverage),
-    "all-market": cell(ofMarket),
     "all-vs-pilot": shown(pilot, overallRatio),
     "all-vs-average": overallRatio(average),
   });
@@ -418,7 +415,6 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
         custom: custom ? cell(custom[k]?.paid) : null,
         pilot: shown(pilot, (steps) => cell(steps[k]?.paid)),
         average: cell(average[k]?.paid),
-        market: cell(benchmark[k]?.paid),
         "vs-pilot": shown(pilot, (steps) => ratio(step.paid, steps[k]?.paid)),
         "vs-average": ratio(step.paid, average[k]?.paid),
       }),
@@ -437,7 +433,6 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       first !== undefined && first > since
         ? `${pilotName} first allocated on Base ${until(market.time - first)} ago: its total, and the comparisons with it, cover only its steps.`
         : "",
-      "No delay: every pool weighed by what it paid in the step itself, which no allocation can do; its gap to your strategy is roughly what picking from the past costs.",
       "Everything is valued at current prices.",
       amount
         ? `Adding ${what} to the pools is taken into account in your strategy and your custom shares, not in the other columns.`

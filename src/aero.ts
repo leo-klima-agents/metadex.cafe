@@ -928,9 +928,6 @@ export function paidOver(gauge: Gauge, accrued: Accrued | undefined, prices: Pri
     power,
   };
 }
-// What a pool paid over the last `hours`, if its history covers them.
-export const paidLately = (gauge: Gauge, hours: Hours, prices: Prices): Paying | undefined =>
-  covers(gauge.windows[hours], hours * HOUR) ? paidOver(gauge, gauge.windows[hours], prices) : undefined;
 // What a pool would pay over the `hold` seconds after the market's time, shared by its sAERO now: its fees as the
 // window paid them, if they come again, and what its programs stream over the hold, prorated to their ends.
 export function paysNext(gauge: Gauge, hours: Hours, market: Market, hold: number): Paying | undefined {
@@ -1003,27 +1000,6 @@ export function marketOver(gauges: Gauge[], payingOf: (gauge: Gauge) => Paying |
   const [f, i] = power ? [(fees * PER) / power, (incentives * PER) / power] : [0, 0];
   return { fees: f, incentives: i, total: f + i };
 }
-// What `amount` sAERO held as the picks would be paid in, by token, a day, largest first; an undefined value has no
-// price.
-export function paidIn(picks: Pick[], amount: number, mine?: Map<string, number>): Flow[] {
-  const by = new Map<string, Flow>();
-  for (const { gauge, weight, paying } of picks) {
-    const added = amount * weight - (mine?.get(key(gauge.address)) ?? 0);
-    const power = paying.power + added;
-    if (!(power > 0)) continue;
-    for (const { token, value } of [...paying.fees, ...paying.incentives]) {
-      const id = token ? key(token.address) : "";
-      const was = by.get(id);
-      const share = value === undefined ? undefined : (value * weight * PER) / power;
-      by.set(id, {
-        token,
-        value: share === undefined || (was && was.value === undefined) ? undefined : (was?.value ?? 0) + share,
-      });
-    }
-  }
-  return [...by.values()].sort((a, b) => (b.value ?? -1) - (a.value ?? -1));
-}
-
 // The record, over the grid's steps of 48 hours, the newest ending now. What a pool paid in a step comes from two of
 // its snapshots: `past` holds every pool's, by rewards manager, at each of its `times`, newest first.
 export type Past = { times: number[]; starts: Map<string, (Start | undefined)[]> };
@@ -1072,8 +1048,8 @@ export type Paid = Step & { paid: Per10k | undefined };
 export type Strategy = { count: number; hours: Hours; again: boolean; blueChips: boolean };
 export const isBlueChip = ({ token0, token1 }: Gauge): boolean =>
   [token0, token1].every(({ address }) => config.BLUE_CHIPS.some((chip) => same(chip, address)));
-// The strategy, the suggestion and the market weigh only pools that are not thin, which one allocation changes, and
-// that pay only tokens with a price, as what is known then shows them: the window before a pick, or the step itself.
+// The strategy and the suggestion weigh only pools that are not thin, which one allocation changes, and that pay only
+// tokens with a price, as the window before a pick shows them.
 export const weighable = (accrued: Accrued, paying: Paying): boolean =>
   !thinOver(accrued) && !!per10kOf(paying)?.priced;
 // The picks at `time`, from what each pool paid over the `hours` before it and what its programs live then would
@@ -1117,19 +1093,6 @@ export function strategySteps(market: Market, past: Past, strategy: Strategy, am
 // Shares chosen now, held over every step: hindsight.
 export const customSteps = (market: Market, past: Past, holdings: Holding[], amount = 0): Paid[] =>
   heldSteps(market, past, () => holdings, amount);
-// The market: every pool that takes allocations and is weighable over the step, weighed in each step by what it paid
-// in that step itself, as if allocations followed rewards with no delay.
-export const marketSteps = (market: Market, past: Past): Paid[] =>
-  stepsOf(market).map((step) => {
-    const paid = paidDuring(market, past, step);
-    const pools = market.gauges.filter(routable).flatMap((gauge) => {
-      const accrued = accrualOf(gauge, past, step.from, step.to, market);
-      const paying = accrued && paid(gauge);
-      return paying && weighable(accrued, paying) ? [{ gauge, paying }] : [];
-    });
-    return { ...step, paid: heldOver(picksOf(pools, Infinity), paid) };
-  });
-
 // The Base average: what the average sAERO allocated on Base earned in each step, all that the pools paid over all
 // their sAERO, leaving out pools paying a token without a price, as the pools' page's tile does.
 export const averageSteps = (market: Market, past: Past): Paid[] =>

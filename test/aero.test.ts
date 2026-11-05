@@ -19,7 +19,6 @@ import {
   heldOver,
   marketOver,
   overallOf,
-  paidIn,
   paidOver,
   gridOf,
   unreadStart,
@@ -49,7 +48,6 @@ import {
   averageSteps,
   customSteps,
   isBlueChip,
-  marketSteps,
   mergePast,
   movedSteps,
   movesOf,
@@ -671,20 +669,6 @@ test("the rule over its own window earns at least the average of its pools, and 
   near(half.total, 2.5, "half idle earns half");
 });
 
-test("the rule's pay comes in its pools' tokens, largest first, and a token without a price says so", () => {
-  const paid = gauge({ perDay: 1, programs: [{ ...streaming(1_000, NOW - DAY, NOW + 9 * DAY), token: other }] });
-  const g = gauge({ perDay: 3 });
-  const m = market([paid, g]);
-  const picks = picksOf(
-    m.gauges.map((each) => ({ gauge: each, paying: paysNext(each, 48, m, HOLD)! })),
-    2,
-  );
-  const flows = paidIn(picks, 0);
-  assert.equal(flows.length, 2);
-  assert.equal(flows[0]!.token?.symbol, "USDC");
-  assert.equal(flows[1]!.value, undefined, "OTHER has no price");
-});
-
 test("the windows and the record's picks lie on one grid of 48 hours, counted back from the last whole hour", () => {
   // NOW is on the hour.
   const { windows, record, times } = gridOf(NOW + 1_234);
@@ -801,7 +785,7 @@ test("a strategy picks at each step from only the window before it, and earns wh
   near(overallOf(strategySteps(m, m.past, { ...top, again: false }))!.total, 5.5, "over the 8 days");
 });
 
-test("the strategy leaves out the pools the market does, as the window before each pick shows them", () => {
+test("the strategy leaves out thin pools and pools paying a token without a price, as the window before each pick shows them", () => {
   // Each would top the picks by what it pays in all: a thin pool, and one streaming a token without a price.
   const thin = (extra: number[]) => [history([1_000, 1_000, 1_000, 1_000, 1_000], extra, {}, 100_000n * SAERO)];
   const unpriced = (extra: number[]) => [
@@ -821,7 +805,6 @@ test("the strategy leaves out the pools the market does, as the window before ea
       assert.ok(paid(m.gauges[2]!) > Math.max(paid(m.gauges[0]!), paid(m.gauges[1]!)), `${what} pays the most`);
     }
     nearAll(totals(strategySteps(m, m.past, top)), [1, 1, 1, 1], `${what} left out`);
-    nearAll(totals(marketSteps(m, m.past)), [101 / 11, 101 / 11, 101 / 11, 101 / 11], `${what} left out of the market`);
   }
 });
 
@@ -846,19 +829,8 @@ test("a longer window needs snapshots before the grid's, read for it alone", () 
   assert.ok(totals(strategySteps(m, all, top)).every((each) => each !== undefined));
 });
 
-test("the market weighs every pool by what it paid in each step itself, leaving out thin pools and tokens without a price", () => {
+test("custom shares are held as they are over every step", () => {
   const { a, b, m } = twoPools();
-  nearAll(totals(marketSteps(m, m.past)), [101 / 11, 101 / 11, 101 / 11, 101 / 11], "10:1 in each step");
-  const thin = twoPools([], (extra) => [history([100, 100, 100, 100, 100], extra, {}, 100_000n * SAERO)]).m;
-  assert.equal(thin.gauges.length, 3);
-  nearAll(totals(marketSteps(thin, thin.past)), [101 / 11, 101 / 11, 101 / 11, 101 / 11], "the thin pool left out");
-  const unpriced = twoPools([], (extra) => [history([100, 100, 100, 100, 100], extra, { token0: other })]).m;
-  nearAll(
-    totals(marketSteps(unpriced, unpriced.past)),
-    [101 / 11, 101 / 11, 101 / 11, 101 / 11],
-    "and one paid in a token without a price",
-  );
-  // Custom shares are held as they are over every step.
   const custom = customSteps(m, m.past, [
     { gauge: a.gauge, weight: 0.5 },
     { gauge: b.gauge, weight: 0.5 },
