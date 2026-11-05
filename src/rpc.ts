@@ -96,10 +96,11 @@ export function sawBlock(time: number): void {
 export const now = (): number => Math.floor(Date.now() / 1000) + drift;
 
 // What a read is for. Reads with no tag, or with a tag the shown page draws, go first. The rest read ahead for other
-// pages and take at most `BEHIND` of the `MAX` slots.
+// pages and take at most `BEHIND` of the `MAX` slots, which they keep until they are answered, so that the shown page,
+// whose reads often wait on one another, always has the other four for its next ones.
 export type Tag = "earnings" | "average" | "shares" | "payouts" | "swap" | "aero";
 const MAX = 6;
-const BEHIND = 4;
+const BEHIND = 2;
 let shown = new Set<Tag>();
 let running = 0;
 let behind = 0;

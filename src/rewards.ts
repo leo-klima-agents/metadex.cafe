@@ -48,13 +48,13 @@ async function contractsOf(pools: Address[], rd: Read): Promise<Contract[]> {
   });
 }
 // Every pool's reward contracts, for the average and for voters who voted again after an epoch began. They take
-// thousands of reads, so they are read once. Hydrex only adds pools, so the list covers every epoch up to the one under
-// way when it was read.
-async function allContracts(start: number): Promise<Contract[]> {
+// thousands of reads, so they are read once, with the first caller's read and so for its page. Hydrex only adds pools,
+// so the list covers every epoch up to the one under way when it was read.
+async function allContracts(start: number, rd: Read): Promise<Contract[]> {
   const readAll = async () => {
-    const [length, active] = required(await read([voter("length"), voter("_epochTimestamp")]));
-    const pools = required(await read(Array.from({ length: Number(length) }, (_, i) => voter("pools", BigInt(i)))));
-    return { through: Number(active), contracts: await contractsOf(pools, read) };
+    const [length, active] = required(await rd([voter("length"), voter("_epochTimestamp")]));
+    const pools = required(await rd(Array.from({ length: Number(length) }, (_, i) => voter("pools", BigInt(i)))));
+    return { through: Number(active), contracts: await contractsOf(pools, rd) };
   };
   const found = await memo("contracts", readAll);
   return start < found.through ? found.contracts : (await memo(`contracts ${start}`, readAll)).contracts;
@@ -106,13 +106,13 @@ async function paidIn(contracts: Contract[], start: number, rd: Read): Promise<P
 }
 // Every pool's, read once for each epoch: every voter takes its share of these, as the epoch's prices need them all.
 const allPaid = (start: number, rd: Read) =>
-  memo(`paid ${start}`, async () => paidIn(await allContracts(start), start, rd));
+  memo(`paid ${start}`, async () => paidIn(await allContracts(start, rd), start, rd));
 
 // What `holder`'s votes, or all votes when `holder` is undefined, earned in the epoch from `start`, with the votes for
 // each pool: in `contracts`, or in every pool's. Contracts not among every pool's are read apart.
 async function rewardsOf(start: number, holder: Address | undefined, rd: Read, contracts?: Contract[]) {
   const at = BigInt(start);
-  const every = await allContracts(start);
+  const every = await allContracts(start, rd);
   const own = contracts ?? every;
   const listed = new Set(every.map(({ address }) => key(address)));
   const apart = own.filter(({ address }) => !listed.has(key(address)));

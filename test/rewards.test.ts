@@ -14,6 +14,7 @@ import { escrowAbi, rewardsAbi, voterAbi } from "../src/abi.ts";
 import { ANCHORS, FIAT_FEEDS, WETH } from "../src/config.ts";
 import { WEEK } from "../src/format.ts";
 import { key, type Token } from "../src/prices.ts";
+import { read, type Read } from "../src/rpc.ts";
 import {
   allEarnings,
   earnedBy,
@@ -213,11 +214,19 @@ test("an epoch's rewards are read once for every voter, on its own pools or not,
     return Response.json({ result: encodeFunctionResult({ abi: multicall3Abi, functionName: "aggregate3", result }) });
   });
 
+  // Each through its own read, as each page's are tagged: every call, the pools' list included, goes through one.
+  const through = new Map<string, number>();
+  const own: Read = (calls, options) => {
+    for (const { functionName } of calls) through.set(functionName, (through.get(functionName) ?? 0) + 1);
+    return read(calls, options);
+  };
   const [a, b, all] = await Promise.all([
-    votesEarned(A, START, false),
-    votesEarned(B, START, false),
-    allEarnings(START),
+    votesEarned(A, START, false, own),
+    votesEarned(B, START, false, own),
+    allEarnings(START, own),
   ]);
+  for (const name of ["length", "pools", "gauges", "internal_bribes", "external_bribes"])
+    assert.equal(through.get(name), asked.get(name), `${name} goes through the caller's read`);
   const amounts = ({ rewards }: Earnings) =>
     rewards.map(({ contract, token, amount }) => [contract, token.symbol, amount]);
   assert.deepEqual(amounts(a), [

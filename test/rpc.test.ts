@@ -84,7 +84,7 @@ test("reads go through Multicall3; a call that fails reads as undefined", async 
   assert.deepEqual(await read([balance, balance]), [42n, undefined]);
 });
 
-test("reads for the page shown go first; the others never hold more than four slots", async () => {
+test("reads for the page shown go first; the others never hold more than two slots", async () => {
   const started: string[] = [];
   const pending: (() => void)[] = [];
   serve((_, { params }) => {
@@ -95,12 +95,16 @@ test("reads for the page shown go first; the others never hold more than four sl
   const all = ["a", "b", "c", "d", "e"].map((id) => rpc("x", [id], { tag: "payouts" }));
   all.push(rpc("x", ["shown"], { tag: "swap" }), rpc("x", ["untagged"]));
   await new Promise((done) => setTimeout(done, 300));
-  assert.deepEqual(started.sort(), ["a", "b", "c", "d", "shown", "untagged"].sort());
-  for (const go of pending) go();
+  assert.deepEqual(started.sort(), ["a", "b", "shown", "untagged"].sort(), "two slots stay free for the page shown");
+  const later = rpc("x", ["shown later"], { tag: "swap" });
   await new Promise((done) => setTimeout(done, 100));
-  pending.splice(0).forEach((go) => go());
-  await Promise.all(all);
-  assert.equal(started.length, 7);
+  assert.ok(started.includes("shown later"), "and its next read takes one at once");
+  for (let round = 0; round < 4; round++) {
+    pending.splice(0).forEach((go) => go());
+    await new Promise((done) => setTimeout(done, 100));
+  }
+  await Promise.all([...all, later]);
+  assert.equal(started.length, 8);
 });
 
 test("an RPC that answers other than JSON-RPC, even in JSON, or does not answer, is asked again", async () => {
