@@ -16,6 +16,7 @@ import {
   type Earnings,
   type Stake,
 } from "./rewards.ts";
+import { pricesFrom } from "./prices.ts";
 import { now, tagged } from "./rpc.ts";
 import { state } from "./state.ts";
 
@@ -119,6 +120,24 @@ export const autopilots = (): Got<aero.Stake[]> =>
       ),
     5 * MINUTE,
   );
+// Prices at the record's step starts, from the pools that price each token now. The grid's times are on the hour, so
+// they are kept, unless some pools could not be read.
+export const pricesThen = (): Got<aero.Then> =>
+  andThen(market(), (found) => {
+    const times = aero.stepsOf(found).map(({ from }) => from);
+    const sources = found.prices.sources ?? new Map();
+    const amounts = aero.dayOf(found.gauges, found.time);
+    return use(
+      `aero prices ${times.join()}`,
+      async () =>
+        new Map(
+          await Promise.all(
+            times.map(async (time) => [time, await pricesFrom(sources, amounts, time, tagged("aero"))] as const),
+          ),
+        ),
+      (then: aero.Then) => ([...then.values()].some(({ unread }) => unread) ? 5 * MINUTE : Infinity),
+    );
+  });
 // Snapshots beyond the grid's, which a longer window needs, read when it is chosen.
 export function pastFor(times: number[]): Got<aero.Past> {
   if (!times.length) return { value: { times: [], starts: new Map() } };

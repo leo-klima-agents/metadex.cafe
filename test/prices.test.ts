@@ -20,6 +20,7 @@ import {
   pairPrice,
   pricesAt,
   pricesAtFlip,
+  pricesFrom,
   pricesNow,
   quotesOf,
   slipstreamPool,
@@ -289,6 +290,29 @@ test("the deepest pool wins, now and at a flip", async () => {
   close((await priceOf(pools))!, 3 * USDC_USD);
   forget();
   close((await priceOf(pools, TOKEN, NOW - 7 * 86_400))!, 3 * USDC_USD);
+});
+
+test("prices at another time come from the pools that priced each token, without searching again", async () => {
+  // 2,000 USDC deep at 2 USDC in Aero, 15,000 at 3 in Aerodrome.
+  const pools: Fake[] = [
+    { exchange: AERO, token: TOKEN, now: [1_000, 2_000] },
+    { exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] },
+  ];
+  const { sources } = await pricesNow([TOKEN], new Map(), market(pools).reader);
+  forget();
+  const { reader, asked } = market(pools);
+  close((await pricesFrom(sources!, new Map(), NOW - 2 * 86_400, reader)).of.get(TOKEN.address)!, 3 * USDC_USD);
+  for (const { name, factory } of PRICING.flat()) assert.ok(!asked.has(factory.toLowerCase()), `no lookup in ${name}`);
+  assert.ok(!asked.has(`0x${"a0".padStart(40, "0")}`), "nor a read of the shallower pool");
+  // A pool younger than the time has no price then.
+  const young = [{ ...pools[1]!, since: NOW - 86_400 }];
+  forget();
+  assert.equal(
+    (await pricesFrom(sources!, new Map(), NOW - 2 * 86_400, market([pools[0]!, ...young]).reader)).of.get(
+      TOKEN.address,
+    ),
+    undefined,
+  );
 });
 
 test("an epoch's prices come from Hydrex's pools only; current ones from all", async () => {

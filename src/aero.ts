@@ -374,7 +374,12 @@ export async function readMarket(
     maxGauges: Number(maxGauges),
     gauges,
     prices: late
-      ? { ...early, of: new Map([...early.of, ...late.of]), ...((early.unread || late.unread) && { unread: true }) }
+      ? {
+          ...early,
+          of: new Map([...early.of, ...late.of]),
+          sources: new Map([...(early.sources ?? []), ...(late.sources ?? [])]),
+          ...((early.unread || late.unread) && { unread: true }),
+        }
       : early,
     unread: [...universe.unread, ...listed.flatMap(({ address }) => (kept.has(address) ? [] : [address]))],
     unknown: universe.unknown,
@@ -1017,7 +1022,23 @@ export function accrualOf(gauge: Gauge, past: Past, from: number, to: number, ma
 export type Step = { from: number; to: number };
 export const stepsOf = (market: Market): Step[] =>
   market.past.times.slice(0, PICKS).map((from, k) => ({ from, to: k ? market.past.times[k - 1]! : market.time }));
-export type Paid = Step & { paid: Per10k | undefined };
+// `prices` value the step: the market's, or the mean of the prices at its two ends.
+export type Paid = Step & { paid: Per10k | undefined; prices: Prices };
+// Prices at the record's step starts, by time.
+export type Then = Map<number, Prices>;
+const pricedAt = (market: Market, then: Then | undefined, time: number): Prices =>
+  (time >= market.time ? market.prices : then?.get(time)) ?? market.prices;
+// The mean of the prices at a step's two ends, or either's where the other has none; the market's without `then`.
+export function pricesOver(market: Market, then: Then | undefined, { from, to }: Step): Prices {
+  const [a, b] = [then?.get(from), pricedAt(market, then, to)];
+  if (!a) return market.prices;
+  const of = new Map<string, number>();
+  for (const token of new Set([...a.of.keys(), ...b.of.keys()])) {
+    const [x, y] = [a.of.get(token), b.of.get(token)];
+    of.set(token, x === undefined ? y! : y === undefined ? x : (x + y) / 2);
+  }
+  return { unit: market.prices.unit, rates: market.prices.rates, of, ...((a.unread || b.unread) && { unread: true }) };
+}
 
 // The top `count` pools, of all or of blue chips, by the fees they paid over the `hours` before each pick and, unless
 // `incentives` is false, what their live programs stream over the next step, each given its share; picked again every
@@ -1029,12 +1050,13 @@ export const isBlueChip = ({ token0, token1 }: Gauge): boolean =>
 export const weighable = (accrued: Accrued, paying: Paying): boolean =>
   !thinOver(accrued) && !!per10kOf(paying)?.priced;
 // From what each pool paid over the `hours` before `time`, and what its programs live then would stream over the next
-// step.
+// step, at `prices`, those of `time`.
 export function picksAt(
   market: Market,
   past: Past,
   time: number,
   { count, hours, blueChips, incentives }: Strategy,
+  prices = market.prices,
 ): Pick[] {
   const since = time - hours * HOUR;
   const pools = market.gauges
@@ -1045,8 +1067,8 @@ export function picksAt(
         return [];
       const live = (program: Program) => program.start <= time;
       const paying = {
-        fees: feeFlows(gauge, before, market.prices),
-        incentives: streamFlows(gauge, time, time + STEP, market.prices, live),
+        fees: feeFlows(gauge, before, prices),
+        incentives: streamFlows(gauge, time, time + STEP, prices, live),
         power: meanOf(before),
       };
       return weighable(before, paying) ? [{ gauge, paying }] : [];
@@ -1059,26 +1081,35 @@ export function timesFor(market: Market, { again, hours }: Strategy): number[] {
   const picks = again ? steps.map(({ from }) => from) : steps.slice(-1).map(({ from }) => from);
   return picks.map((time) => time - hours * HOUR).filter((time) => !market.past.times.includes(time));
 }
-const paidDuring = (market: Market, past: Past, step: Step) => (gauge: Gauge) =>
-  paidOver(gauge, accrualOf(gauge, past, step.from, step.to, market), market.prices);
-const heldSteps = (market: Market, past: Past, holdingsAt: (step: Step) => Holding[], amount = 0): Paid[] =>
-  stepsOf(market).map((step) => ({
-    ...step,
-    paid: heldOver(holdingsAt(step), paidDuring(market, past, step), amount),
-  }));
-export function strategySteps(market: Market, past: Past, strategy: Strategy, amount = 0): Paid[] {
-  const once = strategy.again ? undefined : picksAt(market, past, stepsOf(market).at(-1)!.from, strategy);
-  return heldSteps(market, past, (step) => once ?? picksAt(market, past, step.from, strategy), amount);
+const paidDuring = (market: Market, past: Past, step: Step, prices: Prices) => (gauge: Gauge) =>
+  paidOver(gauge, accrualOf(gauge, past, step.from, step.to, market), prices);
+const heldSteps = (
+  market: Market,
+  past: Past,
+  holdingsAt: (step: Step) => Holding[],
+  amount = 0,
+  then?: Then,
+): Paid[] =>
+  stepsOf(market).map((step) => {
+    const prices = pricesOver(market, then, step);
+    return { ...step, paid: heldOver(holdingsAt(step), paidDuring(market, past, step, prices), amount), prices };
+  });
+// Each pick at the prices when it was made.
+export function strategySteps(market: Market, past: Past, strategy: Strategy, amount = 0, then?: Then): Paid[] {
+  const pick = (time: number) => picksAt(market, past, time, strategy, pricedAt(market, then, time));
+  const once = strategy.again ? undefined : pick(stepsOf(market).at(-1)!.from);
+  return heldSteps(market, past, (step) => once ?? pick(step.from), amount, then);
 }
 // Shares chosen now, held over every step: hindsight.
-export const customSteps = (market: Market, past: Past, holdings: Holding[], amount = 0): Paid[] =>
-  heldSteps(market, past, () => holdings, amount);
+export const customSteps = (market: Market, past: Past, holdings: Holding[], amount = 0, then?: Then): Paid[] =>
+  heldSteps(market, past, () => holdings, amount, then);
 // The Base average: all the pools paid in each step over all their sAERO, leaving out pools paying a token without a
 // price.
-export const averageSteps = (market: Market, past: Past): Paid[] =>
+export const averageSteps = (market: Market, past: Past, then?: Then): Paid[] =>
   stepsOf(market).map((step) => {
-    const { fees, incentives, total } = marketOver(market.gauges, paidDuring(market, past, step));
-    return { ...step, paid: total > 0 ? { fees, incentives, total, priced: true } : undefined };
+    const prices = pricesOver(market, then, step);
+    const { fees, incentives, total } = marketOver(market.gauges, paidDuring(market, past, step, prices));
+    return { ...step, paid: total > 0 ? { fees, incentives, total, priced: true } : undefined, prices };
   });
 
 // A stake's allocations, newest first, each read at the block before the next, back to the first at or before `since`,
@@ -1127,8 +1158,9 @@ export async function movesPast(moves: Move[], market: Market, since: number, rd
 }
 // Each step cut where the stake moved, each part held as its allocation was then. A step it held no allocation for
 // half of has no answer, rather than one that a few hours stand for.
-export function movedSteps(market: Market, past: Past, moves: Move[]): Paid[] {
+export function movedSteps(market: Market, past: Past, moves: Move[], then?: Then): Paid[] {
   return stepsOf(market).map((step) => {
+    const prices = pricesOver(market, then, step);
     const inside = moves.map(({ at }) => at).filter((at) => at > step.from && at < step.to);
     const cuts = [step.from, ...inside.sort((a, b) => a - b), step.to];
     let [fees, incentives, seconds, priced] = [0, 0, 0, true];
@@ -1141,7 +1173,7 @@ export function movedSteps(market: Market, past: Past, moves: Move[]): Paid[] {
         gauge: gaugeAt(market, gauge),
         weight: Number(amount) / Number(total),
       }));
-      const paid = heldOver(holdings, paidDuring(market, past, part));
+      const paid = heldOver(holdings, paidDuring(market, past, part, prices));
       if (!paid) continue;
       const length = part.to - part.from;
       [fees, incentives, seconds, priced] = [
@@ -1157,6 +1189,7 @@ export function movedSteps(market: Market, past: Past, moves: Move[]): Paid[] {
         seconds && seconds >= (step.to - step.from) / 2
           ? { fees: fees / seconds, incentives: incentives / seconds, total: (fees + incentives) / seconds, priced }
           : undefined,
+      prices,
     };
   });
 }
@@ -1173,6 +1206,16 @@ export function overallOf(steps: Paid[]): Per10k | undefined {
     total: mean(({ total }) => total),
     priced: counted.every(({ paid }) => paid!.priced),
   };
+}
+// The APR over the steps with an answer, each at its own prices and weighed by its length.
+export function aprOver(steps: Paid[]): { apr: number; priced: boolean } | undefined {
+  let [sum, seconds, priced] = [0, 0, true];
+  for (const { from, to, paid, prices } of steps) {
+    const apr = paid && aprOf(paid.total, prices);
+    if (apr === undefined) continue;
+    [sum, seconds, priced] = [sum + apr * (to - from), seconds + to - from, priced && paid!.priced];
+  }
+  return seconds ? { apr: sum / seconds, priced } : undefined;
 }
 
 // Aero's Voter takes a stake's whole list for Base at once, replacing the last: amounts in sAERO's smallest units,

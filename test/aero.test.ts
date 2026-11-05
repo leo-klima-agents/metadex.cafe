@@ -8,6 +8,7 @@ import {
   WINDOWS,
   accruedFrom,
   aprOf,
+  aprOver,
   allocateCall,
   allotmentsOf,
   amountOf,
@@ -812,6 +813,38 @@ test("the record's steps run 48 hours each from the grid's times, the newest to 
       [4, 3],
     ],
   );
+});
+
+test("with the prices then, a step is valued at the mean of its ends' prices, and a pick at its own time's", () => {
+  const { m } = twoPools();
+  const top = { count: 1, hours: 48, again: true, blueChips: false } as const;
+  const starts = stepsOf(m).map(({ from }) => from);
+  const at = (usdcPrice?: number) =>
+    prices([...(usdcPrice === undefined ? [] : [[usdc, usdcPrice] as [Token, number]]), [weth, 2_000], [aero, 0.6]]);
+  // USDC, in which both pools pay, at $2 at every step start and $1 now: the newest step at $1.50, the others at $2.
+  const then = new Map(starts.map((time) => [time, at(2)]));
+  nearAll(totals(strategySteps(m, m.past, top, 0, then)), [1.5, 2, 2, 2], "the strategy");
+  const scaled = (plain: Paid[]) => totals(plain).map((value, k) => value! * (k ? 2 : 1.5));
+  nearAll(totals(averageSteps(m, m.past, then)), scaled(averageSteps(m, m.past)), "the Base average");
+  const holdings = m.gauges.map((gauge) => ({ gauge, weight: 0.5 }));
+  nearAll(totals(customSteps(m, m.past, holdings, 0, then)), scaled(customSteps(m, m.past, holdings)), "custom");
+  // No price for USDC when the second newest step was picked: every pool's fees were unpriced then, so nothing was
+  // picked, though the step itself is valued at its end's price.
+  then.set(starts[1]!, at());
+  nearAll(totals(strategySteps(m, m.past, top, 0, then)), [1.5, undefined, 2, 2], "picked then");
+});
+
+test("an APR over steps takes each step's at its own price of AERO, weighed by its length", () => {
+  const step = (from: number, total: number | undefined, aeroPrice: number): Paid => ({
+    from,
+    to: from + STEP,
+    paid: total === undefined ? undefined : { fees: total, incentives: 0, total, priced: true },
+    prices: prices([[aero, aeroPrice]]),
+  });
+  // $1 a day for 10,000 sAERO: 7.3% a year at $0.50 an AERO, 3.65% at $1.
+  const found = aprOver([step(NOW - STEP, 1, 0.5), step(NOW - 2 * STEP, 1, 1), step(NOW - 3 * STEP, undefined, 1)]);
+  near(found!.apr, (0.073 + 0.0365) / 2, "the steps with an answer");
+  assert.equal(aprOver([step(NOW - STEP, undefined, 1)]), undefined);
 });
 
 test("a strategy picks at each step from only the window before it, and earns what its pools paid in the step", () => {

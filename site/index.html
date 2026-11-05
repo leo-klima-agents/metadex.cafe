@@ -996,8 +996,9 @@
             <div class="Pair">
               <dt class="u-small u-quiet">Prices</dt>
               <dd>
-                Averages over the last half hour, from Chainlink and from pools deep enough for a day of this exchange
-                revenue, used for every step back to 8 days ago; a token without one counts for nothing
+                Averages over the half hour before, from Chainlink and from pools deep enough for a day of this exchange
+                revenue; a past step takes the mean of the prices at its start and its end, from the pools that price
+                each token now, and a pick those when it was made; a token without one counts for nothing
               </dd>
             </div>
             <div class="Pair">

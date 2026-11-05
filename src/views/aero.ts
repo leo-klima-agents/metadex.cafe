@@ -10,7 +10,6 @@ import {
   type Market,
   type Paid,
   type Pending,
-  type Per10k,
   type Stake,
 } from "../aero.ts";
 import { andThen, type Got } from "../cache.ts";
@@ -18,7 +17,7 @@ import * as config from "../config.ts";
 import { AUTOPILOTS, BASESCAN, PAYMENTS_MODULE } from "../config.ts";
 import * as data from "../data.ts";
 import { compact, count, date, day, figure, fixed, fraction, money, moneyAt, short, until, utc } from "../format.ts";
-import { key } from "../prices.ts";
+import { key, type Prices } from "../prices.ts";
 import { hrefOf } from "../routes.ts";
 import { now, same, simulate } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
@@ -50,11 +49,12 @@ const stepBrief = (k: number): string => `${k * STEP_DAYS}–${(k + 1) * STEP_DA
 // To the cent, and "At least" when some tokens have no price.
 const perDay = (value: number, priced: boolean, market: Market): string =>
   money(moneyAt(value, market.prices, !priced), true);
-// What 10,000 sAERO earn a day as an APR, to a tenth of a point, and "At least" when some tokens have no price.
-function apr(per10k: number, priced: boolean, market: Market): string {
-  const found = aero.aprOf(per10k, market.prices);
-  return found === undefined ? "–" : `${priced ? "" : "At\u00a0least\u00a0"}${fraction(found, true)}`;
-}
+// To a tenth of a point, and "At least" when some tokens have no price.
+const aprWords = (found: number | undefined, priced: boolean): string =>
+  found === undefined ? "–" : `${priced ? "" : "At\u00a0least\u00a0"}${fraction(found, true)}`;
+// What 10,000 sAERO earn a day as an APR.
+const aprAt = (per10k: number, priced: boolean, prices: Prices): string => aprWords(aero.aprOf(per10k, prices), priced);
+const apr = (per10k: number, priced: boolean, market: Market): string => aprAt(per10k, priced, market.prices);
 const sAero = (amount: bigint): string => `${compact(amount)} sAERO`;
 const power = (amount: bigint): string => `${compact(amount)} sAERO weight`;
 const hoursWords = (seconds: number): string =>
@@ -310,15 +310,19 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
           },
     ),
   });
-  if (!market || !extra.value) return void fill(aeroView, { plan: stateOf(extra) });
+  // Without the prices then, at today's.
+  const pricing = andThen(got, () => data.pricesThen());
+  if (!market || !extra.value || (!pricing.value && !pricing.failed))
+    return void fill(aeroView, { plan: stateOf(extra.value ? {} : extra) });
+  const then = pricing.value;
   const { hours, again, incentives } = strategyOf(market);
   const past = aero.mergePast(market.past, extra.value);
-  const strategy = aero.strategySteps(market, past, strategyOf(market), amount);
-  const custom = plan.rows && aero.customSteps(market, market.past, holdingsOf(plan.rows, market), amount);
-  const average = aero.averageSteps(market, market.past);
+  const strategy = aero.strategySteps(market, past, strategyOf(market), amount, then);
+  const custom = plan.rows && aero.customSteps(market, market.past, holdingsOf(plan.rows, market), amount, then);
+  const average = aero.averageSteps(market, market.past, then);
   const record = data.autopilotRecord();
   const pilot: Got<Paid[]> = andThen(record, (found) => ({
-    value: found ? aero.movedSteps(market, aero.mergePast(market.past, found.past), found.moves) : [],
+    value: found ? aero.movedSteps(market, aero.mergePast(market.past, found.past), found.moves, then) : [],
   }));
   const pilotName = (record.value && autopilotOf(record.value.stake)?.name) ?? AUTOPILOTS[0]!.name;
   const overall = aero.overallOf(strategy);
@@ -333,9 +337,6 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       : "No pool has enough history yet.",
   });
   if (!overall) return;
-  const ofCustom = custom && aero.overallOf(custom);
-  const ofPilot = pilot.value && aero.overallOf(pilot.value);
-  const ofAverage = aero.overallOf(average);
   const first = record.value?.moves.at(-1)?.at;
   const since = strategy.at(-1)!.from;
   // Over fewer days than the record's.
@@ -343,24 +344,27 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   const earned = money(
     moneyAt((overall.total * amount * secondsOf(strategy)) / aero.PER / aero.DAY, market.prices, !overall.priced),
   );
-  const figure = (found: Per10k | undefined) => (found ? `${apr(found.total, found.priced, market)} APR` : "–");
+  const figure = (steps: Paid[]) => {
+    const found = aero.aprOver(steps);
+    return found ? `${aprWords(found.apr, found.priced)} APR` : "–";
+  };
   fill(aeroView, {
-    "average-apr": figure(ofAverage),
-    "pilot-apr": shown(pilot, () => figure(ofPilot)),
+    "average-apr": figure(average),
+    "pilot-apr": shown(pilot, figure),
     "pilot-note": shown(pilot, () =>
       first !== undefined && first > since
         ? `${pilotName}'s actual allocations, since it first allocated on Base ${until(market.time - first)} ago`
         : `${pilotName}'s actual allocations`,
     ),
-    "strategy-apr": figure(overall),
+    "strategy-apr": figure(strategy),
     "strategy-note":
       amount > 0
         ? `${earned}${shorter(strategy)} for ${stake ? stakeName(stake, stake.id) : wholePower(amount)}`
         : shorter(strategy).trim() || null,
     "custom-tile": custom ? true : null,
-    "custom-apr": figure(ofCustom),
+    "custom-apr": custom ? figure(custom) : null,
   });
-  drawLines(market, [
+  drawLines([
     { id: "average", name: "Base average", color: "var(--series-3)", steps: average },
     { id: "pilot", name: pilotName, color: "var(--series-2)", steps: pilot.value ?? [] },
     { id: "strategy", name: "Your strategy", color: "var(--series-1)", steps: strategy },
@@ -369,7 +373,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       : []),
   ]);
   fill(aeroView, { "custom-head": custom ? true : null });
-  const cell = (paid: Per10k | undefined) => (paid ? apr(paid.total, paid.priced, market) : "–");
+  const cell = (step: Paid | undefined) => (step?.paid ? aprAt(step.paid.total, step.paid.priced, step.prices) : "–");
   list(
     $("[data-list=step]", aeroView),
     strategy,
@@ -377,10 +381,10 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
     (tr, step, k) =>
       fill(tr, {
         when: stepWords(k),
-        strategy: cell(step.paid),
-        custom: custom ? cell(custom[k]?.paid) : null,
-        pilot: shown(pilot, (steps) => cell(steps[k]?.paid)),
-        average: cell(average[k]?.paid),
+        strategy: cell(step),
+        custom: custom ? cell(custom[k]) : null,
+        pilot: shown(pilot, (steps) => cell(steps[k])),
+        average: cell(average[k]),
       }),
   );
   const knows = `each pool's fees over the ${WINDOW[hours].over} before it${incentives ? " and the incentives running then" : ""}`;
@@ -392,7 +396,9 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       short
         ? `${history}, too recently for ${short === 1 ? "the oldest step's pick" : `the oldest ${short} steps' picks`} from the ${WINDOW[hours].over} before.`
         : "",
-      "Every step is valued at today's prices, not the prices then, and each sAERO is counted as one AERO.",
+      then
+        ? "Each step is valued at the prices then, the mean of those at its start and its end, and each pick at those when it was made. Each sAERO is counted as one AERO."
+        : "The prices then could not be read, so every step is valued at today's prices. Each sAERO is counted as one AERO.",
     ]
       .filter(Boolean)
       .join(" "),
@@ -401,12 +407,12 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
 
 type Line = { id: string; name: string; color: string; dashed?: boolean; steps: Paid[] };
 // `steps` come newest first; the chart puts the oldest on the left. Each line is drawn over those before it.
-function drawLines(market: Market, lines: Line[]): void {
+function drawLines(lines: Line[]): void {
   const series: Series[] = lines.map(({ steps, ...line }) => ({
     ...line,
     values: Array.from({ length: aero.PICKS }, (_, i) => {
-      const paid = steps[aero.PICKS - 1 - i]?.paid;
-      return paid && aero.aprOf(paid.total, market.prices);
+      const step = steps[aero.PICKS - 1 - i];
+      return step?.paid && aero.aprOf(step.paid.total, step.prices);
     }),
   }));
   const ks = Array.from({ length: aero.PICKS }, (_, i) => aero.PICKS - 1 - i);

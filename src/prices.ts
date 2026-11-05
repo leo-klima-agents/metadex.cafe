@@ -30,8 +30,8 @@ import {
 
 export type Token = { address: Address; decimals: number; symbol: string };
 // Prices per whole token, keyed by lower-case address. `unread` if some pools could not be read, so some tokens may
-// lack a price.
-export type Prices = Basis & { of: Map<string, number>; unread?: true };
+// lack a price. `sources` holds the pool that priced each token, for pricing it again at another time.
+export type Prices = Basis & { of: Map<string, number>; unread?: true; sources?: Map<string, Source> };
 export function key(address: Address): Address;
 export function key(address: string): string;
 export function key(address: string): string {
@@ -300,6 +300,7 @@ const feedAbi = parseAbi([
 ]);
 
 type Pool = { address: Address; exchange: Exchange; stable: boolean; token: Token; anchor: Anchor };
+export type Source = Pool;
 type Measured = { pool: Pool; price: number; depth: number };
 // The window's last block, and the search for its first.
 type Window = { start(): Promise<number>; end: number };
@@ -485,8 +486,11 @@ async function inPools(
     .sort((a, b) => rank(a) - rank(b));
   const measured = await measure(candidates, prices, amounts, window, rd);
   if (!measured) prices.unread = true;
-  for (const [token, pools] of Map.groupBy(measured ?? [], ({ pool }) => key(pool.token.address)))
-    prices.of.set(token, pools.reduce((deepest, each) => (each.depth > deepest.depth ? each : deepest)).price);
+  for (const [token, pools] of Map.groupBy(measured ?? [], ({ pool }) => key(pool.token.address))) {
+    const deepest = pools.reduce((most, each) => (each.depth > most.depth ? each : most));
+    prices.of.set(token, deepest.price);
+    prices.sources?.set(token, deepest.pool);
+  }
 }
 
 // The last block at or before each time asked for, shared by every pricing. Prices now start from the newest block's
@@ -516,6 +520,50 @@ export async function pricesAt(
   tiers = config.PRICING,
 ): Promise<Prices> {
   tiers.flat().forEach(pricingOf);
+  const early = tokens.some(({ address }) => !config.ANCHORS.some((anchor) => same(anchor.address, address)));
+  const { window, prices } = await fedAt(time, early, rd);
+  const anchors = config.ANCHORS.map(({ address, decimals }) => ({ address, decimals, symbol: "" }));
+  for (const each of [anchors, tokens])
+    for (const exchanges of tiers)
+      await inPools(
+        each.filter(({ address }) => !prices.of.has(key(address))),
+        prices,
+        amounts,
+        window,
+        exchanges,
+        rd,
+      );
+  return prices;
+}
+// Prices at `time` from the pools that priced each token at another time, which reads far less than searching again.
+// A token whose pool was too thin, too young or unread then has no price.
+export async function pricesFrom(
+  sources: Map<string, Source>,
+  amounts: Amounts,
+  time: number,
+  rd: Read = read,
+): Promise<Prices> {
+  const { window, prices } = await fedAt(time, sources.size > 0, rd);
+  const isAnchor = ({ token }: Source) => config.ANCHORS.some(({ address }) => same(address, token.address));
+  for (const anchors of [true, false]) {
+    const pools = [...sources.values()].filter(
+      (pool) =>
+        isAnchor(pool) === anchors &&
+        !prices.of.has(key(pool.token.address)) &&
+        prices.of.has(key(pool.anchor.address)),
+    );
+    const measured = await measure(pools, prices, amounts, window, rd);
+    if (!measured) prices.unread = true;
+    for (const { pool, price } of measured ?? []) {
+      prices.of.set(key(pool.token.address), price);
+      prices.sources!.set(key(pool.token.address), pool);
+    }
+  }
+  return prices;
+}
+// The 30 minutes up to `time`, or up to the newest block if earlier, ending at least `SETTLED` blocks back, and the
+// anchors' and currencies' feeds at its end. With `early`, the search for its first block starts at once.
+async function fedAt(time: number, early: boolean, rd: Read): Promise<{ window: Window; prices: Prices }> {
   const [newest, newestTime] = required(await rd([blockNumber, blockTime])).map(Number) as [number, number];
   const top = newest - SETTLED;
   // Both ends are searched for down from `top`, at first at the pace from it to the newest block, and share the blocks
@@ -548,7 +596,7 @@ export async function pricesAt(
     }
     return start;
   };
-  if (tokens.some(({ address }) => !config.ANCHORS.some((anchor) => same(anchor.address, address)))) void startOf();
+  if (early) void startOf();
   const window: Window = { end: time >= newestTime ? top : await lastBlockAt(time), start: startOf };
   const fiat = Object.entries(config.FIAT_FEEDS) as [Fiat, Address][];
   const feeds = [...config.ANCHORS.map(({ feed }) => feed), ...fiat.map(([, feed]) => feed)];
@@ -565,20 +613,9 @@ export async function pricesAt(
     fiat.flatMap(([currency], i) => (fiatFeeds[i] === undefined ? [] : [[currency, fiatFeeds[i]]])),
   );
   const prices: Prices = fed.length
-    ? { unit: "USD", rates, of: new Map(fed) }
-    : { unit: "USDC", rates: {}, of: new Map([[key(config.USDC), 1]]) };
-  const anchors = config.ANCHORS.map(({ address, decimals }) => ({ address, decimals, symbol: "" }));
-  for (const each of [anchors, tokens])
-    for (const exchanges of tiers)
-      await inPools(
-        each.filter(({ address }) => !prices.of.has(key(address))),
-        prices,
-        amounts,
-        window,
-        exchanges,
-        rd,
-      );
-  return prices;
+    ? { unit: "USD", rates, of: new Map(fed), sources: new Map() }
+    : { unit: "USDC", rates: {}, of: new Map([[key(config.USDC), 1]]), sources: new Map() };
+  return { window, prices };
 }
 
 export const pricesNow = (tokens: Token[], amounts: Amounts = new Map(), rd: Read = read): Promise<Prices> =>
