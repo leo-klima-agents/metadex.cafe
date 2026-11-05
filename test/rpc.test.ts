@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { decodeFunctionData, encodeAbiParameters, encodeFunctionResult, erc20Abi, parseAbi } from "viem";
 import { RPCS } from "../src/config.ts";
-import { call, firstBlockAt, read, rpc, showTags } from "../src/rpc.ts";
+import { call, firstBlockAt, read, rpc, showTags, simulate } from "../src/rpc.ts";
 
 type Handler = (url: string, body: { method: string; params: unknown[] }) => Response | Promise<Response>;
 const serve = (handler: Handler) => {
@@ -105,4 +105,33 @@ test("an RPC that answers other than JSON-RPC, even in JSON, or does not answer,
   });
   assert.equal(await rpc("eth_chainId", []), "0x2");
   assert.equal(asked, 4);
+});
+
+test("a simulated call that reverts returns the revert's data, which RPCs put in its error", async () => {
+  const refused = "0x77c522ea0000000000000000000000000000000000000000000000000000000000002105";
+  serve(() =>
+    reply([
+      {
+        calls: [
+          { status: "0x1", returnData: "0x01", gasUsed: "0x10" },
+          { status: "0x0", returnData: "0x", gasUsed: "0x20", error: { code: 3, message: "reverted", data: refused } },
+          { status: "0x0", returnData: "0x02", gasUsed: "0x30" },
+        ],
+      },
+    ]),
+  );
+  const to = "0x0000000000000000000000000000000000000001";
+  const found = await simulate(to, [
+    { to, data: "0x" },
+    { to, data: "0x" },
+    { to, data: "0x" },
+  ]);
+  assert.deepEqual(
+    found.map(({ ok, returnData, gas }) => [ok, returnData, gas]),
+    [
+      [true, "0x01", 16n],
+      [false, refused, 32n],
+      [false, "0x02", 48n],
+    ],
+  );
 });

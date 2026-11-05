@@ -75,6 +75,28 @@ export const aeroEscrowAbi = parseAbi([
 export const aeroVoterAbi = parseAbi([
   "function allocationChainIds(uint256 tokenId) view returns (uint256[])",
   "function allocationChainAmounts(uint256 tokenId, uint256 chainId) view returns (uint128)",
+  "struct ChainAllocationDispatch { uint256 chainId; uint128 delta; uint256 gasLimit; uint256 value; }",
+  "struct GaugeAllocation { address gauge; uint128 allocated; bytes data; }",
+  "struct GaugeAllocationDispatch { uint256 chainId; uint256 gasLimit; uint256 value; GaugeAllocation[] gauges; }",
+  "function allocate(uint256 tokenId, ChainAllocationDispatch[] chainDispatches, GaugeAllocationDispatch[] gaugeDispatches, address refundRecipient) payable",
+]);
+// What Aero's Voter, and its LeafVoter on Base, which it calls in the same transaction, revert with when allocating.
+export const allocateErrorsAbi = parseAbi([
+  "error AllocationExpired()",
+  "error ChainAllocationMismatch()",
+  "error ChainAllocationMismatch(uint256 chainId)",
+  "error ChainNotActiveOrSunset()",
+  "error ChainNotActiveOrSunset(uint256 chainId)",
+  "error CooldownActive()",
+  "error ExceedsMaxGauges()",
+  "error GaugesNotStrictlyAscending()",
+  "error InsufficientChain0Allocation()",
+  "error NotAuthorized()",
+  "error StakeExpired()",
+  "error StakeWithdrawn()",
+  "error StaleShape()",
+  "error SunsetDeallocOnly()",
+  "error ZeroAllocation()",
 ]);
 
 export const leafVoterAbi = parseAbi([

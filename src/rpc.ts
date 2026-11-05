@@ -261,17 +261,18 @@ export const implementation = async (proxy: Address): Promise<Address> =>
   `0x${(await rpc<Hex>("eth_getStorageAt", [proxy, "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc", "latest"])).slice(-40)}`;
 
 export type Tx = { to: Address; data: Hex };
-// Runs the calls in order on the latest block, without checks such as gas or balance.
+// Runs the calls in order on the latest block, without checks such as gas or balance. A call that reverted returns
+// the revert's data, which RPCs put in its error.
 export async function simulate(from: Address, txs: Tx[]): Promise<{ ok: boolean; returnData: Hex; gas: bigint }[]> {
-  type Simulated = { calls: { status: Hex; returnData: Hex; gasUsed: Hex }[] }[];
+  type Simulated = { calls: { status: Hex; returnData: Hex; gasUsed: Hex; error?: { data?: Hex } }[] }[];
   const calls = txs.map(({ to, data }) => ({ from, to, data }));
   const [block] = await rpc<Simulated>("eth_simulateV1", [
     { blockStateCalls: [{ calls }], validation: false },
     "latest",
   ]);
-  return block!.calls.map(({ status, returnData, gasUsed }) => ({
+  return block!.calls.map(({ status, returnData, gasUsed, error }) => ({
     ok: status === "0x1",
-    returnData,
+    returnData: status === "0x1" ? returnData : (error?.data ?? returnData),
     gas: BigInt(gasUsed),
   }));
 }

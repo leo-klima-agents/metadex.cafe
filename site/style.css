@@ -1083,3 +1083,14 @@ dialog[open] {
     --danger: CanvasText;
   }
 }
+
+/* A pool's share, typed in a table row. */
+.Amount--share {
+  inline-size: 4.5rem;
+  text-align: end;
+}
+.Button--drop {
+  inline-size: 1.75rem;
+  min-block-size: 1.75rem;
+  font-size: 1.25rem;
+}

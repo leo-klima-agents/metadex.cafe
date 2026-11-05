@@ -50,7 +50,8 @@ type Sending = Review & {
 };
 
 const dialog = $<HTMLDialogElement>("#review");
-const refreshAfter = (): void => ["account", "held", "allowances", "payouts"].forEach(refresh);
+const refreshAfter = (): void =>
+  ["account", "held", "allowances", "payouts", "aero stake", "aero pending"].forEach(refresh);
 let current: Sending | undefined;
 const apart = (review: Sending): boolean => (review.groups?.length ?? 1) > 1;
 const batched = (review: Sending, steps = review.steps()): boolean =>
@@ -83,7 +84,7 @@ export function openReview(review: Review): void {
 export const closeReview = (): void => dialog.close();
 export const drawReview = (): void => void (current && draw());
 
-function fieldValue({ code: value, tags = [], words, after, calldata }: Field): Node | string {
+function fieldValue({ code: value, tags = [], words, after, calldata, lines }: Field): Node | string {
   if (words !== undefined) return words;
   const one = (text: string) => {
     const el = code(text);
@@ -94,8 +95,14 @@ function fieldValue({ code: value, tags = [], words, after, calldata }: Field): 
   };
   if (!Array.isArray(value)) return after ? frag(one(value ?? ""), after) : one(value ?? "");
   if (!value.length) return "None";
-  const grid = Object.assign(document.createElement("span"), { className: "u-row" });
-  grid.append(...value.map((text, i) => frag(tags[i] ? code(tags[i]!) : "", one(text))));
+  const grid = Object.assign(document.createElement("span"), { className: lines ? "u-stackTight" : "u-row" });
+  const item = (text: string, i: number): Node => frag(tags[i] ? code(tags[i]!) : "", one(text));
+  const line = (text: string, i: number): Node => {
+    const row = Object.assign(document.createElement("span"), { className: "u-spread" });
+    row.append(item(text, i));
+    return row;
+  };
+  grid.append(...value.map(lines ? line : item));
   return grid;
 }
 

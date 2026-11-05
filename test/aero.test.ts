@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { zeroAddress, type Address } from "viem";
+import { decodeFunctionData, encodeErrorResult, getAddress, zeroAddress, type Address } from "viem";
+import { aeroVoterAbi, allocateErrorsAbi } from "../src/abi.ts";
 import {
   DAY,
   THIN,
   WINDOWS,
   accruedFrom,
+  allocateCall,
+  allotmentsOf,
   amountOf,
+  blockedOf,
+  budgetOf,
   average,
   averageOver,
   dayOf,
@@ -21,6 +26,7 @@ import {
   per10kOf,
   picksOf,
   recordOf,
+  refusalOf,
   feesPerDay,
   isThin,
   movesAt,
@@ -46,7 +52,7 @@ import {
   type Stake,
   type Start,
 } from "../src/aero.ts";
-import { AERO, GAUGE_FACTORIES, USDC, WETH } from "../src/config.ts";
+import { AERO, AERO_VOTER, GAUGE_FACTORIES, USDC, WETH } from "../src/config.ts";
 import { key, type Prices, type Token } from "../src/prices.ts";
 import { same, type Call, type Read } from "../src/rpc.ts";
 
@@ -709,4 +715,102 @@ test("followed, each pick comes from the hold before it, and earns what its pool
   const all = overall(record)!;
   const [first, second] = [NOW - t0, t0 - t1];
   near(all.rule, (1 * first + 2 * second) / (first + second), "weighed by time");
+});
+
+test("an allocation splits a stake's sAERO on Base to the wei, its gauges ascending, and leaves out what rounds to nothing", () => {
+  const [a, b, c]: [Address, Address, Address] = [
+    "0x00000000000000000000000000000000000000c3",
+    "0x00000000000000000000000000000000000000a1",
+    "0x00000000000000000000000000000000000000b2",
+  ];
+  const budget = 1_000n * SAERO + 1n;
+  const found = allotmentsOf(
+    [
+      { gauge: a, weight: 50 },
+      { gauge: b, weight: 30 },
+      { gauge: c, weight: 20 },
+    ],
+    budget,
+  );
+  assert.deepEqual(
+    found.map(({ gauge }) => gauge),
+    [b, c, a],
+    "ascending",
+  );
+  assert.equal(
+    found.reduce((sum, { amount }) => sum + amount, 0n),
+    budget,
+    "to the wei",
+  );
+  assert.equal(found.find(({ gauge }) => gauge === a)!.amount, budget / 2n + 1n, "the rest goes to the largest");
+  assert.deepEqual(
+    allotmentsOf(
+      [
+        { gauge: a, weight: 1 },
+        { gauge: b, weight: 0 },
+      ],
+      5n,
+    ).map(({ gauge, amount }) => [gauge, amount]),
+    [[a, 5n]],
+    "nothing at 0%",
+  );
+  assert.deepEqual(allotmentsOf([{ gauge: a, weight: 1 }], 0n), []);
+  assert.deepEqual(allotmentsOf([{ gauge: a, weight: 0 }], 5n), []);
+});
+
+test("allocating calls Aero's Voter for Base alone, with no fee, and moves sAERO on no chain onto Base first", () => {
+  const owner = getAddress("0x00000000000000000000000000000000000000ee");
+  const gauges = [{ gauge: getAddress("0x00000000000000000000000000000000000000a1"), amount: 7n * SAERO }];
+  const decoded = (idle: bigint) => {
+    const tx = allocateCall(stake({ id: 9n, onBase: 5n * SAERO, idle }), gauges, owner);
+    assert.equal(tx.to, AERO_VOTER);
+    return decodeFunctionData({ abi: aeroVoterAbi, data: tx.data }).args as unknown as [
+      bigint,
+      { chainId: bigint; delta: bigint; gasLimit: bigint; value: bigint }[],
+      {
+        chainId: bigint;
+        gasLimit: bigint;
+        value: bigint;
+        gauges: { gauge: Address; allocated: bigint; data: string }[];
+      }[],
+      Address,
+    ];
+  };
+  const [id, chains, dispatches, refund] = decoded(2n * SAERO);
+  assert.deepEqual([id, refund], [9n, owner]);
+  assert.deepEqual(chains, [{ chainId: 8453n, delta: 2n * SAERO, gasLimit: 0n, value: 0n }]);
+  assert.deepEqual(dispatches, [
+    {
+      chainId: 8453n,
+      gasLimit: 0n,
+      value: 0n,
+      gauges: [{ gauge: gauges[0]!.gauge, allocated: 7n * SAERO, data: "0x" }],
+    },
+  ]);
+  assert.deepEqual(decoded(0n)[1], [], "nothing to move onto Base");
+  assert.equal(budgetOf(stake({ onBase: 5n * SAERO, idle: 2n * SAERO, elsewhere: 3n * SAERO })), 7n * SAERO);
+});
+
+test("a stake cannot allocate once its lock has ended, without sAERO for Base, or while it holds", () => {
+  const cooldown = 169_200;
+  assert.equal(blockedOf(stake({ lastAllocated: NOW - cooldown - 1 }), cooldown, NOW), undefined);
+  assert.equal(blockedOf(stake({ lastAllocated: 0 }), cooldown, NOW), undefined, "never allocated");
+  assert.deepEqual(blockedOf(stake({ lastAllocated: NOW - DAY }), cooldown, NOW), {
+    why: "held",
+    until: NOW - DAY + cooldown,
+  });
+  assert.equal(blockedOf(stake({ lastAllocated: NOW - DAY, reduction: DAY }), cooldown, NOW), undefined, "reduced");
+  assert.deepEqual(blockedOf(stake({ permanent: false, end: NOW - 1 }), cooldown, NOW), { why: "ended" });
+  assert.equal(blockedOf(stake({ permanent: false, end: NOW + DAY, lastAllocated: 0 }), cooldown, NOW), undefined);
+  assert.deepEqual(blockedOf(stake({ onBase: 0n, idle: 0n, elsewhere: SAERO }), cooldown, NOW), { why: "empty" });
+});
+
+test("an allocation's refusal is named when it is one of Aero's errors", () => {
+  assert.equal(refusalOf(encodeErrorResult({ abi: allocateErrorsAbi, errorName: "CooldownActive" })), "CooldownActive");
+  assert.equal(
+    refusalOf(encodeErrorResult({ abi: allocateErrorsAbi, errorName: "ChainAllocationMismatch", args: [8453n] })),
+    "ChainAllocationMismatch",
+  );
+  assert.equal(refusalOf("0x"), undefined);
+  assert.equal(refusalOf("0x12345678"), undefined);
 });
