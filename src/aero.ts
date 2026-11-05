@@ -937,11 +937,12 @@ export function per10kOf(paying: Paying, added = 0): Per10k | undefined {
 }
 
 export type Holding = { gauge: Gauge | undefined; weight: number };
-// The top `count` pools by what they pay, each weighed by its share of what they pay together.
+// The top `count` pools by what they pay, or by their fees alone without `incentives`, each weighed by its share of
+// that.
 export type Pick = { gauge: Gauge; weight: number; paying: Paying };
-export function picksOf(pools: { gauge: Gauge; paying: Paying }[], count: number): Pick[] {
+export function picksOf(pools: { gauge: Gauge; paying: Paying }[], count: number, incentives = true): Pick[] {
   const top = pools
-    .map((each) => ({ ...each, total: totalOf(each.paying) }))
+    .map((each) => ({ ...each, total: incentives ? totalOf(each.paying) : sumOf(each.paying.fees).value }))
     .filter(({ total }) => total > 0)
     .sort((a, b) => b.total - a.total)
     .slice(0, Math.max(0, count));
@@ -1018,10 +1019,10 @@ export const stepsOf = (market: Market): Step[] =>
   market.past.times.slice(0, PICKS).map((from, k) => ({ from, to: k ? market.past.times[k - 1]! : market.time }));
 export type Paid = Step & { paid: Per10k | undefined };
 
-// The top `count` pools, of all or of blue chips, by the fees they paid over the `hours` before each pick and what
-// their live programs stream over the next step, each given its share; picked again every step (`again`), or once at
-// the oldest step's start.
-export type Strategy = { count: number; hours: Hours; again: boolean; blueChips: boolean };
+// The top `count` pools, of all or of blue chips, by the fees they paid over the `hours` before each pick and, unless
+// `incentives` is false, what their live programs stream over the next step, each given its share; picked again every
+// step (`again`), or once at the oldest step's start.
+export type Strategy = { count: number; hours: Hours; again: boolean; blueChips: boolean; incentives?: boolean };
 export const isBlueChip = ({ token0, token1 }: Gauge): boolean =>
   [token0, token1].every(({ address }) => config.BLUE_CHIPS.some((chip) => same(chip, address)));
 // False for thin pools and pools paying a token without a price, which the strategy and the suggestion leave out.
@@ -1029,7 +1030,12 @@ export const weighable = (accrued: Accrued, paying: Paying): boolean =>
   !thinOver(accrued) && !!per10kOf(paying)?.priced;
 // From what each pool paid over the `hours` before `time`, and what its programs live then would stream over the next
 // step.
-export function picksAt(market: Market, past: Past, time: number, { count, hours, blueChips }: Strategy): Pick[] {
+export function picksAt(
+  market: Market,
+  past: Past,
+  time: number,
+  { count, hours, blueChips, incentives }: Strategy,
+): Pick[] {
   const since = time - hours * HOUR;
   const pools = market.gauges
     .filter((gauge) => routable(gauge) && (!blueChips || isBlueChip(gauge)))
@@ -1045,7 +1051,7 @@ export function picksAt(market: Market, past: Past, time: number, { count, hours
       };
       return weighable(before, paying) ? [{ gauge, paying }] : [];
     });
-  return picksOf(pools, count);
+  return picksOf(pools, count, incentives);
 }
 // The snapshots a strategy needs beyond the grid's.
 export function timesFor(market: Market, { again, hours }: Strategy): number[] {

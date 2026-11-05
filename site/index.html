@@ -105,7 +105,7 @@
           </li>
           <li class="Card Linked">
             <h2 class="Card-title"><a class="Linked-cover" href="#aero">Aero</a></h2>
-            <p class="u-small u-quiet">What sAERO's allocation power earns in each pool on Base</p>
+            <p class="u-small u-quiet">What sAERO earns in each pool on Base</p>
             <p class="u-small" data-text="aero-yours"></p>
           </li>
           <li class="Card Linked">
@@ -702,13 +702,13 @@
           <button type="button" class="Button--info" popovertarget="aero-info" aria-label="How it works">i</button>
         </header>
         <p class="u-small u-quiet">
-          sAERO's allocation power earns a share of the exchange revenue of each pool on Base it is allocated to. Set
-          your strategy, see how it would have done against Aero's Autopilot and the Base average, then allocate.
+          Your sAERO earns a share of the exchange revenue of each pool it is allocated to. Set your strategy, see how
+          it would have done against Aero's Autopilot and the average allocator on Base, then allocate.
         </p>
         <fieldset>
           <legend><h2>Your strategy</h2></legend>
           <div class="u-stack">
-            <div class="u-row u-small">
+            <p class="u-small">
               <label
                 >Top
                 <select class="u-smallSelect" data-action="aero-count">
@@ -726,8 +726,13 @@
                   <option value="192">8 days</option>
                 </select></label
               >
-              <label class="u-withBox"><input type="checkbox" data-action="aero-again" /> Reallocate every 48 h</label>
+            </p>
+            <div class="u-row u-small">
+              <label class="u-withBox"
+                ><input type="checkbox" data-action="aero-incentives" checked /> Include incentives</label
+              >
               <label class="u-withBox"><input type="checkbox" data-action="aero-blue" /> Blue chips only</label>
+              <label class="u-withBox"><input type="checkbox" data-action="aero-again" /> Reallocate every 48 h</label>
             </div>
             <div class="u-row u-small">
               <label data-text="stake-row"
@@ -747,7 +752,7 @@
                   autocomplete="off"
                   spellcheck="false"
                 />
-                allocation power</span
+                sAERO allocation power</span
               >
             </div>
           </div>
@@ -770,7 +775,7 @@
               <div class="Facts-tile">
                 <dt class="u-label Facts-tileLabel">Base average</dt>
                 <dd class="Facts-value Facts-figure" data-text="average-apr"></dd>
-                <dd class="Facts-tileNote u-small u-quiet">every pool on Base</dd>
+                <dd class="Facts-tileNote u-small u-quiet">the average allocator on Base</dd>
               </div>
               <div class="Facts-tile">
                 <dt class="u-label Facts-tileLabel">Autopilot</dt>
@@ -788,9 +793,12 @@
                 <dd class="Facts-tileNote u-small u-quiet">in hindsight</dd>
               </div>
             </dl>
+            <p class="Notice" data-text="edited">
+              Edited: shown on the chart as your custom allocation, in hindsight. Its shares were set today, knowing how
+              the pools did, and are held as they are throughout.
+            </p>
             <figure class="Chart u-stackTight">
               <ul class="Chart-legend u-small" data-list="legend"></ul>
-              <p class="u-small u-quiet" data-text="legend-note"></p>
               <div class="Chart-frame">
                 <svg
                   class="Chart-plot"
@@ -801,7 +809,6 @@
                 ></svg>
                 <div class="Chart-tip u-small" aria-live="polite" hidden></div>
               </div>
-              <figcaption class="u-small u-quiet" data-text="chart-note"></figcaption>
             </figure>
             <div class="u-scroll">
               <table>
@@ -846,22 +853,20 @@
                   <thead>
                     <tr>
                       <th scope="col">Pool</th>
+                      <th scope="col">Daily revenue</th>
                       <th scope="col">Share</th>
-                      <th scope="col">Allocation power</th>
-                      <th scope="col">Exchange revenue a day</th>
-                      <th scope="col">APR</th>
-                      <th scope="col"><span class="u-visuallyHidden">Set to 0%</span></th>
+                      <th scope="col">sAERO weight</th>
+                      <th scope="col">Current APR</th>
                     </tr>
                   </thead>
                   <tbody data-list="pick"></tbody>
                   <tfoot>
                     <tr>
                       <th scope="row">Total</th>
+                      <td></td>
                       <td class="u-figures u-strong" data-text="share-total"></td>
                       <td class="u-figures" data-text="total-amount"></td>
-                      <td></td>
                       <td class="u-figures u-strong" data-text="total-per"></td>
-                      <td></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -892,13 +897,15 @@
                 >
                   Use the current allocation
                 </button>
-              </div>
-              <p class="Notice u-row" data-text="edited">
-                <span>Edited: shown on the chart as your custom allocation, in hindsight.</span>
-                <button type="button" class="Button--secondary Button--compact" data-action="aero-rule">
+                <button
+                  type="button"
+                  class="Button--secondary Button--compact"
+                  data-action="aero-rule"
+                  data-text="edited"
+                >
                   Back to your strategy
                 </button>
-              </p>
+              </div>
               <div class="u-row" data-if="wallet">
                 <button type="button" data-action="aero-allocate">Allocate</button>
                 <p class="u-small u-hang" data-text="allocate-why"></p>
@@ -933,8 +940,7 @@
             <div class="Pair">
               <dt class="u-small u-quiet">It earns</dt>
               <dd>
-                Each pool's exchange revenue, its fees and incentives, by the second, shared by the allocation power on
-                it
+                Each pool's exchange revenue, its fees and incentives, by the second, shared by the sAERO weight on it
               </dd>
             </div>
           </dl>
@@ -947,8 +953,9 @@
             <div class="Pair">
               <dt class="u-small u-quiet">Your strategy</dt>
               <dd>
-                The top pools by exchange revenue over the chosen window before each pick, each given allocation power
-                in proportion, picked only from what was known then: again every 48 hours, or once, 8 days ago, and kept
+                The top pools by exchange revenue, with or without incentives, over the chosen window before each pick,
+                each given weight in proportion, picked only from what was known then: again every 48 hours, or once, 8
+                days ago, and kept
               </dd>
             </div>
             <div class="Pair">
@@ -962,15 +969,15 @@
             <div class="Pair">
               <dt class="u-small u-quiet">Base average</dt>
               <dd>
-                What the average allocation power on Base earned: all the pools' exchange revenue in each step, over all
-                their allocation power, leaving out pools paying a token without a price
+                What the average allocator on Base earned: all the pools' exchange revenue in each step, over all their
+                sAERO weight, leaving out pools paying a token without a price
               </dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Left out</dt>
               <dd>
-                From your strategy and its suggestion: thin pools, with less than 1M allocation power at either end or
-                on average, and pools paying a token without a price, as the window before each pick shows them
+                From your strategy and its suggestion: thin pools, with less than 1M sAERO weight at either end or on
+                average, and pools paying a token without a price, as the window before each pick shows them
               </dd>
             </div>
             <div class="Pair">
@@ -983,21 +990,19 @@
             <div class="Pair">
               <dt class="u-small u-quiet">APR</dt>
               <dd>
-                A year of this exchange revenue, over what the allocation power is worth, each unit counted as one AERO
+                A year of this exchange revenue, over what the sAERO weight is worth, each sAERO counted as one AERO
               </dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Prices</dt>
               <dd>
                 Averages over the last half hour, from Chainlink and from pools deep enough for a day of this exchange
-                revenue; a token without one counts for nothing
+                revenue, used for every step back to 8 days ago; a token without one counts for nothing
               </dd>
             </div>
             <div class="Pair">
-              <dt class="u-small u-quiet">Your allocation power</dt>
-              <dd>
-                Shares each pool's exchange revenue with the allocation power already there, so each unit earns less
-              </dd>
+              <dt class="u-small u-quiet">Your sAERO</dt>
+              <dd>Shares each pool's exchange revenue with the sAERO weight already there, so each sAERO earns less</dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Not counted</dt>
@@ -1040,12 +1045,12 @@
               <div class="Facts-tile" data-text="idle-row">
                 <dt class="u-label Facts-tileLabel">Not allocated</dt>
                 <dd class="Facts-value Facts-figure" data-text="idle"></dd>
-                <dd class="Facts-tileNote u-small u-quiet">allocation power, earning nothing</dd>
+                <dd class="Facts-tileNote u-small u-quiet">sAERO weight, earning nothing</dd>
               </div>
               <div class="Facts-tile" data-text="elsewhere-row">
                 <dt class="u-label Facts-tileLabel">Other chains</dt>
                 <dd class="Facts-value Facts-figure" data-text="elsewhere"></dd>
-                <dd class="Facts-tileNote u-small u-quiet">allocation power, not shown here</dd>
+                <dd class="Facts-tileNote u-small u-quiet">sAERO weight, not shown here</dd>
               </div>
               <div class="Facts-tile" data-text="owner-row">
                 <dt class="u-label Facts-tileLabel">Owner</dt>
@@ -1074,9 +1079,9 @@
                 </div>
               </dl>
               <p class="u-small u-quiet">
-                APR, each unit of allocation power counted as one AERO. Since it allocated: the fees its pools paid
-                since then, exactly, and every pool's on average over the same time. Its pools: their exchange revenue
-                lately, which it did not earn if it just moved there.
+                APR, each sAERO counted as one AERO. Since it allocated: the fees its pools paid since then, exactly,
+                and every pool's on average over the same time. Its pools: their exchange revenue lately, which it did
+                not earn if it just moved there.
               </p>
               <div class="u-scroll">
                 <table>
@@ -1087,7 +1092,7 @@
                     <tr>
                       <th scope="col">Pool</th>
                       <th scope="col">Share</th>
-                      <th scope="col">Allocation power</th>
+                      <th scope="col">sAERO weight</th>
                       <th scope="col">Since it allocated</th>
                       <th scope="col" data-text="window-head"></th>
                     </tr>
@@ -1118,7 +1123,7 @@
             <p class="Notice" data-text="thin"></p>
             <dl class="Facts Facts--tiles">
               <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">Allocation power</dt>
+                <dt class="u-label Facts-tileLabel">sAERO weight</dt>
                 <dd class="Facts-value Facts-figure" data-text="power"></dd>
               </div>
               <div class="Facts-tile">
@@ -1177,7 +1182,7 @@
                   <thead>
                     <tr>
                       <th scope="col">Day, UTC</th>
-                      <th scope="col">Allocation power</th>
+                      <th scope="col">sAERO weight</th>
                       <th scope="col">Fees APR</th>
                     </tr>
                   </thead>
@@ -1492,8 +1497,10 @@
     <template id="pick">
       <tr>
         <td><a data-text="pool"></a><small class="u-detail" data-text="note"></small></td>
+        <td class="u-figures" data-text="pays"></td>
         <td class="u-figures">
-          <input
+          <button type="button" class="Button--close Button--drop" data-action="aero-drop">×</button
+          ><input
             class="Amount Amount--share"
             data-action="aero-share"
             inputmode="decimal"
@@ -1503,11 +1510,7 @@
           %
         </td>
         <td class="u-figures" data-text="amount"></td>
-        <td class="u-figures" data-text="pays"></td>
         <td class="u-figures u-strong" data-text="per"></td>
-        <td>
-          <button type="button" class="Button--close Button--drop" data-action="aero-drop" data-text="drop">×</button>
-        </td>
       </tr>
     </template>
     <template id="stake-option"><option data-text="name"></option></template>
@@ -1523,7 +1526,7 @@
               <tr>
                 <th scope="col">Pool</th>
                 <th scope="col">Share</th>
-                <th scope="col">Allocation power</th>
+                <th scope="col">sAERO weight</th>
               </tr>
             </thead>
             <tbody data-list="allot"></tbody>

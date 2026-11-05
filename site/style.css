@@ -1047,11 +1047,13 @@ dialog[open] {
 .u-sans {
   font-family: var(--sans);
 }
+/* In a table, a note wraps rather than widening its column. */
 .u-detail {
   display: block;
   color: var(--quiet);
   font-family: var(--sans);
   font-size: var(--label);
+  white-space: normal;
 }
 /* "/ 1k votes, last epoch": the unit stays whole, beside the figure or under it. */
 .u-aside {
@@ -1206,4 +1208,7 @@ dialog[open] {
   inline-size: 1.75rem;
   min-block-size: 1.75rem;
   font-size: 1.25rem;
+}
+.Button--drop[data-off] {
+  visibility: hidden;
 }

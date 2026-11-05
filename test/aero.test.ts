@@ -660,6 +660,25 @@ test("the rule weighs its top pools by what they pay in all, and leaves out thos
   assert.equal(picksOf(pools, 10).length, 3);
 });
 
+test("without incentives, the rule ranks and weighs its pools by their fees alone", () => {
+  const [fees, streams] = [gauge(), gauge()];
+  const flows = (value: number) => [{ token: usdc, value }];
+  const pools = [
+    { gauge: fees, paying: { fees: flows(3), incentives: [], power: 1 } },
+    { gauge: streams, paying: { fees: flows(1), incentives: flows(9), power: 1 } },
+  ];
+  const ranked = (incentives?: boolean) =>
+    picksOf(pools, 2, incentives).map(({ gauge, weight }) => [gauge.address, weight]);
+  assert.deepEqual(ranked(), [
+    [streams.address, 10 / 13],
+    [fees.address, 3 / 13],
+  ]);
+  assert.deepEqual(ranked(false), [
+    [fees.address, 0.75],
+    [streams.address, 0.25],
+  ]);
+});
+
 test("the rule over its own window earns at least the average of its pools, and less as its sAERO dilutes them", () => {
   // Same fees, but one pool has a fifth of the sAERO.
   const crowded = gauge({ perDay: 1 });
