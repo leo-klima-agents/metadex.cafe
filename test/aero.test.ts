@@ -46,6 +46,7 @@ import {
   nameOf,
   weightOf,
   windowFees,
+  averageSteps,
   customSteps,
   isBlueChip,
   marketSteps,
@@ -863,6 +864,18 @@ test("the market weighs every pool by what it paid in each step itself, leaving 
     { gauge: b.gauge, weight: 0.5 },
   ]);
   nearAll(totals(custom), [5.5, 5.5, 5.5, 5.5], "half in each");
+});
+
+test("the Base average is all that the pools paid in each step over all their sAERO, thin pools too", () => {
+  // A and B, at 5M sAERO each, pay $10 and $1 per 10k a day in turn.
+  const { m } = twoPools();
+  nearAll(totals(averageSteps(m, m.past)), [5.5, 5.5, 5.5, 5.5], "half of each");
+  // A thin pool of 100k sAERO paying $1,000 per 10k counts at its sAERO: (55M + 100M) / 10.1M per 10k.
+  const thin = twoPools([], (extra) => [history([1_000, 1_000, 1_000, 1_000, 1_000], extra, {}, 100_000n * SAERO)]).m;
+  nearAll(totals(averageSteps(thin, thin.past)), Array(4).fill(155 / 10.1), "thin pools count");
+  // One paid in a token without a price is left out.
+  const unpriced = twoPools([], (extra) => [history([100, 100, 100, 100, 100], extra, { token0: other })]).m;
+  nearAll(totals(averageSteps(unpriced, unpriced.past)), [5.5, 5.5, 5.5, 5.5], "unpriced left out");
 });
 
 test("an allocation as it actually moved is cut where it moved, and earns nothing before its first move", () => {

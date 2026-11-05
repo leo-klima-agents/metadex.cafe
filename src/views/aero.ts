@@ -315,8 +315,8 @@ function versusWords(a: Paid[], b: Paid[], what: string): string {
 const beganOf = (market: Market): number =>
   Math.min(...market.gauges.filter((gauge) => routable(gauge) && gauge.first > 0).map(({ first }) => first));
 
-// How the strategy would have done over the last 8 days, against the Autopilot as it allocated and the market, and the
-// edited shares held over them, in hindsight.
+// How the strategy would have done over the last 8 days, against the Autopilot as it allocated and the Base average,
+// the edited shares held over them in hindsight, and, in the table only, rewards followed with no delay.
 function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined): void {
   const market = got.value;
   const extra = andThen(got, (found) => data.pastFor(aero.timesFor(found, strategyOf(found))));
@@ -326,6 +326,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   const strategy = aero.strategySteps(market, past, strategyOf(market), amount);
   const custom = plan.rows && aero.customSteps(market, market.past, holdingsOf(plan.rows, market), amount);
   const benchmark = aero.marketSteps(market, market.past);
+  const average = aero.averageSteps(market, market.past);
   const record = data.autopilotRecord();
   const pilot: Got<Paid[]> = andThen(record, (found) => ({
     value: found ? aero.movedSteps(market, aero.mergePast(market.past, found.past), found.moves) : [],
@@ -346,6 +347,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   const ofCustom = custom && aero.overallOf(custom);
   const ofPilot = pilot.value && aero.overallOf(pilot.value);
   const ofMarket = aero.overallOf(benchmark);
+  const ofAverage = aero.overallOf(average);
   const period = periodOf(strategy);
   const what = stake
     ? `the ${sAero(aero.budgetOf(stake))} of ${stakeName(stake, stake.id)} on Base`
@@ -354,8 +356,8 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   fill(aeroView, {
     headline: `${perDay(overall.total, overall.priced, market)} a day`,
     "headline-note": `for 10,000 sAERO over ${period}${[
+      versusWords(strategy, average, "the Base average"),
       pilot.value ? versusWords(strategy, pilot.value, "the Autopilot") : "",
-      versusWords(strategy, benchmark, "the market"),
     ]
       .filter(Boolean)
       .map((words, i) => (i ? `, ${words}` : `: ${words}`))
@@ -374,7 +376,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       ? [{ id: "custom", name: "Your custom shares", color: "var(--series-1)", dashed: true, steps: custom }]
       : []),
     { id: "pilot", name: pilotName, color: "var(--series-2)", steps: pilot.value ?? [] },
-    { id: "market", name: "Market", color: "var(--series-3)", steps: benchmark },
+    { id: "average", name: "Base average", color: "var(--series-3)", steps: average },
   ]);
   const pools = `the top ${count(top, "pool", "pools")}${blueChips ? " of blue chips" : ""} by rewards over the ${WINDOW[hours].over} before`;
   fill(aeroView, {
@@ -400,9 +402,10 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
     "all-strategy": cell(overall),
     "all-custom": custom ? cell(ofCustom) : null,
     "all-pilot": shown(pilot, () => cell(ofPilot)),
+    "all-average": cell(ofAverage),
     "all-market": cell(ofMarket),
     "all-vs-pilot": shown(pilot, overallRatio),
-    "all-vs-market": overallRatio(benchmark),
+    "all-vs-average": overallRatio(average),
   });
   list(
     $("[data-list=step]", aeroView),
@@ -414,9 +417,10 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
         strategy: cell(step.paid),
         custom: custom ? cell(custom[k]?.paid) : null,
         pilot: shown(pilot, (steps) => cell(steps[k]?.paid)),
+        average: cell(average[k]?.paid),
         market: cell(benchmark[k]?.paid),
         "vs-pilot": shown(pilot, (steps) => ratio(step.paid, steps[k]?.paid)),
-        "vs-market": ratio(step.paid, benchmark[k]?.paid),
+        "vs-average": ratio(step.paid, average[k]?.paid),
       }),
   );
   // The Autopilot's first allocation, if within the record.
@@ -433,8 +437,11 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       first !== undefined && first > since
         ? `${pilotName} first allocated on Base ${until(market.time - first)} ago: its total, and the comparisons with it, cover only its steps.`
         : "",
+      "No delay: every pool weighed by what it paid in the step itself, which no allocation can do; its gap to your strategy is roughly what picking from the past costs.",
       "Everything is valued at current prices.",
-      amount ? `Adding ${what} to the pools is taken into account, except in the Autopilot's and the market's.` : "",
+      amount
+        ? `Adding ${what} to the pools is taken into account in your strategy and your custom shares, not in the other columns.`
+        : "",
     ]
       .filter(Boolean)
       .join(" "),

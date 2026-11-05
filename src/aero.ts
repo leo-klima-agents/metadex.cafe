@@ -1130,6 +1130,14 @@ export const marketSteps = (market: Market, past: Past): Paid[] =>
     return { ...step, paid: heldOver(picksOf(pools, Infinity), paid) };
   });
 
+// The Base average: what the average sAERO allocated on Base earned in each step, all that the pools paid over all
+// their sAERO, leaving out pools paying a token without a price, as the pools' page's tile does.
+export const averageSteps = (market: Market, past: Past): Paid[] =>
+  stepsOf(market).map((step) => {
+    const { fees, incentives, total } = marketOver(market.gauges, paidDuring(market, past, step));
+    return { ...step, paid: total > 0 ? { fees, incentives, total, priced: true } : undefined };
+  });
+
 // A stake's allocations, newest first, each with the time it was made, as it was just before the next: read at the
 // block before each move, back to the first made at or before `since`, or `most` of them.
 export type Move = { at: number; allocations: Allocation[] };
