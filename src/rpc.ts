@@ -1,9 +1,11 @@
 import {
+  concat,
   decodeFunctionResult,
   encodeFunctionData,
   multicall3Abi,
   numberToHex,
   parseAbi,
+  size,
   type Abi,
   type Address,
   type ContractFunctionArgs,
@@ -134,6 +136,10 @@ async function inSlot<T>(tag: Tag | undefined, ask: () => Promise<T>): Promise<T
   }
 }
 
+// A request may take 5 seconds, and longer the more it sends: as long as `MAX` of them take to send together at
+// 1 Mbit/s, so that on a slow upload a request is not given up, and sent again, while it is still being sent.
+export const timeoutFor = (bytes: number): number => 5_000 + Math.ceil((bytes * MAX) / 125);
+
 // Each RPC gets at most 25 requests a second, 5 of them for logs. One that is busy or out of reach rests for a second.
 const nextFree = new Map<string, number>();
 const restUntil = new Map<string, number>();
@@ -172,7 +178,7 @@ export function rpc<T>(
             method: "POST",
             headers: { "content-type": "application/json" },
             body,
-            signal: AbortSignal.timeout(5_000),
+            signal: AbortSignal.timeout(timeoutFor(body.length)),
           });
           if (response.status === 429 || response.status >= 500) throw new Error("Busy.");
           reply = (await response.json()) as Reply;
@@ -199,18 +205,40 @@ export function rpc<T>(
 type ReadOptions = { block?: number | "latest"; tag?: Tag | undefined; perBatch?: number };
 // Each call's result, as its ABI types it, or undefined if it failed.
 type Results<C extends readonly Call[]> = { -readonly [K in keyof C]: Result<C[K]> | undefined };
-export type Read = <const C extends readonly Call[]>(calls: C, options?: ReadOptions) => Promise<Results<C>>;
-// Reads through Multicall3 in batches of `perBatch`, because each `eth_call` has its own gas limit.
+// Which addresses hold code, undefined where unread. Reads of Base have it (`codeAt`); a test's may not.
+export type CodeAt = (addresses: readonly Address[]) => Promise<(boolean | undefined)[]>;
+export type Read = (<const C extends readonly Call[]>(calls: C, options?: ReadOptions) => Promise<Results<C>>) & {
+  codeAt?: CodeAt;
+};
+// Reads through Multicall3 in batches of `perBatch`, because each `eth_call` has its own gas limit, and of at most
+// `BATCH_BYTES` of calldata, so that none takes long to send. Multicall3 pads each call's own to 32 bytes and adds 160.
+export const BATCH_BYTES = 100_000;
+const CALL_BYTES = 160;
 export const read: Read = async (calls, { block = "latest", tag, perBatch = 200 } = {}) => {
+  const data = calls.map((each) => encodeFunctionData(each as never));
   const batches: Promise<unknown[]>[] = [];
-  for (let i = 0; i < calls.length; i += perBatch) batches.push(aggregate(calls.slice(i, i + perBatch), block, tag));
+  for (let start = 0; start < calls.length;) {
+    let [end, bytes] = [start, 0];
+    for (; end < calls.length && end - start < perBatch; end++) {
+      bytes += Math.ceil(size(data[end]!) / 32) * 32 + CALL_BYTES;
+      if (end > start && bytes > BATCH_BYTES) break;
+    }
+    batches.push(aggregate(calls.slice(start, end), data.slice(start, end), block, tag));
+    start = end;
+  }
   return (await Promise.all(batches)).flat() as never;
 };
-async function aggregate(calls: Call[], block: number | "latest", tag: Tag | undefined): Promise<unknown[]> {
+read.codeAt = (addresses) => codeAt(addresses);
+async function aggregate(
+  calls: Call[],
+  callData: Hex[],
+  block: number | "latest",
+  tag: Tag | undefined,
+): Promise<unknown[]> {
   const data = encodeFunctionData({
     abi: multicall3Abi,
     functionName: "aggregate3",
-    args: [calls.map((c) => ({ target: c.address, allowFailure: true, callData: encodeFunctionData(c as never) }))],
+    args: [calls.map((c, i) => ({ target: c.address, allowFailure: true, callData: callData[i]! }))],
   });
   const at = block === "latest" ? block : numberToHex(block);
   const reply = await rpc<Hex>("eth_call", [{ to: MULTICALL3, data }, at], { tag });
@@ -225,10 +253,42 @@ async function aggregate(calls: Call[], block: number | "latest", tag: Tag | und
     },
   );
 }
-export const tagged =
-  (tag: Tag): Read =>
-  (calls, options) =>
-    read(calls, { ...options, tag });
+export function tagged(tag: Tag): Read {
+  const rd: Read = (calls, options) => read(calls, { ...options, tag });
+  rd.codeAt = (addresses) => codeAt(addresses, tag);
+  return rd;
+}
+
+// Which addresses hold code, with no contract of the page's own: `eth_call` runs this program as a contract's
+// creation, with the addresses appended, 20 bytes each, and the program returns one byte for each, 1 if it holds code
+// and 0 if not. By offset:
+//   00  PUSH1 0x2f DUP1 CODESIZE SUB DUP1 SWAP2 PUSH0 CODECOPY   the addresses, after the program's 0x2f bytes, to
+//                                                                memory at 0
+//   09  PUSH1 20 DUP2 DIV PUSH0                                  n = their length / 20; i = 0
+//   0e  JUMPDEST DUP2 DUP2 LT ISZERO PUSH1 0x2b JUMPI            while i < n:
+//   16  DUP1 PUSH1 20 MUL MLOAD PUSH1 96 SHR                       address i
+//   1e  EXTCODESIZE ISZERO ISZERO DUP4 DUP3 ADD MSTORE8            1 if its code size is not 0, after the addresses
+//   25  PUSH1 1 ADD PUSH1 0x0e JUMP                                i += 1
+//   2b  JUMPDEST POP SWAP1 RETURN                                the n bytes
+// What a creation returns is its contract's code, which may not exceed 24,576 bytes nor start with 0xEF, so a call
+// asks about `CODE_BATCH` addresses at most, which cost 2,600 gas each.
+const CODE_AT: Hex = "0x602f80380380915f39601481045f5b81811015602b57806014025160601c3b151583820153600101600e565b5090f3";
+const CODE_BATCH = 2_000;
+const FLAGS: Record<string, boolean> = { "00": false, "01": true };
+export async function codeAt(addresses: readonly Address[], tag?: Tag): Promise<(boolean | undefined)[]> {
+  const batches: Promise<(boolean | undefined)[]>[] = [];
+  for (let i = 0; i < addresses.length; i += CODE_BATCH) {
+    const part = addresses.slice(i, i + CODE_BATCH);
+    const whole = (reply: Hex) => typeof reply === "string" && reply.length === 2 + 2 * part.length;
+    batches.push(
+      rpc<Hex>("eth_call", [{ data: concat([CODE_AT, ...part]) }, "latest"], { tag, want: whole }).then(
+        (reply) => part.map((_, j) => (whole(reply) ? FLAGS[reply.slice(2 + 2 * j, 4 + 2 * j)] : undefined)),
+        () => part.map(() => undefined),
+      ),
+    );
+  }
+  return (await Promise.all(batches)).flat();
+}
 // What one of an item's calls returned, or undefined if it failed or was not asked.
 type Field<F> = F extends (item: never) => infer C ? Result<C> | undefined : undefined;
 // Reads some calls of every item together. Each item comes back with its calls' results by field name, so nothing is
