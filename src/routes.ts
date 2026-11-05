@@ -1,10 +1,14 @@
+import { getAddress, type Address } from "viem";
 import { byKind, DEFAULT_OUTPUT, swapperOf, type Kind, type Output } from "./config.ts";
 
-// The page's addresses, such as `#app`, `#about`, `#hydrex`, `#hydrex/matcha-latte`, `#hydrex/9540` and `#swap/weth`.
-// The app, automation and swap views take an optional section that opens a popup, such as `#hydrex/matcha-latte/check`.
-// Anything else is Home.
+// The page's addresses, such as `#app`, `#about`, `#hydrex`, `#hydrex/matcha-latte`, `#hydrex/9540`, `#swap/weth`,
+// `#aero`, `#aero/20365` and `#aero/pool/0x…` (a pool by its gauge). The app, automation, swap and Aero
+// views take an optional section that opens a popup, such as `#hydrex/matcha-latte/check`. Anything else is Home.
 export type Route =
   | { view: "home" | "about" | "hydrex" }
+  | { view: "aero"; section?: string }
+  | { view: "stake"; id: bigint }
+  | { view: "pool"; gauge: Address }
   | { view: "app"; section?: string }
   | { view: "product"; kind: Kind; section?: string }
   | { view: "account"; id: bigint }
@@ -15,6 +19,7 @@ const SECTIONS = {
   app: ["allows"],
   product: ["fees", "control", "check", "record"],
   swap: ["fees", "check", "approvals"],
+  aero: ["how", "check"],
 };
 
 const HOME: Route = { view: "home" };
@@ -35,10 +40,18 @@ export function parse(hash: string): Route {
     if (swapper) return sectioned({ view: "swap", output: swapper.output }, third);
     if (third === undefined) return sectioned({ view: "swap", output: DEFAULT_OUTPUT }, second);
   }
+  // Hydrex's accounts and Aero's stakes are numbered from 1, up to a uint256's 78 digits.
+  const id = (text: string) => /^[1-9]\d{0,77}$/.test(text);
+  if (first === "aero") {
+    if (second === undefined) return { view: "aero" };
+    if (id(second)) return third === undefined ? { view: "stake", id: BigInt(second) } : HOME;
+    if (second === "pool")
+      return third && /^0x[0-9a-fA-F]{40}$/.test(third) ? { view: "pool", gauge: getAddress(third) } : HOME;
+    return third === undefined ? sectioned({ view: "aero" }, second) : HOME;
+  }
   if (first !== "hydrex") return HOME;
   if (second === undefined) return { view: "hydrex" };
-  // Hydrex's accounts are numbered from 1, up to a uint256's 78 digits.
-  if (/^[1-9]\d{0,77}$/.test(second)) return third === undefined ? { view: "account", id: BigInt(second) } : HOME;
+  if (id(second)) return third === undefined ? { view: "account", id: BigInt(second) } : HOME;
   const automation = byKind(second);
   return automation ? sectioned({ view: "product", kind: automation.kind }, third) : HOME;
 }
@@ -50,6 +63,10 @@ export function hrefOf(route: Route): string {
       return "#";
     case "account":
       return `#hydrex/${route.id}`;
+    case "stake":
+      return `#aero/${route.id}`;
+    case "pool":
+      return `#aero/pool/${route.gauge}`;
     case "product":
       return ["#hydrex", route.kind, ...section].join("/");
     case "swap":

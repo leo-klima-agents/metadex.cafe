@@ -248,7 +248,7 @@ test("records are read in one batch; what waits in batches of 20, and what lies 
     ["int128", "int128", "int128", "uint48"].map((type) => ({ type })),
     [0n, 0n, 0n, FIRST - 100 * WEEK],
   );
-  // 50 epochs after `OCT_15`, so past the first 50 that one asking reads; it owes nothing.
+  // 105 epochs after where `earned()` starts for account #1, so only a third asking would reach it; it owes nothing.
   const LATER = OCT_15 + 50 * WEEK;
   const batches: number[] = [];
   const past: unknown[] = [];

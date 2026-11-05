@@ -76,7 +76,7 @@ export type Account = {
   votes: bigint;
   delegate: Address;
   delegateAtStart: Address;
-  // When the automation holding its votes last voted, and when its owner did; 0 if never.
+  // When the delegate last voted, if one of Hydrex's other automations (else 0), and when the owner did (0 if never).
   delegateVoted: number;
   ownerVoted: number;
   claimer: Address;
@@ -285,7 +285,8 @@ export const leaveOther = (accounts: Account[]): Slip[] =>
   });
 
 // Gas for calls that differ only by account, sent from `from`: the first call's estimate plus the most Base charges to
-// post it to Ethereum, times the number of calls. Also returns today's prices to show it in.
+// post it to Ethereum (nothing if the oracle cannot be read), times the number of calls. Also returns today's prices to
+// show it in.
 export async function gasEstimate(steps: Tx[], from: Address): Promise<{ wei: bigint; prices: Prices | undefined }> {
   const [first] = steps;
   if (!first) return { wei: 0n, prices: undefined };

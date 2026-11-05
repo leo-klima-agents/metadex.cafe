@@ -15,12 +15,11 @@ import {
 } from "./swap.ts";
 
 // Routes several tokens sold together into one output. `findRoute` prices each token's route as if it sold alone, but
-// two routes that share a pool both move it, and a token too large for one pool sells better split across several. So
-// this picks routes for all of them together, in tenths of each sale, from a model of each pool they may use: its
-// `quote()` at a few amounts, interpolated linearly between them. A pool pays about the same for two sales one after
-// the other as for both at once, in either order, so the model runs the routes in sequence, as the swap does. The model
-// only picks the routes; what they fetch is what Base returns when it runs them. It reads only what it can afford,
-// about as many requests as the RPCs allow in a second, and reads fewer pools and amounts per pool when there are many.
+// routes that share a pool all move it, and a large sale does better split across pools. So this picks routes for all
+// of them together, in tenths of each sale, from a model of each pool: its `quote()` at a few amounts, interpolated
+// linearly. A pool pays about the same for two sales in turn as for both at once, in either order, so the model runs
+// the routes in turn, as the swap does. It only picks the routes; what they fetch is what Base returns when it runs
+// them. It reads about as many requests as the RPCs allow in a second, so fewer pools and amounts when there are many.
 
 export type Sale = { token: Address; amount: bigint; found: Routed; hydrex: boolean };
 
@@ -53,8 +52,8 @@ const ownKeys = ({ token, found }: Sale): string[] =>
   found.route.hops.map((hop, h) => poolKey({ ...hop, tokenIn: h ? found.route.hops[h - 1]!.tokenOut : token }));
 
 // What a pool pays: linear between the amounts it was quoted at, then at half the last segment's rate up to `cap`, the
-// smallest amount it refused. Aero's basic pools pay 1% less, since their MEV tax is not in the quote. Plain numbers
-// are precise enough, as the model only compares routes.
+// smallest amount it refused above those it paid for. Aero's basic pools pay 1% less, since their MEV tax is not in the
+// quote. Plain numbers are precise enough, as the model only compares routes.
 export type Curve = { xs: number[]; ys: number[]; cap: number };
 
 export function curveOf(read: [bigint, bigint | undefined][], haircut = false): Curve {

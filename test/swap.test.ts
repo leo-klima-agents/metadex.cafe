@@ -154,8 +154,8 @@ test("each route's quote comes back to it, whatever the swapper and however the 
   assert.deepEqual(quoted, expected);
 });
 
-// Slipstream factories' tick spacings by exchange id. Every reader here must answer the same, because `prices.ts` keeps
-// the first answer it reads for the whole run.
+// Slipstream factories' tick spacings by exchange id. Every reader in a test must answer the same, because `prices.ts`
+// keeps the first answer it reads until `forget()`.
 const SPACINGS: Record<number, number[]> = { 4: [1, 100], 6: [1], 7: [50], 8: [] };
 const spacingsAt = (address: Address) => SPACINGS[BY_ID.find(({ factory }) => same(factory, address))!.id];
 

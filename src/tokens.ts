@@ -31,8 +31,8 @@ export const lookalike = (token: Token): Listed | undefined =>
 // An amount of a token, in its smallest units.
 export type Amount = { token: Address; amount: bigint };
 
-// Each token's symbol and decimals as its contract gives them, keyed by lower-case address. A token whose `decimals`
-// read fails is left out.
+// Each token's decimals as its contract gives them, and its symbol cleaned, or "?" if unread, keyed by lower-case
+// address. A token whose `decimals` read fails is left out.
 export async function tokensOf(addresses: Address[], rd: Read = read): Promise<Map<string, Token>> {
   const unique = [...new Set(addresses.map((address) => key(address)))];
   const found = await readEach(
@@ -51,9 +51,9 @@ export async function tokensOf(addresses: Address[], rd: Read = read): Promise<M
 }
 // Like `tokensOf`, but takes listed tokens from the list and keeps every other token once read. A token whose read
 // fails is read again next time.
-export async function describe(addresses: Address[]): Promise<Map<string, Token>> {
+export async function describe(addresses: Address[], rd: Read = read): Promise<Map<string, Token>> {
   const unknown = addresses.filter((address) => !listed(address) && !described.has(key(address)));
-  if (unknown.length) for (const [address, token] of await tokensOf(unknown)) described.set(address, token);
+  if (unknown.length) for (const [address, token] of await tokensOf(unknown, rd)) described.set(address, token);
   return new Map(
     addresses.flatMap((address) => {
       const token = listed(address) ?? described.get(key(address));

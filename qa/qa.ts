@@ -1,6 +1,7 @@
 // `npm run qa [-- scenario]` or `node qa/qa.ts --list`. Opens the page against a fork of Base, as the browser tests do,
 // beside the QA wallet (qa.html), which signs as any address, can ask before it acts, and moves the fork on. anvil
-// forks from BASE_RPC_URL through the browser tests' caches (fork/rpc-cache.ts); CHROMIUM names the browser.
+// forks from BASE_RPC_URL, or else the page's first RPC, through the browser tests' caches (fork/rpc-cache.ts);
+// CHROMIUM names the browser.
 import { readFileSync } from "node:fs";
 import { chromium, type BrowserContext, type Page, type Route } from "playwright-core";
 import { decodeFunctionData, erc20Abi, getAddress, isAddress, toHex, type Address, type Hex } from "viem";

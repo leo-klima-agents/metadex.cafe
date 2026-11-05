@@ -97,10 +97,12 @@ export function list<T>(
     fillRow(row, item, i);
     return row;
   });
-  if (!items.length && empty)
+  if (!items.length && empty) {
     rows.push(
       old.get("") ?? Object.assign(document.createElement("li"), { className: "u-small u-quiet", textContent: empty }),
     );
+    old.delete("");
+  }
   const focused = [...old.values()].some((row) => row.contains(document.activeElement));
   rows.forEach((row, i) => el.children[i] !== row && el.insertBefore(row, el.children[i] ?? null));
   for (const row of old.values()) row.remove();
@@ -179,6 +181,9 @@ export function frag(...parts: (string | Node)[]): DocumentFragment {
   fragment.append(...parts);
   return fragment;
 }
+// Keeps words such as "cbBTC" as written in a label that CSS uppercases.
+export const asWritten = (text: string): DocumentFragment =>
+  frag(...text.split(/(\S*[a-z][A-Z]\S*)/).map((part, i) => (i % 2 ? code(part) : part)));
 
 // Splits hex into spans of four digits that CSS spaces apart, so a copy is still plain hex. An address or hash splits
 // into two halves that break where one line doesn't fit; with `wallet`, an address takes three lines, as the wallet

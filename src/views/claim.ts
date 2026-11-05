@@ -161,8 +161,6 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
   into.disabled = select.disabled = !options.length || safeApart;
   if (into.disabled) current.into = safeApart ? "Swap them once the claims go through." : "Swaps are off.";
 
-  // Plans the swap into `swapper`. Only tokens whose quote is worth at least twice their gas are sold; the rest stay as
-  // they are.
   const planInto = async (swapper: Swapper, id: number) => {
     current.into = undefined;
     current.gasWithSwap = undefined;
@@ -190,7 +188,6 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
           );
       return draw();
     }
-    // Base runs the swap after the claims with no minimums; each route's minimum then comes from what it fetched.
     let at = deadline();
     const run = await swap.simulatePlan(connection.address, calls, sale, tokens, at, true);
     if (id !== current.planned) return;

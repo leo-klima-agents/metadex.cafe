@@ -4,7 +4,7 @@ import { BASESCAN, CHAIN_ID } from "../config.ts";
 import { count } from "../format.ts";
 import { poll, waitForReceipt, type Landed } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
-import { $, announce, code, fill, frag, hex, link, list } from "../ui.ts";
+import { $, announce, asWritten, code, fill, frag, hex, link, list } from "../ui.ts";
 import {
   callsStatus,
   capabilities,
@@ -25,7 +25,8 @@ type Review = {
   // The calls. With `sending`, they are encoded to be sent, with a fresh deadline.
   steps: (sending?: boolean) => Slip[];
   atomic?: boolean;
-  // When the calls don't fit in one transaction: how many calls go in each transaction, in order.
+  // When the calls don't fit in one transaction: how many go in each, in order. A Safe proposes one transaction per
+  // group; other wallets then sign each call alone.
   groups?: number[] | undefined;
   outcome?: (receipts: Landed[]) => Promise<Node | undefined>;
   // What the calls wait for, if anything. They may change until then, so nothing is sent while this returns text.
@@ -50,7 +51,8 @@ type Sending = Review & {
 };
 
 const dialog = $<HTMLDialogElement>("#review");
-const refreshAfter = (): void => ["account", "held", "allowances", "payouts"].forEach(refresh);
+const refreshAfter = (): void =>
+  ["account", "held", "allowances", "payouts", "aero stake", "aero pending"].forEach(refresh);
 let current: Sending | undefined;
 const apart = (review: Sending): boolean => (review.groups?.length ?? 1) > 1;
 const batched = (review: Sending, steps = review.steps()): boolean =>
@@ -83,7 +85,7 @@ export function openReview(review: Review): void {
 export const closeReview = (): void => dialog.close();
 export const drawReview = (): void => void (current && draw());
 
-function fieldValue({ code: value, tags = [], words, after, calldata }: Field): Node | string {
+function fieldValue({ code: value, tags = [], words, after, calldata, lines }: Field): Node | string {
   if (words !== undefined) return words;
   const one = (text: string) => {
     const el = code(text);
@@ -94,8 +96,14 @@ function fieldValue({ code: value, tags = [], words, after, calldata }: Field): 
   };
   if (!Array.isArray(value)) return after ? frag(one(value ?? ""), after) : one(value ?? "");
   if (!value.length) return "None";
-  const grid = Object.assign(document.createElement("span"), { className: "u-row" });
-  grid.append(...value.map((text, i) => frag(tags[i] ? code(tags[i]!) : "", one(text))));
+  const grid = Object.assign(document.createElement("span"), { className: lines ? "u-stackTight" : "u-row" });
+  const item = (text: string, i: number): Node => frag(tags[i] ? code(tags[i]!) : "", one(text));
+  const line = (text: string, i: number): Node => {
+    const row = Object.assign(document.createElement("span"), { className: "u-spread" });
+    row.append(item(text, i));
+    return row;
+  };
+  grid.append(...value.map(lines ? line : item));
   return grid;
 }
 
@@ -116,7 +124,7 @@ function draw(): void {
   const atomic = !!review.atomic && !!review.capabilities?.atomic;
   const waiting = review.finished ? undefined : review.waiting?.();
   fill(dialog, {
-    step: `${review.name}${pages.length > 1 ? ` · ${review.page + 1} of ${pages.length}` : ""}`,
+    step: asWritten(`${review.name}${pages.length > 1 ? ` · ${review.page + 1} of ${pages.length}` : ""}`),
     title: review.result ? "Done" : (shown.title ?? callsName),
     page: review.result ? null : (shown.body ?? null),
     calls: (!review.result && last && steps.length > 0) || null,
@@ -162,7 +170,7 @@ function draw(): void {
       const g = groupOf[i] ?? 0;
       const where = safe ? `${apart(review) ? `Safe ${g + 1} of ${groups.length}` : "Safe"} · Call` : "Transaction";
       fill(row, {
-        count: `${where}${steps.length > 1 ? ` ${i + 1} of ${steps.length}` : ""} · ${step.title}`,
+        count: asWritten(`${where}${steps.length > 1 ? ` ${i + 1} of ${steps.length}` : ""} · ${step.title}`),
         says: step.says,
       });
       // These fields mirror what the wallet shows: destination, function, arguments and a value of 0 ETH. A Safe also
@@ -180,7 +188,11 @@ function draw(): void {
         fields,
         ({ label }) => label,
         (field, value) =>
-          fill(field, { label: value.label, description: value.description ?? null, value: fieldValue(value) }),
+          fill(field, {
+            label: asWritten(value.label),
+            description: value.description ?? null,
+            value: fieldValue(value),
+          }),
       );
       row.toggleAttribute("aria-current", i === next);
     },

@@ -11,7 +11,7 @@ import type { Slip } from "./wallet.ts";
 
 // Once a payout is overdue, anyone can call Double Espresso's `claim(tokenId, feeAddresses, bribeAddresses, tokens)`
 // for any account in it, and it pays the owner less 1%. A claim asks every contract given for every token given, each
-// walking back up to 50 epochs, so the page passes only what `earned()` finds owed and splits it into calls that fit.
+// walking back up to 50 epochs, so the page passes only what `readOwed` finds owed and splits it into calls that fit.
 
 // `passes` is how many times the claim must ask the contract to reach past the 50 epochs one asking reads (see
 // `readOwed`).
@@ -33,16 +33,16 @@ export function claimGas(owed: Claim["owed"]): bigint {
   const tokens = BigInt(new Set(owed.map(({ token }) => key(token))).size);
   return 100_000n + tokens * 80_000n + contracts * (50_000n + tokens * 400_000n);
 }
-// `claimCalls` keeps each call under its budget as `claimGas` estimates it, and simulation keeps it under
-// `MAX_CLAIM_GAS`. A Safe sends many calls in one transaction, so its claim splits into small calls, none asking a
-// contract for a token it does not owe.
+// `claimCalls` splits a claim by `claimGas`'s estimate, and simulation keeps each call under `MAX_CLAIM_GAS`. A Safe
+// sends many calls in one transaction, so its claim splits into small calls, none asking a contract for a token it does
+// not owe.
 export const CLAIM_CALL_GAS = 12_000_000n;
 export const SAFE_CLAIM_CALL_GAS = 1_500_000n;
 export const MAX_CLAIM_GAS = 15_000_000n;
 
-// Splits an account's claim into calls that each fit `budget`. A contract owing too many tokens for one call is split
-// across several. Pieces go, those owing the most tokens first, into the call they add the least gas to, so contracts
-// owing the same tokens share a call.
+// Splits an account's claim into calls that each fit `budget`, unless one contract's token alone exceeds it. A contract
+// owing too many tokens for one call is split across several. Pieces go, those owing the most tokens first, into the
+// call they add the least gas to, so contracts owing the same tokens share a call.
 export function claimCalls(claim: Claim, budget = CLAIM_CALL_GAS): Claim[] {
   const byContract = Map.groupBy(
     claim.owed.filter(({ amount }) => amount > 0n),
@@ -133,7 +133,7 @@ export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true
 
 // What each overdue account can claim now, from the pools its automation voted for last epoch, plus the epoch before's
 // when it is late for that too. Older pools are not read, so this is a lower bound. `unread` counts the reward
-// contracts whose amounts could not all be read; they are left out.
+// contracts with an amount that could not be read; those amounts are left out.
 export async function owedOf(
   entries: Overdue[],
 ): Promise<{ claims: Claim[]; tokens: Map<string, Token>; unread: number }> {

@@ -1,12 +1,17 @@
 # metaDEX Café
 
-A static page at <https://metadex.cafe/> for Hydrex accounts on Base:
+A static page at <https://metadex.cafe/> for Hydrex accounts and Aero stakes on Base:
 
 - join or leave **Matcha Latte**, Hydrex's automation, and **Double Espresso**, an automation nobody controls;
 - claim Double Espresso's rewards when a payout is late;
-- see what votes earned last epoch compared with Hydrex's average, and each account's last payout as a receipt;
+- see the APR votes earned last epoch compared with Hydrex's average, and each account's last payout as a receipt;
 - swap many tokens into one through **ImmutableSwapper**, routed together and simulated on Base before the wallet asks
-  to sign.
+  to sign;
+- pick a simple Aero strategy (the top pools by exchange revenue over 48 hours, four days or eight days, of all pools or
+  blue chips only, picked once or again every 48 hours), see its APR over the last eight days against Aero's Autopilot
+  as it actually allocated and against the Base average, then allocate a stake on Base to its picks or to shares you
+  edit, among every pool, simulated on Base before the wallet asks to sign; see each stake's pools, when it can move and
+  what it can claim, and each pool's APR, day by day.
 
 It has no server, holds no keys and stores nothing. It reads Base through three public RPCs, the only hosts its Content
 Security Policy lets it connect to: `https://mainnet.base.org`, `https://base.drpc.org` and
@@ -31,25 +36,26 @@ The browser tests and the QA wallet fork Base through `fork/rpc-cache.ts`, which
 default the page's first RPC) once for each answer and caches it in `~/.cache/metadex.cafe/fork` (`FORK_CACHE` sets
 another folder). `CHROMIUM` sets the browser binary, and `SCREENSHOTS` a folder to save screenshots in.
 
-| Path                                   | What it holds                                                                                          |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `site/`                                | The files the site serves: the page with every view, popup and row template, the styles and the icons. |
-| `src/main.ts`, `routes.ts`, `state.ts` | The page's start, its addresses, and the state every view is drawn from.                               |
-| `src/config.ts`, `abi.ts`              | What the page trusts: contracts, RPCs, feeds, swap contracts; and Hydrex's ABIs.                       |
-| `src/checks.ts`                        | The checks of Base that run before joining or swapping.                                                |
-| `src/rpc.ts`, `cache.ts`               | RPC requests (failover, pacing, the shown view's reads first), and the cache of every read.            |
-| `src/wallet.ts`                        | Wallets (EIP-6963, Safe{Wallet}), and sending calls one at a time or in one prompt.                    |
-| `src/tokens.ts`                        | The tokens the page knows, and an owner's balances and allowances.                                     |
-| `src/prices.ts`                        | Prices from Chainlink and pools: Aero's, Aerodrome's and Hydrex's now, Hydrex's at an epoch's end.     |
-| `src/rewards.ts`                       | What votes earned in an epoch, and Hydrex's average.                                                   |
-| `src/hydrex.ts`                        | Hydrex accounts, their statuses, joining and leaving.                                                  |
-| `src/payouts.ts`                       | How far each account has been paid, what is waiting, and its last receipt.                             |
-| `src/claim.ts`                         | Claims through Double Espresso, split to fit transactions.                                             |
-| `src/swap.ts`, `routing.ts`            | Routes, quotes, simulation and minimums; `routing.ts` routes the ticked tokens together.               |
-| `src/data.ts`, `views/`                | What each view reads (`data.ts`), and how it fills the page (`views/`).                                |
-| `src/ui.ts`, `format.ts`               | Filling the page's templates, and how figures, sums, dates and hex are written.                        |
-| `test/`, `fork/`, `qa/`                | Unit tests; browser tests (`fork/run.ts`); the QA wallet (`qa/qa.ts`).                                 |
-| `scripts/`                             | The build, the dev server, license notices, the release files, the fonts and the token list check.     |
+| Path                                   | What it holds                                                                                            |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `site/`                                | The files the site serves: the page with every view, popup and row template, the styles and the icons.   |
+| `src/main.ts`, `routes.ts`, `state.ts` | The page's start, its addresses, and the state every view is drawn from.                                 |
+| `src/config.ts`, `abi.ts`              | What the page trusts: contracts, RPCs, feeds, swap contracts; and Hydrex's and Aero's ABIs.              |
+| `src/checks.ts`                        | The checks of Base that run before joining or swapping.                                                  |
+| `src/rpc.ts`, `cache.ts`               | RPC requests (failover, pacing, the shown view's reads first), and the cache of every read.              |
+| `src/wallet.ts`                        | Wallets (EIP-6963, Safe{Wallet}), and sending calls one at a time or in one prompt.                      |
+| `src/tokens.ts`                        | The tokens the page knows, and an owner's balances and allowances.                                       |
+| `src/prices.ts`                        | Prices from Chainlink and pools: Aero's, Aerodrome's and Hydrex's now, Hydrex's at an epoch's end.       |
+| `src/rewards.ts`                       | What votes earned in an epoch, and Hydrex's average.                                                     |
+| `src/hydrex.ts`                        | Hydrex accounts, their statuses, joining and leaving.                                                    |
+| `src/payouts.ts`                       | How far each account has been paid, what is waiting, and its last receipt.                               |
+| `src/claim.ts`                         | Claims through Double Espresso, split to fit transactions.                                               |
+| `src/aero.ts`                          | Aero's pools on Base, what each paid per sAERO, stakes, and the record of strategies over 48-hour steps. |
+| `src/swap.ts`, `routing.ts`            | Routes, quotes, simulation and minimums; `routing.ts` routes the ticked tokens together.                 |
+| `src/data.ts`, `views/`                | What each view reads (`data.ts`), and how it fills the page (`views/`).                                  |
+| `src/ui.ts`, `format.ts`               | Filling the page's templates, and how figures, sums, dates and hex are written.                          |
+| `test/`, `fork/`, `qa/`                | Unit tests; browser tests (`fork/run.ts`); the QA wallet (`qa/qa.ts`).                                   |
+| `scripts/`                             | The build, the dev server, license notices, the release files, the fonts and the token list check.       |
 
 The build bundles `src/main.ts`, and `site/style.css` with the fonts of `site/fonts/` inlined, fills in
 `site/index.html`'s version and integrity hashes, and copies the other files of `site/` unchanged.

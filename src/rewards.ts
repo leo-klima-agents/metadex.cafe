@@ -1,6 +1,7 @@
 import { getAddress, parseAbi, type Address } from "viem";
 import { rewardsAbi } from "./abi.ts";
 import { memo } from "./cache.ts";
+import { HYDX } from "./config.ts";
 import { WEEK, clean, moneyAt, type Money } from "./format.ts";
 import { automationAt, escrow, voter } from "./hydrex.ts";
 import { key, noPrices, pricesAtFlip, worthOf, type Prices, type Token } from "./prices.ts";
@@ -48,13 +49,13 @@ async function contractsOf(pools: Address[], rd: Read): Promise<Contract[]> {
   });
 }
 // Every pool's reward contracts, for the average and for voters who voted again after an epoch began. They take
-// thousands of reads, so they are read once. Hydrex only adds pools, so the list covers every epoch up to the one under
-// way when it was read.
-async function allContracts(start: number): Promise<Contract[]> {
+// thousands of reads, so they are read once, at the priority of the page that first asks. Hydrex only adds pools, so
+// the list covers every epoch up to the one under way when it was read.
+async function allContracts(start: number, rd: Read): Promise<Contract[]> {
   const readAll = async () => {
-    const [length, active] = required(await read([voter("length"), voter("_epochTimestamp")]));
-    const pools = required(await read(Array.from({ length: Number(length) }, (_, i) => voter("pools", BigInt(i)))));
-    return { through: Number(active), contracts: await contractsOf(pools, read) };
+    const [length, active] = required(await rd([voter("length"), voter("_epochTimestamp")]));
+    const pools = required(await rd(Array.from({ length: Number(length) }, (_, i) => voter("pools", BigInt(i)))));
+    return { through: Number(active), contracts: await contractsOf(pools, rd) };
   };
   const found = await memo("contracts", readAll);
   return start < found.through ? found.contracts : (await memo(`contracts ${start}`, readAll)).contracts;
@@ -64,25 +65,24 @@ async function allContracts(start: number): Promise<Contract[]> {
 export const earnedBy = (perEpoch: bigint, supply: bigint, balance: bigint): bigint =>
   (((perEpoch * 10n ** 32n) / supply) * balance) / 10n ** 32n;
 
-// What `holder`'s votes, or all votes when `holder` is undefined, earned in these contracts in the epoch from `start`,
-// with the votes for each pool.
-async function rewardsOf(contracts: Contract[], start: number, holder: Address | undefined, rd: Read) {
+// What all votes earned in each of these contracts that had votes in the epoch from `start`, by reward token.
+type Paid = Contract & { supply: bigint; paid: { token: Address; amount: bigint }[] };
+async function paidIn(contracts: Contract[], start: number, rd: Read): Promise<Paid[]> {
   const at = BigInt(start);
   const totals = await readEach(
     contracts,
     {
       supply: ({ address }) => call(address, rewardsAbi, "totalSupplyAt", at),
       length: ({ address }) => call(address, rewardsAbi, "rewardsListLength"),
-      balance: holder ? ({ address }) => call(address, rewardsAbi, "balanceOfOwnerAt", holder, at) : undefined,
     },
     rd,
   );
   const voted = totals
-    .map(({ item, supply, length, balance }) => {
+    .map(({ item, supply, length }) => {
       const [total, count] = required([supply, length]);
-      return { ...item, supply: total, length: Number(count), balance: holder ? required([balance])[0] : total };
+      return { ...item, supply: total, length: Number(count) };
     })
-    .filter(({ supply, balance }) => supply > 0n && balance > 0n);
+    .filter(({ supply }) => supply > 0n);
   const listed = await readEach(
     voted.flatMap((contract) => Array.from({ length: contract.length }, (_, index) => ({ contract, index }))),
     { token: ({ contract, index }) => call(contract.address, rewardsAbi, "rewardTokens", BigInt(index)) },
@@ -93,11 +93,49 @@ async function rewardsOf(contracts: Contract[], start: number, holder: Address |
     { data: ({ contract, token }) => call(contract.address, rewardsAbi, "rewardData", token, at) },
     rd,
   );
-  const found = perEpoch.flatMap(({ item: { contract, token }, data }) => {
-    const [[, rewards]] = required([data]);
-    const amount = holder ? earnedBy(rewards, contract.supply, contract.balance) : rewards;
-    return amount > 0n ? [{ pool: contract.pool, contract: contract.address, token, amount, fee: contract.fee }] : [];
+  const byContract = Map.groupBy(perEpoch, ({ item }) => item.contract);
+  return voted.map((contract) => ({
+    pool: contract.pool,
+    address: contract.address,
+    fee: contract.fee,
+    supply: contract.supply,
+    paid: (byContract.get(contract) ?? []).map(({ item: { token }, data }) => ({
+      token,
+      amount: required([data])[0][1],
+    })),
+  }));
+}
+// Read once an epoch: every voter takes its share of these, and the epoch's prices need them all.
+const allPaid = (start: number, rd: Read) =>
+  memo(`paid ${start}`, async () => paidIn(await allContracts(start, rd), start, rd));
+
+// What `holder`'s votes, or all votes when `holder` is undefined, earned in the epoch from `start`, with the votes for
+// each pool: in `contracts`, or in every pool's. Contracts not among every pool's are read apart.
+async function rewardsOf(start: number, holder: Address | undefined, rd: Read, contracts?: Contract[]) {
+  const at = BigInt(start);
+  const every = await allContracts(start, rd);
+  const own = contracts ?? every;
+  const listed = new Set(every.map(({ address }) => key(address)));
+  const apart = own.filter(({ address }) => !listed.has(key(address)));
+  const wanted = new Set(own.map(({ address }) => key(address)));
+  const [all, extra, balances] = await Promise.all([
+    allPaid(start, rd),
+    apart.length ? paidIn(apart, start, rd) : [],
+    holder &&
+      readEach(own, { balance: ({ address }) => call(address, rewardsAbi, "balanceOfOwnerAt", holder, at) }, rd),
+  ]);
+  const paid = [...all.filter(({ address }) => wanted.has(key(address))), ...extra];
+  const balanceOf = new Map(balances?.map(({ item, balance }) => [item.address, required([balance])[0]]));
+  const voted = paid.flatMap((contract) => {
+    const balance = holder ? (balanceOf.get(contract.address) ?? 0n) : contract.supply;
+    return balance > 0n ? [{ ...contract, balance }] : [];
   });
+  const found = voted.flatMap((contract) =>
+    contract.paid.flatMap(({ token, amount: all }) => {
+      const amount = holder ? earnedBy(all, contract.supply, contract.balance) : all;
+      return amount > 0n ? [{ pool: contract.pool, contract: contract.address, token, amount, fee: contract.fee }] : [];
+    }),
+  );
   const named = await tokensOf(
     found.map(({ token }) => token),
     rd,
@@ -114,12 +152,27 @@ export const tokensIn = (rewards: Reward[]): Token[] => [
   ...new Map(rewards.map(({ token }) => [key(token.address), token])).values(),
 ];
 
-async function priced(start: number, votes: bigint, pools: Pool[], rewards: Reward[], rd: Read): Promise<Earnings> {
-  const amounts = new Map<string, bigint>();
-  for (const { token, amount } of rewards)
-    amounts.set(key(token.address), (amounts.get(key(token.address)) ?? 0n) + amount);
-  return { start, votes, pools, rewards, prices: await pricesAtFlip(tokensIn(rewards), amounts, start + WEEK, rd) };
-}
+const allRewards = (start: number, rd: Read) => memo(`all rewards ${start}`, () => rewardsOf(start, undefined, rd));
+// The epoch's prices, which every voter's earnings in it share, deep enough for all of each token the epoch paid.
+const epochPrices = (start: number, rd: Read): Promise<Prices> =>
+  memo(`epoch prices ${start}`, async () => {
+    const { rewards } = await allRewards(start, rd);
+    const amounts = new Map<string, bigint>();
+    for (const { token, amount } of rewards)
+      amounts.set(key(token.address), (amounts.get(key(token.address)) ?? 0n) + amount);
+    // HYDX too, which APRs need.
+    const tokens = tokensIn(rewards);
+    if (!tokens.some(({ address }) => key(address) === key(HYDX)))
+      tokens.push({ address: HYDX, decimals: 18, symbol: "HYDX" });
+    return pricesAtFlip(tokens, amounts, start + WEEK, rd);
+  });
+const priced = async (start: number, votes: bigint, pools: Pool[], rewards: Reward[], rd: Read): Promise<Earnings> => ({
+  start,
+  votes,
+  pools,
+  rewards,
+  prices: await epochPrices(start, rd),
+});
 
 // What a voter earned in the epoch from `start`: an automation, whose pools are `named`, or an owner. Rewards go to the
 // votes standing when the epoch starts. A voter with no votes then, or that has not voted since the epoch before began,
@@ -136,12 +189,12 @@ export async function votesEarned(holder: Address, start: number, named: boolean
   if (!votes || Number(voted) < start - WEEK) return { start, votes, pools: [], rewards: [], prices: noPrices() };
   const contracts =
     Number(voted) >= start + WEEK
-      ? await allContracts(start)
+      ? undefined
       : await contractsOf(
           required(await rd(Array.from({ length: Number(length) }, (_, i) => voter("poolVote", holder, BigInt(i))))),
           rd,
         );
-  const { rewards, votes: byPool } = await rewardsOf(contracts, start, holder, rd);
+  const { rewards, votes: byPool } = await rewardsOf(start, holder, rd, contracts);
   const used = [...byPool];
   const pools = named ? await withNames(used, rd) : used.map(([address, votes]) => ({ address, name: "", votes }));
   pools.sort((a, b) => (a.votes === b.votes ? 0 : a.votes > b.votes ? -1 : 1));
@@ -177,7 +230,7 @@ async function withNames(used: [Address, bigint][], rd: Read): Promise<Pool[]> {
 export async function allEarnings(start: number, rd: Read = read): Promise<Earnings> {
   const [[votes], found] = await Promise.all([
     rd([voter("totalWeightAt", BigInt(start))]).then(required),
-    allContracts(start).then((all) => rewardsOf(all, start, undefined, rd)),
+    allRewards(start, rd),
   ]);
   const pools = [...found.votes].map(([address, poolVotes]) => ({ address, name: "", votes: poolVotes }));
   return priced(start, votes, pools, found.rewards, rd);
@@ -185,7 +238,7 @@ export async function allEarnings(start: number, rd: Read = read): Promise<Earni
 
 export async function rewardsFor(automation: Address, start: number, rd: Read = read): Promise<Reward[]> {
   const [votes] = required(await rd([escrow("getPastVotes", automation, BigInt(start))]));
-  return votes ? (await rewardsOf(await allContracts(start), start, automation, rd)).rewards : [];
+  return votes ? (await rewardsOf(start, automation, rd)).rewards : [];
 }
 
 export type Stake = { delegate: Address; votes: bigint };
@@ -220,15 +273,13 @@ export function valueOf({ rewards, prices: own }: Earnings, prices = own) {
   }
   return { total: counted.fees + counted.incentives, ...counted, byPool, unit: prices.unit, rates: prices.rates };
 }
-// Per 1,000 votes, which have 18 decimals.
-export const perThousand = (value: number, votes: bigint): number => (votes > 0n ? value / (Number(votes) / 1e21) : 0);
 // What `votes` earned at the rate of these earnings' votes, by default at their own prices.
 export const shareOf = (earnings: Earnings, votes: bigint, value: Value = valueOf(earnings)): Money =>
   moneyAt(earnings.votes > 0n ? (Number(votes) / Number(earnings.votes)) * value.total : 0, value);
-export const perThousandOf = (earnings: Earnings, value?: Value): Money => shareOf(earnings, 10n ** 21n, value);
-// The ratio of some votes' earnings per 1,000 votes to all of Hydrex's, both at `all`'s prices so they compare fairly.
-export function versus(earnings: Earnings, all: Earnings): number | undefined {
-  const ratio =
-    perThousand(valueOf(earnings, all.prices).total, earnings.votes) / perThousand(valueOf(all).total, all.votes);
-  return earnings.start === all.start && Number.isFinite(ratio) ? ratio : undefined;
+// A year of what the votes earned in an epoch, over what they stand for: a vote of a permanent lock is one HYDX, at the
+// same prices. Undefined without votes or a price for HYDX.
+export function aprOf(earnings: Earnings, prices = earnings.prices): number | undefined {
+  const hydx = prices.of.get(key(HYDX));
+  const votes = Number(earnings.votes) / 1e18;
+  return hydx && votes > 0 ? ((valueOf(earnings, prices).total / votes) * (365 / 7)) / hydx : undefined;
 }

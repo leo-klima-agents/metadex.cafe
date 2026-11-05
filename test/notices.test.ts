@@ -9,7 +9,7 @@ import { bundled, noticeOf, packagePart, partsOf } from "../scripts/notices.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
-// Bundles what `scripts/build.ts` bundles, with the same options, without writing it to disk.
+// Bundles what `scripts/build.ts` bundles, from the same entry points, without writing it to disk.
 const { metafile } = await esbuild.build({
   absWorkingDir: ROOT,
   entryPoints: { main: "src/main.ts", style: "site/style.css" },
