@@ -26,7 +26,7 @@ export type MatchaLatte = {
   epochStart: number;
   retireBps: bigint;
   tonnes: bigint;
-  // These may fail to read without failing the rest; the page says so, but leaves out an unread maximum fee.
+  // These may fail to read without failing the rest; the page then says so.
   voted?: number | undefined;
   feeBps?: bigint | undefined;
   maxFeeBps?: bigint | undefined;

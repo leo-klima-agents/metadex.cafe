@@ -338,7 +338,11 @@ export function swapSlip(
         ),
       })),
       { label: "Deadline", code: String(deadline), description: utc(Number(deadline)) },
-      { label: "Skip failed", code: "true", description: "A route under its minimum is skipped." },
+      {
+        label: "Skip failed",
+        code: "true",
+        description: "A route that fails, as one under its minimum does, is skipped.",
+      },
     ],
   };
 }

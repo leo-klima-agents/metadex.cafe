@@ -827,7 +827,8 @@ dialog[open] {
   background: var(--accent);
 }
 .Shape[data-shape="elsewhere"] {
-  background: var(--quiet);
+  border: 2px solid var(--quiet);
+  background: radial-gradient(circle, var(--quiet) 0 30%, transparent 36%);
 }
 .Shape[data-shape="joining"] {
   border: 2px solid var(--info);
@@ -842,7 +843,7 @@ dialog[open] {
   border: 2px solid var(--quiet);
 }
 .Shape[data-shape="checking"] {
-  border-color: var(--line);
+  border-style: dotted;
 }
 .Shape[data-shape="stopped"] {
   border-radius: 0;
@@ -1214,8 +1215,7 @@ th .Tag {
   }
 }
 @media (forced-colors: active) {
-  /* Shapes keep their fills in forced colours, drawn in the text colour. Running and elsewhere, both filled circles,
-     then look alike, and checking keeps its `--line` ring. */
+  /* Shapes keep their fills in forced colours, drawn in the text colour, so each status stays distinct. */
   .Shape {
     forced-color-adjust: none;
     --accent: CanvasText;

@@ -38,6 +38,7 @@ import {
   sharesOf,
   universeReads,
   stakeOf,
+  startsAt,
   stitched,
   streamPerDay,
   totalsOf,
@@ -418,6 +419,17 @@ test("what a stake can claim adds up by token, in small reads, and says when som
     functionName === "userRewardCheckpointIndex" ? 900n : functionName === "feeClaimState" ? { lastUserCp: 1n } : 0n,
   );
   assert.equal((await pendingOf([own], market([g]), behind)).get(1n)!.partial, true, "more checkpoints than walked");
+  // A pool the market could not read is not counted, and says so; the zero gauge has nothing to count.
+  const [unseen, idle] = [gauge().address, zeroAddress];
+  const both = (other: Address) =>
+    stake({
+      allocations: [
+        { gauge: g.address, amount: SAERO },
+        { gauge: other, amount: SAERO },
+      ],
+    });
+  assert.equal((await pendingOf([both(unseen)], market([g]), read)).get(1n)!.partial, true, "a pool not read");
+  assert.equal((await pendingOf([both(idle)], market([g]), read)).get(1n)!.partial, false, "the zero gauge");
 });
 
 test("pools must be deep enough for a day of what the gauges pay: the most a window paid in a day, and live streams", () => {
@@ -470,7 +482,7 @@ test("each gauge's windows run from its own snapshots to its own latest checkpoi
   const power = (i: number) => BigInt(i + 1) * 1_000_000n * SAERO;
   const at = (index: bigint) => Number(index % 10n);
   const asked: Asked[] = [];
-  const read = fake(({ address, functionName, args }) => {
+  const answer = ({ address, functionName, args = [] }: Call) => {
     const i = n(address);
     switch (functionName) {
       case "getCurrentBlockTimestamp":
@@ -509,7 +521,8 @@ test("each gauge's windows run from its own snapshots to its own latest checkpoi
       case "supplyAccumulatorAt":
         return [BigInt(at(args[0] as bigint)) * 10n ** 30n + BigInt(i) * 10n ** 29n, 0n];
     }
-  }, asked);
+  };
+  const read = fake(answer, asked);
   const found = await readMarket({ gauges: listed, unread: [], unknown: [] }, read);
   assert.deepEqual(found.unread, []);
   // Pricing does not wait for the gauges: it asks for the newest block before the windows' snapshots are read.
@@ -536,6 +549,30 @@ test("each gauge's windows run from its own snapshots to its own latest checkpoi
   assert.deepEqual(found.past.times, grid.record);
   const snapshots = asked.filter(({ names }) => names.has("getPriorSupplyIndex")).length;
   assert.equal(snapshots, 1, "every time's snapshots in one read");
+  // A gauge whose program count fails is left out, rather than taken to pay no incentives.
+  const uncounted = fake((call) =>
+    call.functionName === "incentiveCount" && n(call.address) === 1 ? undefined : answer(call),
+  );
+  const partly = await readMarket({ gauges: listed, unread: [], unknown: [] }, uncounted);
+  assert.deepEqual(
+    [partly.gauges.map(({ address }) => address), partly.unread],
+    [[listed[0]!.address], [listed[1]!.address]],
+  );
+});
+
+test("a snapshot whose checkpoint could not be found is unread, not one from before the first checkpoint", async () => {
+  const g = gauge();
+  const asked: Asked[] = [];
+  const read = fake(({ functionName }) => (functionName === "supplyAt" ? 5_000_000n * SAERO : undefined), asked);
+  const [start] = await startsAt([g.rewards], [BigInt(TODAY)], read);
+  assert.equal(start!.index, undefined);
+  assert.ok(unreadStart(start!), "so it is read again");
+  assert.ok(
+    !asked.some(({ names }) => names.has("feeRewardPerVotingPowerAt")),
+    "nothing read at an unknown checkpoint",
+  );
+  assert.equal(accruedFrom(start!, g.first, g.end).fees0, 0n);
+  assert.deepEqual(stitched(g, [TODAY], [start!]), [], "a pool's history stops there");
 });
 
 test("a Slipstream gauge whose tick spacing cannot be read is unread, not named CL0", async () => {

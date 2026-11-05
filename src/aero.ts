@@ -75,7 +75,7 @@ export type Point = {
 };
 // The checkpoint at or before `time`, `index` 0 if none, and the power at `time`. Fields are undefined if unread.
 export type Start = {
-  index: bigint;
+  index: bigint | undefined;
   time?: number | undefined;
   acc: readonly bigint[] | undefined;
   ts: number | undefined;
@@ -184,7 +184,7 @@ function endOf(latest: Start, accumulator: readonly [bigint, bigint], power: big
   };
 }
 
-type Found = { address: Address; index: bigint; supply: bigint | undefined; time?: number };
+type Found = { address: Address; index: bigint | undefined; supply: bigint | undefined; time?: number };
 async function indicesAt(rewards: Address[], times: bigint[], rd: Read): Promise<Found[]> {
   const found = await readEach(
     rewards.flatMap((address) => times.map((time) => ({ address, time }))),
@@ -196,14 +196,15 @@ async function indicesAt(rewards: Address[], times: bigint[], rd: Read): Promise
   );
   return found.map(({ item: { address, time }, index, supply }) => ({
     address,
-    index: index ?? 0n,
+    index,
     supply,
     time: Number(time),
   }));
 }
 async function snapshotsOf(found: Found[], rd: Read): Promise<Start[]> {
+  const known = found.filter((each): each is Found & { index: bigint } => each.index !== undefined);
   const read = await readEach(
-    found,
+    known,
     {
       acc: ({ address, index }) => manager(address)("feeRewardPerVotingPowerAt", index),
       point: ({ address, index }) => manager(address)("globalRewardPointHistory", index),
@@ -211,15 +212,19 @@ async function snapshotsOf(found: Found[], rd: Read): Promise<Start[]> {
     },
     rd,
   );
-  return read.map(({ item: { index, supply, time }, acc, point, share }) => ({
-    index,
-    time,
-    acc,
-    ts: point && Number(point.ts),
-    share: share?.[0],
-    zero: point && Number(point.zeroSupplySeconds),
-    supply,
-  }));
+  const of = new Map<Found, (typeof read)[number]>(read.map((each) => [each.item, each]));
+  return found.map((item) => {
+    const { acc, point, share } = of.get(item) ?? {};
+    return {
+      index: item.index,
+      time: item.time,
+      acc,
+      ts: point && Number(point.ts),
+      share: share?.[0],
+      zero: point && Number(point.zeroSupplySeconds),
+      supply: item.supply,
+    };
+  });
 }
 // By manager, then time.
 export const startsAt = async (rewards: Address[], times: bigint[], rd: Read): Promise<Start[]> =>
@@ -336,7 +341,7 @@ export function dayOf(gauges: Gauge[], time: number): Map<string, bigint> {
 }
 
 // A gauge whose state cannot be read is left out and listed in `unread`. A failed read of its snapshots or programs
-// leaves out only those, and a failed program count reads as no programs.
+// leaves out only those.
 export async function readMarket(
   from: Universe | Promise<Universe>,
   rd: Read = read,
@@ -408,7 +413,12 @@ async function gaugesOf(
   );
   const at = (i: number, time: number) => starts[i * grid.times.length + grid.times.indexOf(time)]!;
   const read0 = states.flatMap(({ item, cap, activated, power, accumulator, count, first, latest }, i) =>
-    cap !== undefined && activated !== undefined && power !== undefined && accumulator && latest !== undefined
+    cap !== undefined &&
+    activated !== undefined &&
+    power !== undefined &&
+    accumulator &&
+    count !== undefined &&
+    latest !== undefined
       ? [
           {
             ...item,
@@ -416,7 +426,7 @@ async function gaugesOf(
             activated,
             power,
             accumulator: [accumulator[0], accumulator[1]] as const,
-            count: count ?? 0n,
+            count,
             first: first ? Number(first.ts) : 0,
             starts: grid.windows.map((time) => at(i, time)),
             record: grid.record.map((time) => at(i, time)),
@@ -515,6 +525,7 @@ export function stitched(gauge: Gauge, bounds: number[], starts: Start[]): Day[]
   let last: bigint | undefined;
   for (const [k, start] of starts.entries()) {
     const bound = bounds[k]!;
+    if (start.index === undefined) break;
     if (start.index !== 0n && start.index === last) {
       const row = rows.at(-1)!;
       [row.day, row.days] = [bound, row.days + 1];
@@ -802,7 +813,15 @@ export async function pendingOf(stakes: Stake[], market: Market, rd: Read = read
       rd,
     ),
   ]);
-  const found = new Map(stakes.map(({ id }): [bigint, Pending] => [id, { amounts: new Map(), partial: false }]));
+  const found = new Map(
+    stakes.map(({ id, allocations }): [bigint, Pending] => [
+      id,
+      {
+        amounts: new Map(),
+        partial: allocations.some(({ gauge }) => !isIdleGauge(gauge) && !gaugeAt(market, gauge)),
+      },
+    ]),
+  );
   const add = (id: bigint, token: Token | undefined, amount: bigint | undefined) => {
     const pending = found.get(id)!;
     if (amount === undefined || !token) pending.partial = true;

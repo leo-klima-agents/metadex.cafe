@@ -297,7 +297,9 @@ export function drawProduct(): void {
     tonnes: matchaLatteValue(({ tonnes }) => `${units(tonnes)} t`),
     "retire-cost": matchaLatteValue(({ retireBps }) => `Up to ${bps(retireBps)} of each payout`),
     "fee-cost": matchaLatteValue(({ feeBps }) => (feeBps === undefined ? "Not read" : bps(feeBps))),
-    "max-fee": matchaLatteValue(({ maxFeeBps }) => (maxFeeBps === undefined ? "" : ` (up to ${bps(maxFeeBps)})`)),
+    "max-fee": matchaLatteValue(({ maxFeeBps }) =>
+      maxFeeBps === undefined ? " (its maximum not read)" : ` (up to ${bps(maxFeeBps)})`,
+    ),
     join: `Join ${automation.name}`,
     performance: stateOf(earnings, !earnings.value?.votes),
     "versus-words": performance(automation),
