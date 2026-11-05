@@ -12,7 +12,6 @@ import * as config from "./config.ts";
 import { ANCHORS, CHAIN_ID, GAUGE_FACTORIES, PAYMENTS_MODULE, PRICING, type GaugeKind } from "./config.ts";
 import { key, pricesNow, waysFor, worthOf, type Prices, type Token } from "./prices.ts";
 import { blockTime, contract, read, readEach, required, same, sawBlock, type Read, type Tx } from "./rpc.ts";
-import { clean } from "./format.ts";
 import { describe } from "./tokens.ts";
 
 // A gauge's rewards manager adds up the fees it pays per unit of power and snapshots the sum at each checkpoint, so
@@ -108,12 +107,14 @@ export const routable = (gauge: Gauge): boolean => gauge.activated && gauge.cap 
 const whole = (power: bigint): number => Number(power) / 1e18;
 
 // Pools by the names Aero gives them: a Slipstream pool by its tick spacing, as in "CL50-WETH/USDC", and a basic pool
-// by its own symbol, as in "vAMMV2-AERO/USDC", or else by its curve.
-export function nameOf({ kind, tickSpacing, token0, token1, symbol }: Listed): string {
-  const pair = `${token0.symbol}/${token1.symbol}`;
-  if (kind === "cl") return `CL${tickSpacing}-${pair}`;
-  return clean(symbol) || `${kind === "stable" ? "sAMM" : "vAMM"}-${pair}`;
-}
+// by its curve, as in "vAMM-AERO/USDC".
+const PREFIXES: Record<GaugeKind, (tickSpacing: number) => string> = {
+  volatile: () => "vAMM",
+  stable: () => "sAMM",
+  cl: (tickSpacing) => `CL${tickSpacing}`,
+};
+export const nameOf = ({ kind, tickSpacing, token0, token1 }: Listed): string =>
+  `${PREFIXES[kind](tickSpacing)}-${token0.symbol}/${token1.symbol}`;
 
 // Index 0 means no checkpoint yet, so it accrues from nothing at the first one. An unread snapshot accrues nothing.
 // Fees can be credited between checkpoints but power cannot change, so fees accrue from the checkpoint and the mean
@@ -209,8 +210,6 @@ export type Listed = {
   token0: Token;
   token1: Token;
   tickSpacing: number;
-  // A basic pool's own symbol, if read.
-  symbol?: string | undefined;
 };
 export type Universe = { gauges: Listed[]; unread: Address[]; unknown: Address[] };
 export async function readUniverse(rd: Read = read): Promise<Universe> {
@@ -228,7 +227,7 @@ export async function readUniverse(rd: Read = read): Promise<Universe> {
     rd,
   );
   const linked = links.flatMap(({ item, pool, rewards }) => (pool && rewards ? [{ ...item, pool, rewards }] : []));
-  const [sides, spacings, symbols] = await Promise.all([
+  const [sides, spacings] = await Promise.all([
     readEach(
       linked,
       {
@@ -242,23 +241,17 @@ export async function readUniverse(rd: Read = read): Promise<Universe> {
       { spacing: ({ pool }) => contract(pool, aeroPoolAbi)("tickSpacing") },
       rd,
     ),
-    readEach(
-      linked.filter(({ kind }) => kind !== "cl"),
-      { symbol: ({ pool }) => contract(pool, aeroPoolAbi)("symbol") },
-      rd,
-    ),
   ]);
   const tokens = await describe(
     sides.flatMap(({ token0, token1 }) => [token0, token1].filter((token) => token !== undefined)),
     rd,
   );
   const spacing = new Map(spacings.map(({ item, spacing }) => [item.address, spacing]));
-  const symbol = new Map(symbols.map(({ item, symbol }) => [item.address, symbol]));
   const gauges = sides.flatMap(({ item, token0, token1 }): Listed[] => {
     const [first, second] = [token0 && tokens.get(key(token0)), token1 && tokens.get(key(token1))];
     const tickSpacing = item.kind === "cl" ? spacing.get(item.address) : 0;
     return first && second && tickSpacing !== undefined
-      ? [{ ...item, token0: first, token1: second, tickSpacing, symbol: symbol.get(item.address) }]
+      ? [{ ...item, token0: first, token1: second, tickSpacing }]
       : [];
   });
   const kept = new Set(gauges.map(({ address }) => address));
