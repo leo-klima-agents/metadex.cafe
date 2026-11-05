@@ -932,28 +932,25 @@
           </header>
           <dl class="u-stackTight">
             <div class="Pair">
-              <dt class="u-small u-quiet">Blue chips</dt>
-              <dd>Pools whose two tokens are both among USDC, EURC, WETH, cbBTC and AERO</dd>
-            </div>
-            <div class="Pair">
               <dt class="u-small u-quiet">Base average</dt>
               <dd>
-                What the average allocator on Base earned: all the pools' exchange revenue in each step, over all their
+                What the average allocator on Base earned: all the pools' exchange revenue at each step, over all their
                 sAERO weight, leaving out pools paying a token without a price
               </dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Autopilot</dt>
-              <dd>
-                Aero's Autopilot sAERO Maxi, as it actually allocated: its allocations, read from Base at each move
-              </dd>
+              <dd>The actual allocations of Aero's Autopilot sAERO Maxi at each step on Base</dd>
+            </div>
+            <div class="Pair">
+              <dt class="u-small u-quiet">Blue chips</dt>
+              <dd>Pools whose two tokens are both among USDC, EURC, WETH, cbBTC and AERO</dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">APR</dt>
               <dd>
-                A day's exchange revenue per sAERO, times 365, over the price of one AERO, counting each sAERO as one
-                AERO. The last 8 days use the prices of each step; the allocation table uses today's, as if the chosen
-                window's fees came again with the incentives already scheduled.
+                A day's exchange revenue per sAERO, times 365, over the price of one AERO. The last 8 days use the
+                prices of each step
               </dd>
             </div>
             <div class="Pair">
