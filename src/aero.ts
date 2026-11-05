@@ -11,7 +11,20 @@ import {
 import * as config from "./config.ts";
 import { ANCHORS, CHAIN_ID, GAUGE_FACTORIES, PAYMENTS_MODULE, PRICING, type GaugeKind } from "./config.ts";
 import { key, pricesNow, waysFor, worthOf, type Prices, type Token } from "./prices.ts";
-import { blockTime, contract, read, readEach, required, same, sawBlock, type Read, type Tx } from "./rpc.ts";
+import {
+  blockNumber,
+  blockTime,
+  contract,
+  firstBlockAt,
+  read,
+  readEach,
+  required,
+  same,
+  sawBlock,
+  timeAt,
+  type Read,
+  type Tx,
+} from "./rpc.ts";
 import { describe } from "./tokens.ts";
 
 // A gauge's rewards manager adds up the fees it pays per unit of power and snapshots the sum at each checkpoint, so
@@ -1011,10 +1024,23 @@ export function paidIn(picks: Pick[], amount: number, mine?: Map<string, number>
   return [...by.values()].sort((a, b) => (b.value ?? -1) - (a.value ?? -1));
 }
 
-// The rule as it would have been followed: picked at each of `times`, newest first, from what each pool paid since
-// the time before and what its live programs would stream over the hold, then held until the next time, or now.
-export type Past = { times: number[]; starts: Map<string, Start[]> };
-export type Period = { from: number; to: number; rule: Per10k | undefined; market: Average; picked: number };
+// The record, over the grid's steps of 48 hours, the newest ending now. What a pool paid in a step comes from two of
+// its snapshots: `past` holds every pool's, by rewards manager, at each of its `times`, newest first.
+export type Past = { times: number[]; starts: Map<string, (Start | undefined)[]> };
+export const pastOf = (rewards: Address[], times: number[], starts: Start[]): Past => ({
+  times,
+  starts: new Map(rewards.map((address, i) => [key(address), starts.slice(i * times.length, (i + 1) * times.length)])),
+});
+// Both pasts' snapshots, at all their times.
+export function mergePast(a: Past, b: Past): Past {
+  const times = [...new Set([...a.times, ...b.times])].sort((x, y) => y - x);
+  const of = (past: Past, id: string, time: number) => past.starts.get(id)?.[past.times.indexOf(time)];
+  const ids = new Set([...a.starts.keys(), ...b.starts.keys()]);
+  return {
+    times,
+    starts: new Map([...ids].map((id) => [id, times.map((time) => of(a, id, time) ?? of(b, id, time))])),
+  };
+}
 // A checkpoint read as a past end. Fees credited after it count in the time after.
 const pointOf = (start: Start | undefined): Point | undefined =>
   start && start.index !== 0n && start.acc && start.ts !== undefined
@@ -1026,51 +1052,170 @@ const pointOf = (start: Start | undefined): Point | undefined =>
         power: start.supply ?? 0n,
       }
     : undefined;
-export function recordOf(market: Market, past: Past, count: number, amount = 0): Period[] {
-  const { times } = past;
-  // From `times[k]` to the time after, or to now.
-  const accrual = (gauge: Gauge, k: number): Accrued | undefined => {
-    const starts = past.starts.get(key(gauge.rewards));
-    const end = k === 0 ? gauge.end : pointOf(starts?.[k - 1]);
-    return starts?.[k] && end && accruedFrom(starts[k], gauge.first, end);
-  };
-  return times.slice(0, -1).map((time, k) => {
-    const to = k === 0 ? market.time : times[k - 1]!;
-    const step = time - times[k + 1]!;
-    const pools = market.gauges.filter(routable).flatMap((gauge) => {
-      const before = accrual(gauge, k + 1);
-      if (!before || before.to <= before.from || before.from > times[k + 1]! + 0.1 * step || !(meanOf(before) > 0))
+// What a pool paid from one of the past's times to another, or to now.
+export function accrualOf(gauge: Gauge, past: Past, from: number, to: number, market: Market): Accrued | undefined {
+  const starts = past.starts.get(key(gauge.rewards));
+  const start = starts?.[past.times.indexOf(from)];
+  const end = to >= market.time ? gauge.end : pointOf(starts?.[past.times.indexOf(to)]);
+  return start && end ? accruedFrom(start, gauge.first, end) : undefined;
+}
+// The grid's steps, newest first: from each pick to the next, the newest to now.
+export type Step = { from: number; to: number };
+export const stepsOf = (market: Market): Step[] =>
+  market.past.times.slice(0, PICKS).map((from, k) => ({ from, to: k ? market.past.times[k - 1]! : market.time }));
+// What 10,000 sAERO earned a day in a step, undefined where no pool has an answer.
+export type Paid = Step & { paid: Per10k | undefined };
+
+// A strategy: the top `count` pools, of all or of blue chips only, by what they paid over the `hours` before each
+// pick, each given its share of what they paid together; picked again every 48 hours (`again`), or once, at the
+// oldest step's start, and kept.
+export type Strategy = { count: number; hours: Hours; again: boolean; blueChips: boolean };
+export const isBlueChip = ({ token0, token1 }: Gauge): boolean =>
+  [token0, token1].every(({ address }) => config.BLUE_CHIPS.some((chip) => same(chip, address)));
+// The picks at `time`, from what each pool paid over the `hours` before it and what its programs live then would
+// stream over the next 48 hours.
+export function picksAt(market: Market, past: Past, time: number, { count, hours, blueChips }: Strategy): Pick[] {
+  const since = time - hours * HOUR;
+  const pools = market.gauges
+    .filter((gauge) => routable(gauge) && (!blueChips || isBlueChip(gauge)))
+    .flatMap((gauge) => {
+      const before = accrualOf(gauge, past, since, time, market);
+      if (!before || before.to <= before.from || before.from > since + 0.1 * (time - since) || !(meanOf(before) > 0))
         return [];
+      const live = (program: Program) => program.start <= time;
       const paying = {
         fees: feeFlows(gauge, before, market.prices),
-        incentives: streamFlows(gauge, time, time + step, market.prices, (program) => program.start <= time),
+        incentives: streamFlows(gauge, time, time + STEP, market.prices, live),
         power: meanOf(before),
       };
       return [{ gauge, paying }];
     });
-    const picks = picksOf(pools, count);
-    const held = (gauge: Gauge) => paidOver(gauge, accrual(gauge, k), market.prices);
+  return picksOf(pools, count);
+}
+// The snapshots a strategy needs beyond the grid's: where each pick's history starts.
+export function timesFor(market: Market, { again, hours }: Strategy): number[] {
+  const steps = stepsOf(market);
+  const picks = again ? steps.map(({ from }) => from) : steps.slice(-1).map(({ from }) => from);
+  return picks.map((time) => time - hours * HOUR).filter((time) => !market.past.times.includes(time));
+}
+const paidDuring = (market: Market, past: Past, step: Step) => (gauge: Gauge) =>
+  paidOver(gauge, accrualOf(gauge, past, step.from, step.to, market), market.prices);
+// Each step held as `holdingsAt` says, with `amount` sAERO more shared among its pools by their weights.
+const heldSteps = (market: Market, past: Past, holdingsAt: (step: Step) => Holding[], amount = 0): Paid[] =>
+  stepsOf(market).map((step) => ({
+    ...step,
+    paid: heldOver(holdingsAt(step), paidDuring(market, past, step), amount),
+  }));
+export function strategySteps(market: Market, past: Past, strategy: Strategy, amount = 0): Paid[] {
+  const once = strategy.again ? undefined : picksAt(market, past, stepsOf(market).at(-1)!.from, strategy);
+  return heldSteps(market, past, (step) => once ?? picksAt(market, past, step.from, strategy), amount);
+}
+// Shares chosen now, held over every step: hindsight.
+export const customSteps = (market: Market, past: Past, holdings: Holding[], amount = 0): Paid[] =>
+  heldSteps(market, past, () => holdings, amount);
+// The market: every pool that takes allocations, is not thin, and paid only tokens with a price, weighed in each step
+// by what it paid in that step itself, as if allocations followed rewards with no delay.
+export const marketSteps = (market: Market, past: Past): Paid[] =>
+  stepsOf(market).map((step) => {
+    const paid = paidDuring(market, past, step);
+    const pools = market.gauges.filter(routable).flatMap((gauge) => {
+      const accrued = accrualOf(gauge, past, step.from, step.to, market);
+      const paying = accrued && !thinOver(accrued) ? paid(gauge) : undefined;
+      return paying && per10kOf(paying)?.priced ? [{ gauge, paying }] : [];
+    });
+    return { ...step, paid: heldOver(picksOf(pools, Infinity), paid) };
+  });
+
+// A stake's allocations, newest first, each with the time it was made, as it was just before the next: read at the
+// block before each move, back to the first made at or before `since`, or `most` of them.
+export type Move = { at: number; allocations: Allocation[] };
+export async function movesOf(stake: Stake, since: number, rd: Read = read, most = 12): Promise<Move[]> {
+  const moves: Move[] = [{ at: stake.lastAllocated, allocations: stake.allocations }];
+  const [newest, newestTime] = required(await rd([blockNumber, blockTime])).map(Number) as [number, number];
+  const times = new Map<number, Promise<number>>();
+  const timeOf = (block: number): Promise<number> => {
+    const known = times.get(block) ?? timeAt(block, rd);
+    times.set(block, known);
+    return known;
+  };
+  for (let at = stake.lastAllocated; at > since && moves.length < most;) {
+    const block = (await firstBlockAt(at, newest, newestTime, timeOf)) - 1;
+    const [state, gauges] = required(
+      await rd([leaf("tokenStates", stake.id), leaf("allocatedGauges", stake.id)], { block }),
+    );
+    const amounts = required(
+      await rd(
+        gauges.map((gauge) => leaf("allocations", stake.id, gauge)),
+        { block },
+      ),
+    );
+    const before = Number(state[1]);
+    if (!before || before >= at) break;
+    moves.push({
+      at: before,
+      allocations: gauges.flatMap((gauge, i) => (amounts[i] ? [{ gauge, amount: amounts[i] }] : [])),
+    });
+    at = before;
+  }
+  return moves;
+}
+// The moved pools' snapshots at each move after `since`, so that steps can be cut where the allocation changed.
+export async function movesPast(moves: Move[], market: Market, since: number, rd: Read = read): Promise<Past> {
+  const times = moves.map(({ at }) => at).filter((at) => at > since && at < market.time);
+  const rewards = [
+    ...new Set(
+      moves.flatMap(({ allocations }) => allocations.flatMap(({ gauge }) => gaugeAt(market, gauge)?.rewards ?? [])),
+    ),
+  ];
+  if (!times.length || !rewards.length) return { times: [], starts: new Map() };
+  return pastOf(rewards, times, await startsAt(rewards, times.map(BigInt), rd));
+}
+// A stake as it actually allocated: each step cut where it moved, each part held as its allocation was then, weighed
+// by its length.
+export function movedSteps(market: Market, past: Past, moves: Move[]): Paid[] {
+  return stepsOf(market).map((step) => {
+    const inside = moves.map(({ at }) => at).filter((at) => at > step.from && at < step.to);
+    const cuts = [step.from, ...inside.sort((a, b) => a - b), step.to];
+    let [fees, incentives, seconds, priced] = [0, 0, 0, true];
+    for (let i = 0; i + 1 < cuts.length; i++) {
+      const part = { from: cuts[i]!, to: cuts[i + 1]! };
+      const move = moves.find(({ at }) => at <= part.from);
+      const total = move?.allocations.reduce((sum, { amount }) => sum + amount, 0n) ?? 0n;
+      if (!move || !total) continue;
+      const holdings = move.allocations.map(({ gauge, amount }) => ({
+        gauge: gaugeAt(market, gauge),
+        weight: Number(amount) / Number(total),
+      }));
+      const paid = heldOver(holdings, paidDuring(market, past, part));
+      if (!paid) continue;
+      const length = part.to - part.from;
+      [fees, incentives, seconds, priced] = [
+        fees + paid.fees * length,
+        incentives + paid.incentives * length,
+        seconds + length,
+        priced && paid.priced,
+      ];
+    }
     return {
-      from: time,
-      to,
-      rule: heldOver(picks, held, amount),
-      market: marketOver(market.gauges, held),
-      picked: picks.length,
+      ...step,
+      paid: seconds
+        ? { fees: fees / seconds, incentives: incentives / seconds, total: (fees + incentives) / seconds, priced }
+        : undefined,
     };
   });
 }
-// Each period weighed by its length.
-export function overall(periods: Period[]): { rule: number; market: number; from: number; to: number } | undefined {
-  const counted = periods.filter(({ rule }) => rule);
+// A record's pay a day over all its steps that have an answer, each weighed by its length.
+export function overallOf(steps: Paid[]): Per10k | undefined {
+  const counted = steps.filter(({ paid }) => paid);
   const seconds = counted.reduce((sum, { from, to }) => sum + to - from, 0);
   if (!seconds) return undefined;
-  const mean = (of: (period: Period) => number) =>
-    counted.reduce((sum, period) => sum + of(period) * (period.to - period.from), 0) / seconds;
+  const mean = (of: (paid: Per10k) => number) =>
+    counted.reduce((sum, { from, to, paid }) => sum + of(paid!) * (to - from), 0) / seconds;
   return {
-    rule: mean(({ rule }) => rule!.total),
-    market: mean(({ market }) => market.total),
-    from: Math.min(...counted.map(({ from }) => from)),
-    to: Math.max(...counted.map(({ to }) => to)),
+    fees: mean(({ fees }) => fees),
+    incentives: mean(({ incentives }) => incentives),
+    total: mean(({ total }) => total),
+    priced: counted.every(({ paid }) => paid!.priced),
   };
 }
 

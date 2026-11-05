@@ -129,6 +129,13 @@ function figureOf(sum: Money, cents: boolean): string {
   return `≈ ${sign}${of((magnitude >= 100 && !cents ? without : withCents).format(magnitude))}`;
 }
 
+// A chart's scale in the currency shown: what each value is in it, and a tick's label, to the cent and without "≈".
+export function axisOf(basis: Basis): { of: (value: number) => number; tick: (shown: number) => string } {
+  const [shown, rate] = shownOf(basis);
+  const [withCents] = FORMATS[shown]!;
+  return { of: (value) => value / rate, tick: (value) => withCents.format(value) };
+}
+
 const dateFormat = (options: Intl.DateTimeFormatOptions) =>
   new Intl.DateTimeFormat(LANG, { timeZone: "UTC", ...options });
 const utcDay = dateFormat({ weekday: "short", day: "numeric", month: "short" });

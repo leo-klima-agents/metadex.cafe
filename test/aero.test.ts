@@ -18,7 +18,7 @@ import {
   earnedBy,
   heldOver,
   marketOver,
-  overall,
+  overallOf,
   paidIn,
   paidOver,
   gridOf,
@@ -27,7 +27,6 @@ import {
   paysNext,
   per10kOf,
   picksOf,
-  recordOf,
   refusalOf,
   feesPerDay,
   isThin,
@@ -47,9 +46,21 @@ import {
   nameOf,
   weightOf,
   windowFees,
+  customSteps,
+  isBlueChip,
+  marketSteps,
+  mergePast,
+  movedSteps,
+  movesOf,
+  stepsOf,
+  strategySteps,
+  timesFor,
   type Accrued,
   type Gauge,
   type Market,
+  type Move,
+  type Paid,
+  type Past,
   type Point,
   type Program,
   type Stake,
@@ -518,7 +529,7 @@ test("each gauge's windows run from its own snapshots to its own latest checkpoi
     }
     // The record's snapshots are the same reads.
     assert.deepEqual(
-      found.past.starts.get(gauge.rewards.toLowerCase())!.map(({ index }) => index),
+      found.past.starts.get(gauge.rewards.toLowerCase())!.map((start) => start?.index),
       grid.record.map((time) => BigInt(10 * i + 2 + grid.times.indexOf(time))),
     );
   }
@@ -686,55 +697,213 @@ test("the windows and the record's picks lie on one grid of 48 hours, counted ba
   assert.ok(unreadStart({ ...read, acc: undefined }), "a checkpoint whose snapshot failed");
 });
 
-test("followed, each pick comes from the hold before it, and earns what its pools paid after", () => {
-  const [t0, t1, t2] = [TODAY - DAY, TODAY - 3 * DAY, TODAY - 5 * DAY];
-  // 10,000 sAERO earn $1 for a growth of 100 × 10^6 USDC units.
-  const grown = (perDay: number, days: number) => BigInt(Math.round(perDay * days * 1e6)) * 100n;
-  const at = (index: bigint, time: number, acc: bigint): Start => ({
-    index,
+// Pools that paid as `pays` says over the grid's steps, oldest first, the last ending now, in dollars to 10,000 sAERO
+// a day; with their snapshots at the grid's times, and at `extra` times. 10,000 sAERO earn $1 for a growth of
+// 100 × 10^6 USDC units, whatever the power.
+function history(pays: number[], extra: number[] = [], fields: Partial<Gauge> = {}, supply = 5_000_000n * SAERO) {
+  const bounds = pays.map((_, i) => NOW - (pays.length - i) * STEP);
+  const accAt = (time: number): bigint => {
+    const dollars = pays.reduce(
+      (sum, pay, i) => sum + (pay * Math.max(0, Math.min(time, bounds[i]! + STEP) - bounds[i]!)) / DAY,
+      0,
+    );
+    return BigInt(Math.round(dollars * 1e6)) * 100n;
+  };
+  const times = [...new Set([...bounds, ...extra])].sort((a, b) => b - a);
+  const g = gauge({ ...fields, power: supply, end: { ...end(supply), acc: [accAt(NOW), 0n] } });
+  const starts: Start[] = times.map((time, i) => ({
+    index: BigInt(times.length - i),
     time,
-    acc: [acc, 0n],
+    acc: [accAt(time), 0n],
     ts: time,
     share: undefined,
     zero: 0,
-    supply: 5_000_000n * SAERO,
-  });
-  // A paid well, then little; B the other way round.
-  const past = (each: [number, number, number]) => {
-    const a1 = grown(each[0], 2);
-    const a0 = a1 + grown(each[1], 2);
-    return { starts: [at(3n, t0, a0), at(2n, t1, a1), at(1n, t2, 0n)], end: a0 + grown(each[2], (NOW - t0) / DAY) };
-  };
-  const [pa, pb] = [past([1, 10, 1]), past([10, 2, 10])];
-  const a = gauge({ end: { ...end(), acc: [pa.end, 0n] } });
-  const b = gauge({ end: { ...end(), acc: [pb.end, 0n] } });
-  const m = market([a, b]);
-  const record = recordOf(
-    m,
-    {
-      times: [t0, t1, t2],
-      starts: new Map([
-        [key(a.rewards), pa.starts],
-        [key(b.rewards), pb.starts],
-      ]),
+    supply,
+  }));
+  return { gauge: g, times, starts };
+}
+type History = ReturnType<typeof history>;
+const pastOfAll = (all: History[]): Past => ({
+  times: all[0]!.times,
+  starts: new Map(all.map(({ gauge, starts }) => [key(gauge.rewards), starts])),
+});
+// A past at fewer of its times.
+const only = (past: Past, times: number[]): Past => ({
+  times,
+  starts: new Map([...past.starts].map(([id, starts]) => [id, times.map((time) => starts[past.times.indexOf(time)])])),
+});
+const GRID = [1, 2, 3, 4, 5].map((k) => NOW - k * STEP);
+const meme: Token = { address: "0x00000000000000000000000000000000000000bb", decimals: 18, symbol: "MEME" };
+const MEMED = prices([
+  [usdc, 1],
+  [weth, 2_000],
+  [aero, 0.6],
+  [meme, 0.1],
+]);
+// A pays well in every other step, and B in the others; A is a blue chip, B is not. The market holds the grid's
+// snapshots; `past`, those at `extra` times too.
+function twoPools(extra: number[] = [], more: (extra: number[]) => History[] = () => []) {
+  const a = history([1, 10, 1, 10, 1], extra);
+  const b = history([10, 1, 10, 1, 10], extra, { token1: meme });
+  const all = [a, b, ...more(extra)];
+  const past = pastOfAll(all);
+  return {
+    a,
+    b,
+    past,
+    m: {
+      ...market(
+        all.map(({ gauge }) => gauge),
+        MEMED,
+      ),
+      past: only(past, GRID),
     },
-    1,
+  };
+}
+const totals = (steps: Paid[]) => steps.map(({ paid }) => paid?.total);
+const nearAll = (found: (number | undefined)[], expected: (number | undefined)[], what: string) => {
+  assert.equal(found.length, expected.length, what);
+  found.forEach((value, i) =>
+    expected[i] === undefined
+      ? assert.equal(value, undefined, `${what} ${i}`)
+      : near(value!, expected[i]!, `${what} ${i}`),
   );
+};
+
+test("the record's steps run 48 hours each from the grid's times, the newest to now", () => {
+  const { m } = twoPools();
   assert.deepEqual(
-    record.map(({ from, to }) => [from, to]),
+    stepsOf(m).map(({ from, to }) => [(NOW - from) / STEP, (NOW - to) / STEP]),
     [
-      [t0, NOW],
-      [t1, t0],
+      [1, 0],
+      [2, 1],
+      [3, 2],
+      [4, 3],
     ],
   );
-  // At t0, A paid more since t1, so the rule holds A, which then pays $1; at t1, B, which then pays $2.
-  near(record[0]!.rule!.total, 1, "A after t0");
-  near(record[0]!.market.total, (1 + 10) / 2, "both after t0");
-  near(record[1]!.rule!.total, 2, "B after t1");
-  near(record[1]!.market.total, (10 + 2) / 2);
-  const all = overall(record)!;
-  const [first, second] = [NOW - t0, t0 - t1];
-  near(all.rule, (1 * first + 2 * second) / (first + second), "weighed by time");
+});
+
+test("a strategy picks at each step from only the window before it, and earns what its pools paid in the step", () => {
+  const { a, m } = twoPools();
+  const top = { count: 1, hours: 48, again: true, blueChips: false } as const;
+  // Chasing last step's best pool always lands on the one that pays $1 next.
+  nearAll(totals(strategySteps(m, m.past, top)), [1, 1, 1, 1], "again");
+  // Picked once from the 48 hours before the oldest step: B, which paid $10 then, and is kept.
+  nearAll(totals(strategySteps(m, m.past, { ...top, again: false })), [10, 1, 10, 1], "once");
+  // Of blue chips, only A.
+  nearAll(totals(strategySteps(m, m.past, { ...top, blueChips: true })), [1, 10, 1, 10], "blue chips");
+  assert.ok(isBlueChip(a.gauge) && !isBlueChip(m.gauges[1]!));
+  // 5M sAERO more halves what each earns, at 5M already there.
+  nearAll(totals(strategySteps(m, m.past, top, 5_000_000)), [0.5, 0.5, 0.5, 0.5], "diluted");
+  near(overallOf(strategySteps(m, m.past, { ...top, again: false }))!.total, 5.5, "over the 8 days");
+});
+
+test("a longer window needs snapshots before the grid's, read for it alone", () => {
+  const { m, past } = twoPools([NOW - 6 * STEP]);
+  const top = { count: 1, hours: 96, again: true, blueChips: false } as const;
+  assert.deepEqual(timesFor(m, { ...top, hours: 48 }), [], "48 hours: the grid's own");
+  assert.deepEqual(timesFor(m, top), [NOW - 6 * STEP]);
+  assert.deepEqual(
+    timesFor(m, { ...top, hours: 192 }),
+    [6, 7, 8].map((k) => NOW - k * STEP),
+  );
+  assert.deepEqual(timesFor(m, { ...top, hours: 192, again: false }), [NOW - 8 * STEP], "once: the oldest pick's");
+  // Without them, the oldest step has no picks; with them, it does.
+  const without = totals(strategySteps(m, m.past, top));
+  assert.ok(without.slice(0, 3).every((each) => each !== undefined) && without[3] === undefined);
+  const all = mergePast(m.past, only(past, [NOW - 6 * STEP]));
+  assert.deepEqual(
+    all.times,
+    [1, 2, 3, 4, 5, 6].map((k) => NOW - k * STEP),
+  );
+  assert.ok(totals(strategySteps(m, all, top)).every((each) => each !== undefined));
+});
+
+test("the market weighs every pool by what it paid in each step itself, leaving out thin pools and tokens without a price", () => {
+  const { a, b, m } = twoPools();
+  nearAll(totals(marketSteps(m, m.past)), [101 / 11, 101 / 11, 101 / 11, 101 / 11], "10:1 in each step");
+  const thin = twoPools([], (extra) => [history([100, 100, 100, 100, 100], extra, {}, 100_000n * SAERO)]).m;
+  assert.equal(thin.gauges.length, 3);
+  nearAll(totals(marketSteps(thin, thin.past)), [101 / 11, 101 / 11, 101 / 11, 101 / 11], "the thin pool left out");
+  const unpriced = twoPools([], (extra) => [history([100, 100, 100, 100, 100], extra, { token0: other })]).m;
+  nearAll(
+    totals(marketSteps(unpriced, unpriced.past)),
+    [101 / 11, 101 / 11, 101 / 11, 101 / 11],
+    "and one paid in a token without a price",
+  );
+  // Custom shares are held as they are over every step.
+  const custom = customSteps(m, m.past, [
+    { gauge: a.gauge, weight: 0.5 },
+    { gauge: b.gauge, weight: 0.5 },
+  ]);
+  nearAll(totals(custom), [5.5, 5.5, 5.5, 5.5], "half in each");
+});
+
+test("an allocation as it actually moved is cut where it moved, and earns nothing before its first move", () => {
+  const cuts = [NOW - 1.5 * STEP, NOW - 2.5 * STEP];
+  const { a, b, m, past } = twoPools(cuts);
+  const moves: Move[] = [
+    { at: cuts[0]!, allocations: [{ gauge: b.gauge.address, amount: 3n * SAERO }] },
+    // Half of it on the zero gauge, which earns nothing.
+    {
+      at: cuts[1]!,
+      allocations: [
+        { gauge: a.gauge.address, amount: SAERO },
+        { gauge: zeroAddress, amount: SAERO },
+      ],
+    },
+  ];
+  // B through the newest step; A, half idle, and B in the one before; A, half idle, for half of the one before that.
+  nearAll(totals(movedSteps(m, mergePast(m.past, past), moves)), [10, (5 + 1) / 2, 0.5, undefined], "moved");
+  const record = movedSteps(m, mergePast(m.past, past), moves);
+  near(overallOf(record)!.total, (10 + 3 + 0.5) / 3, "over its steps with an answer, each weighed by its length");
+});
+
+test("an allocation's moves are read at the block before each, back to the first at or before the record", async () => {
+  const GENESIS = NOW - 200_000_000;
+  const timeOf = (block: number) => GENESIS + 2 * block;
+  const newest = (NOW - GENESIS) / 2;
+  const [b, c] = [gauge(), gauge()];
+  const times = [NOW - 10 * 3_600, NOW - 60 * 3_600, NOW - 300 * 3_600];
+  const pools = [[b.address], [c.address, b.address], [c.address]];
+  const blocks: (number | undefined)[] = [];
+  const read = (async (calls: readonly Call[], options?: { block?: number }) => {
+    blocks.push(options?.block);
+    const time = options?.block === undefined ? NOW : timeOf(options.block);
+    const k = times.findIndex((at) => at <= time);
+    return calls.map(({ functionName }) => {
+      switch (functionName) {
+        case "getBlockNumber":
+          return BigInt(newest);
+        case "getCurrentBlockTimestamp":
+          return BigInt(time);
+        case "tokenStates":
+          return [zeroAddress, k < 0 ? 0 : times[k], false, 0n];
+        case "allocatedGauges":
+          return k < 0 ? [] : pools[k];
+        default:
+          return k < 0 ? 0n : BigInt(k + 1) * SAERO;
+      }
+    });
+  }) as Read;
+  const own = stake({ lastAllocated: times[0]!, allocations: [{ gauge: b.address, amount: SAERO }] });
+  const found = await movesOf(own, NOW - 192 * 3_600, read);
+  assert.deepEqual(found, [
+    { at: times[0], allocations: own.allocations },
+    {
+      at: times[1],
+      allocations: [
+        { gauge: c.address, amount: 2n * SAERO },
+        { gauge: b.address, amount: 2n * SAERO },
+      ],
+    },
+    { at: times[2], allocations: [{ gauge: c.address, amount: 3n * SAERO }] },
+  ]);
+  assert.ok(
+    blocks.some((block) => block !== undefined && timeOf(block) < times[0]! && timeOf(block + 1) >= times[0]!),
+    "the block just before the newest move",
+  );
+  assert.equal((await movesOf(own, 0, read, 2)).length, 2, "at most `most` of them");
 });
 
 test("an allocation splits a stake's sAERO on Base to the wei, its gauges ascending, and leaves out what rounds to nothing", () => {

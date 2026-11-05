@@ -119,6 +119,33 @@ export const autopilots = (): Got<aero.Stake[]> =>
       ),
     5 * MINUTE,
   );
+// Every pool's snapshots at the times a strategy needs beyond the grid's, as a longer window does, read when chosen.
+export function pastFor(times: number[]): Got<aero.Past> {
+  if (!times.length) return { value: { times: [], starts: new Map() } };
+  return andThen(market(), (found) => {
+    const rewards = found.gauges.map((gauge) => gauge.rewards);
+    return use(`aero past ${times.join()} ${rewards.join()}`, async () =>
+      aero.pastOf(rewards, times, await startsOf(rewards, times)),
+    );
+  });
+}
+// The first Autopilot as it actually allocated over the record's steps: its moves back to the oldest step, and its
+// pools' snapshots at each. Read again when it moves.
+export type AutopilotRecord = { stake: aero.Stake; moves: aero.Move[]; past: aero.Past };
+export const autopilotRecord = (): Got<AutopilotRecord | null> =>
+  andThen(market(), (found) =>
+    andThen(autopilots(), (stakes) => {
+      const stake = AUTOPILOTS.flatMap(({ id, relay }) =>
+        stakes.filter((each) => each.id === id && each.owner.toLowerCase() === relay.toLowerCase()),
+      )[0];
+      if (!stake) return { value: null };
+      const since = aero.stepsOf(found).at(-1)!.from;
+      return use(`aero autopilot ${stake.id} ${stake.lastAllocated} ${since}`, async () => {
+        const moves = await aero.movesOf(stake, since, tagged("aero"));
+        return { stake, moves, past: await aero.movesPast(moves, await marketRead(), since, tagged("aero")) };
+      });
+    }),
+  );
 // Waits for the wallet's own stakes, so as not to read one twice.
 export function stakeShown(id: bigint): Got<aero.Stake | null> {
   const mine = ownStakes();

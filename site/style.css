@@ -50,6 +50,10 @@
   --warn: light-dark(#944e00, #efb062);
   --info: light-dark(#234e82, #85b6e9);
   --danger: light-dark(#ab331f, #ef816b);
+  /* A chart's lines, each its own entity's: stepped for each surface, and checked for colour blindness. */
+  --series-1: light-dark(#2a78d6, #3987e5);
+  --series-2: light-dark(#eb6834, #d95926);
+  --series-3: light-dark(#1baf7a, #199e70);
   color-scheme: light dark;
   font-family: var(--sans);
   line-height: 1.5;
@@ -357,6 +361,108 @@ button,
   content: "· ";
 }
 
+/* A line chart drawn at its own width, so its text keeps its size. Grid and axes stay quiet; the lines are 2px, and
+   their dots ringed in the paper's colour where lines cross. Text wears the text's colours, never a line's. */
+.Chart {
+  margin: 0;
+}
+.Chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem var(--gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.Chart-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.Chart-swatch {
+  inline-size: 1.5rem;
+  block-size: 0.5rem;
+  flex: none;
+  overflow: visible;
+}
+.Chart-swatch line {
+  stroke: var(--key);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.Chart-key[data-dashed] .Chart-swatch line {
+  stroke-dasharray: 4 3;
+}
+.Chart-frame {
+  position: relative;
+}
+.Chart-plot {
+  display: block;
+  inline-size: 100%;
+  overflow: visible;
+  touch-action: pan-y;
+}
+.Chart-plot:focus-visible {
+  outline-offset: 4px;
+}
+.Chart-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.Chart-axis,
+.Chart-end {
+  fill: var(--quiet);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.Chart-end {
+  fill: var(--ink);
+}
+.Chart-cross {
+  stroke: var(--quiet);
+  stroke-width: 1;
+}
+.Chart-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.Chart-dot {
+  stroke: var(--paper);
+  stroke-width: 2;
+}
+.Chart-tip {
+  position: absolute;
+  inset-block-start: 0;
+  display: grid;
+  gap: 0.125rem;
+  min-inline-size: 11rem;
+  max-inline-size: 16rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+  pointer-events: none;
+}
+.Chart-tip p {
+  margin: 0;
+}
+.Chart-tipRow {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.Chart-tipRow strong {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.Chart-skeleton {
+  block-size: 240px;
+}
+
 /* The review is a modal dialog, which the browser keeps a little under the screen's size. Popups get no such limit,
    so their insets keep them off the screen's edges. */
 dialog {
@@ -579,6 +685,20 @@ dialog[open] {
 }
 .Hex-line--indent {
   padding-inline-start: 2ch;
+}
+
+/* The one figure a page leads with. */
+.Headline {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.Headline-skeleton {
+  max-inline-size: 18rem;
+}
+.Skeleton-item.Headline-skeleton::before {
+  block-size: 2rem;
 }
 
 .Home {
@@ -836,6 +956,26 @@ dialog[open] {
   text-align: end;
 }
 
+/* A word set apart beside a name, such as "hindsight"; under it in a table's head. */
+.Tag {
+  display: inline-block;
+  margin-inline-start: 0.375rem;
+  padding-inline: 0.375rem;
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  color: var(--quiet);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+th .Tag {
+  display: block;
+  inline-size: fit-content;
+  margin-inline: auto 0;
+}
+
 .Ticks {
   display: flex;
   align-items: start;
@@ -864,10 +1004,12 @@ dialog[open] {
   cursor: pointer;
 }
 
+/* One column, which a wide table in it scrolls within instead of widening. */
 .u-stack,
 .u-stackTight,
 .u-stackLoose {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
 }
 .u-stack {
@@ -915,7 +1057,9 @@ dialog[open] {
 .u-narrow {
   max-inline-size: 32rem;
 }
+/* Positioned, so that what it holds hidden for screen readers scrolls with it rather than widening the page. */
 .u-scroll {
+  position: relative;
   overflow-x: auto;
 }
 .u-small {
