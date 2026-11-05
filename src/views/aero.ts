@@ -125,7 +125,7 @@ const plan: {
   more: string[];
 } = {
   count: 10,
-  again: false,
+  again: true,
   blueChips: false,
   incentives: true,
   amount: 10_000,
