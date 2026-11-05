@@ -484,6 +484,7 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
     edited: plan.rows ? true : null,
     current: mine.size ? true : null,
     "allocate-why": words,
+    "plan-window": WINDOW[controls.hours].over,
   });
 }
 
