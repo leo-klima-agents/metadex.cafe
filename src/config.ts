@@ -130,9 +130,15 @@ export const EXCHANGES: Exchange[] = [
   { id: 1, name: "Hydrex Classic Pools", kind: "pair", factory: "0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0" },
   { id: 0, name: "Hydrex Integral", kind: "algebra", factory: "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E" },
 ];
-// Prices come from Aero's, Aerodrome's and Hydrex's pools, and at an epoch's end from Hydrex's only. Of two equally
-// deep pools, the first listed wins.
+// Prices come from Aero's, Aerodrome's and Hydrex's pools, and at an epoch's end from Hydrex's only, in tiers: a token
+// is looked for in a tier only if those before cannot price it. Aerodrome's Slipstream pools, which take a lookup for
+// each tick spacing on each of three factories, come last. Of two equally deep pools in a tier, the first listed wins.
 const PRICED = ["solidly", "slipstream", "aerodrome", "pair", "algebra"] as const;
 export type PricedKind = (typeof PRICED)[number];
-export const PRICING = EXCHANGES.filter(({ kind }) => (PRICED as readonly ExchangeKind[]).includes(kind));
-export const HYDREX_PRICING = PRICING.filter(({ kind }) => kind === "pair" || kind === "algebra");
+const priced = EXCHANGES.filter(({ kind }) => (PRICED as readonly ExchangeKind[]).includes(kind));
+const aerodromeSlipstream = ({ kind, name }: Exchange) => kind === "slipstream" && name.startsWith("Aerodrome ");
+export const PRICING: Exchange[][] = [
+  priced.filter((each) => !aerodromeSlipstream(each)),
+  priced.filter(aerodromeSlipstream),
+];
+export const HYDREX_PRICING: Exchange[][] = [priced.filter(({ kind }) => kind === "pair" || kind === "algebra")];

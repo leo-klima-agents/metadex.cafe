@@ -443,15 +443,16 @@ export function forget(): void {
 // the window is the last block at or before its time, and the end at least `SETTLED` blocks back. Anchors take their
 // Chainlink USD feeds' answers at the end, and the fiat feeds give each currency's rate; if no anchor feed answers,
 // prices are in USDC, with USDC at 1. Pools then price the anchors without a feed, then the other tokens. `amounts` is
-// how much of each token will be priced.
+// how much of each token will be priced. `tiers` lists the exchanges to look in, each tier only for what those before
+// left unpriced.
 export async function pricesAt(
   tokens: Token[],
   amounts: Map<string, bigint>,
   time: number,
   rd: Read = read,
-  exchanges = config.PRICING,
+  tiers = config.PRICING,
 ): Promise<Prices> {
-  exchanges.forEach(pricingOf);
+  tiers.flat().forEach(pricingOf);
   const [newest, newestTime] = required(await rd([blockNumber, blockTime])).map(Number) as [number, number];
   const top = newest - SETTLED;
   // Both ends are searched for down from `top`, at first at the pace from it to the newest block, and share the blocks
@@ -505,14 +506,15 @@ export async function pricesAt(
     : { unit: "USDC", rates: {}, of: new Map([[key(config.USDC), 1]]) };
   const anchors = config.ANCHORS.map(({ address, decimals }) => ({ address, decimals, symbol: "" }));
   for (const each of [anchors, tokens])
-    await inPools(
-      each.filter(({ address }) => !prices.of.has(key(address))),
-      prices,
-      amounts,
-      window,
-      exchanges,
-      rd,
-    );
+    for (const exchanges of tiers)
+      await inPools(
+        each.filter(({ address }) => !prices.of.has(key(address))),
+        prices,
+        amounts,
+        window,
+        exchanges,
+        rd,
+      );
   return prices;
 }
 

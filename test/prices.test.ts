@@ -40,24 +40,24 @@ test("a classic pair's price: the ratio of its reserves, or the slope of x³y + 
   assert.ok(pairPrice(90, 110, true) > 1);
 });
 
-test("prices come from Aero's, Aerodrome's and Hydrex's pools, in that order, and an epoch's from Hydrex's", () => {
+test("prices come from Aero's, Aerodrome's and Hydrex's pools, then Aerodrome's Slipstream; an epoch's from Hydrex's", () => {
   assert.deepEqual(
-    PRICING.map(({ name }) => name),
+    PRICING.map((tier) => tier.map(({ name }) => name)),
     [
-      "Aero Basic Pools",
-      "Aero Basic Pools",
-      "Aero Slipstream",
-      "Aerodrome Basic Pools",
-      "Aerodrome Slipstream V3",
-      "Aerodrome Slipstream V2",
-      "Aerodrome Slipstream",
-      "Hydrex Classic Pools",
-      "Hydrex Integral",
+      [
+        "Aero Basic Pools",
+        "Aero Basic Pools",
+        "Aero Slipstream",
+        "Aerodrome Basic Pools",
+        "Hydrex Classic Pools",
+        "Hydrex Integral",
+      ],
+      ["Aerodrome Slipstream V3", "Aerodrome Slipstream V2", "Aerodrome Slipstream"],
     ],
   );
   assert.deepEqual(
-    HYDREX_PRICING.map(({ name }) => name),
-    ["Hydrex Classic Pools", "Hydrex Integral"],
+    HYDREX_PRICING.map((tier) => tier.map(({ name }) => name)),
+    [["Hydrex Classic Pools", "Hydrex Integral"]],
   );
 });
 
@@ -85,11 +85,12 @@ const ANSWERS = new Map<Address, number>([
 ]);
 const exchange = (name: string, stable = false): Exchange =>
   EXCHANGES.find((each) => each.name === name && !!each.stable === stable)!;
-const [AERO, AERO_STABLE, AERO_CL, AERODROME, HYDREX, INTEGRAL] = [
+const [AERO, AERO_STABLE, AERO_CL, AERODROME, AERODROME_CL, HYDREX, INTEGRAL] = [
   exchange("Aero Basic Pools"),
   exchange("Aero Basic Pools", true),
   exchange("Aero Slipstream"),
   exchange("Aerodrome Basic Pools"),
+  exchange("Aerodrome Slipstream V3"),
   exchange("Hydrex Classic Pools"),
   exchange("Hydrex Integral"),
 ];
@@ -287,7 +288,7 @@ test("an epoch's prices come from Hydrex's pools only; current ones from all", a
   ];
   const { reader, asked } = market(pools);
   close((await pricesAtFlip([TOKEN], new Map(), NOW - 7 * 86_400, reader)).of.get(TOKEN.address)!, 4 * USDC_USD);
-  for (const { name, factory } of PRICING.filter((each) => !HYDREX_PRICING.includes(each)))
+  for (const { name, factory } of PRICING.flat().filter((each) => !HYDREX_PRICING.flat().includes(each)))
     assert.ok(!asked.has(factory.toLowerCase()), `an epoch's prices do not look in ${name}`);
   close((await pricesNow([TOKEN], new Map(), reader)).of.get(TOKEN.address)!, 3 * USDC_USD);
 });
@@ -323,13 +324,34 @@ test("every kind of pool gives its average over the window, not what it holds at
     }
 });
 
-test("a concentrated pool's depth is what it holds of each token", async () => {
-  // Both at 3 USDC; the Aero Slipstream pool holds 30,000 USDC and the Aero pool 3,000.
-  const pools: Fake[] = [
-    { exchange: AERO, token: TOKEN, now: [1_000, 3_000], held: [1_000, 2_000] },
-    { exchange: AERO_CL, token: TOKEN, now: [10_000, 30_000] },
-  ];
-  close((await priceOf(pools))!, 3 * USDC_USD, 1e-6);
+test("Aerodrome's Slipstream pools price only what the others cannot", async () => {
+  // Whether Aerodrome's Slipstream factories were asked for TKN's pools.
+  const lookedIn = (pools: Fake[]) => {
+    const { reader } = market(pools);
+    const asked = new Set<string>();
+    const watched = async (calls: readonly Call[], options?: { block?: number | "latest" }): Promise<any> => {
+      for (const { address, args } of calls)
+        if ((args ?? []).some((arg) => typeof arg === "string" && same(arg, TOKEN.address))) asked.add(address);
+      return reader(calls, options);
+    };
+    const last = () => PRICING[1]!.some(({ factory }) => [...asked].some((each) => same(each, factory)));
+    return { watched, last };
+  };
+  // The Aero pool holds 3,000 USDC at 2: enough, so Aerodrome's Slipstream pool, deeper at 4, is not looked up.
+  const basic: Fake = { exchange: AERO, token: TOKEN, now: [1_500, 3_000] };
+  const aerodromeCl: Fake = { exchange: AERODROME_CL, token: TOKEN, now: [20_000, 80_000] };
+  let found = lookedIn([basic, aerodromeCl]);
+  close((await pricesNow([TOKEN], new Map(), found.watched)).of.get(TOKEN.address)!, 2 * USDC_USD, 1e-6);
+  assert.equal(found.last(), false);
+  // Too thin for 1,000 TKN, about $2,000, which needs $20,000 on each side: Aerodrome's, $80,000 deep, prices them.
+  forget();
+  found = lookedIn([basic, aerodromeCl]);
+  const thousand = new Map([[TOKEN.address, 1_000n * 10n ** 18n]]);
+  close((await pricesNow([TOKEN], thousand, found.watched)).of.get(TOKEN.address)!, 4 * USDC_USD, 1e-6);
+  assert.equal(found.last(), true);
+  // Aero's Slipstream pools are in the first tier: of the Aero pool and Aero's Slipstream pool, the deeper prices.
+  forget();
+  close((await priceOf([basic, { exchange: AERO_CL, token: TOKEN, now: [10_000, 30_000] }]))!, 3 * USDC_USD, 1e-6);
 });
 
 test("sums are read at the block priced and the last block half an hour before the newest, reserves at the first", async () => {
@@ -360,11 +382,11 @@ test("a pool holding under $250 of its anchor is dropped before its sums are rea
 });
 
 test("a concentrated pool counts only the liquidity at its price, not what it parks away from it", async () => {
-  // The Slipstream pool holds 20,000 USDC, but its liquidity at the price is that of a basic pool holding 20 USDC; the
-  // Aero pool holds 3,000 USDC at 3.
+  // Aero's Slipstream pool holds 20,000 USDC, but its liquidity at the price is that of a basic pool holding 20 USDC;
+  // Aerodrome's holds 3,000 USDC at 3.
   const pools: Fake[] = [
-    { exchange: AERO, token: TOKEN, now: [1_000, 3_000] },
     { exchange: AERO_CL, token: TOKEN, now: [10_000, 20_000], inRange: 0.001 },
+    { exchange: AERODROME_CL, token: TOKEN, now: [1_000, 3_000] },
   ];
   close((await priceOf(pools))!, 3 * USDC_USD, 1e-6);
 });
@@ -497,7 +519,7 @@ test("an exchange whose pools cannot price is refused before anything is read", 
     return reader(calls, options);
   };
   const v2 = EXCHANGES.find(({ kind }) => kind === "v2")!;
-  await assert.rejects(pricesAt([TOKEN], new Map(), Infinity, counting, [v2]), /Uniswap v2 cannot price tokens/);
+  await assert.rejects(pricesAt([TOKEN], new Map(), Infinity, counting, [[v2]]), /Uniswap v2 cannot price tokens/);
   assert.equal(reads, 0);
 });
 
