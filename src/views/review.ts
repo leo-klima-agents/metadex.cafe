@@ -187,7 +187,11 @@ function draw(): void {
         fields,
         ({ label }) => label,
         (field, value) =>
-          fill(field, { label: value.label, description: value.description ?? null, value: fieldValue(value) }),
+          fill(field, {
+            label: asWritten(value.label),
+            description: value.description ?? null,
+            value: fieldValue(value),
+          }),
       );
       row.toggleAttribute("aria-current", i === next);
     },

@@ -746,12 +746,12 @@
         <section class="u-stack u-gapAbove" aria-labelledby="plan-title">
           <h2 id="plan-title">Allocate</h2>
           <p class="u-small u-quiet">
-            Start from a simple rule: the pools that pay out the most each day, each given sAERO in proportion to what
-            it pays out. Then change the shares, add or remove pools, and allocate.
+            Choose the pools to allocate your sAERO to on Base, and the share each gets. To start, the page suggests the
+            pools that paid out the most, each with a share in proportion to what it paid out.
           </p>
           <div class="u-row u-small">
             <label
-              >Start from the top
+              >Suggest the top
               <select class="u-smallSelect" data-action="aero-count">
                 <option value="1">1</option>
                 <option value="3">3</option>
@@ -763,7 +763,7 @@
               pools</label
             >
             <label
-              >based on the last
+              >by what they paid over the last
               <select class="u-smallSelect" data-action="aero-window">
                 <option value="24">24 hours</option>
                 <option value="48" selected>48 hours</option>
@@ -808,7 +808,7 @@
                   <dd class="Facts-tileNote u-small u-quiet" data-text="yours-note"></dd>
                 </div>
                 <div class="Facts-tile">
-                  <dt class="u-label Facts-tileLabel">If you had followed the rule</dt>
+                  <dt class="u-label Facts-tileLabel">If you had followed the suggestion</dt>
                   <dd class="Facts-value Facts-figure" data-text="followed"></dd>
                   <dd class="Facts-tileNote u-small u-quiet" data-text="followed-note"></dd>
                 </div>
@@ -865,7 +865,7 @@
                   data-action="aero-rule"
                   data-text="rule"
                 >
-                  Back to the rule
+                  Use the suggestion
                 </button>
                 <button
                   type="button"
@@ -873,10 +873,9 @@
                   data-action="aero-current"
                   data-text="current"
                 >
-                  Start from where it is now
+                  Use the current allocation
                 </button>
               </div>
-              <p class="Notice" data-text="total-notice"></p>
               <div class="u-row">
                 <button type="button" data-action="aero-allocate">Allocate</button>
                 <p class="u-small u-hang" data-text="allocate-why"></p>
@@ -901,11 +900,11 @@
                 </table>
               </div>
               <p class="u-small u-quiet">
-                Each allocation as it stands today. The first column is a forecast: each pool's recent fees, repeated,
-                plus the incentives already scheduled. The other columns show what the same pools actually paid. They
-                flatter the rule, which picked its pools because they paid well recently; the table below does not.
+                Each row is an allocation as it stands now. The first column is the forecast described above; the others
+                show what the same pools actually paid. Those flatter the suggestion, which picked its pools because
+                they paid well recently. The table below shows how it would really have done.
               </p>
-              <h3 class="u-label u-gapAbove">If you had followed the rule</h3>
+              <h3 class="u-label u-gapAbove">If you had followed the suggestion</h3>
               <div class="u-stack" data-text="record" data-state="loading">
                 <ul class="Skeleton" data-when="loading" aria-hidden="true">
                   <li class="Skeleton-item"></li>
@@ -916,12 +915,12 @@
                 <div class="u-scroll" data-when="ready">
                   <table>
                     <caption class="u-visuallyHidden">
-                      What the rule would have earned after each pick
+                      What the suggestion would have earned after each time it was worked out
                     </caption>
                     <thead>
                       <tr>
                         <th scope="col">Picked on</th>
-                        <th scope="col">The rule</th>
+                        <th scope="col">Suggested</th>
                         <th scope="col">Base average</th>
                         <th scope="col">Difference</th>
                       </tr>
