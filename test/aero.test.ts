@@ -259,7 +259,7 @@ const stake = (fields: Partial<Stake> = {}): Stake => ({
   ...fields,
 });
 
-test("Base's fees count each pool at its mean power, and its incentives only those paid to some sAERO", () => {
+test("Base's fees count each pool at its mean power, its incentives only those paid to some sAERO, and what they leave out", () => {
   const growing = gauge({ perDay: 10 });
   growing.windows[24] = {
     ...growing.windows[24],
@@ -271,9 +271,12 @@ test("Base's fees count each pool at its mean power, and its incentives only tho
   const program = { id: 1n, token: usdc, rate, start: NOW - DAY, end: NOW + DAY };
   const empty = gauge({ perDay: 0, power: 0n, programs: [program] });
   const paid = gauge({ programs: [program] });
-  const totals = totalsOf(market([growing, empty, paid]));
+  // A pool paid only in a token without a price adds nothing, and is counted as left out, for its fees and its stream.
+  const unpriced = gauge({ token0: other, programs: [{ ...program, token: other }] });
+  const totals = totalsOf(market([growing, empty, paid, unpriced]));
   assert.ok(Math.abs(totals.fees.value - (10 * 300 + 1 * 500)) < 1e-6, `fees ${totals.fees.value}`);
   assert.ok(Math.abs(totals.incentives.value - 1_000) < 1e-6, `incentives ${totals.incentives.value}`);
+  assert.deepEqual([totals.fees.left, totals.incentives.left], [1, 1]);
   assert.equal(meanOf(growing.windows[24]), 3e6);
   assert.equal(meanOf({ ...growing.windows[24], spread: undefined }), 2e6, "else the least of either end");
 });

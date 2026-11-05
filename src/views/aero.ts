@@ -48,9 +48,9 @@ const WINDOW: Record<Hours, { last: string; head: string; over: string; name: st
 // To the cent, and "At least" when it leaves out tokens without a price.
 const perDay = (value: number, priced: boolean, market: Market): string =>
   money(moneyAt(value, market.prices, !priced), true);
-// In a tile, "At least" may go above the figure, which stays whole.
-const tileMoney = ({ value, priced }: aero.Yield, market: Market): string =>
-  `${priced ? "" : "At least "}${money(moneyAt(value, market.prices))}`;
+// A tile's total leaves out what a few small pools pay in tokens without a price, which its note says.
+const leftOut = (note: string, left: number | undefined, what: string): string =>
+  left ? `${note} · ${count(left, "pool's", "pools'")} unpriced ${what} left out` : note;
 const sAero = (amount: bigint): string => `${compact(amount)} sAERO`;
 const hoursWords = (seconds: number): string =>
   seconds % 3_600 === 0 ? count(seconds / 3_600, "hour", "hours") : until(seconds);
@@ -124,8 +124,10 @@ export function drawAero(): void {
     "average-note": `/ 10k sAERO a day, ${WINDOW[controls.hours].last}`,
     allocated: shown(got, () => sAero(totals!.power)),
     "allocated-note": shown(got, () => `in ${count(market!.gauges.length, "pool", "pools")}`),
-    fees: shown(got, () => tileMoney(totals!.fees, market!)),
-    incentives: shown(got, () => tileMoney(totals!.incentives, market!)),
+    fees: shown(got, () => money(moneyAt(totals!.fees.value, market!.prices))),
+    "fees-note": leftOut("a day to allocators, last 24 h", totals?.fees.left, "fees"),
+    incentives: shown(got, () => money(moneyAt(totals!.incentives.value, market!.prices))),
+    "incentives-note": leftOut("a day, streaming now", totals?.incentives.left, "streams"),
     cooldown: shown(got, () => until(market!.cooldown)),
     "max-gauges": shown(got, () => String(market!.maxGauges)),
   });
