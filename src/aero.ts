@@ -572,17 +572,25 @@ export function average(market: Market, accrued: (gauge: Gauge) => Accrued | und
 }
 export const averageOver = (market: Market, hours: Hours): Average => average(market, (gauge) => gauge.windows[hours]);
 
-// Streams to a gauge with no power go back to their creator.
+// Streams to a gauge with no power go back to their creator. `left` counts the pools whose fees, or whose live
+// streams, pay a token without a price, which counts for nothing.
 export function totalsOf(market: Market) {
-  let [power, fees, incentives] = [0n, { value: 0, priced: true }, { value: 0, priced: true }];
+  let power = 0n;
+  const [fees, incentives] = [
+    { value: 0, left: 0 },
+    { value: 0, left: 0 },
+  ];
   for (const gauge of market.gauges) {
     power += gauge.power;
     const day = feesPerDay(gauge, gauge.windows[24], market.prices);
-    if (day)
-      fees = { value: fees.value + (day.value * meanOf(gauge.windows[24])) / PER, priced: fees.priced && day.priced };
+    if (day) {
+      fees.value += (day.value * meanOf(gauge.windows[24])) / PER;
+      if (!day.priced) fees.left++;
+    }
     if (!gauge.power) continue;
     const stream = streamPerDay(gauge, market.time, market.prices);
-    incentives = { value: incentives.value + stream.value, priced: incentives.priced && stream.priced };
+    incentives.value += stream.value;
+    if (!stream.priced) incentives.left++;
   }
   return { power, fees, incentives };
 }
