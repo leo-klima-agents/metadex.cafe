@@ -1195,7 +1195,7 @@ export async function movesPast(moves: Move[], market: Market, since: number, rd
   return pastOf(rewards, times, await startsAt(rewards, times.map(BigInt), rd));
 }
 // Each step cut where the stake moved, each part held as its allocation was then, its sAERO on no chain earning
-// nothing. A step it held no allocation for half of has no answer, rather than one that a few hours stand for.
+// nothing. A step is measured over the parts it held an allocation for.
 export function movedSteps(market: Market, past: Past, moves: Move[], { amount = 0, then, own }: Held = {}): Paid[] {
   return stepsOf(market).map((step) => {
     const prices = pricesOver(market, then, step);
@@ -1222,27 +1222,12 @@ export function movedSteps(market: Market, past: Past, moves: Move[], { amount =
     }
     return {
       ...step,
-      paid:
-        seconds && seconds >= (step.to - step.from) / 2
-          ? { fees: fees / seconds, incentives: incentives / seconds, total: (fees + incentives) / seconds, priced }
-          : undefined,
+      paid: seconds
+        ? { fees: fees / seconds, incentives: incentives / seconds, total: (fees + incentives) / seconds, priced }
+        : undefined,
       prices,
     };
   });
-}
-// Over the steps with an answer, each weighed by its length.
-export function overallOf(steps: Paid[]): Per10k | undefined {
-  const counted = steps.filter(({ paid }) => paid);
-  const seconds = counted.reduce((sum, { from, to }) => sum + to - from, 0);
-  if (!seconds) return undefined;
-  const mean = (of: (paid: Per10k) => number) =>
-    counted.reduce((sum, { from, to, paid }) => sum + of(paid!) * (to - from), 0) / seconds;
-  return {
-    fees: mean(({ fees }) => fees),
-    incentives: mean(({ incentives }) => incentives),
-    total: mean(({ total }) => total),
-    priced: counted.every(({ paid }) => paid!.priced),
-  };
 }
 // The APR, and what 10,000 sAERO earned a day, over the steps whose APR is known, each at its own prices and weighed by
 // its length, so that both cover the same steps.

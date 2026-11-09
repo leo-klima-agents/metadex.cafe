@@ -22,7 +22,6 @@ import {
   earnedBy,
   heldOver,
   marketOver,
-  overallOf,
   paidOver,
   gridOf,
   unreadStart,
@@ -926,7 +925,7 @@ test("a strategy picks at each step from only the window before it, and earns wh
     },
   ];
   nearAll(totals(strategySteps(m, m.past, top, { amount: 5_000_000, own })), [1, 1, 1, 1], "its own weight");
-  near(overallOf(strategySteps(m, m.past, { ...top, again: false }))!.total, 5.5, "over the 8 days");
+  near(aprOver(strategySteps(m, m.past, { ...top, again: false }))!.total, 5.5, "over the 8 days");
 });
 
 test("the strategy leaves out thin pools and pools paying a token without a price, as the window before each pick shows them", () => {
@@ -1011,7 +1010,7 @@ test("an allocation as it actually moved is cut where it moved, and earns nothin
   // B through the newest step; A, half idle, and B in the one before; A, half idle, for half of the one before that.
   nearAll(totals(movedSteps(m, mergePast(m.past, past), moves)), [10, (5 + 1) / 2, 0.5, undefined], "moved");
   const record = movedSteps(m, mergePast(m.past, past), moves);
-  near(overallOf(record)!.total, (10 + 3 + 0.5) / 3, "over its steps with an answer, each weighed by its length");
+  near(aprOver(record)!.total, (10 + 3 + 0.5) / 3, "over its steps with an answer, each weighed by its length");
   assert.ok(
     record.every(({ paid }) => !paid || paid.priced),
     "its sAERO on no chain earns nothing, as it should",
@@ -1035,18 +1034,14 @@ test("an allocation as it actually moved is cut where it moved, and earns nothin
     movedSteps(m, mergePast(m.past, past), holder, { amount: 5_000_000, own })[0]!.paid!.total;
   near(followed(), 5, "diluted");
   near(followed(holder), 10, "its own");
-  // First allocated a quarter of the way before the end of a step: that step has no answer.
+  // First allocated a quarter of the way before the end of a step: that step is measured over that quarter.
   const late = [NOW - 1.5 * STEP, NOW - 2.25 * STEP];
   const q = twoPools(late);
   const after: Move[] = [
     { at: late[0]!, allocations: [{ gauge: q.b.gauge.address, amount: SAERO }] },
     { at: late[1]!, allocations: [{ gauge: q.a.gauge.address, amount: SAERO }] },
   ];
-  nearAll(
-    totals(movedSteps(q.m, mergePast(q.m.past, q.past), after)),
-    [10, (10 + 1) / 2, undefined, undefined],
-    "late",
-  );
+  nearAll(totals(movedSteps(q.m, mergePast(q.m.past, q.past), after)), [10, (10 + 1) / 2, 1, undefined], "late");
 });
 
 test("an allocation's moves are read at the block before each, back to the first at or before the record", async () => {

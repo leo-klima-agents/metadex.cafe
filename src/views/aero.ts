@@ -275,8 +275,6 @@ function introOf({ count: top, hours, again, blueChips, incentives }: aero.Strat
     ? `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools} each pick, picked again every ${hoursWords(aero.STEP)}. Without hindsight: each pick knows only what was known then.`
     : `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools} that, and kept since. Without hindsight: the pick knows only what was known then.`;
 }
-const beganOf = (market: Market): number =>
-  Math.min(...market.gauges.filter((gauge) => routable(gauge) && gauge.first > 0).map(({ first }) => first));
 
 // The last result of `make`, kept while its arguments are the same values or objects.
 function lastOf<A extends unknown[], R>(make: (...args: A) => R): (...args: A) => R {
@@ -368,18 +366,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   const average = averageLine(market, then);
   const pilot: Got<Paid[]> = andThen(record, (found) => ({ value: pilotLine(market, found, held) }));
   const pilotName = (record.value && autopilotOf(record.value.stake)?.name) ?? AUTOPILOTS[0]!.name;
-  const overall = aero.overallOf(strategy);
-  // Picks need the window before them, which the pools' history on Base may not cover.
-  const began = beganOf(market);
-  const short = strategy.filter(({ from, paid }) => !paid && from - hours * 3_600 < began).length;
-  const history = `Aero's pools on Base began ${count(Math.floor((market.time - began) / aero.DAY), "day", "days")} ago`;
-  fill(aeroView, {
-    plan: stateOf(extra, !overall),
-    "record-empty": short
-      ? `${history}: too recently for a pick ${RECORD_DAYS} days ago from the ${WINDOW[hours].over} before it. Pick a shorter window, or reallocate every ${hoursWords(aero.STEP)}.`
-      : "No pool has enough history yet.",
-  });
-  if (!overall) return void (recordFor = undefined);
+  fill(aeroView, { plan: stateOf(extra) });
   const who = stake ? stakeName(stake, stake.id) : wholePower(amount);
   // The APR, and what the amount or stake would have earned a day, over the same steps.
   const figure = (steps: Paid[]) => {
@@ -430,9 +417,6 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       again
         ? `Each pick knows ${knows}, and is kept until the next, as an allocation holds for ${hoursWords(market.cooldown)}.`
         : `The pick knows ${knows}.`,
-      short
-        ? `${history}, too recently for ${short === 1 ? "the oldest step's pick" : `the oldest ${short} steps' picks`} from the ${WINDOW[hours].over} before.`
-        : "",
       then
         ? "Each step is valued at the prices then, the mean of those at its start and its end, and each pick at those when it was made. Each sAERO is counted as one AERO."
         : "The prices then could not be read, so every step is valued at today's prices. Each sAERO is counted as one AERO.",
@@ -496,7 +480,7 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
     top,
     incentives,
   );
-  fill(aeroView, { picks: stateOf(got, !picks.length && !plan.rows) });
+  fill(aeroView, { picks: stateOf(got) });
   const rows = (drawn = plan.rows ?? ruleRows(picks));
   const total = totalOf(rows);
   const expected = aero.heldOver(holdingsOf(rows, market), next, amount, leaving);
