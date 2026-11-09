@@ -10,8 +10,20 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { RPCS } from "../src/config.ts";
-import { BATCH_BYTES, call, codeAt, firstBlockAt, read, rpc, showTags, simulate, timeoutFor } from "../src/rpc.ts";
+import { BLOCK_SCHEDULE, RPCS } from "../src/config.ts";
+import {
+  BATCH_BYTES,
+  call,
+  codeAt,
+  firstBlockAt,
+  poll,
+  read,
+  rpc,
+  scheduled,
+  showTags,
+  simulate,
+  timeoutFor,
+} from "../src/rpc.ts";
 
 type Handler = (url: string, body: { method: string; params: unknown[] }) => Response | Promise<Response>;
 const serve = (handler: Handler) => {
@@ -20,6 +32,7 @@ const serve = (handler: Handler) => {
 const reply = (result: unknown) => Response.json({ jsonrpc: "2.0", id: 1, result });
 
 test("a time's first block, from the blocks' own times, whatever the time between blocks", async () => {
+  // Not Base's schedule, so none is given.
   const GENESIS = 1_686_789_347;
   const timeAt = (block: number) =>
     GENESIS + 2 * Math.min(block, 1e6) + Math.max(0, Math.min(block, 2e6) - 1e6) + 3 * Math.max(0, block - 2e6);
@@ -29,9 +42,9 @@ test("a time's first block, from the blocks' own times, whatever the time betwee
   for (const block of [10, 999_999, 1_000_000, 1_500_001, 2_000_000, 2_500_000, top]) {
     reads = 0;
     const time = timeAt(block);
-    assert.equal(await firstBlockAt(time, top, timeAt(top), reader), block, `block ${block}`);
+    assert.equal(await firstBlockAt(time, top, timeAt(top), reader, undefined, []), block, `block ${block}`);
     const before = timeAt(block - 1) >= time - 1 ? block - 1 : block;
-    assert.equal(await firstBlockAt(time - 1, top, timeAt(top), reader), before);
+    assert.equal(await firstBlockAt(time - 1, top, timeAt(top), reader, undefined, []), before);
     assert.ok(reads <= 2 * 26, `${reads} reads for block ${block}, in two searches`);
   }
   for (const pace of [2, 1, 3, 12]) {
@@ -39,17 +52,90 @@ test("a time's first block, from the blocks' own times, whatever the time betwee
     const evenly = async (block: number) => (reads++, GENESIS + pace * block);
     const time = GENESIS + pace * 52_000_001;
     assert.deepEqual(
-      [await firstBlockAt(time, 53_000_000, GENESIS + pace * 53_000_000, evenly), reads],
+      [await firstBlockAt(time, 53_000_000, GENESIS + pace * 53_000_000, evenly, undefined, []), reads],
       [52_000_001, 3],
     );
     reads = 0;
     const above = [53_000_005, GENESIS + pace * 53_000_005] as const;
     assert.deepEqual(
-      [await firstBlockAt(time, 53_000_000, GENESIS + pace * 53_000_000, evenly, above), reads],
+      [await firstBlockAt(time, 53_000_000, GENESIS + pace * 53_000_000, evenly, above, []), reads],
       [52_000_001, 2],
       "with a newer block given, the pace needs no read",
     );
   }
+});
+
+// Base's blocks as Denim made them: every 2 seconds until block 53,556,127, then five a second, in whole seconds.
+const DENIM = 53_556_127;
+const baseTime = (block: number) =>
+  block < DENIM ? 1_686_789_347 + 2 * block : 1_793_901_601 + Math.floor((block - DENIM) / 5);
+const NEWEST = 55_148_356;
+const isFirst = (time: number, block: number, timeOf: (block: number) => number) =>
+  timeOf(block) >= time && timeOf(block - 1) < time;
+
+test("Base's schedule says a time's first block, before and after Denim", () => {
+  assert.deepEqual(
+    [1_793_901_599, 1_793_901_600, 1_793_901_601, 1_793_901_602, 1_686_789_348, 1].map((time) =>
+      scheduled(time, BLOCK_SCHEDULE),
+    ),
+    [DENIM - 1, DENIM, DENIM, DENIM + 5, 1, 0],
+  );
+  for (const block of [1, 40_000_000, DENIM - 1, DENIM, DENIM + 1, DENIM + 4, DENIM + 5, NEWEST]) {
+    const time = baseTime(block);
+    assert.ok(isFirst(time, scheduled(time, BLOCK_SCHEDULE)!, baseTime) || baseTime(block - 1) === time, `${block}`);
+  }
+  assert.equal(scheduled(1_793_901_601, []), undefined);
+});
+
+test("on Base, a time's first block is the schedule's, checked with it and the one before, read together", async () => {
+  const top = NEWEST - 50;
+  for (const back of [11, 60, 1_800, 2 * 86_400, 4 * 86_400, 8 * 86_400, 400 * 86_400]) {
+    const time = baseTime(NEWEST) - back;
+    let [reads, waiting, most] = [0, 0, 0];
+    const reader = async (block: number) => {
+      [reads, waiting, most] = [reads + 1, waiting + 1, Math.max(most, waiting + 1)];
+      await Promise.resolve();
+      waiting--;
+      return baseTime(block);
+    };
+    const found = await firstBlockAt(time, top, baseTime(top), reader, [NEWEST, baseTime(NEWEST)]);
+    assert.ok(isFirst(time, found, baseTime), `${back} s back`);
+    assert.deepEqual([reads, most], [2, 2], `${back} s back`);
+  }
+});
+
+test("with five blocks a second and no schedule, or a wrong one, a search takes a few reads", async () => {
+  // Five blocks share each second, so a guess at a block of the right second may not be the first of it.
+  const GENESIS = 1_686_789_347;
+  const timeOf = (block: number) => GENESIS + Math.floor(block / 5);
+  const newest = 300_000_000;
+  const top = newest - 50;
+  for (const schedule of [[], BLOCK_SCHEDULE]) {
+    for (const back of [11, 60, 1_800, 2 * 86_400, 8 * 86_400, 400 * 86_400]) {
+      for (let late = 0; late < 5; late++) {
+        const time = timeOf(newest) - back - late;
+        let reads = 0;
+        const reader = async (block: number) => (reads++, timeOf(block));
+        const found = await firstBlockAt(time, top, timeOf(top), reader, [newest, timeOf(newest)], schedule);
+        assert.ok(isFirst(time, found, timeOf), `${back + late} s back`);
+        assert.ok(reads <= (schedule.length ? 8 : 6), `${reads} reads for ${back + late} s back`);
+      }
+    }
+  }
+});
+
+test("waiting for an answer asks every 0.2 s for 10 s, then every 2 s, for up to 10 minutes", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const asked: number[] = [];
+  const waiting = poll(async () => void asked.push(Date.now()));
+  for (let ms = 0; ms <= 600_000; ms += 200) {
+    await new Promise((done) => setImmediate(done));
+    t.mock.timers.tick(200);
+  }
+  assert.equal(await waiting, undefined);
+  const fast = Array.from({ length: 51 }, (_, i) => i * 200);
+  const slow = Array.from({ length: 295 }, (_, i) => 10_000 + 2_000 * i).filter((ms) => ms > 10_000 && ms < 600_000);
+  assert.deepEqual(asked, [...fast, ...slow]);
 });
 
 test("a busy RPC hands over to the next; an unwanted answer is taken only when none is wanted", async () => {

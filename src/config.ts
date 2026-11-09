@@ -4,6 +4,12 @@ export const CHAIN_ID = 8453;
 // Asked in this order. Prices read old blocks, which Base's RPC and drpc serve; publicnode serves only recent ones.
 export const RPCS = ["https://mainnet.base.org", "https://base.drpc.org", "https://base-rpc.publicnode.com"];
 export const MULTICALL3: Address = "0xcA11bde05977b3631167028862bE2a173976CA11";
+// Base makes its blocks on a fixed schedule: one every 2 seconds from genesis, then five a second from Denim's first
+// block, on 5 November 2026 at 18:00:01 UTC. Each entry is a first block, its time and the milliseconds between blocks.
+export const BLOCK_SCHEDULE = [
+  { block: 0, time: 1_686_789_347, ms: 2_000 },
+  { block: 53_556_127, time: 1_793_901_601, ms: 200 },
+];
 export const BASESCAN = "https://basescan.org";
 // Base's GasPriceOracle, which says what posting a transaction to Ethereum costs.
 export const GAS_PRICE_ORACLE: Address = "0x420000000000000000000000000000000000000F";

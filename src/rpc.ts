@@ -18,7 +18,7 @@ import {
 } from "viem";
 import type { OpStackRpcTransactionReceipt } from "viem/chains";
 import { memo, use, type Got } from "./cache.ts";
-import { MULTICALL3, RPCS } from "./config.ts";
+import { BLOCK_SCHEDULE, MULTICALL3, RPCS } from "./config.ts";
 
 export type Call<A extends Abi = Abi, N extends string = string> = {
   address: Address;
@@ -57,8 +57,8 @@ export const blockNumber = call(
   "getBlockNumber",
 );
 
-// The newest `SETTLED` blocks are skipped, since an RPC a little behind may not have them yet.
-export const SETTLED = 5;
+// The newest `SETTLED` blocks, 10 seconds of them, are skipped, since an RPC a little behind may not have them yet.
+export const SETTLED = 50;
 
 export const timeAt = async (block: number, rd: Read = read): Promise<number> =>
   Number(required(await rd([blockTime], { block }))[0]);
@@ -74,21 +74,51 @@ export async function blockClock(rd: Read = read) {
   return { newest, newestTime, timeOf };
 }
 
-// The first block whose time is at least `time`, at or below `top`, which must be at or after it. The first five
-// guesses interpolate between the closest blocks read so far or, until one before `time` is read, follow the pace of
-// the last two read, starting from `top` and the newer `above`, if given. Later ones halve the range.
+// Blocks made on a fixed schedule, as `BLOCK_SCHEDULE` lists Base's.
+export type Schedule = readonly { block: number; time: number; ms: number }[];
+// The first block whose time, in whole seconds, is at least `time`, if every block kept to `schedule`.
+export function scheduled(time: number, schedule: Schedule): number | undefined {
+  const i = schedule.findLastIndex((each) => each.time <= time);
+  const from = schedule[Math.max(i, 0)];
+  if (!from) return undefined;
+  const block = from.block + Math.max(0, Math.ceil(((time - from.time) * 1000) / from.ms));
+  const next = schedule[i + 1];
+  return next && block > next.block ? next.block : block;
+}
+
+// The first block whose time is at least `time`, at or below `top`, which must be at or after it. The block `schedule`
+// gives and the one before are read together, and if they fit, that's the answer. Otherwise, the first five guesses
+// interpolate between the closest blocks read so far or, until one before `time` is read, follow the pace of the last
+// two read, starting from `top` and the newer `above`, if given. Later ones halve the range. Times are whole seconds,
+// so with several blocks a second, guesses aim a second's blocks below `time` until one is before it, then as far
+// above, and the range is halved once it holds two seconds' blocks or fewer.
 export async function firstBlockAt(
   time: number,
   top: number,
   topTime: number,
   timeOf: (block: number) => Promise<number>,
   [above, aboveTime]: readonly [number, number] = [top, topTime],
+  schedule: Schedule = BLOCK_SCHEDULE,
 ): Promise<number> {
   let [lo, loTime, hi, hiTime] = [-1, 0, top, topTime];
+  const expected = scheduled(time, schedule);
+  if (expected !== undefined && expected > 0 && expected <= top) {
+    const [at, before] = await Promise.all([timeOf(expected), timeOf(expected - 1)]);
+    if (at >= time && before < time) return expected;
+    if (at < time) [lo, loTime] = [expected, at];
+    else [hi, hiTime] = [expected - 1, before];
+  }
+  let pace = 0;
   for (let step = 0; hi - lo > 1; step++) {
-    const gap = lo >= 0 ? (hiTime - loTime) / (hi - lo) : above > hi ? (aboveTime - hiTime) / (above - hi) : 0;
-    const placed = gap ? hi - Math.ceil((hiTime - time) / gap) : hi - 1;
-    const guess = step < 5 ? Math.min(hi - 1, Math.max(lo + 1, placed)) : Math.floor((lo + hi) / 2);
+    const gap =
+      (lo >= 0 ? (hiTime - loTime) / (hi - lo) : above > hi ? (aboveTime - hiTime) / (above - hi) : 0) || pace;
+    pace = gap;
+    // How many blocks may share one time.
+    const spread = gap > 0 && gap < 1 ? Math.ceil(1 / gap) : 0;
+    let placed = gap ? hi - Math.ceil((hiTime - time) / gap) : hi - 1;
+    if (spread) placed += lo < 0 || placed - lo > hi - placed ? -spread : spread;
+    const guess =
+      step < 5 && hi - lo > 2 * spread + 1 ? Math.min(hi - 1, Math.max(lo + 1, placed)) : Math.floor((lo + hi) / 2);
     const at = await timeOf(guess);
     if (at >= time) [above, aboveTime, hi, hiTime] = [hi, hiTime, guess, at];
     else [lo, loTime] = [guess, at];
@@ -353,8 +383,10 @@ export type Landed = WalletCallReceipt;
 // The receipts' logs, typed for `parseEventLogs`. A wallet's logs hold only address, data and topics, which is enough
 // to decode their events, but not the block and index that an RPC's logs also hold.
 export const logsIn = (receipts: Pick<Landed, "logs">[]): RpcLog[] => receipts.flatMap(({ logs }) => logs) as RpcLog[];
+// Asks every 0.2 seconds, as often as Base makes a block, for 10 seconds, then every 2, for up to 10 minutes.
 export async function poll<T>(ask: () => Promise<T | undefined>): Promise<T | undefined> {
-  for (const end = Date.now() + 600_000; Date.now() < end; await sleep(2_000)) {
+  const start = Date.now();
+  for (const end = start + 600_000; Date.now() < end; await sleep(Date.now() - start < 10_000 ? 200 : 2_000)) {
     const answer = await ask();
     if (answer !== undefined) return answer;
   }
