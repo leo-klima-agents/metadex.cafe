@@ -1,6 +1,7 @@
 import {
   concat,
   encodeAbiParameters,
+  encodePacked,
   erc20Abi,
   getContractAddress,
   keccak256,
@@ -39,10 +40,23 @@ export const exchangeOf = (id: number): Exchange => BY_ID[id]!;
 export const pairKey = (a: Address, b: Address): string => `${key(a)} ${key(b)}`;
 
 const factoryAbis = {
-  algebra: parseAbi(["function poolByPair(address, address) view returns (address)"]),
-  pair: parseAbi(["function getPair(address, address, bool stable) view returns (address)"]),
-  solidly: parseAbi(["function getPool(address, address) view returns (address)"]),
-  aerodrome: parseAbi(["function getPool(address, address, bool stable) view returns (address)"]),
+  algebra: parseAbi([
+    "function poolByPair(address, address) view returns (address)",
+    "function poolDeployer() view returns (address)",
+    "function POOL_INIT_CODE_HASH() view returns (bytes32)",
+  ]),
+  pair: parseAbi([
+    "function getPair(address, address, bool stable) view returns (address)",
+    "function pairCodeHash() view returns (bytes32)",
+  ]),
+  solidly: parseAbi([
+    "function getPool(address, address) view returns (address)",
+    "function implementation() view returns (address)",
+  ]),
+  aerodrome: parseAbi([
+    "function getPool(address, address, bool stable) view returns (address)",
+    "function implementation() view returns (address)",
+  ]),
   slipstream: parseAbi([
     "function getPool(address, address, int24 tickSpacing) view returns (address)",
     "function tickSpacings() view returns (int24[])",
@@ -111,19 +125,73 @@ function lookupsOn(exchange: Exchange, pair: [Address, Address], spacings: Map<n
   }
 }
 
-// A Slipstream factory makes each pool an EIP-1167 clone of its implementation, with CREATE2 and the salt
-// keccak256(abi.encode(token0, token1, tickSpacing)), so a pool's address is known without asking. `pair` must be
-// sorted by address.
-export function slipstreamPool(factory: Address, implementation: Address, pair: [Address, Address], spacing: number) {
-  const salt = keccak256(
-    encodeAbiParameters([{ type: "address" }, { type: "address" }, { type: "int24" }], [...pair, spacing]),
-  );
-  const bytecode = concat([
-    "0x3d602d80600a3d3981f3363d3d373d3d3d363d73",
+// Where a factory puts its pools, so that their addresses are known without asking it, as each factory's verified
+// source says: EIP-1167 clones of an implementation, made by the factory, or whole contracts made by a deployer, whose
+// init code hashes to one of `hashes`, each with CREATE2 and a salt of the sorted pair.
+export type Placement = { implementation: Address } | { deployer: Address; hashes: Hex[] };
+const cloneAt = (factory: Address, implementation: Address, salt: Hex): Address =>
+  getContractAddress({
+    opcode: "CREATE2",
+    from: factory,
+    salt,
+    bytecode: concat([
+      "0x3d602d80600a3d3981f3363d3d373d3d3d363d73",
+      implementation,
+      "0x5af43d82803e903d91602b57fd5bf3",
+    ]),
+  });
+// A Slipstream pool's salt is keccak256(abi.encode(token0, token1, tickSpacing)). `pair` must be sorted by address.
+export const slipstreamPool = (factory: Address, implementation: Address, pair: [Address, Address], spacing: number) =>
+  cloneAt(
+    factory,
     implementation,
-    "0x5af43d82803e903d91602b57fd5bf3",
-  ]);
-  return getContractAddress({ opcode: "CREATE2", from: factory, salt, bytecode });
+    keccak256(encodeAbiParameters([{ type: "address" }, { type: "address" }, { type: "int24" }], [...pair, spacing])),
+  );
+// Every pool `exchange` could have for `pair`, sorted by address: one per tick spacing for Slipstream; for Aero's basic
+// pools, whose stable and volatile pools have a factory each, salted keccak256(abi.encodePacked(token0, token1)), one;
+// for Aerodrome's and Hydrex's classic ones, salted keccak256(abi.encodePacked(token0, token1, stable)), one per curve
+// and code hash; and for Hydrex Integral (Algebra), salted keccak256(abi.encode(token0, token1)), one.
+export function placedPools(
+  exchange: Exchange,
+  placement: Placement,
+  pair: [Address, Address],
+  spacings: number[] = [],
+): PoolFound[] {
+  const { id, kind, factory } = exchange;
+  const found = (pool: Address, way: Partial<PoolFound> = {}): PoolFound => ({
+    exchange: id,
+    pool,
+    fee: 0,
+    tickSpacing: 0,
+    ...way,
+  });
+  const packed = (stable?: boolean) =>
+    keccak256(
+      stable === undefined
+        ? encodePacked(["address", "address"], pair)
+        : encodePacked(["address", "address", "bool"], [...pair, stable]),
+    );
+  if ("implementation" in placement) {
+    const { implementation } = placement;
+    if (kind === "slipstream")
+      return spacings.map((spacing) =>
+        found(slipstreamPool(factory, implementation, pair, spacing), { tickSpacing: spacing }),
+      );
+    if (kind === "solidly") return [found(cloneAt(factory, implementation, packed()), { stable: !!exchange.stable })];
+    if (kind === "aerodrome")
+      return [false, true].map((stable) => found(cloneAt(factory, implementation, packed(stable)), { stable }));
+    return [];
+  }
+  const { deployer, hashes } = placement;
+  const made = (salt: Hex, hash: Hex) =>
+    getContractAddress({ opcode: "CREATE2", from: deployer, salt, bytecodeHash: hash });
+  if (kind === "pair")
+    return [false, true].flatMap((stable) => hashes.map((hash) => found(made(packed(stable), hash), { stable })));
+  if (kind === "algebra") {
+    const salt = keccak256(encodeAbiParameters([{ type: "address" }, { type: "address" }], pair));
+    return hashes.map((hash) => found(made(salt, hash)));
+  }
+  return [];
 }
 
 // Pools found, keyed by exchange id and sorted pair, cached until the page reloads. A failed lookup says so to those
@@ -152,19 +220,42 @@ function spacings(rd: Read): Promise<Map<number, number[]>> {
   ));
 }
 
-// Each Slipstream factory's pool implementation, by exchange id, read once, and again after a failure.
-let implementationsRead: Promise<Map<number, Address>> | undefined;
-function implementations(rd: Read): Promise<Map<number, Address>> {
-  const slipstreams = BY_ID.filter(({ kind }) => kind === "slipstream");
-  return (implementationsRead ??= rd(
-    slipstreams.map(({ factory }) => call(factory, factoryAbis.slipstream, "poolImplementation")),
-  ).then(
+// Where each factory whose pools' addresses can be computed puts them, by exchange id, read once, and again after a
+// failure, leaving out an exchange whose answer is missing. A factory that an upgrade could change is read too: its
+// pairs are looked for at its `codeHash` and, if another, at the one it gives now.
+const PLACED: readonly ExchangeKind[] = ["slipstream", "solidly", "aerodrome", "pair", "algebra"];
+let placementsRead: Promise<Map<number, Placement>> | undefined;
+function placements(rd: Read): Promise<Map<number, Placement>> {
+  const placed = BY_ID.filter(({ kind }) => PLACED.includes(kind));
+  const asks = placed.map(({ factory, kind }): Call[] => {
+    const abi: Abi = factoryAbis[kind];
+    if (kind === "slipstream") return [call(factory, abi, "poolImplementation")];
+    if (kind === "pair") return [call(factory, abi, "pairCodeHash")];
+    if (kind === "algebra") return [call(factory, abi, "poolDeployer"), call(factory, abi, "POOL_INIT_CODE_HASH")];
+    return [call(factory, abi, "implementation")];
+  });
+  return (placementsRead ??= rd(asks.flat()).then(
     (replies) => {
-      if (replies.includes(undefined)) implementationsRead = undefined;
-      return new Map(slipstreams.flatMap(({ id }, i) => (replies[i] ? [[id, replies[i]]] : [])));
+      if (replies.includes(undefined)) placementsRead = undefined;
+      let next = 0;
+      return new Map(
+        placed.flatMap((exchange, i): [number, Placement][] => {
+          const got = asks[i]!.map(() => replies[next++] as Address | Hex | undefined);
+          if (got.includes(undefined)) return [];
+          const { id, kind, factory, codeHash } = exchange;
+          if (kind === "pair") {
+            const hashes = [
+              ...new Set([codeHash, got[0]].flatMap((hash) => (hash ? [hash.toLowerCase() as Hex] : []))),
+            ];
+            return [[id, { deployer: factory, hashes }]];
+          }
+          if (kind === "algebra") return [[id, { deployer: got[0] as Address, hashes: [got[1] as Hex] }]];
+          return [[id, { implementation: got[0] as Address }]];
+        }),
+      );
     },
     (error: unknown) => {
-      implementationsRead = undefined;
+      placementsRead = undefined;
       throw error;
     },
   ));
@@ -191,43 +282,51 @@ async function lookUp(
   ].filter(([id]) => !pools.has(id));
   if (missing.length) {
     const needsSpacings = missing.some(([, [exchange]]) => exchange.kind === "slipstream");
-    // With `codeAt`, Slipstream pools are found at their computed addresses in one ask, rather than by asking each
-    // factory for each pair and tick spacing.
+    // With `codeAt`, pools are found at their computed addresses in one ask, rather than by asking each factory for
+    // each pair, curve and tick spacing. A factory is asked only for what could not be computed or checked: its
+    // placement could not be read, or the check did not answer.
     const { codeAt } = rd;
+    const placing = !!codeAt && missing.some(([, [exchange]]) => PLACED.includes(exchange.kind));
+    const ask = (lookups: Lookup[][]) => {
+      const calls = lookups.flat().map(({ call }) => call);
+      const light = lookups.every((each, i) => !each.length || missing[i]![1][0].kind !== "v4");
+      return calls.length ? rd(calls, light ? { perBatch: LOOKUPS } : {}) : Promise.resolve([]);
+    };
+    const answersTo = (lookups: Lookup[][], replies: unknown[]) => {
+      let next = 0;
+      return lookups.map((each) => each.map(() => replies[next++]));
+    };
     const all = Promise.all([
       needsSpacings ? spacings(rd) : new Map<number, number[]>(),
-      needsSpacings && codeAt ? implementations(rd) : new Map<number, Address>(),
-    ]).then(async ([known, made]) => {
-      const clones = (exchange: Exchange) => !!codeAt && exchange.kind === "slipstream";
-      const each = missing.map(([, [exchange, pair]]) => (clones(exchange) ? [] : lookupsOn(exchange, pair, known)));
+      placing ? placements(rd).catch(() => new Map<number, Placement>()) : new Map<number, Placement>(),
+    ]).then(async ([known, placed]) => {
       const candidates = missing.map(([, [exchange, pair]]) => {
-        const implementation = made.get(exchange.id);
-        if (!clones(exchange) || !implementation) return [];
-        return (known.get(exchange.id) ?? []).map((spacing) => ({
-          exchange: exchange.id,
-          pool: slipstreamPool(exchange.factory, implementation, pair, spacing),
-          fee: 0,
-          tickSpacing: spacing,
-        }));
+        const placement = codeAt && PLACED.includes(exchange.kind) ? placed.get(exchange.id) : undefined;
+        if (!placement || (exchange.kind === "slipstream" && !known.has(exchange.id))) return undefined;
+        return placedPools(exchange, placement, pair, known.get(exchange.id));
       });
-      const light = missing.every(([, [exchange]]) => exchange.kind !== "v4");
+      const first = missing.map(([, [exchange, pair]], i) => (candidates[i] ? [] : lookupsOn(exchange, pair, known)));
       const [replies, held] = await Promise.all([
-        rd(
-          each.flat().map(({ call }) => call),
-          light ? { perBatch: LOOKUPS } : {},
-        ),
-        codeAt && candidates.some((list) => list.length) ? codeAt(candidates.flat().map(({ pool }) => pool)) : [],
+        ask(first),
+        codeAt && candidates.some((list) => list?.length)
+          ? codeAt(candidates.flatMap((list) => list ?? []).map(({ pool }) => pool))
+          : [],
       ]);
-      let [next, nextHeld] = [0, 0];
-      return each.map((lookups, i) => {
-        const answers = lookups.map(() => replies[next++]);
-        const holds = candidates[i]!.map(() => held[nextHeld++]);
-        const [exchange] = missing[i]![1];
-        const unknown =
-          exchange.kind === "slipstream" && (!known.has(exchange.id) || (clones(exchange) && !made.has(exchange.id)));
-        const failed = answers.includes(undefined) || holds.includes(undefined) || unknown;
-        const looked = lookups.flatMap((lookup, j) => lookup.found(answers[j]) ?? []);
-        return { failed, found: [...looked, ...candidates[i]!.filter((_, j) => holds[j])] };
+      let nextHeld = 0;
+      const holds = candidates.map((list) => list?.map(() => held[nextHeld++]));
+      // Checks that did not answer are asked of the factory instead.
+      const again = missing.map(([, [exchange, pair]], i) =>
+        holds[i]?.includes(undefined) ? lookupsOn(exchange, pair, known) : [],
+      );
+      const answers = answersTo(first, replies);
+      const answersAgain = answersTo(again, await ask(again));
+      return missing.map(([, [exchange]], i) => {
+        const lookups = again[i]!.length ? again[i]! : first[i]!;
+        const replied = again[i]!.length ? answersAgain[i]! : answers[i]!;
+        const unknown = exchange.kind === "slipstream" && !known.has(exchange.id);
+        const looked = lookups.flatMap((lookup, j) => lookup.found(replied[j]) ?? []);
+        const computed = again[i]!.length ? [] : (candidates[i] ?? []).filter((_, j) => holds[i]![j]);
+        return { failed: replied.includes(undefined) || unknown, found: [...looked, ...computed] };
       });
     });
     missing.forEach(([id], i) => {
@@ -489,7 +588,7 @@ let nowStart: number | undefined;
 export function forget(): void {
   pools.clear();
   spacingsRead = undefined;
-  implementationsRead = undefined;
+  placementsRead = undefined;
   blocksAt.clear();
   nowStart = undefined;
   quotes.clear();

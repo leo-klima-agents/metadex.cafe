@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
-import { zeroAddress, type Address } from "viem";
+import { zeroAddress, type Address, type Hex } from "viem";
 import { same, settledBelow, type Call, type Read } from "../src/rpc.ts";
 import {
   ANCHORS,
   FIAT_FEEDS,
   EXCHANGES,
   HYDREX_PRICING,
+  HYDX,
   PRICING,
   USDC as USDC_ON_BASE,
   WETH,
@@ -22,10 +23,12 @@ import {
   pricesAtFlip,
   pricesFrom,
   pricesNow,
+  placedPools,
   quotesOf,
   slipstreamPool,
   tickPrice,
   waysFor,
+  type Placement,
   type Token,
 } from "../src/prices.ts";
 
@@ -696,51 +699,113 @@ test("a Slipstream pool is a clone of its factory's implementation, where CREATE
   );
 });
 
-test("a read that knows which addresses hold code finds Slipstream pools in one ask, and asks again after a failure", async () => {
+test("Aero's, Aerodrome's and Hydrex's other pools are where their factories' CREATE2 puts them", () => {
+  // As the factories' getPool, getPair and poolByPair give them on Base.
+  const wethUsdc: [Address, Address] = [WETH, USDC_ON_BASE];
+  const at = (exchange: Exchange, placement: Placement, pair: [Address, Address], stable?: boolean) =>
+    placedPools(exchange, placement, pair)
+      .filter((each) => stable === undefined || each.stable === stable)
+      .map(({ pool }) => pool);
+  const aerodrome: Placement = { implementation: "0xA4e46b4f701c62e14DF11B48dCe76A7d793CD6d7" };
+  const classic: Placement = { deployer: HYDREX.factory, hashes: [HYDREX.codeHash!] };
+  const integral: Placement = {
+    deployer: "0x1595A5D101d69D2a2bAB2976839cC8eeEb13Ab94",
+    hashes: ["0xa18736c3ee97fe3c96c9428c0cc2a9116facec18e84f95f9da30543f8238a782"],
+  };
+  assert.deepEqual(
+    [
+      at(AERO, { implementation: "0x0526cF035C1156b5C598b0d3c2445e38af2e8bDE" }, wethUsdc),
+      at(AERO_STABLE, { implementation: "0xf525988f88B7D8b64631D86070FEC5BFDc50C174" }, wethUsdc),
+      at(AERODROME, aerodrome, wethUsdc, false),
+      at(AERODROME, aerodrome, wethUsdc, true),
+      at(HYDREX, classic, wethUsdc, false),
+      at(HYDREX, classic, [HYDX, USDC_ON_BASE], true),
+      at(INTEGRAL, integral, wethUsdc),
+    ],
+    [
+      ["0x800EB395B577B234C5065c8E0cCb0F3A1401B2c2"],
+      ["0x4B0fA5253e7c75C3EF798EF250780C996360287a"],
+      ["0xcDAC0d6c6C59727a65F871236188350531885C43"],
+      ["0x3548029694fbB241D45FB24Ba0cd9c9d4E745f16"],
+      ["0x4DC7EfB7d005DD514aCDc0a0631630b67dD83A4B"],
+      ["0x81526d7c6d5999f1596feE40C2D6c837B0E62D3a"],
+      ["0x82dbe18346a8656dBB5E76F74bf3AE279cC16B29"],
+    ],
+  );
+});
+
+test("a read that knows which addresses hold code finds pools at their computed addresses, and asks a factory only what it could not check", async () => {
   const implementation: Address = "0x00000000000000000000000000000000000000c1";
-  const slipstreams = BY_ID.filter(({ kind }) => kind === "slipstream");
+  const deployer: Address = "0x00000000000000000000000000000000000000d1";
+  const integralHash: Hex = `0x${"aa".repeat(32)}`;
+  const upgraded: Hex = `0x${"bb".repeat(32)}`;
   const pair: [Address, Address] = [TOKEN.address, USDC];
-  // Two pools: Aero Slipstream's at a spacing of 100, and Aerodrome Slipstream V3's at 1.
+  const pools = (exchange: Exchange, placement: Placement, stable?: boolean) =>
+    placedPools(exchange, placement, pair)
+      .filter((each) => stable === undefined || each.stable === stable)
+      .map(({ pool }) => pool);
+  // Aero Slipstream's pool at 100, Aerodrome's stable basic pool, Hydrex Classic's volatile pair, made at its known
+  // code hash, and its stable one, made since an upgrade changed it, and Hydrex Integral's pool.
+  const [integral] = pools(INTEGRAL, { deployer, hashes: [integralHash] });
   const held = [
     slipstreamPool(AERO_CL.factory, implementation, pair, 100),
-    slipstreamPool(AERODROME_CL.factory, implementation, pair, 1),
+    ...pools(AERODROME, { implementation }, true),
+    ...pools(HYDREX, { deployer: HYDREX.factory, hashes: [HYDREX.codeHash!] }, false),
+    ...pools(HYDREX, { deployer: HYDREX.factory, hashes: [upgraded] }, true),
+    integral!,
   ];
   const asked: string[] = [];
   const checked: (readonly Address[])[] = [];
-  let failing = true;
+  // At first, Aero's volatile basic pool's check does not answer, nor does Hydrex Integral's code hash.
+  let unanswered: Address | undefined = pools(AERO, { implementation })[0];
+  let hashUnread = true;
   const rd: Read = async (calls): Promise<any> =>
     calls.map(({ address, functionName }) => {
       asked.push(`${address} ${functionName}`);
       if (functionName === "tickSpacings") return [1, 100];
-      if (functionName === "poolImplementation") return implementation;
+      if (functionName === "poolImplementation" || functionName === "implementation") return implementation;
+      if (functionName === "pairCodeHash") return upgraded;
+      if (functionName === "poolDeployer") return deployer;
+      if (functionName === "POOL_INIT_CODE_HASH") return hashUnread ? undefined : integralHash;
+      if (functionName === "poolByPair") return integral;
       return functionName === "extsload" ? Array(4).fill(`0x${"0".repeat(64)}`) : zeroAddress;
     });
   rd.codeAt = async (addresses) => {
     checked.push(addresses);
-    return addresses.map((address, i) => (failing && i === 0 ? undefined : held.some((pool) => same(pool, address))));
+    return addresses.map((address) =>
+      unanswered && same(address, unanswered) ? undefined : held.some((pool) => same(pool, address)),
+    );
   };
-  const found = async () =>
-    (await waysFor([pair], BY_ID, rd))
-      .get(`${TOKEN.address} ${USDC.toLowerCase()}`)!
-      .map(({ exchange, pool, tickSpacing }) => [exchange, pool, tickSpacing]);
-  // Aero Slipstream's first check failed: its pool at 100 is found all the same, but it is asked again next time.
-  assert.deepEqual(await found(), [
-    [AERO_CL.id, held[0], 100],
-    [AERODROME_CL.id, held[1], 1],
-  ]);
-  assert.equal(checked.length, 1, "one ask");
-  assert.equal(checked[0]!.length, slipstreams.length * 2, "each Slipstream factory's two spacings");
-  assert.ok(
-    !asked.some((each) => slipstreams.some(({ factory }) => each === `${factory} getPool`)),
-    "no Slipstream factory is asked for a pool",
+  const placed = BY_ID.filter(({ kind }) => ["slipstream", "solidly", "aerodrome", "pair", "algebra"].includes(kind));
+  const askedForPools = () =>
+    placed.filter(({ factory }) =>
+      asked.some((each) => /^\S+ (getPool|getPair|poolByPair)$/.test(each) && each.startsWith(factory)),
+    );
+  const ways = await waysFor([pair], BY_ID, rd);
+  assert.deepEqual(
+    ways.get(`${TOKEN.address} ${USDC.toLowerCase()}`)!.map(({ exchange, pool }) => [exchange, pool]),
+    [
+      [INTEGRAL.id, integral],
+      [HYDREX.id, held[2]],
+      [HYDREX.id, held[3]],
+      [AERO_CL.id, held[0]],
+      [AERODROME.id, held[1]],
+    ],
   );
-  failing = false;
-  assert.deepEqual(await found(), [
-    [AERO_CL.id, held[0], 100],
-    [AERODROME_CL.id, held[1], 1],
-  ]);
+  assert.equal(checked.length, 1, "one ask");
+  // Two spacings for each Slipstream factory, a pool for each of Aero's basic factories, a curve each for Aerodrome's,
+  // and a curve each for Hydrex Classic's at both code hashes; none for Hydrex Integral, whose code hash is unknown.
+  assert.equal(checked[0]!.length, placed.filter(({ kind }) => kind === "slipstream").length * 2 + 2 + 2 + 2 * 2);
+  assert.deepEqual(askedForPools(), [INTEGRAL, AERO], "only Integral and the pool whose check did not answer");
+  // Read again, the code hash is known: a new pair's Integral pool is computed, and no factory is asked.
+  [hashUnread, unanswered] = [false, undefined];
+  asked.length = 0;
+  await waysFor([[USDC, LATE.address]], BY_ID, rd);
   assert.equal(checked.length, 2);
-  assert.equal(checked[1]!.length, 2, "only Aero Slipstream's spacings, whose check failed, are asked again");
-  await found();
-  assert.equal(checked.length, 2, "and then none, all found");
+  assert.equal(checked[1]!.length, checked[0]!.length + 1, "Integral's pool too");
+  assert.deepEqual(askedForPools(), [], "no factory is asked for a pool");
+  assert.ok(
+    asked.some((each) => each.endsWith("POOL_INIT_CODE_HASH")),
+    "what was unread is read again",
+  );
 });

@@ -1,4 +1,4 @@
-import type { Address } from "viem";
+import type { Address, Hex } from "viem";
 
 export const CHAIN_ID = 8453;
 // Asked in this order. Prices read old blocks, which Base's RPC and drpc serve; publicnode serves only recent ones.
@@ -138,7 +138,15 @@ export const swapperOf = (output: string): Swapper | undefined => SWAPPERS.find(
 // The swappers' exchanges, in the order pricing prefers them. `id` is the value of the swapper's `Exchange` enum. For
 // Uniswap v4, `factory` is the PoolManager.
 export type ExchangeKind = "algebra" | "pair" | "solidly" | "slipstream" | "aerodrome" | "v2" | "v3" | "v4";
-export type Exchange = { id: number; name: string; kind: ExchangeKind; factory: Address; stable?: boolean };
+// `codeHash`: the init code hash of the pairs a factory has made, for one whose pair code an upgrade could change.
+export type Exchange = {
+  id: number;
+  name: string;
+  kind: ExchangeKind;
+  factory: Address;
+  stable?: boolean;
+  codeHash?: Hex;
+};
 export const EXCHANGES: Exchange[] = [
   { id: 2, name: "Aero Basic Pools", kind: "solidly", factory: "0x8E6a9FCd1d638CC760Ffba397605Fe3355dE76D2" },
   {
@@ -156,7 +164,13 @@ export const EXCHANGES: Exchange[] = [
   { id: 11, name: "Uniswap v4", kind: "v4", factory: "0x498581fF718922c3f8e6A244956aF099B2652b2b" },
   { id: 10, name: "Uniswap v3", kind: "v3", factory: "0x33128a8fC17869897dcE68Ed026d694621f6FDfD" },
   { id: 9, name: "Uniswap v2", kind: "v2", factory: "0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6" },
-  { id: 1, name: "Hydrex Classic Pools", kind: "pair", factory: "0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0" },
+  {
+    id: 1,
+    name: "Hydrex Classic Pools",
+    kind: "pair",
+    factory: "0xC47F17c4fd96F50eFD2A2448ceDe5C185c084bf0",
+    codeHash: "0x9bbd03d1e1f14c9b95dda0aea4eb438b212c58a1cf9aa3d5dfad574e312e3946",
+  },
   { id: 0, name: "Hydrex Integral", kind: "algebra", factory: "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E" },
 ];
 // Prices come from Aero's, Aerodrome's and Hydrex's pools, and at an epoch's end from Hydrex's only, in tiers, each
