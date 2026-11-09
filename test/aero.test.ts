@@ -9,6 +9,8 @@ import {
   accruedFrom,
   aprOf,
   aprOver,
+  heldIn,
+  payOf,
   allocateCall,
   allotmentsOf,
   amountOf,
@@ -674,6 +676,8 @@ test("without incentives, the rule ranks and weighs its pools by their fees alon
     [streams.address, 10 / 13],
     [fees.address, 3 / 13],
   ]);
+  assert.equal(payOf(pools[1]!.paying), 10, "fees and incentives");
+  assert.equal(payOf(pools[1]!.paying, false), 1, "fees alone");
   assert.deepEqual(ranked(false), [
     [fees.address, 0.75],
     [streams.address, 0.25],
@@ -705,7 +709,8 @@ test("the rule over its own window earns at least the average of its pools, and 
     [key(quiet.address), 500_000],
   ]);
   near(heldOver(picks, lately, 1_000_000, mine)!.total, rule.total, "already in");
-  assert.deepEqual(heldOver([{ gauge: undefined, weight: 1 }], lately), undefined, "idle earns nothing");
+  assert.deepEqual(heldOver([{ gauge: undefined, weight: 1 }], lately), undefined, "no pool, no answer");
+  // Half outside the market's pools counts for nothing, and the figure is then a lower bound.
   const half = heldOver(
     [
       { gauge: undefined, weight: 0.5 },
@@ -713,7 +718,49 @@ test("the rule over its own window earns at least the average of its pools, and 
     ],
     lately,
   )!;
-  near(half.total, 2.5, "half idle earns half");
+  near(half.total, 2.5, "half outside earns half");
+  assert.equal(half.priced, false, "partial");
+  // So does a pool without an answer, such as one whose snapshot could not be read; a share of 0% doesn't count.
+  const onlyQuiet = (each: Gauge) => (each === quiet ? lately(each) : undefined);
+  const both = [
+    { gauge: crowded, weight: 0.5 },
+    { gauge: quiet, weight: 0.5 },
+  ];
+  assert.equal(heldOver(both, onlyQuiet)!.priced, false, "no answer");
+  assert.equal(
+    heldOver(
+      [
+        { gauge: crowded, weight: 0 },
+        { gauge: quiet, weight: 1 },
+      ],
+      onlyQuiet,
+    )!.priced,
+    true,
+    "0%",
+  );
+});
+
+test("a stake's own weight over a span is what its moves held there on average, its sAERO on no chain left out", () => {
+  const [p, q] = [gauge(), gauge()];
+  const moves: Move[] = [
+    { at: NOW - DAY, allocations: [{ gauge: q.address, amount: 4n * SAERO }] },
+    {
+      at: NOW - 3 * DAY,
+      allocations: [
+        { gauge: p.address, amount: 2n * SAERO },
+        { gauge: zeroAddress, amount: SAERO },
+      ],
+    },
+  ];
+  // Over the last two days: P for the first, Q for the second.
+  assert.deepEqual(
+    [...heldIn(moves, { from: NOW - 2 * DAY, to: NOW })],
+    [
+      [key(p.address), 1],
+      [key(q.address), 2],
+    ],
+  );
+  assert.equal(heldIn(moves, { from: NOW - 5 * DAY, to: NOW - 4 * DAY }).size, 0, "nothing before its first move");
 });
 
 test("the windows and the record's picks lie on one grid of 48 hours, counted back from the last whole hour", () => {
@@ -817,21 +864,28 @@ test("the record's steps run 48 hours each from the grid's times, the newest to 
 
 test("with the prices then, a step is valued at the mean of its ends' prices, and a pick at its own time's", () => {
   const { m } = twoPools();
-  const top = { count: 1, hours: 48, again: true, blueChips: false } as const;
+  const top = { count: 1, hours: 48, again: true, blueChips: false, incentives: true } as const;
   const starts = stepsOf(m).map(({ from }) => from);
   const at = (usdcPrice?: number) =>
     prices([...(usdcPrice === undefined ? [] : [[usdc, usdcPrice] as [Token, number]]), [weth, 2_000], [aero, 0.6]]);
   // USDC, in which both pools pay, at $2 at every step start and $1 now: the newest step at $1.50, the others at $2.
   const then = new Map(starts.map((time) => [time, at(2)]));
-  nearAll(totals(strategySteps(m, m.past, top, 0, then)), [1.5, 2, 2, 2], "the strategy");
-  const scaled = (plain: Paid[]) => totals(plain).map((value, k) => value! * (k ? 2 : 1.5));
+  nearAll(totals(strategySteps(m, m.past, top, { then })), [1.5, 2, 2, 2], "the strategy");
+  const times = (plain: Paid[], by: number[]) => totals(plain).map((value, k) => value! * by[k]!);
+  const scaled = (plain: Paid[]) => times(plain, [1.5, 2, 2, 2]);
   nearAll(totals(averageSteps(m, m.past, then)), scaled(averageSteps(m, m.past)), "the Base average");
   const holdings = m.gauges.map((gauge) => ({ gauge, weight: 0.5 }));
-  nearAll(totals(customSteps(m, m.past, holdings, 0, then)), scaled(customSteps(m, m.past, holdings)), "custom");
+  nearAll(totals(customSteps(m, m.past, holdings, { then })), scaled(customSteps(m, m.past, holdings)), "custom");
   // No price for USDC when the second newest step was picked: every pool's fees were unpriced then, so nothing was
   // picked, though the step itself is valued at its end's price.
   then.set(starts[1]!, at());
-  nearAll(totals(strategySteps(m, m.past, top, 0, then)), [1.5, undefined, 2, 2], "picked then");
+  nearAll(totals(strategySteps(m, m.past, top, { then })), [1.5, undefined, 2, 2], "picked then");
+  // With one end's prices missing, a step takes the other's alone; with neither, today's.
+  const one = new Map([[starts[1]!, at(2)]]);
+  nearAll(totals(averageSteps(m, m.past, one)), times(averageSteps(m, m.past), [1, 2, 2, 1]), "one end");
+  // A pricing in another unit, after its feeds failed, is left out rather than mixed in.
+  const inUsdc = new Map(starts.map((time): [number, Prices] => [time, { ...at(2), unit: "USDC" }]));
+  nearAll(totals(averageSteps(m, m.past, inUsdc)), totals(averageSteps(m, m.past)), "another unit");
 });
 
 test("an APR over steps takes each step's at its own price of AERO, weighed by its length", () => {
@@ -845,11 +899,16 @@ test("an APR over steps takes each step's at its own price of AERO, weighed by i
   const found = aprOver([step(NOW - STEP, 1, 0.5), step(NOW - 2 * STEP, 1, 1), step(NOW - 3 * STEP, undefined, 1)]);
   near(found!.apr, (0.073 + 0.0365) / 2, "the steps with an answer");
   assert.equal(aprOver([step(NOW - STEP, undefined, 1)]), undefined);
+  // A step without a price for AERO has no APR, so it counts in neither the APR nor what was earned.
+  const unknown: Paid = { ...step(NOW - 2 * STEP, 9, 1), prices: prices([[usdc, 1]]) };
+  const without = aprOver([step(NOW - STEP, 1, 0.5), unknown])!;
+  near(without.apr, 0.073, "its APR");
+  near(without.total, 1, "what 10,000 sAERO earned a day, over the same steps");
 });
 
 test("a strategy picks at each step from only the window before it, and earns what its pools paid in the step", () => {
   const { a, m } = twoPools();
-  const top = { count: 1, hours: 48, again: true, blueChips: false } as const;
+  const top = { count: 1, hours: 48, again: true, blueChips: false, incentives: true } as const;
   // Chasing last step's best pool always lands on the one that pays $1 next.
   nearAll(totals(strategySteps(m, m.past, top)), [1, 1, 1, 1], "again");
   // Picked once from the 48 hours before the oldest step: B, which paid $10 then, and is kept.
@@ -858,7 +917,15 @@ test("a strategy picks at each step from only the window before it, and earns wh
   nearAll(totals(strategySteps(m, m.past, { ...top, blueChips: true })), [1, 10, 1, 10], "blue chips");
   assert.ok(isBlueChip(a.gauge) && !isBlueChip(m.gauges[1]!));
   // 5M sAERO more halves what each earns, at 5M already there.
-  nearAll(totals(strategySteps(m, m.past, top, 5_000_000)), [0.5, 0.5, 0.5, 0.5], "diluted");
+  nearAll(totals(strategySteps(m, m.past, top, { amount: 5_000_000 })), [0.5, 0.5, 0.5, 0.5], "diluted");
+  // Unless the stake's own 5M was in both pools all along: it is not added again.
+  const own: Move[] = [
+    {
+      at: NOW - 30 * DAY,
+      allocations: m.gauges.map((each) => ({ gauge: each.address, amount: 5_000_000n * SAERO })),
+    },
+  ];
+  nearAll(totals(strategySteps(m, m.past, top, { amount: 5_000_000, own })), [1, 1, 1, 1], "its own weight");
   near(overallOf(strategySteps(m, m.past, { ...top, again: false }))!.total, 5.5, "over the 8 days");
 });
 
@@ -870,7 +937,7 @@ test("the strategy leaves out thin pools and pools paying a token without a pric
       programs: [{ ...streaming(1_000, NOW - 20 * DAY, NOW + DAY), token: other }],
     }),
   ];
-  const top = { count: 1, hours: 48, again: true, blueChips: false } as const;
+  const top = { count: 1, hours: 48, again: true, blueChips: false, incentives: true } as const;
   for (const [more, what] of [
     [thin, "thin"],
     [unpriced, "unpriced"],
@@ -887,7 +954,7 @@ test("the strategy leaves out thin pools and pools paying a token without a pric
 
 test("a longer window needs snapshots before the grid's, read for it alone", () => {
   const { m, past } = twoPools([NOW - 6 * STEP]);
-  const top = { count: 1, hours: 96, again: true, blueChips: false } as const;
+  const top = { count: 1, hours: 96, again: true, blueChips: false, incentives: true } as const;
   assert.deepEqual(timesFor(m, { ...top, hours: 48 }), [], "48 hours: the grid's own");
   assert.deepEqual(timesFor(m, top), [NOW - 6 * STEP]);
   assert.deepEqual(
@@ -945,6 +1012,29 @@ test("an allocation as it actually moved is cut where it moved, and earns nothin
   nearAll(totals(movedSteps(m, mergePast(m.past, past), moves)), [10, (5 + 1) / 2, 0.5, undefined], "moved");
   const record = movedSteps(m, mergePast(m.past, past), moves);
   near(overallOf(record)!.total, (10 + 3 + 0.5) / 3, "over its steps with an answer, each weighed by its length");
+  assert.ok(
+    record.every(({ paid }) => !paid || paid.priced),
+    "its sAERO on no chain earns nothing, as it should",
+  );
+  // At the prices then: USDC at $2 at each step start and $1 now.
+  const starts = stepsOf(m).map(({ from }) => from);
+  const then = new Map(
+    starts.map((time) => [
+      time,
+      prices([
+        [usdc, 2],
+        [weth, 2_000],
+        [aero, 0.6],
+      ]),
+    ]),
+  );
+  nearAll(totals(movedSteps(m, mergePast(m.past, past), moves, { then })), [15, 6, 1, undefined], "then");
+  // Followed with 5M more, the newest step's pool pays half; unless the 5M was the stake's own, already there.
+  const holder: Move[] = [{ at: cuts[0]!, allocations: [{ gauge: b.gauge.address, amount: 5_000_000n * SAERO }] }];
+  const followed = (own?: Move[]) =>
+    movedSteps(m, mergePast(m.past, past), holder, { amount: 5_000_000, own })[0]!.paid!.total;
+  near(followed(), 5, "diluted");
+  near(followed(holder), 10, "its own");
   // First allocated a quarter of the way before the end of a step: that step has no answer.
   const late = [NOW - 1.5 * STEP, NOW - 2.25 * STEP];
   const q = twoPools(late);

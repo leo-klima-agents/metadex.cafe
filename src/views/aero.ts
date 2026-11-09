@@ -6,6 +6,7 @@ import {
   isThin,
   routable,
   type Gauge,
+  type Held,
   type Hours,
   type Market,
   type Paid,
@@ -205,7 +206,7 @@ function allocateWords(stake: Stake | undefined, stakes: Stake[], rows: Part[], 
   if (!stake) return [false, ""];
   const blocked = aero.blockedOf(stake, market.cooldown, now());
   if (blocked) return [false, blockedWords(blocked, stake)];
-  if (!rows.length) return [false, "Add at least one pool."];
+  if (!rows.length) return [false, "Show more pools, then give one a share."];
   const total = totalOf(rows);
   if (!whole(total)) return [false, `The shares add up to ${fraction(total / 100, true)}, not 100%.`];
   // A pool at 0% is not sent.
@@ -218,7 +219,7 @@ function allocateWords(stake: Stake | undefined, stakes: Stake[], rows: Part[], 
   if (closed)
     return [
       false,
-      `${aero.gaugeAt(market, closed.gauge)?.name ?? short(closed.gauge)} doesn't take allocations: remove it.`,
+      `${aero.gaugeAt(market, closed.gauge)?.name ?? short(closed.gauge)} doesn't take allocations: set its share to 0%.`,
     ];
   return [
     true,
@@ -277,6 +278,50 @@ function introOf({ count: top, hours, again, blueChips, incentives }: aero.Strat
 const beganOf = (market: Market): number =>
   Math.min(...market.gauges.filter((gauge) => routable(gauge) && gauge.first > 0).map(({ first }) => first));
 
+// The last result of `make`, kept while its arguments are the same values or objects.
+function lastOf<A extends unknown[], R>(make: (...args: A) => R): (...args: A) => R {
+  let last: { args: A; value: R } | undefined;
+  return (...args) => {
+    if (last && args.length === last.args.length && args.every((arg, i) => arg === last!.args[i])) return last.value;
+    last = { args, value: make(...args) };
+    return last.value;
+  };
+}
+// The record's lines, worked out again only when what they rest on changes, not on every render.
+const strategyPast = lastOf(aero.mergePast);
+const pilotPast = lastOf(aero.mergePast);
+const strategyLine = lastOf(
+  (
+    market: Market,
+    past: aero.Past,
+    count: number,
+    hours: Hours,
+    again: boolean,
+    blueChips: boolean,
+    incentives: boolean,
+    held: Held,
+  ): Paid[] => aero.strategySteps(market, past, { count, hours, again, blueChips, incentives }, held),
+);
+const averageLine = lastOf((market: Market, then: aero.Then | undefined) =>
+  aero.averageSteps(market, market.past, then),
+);
+const customLine = lastOf((market: Market, rows: Part[], held: Held) =>
+  aero.customSteps(market, market.past, holdingsOf(rows, market), held),
+);
+const pilotLine = lastOf((market: Market, found: data.AutopilotRecord | null, held: Held) =>
+  found ? aero.movedSteps(market, pilotPast(market.past, found.past), found.moves, held) : [],
+);
+const heldAs = lastOf((amount: number, then: aero.Then | undefined, own: aero.Move[] | undefined): Held => ({
+  amount,
+  then,
+  own,
+}));
+// A stake's current allocation, standing for its moves when they could not be read.
+const stillOf = lastOf((stake: Stake): aero.Move[] => [{ at: stake.lastAllocated, allocations: stake.allocations }]);
+// What the record was last drawn whole for, so that the reads a new hour starts don't blank it meanwhile.
+let recordFor: string | undefined;
+const waiting = (got: Got<unknown>): boolean => got.value === undefined && !got.failed;
+
 function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined): void {
   const market = got.value;
   const extra = andThen(got, (found) => data.pastFor(aero.timesFor(found, strategyOf(found))));
@@ -295,18 +340,33 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   });
   // Without the prices then, at today's.
   const pricing = andThen(got, () => data.pricesThen());
-  if (!market || !extra.value || (!pricing.value && !pricing.failed))
-    return void fill(aeroView, { plan: stateOf(extra.value ? {} : extra) });
-  const then = pricing.value;
-  const { hours, again, incentives } = strategyOf(market);
-  const past = aero.mergePast(market.past, extra.value);
-  const strategy = aero.strategySteps(market, past, strategyOf(market), amount, then);
-  const custom = plan.rows && aero.customSteps(market, market.past, holdingsOf(plan.rows, market), amount, then);
-  const average = aero.averageSteps(market, market.past, then);
   const record = data.autopilotRecord();
-  const pilot: Got<Paid[]> = andThen(record, (found) => ({
-    value: found ? aero.movedSteps(market, aero.mergePast(market.past, found.past), found.moves, then) : [],
-  }));
+  // The stake's own weight is already in the pools it was in, so it is not added there again.
+  const moves: Got<aero.Move[] | null> = stake ? data.stakeMoves(stake) : { value: null };
+  const shows = JSON.stringify([
+    plan.count,
+    controls.hours,
+    plan.again,
+    plan.blueChips,
+    plan.incentives,
+    amount,
+    stake && String(stake.id),
+    plan.rows,
+  ]);
+  if (recordFor === shows && [extra, pricing, record, moves].some(waiting)) return;
+  if (!market || !extra.value || waiting(pricing) || waiting(moves)) {
+    recordFor = undefined;
+    return void fill(aeroView, { plan: stateOf(extra.value ? {} : extra) });
+  }
+  const then = pricing.value;
+  const own = moves.value ?? (stake && moves.failed ? stillOf(stake) : undefined);
+  const held = heldAs(amount, then, own);
+  const { count: top, hours, again, blueChips, incentives } = strategyOf(market);
+  const past = strategyPast(market.past, extra.value);
+  const strategy = strategyLine(market, past, top, hours, again, blueChips, incentives, held);
+  const custom = plan.rows && customLine(market, plan.rows, held);
+  const average = averageLine(market, then);
+  const pilot: Got<Paid[]> = andThen(record, (found) => ({ value: pilotLine(market, found, held) }));
   const pilotName = (record.value && autopilotOf(record.value.stake)?.name) ?? AUTOPILOTS[0]!.name;
   const overall = aero.overallOf(strategy);
   // Picks need the window before them, which the pools' history on Base may not cover.
@@ -319,17 +379,18 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       ? `${history}: too recently for a pick ${RECORD_DAYS} days ago from the ${WINDOW[hours].over} before it. Pick a shorter window, or reallocate every ${hoursWords(aero.STEP)}.`
       : "No pool has enough history yet.",
   });
-  if (!overall) return;
-  // What the amount or stake would have earned a day, on average over the steps with an answer.
-  const daily = (steps: Paid[]) => {
-    const found = aero.overallOf(steps);
-    return amount > 0 && found
-      ? `${money(moneyAt((found.total * amount) / aero.PER, market.prices, !found.priced), true)} a day for ${stake ? stakeName(stake, stake.id) : wholePower(amount)}`
-      : null;
-  };
+  if (!overall) return void (recordFor = undefined);
+  const who = stake ? stakeName(stake, stake.id) : wholePower(amount);
+  // The APR, and what the amount or stake would have earned a day, over the same steps.
   const figure = (steps: Paid[]) => {
     const found = aero.aprOver(steps);
     return found ? `${aprWords(found.apr, found.priced)} APR` : "–";
+  };
+  const daily = (steps: Paid[]) => {
+    const found = aero.aprOver(steps);
+    return amount > 0 && found
+      ? `${perDay((found.total * amount) / aero.PER, found.priced, market)} a day for ${who}`
+      : null;
   };
   fill(aeroView, {
     "average-apr": figure(average),
@@ -378,7 +439,11 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
     ]
       .filter(Boolean)
       .join(" "),
+    "record-prices": then
+      ? "The last 8 days use the prices of each step"
+      : "The last 8 days use today's prices, as the prices then could not be read",
   });
+  recordFor = waiting(record) ? undefined : shows;
 }
 
 type Line = { id: string; name: string; color: string; dashed?: boolean; steps: Paid[] };
@@ -436,13 +501,20 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
   const total = totalOf(rows);
   const expected = aero.heldOver(holdingsOf(rows, market), next, amount, leaving);
   const inRows = new Set(rows.map(({ gauge }) => key(gauge)));
+  // Ranked and filtered as the strategy is.
   const pays = (gauge: Gauge) => {
     const found = next(gauge);
-    return found ? aero.totalOf(found) : -1;
+    return found ? aero.payOf(found, incentives) : -1;
   };
   const more = new Set(plan.more);
   nextPools = market.gauges
-    .filter((gauge) => routable(gauge) && !inRows.has(key(gauge.address)) && !more.has(key(gauge.address)))
+    .filter(
+      (gauge) =>
+        routable(gauge) &&
+        (!blueChips || isBlueChip(gauge)) &&
+        !inRows.has(key(gauge.address)) &&
+        !more.has(key(gauge.address)),
+    )
     .sort((a, b) => pays(b) - pays(a))
     .slice(0, MORE)
     .map(({ address }) => key(address));
@@ -669,7 +741,8 @@ export function drawStake(): void {
       ? "Too soon for a record"
       : shown(
           record,
-          ({ average }) => `fees since ${utc(stake.lastAllocated)} · Base average ${apr(average.fees, true, market!)}`,
+          ({ average }) =>
+            `fees since ${utc(stake.lastAllocated)} · Base average fees ${apr(average.fees, true, market!)}`,
         ),
     paid: !market ? undefined : paid ? `${apr(paid.value, paid.priced, market)} APR` : "Not enough history",
     "paid-note": !market

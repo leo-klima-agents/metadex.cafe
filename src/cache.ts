@@ -58,3 +58,11 @@ export function refresh(prefix: string): void {
   settled();
 }
 export const failures = (): number => [...entries.values()].filter((entry) => "error" in entry).length;
+// Forgets the settled reads whose keys start with one of `prefixes` and that were made over `age` ms ago: reads keyed by
+// a time that has moved on, which nothing asks for again.
+export function prune(prefixes: readonly string[], age: number): void {
+  const now = performance.now();
+  for (const [key, entry] of entries)
+    if (!entry.reading && now - entry.at > age && prefixes.some((prefix) => key.startsWith(prefix)))
+      entries.delete(key);
+}

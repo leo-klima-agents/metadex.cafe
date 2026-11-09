@@ -1,10 +1,10 @@
 import { getAddress, parseAbi, type Address } from "viem";
 import { rewardsAbi } from "./abi.ts";
 import { memo } from "./cache.ts";
-import { HYDX } from "./config.ts";
+import { HYDREX_PRICING, HYDX } from "./config.ts";
 import { WEEK, clean, moneyAt, type Money } from "./format.ts";
 import { automationAt, escrow, voter } from "./hydrex.ts";
-import { key, noPrices, pricesAtFlip, worthOf, type Prices, type Token } from "./prices.ts";
+import { key, noPrices, pricesAt, pricesAtFlip, worthOf, type Prices, type Token } from "./prices.ts";
 import { call, read, readEach, required, type Read } from "./rpc.ts";
 import { tokensOf } from "./tokens.ts";
 
@@ -160,11 +160,14 @@ const epochPrices = (start: number, rd: Read): Promise<Prices> =>
     const amounts = new Map<string, bigint>();
     for (const { token, amount } of rewards)
       amounts.set(key(token.address), (amounts.get(key(token.address)) ?? 0n) + amount);
-    // HYDX too, which APRs need.
     const tokens = tokensIn(rewards);
-    if (!tokens.some(({ address }) => key(address) === key(HYDX)))
-      tokens.push({ address: HYDX, decimals: 18, symbol: "HYDX" });
-    return pricesAtFlip(tokens, amounts, start + WEEK, rd);
+    if (tokens.some(({ address }) => key(address) === key(HYDX)))
+      return pricesAtFlip(tokens, amounts, start + WEEK, rd);
+    // HYDX too, which APRs need; but if a pool could not be read, the rewards are priced again without it, so that
+    // HYDX alone fails only the APRs.
+    const hydx: Token = { address: HYDX, decimals: 18, symbol: "HYDX" };
+    const all = await pricesAt([...tokens, hydx], amounts, start + WEEK, rd, HYDREX_PRICING);
+    return all.unread ? pricesAtFlip(tokens, amounts, start + WEEK, rd) : all;
   });
 const priced = async (start: number, votes: bigint, pools: Pool[], rewards: Reward[], rd: Read): Promise<Earnings> => ({
   start,

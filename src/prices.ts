@@ -14,19 +14,7 @@ import { memo } from "./cache.ts";
 import * as config from "./config.ts";
 import type { Anchor, Exchange, ExchangeKind, Fiat, PricedKind } from "./config.ts";
 import { figure, money, moneyAt, type Basis, type Money, type Rates } from "./format.ts";
-import {
-  SETTLED,
-  blockNumber,
-  blockTime,
-  call,
-  firstBlockAt,
-  read,
-  required,
-  same,
-  timeAt,
-  type Call,
-  type Read,
-} from "./rpc.ts";
+import { SETTLED, blockClock, blockTime, call, firstBlockAt, read, same, type Call, type Read } from "./rpc.ts";
 
 export type Token = { address: Address; decimals: number; symbol: string };
 // Prices per whole token, keyed by lower-case address. `unread` if some pools could not be read, so some tokens may
@@ -564,16 +552,10 @@ export async function pricesFrom(
 // The 30 minutes up to `time`, or up to the newest block if earlier, ending at least `SETTLED` blocks back, and the
 // anchors' and currencies' feeds at its end. With `early`, the search for its first block starts at once.
 async function fedAt(time: number, early: boolean, rd: Read): Promise<{ window: Window; prices: Prices }> {
-  const [newest, newestTime] = required(await rd([blockNumber, blockTime])).map(Number) as [number, number];
-  const top = newest - SETTLED;
   // Both ends are searched for down from `top`, at first at the pace from it to the newest block, and share the blocks
   // they read.
-  const times = new Map<number, Promise<number>>();
-  const timeOf = (block: number): Promise<number> => {
-    const known = times.get(block) ?? timeAt(block, rd);
-    times.set(block, known);
-    return known;
-  };
+  const { newest, newestTime, timeOf } = await blockClock(rd);
+  const top = newest - SETTLED;
   const lastBlockAt = async (at: number): Promise<number> => {
     const topTime = await timeOf(top);
     if (at >= topTime) return top;

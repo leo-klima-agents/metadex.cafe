@@ -315,6 +315,20 @@ test("prices at another time come from the pools that priced each token, without
   );
 });
 
+test("prices at another time price an anchor without a feed from its pool first, then the tokens against it", async () => {
+  // EURC at 1.15 USDC, and TOKEN at 2 EURC, with no feed for EURC.
+  const pools: Fake[] = [
+    { exchange: HYDREX, token: EURC_TOKEN, now: [10_000, 11_500] },
+    { exchange: HYDREX, token: TOKEN, anchor: EURC, now: [5_000, 10_000] },
+  ];
+  const answers = new Map([[USDC, USDC_USD]]);
+  const { sources } = await pricesAt([TOKEN], new Map(), Infinity, market(pools, answers).reader);
+  forget();
+  const then = await pricesFrom(sources!, new Map(), NOW - 2 * 86_400, market(pools, answers).reader);
+  close(then.of.get(EURC.toLowerCase())!, 1.15 * USDC_USD);
+  close(then.of.get(TOKEN.address)!, 2 * 1.15 * USDC_USD);
+});
+
 test("an epoch's prices come from Hydrex's pools only; current ones from all", async () => {
   // 15,000 USDC deep at 3 in Aerodrome, 8,000 at 4 in Hydrex Classic.
   const pools: Fake[] = [

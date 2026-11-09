@@ -247,13 +247,15 @@ export function drawHydrex(): void {
   };
   const holdings = data.accounts();
   const found = holdings.value && data.payouts(holdings.value).value;
+  const average = data.average().value;
   fill(hydrexView, {
     checks: failed.size
       ? frag(...[...failed].map((id) => Object.assign(document.createElement("p"), { textContent: reasons[id] })))
       : null,
     underway: found && underWay(found) ? "Payout under way." : null,
     average: shown(data.average(), (all) => aprWords(aprOf(all))),
-    "average-aside": data.average().value && aprOf(data.average().value!) === undefined ? null : true,
+    // Only beside an APR, not "Loading…", "Not read" or "No price for HYDX".
+    "average-aside": average && aprOf(average) !== undefined ? true : null,
     own: shown(holdings, ownWords),
     epoch: state.connection ? epochWords() : null,
     accounts: stateOf(holdings, !holdings.value?.accounts.some(({ amount }) => amount > 0n)),

@@ -62,6 +62,17 @@ export const SETTLED = 5;
 
 export const timeAt = async (block: number, rd: Read = read): Promise<number> =>
   Number(required(await rd([blockTime], { block }))[0]);
+// The newest block and its time, and the time of any other, each asked for once: what `firstBlockAt` searches with.
+export async function blockClock(rd: Read = read) {
+  const [newest, newestTime] = required(await rd([blockNumber, blockTime])).map(Number) as [number, number];
+  const times = new Map<number, Promise<number>>();
+  const timeOf = (block: number): Promise<number> => {
+    const known = times.get(block) ?? timeAt(block, rd);
+    times.set(block, known);
+    return known;
+  };
+  return { newest, newestTime, timeOf };
+}
 
 // The first block whose time is at least `time`, at or below `top`, which must be at or after it. The first five
 // guesses interpolate between the closest blocks read so far or, until one before `time` is read, follow the pace of
