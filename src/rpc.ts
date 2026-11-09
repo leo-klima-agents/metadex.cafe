@@ -57,8 +57,12 @@ export const blockNumber = call(
   "getBlockNumber",
 );
 
-// The newest `SETTLED` blocks, 10 seconds of them, are skipped, since an RPC a little behind may not have them yet.
-export const SETTLED = 50;
+// The newest block that every RPC should have: 10 seconds of blocks are skipped, since an RPC a little behind may not
+// have them yet. That's 50 blocks since Denim and 5 before, as `schedule` paces them.
+export function settledBelow(newest: number, schedule: Schedule = BLOCK_SCHEDULE): number {
+  const ms = schedule.findLast((each) => each.block <= newest)?.ms ?? 2_000;
+  return newest - Math.ceil(10_000 / ms);
+}
 
 export const timeAt = async (block: number, rd: Read = read): Promise<number> =>
   Number(required(await rd([blockTime], { block }))[0]);

@@ -14,7 +14,7 @@ import { memo } from "./cache.ts";
 import * as config from "./config.ts";
 import type { Anchor, Exchange, ExchangeKind, Fiat, PricedKind } from "./config.ts";
 import { figure, money, moneyAt, type Basis, type Money, type Rates } from "./format.ts";
-import { SETTLED, blockClock, blockTime, call, firstBlockAt, read, same, type Call, type Read } from "./rpc.ts";
+import { blockClock, blockTime, call, firstBlockAt, read, same, settledBelow, type Call, type Read } from "./rpc.ts";
 
 export type Token = { address: Address; decimals: number; symbol: string };
 // Prices per whole token, keyed by lower-case address. `unread` if some pools could not be read, so some tokens may
@@ -496,7 +496,7 @@ export function forget(): void {
 }
 
 // Prices per whole token over the 30 minutes up to `time`, or up to the newest block if earlier, ending at least
-// `SETTLED` blocks back. Anchors take their Chainlink feeds' answers and fiat feeds give each currency's rate; with no
+// `settledBelow` it. Anchors take their Chainlink feeds' answers and fiat feeds give each currency's rate; with no
 // anchor feed, prices are in USDC, at 1. Pools then price the anchors without a feed, then the other tokens. `amounts`,
 // how much of each token will be priced, may be a promise: pools are read meanwhile and judged once it is known.
 // `tiers` are searched in order, each only for what those before left unpriced.
@@ -549,13 +549,13 @@ export async function pricesFrom(
   }
   return prices;
 }
-// The 30 minutes up to `time`, or up to the newest block if earlier, ending at least `SETTLED` blocks back, and the
+// The 30 minutes up to `time`, or up to the newest block if earlier, ending at least `settledBelow` it, and the
 // anchors' and currencies' feeds at its end. With `early`, the search for its first block starts at once.
 async function fedAt(time: number, early: boolean, rd: Read): Promise<{ window: Window; prices: Prices }> {
   // Both ends are searched for down from `top`, at first at the pace from it to the newest block, and share the blocks
   // they read.
   const { newest, newestTime, timeOf } = await blockClock(rd);
-  const top = newest - SETTLED;
+  const top = settledBelow(newest);
   const lastBlockAt = async (at: number): Promise<number> => {
     const topTime = await timeOf(top);
     if (at >= topTime) return top;

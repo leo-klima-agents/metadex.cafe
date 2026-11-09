@@ -20,6 +20,7 @@ import {
   read,
   rpc,
   scheduled,
+  settledBelow,
   showTags,
   simulate,
   timeoutFor,
@@ -122,6 +123,14 @@ test("with five blocks a second and no schedule, or a wrong one, a search takes 
       }
     }
   }
+});
+
+test("10 seconds of blocks are skipped as unsettled: 50 since Denim, 5 before", () => {
+  assert.deepEqual(
+    [NEWEST, DENIM, DENIM - 1, 52_694_000].map((block) => block - settledBelow(block, BLOCK_SCHEDULE)),
+    [50, 50, 5, 5],
+  );
+  assert.equal(settledBelow(100, []), 95);
 });
 
 test("waiting for an answer asks every 0.2 s for 10 s, then every 2 s, for up to 10 minutes", async (t) => {

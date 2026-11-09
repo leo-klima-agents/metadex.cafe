@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import { zeroAddress, type Address } from "viem";
-import { SETTLED, same, type Call, type Read } from "../src/rpc.ts";
+import { same, settledBelow, type Call, type Read } from "../src/rpc.ts";
 import {
   ANCHORS,
   FIAT_FEEDS,
@@ -79,7 +79,9 @@ const NOW = 1_792_800_000;
 // the one priced.
 const PACE = 7;
 const PRICED = 60_000_000;
-const NEWEST = PRICED + SETTLED;
+// Ten seconds of Denim's blocks.
+const NEWEST = PRICED + 50;
+test("the fake chain's newest settled block is the one priced", () => assert.equal(settledBelow(NEWEST), PRICED));
 const timeOf = (block: number) => NOW + (block - PRICED) * PACE;
 const blockOf = (time: number) => PRICED + Math.floor((time - NOW) / PACE);
 const START = blockOf(timeOf(NEWEST) - WINDOW);

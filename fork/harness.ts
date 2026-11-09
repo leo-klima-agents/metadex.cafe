@@ -36,6 +36,7 @@ import {
 import { DOUBLE_ESPRESSO, MATCHA_LATTE, MATCHA_LATTE_ADMIN, RPCS, VOTER, VOTING_ESCROW } from "../src/config.ts";
 import { WEEK, weekStart } from "../src/format.ts";
 import { lastEpoch, votesEarned, type Reward } from "../src/rewards.ts";
+import { settledBelow } from "../src/rpc.ts";
 import { SAFE_ORIGIN } from "../src/wallet.ts";
 import { runsCalls } from "./rpc-cache.ts";
 
@@ -180,8 +181,12 @@ export async function expectApprovals(ids: bigint[], delegate: Address, claimer:
       `#${id}`,
     );
 }
-// The page reads a few blocks behind the latest, so mine a few to let it see the last transactions.
-export const settle = () => anvil.mine({ blocks: 6 });
+// The page reads a few blocks behind the latest (`settledBelow`), so mine as many and one more to let it see the last
+// transactions.
+export async function settle(): Promise<void> {
+  const newest = Number(await anvil.getBlockNumber());
+  await anvil.mine({ blocks: newest - settledBelow(newest) + 1 });
+}
 
 // Moves Hydrex on to the current epoch, as anyone may once the epoch has flipped. What the previous epoch earned is
 // then final.

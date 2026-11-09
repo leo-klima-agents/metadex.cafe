@@ -8,7 +8,6 @@ import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { key, quotesOf, worthOf, type Prices } from "./prices.ts";
 import { rewardsFor, tokensIn, type Earnings, type Reward } from "./rewards.ts";
 import {
-  SETTLED,
   blockNumber,
   blockTime,
   call,
@@ -19,6 +18,7 @@ import {
   required,
   rpc,
   same,
+  settledBelow,
   tagged,
   timeAt,
 } from "./rpc.ts";
@@ -580,7 +580,7 @@ export async function readPayouts(
   if (!members.length) return { epochStart, entries: [] };
   const ids = members.map(({ account }) => account.id);
   const newest = required(await read([blockNumber, blockTime], { tag: "payouts" })).map(Number) as [number, number];
-  const top = newest[0] - SETTLED;
+  const top = settledBelow(newest[0]);
   const at = { block: top, tag: "payouts" } as const;
   const [[time], held] = await Promise.all([
     read([blockTime], at).then(required),
