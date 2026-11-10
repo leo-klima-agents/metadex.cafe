@@ -16,7 +16,9 @@ import {
   type Route,
 } from "playwright-core";
 import {
+  BaseError,
   concat,
+  ContractFunctionRevertedError,
   createPublicClient,
   encodeFunctionData,
   getAddress,
@@ -25,6 +27,7 @@ import {
   hexToBytes,
   http,
   keccak256,
+  pad,
   parseAbi,
   testActions,
   toHex,
@@ -211,6 +214,29 @@ export async function incentive(pool: Address, token: Address, amount: bigint): 
   const bribe = await at(VOTER).read.external_bribes([await at(VOTER).read.gauges([pool])]);
   await mined(HOLDER, token, encodeFunctionData({ abi, functionName: "approve", args: [bribe, amount] }));
   await mined(HOLDER, bribe, encodeFunctionData({ abi, functionName: "notifyRewardAmount", args: [token, amount] }));
+}
+
+const feedAbi = parseAbi([
+  "function pricedTokens(uint256) view returns (address token, address feed, uint256 maxAge, uint256 mul, uint256 div)",
+  "function latestRoundData() view returns (uint80, int256, uint256, uint256, uint80)",
+]);
+// Double Espresso values a vote only with feeds updated within their maxAge, but on a fork moved on days, nothing
+// updates them. This keeps each of its feeds at its last answer, as if updated in every block: their code becomes one
+// that answers any call with (1, answer, now, now, 1).
+export async function freshenFeeds(): Promise<void> {
+  for (let i = 0n; ; i++) {
+    const priced = await anvil
+      .readContract({ address: DOUBLE_ESPRESSO.address, abi: feedAbi, functionName: "pricedTokens", args: [i] })
+      .catch((error: unknown) => {
+        if (error instanceof BaseError && error.walk((cause) => cause instanceof ContractFunctionRevertedError)) return;
+        throw error;
+      });
+    if (!priced) return;
+    const [, feed] = priced;
+    const [, answer] = await anvil.readContract({ address: feed, abi: feedAbi, functionName: "latestRoundData" });
+    const bytecode = concat(["0x60015f527f", pad(toHex(answer)), "0x6020524260405242606052600160805260a05ff3"]);
+    await anvil.setCode({ address: feed, bytecode });
+  }
 }
 
 // Deploys Double Espresso at the address the page expects, for forks of blocks before its deployment on Base.
