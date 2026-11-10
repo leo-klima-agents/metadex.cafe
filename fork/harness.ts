@@ -41,22 +41,26 @@ import { SAFE_ORIGIN } from "../src/wallet.ts";
 import { runsCalls } from "./rpc-cache.ts";
 
 export const CONDUIT = MATCHA_LATTE.address;
-export const BLOCK = 52_694_000; // Fri 16 Oct 2026, 19:02 UTC
-export const FLIP = 1_792_627_200; // Thu 22 Oct 2026, 00:00 UTC, when the epoch after BLOCK's starts
-// Wed 21 Oct 2026, after the swappers' deployment.
-export const RECENT = 52_904_000;
+export const BLOCK = 55_388_000; // Mon 9 Nov 2026, 23:46 UTC, after Base Denim made five blocks a second
+export const FLIP = 1_794_441_600; // Thu 12 Nov 2026, 00:00 UTC, when the epoch after BLOCK's starts
+// Matcha Latte paid every account up to Thu 5 Nov, before Denim, so no block since holds a payout late, with rewards
+// left to claim. The tests of one keep to blocks before Denim that do, until a block after it does: Fri 16 Oct 2026,
+// 19:02 UTC, with #82774 unpaid since Thu 17 Sept, and Wed 21 Oct 2026, after the swappers' deployment, still unpaid.
+export const UNPAID = 52_694_000;
+export const UNPAID_SWAPS = 52_904_000;
 export const SITE = "https://metadex.cafe";
 const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 export const RPC_ORIGINS = RPCS.map((url) => new URL(url).origin);
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type" };
 
-// What each owner holds at `BLOCK`.
+// What each owner holds at `BLOCK`, and at the payout tests' blocks unless said.
 export const MEMBER = getAddress("0x388b2d29e7919d45b1b8f6e88b8a13a392f97b40"); // #9540 in Matcha Latte, #14485 its own
 export const NEWCOMER = getAddress("0x0208ddbc05a91e1b937e8b3140b62ef22a274c95"); // #141 its own, #42877 in Liquid Hydrex
 export const ELSEWHERE = getAddress("0x69707a120ade8239f07595165e180c61395ea655"); // #2435 in Lock Maxi, #2439 in USDC
 export const LEAVER = getAddress("0x2573264b8e690ca6b2128c113890f42198840b16"); // #53350 and #82206 in Matcha Latte
 export const ENDED = getAddress("0x2518820268e4079e90446b93020dfad7dd54e84d"); // #123351 (ended, holds HYDX), #123364
-export const PAYEE = getAddress("0x60924601e73ebc5c2bd9244c788d93e0710a6c93"); // #82774 in Matcha Latte, paid Wed 23 Sep
+export const PAYEE = getAddress("0x60924601e73ebc5c2bd9244c788d93e0710a6c93"); // #82774 in Matcha Latte
+// #82774's last payout at `UNPAID`, on Wed 23 Sept, up to Thu 17 Sept.
 export const PAID_TX = "0x0932e5a24f24e45bfd1021764d94abc1d920754c4dc17128dd89f44bd086e899";
 export const LOCK_MAXI = getAddress("0x53388a4E98Bb56F8571433F5461010Fc287929d3");
 export const STRANGER = getAddress("0x000000000000000000000000000000000000dead");
@@ -212,7 +216,7 @@ export async function incentive(pool: Address, token: Address, amount: bigint): 
 // Deploys Double Espresso at the address the page expects, for forks of blocks before its deployment on Base.
 export async function deployDoubleEspresso(): Promise<void> {
   if (await anvil.getCode({ address: DOUBLE_ESPRESSO.address })) return;
-  const { timestamp } = await anvil.getBlock({ blockNumber: BigInt(BLOCK) });
+  const { timestamp } = await anvil.getBlock();
   await anvil.setNextBlockTimestamp({ timestamp: timestamp + 60n });
   await anvil.setBalance({ address: SOMEONE, value: FOR_GAS });
   await mined(SOMEONE, CREATE2_DEPLOYER, concat([SALT, INIT_CODE]));

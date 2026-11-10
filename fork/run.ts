@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { RPCS } from "../src/config.ts";
-import { BLOCK, RECENT } from "./harness.ts";
+import { BLOCK, UNPAID, UNPAID_SWAPS } from "./harness.ts";
 import { cacheFileOf, forkUrl, serveCached, upstreamOf } from "./rpc-cache.ts";
 
 // Runs the browser test files in parallel, each with its own anvil, all forking through one cache per block and one
@@ -11,7 +11,7 @@ const args = process.argv.slice(2);
 const named = args.some((arg) => !arg.startsWith("-"));
 const upstream = upstreamOf(forkUrl(RPCS[0]!));
 const caches = await Promise.all(
-  [BLOCK, RECENT].map(async (block) => ({
+  [BLOCK, UNPAID, UNPAID_SWAPS].map(async (block) => ({
     block,
     cache: await serveCached(upstream, cacheFileOf(block), block),
   })),

@@ -3,12 +3,12 @@ import { describe, test } from "node:test";
 import { DOUBLE_ESPRESSO } from "../src/config.ts";
 import { short } from "../src/format.ts";
 import * as h from "./harness.ts";
-import { BLOCK, MEMBER, PAID_TX, PAYEE, SITE, STRANGER, connected, heading, open, row, view } from "./harness.ts";
+import { MEMBER, PAID_TX, PAYEE, SITE, STRANGER, UNPAID, connected, heading, open, row, view } from "./harness.ts";
 
 const standing = (page: h.Opened["page"]) => view(page, "account").locator("[data-list=standing] > article");
 
-describe("payouts against a fork of Base", { timeout: 1_800_000 }, () => {
-  h.fork(BLOCK, [MEMBER, PAYEE]);
+describe("payouts against a fork of Base before Denim, with a payout late", { timeout: 1_800_000 }, () => {
+  h.fork(UNPAID, [MEMBER, PAYEE]);
 
   test("an account paid late: the App marks it, and its page shows its standing and its last receipt", async () => {
     const { page, violations } = await connected({ owner: PAYEE }, { width: 390, height: 844, dark: true });
