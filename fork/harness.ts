@@ -485,7 +485,10 @@ export async function serve(route: Route, { origins, rpc, safe }: Served): Promi
       return route.fulfill({ headers: { ...CORS, "content-type": "application/json" }, body: answered });
     const reply = post(body);
     forwarding.add(reply);
-    const answer = await reply.finally(() => forwarding.delete(reply));
+    // anvil can drop a connection ("fetch failed"). The request then fails as on a flaky network, and the page asks
+    // again, rather than the rejection escaping this handler, which fails the whole test file.
+    const answer = await reply.finally(() => forwarding.delete(reply)).catch(() => undefined);
+    if (answer === undefined) return route.abort("connectionreset").catch(() => {});
     return route.fulfill({
       headers: { ...CORS, "content-type": "application/json" },
       body: rpc.rewrite?.(body, answer) ?? answer,
