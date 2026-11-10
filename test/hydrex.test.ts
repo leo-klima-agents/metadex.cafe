@@ -51,7 +51,7 @@ const group = (changes: Partial<Account>) => groupOf(account(changes), status(ch
 const inBoth = (at: Address, changes: Partial<Account> = {}) => ({ delegate: at, claimer: at, ...changes });
 const matcha = { automation: MATCHA_LATTE };
 
-// From the verified source on Sourcify, not from `src/hydrex.ts`, so a wrong ABI there fails the test.
+// From the verified source on Sourcify, not from `src/abi.ts`, so a wrong ABI there fails the test.
 const abi = parseAbi(["function setConduitApproval(address conduitAddress, uint256 tokenId, bool approve)"]);
 const approval = (id: bigint, approve: boolean, conduit: Address = CONDUIT) => ({
   to: VOTING_ESCROW,

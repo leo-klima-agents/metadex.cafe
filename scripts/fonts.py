@@ -57,7 +57,7 @@ UNICODES = [
     0xFEFF,
     0xFFFD,
 ]
-# The features the page relies on: figures that line up, the slashed zero, and fractions.
+# Number features kept in the subset, though the page's CSS asks only for tabular figures (`tnum`).
 FEATURES = ["tnum", "pnum", "lnum", "onum", "zero", "case", "frac", "numr", "dnom", "sups"]
 
 

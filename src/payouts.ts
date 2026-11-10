@@ -8,7 +8,6 @@ import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { key, quotesOf, worthOf, type Prices } from "./prices.ts";
 import { rewardsFor, tokensIn, type Earnings, type Reward } from "./rewards.ts";
 import {
-  SETTLED,
   blockNumber,
   blockTime,
   call,
@@ -19,16 +18,17 @@ import {
   required,
   rpc,
   same,
+  settledBelow,
   tagged,
   timeAt,
 } from "./rpc.ts";
 
-// For each account and token, Hydrex's reward contracts record the start of the epoch they have paid it up to. Every
-// claim sets this to the current epoch, even a claim of nothing. An epoch counts as paid once the records holding more
-// than half of its rewards' worth, at today's quotes, have moved past its end. A search through past blocks then finds
-// the last payout's block, whose logs make its receipt. Matcha Latte pays each account in one transaction, which logs
-// both the payout and the retirement. Double Espresso records each account's last claim block, and each claim logs the
-// one before.
+// For each account and token, Hydrex's reward contracts record the start of the epoch they have paid it up to; every
+// claim, even of nothing, sets it to the current epoch. An epoch counts as paid once the records holding more than half
+// its rewards' worth, at today's quotes, have moved past its end. A search through past blocks then finds the last
+// payout's block, whose logs make its receipt: Matcha Latte pays each account in one transaction that logs both the
+// payout and the retirement; Double Espresso records each account's last claim block, and each claim logs the one
+// before.
 
 // A payout takes up to half a day after each flip.
 const UNDER_WAY = 12 * 3600;
@@ -73,7 +73,7 @@ const less = (amounts: Amount[], taken: Amount[]): Amount[] =>
       amount: amount - (taken.find((each) => same(each.token, token))?.amount ?? 0n),
     }))
     .filter(({ amount }) => amount > 0n);
-// A token without a price counts for nothing.
+// A token without a price or decimals counts for nothing.
 type Decimals = Map<string, { decimals: number }>;
 export function valueAt(amounts: Amount[], decimals: Decimals, prices: Pick<Prices, "of">): number {
   return sum(
@@ -104,8 +104,9 @@ const quotesFor = (rewards: Reward[]) => quotesOf(tokensIn(rewards), tagged("pay
 const weights = (pairs: Weighed[]): number[] =>
   pairs.some(({ value }) => value > 0) ? pairs.map(({ value }) => value) : pairs.map(() => 1);
 
-// Whether claims since the epoch ended at `end` took more than half of what its rewards were worth. Half tells a payout
-// from a claim of a few small rewards, and still counts a payout that leaves some tokens out.
+// Whether claims since the epoch ended at `end` took more than half of what its rewards were worth, or more than half
+// its pairs if none has a known worth; an epoch without rewards counts as paid. Half tells a payout from a claim of a
+// few small rewards, and still counts a payout that leaves some tokens out.
 export function paidFor(pairs: Weighed[], stamps: number[], end: number): boolean {
   if (!pairs.length) return true;
   const weight = weights(pairs);
@@ -174,9 +175,9 @@ export async function readStamps(ids: bigint[], pairs: Pair[], block: number): P
     ids.map((id) => [id, required(found.flatMap(({ item, stamp }) => (item.id === id ? [stamp] : []))).map(Number)]),
   );
 }
-// `earned()` reads at most 50 epochs, starting from the account's last claim from the contract. If it never claimed
-// there, it starts from the week before the contract's first incentives, or from the account's creation if that came
-// after them, as the reward contract does. Each claim moves this window on by up to 50 epochs.
+// `earned()` reads at most 50 epochs from the account's last claim from the contract or, if it never claimed there,
+// from the account's creation if that came after the contract's first incentives, or else from the week before them, as
+// the contract does. Each claim moves this window on by up to 50 epochs.
 const WINDOW = 50 * WEEK;
 export const windowStart = (stamp: number, first: number, created: number): number =>
   stamp >= first ? stamp : created > first ? created : first - WEEK;
@@ -184,10 +185,9 @@ export const windowStart = (stamp: number, first: number, created: number): numb
 export const passesTo = (start: number, epoch: number): number =>
   epoch < start ? 1 : Math.floor((epoch - start) / WINDOW) + 1;
 
-// What each account can claim from each pair: `earned()`, plus `earnedTokenId` for each of the given `epochs` beyond
-// its 50-epoch window. Each row also carries the claim's passes and the pair's record. If the window's start cannot be
-// read, only `earned()` counts. Each `earned()` call sums up to 50 epochs and costs about a million gas, so calls go 20
-// to a batch.
+// What each account can claim from each pair: `earned()`, plus `earnedTokenId` for each of `epochs` beyond its 50-epoch
+// window, or only `earned()` if the window's start cannot be read. Each `earned()` sums up to 50 epochs and costs about
+// a million gas, so calls go 20 to a batch.
 type Owing<P> = { pair: P; amount: bigint | undefined; passes: number; stamp: number | undefined };
 export async function readOwed<P extends Pair>(
   ids: bigint[],
@@ -485,14 +485,15 @@ async function claimsAt(block: number, ids: bigint[]): Promise<ClaimLog[]> {
 }
 
 // An account in one of the page's automations, as `automation`, which it may be joining or leaving. `voter` is the
-// automation it voted with last epoch, whose pools hold its rewards and set its `standing`. Its last payout's receipt
-// is `payout` or `walk`; `note` says why there is none.
+// automation it voted with last epoch, or else `automation`, whose pools hold its rewards and set its `standing`. Its
+// last payout's receipt is `payout` or `walk`; `note`, if set, says why there is none.
 type Entry = {
   automation: Automation;
   voter: Automation;
   account: Account;
   standing?: Standing | undefined;
-  // Undefined when the voter's figures could not be read, or are not final yet, which `early` marks.
+  // Undefined when the voter's figures or the automation's payouts could not be read, or the figures are not final yet,
+  // which `early` marks.
   earnings?: Earnings | undefined;
   early: boolean;
   // It voted with the automation last epoch and the automation still holds its claims, so a payout is due.
@@ -579,7 +580,7 @@ export async function readPayouts(
   if (!members.length) return { epochStart, entries: [] };
   const ids = members.map(({ account }) => account.id);
   const newest = required(await read([blockNumber, blockTime], { tag: "payouts" })).map(Number) as [number, number];
-  const top = newest[0] - SETTLED;
+  const top = settledBelow(newest[0]);
   const at = { block: top, tag: "payouts" } as const;
   const [[time], held] = await Promise.all([
     read([blockTime], at).then(required),

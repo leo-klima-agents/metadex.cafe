@@ -29,7 +29,8 @@ test("ids are unique, every address in the page is one of its routes, and each v
 
 test("addresses are checksummed, and the page names nobody who runs it", () => {
   const source = readFileSync(new URL("../src/config.ts", import.meta.url), "utf8");
-  const addresses = source.match(/0x[0-9a-fA-F]{40}/g) ?? [];
+  // Whole addresses, not the start of a longer hex string such as a hash.
+  const addresses = source.match(/0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/g) ?? [];
   assert.ok(addresses.length > 30);
   for (const address of addresses) assert.equal(address, getAddress(address));
   assert.doesNotMatch(html, /github\.com|ldeso|léo/i);

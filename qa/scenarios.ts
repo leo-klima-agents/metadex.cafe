@@ -21,7 +21,7 @@ const ACCOUNTS: Owner[] = [
   { address: h.MEMBER, holds: "#9540 in Matcha Latte; #14485, its own" },
   { address: h.LEAVER, holds: "#53350 and #82206 in Matcha Latte" },
   { address: h.ENDED, holds: "#123351, whose lock ended; #123364" },
-  { address: h.PAYEE, holds: "93 Hydrex accounts; #82774 in Matcha Latte, its payout late" },
+  { address: h.PAYEE, holds: "93 Hydrex accounts; #82774 in Matcha Latte, paid up to Thu 5 Nov" },
 ];
 
 // Thu 22 Oct 2026, 00:00:26 UTC: Hydrex has moved on to the new epoch, and Matcha Latte's operator has not paid yet.
@@ -30,11 +30,10 @@ const PAYOUT_BLOCK = 52_918_940;
 export const SCENARIOS: Scenario[] = [
   {
     name: "hydrex",
-    title: "Fri 16 Oct 2026, Double Espresso deployed: both automations, those that stopped, accounts in or out",
+    title: "Mon 9 Nov 2026, after Base Denim: both automations, those that stopped, accounts in or out",
     block: h.BLOCK,
     hash: "#hydrex",
     owners: ACCOUNTS,
-    setup: h.deployDoubleEspresso,
   },
   {
     name: "fee",
@@ -42,32 +41,33 @@ export const SCENARIOS: Scenario[] = [
     block: h.BLOCK,
     hash: "#hydrex/matcha-latte",
     owners: ACCOUNTS,
-    setup: () => h.deployDoubleEspresso().then(() => h.setMatchaLatteFee(100n)),
+    setup: () => h.setMatchaLatteFee(100n),
   },
   {
     name: "double-espresso",
-    title: "As hydrex, with #82774 in Double Espresso, claimed by two strangers",
-    block: h.BLOCK,
+    title:
+      "Fri 16 Oct 2026, before Denim, #82774 unpaid since Thu 17 Sept: in Double Espresso, claimed by two strangers",
+    block: h.UNPAID,
     hash: "#hydrex/double-espresso",
     owners: [...ACCOUNTS.slice(0, -1), { address: h.PAYEE, holds: "93 Hydrex accounts; #82774 in Double Espresso" }],
     setup: h.doubleEspressoReceipts,
   },
   {
     name: "swap",
-    title: "Wed 21 Oct 2026, after the swappers' deployment: a wallet with three tokens to swap",
-    block: h.RECENT,
+    title: "Mon 9 Nov 2026, after Base Denim: a wallet with three tokens to swap",
+    block: h.BLOCK,
     hash: "#swap",
     owners: [
       { address: h.SELLER, holds: "WETH, ZORA and AVNT, from Matcha Latte's fee recipient" },
       { address: h.HOLDER, holds: "Matcha Latte's fee recipient, a Safe with many tokens" },
-      { address: h.PAYEE, holds: "93 Hydrex accounts; #82774 in Matcha Latte, its payout late" },
+      ACCOUNTS.at(-1)!,
     ],
     setup: () => h.fund([WETH, h.ZORA, h.AVNT]),
   },
   {
     name: "claim",
-    title: "Wed 21 Oct 2026: #82774 in Double Espresso, its payout overdue, to claim as it is or swapped",
-    block: h.RECENT,
+    title: "Wed 21 Oct 2026, before Denim: #82774 in Double Espresso, its payout overdue, to claim as it is or swapped",
+    block: h.UNPAID_SWAPS,
     hash: "#app",
     owners: [{ address: h.PAYEE, holds: "93 Hydrex accounts; #82774 in Double Espresso, its payout overdue" }],
     setup: () => h.approveConduit(h.PAYEE, DOUBLE_ESPRESSO.address, 82774n).then(h.settle),

@@ -126,8 +126,8 @@ export function split<T extends { hops: Hop[] }>(routes: T[]): T[][] {
 export const feeOf = (out: bigint): bigint => (out * FEE_BPS) / 10_000n;
 export const paidOf = (out: bigint): bigint => out - feeOf(out);
 export const minimumOf = (out: bigint, marginBps: bigint): bigint => (paidOf(out) * (10_000n - marginBps)) / 10_000n;
-// Scales a route down to `amount`, as when a claim brings less than `expected`; its quote and minimum shrink in
-// proportion.
+// Sets a route's amount to what a claim brought. When that is less than `expected`, its quote and minimum shrink in
+// proportion; otherwise they stay as they were.
 export function partOf<T extends { route: Route; out: bigint }>(item: T, amount: bigint, expected: bigint): T {
   if (amount >= expected) return { ...item, route: { ...item.route, amount } };
   const share = (value: bigint) => (value * amount) / expected;
@@ -301,7 +301,8 @@ export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Sli
     ],
   };
 }
-// Calls `swap` with `skipFailed`, so a route under its minimum is skipped and its token stays in the wallet.
+// Calls `swap` with `skipFailed`, so a route that fails, as one under its minimum does, is skipped and its token stays
+// in the wallet.
 export function swapSlip(
   swapper: Swapper,
   routes: Route[],
@@ -337,13 +338,18 @@ export function swapSlip(
         ),
       })),
       { label: "Deadline", code: String(deadline), description: utc(Number(deadline)) },
-      { label: "Skip failed", code: "true", description: "A route under its minimum is skipped." },
+      {
+        label: "Skip failed",
+        code: "true",
+        description: "A route that fails, as one under its minimum does, is skipped.",
+      },
     ],
   };
 }
 
-// A swap to review. Each item is a route, or one part of a token's route. Each token gets one exact approval covering
-// all its parts; `approve` sets its amount when the allowance is not yet known, as after a claim.
+// A swap to review. Each item is a route, or one part of a token's route. A token whose allowance falls short of all
+// its parts gets one exact approval for them; `approve` sets that amount, and forces the approval, when the allowance
+// is not yet known, as after a claim.
 export type Item = { token: Token; route: Route; out: bigint; allowance: bigint; approve?: bigint | undefined };
 export type Plan = { swapper: Swapper; items: Item[]; margin: bigint };
 type Steps = { approvals: Slip[]; swaps: Route[][]; slips: Slip[] };

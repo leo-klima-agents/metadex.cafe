@@ -3,12 +3,12 @@ import { describe, test } from "node:test";
 import { DOUBLE_ESPRESSO } from "../src/config.ts";
 import { short } from "../src/format.ts";
 import * as h from "./harness.ts";
-import { BLOCK, MEMBER, PAID_TX, PAYEE, SITE, STRANGER, connected, heading, open, row, view } from "./harness.ts";
+import { MEMBER, PAID_TX, PAYEE, SITE, STRANGER, UNPAID, connected, heading, open, row, view } from "./harness.ts";
 
 const standing = (page: h.Opened["page"]) => view(page, "account").locator("[data-list=standing] > article");
 
-describe("payouts against a fork of Base", { timeout: 1_800_000 }, () => {
-  h.fork(BLOCK, [MEMBER, PAYEE]);
+describe("payouts against a fork of Base before Denim, with a payout late", { timeout: 1_800_000 }, () => {
+  h.fork(UNPAID, [MEMBER, PAYEE]);
 
   test("an account paid late: the App marks it, and its page shows its standing and its last receipt", async () => {
     const { page, violations } = await connected({ owner: PAYEE }, { width: 390, height: 844, dark: true });
@@ -17,7 +17,7 @@ describe("payouts against a fork of Base", { timeout: 1_800_000 }, () => {
     await heading(page, "Hydrex account #82774").waitFor();
     const article = standing(page);
     await article.getByText(/^Late · paid up to Thu,? 17 Sept?, 00:00 UTC$/).waitFor();
-    await article.getByText(/^(At least )?≈\s\$\d[\d,.]* in \d+ tokens waiting$/).waitFor();
+    await article.getByText(/^(At least )?\$\d[\d,.]* in \d+ tokens waiting$/).waitFor();
     const bill = article.locator("article.Slip");
     await bill.getByText("Receipt · Account #82774 · Matcha Latte").waitFor();
     const text = await bill.innerText();
@@ -37,10 +37,7 @@ describe("payouts against a fork of Base", { timeout: 1_800_000 }, () => {
       await bill.getByRole("link", { name: "Transaction" }).getAttribute("href"),
       `https://basescan.org/tx/${PAID_TX}`,
     );
-    await bill
-      .getByText(/^≈\s\$\d/)
-      .first()
-      .waitFor();
+    await bill.getByText(/^\$\d/).first().waitFor();
     await h.shoot(page, "receipt-390-dark");
     const other = await open(false, { url: `${SITE}/#hydrex/9540` });
     await standing(other.page)

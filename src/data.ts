@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 import * as aero from "./aero.ts";
-import { memo, andThen, use, type Got } from "./cache.ts";
+import { memo, andThen, prune, use, type Got } from "./cache.ts";
 import { checks } from "./checks.ts";
 import { AUTOMATIONS, AUTOPILOTS, type Automation } from "./config.ts";
 import { WEEK, weekStart, type Money } from "./format.ts";
@@ -16,11 +16,12 @@ import {
   type Earnings,
   type Stake,
 } from "./rewards.ts";
-import { now, tagged } from "./rpc.ts";
+import { pricesFrom } from "./prices.ts";
+import { now, same, tagged } from "./rpc.ts";
 import { state } from "./state.ts";
 
-// What the views show from Base, each read once and cached. Keys name the wallet and the epoch, so nothing read for
-// another wallet is shown, and reads of an epoch that has ended are made again.
+// What the views show from Base, cached by key. Keys name the wallet and the epoch, so nothing read for another wallet
+// is shown, and reads of an epoch that has ended are made again.
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const week = (): number => weekStart(now());
@@ -91,12 +92,40 @@ export function payouts(holdings: Holdings): Got<Payouts> {
   );
 }
 
-// Aero's reads last five minutes, and its universe as `universeReads` says.
+// Aero's reads of the present last five minutes, and its universe as `universeReads` says.
 const MARKET = "aero market";
 const universes = aero.universeReads(() => aero.readUniverse(tagged("aero")));
 const universe = () => memo("aero universe", universes.read, universes.ttl);
-const readAero = () => aero.readMarket(universe(), tagged("aero"));
-export const market = (): Got<aero.Market> => use(MARKET, readAero, 5 * MINUTE);
+// A short, stable name for a list of addresses in a key: its length and a 53-bit hash of it.
+function digest(list: readonly string[]): string {
+  let [h1, h2] = [0xdeadbeef, 0x41c6ce57];
+  for (const item of list)
+    for (const c of `${item},`) {
+      h1 = Math.imul(h1 ^ c.charCodeAt(0), 2654435761);
+      h2 = Math.imul(h2 ^ c.charCodeAt(0), 1597334677);
+    }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return `${list.length}:${(4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)}`;
+}
+// Snapshots on the grid's whole hours never change, so each set is read once, unless some could not be.
+const startsOf: aero.StartsOf = (rewards, times) =>
+  memo(
+    `aero starts ${times.join()} ${digest(rewards)}`,
+    () => aero.startsAt(rewards, times.map(BigInt), tagged("aero")),
+    (found: aero.Start[]) => (found.some(aero.unreadStart) ? 0 : Infinity),
+  );
+const readAero = () => aero.readMarket(universe(), tagged("aero"), startsOf);
+// Reads keyed by the grid's hour, forgotten once newer hours have replaced them.
+const HOURLY = ["aero starts ", "aero past ", "aero prices ", "aero autopilot ", "aero moves "];
+let pruned = 0;
+export const market = (): Got<aero.Market> => {
+  if (performance.now() - pruned > 10 * MINUTE) {
+    pruned = performance.now();
+    prune(HOURLY, 2 * HOUR);
+  }
+  return use(MARKET, readAero, 5 * MINUTE);
+};
 const marketRead = (): Promise<aero.Market> => memo(MARKET, readAero, 5 * MINUTE);
 export const ownStakes = (): Got<aero.Stake[]> => {
   const address = owner();
@@ -111,6 +140,63 @@ export const autopilots = (): Got<aero.Stake[]> =>
         tagged("aero"),
       ),
     5 * MINUTE,
+  );
+// Prices at the record's step starts, from the pools that price each token now. The grid's times are on the hour, so
+// they are kept, unless some pools could not be read.
+export const pricesThen = (): Got<aero.Then> =>
+  andThen(market(), (found) => {
+    const times = aero.stepsOf(found).map(({ from }) => from);
+    const sources = found.prices.sources ?? new Map();
+    const amounts = aero.dayOf(found.gauges, found.time);
+    return use(
+      `aero prices ${times.join()}`,
+      async () =>
+        new Map(
+          await Promise.all(
+            times.map(async (time) => [time, await pricesFrom(sources, amounts, time, tagged("aero"))] as const),
+          ),
+        ),
+      (then: aero.Then) => ([...then.values()].some(({ unread }) => unread) ? 5 * MINUTE : Infinity),
+    );
+  });
+// Snapshots beyond the grid's, which a longer window needs, read when it is chosen; read again in five minutes if some
+// could not be.
+const unreadIn = (past: aero.Past): boolean =>
+  [...past.starts.values()].some((starts) => starts.some((start) => start && aero.unreadStart(start)));
+export function pastFor(times: number[]): Got<aero.Past> {
+  if (!times.length) return { value: { times: [], starts: new Map() } };
+  return andThen(market(), (found) => {
+    const rewards = found.gauges.map((gauge) => gauge.rewards);
+    return use(
+      `aero past ${times.join()} ${digest(rewards)}`,
+      async () => aero.pastOf(rewards, times, await startsOf(rewards, times)),
+      (past: aero.Past) => (unreadIn(past) ? 5 * MINUTE : Infinity),
+    );
+  });
+}
+// A stake's moves back to the record's oldest step, read again when it moves.
+const sinceOf = (found: aero.Market): number => aero.stepsOf(found).at(-1)!.from;
+const movesSince = (stake: aero.Stake, since: number): [string, () => Promise<aero.Move[]>] => [
+  `aero moves ${stake.id} ${stake.lastAllocated} ${since}`,
+  () => aero.movesOf(stake, since, tagged("aero")),
+];
+export const stakeMoves = (stake: aero.Stake): Got<aero.Move[]> =>
+  andThen(market(), (found) => use(...movesSince(stake, sinceOf(found))));
+// The first Autopilot its Relay still owns: its moves and its pools' snapshots at each.
+export type AutopilotRecord = { stake: aero.Stake; moves: aero.Move[]; past: aero.Past };
+export const autopilotRecord = (): Got<AutopilotRecord | null> =>
+  andThen(market(), (found) =>
+    andThen(autopilots(), (stakes) => {
+      const stake = AUTOPILOTS.flatMap(({ id, relay }) =>
+        stakes.filter((each) => each.id === id && same(each.owner, relay)),
+      )[0];
+      if (!stake) return { value: null };
+      const since = sinceOf(found);
+      return use(`aero autopilot ${stake.id} ${stake.lastAllocated} ${since}`, async () => {
+        const moves = await memo(...movesSince(stake, since));
+        return { stake, moves, past: await aero.movesPast(moves, await marketRead(), since, tagged("aero")) };
+      });
+    }),
   );
 // Waits for the wallet's own stakes, so as not to read one twice.
 export function stakeShown(id: bigint): Got<aero.Stake | null> {
@@ -132,12 +218,6 @@ export const since = (time: number): Got<Map<string, aero.Start>> =>
   andThen(market(), () =>
     use(`aero since ${time}`, async () => aero.startsSince((await marketRead()).gauges, time, tagged("aero"))),
   );
-// Every pool's snapshots at each of the rule's picks over the last week or so. A pick's are read once.
-export const past = (): Got<aero.Past> =>
-  andThen(market(), (found) => {
-    const times = aero.pastTimes(found.time, found.cooldown);
-    return use(`aero past ${times.join()}`, async () => aero.readPast(await marketRead(), times, tagged("aero")));
-  });
 const HISTORY_DAYS = 14;
 export const history = (gauge: Address): Got<aero.Day[] | null> =>
   andThen(market(), (found) => {

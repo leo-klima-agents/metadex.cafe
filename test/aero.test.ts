@@ -7,6 +7,10 @@ import {
   THIN,
   WINDOWS,
   accruedFrom,
+  aprOf,
+  aprOver,
+  heldIn,
+  payOf,
   allocateCall,
   allotmentsOf,
   amountOf,
@@ -18,14 +22,13 @@ import {
   earnedBy,
   heldOver,
   marketOver,
-  overall,
-  paidIn,
   paidOver,
-  pastTimes,
+  gridOf,
+  unreadStart,
+  STEP,
   paysNext,
   per10kOf,
   picksOf,
-  recordOf,
   refusalOf,
   feesPerDay,
   isThin,
@@ -38,16 +41,30 @@ import {
   sharesOf,
   universeReads,
   stakeOf,
+  startsAt,
   stitched,
   streamPerDay,
-  totalsOf,
   meanOf,
   nameOf,
   weightOf,
   windowFees,
+  averageSteps,
+  customSteps,
+  isBlueChip,
+  mergePast,
+  movedSteps,
+  movesOf,
+  stepsOf,
+  strategySteps,
+  timesFor,
+  totalOf,
+  accrualOf,
   type Accrued,
   type Gauge,
   type Market,
+  type Move,
+  type Paid,
+  type Past,
   type Point,
   type Program,
   type Stake,
@@ -104,7 +121,7 @@ function gauge(fields: Partial<Gauge> & { perDay?: number } = {}): Gauge {
     power: 5_000_000n * SAERO,
     end: end(),
     first: NOW - 30 * DAY,
-    windows: { 24: grown(1), 48: grown(2), 168: grown(7) },
+    windows: { 48: grown(2), 96: grown(4), 192: grown(8) },
     programs: [],
     programCount: 0,
     ...rest,
@@ -118,8 +135,8 @@ const market = (gauges: Gauge[], of = PRICES): Market => ({
   prices: of,
   unread: [],
   unknown: [],
+  past: { times: [], starts: new Map() },
 });
-// Answers each call from `answer`, and records what each read asked.
 type Asked = { names: Set<string>; perBatch: number | undefined };
 function fake(answer: (call: Call) => unknown, asked: Asked[] = []): Read {
   return (async (calls: readonly Call[], options?: { perBatch?: number }) => {
@@ -138,19 +155,19 @@ test("fees per 10,000 sAERO a day come from the accumulator's growth over the ti
 });
 
 test("a pool whose power dipped pays exactly what it paid, and is thin and weighs little for it", () => {
-  // 5M sAERO at both ends, but a harmonic mean of 50k over the day: a dip to dust.
+  // 5M sAERO at both ends, but a harmonic mean of 50k over the 48 hours: a dip to dust.
   const dipped = gauge({ perDay: 1_000 });
-  dipped.windows[24] = { ...dipped.windows[24], spread: 50_000 };
-  assert.equal(feesPerDay(dipped, dipped.windows[24], PRICES)!.value, 1_000, "exactly what it paid");
-  assert.ok(isThin(dipped, 24) && !isThin(gauge(), 24));
-  assert.equal(weightOf(dipped.windows[24]), 50_000);
+  dipped.windows[48] = { ...dipped.windows[48], spread: 50_000 };
+  assert.equal(feesPerDay(dipped, dipped.windows[48], PRICES)!.value, 1_000, "exactly what it paid");
+  assert.ok(isThin(dipped, 48) && !isThin(gauge(), 48));
+  assert.equal(weightOf(dipped.windows[48]), 50_000);
   const steady = gauge({ perDay: 2 });
-  const mixed = averageOver(market([steady, dipped]), 24);
+  const mixed = averageOver(market([steady, dipped]), 48);
   assert.ok(mixed.fees > 2 && mixed.fees < 12, `the dip weighs a hundredth: ${mixed.fees}`);
   // Lower power, but not next to nothing, leaves it as it is.
   const lower = gauge();
-  lower.windows[24] = { ...lower.windows[24], spread: 2_500_000 };
-  assert.ok(!isThin(lower, 24) && weightOf(lower.windows[24]) === 2_500_000);
+  lower.windows[48] = { ...lower.windows[48], spread: 2_500_000 };
+  assert.ok(!isThin(lower, 48) && weightOf(lower.windows[48]) === 2_500_000);
   // From the accumulators: a day at 50k sAERO adds 86,400 × 1e42 / (50k × 1e18).
   const share = (86_400n * 10n ** 42n) / (50_000n * SAERO);
   const start: Start = { index: 3n, acc: [0n, 0n], ts: NOW - DAY, share: 0n, zero: 0, supply: 5_000_000n * SAERO };
@@ -169,8 +186,8 @@ test("a pool whose power dipped pays exactly what it paid, and is thin and weigh
 });
 
 test("a window counts only if the gauge's history covers most of it", () => {
-  const young = gauge({ windows: { ...gauge().windows, 168: accrued(3_000_000n, 3) } });
-  assert.equal(windowFees(young, 168, PRICES), undefined);
+  const young = gauge({ windows: { ...gauge().windows, 192: accrued(3_000_000n, 3) } });
+  assert.equal(windowFees(young, 192, PRICES), undefined);
   assert.deepEqual(windowFees(young, 48, PRICES), { value: 1, priced: true });
 });
 
@@ -276,26 +293,17 @@ const stake = (fields: Partial<Stake> = {}): Stake => ({
   ...fields,
 });
 
-test("Base's fees count each pool at its mean power, its incentives only those paid to some sAERO, and what they leave out", () => {
-  const growing = gauge({ perDay: 10 });
-  growing.windows[24] = {
-    ...growing.windows[24],
-    power: 2_000_000n * SAERO,
-    endPower: 4_000_000n * SAERO,
-    spread: 3e6,
-  };
-  const rate = (BigInt(1_000) * 10n ** 24n) / BigInt(DAY);
-  const program = { id: 1n, token: usdc, rate, start: NOW - DAY, end: NOW + DAY };
-  const empty = gauge({ perDay: 0, power: 0n, programs: [program] });
-  const paid = gauge({ programs: [program] });
-  // A pool paid only in a token without a price adds nothing, and is counted as left out, for its fees and its stream.
-  const unpriced = gauge({ token0: other, programs: [{ ...program, token: other }] });
-  const totals = totalsOf(market([growing, empty, paid, unpriced]));
-  assert.ok(Math.abs(totals.fees.value - (10 * 300 + 1 * 500)) < 1e-6, `fees ${totals.fees.value}`);
-  assert.ok(Math.abs(totals.incentives.value - 1_000) < 1e-6, `incentives ${totals.incentives.value}`);
-  assert.deepEqual([totals.fees.left, totals.incentives.left], [1, 1]);
-  assert.equal(meanOf(growing.windows[24]), 3e6);
-  assert.equal(meanOf({ ...growing.windows[24], spread: undefined }), 2e6, "else the least of either end");
+test("an APR is a year of what 10,000 sAERO earn a day, over what 10,000 AERO are worth", () => {
+  // $2 a day, a year of days, over 10,000 AERO at $0.60.
+  near(aprOf(2, PRICES)!, (2 * 365) / (10_000 * 0.6));
+  assert.equal(aprOf(2, prices([[usdc, 1]])), undefined, "without a price for AERO");
+});
+
+test("a pool's mean power is the harmonic mean of its sAERO, else the least of either end", () => {
+  const growing = gauge().windows[48];
+  const window = { ...growing, power: 2_000_000n * SAERO, endPower: 4_000_000n * SAERO, spread: 3e6 };
+  assert.equal(meanOf(window), 3e6);
+  assert.equal(meanOf({ ...window, spread: undefined }), 2e6, "else the least of either end");
 });
 
 test("a stake moves 47 hours after it last allocated, less any reduction, or now if it never did", () => {
@@ -349,7 +357,7 @@ test("a stake earns its pools' yields by its share in each, and its power on the
     ],
   );
   assert.deepEqual(
-    earnedBy(shares, (g) => g.windows[24], PRICES),
+    earnedBy(shares, (g) => g.windows[48], PRICES),
     { value: 2 + 0.25, priced: true },
   );
   assert.ok(Math.abs(paidBy(shares, m, 48)!.value - 2.25) < 1e-9);
@@ -404,6 +412,17 @@ test("what a stake can claim adds up by token, in small reads, and says when som
     functionName === "userRewardCheckpointIndex" ? 900n : functionName === "feeClaimState" ? { lastUserCp: 1n } : 0n,
   );
   assert.equal((await pendingOf([own], market([g]), behind)).get(1n)!.partial, true, "more checkpoints than walked");
+  // A pool the market could not read is not counted, and says so; the zero gauge has nothing to count.
+  const [unseen, idle] = [gauge().address, zeroAddress];
+  const both = (other: Address) =>
+    stake({
+      allocations: [
+        { gauge: g.address, amount: SAERO },
+        { gauge: other, amount: SAERO },
+      ],
+    });
+  assert.equal((await pendingOf([both(unseen)], market([g]), read)).get(1n)!.partial, true, "a pool not read");
+  assert.equal((await pendingOf([both(idle)], market([g]), read)).get(1n)!.partial, false, "the zero gauge");
 });
 
 test("pools must be deep enough for a day of what the gauges pay: the most a window paid in a day, and live streams", () => {
@@ -411,7 +430,7 @@ test("pools must be deep enough for a day of what the gauges pay: the most a win
   const steady = gauge();
   // A busier last day: 4 USDC per 10k sAERO, and 1 a day over the week.
   const busy = gauge({ perDay: 1 });
-  busy.windows[24] = accrued(4_000_000n);
+  busy.windows[48] = accrued(4_000_000n);
   const program = (rate: bigint, start: number, end: number): Program => ({ id: 1n, token: aero, rate, start, end });
   // 2 AERO a second while live, and one that ended.
   steady.programs = [program(2n * 10n ** 18n * 10n ** 18n, NOW - DAY, NOW + DAY), program(10n ** 36n, 0, NOW - 1)];
@@ -449,12 +468,14 @@ test("each gauge's windows run from its own snapshots to its own latest checkpoi
       tickSpacing: 1,
     };
   });
-  // Gauge i has power (i + 1)M, its window k starts at checkpoint 10i + 2 + k, and its latest is 10i + 9, a day old.
+  // Gauge i has power (i + 1)M, its snapshot at the grid's time k is checkpoint 10i + 2 + k, and its latest is
+  // 10i + 9, a day old.
+  const grid = gridOf(NOW);
   const n = (address: string) => listed.findIndex((each) => same(each.rewards, address));
   const power = (i: number) => BigInt(i + 1) * 1_000_000n * SAERO;
   const at = (index: bigint) => Number(index % 10n);
   const asked: Asked[] = [];
-  const read = fake(({ address, functionName, args }) => {
+  const answer = ({ address, functionName, args = [] }: Call) => {
     const i = n(address);
     switch (functionName) {
       case "getCurrentBlockTimestamp":
@@ -480,20 +501,21 @@ test("each gauge's windows run from its own snapshots to its own latest checkpoi
       case "globalCheckpointIndex":
         return BigInt(10 * i + 9);
       case "getPriorSupplyIndex":
-        return BigInt(10 * i + 2 + WINDOWS.findIndex((hours) => BigInt(NOW - hours * 3_600) === args[0]));
+        return BigInt(10 * i + 2 + grid.times.indexOf(Number(args[0])));
       case "supplyAt":
         return power(i);
       case "feeRewardPerVotingPowerAt":
         return [BigInt(100 * at(args[0] as bigint) + 7 * i), 0n, 0n, 0n];
       case "globalRewardPointHistory": {
         const index = args[0] as bigint;
-        const ts = index === 1n ? NOW - 30 * DAY : at(index) === 9 ? NOW - DAY : NOW - WINDOWS[at(index) - 2]! * 3_600;
+        const ts = index === 1n ? NOW - 30 * DAY : at(index) === 9 ? NOW - DAY : grid.times[at(index) - 2]!;
         return { bias: 0n, slope: 0n, ts, permanentStakeBalance: 0n, zeroSupplySeconds: 0 };
       }
       case "supplyAccumulatorAt":
         return [BigInt(at(args[0] as bigint)) * 10n ** 30n + BigInt(i) * 10n ** 29n, 0n];
     }
-  }, asked);
+  };
+  const read = fake(answer, asked);
   const found = await readMarket({ gauges: listed, unread: [], unknown: [] }, read);
   assert.deepEqual(found.unread, []);
   // Pricing does not wait for the gauges: it asks for the newest block before the windows' snapshots are read.
@@ -502,15 +524,48 @@ test("each gauge's windows run from its own snapshots to its own latest checkpoi
   for (const [i, gauge] of found.gauges.entries()) {
     const shared = 9n * 10n ** 30n + BigInt(i) * 10n ** 29n + (BigInt(DAY) * 10n ** 42n) / power(i);
     assert.deepEqual([gauge.end.at, gauge.end.share, gauge.end.power], [NOW, shared, power(i)], `gauge ${i}'s end`);
-    for (const [k, hours] of WINDOWS.entries()) {
+    for (const hours of WINDOWS) {
       const window = gauge.windows[hours];
+      const k = grid.times.indexOf(NOW - hours * 3_600);
       assert.deepEqual(
         [window.from, window.fees0],
         [NOW - hours * 3_600, BigInt(1_000 * (i + 1) - 100 * (k + 2) - 7 * i)],
         `gauge ${i}, ${hours} h`,
       );
     }
+    // The record's snapshots are the same reads.
+    assert.deepEqual(
+      found.past.starts.get(gauge.rewards.toLowerCase())!.map((start) => start?.index),
+      grid.record.map((time) => BigInt(10 * i + 2 + grid.times.indexOf(time))),
+    );
   }
+  assert.deepEqual(found.past.times, grid.record);
+  const snapshots = asked.filter(({ names }) => names.has("getPriorSupplyIndex")).length;
+  assert.equal(snapshots, 1, "every time's snapshots in one read");
+  // A gauge whose program count fails is left out, rather than taken to pay no incentives.
+  const uncounted = fake((call) =>
+    call.functionName === "incentiveCount" && n(call.address) === 1 ? undefined : answer(call),
+  );
+  const partly = await readMarket({ gauges: listed, unread: [], unknown: [] }, uncounted);
+  assert.deepEqual(
+    [partly.gauges.map(({ address }) => address), partly.unread],
+    [[listed[0]!.address], [listed[1]!.address]],
+  );
+});
+
+test("a snapshot whose checkpoint could not be found is unread, not one from before the first checkpoint", async () => {
+  const g = gauge();
+  const asked: Asked[] = [];
+  const read = fake(({ functionName }) => (functionName === "supplyAt" ? 5_000_000n * SAERO : undefined), asked);
+  const [start] = await startsAt([g.rewards], [BigInt(TODAY)], read);
+  assert.equal(start!.index, undefined);
+  assert.ok(unreadStart(start!), "so it is read again");
+  assert.ok(
+    !asked.some(({ names }) => names.has("feeRewardPerVotingPowerAt")),
+    "nothing read at an unknown checkpoint",
+  );
+  assert.equal(accruedFrom(start!, g.first, g.end).fees0, 0n);
+  assert.deepEqual(stitched(g, [TODAY], [start!]), [], "a pool's history stops there");
 });
 
 test("a Slipstream gauge whose tick spacing cannot be read is unread, not named CL0", async () => {
@@ -607,6 +662,27 @@ test("the rule weighs its top pools by what they pay in all, and leaves out thos
   assert.equal(picksOf(pools, 10).length, 3);
 });
 
+test("without incentives, the rule ranks and weighs its pools by their fees alone", () => {
+  const [fees, streams] = [gauge(), gauge()];
+  const flows = (value: number) => [{ token: usdc, value }];
+  const pools = [
+    { gauge: fees, paying: { fees: flows(3), incentives: [], power: 1 } },
+    { gauge: streams, paying: { fees: flows(1), incentives: flows(9), power: 1 } },
+  ];
+  const ranked = (incentives?: boolean) =>
+    picksOf(pools, 2, incentives).map(({ gauge, weight }) => [gauge.address, weight]);
+  assert.deepEqual(ranked(), [
+    [streams.address, 10 / 13],
+    [fees.address, 3 / 13],
+  ]);
+  assert.equal(payOf(pools[1]!.paying), 10, "fees and incentives");
+  assert.equal(payOf(pools[1]!.paying, false), 1, "fees alone");
+  assert.deepEqual(ranked(false), [
+    [fees.address, 0.75],
+    [streams.address, 0.25],
+  ]);
+});
+
 test("the rule over its own window earns at least the average of its pools, and less as its sAERO dilutes them", () => {
   // Same fees, but one pool has a fifth of the sAERO.
   const crowded = gauge({ perDay: 1 });
@@ -632,7 +708,8 @@ test("the rule over its own window earns at least the average of its pools, and 
     [key(quiet.address), 500_000],
   ]);
   near(heldOver(picks, lately, 1_000_000, mine)!.total, rule.total, "already in");
-  assert.deepEqual(heldOver([{ gauge: undefined, weight: 1 }], lately), undefined, "idle earns nothing");
+  assert.deepEqual(heldOver([{ gauge: undefined, weight: 1 }], lately), undefined, "no pool, no answer");
+  // Half outside the market's pools counts for nothing, and the figure is then a lower bound.
   const half = heldOver(
     [
       { gauge: undefined, weight: 0.5 },
@@ -640,82 +717,378 @@ test("the rule over its own window earns at least the average of its pools, and 
     ],
     lately,
   )!;
-  near(half.total, 2.5, "half idle earns half");
-});
-
-test("the rule's pay comes in its pools' tokens, largest first, and a token without a price says so", () => {
-  const paid = gauge({ perDay: 1, programs: [{ ...streaming(1_000, NOW - DAY, NOW + 9 * DAY), token: other }] });
-  const g = gauge({ perDay: 3 });
-  const m = market([paid, g]);
-  const picks = picksOf(
-    m.gauges.map((each) => ({ gauge: each, paying: paysNext(each, 48, m, HOLD)! })),
-    2,
+  near(half.total, 2.5, "half outside earns half");
+  assert.equal(half.priced, false, "partial");
+  // So does a pool without an answer, such as one whose snapshot could not be read; a share of 0% doesn't count.
+  const onlyQuiet = (each: Gauge) => (each === quiet ? lately(each) : undefined);
+  const both = [
+    { gauge: crowded, weight: 0.5 },
+    { gauge: quiet, weight: 0.5 },
+  ];
+  assert.equal(heldOver(both, onlyQuiet)!.priced, false, "no answer");
+  assert.equal(
+    heldOver(
+      [
+        { gauge: crowded, weight: 0 },
+        { gauge: quiet, weight: 1 },
+      ],
+      onlyQuiet,
+    )!.priced,
+    true,
+    "0%",
   );
-  const flows = paidIn(picks, 0);
-  assert.equal(flows.length, 2);
-  assert.equal(flows[0]!.token?.symbol, "USDC");
-  assert.equal(flows[1]!.value, undefined, "OTHER has no price");
 });
 
-test("the rule picks at 00:00 UTC as often as an allocation's hold allows, over at least a week", () => {
-  const times = pastTimes(NOW, HOLD);
-  assert.ok(times.every((time) => time % DAY === 0) && times[0]! <= NOW && NOW - times[0]! < 2 * DAY);
-  assert.ok(
-    times.slice(1).every((time, k) => times[k]! - time === 2 * DAY),
-    "every other day for a 47-hour hold",
+test("a stake's own weight over a span is what its moves held there on average, its sAERO on no chain left out", () => {
+  const [p, q] = [gauge(), gauge()];
+  const moves: Move[] = [
+    { at: NOW - DAY, allocations: [{ gauge: q.address, amount: 4n * SAERO }] },
+    {
+      at: NOW - 3 * DAY,
+      allocations: [
+        { gauge: p.address, amount: 2n * SAERO },
+        { gauge: zeroAddress, amount: SAERO },
+      ],
+    },
+  ];
+  // Over the last two days: P for the first, Q for the second.
+  assert.deepEqual(
+    [...heldIn(moves, { from: NOW - 2 * DAY, to: NOW })],
+    [
+      [key(p.address), 1],
+      [key(q.address), 2],
+    ],
   );
-  assert.ok(NOW - times.at(-2)! >= 7 * DAY, "the holds cover a week");
+  assert.equal(heldIn(moves, { from: NOW - 5 * DAY, to: NOW - 4 * DAY }).size, 0, "nothing before its first move");
 });
 
-test("followed, each pick comes from the hold before it, and earns what its pools paid after", () => {
-  const [t0, t1, t2] = [TODAY - DAY, TODAY - 3 * DAY, TODAY - 5 * DAY];
-  // 10,000 sAERO earn $1 for a growth of 100 × 10^6 USDC units.
-  const grown = (perDay: number, days: number) => BigInt(Math.round(perDay * days * 1e6)) * 100n;
-  const at = (index: bigint, time: number, acc: bigint): Start => ({
-    index,
+test("the windows and the record's picks lie on one grid of 48 hours, counted back from the last whole hour", () => {
+  // NOW is on the hour.
+  const { windows, record, times } = gridOf(NOW + 1_234);
+  assert.deepEqual(windows, [NOW - 48 * 3_600, NOW - 96 * 3_600, NOW - 192 * 3_600]);
+  assert.deepEqual(
+    record,
+    [1, 2, 3, 4, 5].map((k) => NOW - k * 48 * 3_600),
+  );
+  assert.deepEqual(times, record, "each window starts at one of the record's times");
+  assert.ok(STEP >= HOLD, "a pick can be followed: an allocation holds 47 hours");
+  const read: Start = { index: 3n, acc: [0n, 0n], ts: NOW, share: 0n, zero: 0, supply: 0n };
+  assert.ok(!unreadStart(read) && !unreadStart({ ...read, index: 0n, acc: undefined, ts: undefined }));
+  assert.ok(unreadStart({ ...read, acc: undefined }), "a checkpoint whose snapshot failed");
+});
+
+// A pool paying `pays` per 10,000 sAERO a day over the grid's steps, oldest first, the last ending now; with snapshots
+// at the grid's times and at `extra`.
+function history(pays: number[], extra: number[] = [], fields: Partial<Gauge> = {}, supply = 5_000_000n * SAERO) {
+  const bounds = pays.map((_, i) => NOW - (pays.length - i) * STEP);
+  const accAt = (time: number): bigint => {
+    const dollars = pays.reduce(
+      (sum, pay, i) => sum + (pay * Math.max(0, Math.min(time, bounds[i]! + STEP) - bounds[i]!)) / DAY,
+      0,
+    );
+    return BigInt(Math.round(dollars * 1e6)) * 100n;
+  };
+  const times = [...new Set([...bounds, ...extra])].sort((a, b) => b - a);
+  const g = gauge({ ...fields, power: supply, end: { ...end(supply), acc: [accAt(NOW), 0n] } });
+  const starts: Start[] = times.map((time, i) => ({
+    index: BigInt(times.length - i),
     time,
-    acc: [acc, 0n],
+    acc: [accAt(time), 0n],
     ts: time,
     share: undefined,
     zero: 0,
-    supply: 5_000_000n * SAERO,
-  });
-  // A paid well, then little; B the other way round.
-  const past = (each: [number, number, number]) => {
-    const a1 = grown(each[0], 2);
-    const a0 = a1 + grown(each[1], 2);
-    return { starts: [at(3n, t0, a0), at(2n, t1, a1), at(1n, t2, 0n)], end: a0 + grown(each[2], (NOW - t0) / DAY) };
-  };
-  const [pa, pb] = [past([1, 10, 1]), past([10, 2, 10])];
-  const a = gauge({ end: { ...end(), acc: [pa.end, 0n] } });
-  const b = gauge({ end: { ...end(), acc: [pb.end, 0n] } });
-  const m = market([a, b]);
-  const record = recordOf(
-    m,
-    {
-      times: [t0, t1, t2],
-      starts: new Map([
-        [key(a.rewards), pa.starts],
-        [key(b.rewards), pb.starts],
-      ]),
+    supply,
+  }));
+  return { gauge: g, times, starts };
+}
+type History = ReturnType<typeof history>;
+const pastOfAll = (all: History[]): Past => ({
+  times: all[0]!.times,
+  starts: new Map(all.map(({ gauge, starts }) => [key(gauge.rewards), starts])),
+});
+const only = (past: Past, times: number[]): Past => ({
+  times,
+  starts: new Map([...past.starts].map(([id, starts]) => [id, times.map((time) => starts[past.times.indexOf(time)])])),
+});
+const GRID = [1, 2, 3, 4, 5].map((k) => NOW - k * STEP);
+const meme: Token = { address: "0x00000000000000000000000000000000000000bb", decimals: 18, symbol: "MEME" };
+const MEMED = prices([
+  [usdc, 1],
+  [weth, 2_000],
+  [aero, 0.6],
+  [meme, 0.1],
+]);
+// A pays well in every other step and B in the others; only A is a blue chip. `m.past` holds the grid's snapshots,
+// `past` also those at `extra`.
+function twoPools(extra: number[] = [], more: (extra: number[]) => History[] = () => []) {
+  const a = history([1, 10, 1, 10, 1], extra);
+  const b = history([10, 1, 10, 1, 10], extra, { token1: meme });
+  const all = [a, b, ...more(extra)];
+  const past = pastOfAll(all);
+  return {
+    a,
+    b,
+    past,
+    m: {
+      ...market(
+        all.map(({ gauge }) => gauge),
+        MEMED,
+      ),
+      past: only(past, GRID),
     },
-    1,
+  };
+}
+const totals = (steps: Paid[]) => steps.map(({ paid }) => paid?.total);
+const nearAll = (found: (number | undefined)[], expected: (number | undefined)[], what: string) => {
+  assert.equal(found.length, expected.length, what);
+  found.forEach((value, i) =>
+    expected[i] === undefined
+      ? assert.equal(value, undefined, `${what} ${i}`)
+      : near(value!, expected[i]!, `${what} ${i}`),
   );
+};
+
+test("the record's steps run 48 hours each from the grid's times, the newest to now", () => {
+  const { m } = twoPools();
   assert.deepEqual(
-    record.map(({ from, to }) => [from, to]),
+    stepsOf(m).map(({ from, to }) => [(NOW - from) / STEP, (NOW - to) / STEP]),
     [
-      [t0, NOW],
-      [t1, t0],
+      [1, 0],
+      [2, 1],
+      [3, 2],
+      [4, 3],
     ],
   );
-  // At t0, A paid more since t1, so the rule holds A, which then pays $1; at t1, B, which then pays $2.
-  near(record[0]!.rule!.total, 1, "A after t0");
-  near(record[0]!.market.total, (1 + 10) / 2, "both after t0");
-  near(record[1]!.rule!.total, 2, "B after t1");
-  near(record[1]!.market.total, (10 + 2) / 2);
-  const all = overall(record)!;
-  const [first, second] = [NOW - t0, t0 - t1];
-  near(all.rule, (1 * first + 2 * second) / (first + second), "weighed by time");
+});
+
+test("with the prices then, a step is valued at the mean of its ends' prices, and a pick at its own time's", () => {
+  const { m } = twoPools();
+  const top = { count: 1, hours: 48, again: true, blueChips: false, incentives: true } as const;
+  const starts = stepsOf(m).map(({ from }) => from);
+  const at = (usdcPrice?: number) =>
+    prices([...(usdcPrice === undefined ? [] : [[usdc, usdcPrice] as [Token, number]]), [weth, 2_000], [aero, 0.6]]);
+  // USDC, in which both pools pay, at $2 at every step start and $1 now: the newest step at $1.50, the others at $2.
+  const then = new Map(starts.map((time) => [time, at(2)]));
+  nearAll(totals(strategySteps(m, m.past, top, { then })), [1.5, 2, 2, 2], "the strategy");
+  const times = (plain: Paid[], by: number[]) => totals(plain).map((value, k) => value! * by[k]!);
+  const scaled = (plain: Paid[]) => times(plain, [1.5, 2, 2, 2]);
+  nearAll(totals(averageSteps(m, m.past, then)), scaled(averageSteps(m, m.past)), "the Base average");
+  const holdings = m.gauges.map((gauge) => ({ gauge, weight: 0.5 }));
+  nearAll(totals(customSteps(m, m.past, holdings, { then })), scaled(customSteps(m, m.past, holdings)), "custom");
+  // No price for USDC when the second newest step was picked: every pool's fees were unpriced then, so nothing was
+  // picked, though the step itself is valued at its end's price.
+  then.set(starts[1]!, at());
+  nearAll(totals(strategySteps(m, m.past, top, { then })), [1.5, undefined, 2, 2], "picked then");
+  // With one end's prices missing, a step takes the other's alone; with neither, today's.
+  const one = new Map([[starts[1]!, at(2)]]);
+  nearAll(totals(averageSteps(m, m.past, one)), times(averageSteps(m, m.past), [1, 2, 2, 1]), "one end");
+  // A pricing in another unit, after its feeds failed, is left out rather than mixed in.
+  const inUsdc = new Map(starts.map((time): [number, Prices] => [time, { ...at(2), unit: "USDC" }]));
+  nearAll(totals(averageSteps(m, m.past, inUsdc)), totals(averageSteps(m, m.past)), "another unit");
+});
+
+test("an APR over steps takes each step's at its own price of AERO, weighed by its length", () => {
+  const step = (from: number, total: number | undefined, aeroPrice: number): Paid => ({
+    from,
+    to: from + STEP,
+    paid: total === undefined ? undefined : { fees: total, incentives: 0, total, priced: true },
+    prices: prices([[aero, aeroPrice]]),
+  });
+  // $1 a day for 10,000 sAERO: 7.3% a year at $0.50 an AERO, 3.65% at $1.
+  const found = aprOver([step(NOW - STEP, 1, 0.5), step(NOW - 2 * STEP, 1, 1), step(NOW - 3 * STEP, undefined, 1)]);
+  near(found!.apr, (0.073 + 0.0365) / 2, "the steps with an answer");
+  assert.equal(aprOver([step(NOW - STEP, undefined, 1)]), undefined);
+  // A step without a price for AERO has no APR, so it counts in neither the APR nor what was earned.
+  const unknown: Paid = { ...step(NOW - 2 * STEP, 9, 1), prices: prices([[usdc, 1]]) };
+  const without = aprOver([step(NOW - STEP, 1, 0.5), unknown])!;
+  near(without.apr, 0.073, "its APR");
+  near(without.total, 1, "what 10,000 sAERO earned a day, over the same steps");
+});
+
+test("a strategy picks at each step from only the window before it, and earns what its pools paid in the step", () => {
+  const { a, m } = twoPools();
+  const top = { count: 1, hours: 48, again: true, blueChips: false, incentives: true } as const;
+  // Chasing last step's best pool always lands on the one that pays $1 next.
+  nearAll(totals(strategySteps(m, m.past, top)), [1, 1, 1, 1], "again");
+  // Picked once from the 48 hours before the oldest step: B, which paid $10 then, and is kept.
+  nearAll(totals(strategySteps(m, m.past, { ...top, again: false })), [10, 1, 10, 1], "once");
+  // Of blue chips, only A.
+  nearAll(totals(strategySteps(m, m.past, { ...top, blueChips: true })), [1, 10, 1, 10], "blue chips");
+  assert.ok(isBlueChip(a.gauge) && !isBlueChip(m.gauges[1]!));
+  // 5M sAERO more halves what each earns, at 5M already there.
+  nearAll(totals(strategySteps(m, m.past, top, { amount: 5_000_000 })), [0.5, 0.5, 0.5, 0.5], "diluted");
+  // Unless the stake's own 5M was in both pools all along: it is not added again.
+  const own: Move[] = [
+    {
+      at: NOW - 30 * DAY,
+      allocations: m.gauges.map((each) => ({ gauge: each.address, amount: 5_000_000n * SAERO })),
+    },
+  ];
+  nearAll(totals(strategySteps(m, m.past, top, { amount: 5_000_000, own })), [1, 1, 1, 1], "its own weight");
+  near(aprOver(strategySteps(m, m.past, { ...top, again: false }))!.total, 5.5, "over the 8 days");
+});
+
+test("the strategy leaves out thin pools and pools paying a token without a price, as the window before each pick shows them", () => {
+  // Each would top the picks by what it pays in all: a thin pool, and one streaming a token without a price.
+  const thin = (extra: number[]) => [history([1_000, 1_000, 1_000, 1_000, 1_000], extra, {}, 100_000n * SAERO)];
+  const unpriced = (extra: number[]) => [
+    history([100, 100, 100, 100, 100], extra, {
+      programs: [{ ...streaming(1_000, NOW - 20 * DAY, NOW + DAY), token: other }],
+    }),
+  ];
+  const top = { count: 1, hours: 48, again: true, blueChips: false, incentives: true } as const;
+  for (const [more, what] of [
+    [thin, "thin"],
+    [unpriced, "unpriced"],
+  ] as const) {
+    const { m } = twoPools([], more);
+    // In the 48 hours before every pick, it paid more in all than A or B.
+    for (const { from } of stepsOf(m)) {
+      const paid = (gauge: Gauge) => totalOf(paidOver(gauge, accrualOf(gauge, m.past, from - STEP, from, m), MEMED)!);
+      assert.ok(paid(m.gauges[2]!) > Math.max(paid(m.gauges[0]!), paid(m.gauges[1]!)), `${what} pays the most`);
+    }
+    nearAll(totals(strategySteps(m, m.past, top)), [1, 1, 1, 1], `${what} left out`);
+  }
+});
+
+test("a longer window needs snapshots before the grid's, read for it alone", () => {
+  const { m, past } = twoPools([NOW - 6 * STEP]);
+  const top = { count: 1, hours: 96, again: true, blueChips: false, incentives: true } as const;
+  assert.deepEqual(timesFor(m, { ...top, hours: 48 }), [], "48 hours: the grid's own");
+  assert.deepEqual(timesFor(m, top), [NOW - 6 * STEP]);
+  assert.deepEqual(
+    timesFor(m, { ...top, hours: 192 }),
+    [6, 7, 8].map((k) => NOW - k * STEP),
+  );
+  assert.deepEqual(timesFor(m, { ...top, hours: 192, again: false }), [NOW - 8 * STEP], "once: the oldest pick's");
+  // Without them, the oldest step has no picks; with them, it does.
+  const without = totals(strategySteps(m, m.past, top));
+  assert.ok(without.slice(0, 3).every((each) => each !== undefined) && without[3] === undefined);
+  const all = mergePast(m.past, only(past, [NOW - 6 * STEP]));
+  assert.deepEqual(
+    all.times,
+    [1, 2, 3, 4, 5, 6].map((k) => NOW - k * STEP),
+  );
+  assert.ok(totals(strategySteps(m, all, top)).every((each) => each !== undefined));
+});
+
+test("custom shares are held as they are over every step", () => {
+  const { a, b, m } = twoPools();
+  const custom = customSteps(m, m.past, [
+    { gauge: a.gauge, weight: 0.5 },
+    { gauge: b.gauge, weight: 0.5 },
+  ]);
+  nearAll(totals(custom), [5.5, 5.5, 5.5, 5.5], "half in each");
+});
+
+test("the Base average is all that the pools paid in each step over all their sAERO, thin pools too", () => {
+  // A and B, at 5M sAERO each, pay $10 and $1 per 10k a day in turn.
+  const { m } = twoPools();
+  nearAll(totals(averageSteps(m, m.past)), [5.5, 5.5, 5.5, 5.5], "half of each");
+  // A thin pool of 100k sAERO paying $1,000 per 10k counts at its sAERO: (55M + 100M) / 10.1M per 10k.
+  const thin = twoPools([], (extra) => [history([1_000, 1_000, 1_000, 1_000, 1_000], extra, {}, 100_000n * SAERO)]).m;
+  nearAll(totals(averageSteps(thin, thin.past)), Array(4).fill(155 / 10.1), "thin pools count");
+  // One paid in a token without a price is left out.
+  const unpriced = twoPools([], (extra) => [history([100, 100, 100, 100, 100], extra, { token0: other })]).m;
+  nearAll(totals(averageSteps(unpriced, unpriced.past)), [5.5, 5.5, 5.5, 5.5], "unpriced left out");
+});
+
+test("an allocation as it actually moved is cut where it moved, and earns nothing before its first move", () => {
+  const cuts = [NOW - 1.5 * STEP, NOW - 2.5 * STEP];
+  const { a, b, m, past } = twoPools(cuts);
+  const moves: Move[] = [
+    { at: cuts[0]!, allocations: [{ gauge: b.gauge.address, amount: 3n * SAERO }] },
+    // Half of it on the zero gauge, which earns nothing.
+    {
+      at: cuts[1]!,
+      allocations: [
+        { gauge: a.gauge.address, amount: SAERO },
+        { gauge: zeroAddress, amount: SAERO },
+      ],
+    },
+  ];
+  // B through the newest step; A, half idle, and B in the one before; A, half idle, for half of the one before that.
+  nearAll(totals(movedSteps(m, mergePast(m.past, past), moves)), [10, (5 + 1) / 2, 0.5, undefined], "moved");
+  const record = movedSteps(m, mergePast(m.past, past), moves);
+  near(aprOver(record)!.total, (10 + 3 + 0.5) / 3, "over its steps with an answer, each weighed by its length");
+  assert.ok(
+    record.every(({ paid }) => !paid || paid.priced),
+    "its sAERO on no chain earns nothing, as it should",
+  );
+  // At the prices then: USDC at $2 at each step start and $1 now.
+  const starts = stepsOf(m).map(({ from }) => from);
+  const then = new Map(
+    starts.map((time) => [
+      time,
+      prices([
+        [usdc, 2],
+        [weth, 2_000],
+        [aero, 0.6],
+      ]),
+    ]),
+  );
+  nearAll(totals(movedSteps(m, mergePast(m.past, past), moves, { then })), [15, 6, 1, undefined], "then");
+  // Followed with 5M more, the newest step's pool pays half; unless the 5M was the stake's own, already there.
+  const holder: Move[] = [{ at: cuts[0]!, allocations: [{ gauge: b.gauge.address, amount: 5_000_000n * SAERO }] }];
+  const followed = (own?: Move[]) =>
+    movedSteps(m, mergePast(m.past, past), holder, { amount: 5_000_000, own })[0]!.paid!.total;
+  near(followed(), 5, "diluted");
+  near(followed(holder), 10, "its own");
+  // First allocated a quarter of the way before the end of a step: that step is measured over that quarter.
+  const late = [NOW - 1.5 * STEP, NOW - 2.25 * STEP];
+  const q = twoPools(late);
+  const after: Move[] = [
+    { at: late[0]!, allocations: [{ gauge: q.b.gauge.address, amount: SAERO }] },
+    { at: late[1]!, allocations: [{ gauge: q.a.gauge.address, amount: SAERO }] },
+  ];
+  nearAll(totals(movedSteps(q.m, mergePast(q.m.past, q.past), after)), [10, (10 + 1) / 2, 1, undefined], "late");
+});
+
+test("an allocation's moves are read at the block before each, back to the first at or before the record", async () => {
+  const GENESIS = NOW - 200_000_000;
+  const timeOf = (block: number) => GENESIS + 2 * block;
+  const newest = (NOW - GENESIS) / 2;
+  const [b, c] = [gauge(), gauge()];
+  const times = [NOW - 10 * 3_600, NOW - 60 * 3_600, NOW - 300 * 3_600];
+  const pools = [[b.address], [c.address, b.address], [c.address]];
+  const blocks: (number | undefined)[] = [];
+  const read = (async (calls: readonly Call[], options?: { block?: number }) => {
+    blocks.push(options?.block);
+    const time = options?.block === undefined ? NOW : timeOf(options.block);
+    const k = times.findIndex((at) => at <= time);
+    return calls.map(({ functionName }) => {
+      switch (functionName) {
+        case "getBlockNumber":
+          return BigInt(newest);
+        case "getCurrentBlockTimestamp":
+          return BigInt(time);
+        case "tokenStates":
+          return [zeroAddress, k < 0 ? 0 : times[k], false, 0n];
+        case "allocatedGauges":
+          return k < 0 ? [] : pools[k];
+        default:
+          return k < 0 ? 0n : BigInt(k + 1) * SAERO;
+      }
+    });
+  }) as Read;
+  const own = stake({ lastAllocated: times[0]!, allocations: [{ gauge: b.address, amount: SAERO }] });
+  const found = await movesOf(own, NOW - 192 * 3_600, read);
+  assert.deepEqual(found, [
+    { at: times[0], allocations: own.allocations },
+    {
+      at: times[1],
+      allocations: [
+        { gauge: c.address, amount: 2n * SAERO },
+        { gauge: b.address, amount: 2n * SAERO },
+      ],
+    },
+    { at: times[2], allocations: [{ gauge: c.address, amount: 3n * SAERO }] },
+  ]);
+  assert.ok(
+    blocks.some((block) => block !== undefined && timeOf(block) < times[0]! && timeOf(block + 1) >= times[0]!),
+    "the block just before the newest move",
+  );
+  assert.equal((await movesOf(own, 0, read, 2)).length, 2, "at most `most` of them");
 });
 
 test("an allocation splits a stake's sAERO on Base to the wei, its gauges ascending, and leaves out what rounds to nothing", () => {

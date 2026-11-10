@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { memo, refresh, retry, use } from "../src/cache.ts";
+import { memo, prune, refresh, retry, use } from "../src/cache.ts";
 
 const tick = () => new Promise((done) => setTimeout(done, 0));
 
@@ -51,4 +51,19 @@ test("a read given no time to live keeps its key's; one that fails again is fail
   refresh("e");
   await memo("e", flaky);
   assert.deepEqual(use("e", flaky, 1e9), { value: "ok" });
+});
+
+test("pruning forgets the settled reads of a prefix made long enough ago, and nothing else", async () => {
+  let n = 0;
+  const read = async () => ++n;
+  await Promise.all([memo("hour old", read), memo("hour new", read), memo("kept", read)]);
+  void memo("hour slow", () => new Promise<number>(() => {}));
+  prune(["hour "], -1);
+  assert.deepEqual(use("kept", read), { value: 3 }, "another prefix");
+  assert.deepEqual(use("hour new", read), {}, "read again");
+  assert.equal(n, 4);
+  void memo("hour slow", read);
+  assert.equal(n, 4, "one under way is left alone");
+  prune(["hour "], 60_000);
+  assert.deepEqual(use("hour new", read), {}, "a recent one too");
 });

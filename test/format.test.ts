@@ -59,16 +59,16 @@ test("token amounts to fixed places, rounded half away from zero, without floats
 
 test("money, approximate, in the currency picked at the rate of its prices' time", () => {
   const usd = (value: number, cents = false) => f.money({ value, unit: "USD" }, cents);
-  assert.equal(usd(692.85), "≈ $693");
-  assert.equal(usd(0.7724), "≈ $0.77");
+  assert.equal(usd(692.85), "$693");
+  assert.equal(usd(0.7724), "$0.77");
   assert.equal(usd(0.001), "< $0.01");
   assert.equal(usd(0), "$0");
-  assert.equal(usd(-1.312), "≈ −$1.31");
-  assert.equal(usd(692.4, true), "≈ $692.40");
-  assert.equal(f.money({ value: 0.7724, unit: "USDC" }), "≈ 0.77 USDC");
+  assert.equal(usd(-1.312), "−$1.31");
+  assert.equal(usd(692.4, true), "$692.40");
+  assert.equal(f.money({ value: 0.7724, unit: "USDC" }), "0.77 USDC");
   assert.equal(
     f.money(f.moneyAt(3.1, { unit: "USD" }, true)),
-    "At\u00a0least\u00a0≈ $3.10",
+    "At\u00a0least\u00a0$3.10",
     "when some of it had no price",
   );
   assert.deepEqual(f.moneyAt(3.1, { unit: "USD" }), { value: 3.1, unit: "USD", rates: undefined });
@@ -78,14 +78,14 @@ test("money, approximate, in the currency picked at the rate of its prices' time
       f.setCurrency(currency);
       return f.money(f.moneyAt(value, then));
     };
-    assert.equal(shown("EUR"), "≈ €8.00");
-    assert.equal(shown("EUR", 250), "≈ €200");
-    assert.equal(shown("GBP"), "≈ £8.00");
-    assert.equal(shown("CHF"), "≈ CHF 8.00");
-    assert.equal(shown("AUD"), "≈ A$16.00");
-    assert.equal(shown("CAD"), "≈ CA$16.00");
-    assert.equal(f.money({ value: 10, unit: "USD" }), "≈ $10.00", "no rate for the time");
-    assert.equal(f.money({ value: 10, unit: "USDC", rates: then.rates }), "≈ 10.00 USDC");
+    assert.equal(shown("EUR"), "€8.00");
+    assert.equal(shown("EUR", 250), "€200");
+    assert.equal(shown("GBP"), "£8.00");
+    assert.equal(shown("CHF"), "CHF 8.00");
+    assert.equal(shown("AUD"), "A$16.00");
+    assert.equal(shown("CAD"), "CA$16.00");
+    assert.equal(f.money({ value: 10, unit: "USD" }), "$10.00", "no rate for the time");
+    assert.equal(f.money({ value: 10, unit: "USDC", rates: then.rates }), "10.00 USDC");
   } finally {
     f.setCurrency("USD");
   }
@@ -93,9 +93,9 @@ test("money, approximate, in the currency picked at the rate of its prices' time
 
 test("what lies between two sums, so that a column adds up as it reads", () => {
   const [fetched, paid] = [f.moneyAt(1.006, { unit: "USD" }), f.moneyAt(0.994, { unit: "USD" })];
-  assert.equal(f.money(fetched, true), "≈ $1.01");
-  assert.equal(f.money(paid, true), "≈ $0.99");
-  assert.equal(f.money(f.between(fetched, paid), true), "≈ −$0.02");
+  assert.equal(f.money(fetched, true), "$1.01");
+  assert.equal(f.money(paid, true), "$0.99");
+  assert.equal(f.money(f.between(fetched, paid), true), "−$0.02");
 });
 
 test("hex in groups of four, and an address as hardware wallets show it", () => {

@@ -1,6 +1,9 @@
 import {
+  concat,
   encodeAbiParameters,
+  encodePacked,
   erc20Abi,
+  getContractAddress,
   keccak256,
   parseAbi,
   zeroAddress,
@@ -12,24 +15,12 @@ import { memo } from "./cache.ts";
 import * as config from "./config.ts";
 import type { Anchor, Exchange, ExchangeKind, Fiat, PricedKind } from "./config.ts";
 import { figure, money, moneyAt, type Basis, type Money, type Rates } from "./format.ts";
-import {
-  SETTLED,
-  blockNumber,
-  blockTime,
-  call,
-  firstBlockAt,
-  read,
-  required,
-  same,
-  timeAt,
-  type Call,
-  type Read,
-} from "./rpc.ts";
+import { blockClock, blockTime, call, firstBlockAt, read, same, settledBelow, type Call, type Read } from "./rpc.ts";
 
 export type Token = { address: Address; decimals: number; symbol: string };
 // Prices per whole token, keyed by lower-case address. `unread` if some pools could not be read, so some tokens may
-// lack a price.
-export type Prices = Basis & { of: Map<string, number>; unread?: true };
+// lack a price. `sources` holds the pool that priced each token, for pricing it again at another time.
+export type Prices = Basis & { of: Map<string, number>; unread?: true; sources?: Map<string, Source> };
 export function key(address: Address): Address;
 export function key(address: string): string;
 export function key(address: string): string {
@@ -49,13 +40,27 @@ export const exchangeOf = (id: number): Exchange => BY_ID[id]!;
 export const pairKey = (a: Address, b: Address): string => `${key(a)} ${key(b)}`;
 
 const factoryAbis = {
-  algebra: parseAbi(["function poolByPair(address, address) view returns (address)"]),
-  pair: parseAbi(["function getPair(address, address, bool stable) view returns (address)"]),
-  solidly: parseAbi(["function getPool(address, address) view returns (address)"]),
-  aerodrome: parseAbi(["function getPool(address, address, bool stable) view returns (address)"]),
+  algebra: parseAbi([
+    "function poolByPair(address, address) view returns (address)",
+    "function poolDeployer() view returns (address)",
+    "function POOL_INIT_CODE_HASH() view returns (bytes32)",
+  ]),
+  pair: parseAbi([
+    "function getPair(address, address, bool stable) view returns (address)",
+    "function pairCodeHash() view returns (bytes32)",
+  ]),
+  solidly: parseAbi([
+    "function getPool(address, address) view returns (address)",
+    "function implementation() view returns (address)",
+  ]),
+  aerodrome: parseAbi([
+    "function getPool(address, address, bool stable) view returns (address)",
+    "function implementation() view returns (address)",
+  ]),
   slipstream: parseAbi([
     "function getPool(address, address, int24 tickSpacing) view returns (address)",
     "function tickSpacings() view returns (int24[])",
+    "function poolImplementation() view returns (address)",
   ]),
   v2: parseAbi(["function getPair(address, address) view returns (address)"]),
   v3: parseAbi(["function getPool(address, address, uint24 fee) view returns (address)"]),
@@ -120,6 +125,75 @@ function lookupsOn(exchange: Exchange, pair: [Address, Address], spacings: Map<n
   }
 }
 
+// Where a factory puts its pools, so that their addresses are known without asking it, as each factory's verified
+// source says: EIP-1167 clones of an implementation, made by the factory, or whole contracts made by a deployer, whose
+// init code hashes to one of `hashes`, each with CREATE2 and a salt of the sorted pair.
+export type Placement = { implementation: Address } | { deployer: Address; hashes: Hex[] };
+const cloneAt = (factory: Address, implementation: Address, salt: Hex): Address =>
+  getContractAddress({
+    opcode: "CREATE2",
+    from: factory,
+    salt,
+    bytecode: concat([
+      "0x3d602d80600a3d3981f3363d3d373d3d3d363d73",
+      implementation,
+      "0x5af43d82803e903d91602b57fd5bf3",
+    ]),
+  });
+// A Slipstream pool's salt is keccak256(abi.encode(token0, token1, tickSpacing)). `pair` must be sorted by address.
+export const slipstreamPool = (factory: Address, implementation: Address, pair: [Address, Address], spacing: number) =>
+  cloneAt(
+    factory,
+    implementation,
+    keccak256(encodeAbiParameters([{ type: "address" }, { type: "address" }, { type: "int24" }], [...pair, spacing])),
+  );
+// Every pool `exchange` could have for `pair`, sorted by address: one per tick spacing for Slipstream; for Aero's basic
+// pools, whose stable and volatile pools have a factory each, salted keccak256(abi.encodePacked(token0, token1)), one;
+// for Aerodrome's and Hydrex's classic ones, salted keccak256(abi.encodePacked(token0, token1, stable)), one per curve
+// and code hash; and for Hydrex Integral (Algebra), salted keccak256(abi.encode(token0, token1)), one.
+export function placedPools(
+  exchange: Exchange,
+  placement: Placement,
+  pair: [Address, Address],
+  spacings: number[] = [],
+): PoolFound[] {
+  const { id, kind, factory } = exchange;
+  const found = (pool: Address, way: Partial<PoolFound> = {}): PoolFound => ({
+    exchange: id,
+    pool,
+    fee: 0,
+    tickSpacing: 0,
+    ...way,
+  });
+  const packed = (stable?: boolean) =>
+    keccak256(
+      stable === undefined
+        ? encodePacked(["address", "address"], pair)
+        : encodePacked(["address", "address", "bool"], [...pair, stable]),
+    );
+  if ("implementation" in placement) {
+    const { implementation } = placement;
+    if (kind === "slipstream")
+      return spacings.map((spacing) =>
+        found(slipstreamPool(factory, implementation, pair, spacing), { tickSpacing: spacing }),
+      );
+    if (kind === "solidly") return [found(cloneAt(factory, implementation, packed()), { stable: !!exchange.stable })];
+    if (kind === "aerodrome")
+      return [false, true].map((stable) => found(cloneAt(factory, implementation, packed(stable)), { stable }));
+    return [];
+  }
+  const { deployer, hashes } = placement;
+  const made = (salt: Hex, hash: Hex) =>
+    getContractAddress({ opcode: "CREATE2", from: deployer, salt, bytecodeHash: hash });
+  if (kind === "pair")
+    return [false, true].flatMap((stable) => hashes.map((hash) => found(made(packed(stable), hash), { stable })));
+  if (kind === "algebra") {
+    const salt = keccak256(encodeAbiParameters([{ type: "address" }, { type: "address" }], pair));
+    return hashes.map((hash) => found(made(salt, hash)));
+  }
+  return [];
+}
+
 // Pools found, keyed by exchange id and sorted pair, cached until the page reloads. A failed lookup says so to those
 // waiting on it, and is dropped so that the next call retries it.
 type Looked = { found: PoolFound[]; failed: boolean };
@@ -146,6 +220,47 @@ function spacings(rd: Read): Promise<Map<number, number[]>> {
   ));
 }
 
+// Where each factory whose pools' addresses can be computed puts them, by exchange id, read once, and again after a
+// failure, leaving out an exchange whose answer is missing. A factory that an upgrade could change is read too: its
+// pairs are looked for at its `codeHash` and, if another, at the one it gives now.
+const PLACED: readonly ExchangeKind[] = ["slipstream", "solidly", "aerodrome", "pair", "algebra"];
+let placementsRead: Promise<Map<number, Placement>> | undefined;
+function placements(rd: Read): Promise<Map<number, Placement>> {
+  const placed = BY_ID.filter(({ kind }) => PLACED.includes(kind));
+  const asks = placed.map(({ factory, kind }): Call[] => {
+    const abi: Abi = factoryAbis[kind];
+    if (kind === "slipstream") return [call(factory, abi, "poolImplementation")];
+    if (kind === "pair") return [call(factory, abi, "pairCodeHash")];
+    if (kind === "algebra") return [call(factory, abi, "poolDeployer"), call(factory, abi, "POOL_INIT_CODE_HASH")];
+    return [call(factory, abi, "implementation")];
+  });
+  return (placementsRead ??= rd(asks.flat()).then(
+    (replies) => {
+      if (replies.includes(undefined)) placementsRead = undefined;
+      let next = 0;
+      return new Map(
+        placed.flatMap((exchange, i): [number, Placement][] => {
+          const got = asks[i]!.map(() => replies[next++] as Address | Hex | undefined);
+          if (got.includes(undefined)) return [];
+          const { id, kind, factory, codeHash } = exchange;
+          if (kind === "pair") {
+            const hashes = [
+              ...new Set([codeHash, got[0]].flatMap((hash) => (hash ? [hash.toLowerCase() as Hex] : []))),
+            ];
+            return [[id, { deployer: factory, hashes }]];
+          }
+          if (kind === "algebra") return [[id, { deployer: got[0] as Address, hashes: [got[1] as Hex] }]];
+          return [[id, { implementation: got[0] as Address }]];
+        }),
+      );
+    },
+    (error: unknown) => {
+      placementsRead = undefined;
+      throw error;
+    },
+  ));
+}
+
 // Each pair's pools, keyed by `pairKey` of the pair as given, in the order of `exchanges`. Lookups not yet cached go in
 // a single read, `LOOKUPS` calls to a batch since each is cheap, unless Uniswap v4's, which read more, are among them.
 const LOOKUPS = 1_000;
@@ -167,19 +282,51 @@ async function lookUp(
   ].filter(([id]) => !pools.has(id));
   if (missing.length) {
     const needsSpacings = missing.some(([, [exchange]]) => exchange.kind === "slipstream");
-    const all = (needsSpacings ? spacings(rd) : Promise.resolve(new Map<number, number[]>())).then(async (known) => {
-      const each = missing.map(([, [exchange, pair]]) => lookupsOn(exchange, pair, known));
-      const light = missing.every(([, [exchange]]) => exchange.kind !== "v4");
-      const replies = await rd(
-        each.flat().map(({ call }) => call),
-        light ? { perBatch: LOOKUPS } : {},
-      );
+    // With `codeAt`, pools are found at their computed addresses in one ask, rather than by asking each factory for
+    // each pair, curve and tick spacing. A factory is asked only for what could not be computed or checked: its
+    // placement could not be read, or the check did not answer.
+    const { codeAt } = rd;
+    const placing = !!codeAt && missing.some(([, [exchange]]) => PLACED.includes(exchange.kind));
+    const ask = (lookups: Lookup[][]) => {
+      const calls = lookups.flat().map(({ call }) => call);
+      const light = lookups.every((each, i) => !each.length || missing[i]![1][0].kind !== "v4");
+      return calls.length ? rd(calls, light ? { perBatch: LOOKUPS } : {}) : Promise.resolve([]);
+    };
+    const answersTo = (lookups: Lookup[][], replies: unknown[]) => {
       let next = 0;
-      return each.map((lookups, i) => {
-        const answers = lookups.map(() => replies[next++]);
-        const [exchange] = missing[i]![1];
-        const failed = answers.includes(undefined) || (exchange.kind === "slipstream" && !known.has(exchange.id));
-        return { failed, found: lookups.flatMap((lookup, j) => lookup.found(answers[j]) ?? []) };
+      return lookups.map((each) => each.map(() => replies[next++]));
+    };
+    const all = Promise.all([
+      needsSpacings ? spacings(rd) : new Map<number, number[]>(),
+      placing ? placements(rd).catch(() => new Map<number, Placement>()) : new Map<number, Placement>(),
+    ]).then(async ([known, placed]) => {
+      const candidates = missing.map(([, [exchange, pair]]) => {
+        const placement = codeAt && PLACED.includes(exchange.kind) ? placed.get(exchange.id) : undefined;
+        if (!placement || (exchange.kind === "slipstream" && !known.has(exchange.id))) return undefined;
+        return placedPools(exchange, placement, pair, known.get(exchange.id));
+      });
+      const first = missing.map(([, [exchange, pair]], i) => (candidates[i] ? [] : lookupsOn(exchange, pair, known)));
+      const [replies, held] = await Promise.all([
+        ask(first),
+        codeAt && candidates.some((list) => list?.length)
+          ? codeAt(candidates.flatMap((list) => list ?? []).map(({ pool }) => pool))
+          : [],
+      ]);
+      let nextHeld = 0;
+      const holds = candidates.map((list) => list?.map(() => held[nextHeld++]));
+      // Checks that did not answer are asked of the factory instead.
+      const again = missing.map(([, [exchange, pair]], i) =>
+        holds[i]?.includes(undefined) ? lookupsOn(exchange, pair, known) : [],
+      );
+      const answers = answersTo(first, replies);
+      const answersAgain = answersTo(again, await ask(again));
+      return missing.map(([, [exchange]], i) => {
+        const lookups = again[i]!.length ? again[i]! : first[i]!;
+        const replied = again[i]!.length ? answersAgain[i]! : answers[i]!;
+        const unknown = exchange.kind === "slipstream" && !known.has(exchange.id);
+        const looked = lookups.flatMap((lookup, j) => lookup.found(replied[j]) ?? []);
+        const computed = again[i]!.length ? [] : (candidates[i] ?? []).filter((_, j) => holds[i]![j]);
+        return { failed: replied.includes(undefined) || unknown, found: [...looked, ...computed] };
       });
     });
     missing.forEach(([id], i) => {
@@ -240,6 +387,7 @@ const feedAbi = parseAbi([
 ]);
 
 type Pool = { address: Address; exchange: Exchange; stable: boolean; token: Token; anchor: Anchor };
+export type Source = Pool;
 type Measured = { pool: Pool; price: number; depth: number };
 // The window's last block, and the search for its first.
 type Window = { start(): Promise<number>; end: number };
@@ -425,8 +573,11 @@ async function inPools(
     .sort((a, b) => rank(a) - rank(b));
   const measured = await measure(candidates, prices, amounts, window, rd);
   if (!measured) prices.unread = true;
-  for (const [token, pools] of Map.groupBy(measured ?? [], ({ pool }) => key(pool.token.address)))
-    prices.of.set(token, pools.reduce((deepest, each) => (each.depth > deepest.depth ? each : deepest)).price);
+  for (const [token, pools] of Map.groupBy(measured ?? [], ({ pool }) => key(pool.token.address))) {
+    const deepest = pools.reduce((most, each) => (each.depth > most.depth ? each : most));
+    prices.of.set(token, deepest.price);
+    prices.sources?.set(token, deepest.pool);
+  }
 }
 
 // The last block at or before each time asked for, shared by every pricing. Prices now start from the newest block's
@@ -437,17 +588,17 @@ let nowStart: number | undefined;
 export function forget(): void {
   pools.clear();
   spacingsRead = undefined;
+  placementsRead = undefined;
   blocksAt.clear();
   nowStart = undefined;
   quotes.clear();
 }
 
-// Prices per whole token over the 30 minutes up to `time`, or up to the newest block if that is earlier. Each end of
-// the window is the last block at or before its time, and the end at least `SETTLED` blocks back. Anchors take their
-// Chainlink USD feeds' answers at the end, and the fiat feeds give each currency's rate; if no anchor feed answers,
-// prices are in USDC, with USDC at 1. Pools then price the anchors without a feed, then the other tokens. `amounts` is
-// how much of each token will be priced; given as a promise, pools are read meanwhile and only judged deep enough once
-// it is known. `tiers` lists the exchanges to look in, each tier only for what those before left unpriced.
+// Prices per whole token over the 30 minutes up to `time`, or up to the newest block if earlier, ending at least
+// `settledBelow` it. Anchors take their Chainlink feeds' answers and fiat feeds give each currency's rate; with no
+// anchor feed, prices are in USDC, at 1. Pools then price the anchors without a feed, then the other tokens. `amounts`,
+// how much of each token will be priced, may be a promise: pools are read meanwhile and judged once it is known.
+// `tiers` are searched in order, each only for what those before left unpriced.
 export async function pricesAt(
   tokens: Token[],
   amounts: Amounts,
@@ -456,16 +607,54 @@ export async function pricesAt(
   tiers = config.PRICING,
 ): Promise<Prices> {
   tiers.flat().forEach(pricingOf);
-  const [newest, newestTime] = required(await rd([blockNumber, blockTime])).map(Number) as [number, number];
-  const top = newest - SETTLED;
+  const early = tokens.some(({ address }) => !config.ANCHORS.some((anchor) => same(anchor.address, address)));
+  const { window, prices } = await fedAt(time, early, rd);
+  const anchors = config.ANCHORS.map(({ address, decimals }) => ({ address, decimals, symbol: "" }));
+  for (const each of [anchors, tokens])
+    for (const exchanges of tiers)
+      await inPools(
+        each.filter(({ address }) => !prices.of.has(key(address))),
+        prices,
+        amounts,
+        window,
+        exchanges,
+        rd,
+      );
+  return prices;
+}
+// Prices at `time` from the pools that priced each token at another time, which reads far less than searching again.
+// A token whose pool was too thin, too young or unread then has no price.
+export async function pricesFrom(
+  sources: Map<string, Source>,
+  amounts: Amounts,
+  time: number,
+  rd: Read = read,
+): Promise<Prices> {
+  const { window, prices } = await fedAt(time, sources.size > 0, rd);
+  const isAnchor = ({ token }: Source) => config.ANCHORS.some(({ address }) => same(address, token.address));
+  for (const anchors of [true, false]) {
+    const pools = [...sources.values()].filter(
+      (pool) =>
+        isAnchor(pool) === anchors &&
+        !prices.of.has(key(pool.token.address)) &&
+        prices.of.has(key(pool.anchor.address)),
+    );
+    const measured = await measure(pools, prices, amounts, window, rd);
+    if (!measured) prices.unread = true;
+    for (const { pool, price } of measured ?? []) {
+      prices.of.set(key(pool.token.address), price);
+      prices.sources!.set(key(pool.token.address), pool);
+    }
+  }
+  return prices;
+}
+// The 30 minutes up to `time`, or up to the newest block if earlier, ending at least `settledBelow` it, and the
+// anchors' and currencies' feeds at its end. With `early`, the search for its first block starts at once.
+async function fedAt(time: number, early: boolean, rd: Read): Promise<{ window: Window; prices: Prices }> {
   // Both ends are searched for down from `top`, at first at the pace from it to the newest block, and share the blocks
   // they read.
-  const times = new Map<number, Promise<number>>();
-  const timeOf = (block: number): Promise<number> => {
-    const known = times.get(block) ?? timeAt(block, rd);
-    times.set(block, known);
-    return known;
-  };
+  const { newest, newestTime, timeOf } = await blockClock(rd);
+  const top = settledBelow(newest);
   const lastBlockAt = async (at: number): Promise<number> => {
     const topTime = await timeOf(top);
     if (at >= topTime) return top;
@@ -488,7 +677,7 @@ export async function pricesAt(
     }
     return start;
   };
-  if (tokens.some(({ address }) => !config.ANCHORS.some((anchor) => same(anchor.address, address)))) void startOf();
+  if (early) void startOf();
   const window: Window = { end: time >= newestTime ? top : await lastBlockAt(time), start: startOf };
   const fiat = Object.entries(config.FIAT_FEEDS) as [Fiat, Address][];
   const feeds = [...config.ANCHORS.map(({ feed }) => feed), ...fiat.map(([, feed]) => feed)];
@@ -505,20 +694,9 @@ export async function pricesAt(
     fiat.flatMap(([currency], i) => (fiatFeeds[i] === undefined ? [] : [[currency, fiatFeeds[i]]])),
   );
   const prices: Prices = fed.length
-    ? { unit: "USD", rates, of: new Map(fed) }
-    : { unit: "USDC", rates: {}, of: new Map([[key(config.USDC), 1]]) };
-  const anchors = config.ANCHORS.map(({ address, decimals }) => ({ address, decimals, symbol: "" }));
-  for (const each of [anchors, tokens])
-    for (const exchanges of tiers)
-      await inPools(
-        each.filter(({ address }) => !prices.of.has(key(address))),
-        prices,
-        amounts,
-        window,
-        exchanges,
-        rd,
-      );
-  return prices;
+    ? { unit: "USD", rates, of: new Map(fed), sources: new Map() }
+    : { unit: "USDC", rates: {}, of: new Map([[key(config.USDC), 1]]), sources: new Map() };
+  return { window, prices };
 }
 
 export const pricesNow = (tokens: Token[], amounts: Amounts = new Map(), rd: Read = read): Promise<Prices> =>

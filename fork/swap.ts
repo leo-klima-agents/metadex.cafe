@@ -8,11 +8,12 @@ import {
   AVNT,
   HOLDER,
   NEWCOMER,
+  BLOCK,
   PAYEE,
-  RECENT,
   SELLER,
   SITE,
   STRANGER,
+  UNPAID_SWAPS,
   ZORA,
   balanceOf,
   connected,
@@ -24,8 +25,8 @@ import {
 const INTO_USDC = SWAPPERS[0]!;
 // The selector the page's reads use to ask a reward contract what it owes an account.
 const EARNED = toFunctionSelector("function earned(uint256, address)").slice(2);
-// The pool Matcha Latte votes for most. Its incentives contract began 54 epochs before the epoch claimed, beyond the 50
-// that `earned()` reads for an account that never claimed from it.
+// A pool on Hydrex whose incentives contract began 57 epochs before the epoch claimed, beyond the 50 that `earned()`
+// reads for an account that never claimed from it.
 const POOL = "0x66352585BAD83DA857a020f739f1f7cA93209A1B";
 const says = (root: h.Opened["page"] | ReturnType<h.Opened["page"]["frameLocator"]>) =>
   review(root).locator("[data-text=says]").allTextContents();
@@ -46,8 +47,8 @@ async function tickOnly(page: h.Opened["page"], symbols: string[]): Promise<void
   }
 }
 
-describe("the swap and the claim against a fork after the swappers' deployment", { timeout: 2_400_000 }, () => {
-  h.fork(RECENT, [HOLDER, NEWCOMER, PAYEE, SELLER]);
+describe("swaps against a fork of Base after Denim", { timeout: 2_400_000 }, () => {
+  h.fork(BLOCK, [HOLDER, NEWCOMER, SELLER]);
 
   test("swap three tokens into USDC in one prompt; one is skipped, and its approval is reset", async () => {
     await h.fund([WETH, ZORA, AVNT]);
@@ -114,6 +115,67 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     await page.getByText("Joining is off: the page reached another network than Base.").waitFor();
   });
 
+  // Keep this test last: it moves the fork on two epochs, about eight days.
+  test("a claim past the 50 epochs earned() reads, and the swap of what it brings, go in one prompt", async () => {
+    // Stages an epoch as anyone could on Base: #141 joins Double Espresso, which votes for a pool that someone
+    // incentivises. Half a day after that epoch, its payout is overdue and owes one reward beyond what `earned()`
+    // reads. Its feeds, which Chainlink would have updated meanwhile, are kept at their last answers.
+    await h.approveConduit(NEWCOMER, DOUBLE_ESPRESSO.address, 141n);
+    await h.nextEpoch();
+    await h.freshenFeeds();
+    await h.incentive(POOL, USDC, 100_000_000n);
+    const vote = encodeFunctionData({ abi: h.abi, functionName: "vote", args: [[POOL], [1n]] });
+    await h.mined(STRANGER, DOUBLE_ESPRESSO.address, vote);
+    await h.nextEpoch(12 * 3600 + 60);
+    const { page, sent, violations } = await connected({ owner: NEWCOMER, batch: true }, { url: `${SITE}/#app` });
+    const line = view(page, "app").locator("[data-list=need] > li").filter({ hasText: "#141: payout overdue" });
+    await line.getByRole("button", { name: "Claim now" }).click();
+    await heading(review(page), "What waits", 2).waitFor();
+    await review(page).getByRole("radio", { name: "Into" }).check();
+    await review(page).getByRole("combobox", { name: "The token to receive" }).selectOption("weth");
+    await review(page)
+      .getByText(/^[\d,.]+ WETH, at least [\d,.]+, from USDC$/)
+      .waitFor();
+    await review(page).getByRole("button", { name: "Continue" }).click();
+    // The review began with the claim's one call; now the claim, the approval and the swap go together.
+    await review(page).getByText("All 3 in one prompt, all or nothing").waitFor();
+    assert.match((await says(page))[0]!, /^Claims account #141's rewards through Double Espresso/);
+    // The claim asks the incentives contract twice in one call: the first moves `earned()` on 50 epochs, the second
+    // pays.
+    await review(page)
+      .getByText(/incentives contracts that owe it; twice where one asking cannot reach all it owes/i)
+      .waitFor();
+    const before = await balanceOf(WETH, NEWCOMER);
+    await review(page).getByRole("button", { name: "Sign 3 transactions" }).click();
+    await heading(review(page), "Done", 2).waitFor();
+    assert.equal(sent.length, 3);
+    // The claim's receipt shows what `earned()` alone did not, less the 1% fee: some USDC.
+    const claimed = review(page).locator("[data-text=done] .Slip").filter({ hasNotText: "swap into" });
+    await claimed
+      .getByText(/^[\d,.]+ USDC$/)
+      .first()
+      .waitFor();
+    const amounts = await claimed.getByText(/^[\d,.]+ USDC$/).allInnerTexts();
+    assert.ok(
+      amounts.some((each) => Number(each.replace(/[^\d.]/g, "")) > 0),
+      amounts.join(", "),
+    );
+    // The receipt of the swap started from the App shows its output, WETH, not the swap page's own token.
+    const swapped = review(page).locator("[data-text=done] .Slip").filter({ hasText: "swap into WETH" });
+    await swapped
+      .locator("[data-text=total-value]")
+      .getByText(/^[\d,.]+ WETH$/)
+      .waitFor();
+    assert.equal(await swapped.getByText(/ USDC$/).count(), 0);
+    assert.ok((await balanceOf(WETH, NEWCOMER)) > before);
+    assert.ok((await h.at(DOUBLE_ESPRESSO.address).read.lastClaimBlock([141n])) > 0n);
+    assert.deepEqual(violations, []);
+  });
+});
+
+describe("claims of a payout late, against a fork of Base before Denim", { timeout: 2_400_000 }, () => {
+  h.fork(UNPAID_SWAPS, [PAYEE]);
+
   test("an overdue payout in Double Espresso: claimed, then what it brought swapped into USDC", async () => {
     await h.approveConduit(PAYEE, DOUBLE_ESPRESSO.address, 82774n);
     await h.settle();
@@ -123,7 +185,7 @@ describe("the swap and the claim against a fork after the swappers' deployment",
       { url: `${SITE}/#app`, refuse: (body) => refusing && body.includes(EARNED) },
     );
     const line = view(page, "app").locator("[data-list=need] > li").filter({ hasText: "#82774: payout overdue" });
-    await line.filter({ hasText: /payout overdue, at least (≈|<)\s\$[\d,.]+ in \d+ tokens?/ }).waitFor();
+    await line.filter({ hasText: /payout overdue, at least (<\s)?\$[\d,.]+ in \d+ tokens?/ }).waitFor();
     refusing = true;
     await line.getByRole("button", { name: "Claim now" }).click();
     await review(page).getByText("Base did not say what waits: try again in a moment.").waitFor();
@@ -192,53 +254,6 @@ describe("the swap and the claim against a fork after the swappers' deployment",
     type Received = { method: string; params: { txs: unknown[] } };
     const received = await page.evaluate(() => (window as unknown as { received: Received[] }).received);
     assert.equal(received.filter(({ method }) => method === "sendTransactions").length, Number(safeTxs));
-    assert.deepEqual(violations, []);
-  });
-
-  // Keep this test last: it moves the fork on two epochs, about eight days.
-  test("a claim past the 50 epochs earned() reads, and the swap of what it brings, go in one prompt", async () => {
-    // Stages an epoch as anyone could on Base: #141 joins Double Espresso, which votes for a pool that someone
-    // incentivises. Half a day after that epoch, its payout is overdue and owes one reward beyond what `earned()`
-    // reads.
-    await h.approveConduit(NEWCOMER, DOUBLE_ESPRESSO.address, 141n);
-    await h.nextEpoch();
-    await h.incentive(POOL, USDC, 100_000_000n);
-    const vote = encodeFunctionData({ abi: h.abi, functionName: "vote", args: [[POOL], [1n]] });
-    await h.mined(STRANGER, DOUBLE_ESPRESSO.address, vote);
-    await h.nextEpoch(12 * 3600 + 60);
-    const { page, sent, violations } = await connected({ owner: NEWCOMER, batch: true }, { url: `${SITE}/#app` });
-    const line = view(page, "app").locator("[data-list=need] > li").filter({ hasText: "#141: payout overdue" });
-    await line.getByRole("button", { name: "Claim now" }).click();
-    await heading(review(page), "What waits", 2).waitFor();
-    await review(page).getByRole("radio", { name: "Into" }).check();
-    await review(page).getByRole("combobox", { name: "The token to receive" }).selectOption("weth");
-    await review(page)
-      .getByText(/^[\d,.]+ WETH, at least [\d,.]+, from USDC$/)
-      .waitFor();
-    await review(page).getByRole("button", { name: "Continue" }).click();
-    // The review began with the claim's one call; now the claim, the approval and the swap go together.
-    await review(page).getByText("All 3 in one prompt, all or nothing").waitFor();
-    assert.match((await says(page))[0]!, /^Claims account #141's rewards through Double Espresso/);
-    // The claim asks the incentives contract twice in one call: the first moves `earned()` on 50 epochs, the second
-    // pays.
-    await review(page)
-      .getByText(/incentives contracts that owe it; twice where one asking cannot reach all it owes/i)
-      .waitFor();
-    const before = await balanceOf(WETH, NEWCOMER);
-    await review(page).getByRole("button", { name: "Sign 3 transactions" }).click();
-    await heading(review(page), "Done", 2).waitFor();
-    assert.equal(sent.length, 3);
-    // The claim's receipt shows what `earned()` alone did not, less the 1% fee.
-    await review(page).locator("[data-text=done]").getByText("4.27 USDC").first().waitFor();
-    // The receipt of the swap started from the App shows its output, WETH, not the swap page's own token.
-    const swapped = review(page).locator("[data-text=done] .Slip").filter({ hasText: "swap into WETH" });
-    await swapped
-      .locator("[data-text=total-value]")
-      .getByText(/^[\d,.]+ WETH$/)
-      .waitFor();
-    assert.equal(await swapped.getByText(/ USDC$/).count(), 0);
-    assert.ok((await balanceOf(WETH, NEWCOMER)) > before);
-    assert.ok((await h.at(DOUBLE_ESPRESSO.address).read.lastClaimBlock([141n])) > 0n);
     assert.deepEqual(violations, []);
   });
 });

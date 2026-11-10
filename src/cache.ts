@@ -1,6 +1,6 @@
 // Every read from Base the page keeps, by key: its value or error, and any read under way. A failed read stays failed
-// until `retry()`. A read past its time to live (in ms) is made again and shows its last value meanwhile. A read given
-// no time to live keeps its key's previous one.
+// until `retry()`, or a `refresh()` of its key. A read past its time to live (in ms) is made again and shows its last
+// value meanwhile. A read given no time to live keeps its key's previous one.
 type TTL<T> = number | ((value: T) => number);
 type Entry = { value?: unknown; error?: unknown; reading?: Promise<unknown>; at: number; ttl: TTL<never> };
 const entries = new Map<string, Entry>();
@@ -58,3 +58,11 @@ export function refresh(prefix: string): void {
   settled();
 }
 export const failures = (): number => [...entries.values()].filter((entry) => "error" in entry).length;
+// Forgets the settled reads whose keys start with one of `prefixes` and that were made over `age` ms ago: reads keyed by
+// a time that has moved on, which nothing asks for again.
+export function prune(prefixes: readonly string[], age: number): void {
+  const now = performance.now();
+  for (const [key, entry] of entries)
+    if (!entry.reading && now - entry.at > age && prefixes.some((prefix) => key.startsWith(prefix)))
+      entries.delete(key);
+}

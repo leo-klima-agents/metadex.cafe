@@ -20,7 +20,7 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "viem": "2.57.13"
+    "viem": "2.57.17"
   },
   "devDependencies": {
     "@ipld/car": "5.4.7",
@@ -29,7 +29,7 @@
     "esbuild": "0.28.2",
     "ipfs-unixfs-importer": "17.1.1",
     "multiformats": "14.0.5",
-    "playwright-core": "1.64.1",
+    "playwright-core": "1.65.0",
     "prettier": "3.9.10",
     "typescript": "7.0.2"
   },

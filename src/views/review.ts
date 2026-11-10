@@ -25,7 +25,8 @@ type Review = {
   // The calls. With `sending`, they are encoded to be sent, with a fresh deadline.
   steps: (sending?: boolean) => Slip[];
   atomic?: boolean;
-  // When the calls don't fit in one transaction: how many calls go in each transaction, in order.
+  // When the calls don't fit in one transaction: how many go in each, in order. A Safe proposes one transaction per
+  // group; other wallets then sign each call alone.
   groups?: number[] | undefined;
   outcome?: (receipts: Landed[]) => Promise<Node | undefined>;
   // What the calls wait for, if anything. They may change until then, so nothing is sent while this returns text.
