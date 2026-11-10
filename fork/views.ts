@@ -155,8 +155,16 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
     await h.row(page, 141).getByRole("link", { name: "Hydrex account #141" }).click();
     const standing = view(page, "account").locator("[data-list=standing] > article");
     await standing.getByText("Not final yet").waitFor();
+    // The page reads payouts `settledBelow` the newest block, which on Base is soon past the minter's call: a fork's
+    // blocks come only with its transactions, so it mines them.
     await h.moveOn();
+    await h.settle();
     await page.clock.runFor(5 * 60_000);
-    await standing.getByText(/^(Paid up to|Not paid yet|Nothing to pay)/).waitFor();
+    await standing
+      .getByText(/^(Paid up to|Not paid yet|Nothing to pay)/)
+      .waitFor()
+      .catch(async (error: unknown) => {
+        throw new Error(`The standing shows: ${(await standing.allInnerTexts()).join(" | ")}`, { cause: error });
+      });
   });
 });
