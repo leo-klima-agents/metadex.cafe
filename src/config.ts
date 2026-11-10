@@ -62,10 +62,9 @@ export const GAUGE_FACTORIES: { address: Address; kind: GaugeKind }[] = [
   { address: "0x1e0f776E88649285f99e65Fa599aD6e0f9D97800", kind: "stable" },
   { address: "0xf437f62053ACB121665b8fDBfeA8F214FB8E589d", kind: "cl" },
 ];
-// Aero's public Autopilots: each is a stake its Relay owns, shown only while it does.
+// The Aero Autopilot the page names and compares with: a stake its Relay owns, shown only while it does.
 export type Autopilot = { id: bigint; name: string; relay: Address };
 export const AUTOPILOTS: Autopilot[] = [
-  { id: 20365n, name: "Autopilot sAERO Maxi", relay: "0xf588F86577C472D83E5F84403951AA0B92fc1Dd6" },
   { id: 20366n, name: "Autopilot USDC Maxi", relay: "0xAfa7cA53e0A63d94218728842ED286308435DD86" },
 ];
 

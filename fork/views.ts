@@ -33,9 +33,9 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
     assert.equal(await page.title(), "Your wallet · metaDEX Café");
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Your wallet");
     assert.deepEqual(await view(page, "app").getByRole("heading", { level: 2 }).allInnerTexts(), [
-      "Swap",
       "Aero",
       "Hydrex",
+      "Swap",
     ]);
     await page.goBack();
     await heading(page, "Vote, claim and swap on Base").waitFor();

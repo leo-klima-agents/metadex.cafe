@@ -2,7 +2,7 @@ import { getAddress, type Address } from "viem";
 import { byKind, DEFAULT_OUTPUT, swapperOf, type Kind, type Output } from "./config.ts";
 
 // The page's addresses, such as `#app`, `#about`, `#hydrex`, `#hydrex/matcha-latte`, `#hydrex/9540`, `#swap/weth`,
-// `#aero`, `#aero/20365` and `#aero/pool/0x…` (a pool by its gauge). The app, automation, swap and Aero
+// `#aero`, `#aero/20366` and `#aero/pool/0x…` (a pool by its gauge). The app, automation, swap and Aero
 // views take an optional section that opens a popup, such as `#hydrex/matcha-latte/check`. Anything else is Home.
 export type Route =
   | { view: "home" | "about" | "hydrex" }

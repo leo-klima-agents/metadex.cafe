@@ -20,7 +20,7 @@ test("each address is a route, each route has its address, and anything else is 
     ["#aero", { view: "aero" }],
     ["#aero/how", { view: "aero", section: "how" }],
     ["#aero/check", { view: "aero", section: "check" }],
-    ["#aero/20365", { view: "stake", id: 20365n }],
+    ["#aero/20366", { view: "stake", id: 20366n }],
     ["#aero/pool/0xd424BA8ca9d4E278753DE76651a0095451e65cD1", { view: "pool", gauge: GAUGE }],
   ];
   for (const [hash, route] of cases) {
@@ -38,8 +38,8 @@ test("each address is a route, each route has its address, and anything else is 
     "#swap/check/weth",
     "#aero/",
     "#aero/0",
-    "#aero/020365",
-    "#aero/20365/how",
+    "#aero/020366",
+    "#aero/20366/how",
     "#aero/how/x",
     "#aero/pools",
     "#aero/pool",
