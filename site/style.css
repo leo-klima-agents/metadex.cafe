@@ -606,10 +606,6 @@ dialog[open] {
   color: var(--quiet);
   font-size: var(--small);
 }
-.Footer-note {
-  flex-basis: 100%;
-  margin: 0;
-}
 
 .Header {
   padding-block: var(--gap);
