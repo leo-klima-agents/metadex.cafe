@@ -74,7 +74,7 @@ function holdNode(stake: Stake, market: Market | undefined): Value {
   if (!market) return undefined;
   const at = aero.movesAt(stake, market.cooldown);
   return at > now()
-    ? status("running", "Holds", ` until ${utc(at)}, in ${until(at - now())}`)
+    ? status("running", "Locked", ` until ${utc(at)}, in ${until(at - now())}`)
     : status("idle", "Can move now");
 }
 // Of approvals for all of an owner's sAERO, only Aero's payments module's can be read: others would need logs.
@@ -182,7 +182,38 @@ function holdingsOf(rows: Part[], market: Market): aero.Holding[] {
     : [];
 }
 
-const stakeFor = (stakes: Stake[]): Stake | undefined => stakes.find(({ id }) => id === plan.stake) ?? stakes[0];
+// How long Aero locks an allocation, until the market has been read: its launch value.
+const LOCK = 169_200;
+const cooldownOf = (): number => data.market().value?.cooldown ?? LOCK;
+// Largest on Base first.
+const bySize = (stakes: Stake[]): Stake[] =>
+  [...stakes].sort((a, b) => {
+    const [x, y] = [aero.budgetOf(a), aero.budgetOf(b)];
+    return x === y ? 0 : x > y ? -1 : 1;
+  });
+// The stake picked, or else the largest on Base that can be allocated now, or else the largest.
+function stakeFor(stakes: Stake[]): Stake | undefined {
+  const picked = stakes.find(({ id }) => id === plan.stake);
+  if (picked) return picked;
+  const sized = bySize(stakes);
+  return sized.find((stake) => !aero.blockedOf(stake, cooldownOf(), now())) ?? sized[0];
+}
+// A stake as the picker lists it, and why it can't be allocated now, if it can't.
+function optionWords(stake: Stake): string {
+  const name = stakeName(stake, stake.id);
+  const blocked = aero.blockedOf(stake, cooldownOf(), now());
+  if (blocked?.why === "empty") return `${name} · nothing on Base`;
+  if (blocked?.why === "ended") return `${name} · its lock has ended`;
+  const words = `${name} · ${power(aero.budgetOf(stake))} on Base`;
+  return blocked ? `${words} · locked until ${utc(blocked.until)}` : words;
+}
+function heldWords(stake: Stake | undefined): string | null {
+  const blocked = stake && aero.blockedOf(stake, cooldownOf(), now());
+  if (!blocked) return null;
+  if (blocked.why === "empty") return "Nothing to allocate on Base";
+  if (blocked.why === "ended") return "Its lock has ended";
+  return `Locked until ${utc(blocked.until)}, in ${until(blocked.until - now())}`;
+}
 // In whole sAERO.
 function placesOf(stake: Stake | undefined) {
   const mine = new Map<string, number>();
@@ -266,15 +297,17 @@ function drawControls(stakes: Stake[], stake: Stake | undefined): void {
   fill(aeroView, {
     "stake-row": stakes.length ? true : null,
     "stake-link": stake ? { href: hrefOf({ view: "stake", id: stake.id }), text: "Its allocation now" } : null,
+    "stake-lock": heldWords(stake),
     "amount-row": stakes.length ? null : true,
     "plan-window": WINDOW[controls.hours].over,
+    "lock-hours": hoursWords(cooldownOf()),
   });
   list(
     $("[data-list=stake-option]", aeroView),
-    stakes,
+    bySize(stakes),
     ({ id }) => String(id),
     (option, each) => {
-      fill(option, { name: `${stakeName(each, each.id)} · ${power(aero.budgetOf(each))} on Base` });
+      fill(option, { name: optionWords(each) });
       (option as HTMLOptionElement).value = String(each.id);
     },
   );
@@ -473,7 +506,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   fill(aeroView, {
     "record-note": [
       again
-        ? `Each pick knows ${knows}, and is kept until the next, as an allocation holds for ${hoursWords(market.cooldown)}.`
+        ? `Each pick knows ${knows}, and is kept until the next, as an allocation is locked for ${hoursWords(market.cooldown)} after each change.`
         : `The pick knows ${knows}.`,
       then
         ? "Each step is valued at the prices then, the mean of those at its start and its end, and each pick at those when it was made. Each sAERO is counted as one AERO."
@@ -517,6 +550,36 @@ function drawLines(lines: Line[]): void {
     },
   );
 }
+
+// What `rows` would earn for `amount` sAERO, and the stake's current pools for what it holds in them, if the window's
+// revenue came again.
+function projectedWords(
+  market: Market,
+  next: (gauge: Gauge) => aero.Paying | undefined,
+  rows: Part[],
+  amount: number,
+  stake: Stake | undefined,
+): string | null {
+  if (!(amount > 0)) return null;
+  const mine = placesOf(stake);
+  const then = aero.heldOver(holdingsOf(rows, market), next, amount, mine.size ? mine : undefined);
+  if (!then) return null;
+  const words = (found: aero.Per10k, of: number) =>
+    `${apr(found.total, found.priced, market)} APR, ${perDay((found.total * of) / aero.PER, found.priced, market)} a day`;
+  const held = [...mine.values()].reduce((sum, each) => sum + each, 0);
+  const current =
+    held > 0
+      ? aero.heldOver(
+          [...mine].map(([gauge, each]) => ({ gauge: aero.gaugeAt(market, gauge as Address), weight: each / held })),
+          next,
+          held,
+          mine,
+        )
+      : undefined;
+  const who = stake ? stakeName(stake, stake.id) : wholePower(amount);
+  return `If the last ${WINDOW[controls.hours].over} came again: ${words(then, amount)} for ${who}${current ? `, against ${words(current, held)} in its current pools` : ""}.`;
+}
+const AUTOMATIC = "Nothing happens automatically: an allocation stays as it is until you change it.";
 
 function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefined, stakes: Stake[]): void {
   const market = got.value;
@@ -602,6 +665,11 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
     edited: plan.rows ? true : null,
     current: mine.size ? true : null,
     "allocate-why": words,
+    "plan-pay": projectedWords(market, next, rows, amount, stake),
+    "plan-auto":
+      plan.again && !plan.rows
+        ? `${AUTOMATIC} To follow this strategy, come back every ${hoursWords(aero.STEP)} and allocate again.`
+        : AUTOMATIC,
   });
 }
 
@@ -706,9 +774,17 @@ async function allocateNow(): Promise<void> {
     $("[data-list=allot-note]", body),
     [
       `This replaces its current allocation on Base. It can't be changed again until ${utc(ends)}.`,
+      projectedWords(
+        market,
+        (gauge) => aero.paysNext(gauge, controls.hours, market, market.cooldown),
+        rows,
+        wholeOf(budget),
+        stake,
+      ) ?? "",
       stake.idle ? `Its ${power(stake.idle)} not yet on any chain moves onto Base too.` : "",
       stake.elsewhere ? `Its ${power(stake.elsewhere)} on other chains isn't affected.` : "",
       run ? "Simulated on Base: it succeeds." : "Base couldn't simulate it, so your wallet may warn you.",
+      AUTOMATIC,
     ].filter(Boolean),
     (words) => words,
     (li, words) => fill(li, { words }),

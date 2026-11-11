@@ -1177,6 +1177,13 @@ dialog[open] {
   flex: 1 1 16rem;
   text-indent: 1.125em hanging;
 }
+/* Shrinks to fit its row, however long its text: a select is otherwise as wide as its longest option. Its own words
+   stay whole. */
+.u-fit {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow-wrap: normal;
+}
 .u-smallSelect {
   min-block-size: 1.75rem;
   padding-block: 0;
@@ -1298,4 +1305,15 @@ dialog[open] {
 .Amount--share {
   inline-size: 4.5rem;
   text-align: end;
+}
+/* On a phone, the pools to allocate to keep their share and projected APR in view: the headings wrap. */
+@media (width <= 30rem) {
+  .Plan th {
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+  .Plan :is(th, td) {
+    padding-inline-end: var(--gap-s);
+  }
 }

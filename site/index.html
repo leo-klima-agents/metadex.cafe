@@ -737,16 +737,17 @@
             </p>
             <div class="u-row u-small">
               <label class="u-withBox"
-                ><input type="checkbox" data-action="aero-again" checked /> Reallocate every 48 h</label
+                ><input type="checkbox" data-action="aero-again" checked /> Come back every 48 h to pick again</label
               >
               <label class="u-withBox"><input type="checkbox" data-action="aero-blue" /> Blue chips only</label>
             </div>
             <div class="u-row u-small">
-              <label data-text="stake-row"
+              <label class="u-withBox u-fit" data-text="stake-row"
                 >For
-                <select class="u-smallSelect" data-action="aero-stake" data-list="stake-option"></select
+                <select class="u-smallSelect u-fit" data-action="aero-stake" data-list="stake-option"></select
               ></label>
               <a data-text="stake-link"></a>
+              <span class="u-quiet" data-text="stake-lock"></span>
               <label class="u-withBox" data-text="amount-row"
                 >For
                 <input
@@ -815,7 +816,7 @@
                 <div class="Chart-tip u-small" aria-live="polite" hidden></div>
               </div>
             </figure>
-            <div class="u-scroll">
+            <div class="u-scroll" tabindex="0" role="region" aria-label="APR in each step, scrolls sideways">
               <table>
                 <caption class="u-visuallyHidden">
                   The APR of each strategy in each step of 48 hours
@@ -823,10 +824,10 @@
                 <thead>
                   <tr>
                     <th scope="col">APR</th>
-                    <th scope="col">Base average</th>
-                    <th scope="col">Autopilot</th>
                     <th scope="col">Your strategy</th>
                     <th scope="col" data-text="custom-head">Custom allocation</th>
+                    <th scope="col">Base average</th>
+                    <th scope="col">Autopilot</th>
                   </tr>
                 </thead>
                 <tbody data-list="step"></tbody>
@@ -849,28 +850,28 @@
             </ul>
             <p class="u-small" data-when="failed">The pools could not be read.</p>
             <div class="u-stack" data-when="ready">
-              <div class="u-scroll">
-                <table>
+              <div class="u-scroll" tabindex="0" role="region" aria-label="Pools to allocate to, scrolls sideways">
+                <table class="Plan">
                   <caption class="u-visuallyHidden">
                     The pools to allocate to, their shares, and what each would pay
                   </caption>
                   <thead>
                     <tr>
                       <th scope="col">Pool</th>
-                      <th scope="col">Daily revenue</th>
                       <th scope="col">Share</th>
-                      <th scope="col">sAERO weight</th>
                       <th scope="col">Projected APR</th>
+                      <th scope="col">sAERO weight</th>
+                      <th scope="col">Pool's revenue a day</th>
                     </tr>
                   </thead>
                   <tbody data-list="pick"></tbody>
                   <tfoot>
                     <tr>
                       <th scope="row">Total</th>
-                      <td></td>
                       <td class="u-figures u-strong" data-text="share-total"></td>
-                      <td class="u-figures" data-text="total-amount"></td>
                       <td class="u-figures u-strong" data-text="total-per"></td>
+                      <td class="u-figures" data-text="total-amount"></td>
+                      <td></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -910,6 +911,8 @@
                   Make the shares add up to 100%
                 </button>
               </div>
+              <p class="u-small" data-text="plan-pay"></p>
+              <p class="u-small" data-text="plan-auto"></p>
               <div class="u-row" data-if="wallet">
                 <button type="button" data-action="aero-allocate">Allocate</button>
                 <p class="u-small u-hang" data-text="allocate-why"></p>
@@ -948,13 +951,46 @@
             <div class="Pair">
               <dt class="u-small u-quiet">How far</dt>
               <dd>
-                At 0%, the top pools by exchange revenue, each given its share of it, however crowded. At 100%, the
-                split where each sAERO should earn the most if every pool pays again what it paid lately, taking into
-                account that your own weight lowers what each sAERO earns in a pool: that rarely spreads a small stake,
-                which goes into the one or two pools that should pay it the most. In between, sAERO moves out of the
-                pools where each sAERO earned the least and into those where it earned the most, in no more pools than
-                you set
+                At 0%, your sAERO is spread over the top pools by exchange revenue, each given its share of it. At 100%,
+                it goes where each sAERO should earn the most if every pool pays again what it paid lately. Your own
+                weight lowers what each sAERO earns in a pool, which is counted, but that rarely spreads a small stake:
+                it goes into the one or two pools that should pay it the most. In between, sAERO moves out of the pools
+                where each sAERO earned the least and into those where it earned the most
               </dd>
+            </div>
+            <div class="Pair">
+              <dt class="u-small u-quiet">Up to, judged on</dt>
+              <dd>The most pools a strategy uses, and how far back it looks at what each pool paid</dd>
+            </div>
+            <div class="Pair">
+              <dt class="u-small u-quiet">Come back every 48 h</dt>
+              <dd>
+                In the record, the strategy picks again every 48 hours, as an allocation is locked for
+                <span data-text="lock-hours">47 hours</span> after each change. Nothing does it for you: to follow it,
+                come back and allocate again. Unticked, the record picks once, 8 days ago, and keeps that
+              </dd>
+            </div>
+            <div class="Pair">
+              <dt class="u-small u-quiet">sAERO weight</dt>
+              <dd>What a stake allocates to pools. Aero's app calls it Allocation Power</dd>
+            </div>
+            <div class="Pair">
+              <dt class="u-small u-quiet">Pool's revenue a day</dt>
+              <dd>
+                What a pool pays all its sAERO a day: its exchange revenue over the window you set, and the incentives
+                already scheduled. Your sAERO earns its share of it
+              </dd>
+            </div>
+            <div class="Pair">
+              <dt class="u-small u-quiet">Thin</dt>
+              <dd>
+                A pool with under 1M sAERO weight over the window, where one allocation changes what it pays. Strategies
+                leave them out
+              </dd>
+            </div>
+            <div class="Pair">
+              <dt class="u-small u-quiet">More sAERO weight than before</dt>
+              <dd>Others moved into the pool lately, so each sAERO there earns less than it did</dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Blue chips</dt>
@@ -1450,10 +1486,10 @@
     <template id="step">
       <tr>
         <td data-text="when"></td>
-        <td class="u-figures" data-text="average"></td>
-        <td class="u-figures" data-text="pilot"></td>
         <td class="u-figures u-strong" data-text="strategy"></td>
         <td class="u-figures" data-text="custom"></td>
+        <td class="u-figures" data-text="average"></td>
+        <td class="u-figures" data-text="pilot"></td>
       </tr>
     </template>
     <template id="stop">
@@ -1479,7 +1515,6 @@
     <template id="pick">
       <tr>
         <td><a data-text="pool"></a><small class="u-detail" data-text="note"></small></td>
-        <td class="u-figures" data-text="pays"></td>
         <td class="u-figures">
           <input
             class="Amount Amount--share"
@@ -1490,8 +1525,9 @@
           />
           %
         </td>
-        <td class="u-figures" data-text="amount"></td>
         <td class="u-figures u-strong" data-text="per"></td>
+        <td class="u-figures" data-text="amount"></td>
+        <td class="u-figures" data-text="pays"></td>
       </tr>
     </template>
     <template id="stake-option"><option data-text="name"></option></template>
