@@ -55,6 +55,9 @@
   --series-1: light-dark(#2a78d6, #3987e5);
   --series-2: light-dark(#eb6834, #d95926);
   --series-3: light-dark(#1baf7a, #199e70);
+  /* The drinks of the Aero menu, mixed by how much coffee each holds. */
+  --coffee: light-dark(#4e2c18, #5a361f);
+  --milk: #f3e9d8;
   color-scheme: light dark;
   font-family: var(--sans);
   line-height: 1.5;
@@ -223,7 +226,8 @@ code,
   color: var(--quiet);
 }
 :focus-visible,
-.Pill--choice:has(.Pill-input:focus-visible) {
+.Pill--choice:has(.Pill-input:focus-visible),
+.Cup:has(.Pill-input:focus-visible) {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
 }
@@ -360,6 +364,124 @@ button,
 }
 .Count:not(:empty)::before {
   content: "· ";
+}
+
+/* The Aero menu: a row of cups, or a list of them on a narrow screen. */
+.Cups {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--gap-s);
+}
+.Cup {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  /* The APRs line up at the foot, whatever the lines above them. */
+  grid-template-rows: auto auto 1fr auto;
+  justify-items: center;
+  align-content: start;
+  gap: 0.125rem;
+  padding: var(--gap-s) 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  text-align: center;
+  cursor: pointer;
+}
+/* The house blend stands apart from the brews, which run from hot milk to coffee. */
+.Cup[data-blend] {
+  margin-inline-end: var(--gap-s);
+}
+.Cup:has(.Pill-input:checked) {
+  border-color: var(--accent);
+  background: var(--tint);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.Cup:has(.Pill-input:checked) .Cup-name {
+  font-weight: 700;
+}
+.Cup-icon {
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+}
+.Cup-drink {
+  fill: color-mix(in oklab, var(--coffee) var(--strength, 100%), var(--milk));
+}
+.Cup-layers {
+  fill: none;
+  stroke: var(--milk);
+  stroke-width: 1.25;
+}
+.Cup:not([data-blend]) .Cup-layers {
+  display: none;
+}
+.Cup-mug,
+.Cup-steam {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.Cup-steam {
+  opacity: 0.5;
+}
+.Cup-name {
+  font-size: var(--small);
+  line-height: 1.25;
+}
+.Cup-mix {
+  align-self: start;
+  color: var(--quiet);
+  font-size: var(--label);
+  line-height: 1.25;
+}
+.Cup-apr {
+  font-size: var(--small);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+@media (width <= 36rem) {
+  .Cups {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--card);
+  }
+  .Cup {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    grid-template-areas: "icon name apr" "icon mix apr";
+    justify-items: start;
+    column-gap: var(--gap-s);
+    padding: var(--gap-s) var(--gap);
+    border: 0;
+    border-radius: 0;
+    background: none;
+    text-align: start;
+  }
+  .Cup + .Cup {
+    border-block-start: 1px solid var(--line);
+  }
+  .Cup[data-blend] {
+    margin: 0;
+  }
+  .Cup-icon {
+    grid-area: icon;
+    align-self: center;
+  }
+  .Cup-name {
+    grid-area: name;
+  }
+  .Cup-mix {
+    grid-area: mix;
+  }
+  .Cup-apr {
+    grid-area: apr;
+    align-self: center;
+  }
 }
 
 .Chart {

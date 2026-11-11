@@ -941,19 +941,109 @@ export function per10kOf(paying: Paying, added = 0): Per10k | undefined {
 }
 
 export type Holding = { gauge: Gauge | undefined; weight: number };
-// What the strategy ranks pools by: what they pay, or their fees alone without `incentives`.
+// What pools are listed by: what they pay, or their fees alone without `incentives`.
 export const payOf = (paying: Paying, incentives = true): number =>
   incentives ? totalOf(paying) : sumOf(paying.fees).value;
-// The top `count` pools by `payOf`, each weighed by its share of it.
+
+// Shares under this are left out, so that each pool picked counts.
+const SMALLEST = 0.01;
+// The split of `amount` that pays the most, as shares of it, when each pool pays `pays` a day to all its sAERO and holds
+// `others` (above 0) besides it: `x` in a pool earns pays × x / (others + x). What one sAERO more earns there falls as
+// `x` grows, so the best split gives every pool it funds the same λ for one sAERO more: x = max(0, √(pays × others / λ)
+// − others), with λ such that the `x` add up to `amount`. Beyond the `most` largest shares, or under `SMALLEST`, pools
+// are left out and the rest solved again. Undefined if no pool pays.
+export function waterFill(
+  pools: { pays: number; others: number }[],
+  amount: number,
+  most: number,
+): number[] | undefined {
+  let shares = filled(pools, amount);
+  while (shares) {
+    const of = shares;
+    const funded = of.flatMap((share, i) => (share > 0 ? [i] : [])).sort((a, b) => of[b]! - of[a]!);
+    const kept =
+      funded.length > most
+        ? funded.slice(0, Math.max(1, most))
+        : funded.filter((i, rank) => rank === 0 || of[i]! >= SMALLEST);
+    if (kept.length === funded.length) return of;
+    const keep = new Set(kept);
+    shares = filled(
+      pools.map((pool, i) => (keep.has(i) ? pool : { ...pool, pays: 0 })),
+      amount,
+    );
+  }
+  return undefined;
+}
+function filled(pools: { pays: number; others: number }[], amount: number): number[] | undefined {
+  const pays = pools.map((pool) => Math.max(0, pool.pays));
+  const ratios = pools.map(({ others }, i) => pays[i]! / others);
+  const best = Math.max(...ratios);
+  if (!(best > 0)) return undefined;
+  const at = (lambda: number) =>
+    pools.map(({ others }, i) => Math.max(0, Math.sqrt((pays[i]! * others) / lambda) - others));
+  const sum = (xs: number[]) => xs.reduce((all, x) => all + x, 0);
+  let [low, high] = [0, best];
+  for (let k = 0; k < 200; k++) {
+    const mid = (low + high) / 2;
+    if (sum(at(mid)) > amount) low = mid;
+    else high = mid;
+  }
+  const x = at(high);
+  const total = sum(x);
+  if (total > 0) return x.map((each) => each / total);
+  // So little that it all goes where one sAERO earns the most.
+  const tops = ratios.filter((ratio) => ratio === best).length;
+  return ratios.map((ratio) => (ratio === best ? 1 / tops : 0));
+}
+
+// How far a strategy trusts each pool's recent fees to come again, from 0, where every pool is expected to pay as much
+// for each sAERO as the pools it picks from do on average, to 1, where each is expected to pay again what it paid: hot
+// milk, coffee, and the mixes between. Undefined is the house blend, which spreads over its pools instead.
+export const BREWS = [undefined, 0, 0.25, 0.5, 0.75, 1] as const;
+export type Brew = (typeof BREWS)[number];
+// A pool the strategy can pick from: what it pays, shared by its sAERO at the pick (`paying.power`), and how many of
+// those whole sAERO are the stake's own (`own`).
+export type Candidate = { gauge: Gauge; paying: Paying; own?: number };
 export type Pick = { gauge: Gauge; weight: number; paying: Paying };
-export function picksOf(pools: { gauge: Gauge; paying: Paying }[], count: number, incentives = true): Pick[] {
-  const top = pools
-    .map((each) => ({ ...each, total: payOf(each.paying, incentives) }))
-    .filter(({ total }) => total > 0)
-    .sort((a, b) => b.total - a.total)
-    .slice(0, Math.max(0, count));
-  const sum = top.reduce((all, { total }) => all + total, 0);
-  return top.map(({ gauge, paying, total }) => ({ gauge, paying, weight: total / sum }));
+// The house blend: the top `count` pools by `payOf`, each weighed by its share of it. A brew: the split of `amount` sAERO
+// over at most `count` pools that pays the most, after it dilutes them, if each pool pays its fees mixed as `brew` says
+// with what its sAERO would earn at the pools' average, and its incentives in full unless `incentives` is false. Without
+// an amount, as for one sAERO.
+export function picksOf(
+  pools: Candidate[],
+  { count, incentives, brew }: { count: number; incentives: boolean; brew: Brew },
+  amount = 0,
+): Pick[] {
+  if (brew === undefined) {
+    const top = pools
+      .map((each) => ({ ...each, total: payOf(each.paying, incentives) }))
+      .filter(({ total }) => total > 0)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, Math.max(0, count));
+    const sum = top.reduce((all, { total }) => all + total, 0);
+    return top.map(({ gauge, paying, total }) => ({ gauge, paying, weight: total / sum }));
+  }
+  const found = pools.map(({ gauge, paying, own = 0 }) => ({
+    gauge,
+    paying,
+    fees: sumOf(paying.fees).value,
+    streams: incentives ? sumOf(paying.incentives).value : 0,
+    others: paying.power - own,
+  }));
+  const power = found.reduce((sum, { paying }) => sum + paying.power, 0);
+  const average = power > 0 ? found.reduce((sum, { fees }) => sum + fees, 0) / power : 0;
+  const size = amount > 0 ? amount : 1;
+  const shares = waterFill(
+    found.map(({ paying, fees, streams, others }) => ({
+      pays: brew * fees + (1 - brew) * average * paying.power + streams,
+      others: Math.max(others, size / 10_000),
+    })),
+    size,
+    count,
+  );
+  return (shares ?? [])
+    .flatMap((weight, i) => (weight > 0 ? [{ gauge: found[i]!.gauge, paying: found[i]!.paying, weight }] : []))
+    .sort((a, b) => b.weight - a.weight);
 }
 // What 10,000 of `amount` sAERO held as `holdings` earn a day. Each pool takes its weight of `amount`, less what `mine`
 // (whole sAERO by gauge) already holds there. A holding outside the market's pools, or in a pool without an answer,
@@ -1068,28 +1158,38 @@ function pricesOver(market: Market, then: Then | undefined, { from, to }: Step):
   return found;
 }
 
-// The top `count` pools, of all or of blue chips, by the fees they paid over the `hours` before each pick and, unless
-// `incentives` is false, what their live programs stream over the next step, each given its share; picked again every
-// step (`again`), or once at the oldest step's start.
-export type Strategy = { count: number; hours: Hours; again: boolean; blueChips: boolean; incentives: boolean };
+// At most `count` pools, of all or of blue chips, split as `picksOf` does for `brew` from the fees they paid over the
+// `hours` before each pick and what their live programs stream over the next step; picked again every step (`again`), or
+// once at the oldest step's start.
+export type Strategy = {
+  count: number;
+  hours: Hours;
+  again: boolean;
+  blueChips: boolean;
+  incentives: boolean;
+  brew: Brew;
+};
 export const isBlueChip = ({ token0, token1 }: Gauge): boolean =>
   [token0, token1].every(({ address }) => config.BLUE_CHIPS.some((chip) => same(chip, address)));
 // False for thin pools and pools paying a token without a price, which the strategy and the suggestion leave out.
 export const weighable = (accrued: Accrued, paying: Paying): boolean =>
   !thinOver(accrued) && !!per10kOf(paying)?.priced;
 // From what each pool paid over the `hours` before `time`, and what its programs live then would stream over the next
-// step, at `prices`, those of `time`.
+// step, at `prices`, those of `time`, shared by its sAERO then, of which `own` are the stake's, by gauge; for `amount`
+// sAERO.
 export function picksAt(
   market: Market,
   past: Past,
   time: number,
-  { count, hours, blueChips, incentives }: Strategy,
+  strategy: Strategy,
   prices = market.prices,
+  amount = 0,
+  own?: Map<string, number>,
 ): Pick[] {
-  const since = time - hours * HOUR;
+  const since = time - strategy.hours * HOUR;
   const pools = market.gauges
-    .filter((gauge) => routable(gauge) && (!blueChips || isBlueChip(gauge)))
-    .flatMap((gauge) => {
+    .filter((gauge) => routable(gauge) && (!strategy.blueChips || isBlueChip(gauge)))
+    .flatMap((gauge): Candidate[] => {
       const before = accrualOf(gauge, past, since, time, market);
       if (!before || before.to <= before.from || before.from > since + 0.1 * (time - since) || !(meanOf(before) > 0))
         return [];
@@ -1097,11 +1197,11 @@ export function picksAt(
       const paying = {
         fees: feeFlows(gauge, before, prices),
         incentives: streamFlows(gauge, time, time + STEP, prices, live),
-        power: meanOf(before),
+        power: whole(before.endPower),
       };
-      return weighable(before, paying) ? [{ gauge, paying }] : [];
+      return weighable(before, paying) ? [{ gauge, paying, own: own?.get(key(gauge.address)) }] : [];
     });
-  return picksOf(pools, count, incentives);
+  return picksOf(pools, strategy, amount);
 }
 // The snapshots a strategy needs beyond the grid's.
 export function timesFor(market: Market, { again, hours }: Strategy): number[] {
@@ -1136,10 +1236,25 @@ const heldSteps = (
     const mine = own && heldIn(own, step);
     return { ...step, paid: heldOver(holdingsAt(step), paidDuring(market, past, step, prices), amount, mine), prices };
   });
-// Each pick at the prices when it was made.
+// The whole sAERO by gauge that `moves` held at `time`.
+export function heldAt(moves: Move[], time: number): Map<string, number> {
+  const mine = new Map<string, number>();
+  for (const { gauge, amount } of moves.find(({ at }) => at <= time)?.allocations ?? [])
+    if (!isIdleGauge(gauge)) mine.set(key(gauge), (mine.get(key(gauge)) ?? 0) + whole(amount));
+  return mine;
+}
+// Each pick at the prices when it was made, for the amount, knowing where the stake's own sAERO was then.
 export function strategySteps(market: Market, past: Past, strategy: Strategy, held: Held = {}): Paid[] {
   const pick = (time: number) =>
-    picksAt(market, past, time, strategy, pricedAt(market, held.then, time) ?? market.prices);
+    picksAt(
+      market,
+      past,
+      time,
+      strategy,
+      pricedAt(market, held.then, time) ?? market.prices,
+      held.amount,
+      held.own && heldAt(held.own, time),
+    );
   const once = strategy.again ? undefined : pick(stepsOf(market).at(-1)!.from);
   return heldSteps(market, past, (step) => once ?? pick(step.from), held);
 }

@@ -3,6 +3,7 @@ import * as aero from "../aero.ts";
 import {
   WINDOWS,
   isBlueChip,
+  type Brew,
   isThin,
   routable,
   type Gauge,
@@ -120,6 +121,7 @@ const plan: {
   again: boolean;
   blueChips: boolean;
   incentives: boolean;
+  brew: Brew;
   amount: number;
   stake: bigint | undefined;
   rows: Part[] | undefined;
@@ -129,11 +131,38 @@ const plan: {
   again: true,
   blueChips: false,
   incentives: true,
+  brew: undefined,
   amount: 10_000,
   stake: undefined,
   rows: undefined,
   more: [],
 };
+// The strategies on the menu: the house blend, then the brews from hot milk to coffee, in `aero.BREWS`' order. `of`
+// says how much coffee is in it, or of the average without coffee.
+const CUPS: { brew: Brew; name: string; mix: string; of: string }[] = [
+  { brew: undefined, name: "House blend", mix: "Spread by revenue", of: "" },
+  { brew: 0, name: "Hot milk", mix: "No coffee", of: "none" },
+  { brew: 0.25, name: "Flat white", mix: "¼ coffee", of: "a quarter" },
+  { brew: 0.5, name: "Café au lait", mix: "½ coffee", of: "half" },
+  { brew: 0.75, name: "Macchiato", mix: "¾ coffee", of: "three quarters" },
+  { brew: 1, name: "Coffee", mix: "All coffee", of: "all" },
+];
+const cupOf = (brew: number | undefined) => CUPS.find((cup) => cup.brew === brew)!;
+const brewKey = (brew: Brew): string => (brew === undefined ? "blend" : String(brew));
+// What the chosen strategy does, in words.
+function brewWords(brew: Brew, incentives: boolean): string {
+  if (brew === undefined)
+    return "The house blend spreads your sAERO over the top pools by exchange revenue, each given its share of it.";
+  if (brew === 0 && !incentives)
+    return "Hot milk expects every pool to pay the average in fees, whatever it paid lately, so it spreads your sAERO like everyone else's, over the largest pools.";
+  const expects =
+    brew === 1
+      ? "each pool to pay again the fees it paid lately"
+      : brew === 0
+        ? "every pool to pay the average in fees, whatever it paid lately"
+        : `each pool to pay ${cupOf(brew).of} the fees it paid lately and ${cupOf(1 - brew).of} the average`;
+  return `${cupOf(brew).name} expects ${expects}${incentives ? ", plus the incentives already scheduled" : ""}. It puts your sAERO where that pays the most, after your own weight dilutes each pool: a small stake usually goes into one or two pools, a large one spreads.`;
+}
 // The rows as last drawn, which the actions edit, and the next pools "Show more pools" adds.
 let drawn: Part[] = [];
 let nextPools: string[] = [];
@@ -155,6 +184,7 @@ const strategyOf = (market: Market): aero.Strategy => ({
   again: plan.again,
   blueChips: plan.blueChips,
   incentives: plan.incentives,
+  brew: plan.brew,
 });
 // As weights that add up to one.
 function holdingsOf(rows: Part[], market: Market): aero.Holding[] {
@@ -267,10 +297,31 @@ function drawControls(stakes: Stake[], stake: Stake | undefined): void {
   $<HTMLInputElement>("[data-action=aero-blue]", aeroView).checked = plan.blueChips;
   $<HTMLInputElement>("[data-action=aero-incentives]", aeroView).checked = plan.incentives;
 }
+// The menu, each strategy with what it would have earned over the record, as `apr` says.
+function drawCups(apr: (brew: Brew) => Value): void {
+  list(
+    $("[data-list=cup]", aeroView),
+    CUPS,
+    ({ brew }) => brewKey(brew),
+    (label, { brew, name, mix }) => {
+      const input = $<HTMLInputElement>("input", label);
+      input.value = brewKey(brew);
+      input.checked = plan.brew === brew;
+      label.style.setProperty("--strength", `${(brew ?? 1) * 100}%`);
+      label.toggleAttribute("data-blend", brew === undefined);
+      fill(label, { name, mix, apr: apr(brew) });
+    },
+  );
+  fill(aeroView, { "cup-words": brewWords(plan.brew, plan.incentives) });
+}
 
 // The strategy as the controls set it, and that it is picked from only what was known then.
-function introOf({ count: top, hours, again, blueChips, incentives }: aero.Strategy): string {
-  const pools = `the top ${count(top, "pool", "pools")}${blueChips ? " of blue chips" : ""} by exchange revenue${incentives ? "" : " without incentives"} over the ${WINDOW[hours].over} before`;
+function introOf({ count: top, hours, again, blueChips, incentives, brew }: aero.Strategy): string {
+  const chips = blueChips ? " of blue chips" : "";
+  const pools =
+    brew === undefined
+      ? `the house blend, the top ${count(top, "pool", "pools")}${chips} by exchange revenue${incentives ? "" : " without incentives"} over the ${WINDOW[hours].over} before`
+      : `${cupOf(brew).name.toLowerCase()}, up to ${count(top, "pool", "pools")}${chips} judged on the ${WINDOW[hours].over} before`;
   return again
     ? `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools} each pick, picked again every ${hoursWords(aero.STEP)}. Without hindsight: each pick knows only what was known then.`
     : `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools} that, and kept since. Without hindsight: the pick knows only what was known then.`;
@@ -288,17 +339,23 @@ function lastOf<A extends unknown[], R>(make: (...args: A) => R): (...args: A) =
 // The record's lines, worked out again only when what they rest on changes, not on every render.
 const strategyPast = lastOf(aero.mergePast);
 const pilotPast = lastOf(aero.mergePast);
-const strategyLine = lastOf(
-  (
-    market: Market,
-    past: aero.Past,
-    count: number,
-    hours: Hours,
-    again: boolean,
-    blueChips: boolean,
-    incentives: boolean,
-    held: Held,
-  ): Paid[] => aero.strategySteps(market, past, { count, hours, again, blueChips, incentives }, held),
+// One line for each strategy on the menu, so that each shows what it earned.
+const strategyLines = new Map(
+  CUPS.map(({ brew }) => [
+    brew,
+    lastOf(
+      (
+        market: Market,
+        past: aero.Past,
+        count: number,
+        hours: Hours,
+        again: boolean,
+        blueChips: boolean,
+        incentives: boolean,
+        held: Held,
+      ): Paid[] => aero.strategySteps(market, past, { count, hours, again, blueChips, incentives, brew }, held),
+    ),
+  ]),
 );
 const averageLine = lastOf((market: Market, then: aero.Then | undefined) =>
   aero.averageSteps(market, market.past, then),
@@ -333,6 +390,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
             again: plan.again,
             blueChips: plan.blueChips,
             incentives: plan.incentives,
+            brew: plan.brew,
           },
     ),
   });
@@ -347,6 +405,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
     plan.again,
     plan.blueChips,
     plan.incentives,
+    brewKey(plan.brew),
     amount,
     stake && String(stake.id),
     plan.rows,
@@ -354,6 +413,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   if (recordFor === shows && [extra, pricing, record, moves].some(waiting)) return;
   if (!market || !extra.value || waiting(pricing) || waiting(moves)) {
     recordFor = undefined;
+    drawCups(() => (extra.failed ? "–" : undefined));
     return void fill(aeroView, { plan: stateOf(extra.value ? {} : extra) });
   }
   const then = pricing.value;
@@ -361,7 +421,17 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   const held = heldAs(amount, then, own);
   const { count: top, hours, again, blueChips, incentives } = strategyOf(market);
   const past = strategyPast(market.past, extra.value);
-  const strategy = strategyLine(market, past, top, hours, again, blueChips, incentives, held);
+  const lines = new Map(
+    CUPS.map(({ brew }) => [
+      brew,
+      strategyLines.get(brew)!(market, past, top, hours, again, blueChips, incentives, held),
+    ]),
+  );
+  const strategy = lines.get(plan.brew)!;
+  drawCups((brew) => {
+    const found = aero.aprOver(lines.get(brew)!);
+    return found ? aprWords(found.apr, found.priced) : "–";
+  });
   const custom = plan.rows && customLine(market, plan.rows, held);
   const average = averageLine(market, then);
   const pilot: Got<Paid[]> = andThen(record, (found) => ({ value: pilotLine(market, found, held) }));
@@ -469,23 +539,26 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
   const leaving = mine.size ? mine : undefined;
   const ahead = new Map(market.gauges.map((gauge) => [gauge, aero.paysNext(gauge, controls.hours, market, hold)]));
   const next = (gauge: Gauge) => ahead.get(gauge);
-  const { count: top, blueChips, incentives } = strategyOf(market);
+  const strategy = strategyOf(market);
+  const { blueChips, incentives } = strategy;
   const picks = aero.picksOf(
     market.gauges
       .filter((gauge) => routable(gauge) && (!blueChips || isBlueChip(gauge)))
       .flatMap((gauge) => {
         const paying = next(gauge);
-        return paying && aero.weighable(gauge.windows[controls.hours], paying) ? [{ gauge, paying }] : [];
+        return paying && aero.weighable(gauge.windows[controls.hours], paying)
+          ? [{ gauge, paying, own: leaving?.get(key(gauge.address)) }]
+          : [];
       }),
-    top,
-    incentives,
+    strategy,
+    amount,
   );
   fill(aeroView, { picks: stateOf(got) });
   const rows = (drawn = plan.rows ?? ruleRows(picks));
   const total = totalOf(rows);
   const expected = aero.heldOver(holdingsOf(rows, market), next, amount, leaving);
   const inRows = new Set(rows.map(({ gauge }) => key(gauge)));
-  // Ranked and filtered as the strategy is.
+  // Filtered as the strategy is, and listed by what they pay.
   const pays = (gauge: Gauge) => {
     const found = next(gauge);
     return found ? aero.payOf(found, incentives) : -1;
@@ -890,6 +963,11 @@ actions["aero-again"] = (el) => {
 };
 actions["aero-incentives"] = (el) => {
   plan.incentives = (el as HTMLInputElement).checked;
+  suggest();
+};
+actions["aero-brew"] = (el) => {
+  const value = (el as HTMLInputElement).value;
+  plan.brew = CUPS.find(({ brew }) => brewKey(brew) === value)?.brew;
   suggest();
 };
 actions["aero-blue"] = (el) => {
