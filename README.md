@@ -7,13 +7,12 @@ A static page at <https://metadex.cafe/> for Hydrex accounts and Aero stakes on 
 - see the APR votes earned last epoch compared with Hydrex's average, and each account's last payout as a receipt;
 - swap many tokens into one through **ImmutableSwapper**, routed together and simulated on Base before the wallet asks
   to sign;
-- pick an Aero strategy from a menu, each with its APR over the last eight days: the house blend, which spreads a stake
-  over the top pools by exchange revenue, or a brew from hot milk to coffee, which expects each pool to pay from the
-  average to again what it paid lately and puts the stake where that pays the most once it dilutes each pool (judged on
-  48 hours, four days or eight days, of all pools or blue chips only, picked once or again every 48 hours); see it
-  against Aero's Autopilot as it actually allocated and against the Base average, then allocate a stake on Base to its
-  picks or to shares you edit, among every pool, simulated on Base before the wallet asks to sign; see each stake's
-  pools, when it can move and what it can claim, and each pool's APR, day by day.
+- pick an Aero strategy on a dial, from spreading a stake over the top pools by exchange revenue to the split where each
+  sAERO earns the most once it dilutes each pool, each stop with its APR over the last eight days (judged on 48 hours,
+  four days or eight days, of all pools or blue chips only, picked once or again every 48 hours); see it against Aero's
+  Autopilot as it actually allocated and against the Base average, then allocate a stake on Base to its picks or to
+  shares you edit, among every pool, simulated on Base before the wallet asks to sign; see each stake's pools, when it
+  can move and what it can claim, and each pool's APR, day by day.
 
 It has no server, holds no keys and stores nothing. It reads Base through three public RPCs, the only hosts its Content
 Security Policy lets it connect to: `https://mainnet.base.org`, `https://base.drpc.org` and

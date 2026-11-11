@@ -709,9 +709,12 @@
           <legend><h2>Your strategy</h2></legend>
           <div class="u-stack">
             <fieldset class="u-stackTight">
-              <legend class="u-small">From the menu, each with its APR over the last 8 days:</legend>
-              <div class="Cups" data-list="cup"></div>
-              <p class="u-small u-quiet" data-text="cup-words"></p>
+              <legend class="u-small">
+                How far to go from spreading by revenue to the best pay per sAERO, each with its APR over the last 8
+                days:
+              </legend>
+              <div class="Stops" data-list="stop"></div>
+              <p class="u-small u-quiet" data-text="far-words"></p>
             </fieldset>
             <p class="u-small">
               <label
@@ -733,9 +736,6 @@
               >
             </p>
             <div class="u-row u-small">
-              <label class="u-withBox"
-                ><input type="checkbox" data-action="aero-incentives" checked /> Include incentives</label
-              >
               <label class="u-withBox"
                 ><input type="checkbox" data-action="aero-again" checked /> Reallocate every 48 h</label
               >
@@ -946,17 +946,14 @@
               <dd>The actual allocations of Aero's Autopilot USDC Maxi at each step on Base</dd>
             </div>
             <div class="Pair">
-              <dt class="u-small u-quiet">House blend</dt>
-              <dd>The top pools by exchange revenue, each given its share of it: it spreads your sAERO over them</dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Hot milk to coffee</dt>
+              <dt class="u-small u-quiet">How far</dt>
               <dd>
-                How far a pick trusts each pool's recent fees to come again. Coffee expects every pool to pay again what
-                it paid; hot milk expects each to pay the average, whatever it paid; the drinks between mix the two, a
-                café au lait half and half. Incentives already scheduled count in full in every one. Each then puts your
-                sAERO where that pays the most, taking into account that your own weight lowers what each sAERO earns in
-                a pool. That rarely spreads a small stake: it goes into the one or two pools that should pay it the most
+                At 0%, the top pools by exchange revenue, each given its share of it, however crowded. At 100%, the
+                split where each sAERO should earn the most if every pool pays again what it paid lately, taking into
+                account that your own weight lowers what each sAERO earns in a pool: that rarely spreads a small stake,
+                which goes into the one or two pools that should pay it the most. In between, sAERO moves out of the
+                pools where each sAERO earned the least and into those where it earned the most, in no more pools than
+                you set
               </dd>
             </div>
             <div class="Pair">
@@ -1459,18 +1456,18 @@
         <td class="u-figures" data-text="custom"></td>
       </tr>
     </template>
-    <template id="cup">
-      <label class="Cup">
-        <input class="Pill-input" type="radio" name="aero-brew" data-action="aero-brew" />
-        <svg class="Cup-icon" viewBox="0 0 32 32" aria-hidden="true">
-          <path class="Cup-drink" d="M7 13h15v8a5 5 0 0 1-5 5h-5a5 5 0 0 1-5-5z" />
-          <path class="Cup-layers" d="M7 17h15M7 21.5h14.5" />
-          <path class="Cup-mug" d="M6 10h17v11a6 6 0 0 1-6 6h-5a6 6 0 0 1-6-6zM23 13h1.5a3.5 3.5 0 0 1 0 7H23" />
-          <path class="Cup-steam" d="M12 2.5q-1.5 1.75 0 3.5M17 2.5q-1.5 1.75 0 3.5" />
+    <template id="stop">
+      <label class="Stop">
+        <input class="Pill-input" type="radio" name="aero-far" data-action="aero-far" />
+        <svg class="Stop-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <rect class="Stop-bar" x="3" width="5" />
+          <rect class="Stop-bar" x="10" width="5" />
+          <rect class="Stop-bar" x="17" width="5" />
+          <path class="Stop-base" d="M2 21.5h20" />
         </svg>
-        <span class="Cup-name" data-text="name"></span>
-        <span class="Cup-mix" data-text="mix"></span>
-        <span class="Cup-apr" data-text="apr"></span>
+        <span class="Stop-name" data-text="name"></span>
+        <span class="Stop-note" data-text="note"></span>
+        <span class="Stop-apr" data-text="apr"></span>
       </label>
     </template>
     <template id="legend">

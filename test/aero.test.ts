@@ -10,7 +10,6 @@ import {
   aprOf,
   aprOver,
   heldIn,
-  payOf,
   allocateCall,
   allotmentsOf,
   amountOf,
@@ -31,8 +30,6 @@ import {
   picksOf,
   waterFill,
   heldAt,
-  BREWS,
-  type Brew,
   refusalOf,
   feesPerDay,
   isThin,
@@ -644,9 +641,9 @@ test("ahead, a pool pays its window's fees again, shared by its sAERO now, and o
   assert.equal(paysNext(young, 48, market([young]), HOLD), undefined, "too young for the window");
 });
 
-// The house blend's settings.
-const BLEND = (count: number, incentives = true) => ({ count, incentives, brew: undefined });
-test("the house blend weighs its top pools by what they pay in all, and leaves out those that pay nothing", () => {
+// The strategy at 0%, over `count` pools.
+const TOP = (count: number) => ({ count, far: 0 });
+test("at 0%, the strategy weighs its top pools by what they pay in all, and leaves out those that pay nothing", () => {
   const [big, mid, small, none] = [
     gauge({ perDay: 3 }),
     gauge({ perDay: 2 }),
@@ -657,7 +654,7 @@ test("the house blend weighs its top pools by what they pay in all, and leaves o
     gauge: each,
     paying: paidOver(each, each.windows[48], PRICES)!,
   }));
-  const picks = picksOf(pools, BLEND(2));
+  const picks = picksOf(pools, TOP(2));
   assert.deepEqual(
     picks.map(({ gauge, weight }) => [gauge.address, weight]),
     [
@@ -665,31 +662,10 @@ test("the house blend weighs its top pools by what they pay in all, and leaves o
       [mid.address, 0.4],
     ],
   );
-  assert.equal(picksOf(pools, BLEND(10)).length, 3);
+  assert.equal(picksOf(pools, TOP(10)).length, 3);
 });
 
-test("without incentives, the house blend ranks and weighs its pools by their fees alone", () => {
-  const [fees, streams] = [gauge(), gauge()];
-  const flows = (value: number) => [{ token: usdc, value }];
-  const pools = [
-    { gauge: fees, paying: { fees: flows(3), incentives: [], power: 1 } },
-    { gauge: streams, paying: { fees: flows(1), incentives: flows(9), power: 1 } },
-  ];
-  const ranked = (incentives?: boolean) =>
-    picksOf(pools, BLEND(2, incentives)).map(({ gauge, weight }) => [gauge.address, weight]);
-  assert.deepEqual(ranked(), [
-    [streams.address, 10 / 13],
-    [fees.address, 3 / 13],
-  ]);
-  assert.equal(payOf(pools[1]!.paying), 10, "fees and incentives");
-  assert.equal(payOf(pools[1]!.paying, false), 1, "fees alone");
-  assert.deepEqual(ranked(false), [
-    [fees.address, 0.75],
-    [streams.address, 0.25],
-  ]);
-});
-
-test("the house blend over its own window earns at least the average of its pools, and less as its sAERO dilutes them", () => {
+test("at 0%, the strategy over its own window earns at least the average of its pools, and less as its sAERO dilutes them", () => {
   // Same fees, but one pool has a fifth of the sAERO.
   const crowded = gauge({ perDay: 1 });
   const quiet = gauge({ perDay: 5, power: 1_000_000n * SAERO });
@@ -698,7 +674,7 @@ test("the house blend over its own window earns at least the average of its pool
   const lately = (each: Gauge) => paidOver(each, each.windows[48], PRICES);
   const picks = picksOf(
     [crowded, quiet].map((each) => ({ gauge: each, paying: lately(each)! })),
-    BLEND(2),
+    TOP(2),
   );
   const rule = heldOver(picks, lately)!;
   const base = marketOver(m.gauges, lately);
@@ -869,7 +845,7 @@ test("the record's steps run 48 hours each from the grid's times, the newest to 
 
 test("with the prices then, a step is valued at the mean of its ends' prices, and a pick at its own time's", () => {
   const { m } = twoPools();
-  const top = { count: 1, hours: 48, again: true, blueChips: false, incentives: true, brew: undefined } as const;
+  const top = { count: 1, hours: 48, again: true, blueChips: false, far: 0 } as const;
   const starts = stepsOf(m).map(({ from }) => from);
   const at = (usdcPrice?: number) =>
     prices([...(usdcPrice === undefined ? [] : [[usdc, usdcPrice] as [Token, number]]), [weth, 2_000], [aero, 0.6]]);
@@ -913,7 +889,7 @@ test("an APR over steps takes each step's at its own price of AERO, weighed by i
 
 test("a strategy picks at each step from only the window before it, and earns what its pools paid in the step", () => {
   const { a, m } = twoPools();
-  const top = { count: 1, hours: 48, again: true, blueChips: false, incentives: true, brew: undefined } as const;
+  const top = { count: 1, hours: 48, again: true, blueChips: false, far: 0 } as const;
   // Chasing last step's best pool always lands on the one that pays $1 next.
   nearAll(totals(strategySteps(m, m.past, top)), [1, 1, 1, 1], "again");
   // Picked once from the 48 hours before the oldest step: B, which paid $10 then, and is kept.
@@ -957,59 +933,67 @@ test("water-filling gives every pool it funds the same pay for one sAERO more, w
   assert.equal(shares([0, 0], 4), undefined, "no pool pays");
 });
 
-test("a brew expects each pool's fees as it mixes them with the average's, and splits by water-filling", () => {
-  const [a, b, c] = [gauge(), gauge(), gauge()];
+test("the dial goes from the top pools by revenue to water-filling, out of the pools where each sAERO earns least first", () => {
+  const [a, b, c, d] = [gauge(), gauge(), gauge(), gauge()];
   const flows = (value: number) => (value ? [{ token: usdc, value }] : []);
-  // $4, $1 and $0 a day of fees over 1M, 1M and 2M sAERO: on average $5 over 4M.
-  const pools = (cIncentives = 0, own: (number | undefined)[] = []) =>
-    (
-      [
-        [a, 4, 0, 1_000_000],
-        [b, 1, 0, 1_000_000],
-        [c, 0, cIncentives, 2_000_000],
-      ] as const
-    ).map(([gauge, fees, incentives, power], i) => ({
-      gauge,
-      paying: { fees: flows(fees), incentives: flows(incentives), power },
-      own: own[i],
-    }));
-  const split = (brew: Brew, amount = 4_000_000, found = pools(), count = 10, incentives = true) => {
-    const picks = picksOf(found, { count, incentives, brew }, amount);
-    return [a, b, c].map((each) => picks.find(({ gauge }) => gauge === each)?.weight ?? 0);
+  // A day: A $1,000 over 10M sAERO, B $200 over 1M, C $50 and $100 of incentives over 1M. For each sAERO, B pays
+  // twice what A does, and C half as much again as A.
+  const pools = (
+    [
+      [a, 1_000, 0, 10_000_000],
+      [b, 200, 0, 1_000_000],
+      [c, 50, 100, 1_000_000],
+      [d, 300, 0, 10_000_000],
+    ] as const
+  ).map(([gauge, fees, incentives, power]) => ({
+    gauge,
+    paying: { fees: flows(fees), incentives: flows(incentives), power },
+  }));
+  const split = (
+    far: number,
+    count = 10,
+    amount = 10_000,
+    found: Parameters<typeof picksOf>[0] = pools.slice(0, 3),
+  ) => {
+    const picks = picksOf(found, { count, far }, amount);
+    return [a, b, c, d].map((each) => picks.find(({ gauge }) => gauge === each)?.weight ?? 0);
   };
-  // Coffee trusts the fees: $4 and $1 over 1M each, as above.
-  nearAll(split(1), [0.75, 0.25, 0], "coffee");
-  // Hot milk expects every pool to pay the average, $1.25 a day for each 1M, so spreads like everyone else.
-  nearAll(split(0), [0.25, 0.25, 0.5], "hot milk");
-  nearAll(split(0, 4_000_000, pools(), 2), [1 / 3, 0, 2 / 3], "hot milk in at most two pools");
-  // The mixes lie between.
-  const tilts = BREWS.flatMap((brew) => (brew === undefined ? [] : [split(brew)[0]!]));
-  assert.ok(
-    tilts.every((share, i) => i === 0 || share > tilts[i - 1]!),
-    `the more coffee, the more in the pool that paid best: ${tilts}`,
-  );
-  // Incentives already scheduled count in full in every brew, unless left out.
-  assert.ok(split(0, 4_000_000, pools(10))[2]! > 0.5, "hot milk follows incentives");
-  nearAll(split(0, 4_000_000, pools(10), 10, false), [0.25, 0.25, 0.5], "without incentives");
-  // Half of A's 1M is the stake's own, so only 500k others share A: x = √(pays × others / λ) − others, adding up to 4M.
-  const root = 5_500_000 / (Math.sqrt(4 * 500_000) + Math.sqrt(1_000_000));
-  nearAll(
-    split(1, 4_000_000, pools(0, [500_000])),
-    [(Math.sqrt(4 * 500_000) * root - 500_000) / 4e6, (Math.sqrt(1_000_000) * root - 1_000_000) / 4e6, 0],
-    "its own weight",
-  );
-  // A stake that barely dilutes any pool goes where one sAERO earns the most.
-  nearAll(split(1, 10_000), [1, 0, 0], "small");
-  nearAll(split(1, 0), [1, 0, 0], "no amount");
+  nearAll(split(0), [1_000 / 1_350, 200 / 1_350, 150 / 1_350, 0], "by revenue");
+  // 10,000 sAERO barely dilute B, so they all go where each sAERO earns the most.
+  nearAll(split(1), [0, 1, 0, 0], "water-filling");
+  // In between, a share of the 1,150 / 1,350 that differs moves into B: out of A first, then out of C.
+  nearAll(split(0.25), [712.5 / 1_350, 487.5 / 1_350, 150 / 1_350, 0], "a quarter");
+  nearAll(split(0.75), [137.5 / 1_350, 1_062.5 / 1_350, 150 / 1_350, 0], "three quarters");
+  nearAll(split(0.9), [0, 1_235 / 1_350, 115 / 1_350, 0], "A empty, then C");
+  // With two pools at most, D and A are its top pools by revenue and B its best pay; a step that would hold three
+  // empties D, where each sAERO earns the least, first.
+  nearAll(split(0, 2, 10_000, pools), [1_000 / 1_300, 0, 0, 300 / 1_300], "two pools by revenue");
+  nearAll(split(0.1, 2, 10_000, pools), [1_000 / 1_300, 300 / 1_300, 0, 0], "never three");
+  // A stake as large as A's weight spreads at 100%, and each step stays between the ends.
+  const large = split(1, 10, 10_000_000);
+  assert.ok(large.filter((share) => share > 0).length > 1, `spread: ${large}`);
+  const start = split(0, 10, 10_000_000);
+  split(0.5, 10, 10_000_000).forEach((share, i) => {
+    const [low, high] = [Math.min(start[i]!, large[i]!), Math.max(start[i]!, large[i]!)];
+    assert.ok(share >= low - 1e-9 && share <= high + 1e-9, `pool ${i}: ${low} ≤ ${share} ≤ ${high}`);
+  });
+  // Half of A's 10M is the stake's own: water-filling counts A as shared with 5M others.
+  const own = pools.slice(0, 3).map((each, i) => ({ ...each, own: i === 0 ? 5_000_000 : undefined }));
+  const halved = pools
+    .slice(0, 3)
+    .map((each, i) => (i === 0 ? { ...each, paying: { ...each.paying, power: 5_000_000 } } : each));
+  nearAll(split(1, 10, 10_000_000, own), split(1, 10, 10_000_000, halved), "its own weight");
 });
 
-test("a brew in the record picks from the window before each pick, knowing where the stake was then", () => {
+test("the dial in the record picks from the window before each pick, knowing where the stake was then", () => {
   const { m } = twoPools();
-  const top = { count: 2, hours: 48, again: true, blueChips: false, incentives: true } as const;
-  // Coffee chases last step's best pool, which then pays $1, as the house blend does with one pool.
-  nearAll(totals(strategySteps(m, m.past, { ...top, count: 1, brew: 1 })), [1, 1, 1, 1], "coffee");
-  // Hot milk expects both pools, with as much sAERO, to pay the same, so holds half of each: $5.50.
-  nearAll(totals(strategySteps(m, m.past, { ...top, brew: 0 })), [5.5, 5.5, 5.5, 5.5], "hot milk");
+  const top = { count: 2, hours: 48, again: true, blueChips: false } as const;
+  // Each pick gives the pool that paid $10 lately 10/11 by revenue, and it then pays $1, the other $10.
+  nearAll(totals(strategySteps(m, m.past, { ...top, far: 0 })), Array(4).fill(20 / 11), "0%");
+  // Water-filling chases last step's best pool alone, which then pays $1.
+  nearAll(totals(strategySteps(m, m.past, { ...top, far: 1 })), [1, 1, 1, 1], "100%");
+  // Halfway, it moves half of the other pool's 1/11 into the best: 21/22 at $1 and 1/22 at $10.
+  nearAll(totals(strategySteps(m, m.past, { ...top, far: 0.5 })), Array(4).fill(31 / 22), "50%");
   // Where a stake's sAERO was at a pick.
   const [p, q] = m.gauges;
   const moves: Move[] = [
@@ -1035,7 +1019,7 @@ test("the strategy leaves out thin pools and pools paying a token without a pric
       programs: [{ ...streaming(1_000, NOW - 20 * DAY, NOW + DAY), token: other }],
     }),
   ];
-  const top = { count: 1, hours: 48, again: true, blueChips: false, incentives: true, brew: undefined } as const;
+  const top = { count: 1, hours: 48, again: true, blueChips: false, far: 0 } as const;
   for (const [more, what] of [
     [thin, "thin"],
     [unpriced, "unpriced"],
@@ -1052,7 +1036,7 @@ test("the strategy leaves out thin pools and pools paying a token without a pric
 
 test("a longer window needs snapshots before the grid's, read for it alone", () => {
   const { m, past } = twoPools([NOW - 6 * STEP]);
-  const top = { count: 1, hours: 96, again: true, blueChips: false, incentives: true, brew: undefined } as const;
+  const top = { count: 1, hours: 96, again: true, blueChips: false, far: 0 } as const;
   assert.deepEqual(timesFor(m, { ...top, hours: 48 }), [], "48 hours: the grid's own");
   assert.deepEqual(timesFor(m, top), [NOW - 6 * STEP]);
   assert.deepEqual(

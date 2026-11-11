@@ -3,7 +3,6 @@ import * as aero from "../aero.ts";
 import {
   WINDOWS,
   isBlueChip,
-  type Brew,
   isThin,
   routable,
   type Gauge,
@@ -120,8 +119,7 @@ const plan: {
   count: number;
   again: boolean;
   blueChips: boolean;
-  incentives: boolean;
-  brew: Brew;
+  far: number;
   amount: number;
   stake: bigint | undefined;
   rows: Part[] | undefined;
@@ -130,38 +128,29 @@ const plan: {
   count: 10,
   again: true,
   blueChips: false,
-  incentives: true,
-  brew: undefined,
+  far: 0,
   amount: 10_000,
   stake: undefined,
   rows: undefined,
   more: [],
 };
-// The strategies on the menu: the house blend, then the brews from hot milk to coffee, in `aero.BREWS`' order. `of`
-// says how much coffee is in it, or of the average without coffee.
-const CUPS: { brew: Brew; name: string; mix: string; of: string }[] = [
-  { brew: undefined, name: "House blend", mix: "Spread by revenue", of: "" },
-  { brew: 0, name: "Hot milk", mix: "No coffee", of: "none" },
-  { brew: 0.25, name: "Flat white", mix: "¼ coffee", of: "a quarter" },
-  { brew: 0.5, name: "Café au lait", mix: "½ coffee", of: "half" },
-  { brew: 0.75, name: "Macchiato", mix: "¾ coffee", of: "three quarters" },
-  { brew: 1, name: "Coffee", mix: "All coffee", of: "all" },
+// The stops of the dial: how far a strategy goes from spreading over the pools that paid the most (0) to the best pay
+// for each sAERO (1).
+const STOPS: { far: number; name: string; note: string; words: string }[] = [
+  { far: 0, name: "0%", note: "Spread by revenue", words: "" },
+  { far: 0.25, name: "25%", note: "of the way", words: "a quarter of the way" },
+  { far: 0.5, name: "50%", note: "of the way", words: "halfway" },
+  { far: 0.75, name: "75%", note: "of the way", words: "three quarters of the way" },
+  { far: 1, name: "100%", note: "Best pay per sAERO", words: "" },
 ];
-const cupOf = (brew: number | undefined) => CUPS.find((cup) => cup.brew === brew)!;
-const brewKey = (brew: Brew): string => (brew === undefined ? "blend" : String(brew));
-// What the chosen strategy does, in words.
-function brewWords(brew: Brew, incentives: boolean): string {
-  if (brew === undefined)
-    return "The house blend spreads your sAERO over the top pools by exchange revenue, each given its share of it.";
-  if (brew === 0 && !incentives)
-    return "Hot milk expects every pool to pay the average in fees, whatever it paid lately, so it spreads your sAERO like everyone else's, over the largest pools.";
-  const expects =
-    brew === 1
-      ? "each pool to pay again the fees it paid lately"
-      : brew === 0
-        ? "every pool to pay the average in fees, whatever it paid lately"
-        : `each pool to pay ${cupOf(brew).of} the fees it paid lately and ${cupOf(1 - brew).of} the average`;
-  return `${cupOf(brew).name} expects ${expects}${incentives ? ", plus the incentives already scheduled" : ""}. It puts your sAERO where that pays the most, after your own weight dilutes each pool: a small stake usually goes into one or two pools, a large one spreads.`;
+const stopOf = (far: number) => STOPS.find((stop) => stop.far === far)!;
+// What the dial does where it is, in words.
+function farWords(far: number): string {
+  if (far === 0)
+    return "Spreads your sAERO over the top pools by exchange revenue, each given its share of it, however crowded.";
+  if (far === 1)
+    return "Puts your sAERO where each sAERO should earn the most if every pool pays again what it paid lately, after your own weight dilutes it: a small stake usually goes into one or two pools, a large one spreads.";
+  return `Goes ${stopOf(far).words} from spreading by revenue to the best pay per sAERO: it moves sAERO out of the pools where each sAERO earned the least lately, and into those where it earned the most.`;
 }
 // The rows as last drawn, which the actions edit, and the next pools "Show more pools" adds.
 let drawn: Part[] = [];
@@ -183,8 +172,7 @@ const strategyOf = (market: Market): aero.Strategy => ({
   hours: controls.hours,
   again: plan.again,
   blueChips: plan.blueChips,
-  incentives: plan.incentives,
-  brew: plan.brew,
+  far: plan.far,
 });
 // As weights that add up to one.
 function holdingsOf(rows: Part[], market: Market): aero.Holding[] {
@@ -295,33 +283,39 @@ function drawControls(stakes: Stake[], stake: Stake | undefined): void {
   $<HTMLSelectElement>("[data-action=aero-window]", aeroView).value = String(controls.hours);
   $<HTMLInputElement>("[data-action=aero-again]", aeroView).checked = plan.again;
   $<HTMLInputElement>("[data-action=aero-blue]", aeroView).checked = plan.blueChips;
-  $<HTMLInputElement>("[data-action=aero-incentives]", aeroView).checked = plan.incentives;
 }
-// The menu, each strategy with what it would have earned over the record, as `apr` says.
-function drawCups(apr: (brew: Brew) => Value): void {
+// The dial, each stop with what it would have earned over the record, as `apr` says.
+function drawStops(apr: (far: number) => Value): void {
   list(
-    $("[data-list=cup]", aeroView),
-    CUPS,
-    ({ brew }) => brewKey(brew),
-    (label, { brew, name, mix }) => {
+    $("[data-list=stop]", aeroView),
+    STOPS,
+    ({ far }) => String(far),
+    (label, { far, name, note }) => {
       const input = $<HTMLInputElement>("input", label);
-      input.value = brewKey(brew);
-      input.checked = plan.brew === brew;
-      label.style.setProperty("--strength", `${(brew ?? 1) * 100}%`);
-      label.toggleAttribute("data-blend", brew === undefined);
-      fill(label, { name, mix, apr: apr(brew) });
+      input.value = String(far);
+      input.checked = plan.far === far;
+      // Three pools: spread by revenue at 0%, all in the one that pays the most per sAERO at 100%.
+      const heights = [11 * (1 - far), 8 * (1 - far) + 17 * far, 5 * (1 - far)];
+      label.querySelectorAll<SVGRectElement>(".Stop-bar").forEach((bar, i) => {
+        bar.setAttribute("y", String(21 - heights[i]!));
+        bar.setAttribute("height", String(heights[i]!));
+      });
+      fill(label, { name, note, apr: apr(far) });
     },
   );
-  fill(aeroView, { "cup-words": brewWords(plan.brew, plan.incentives) });
+  fill(aeroView, { "far-words": farWords(plan.far) });
 }
 
 // The strategy as the controls set it, and that it is picked from only what was known then.
-function introOf({ count: top, hours, again, blueChips, incentives, brew }: aero.Strategy): string {
+function introOf({ count: top, hours, again, blueChips, far }: aero.Strategy): string {
   const chips = blueChips ? " of blue chips" : "";
+  const window = `the ${WINDOW[hours].over} before`;
   const pools =
-    brew === undefined
-      ? `the house blend, the top ${count(top, "pool", "pools")}${chips} by exchange revenue${incentives ? "" : " without incentives"} over the ${WINDOW[hours].over} before`
-      : `${cupOf(brew).name.toLowerCase()}, up to ${count(top, "pool", "pools")}${chips} judged on the ${WINDOW[hours].over} before`;
+    far === 0
+      ? `the top ${count(top, "pool", "pools")}${chips} by exchange revenue over ${window}`
+      : far === 1
+        ? `the best pay per sAERO, in up to ${count(top, "pool", "pools")}${chips}, judged on ${window}`
+        : `${stopOf(far).name} of the way from the top ${count(top, "pool", "pools")}${chips} by exchange revenue to the best pay per sAERO, judged on ${window}`;
   return again
     ? `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools} each pick, picked again every ${hoursWords(aero.STEP)}. Without hindsight: each pick knows only what was known then.`
     : `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools} that, and kept since. Without hindsight: the pick knows only what was known then.`;
@@ -339,10 +333,10 @@ function lastOf<A extends unknown[], R>(make: (...args: A) => R): (...args: A) =
 // The record's lines, worked out again only when what they rest on changes, not on every render.
 const strategyPast = lastOf(aero.mergePast);
 const pilotPast = lastOf(aero.mergePast);
-// One line for each strategy on the menu, so that each shows what it earned.
+// One line for each stop of the dial, so that each shows what it earned.
 const strategyLines = new Map(
-  CUPS.map(({ brew }) => [
-    brew,
+  STOPS.map(({ far }) => [
+    far,
     lastOf(
       (
         market: Market,
@@ -351,9 +345,8 @@ const strategyLines = new Map(
         hours: Hours,
         again: boolean,
         blueChips: boolean,
-        incentives: boolean,
         held: Held,
-      ): Paid[] => aero.strategySteps(market, past, { count, hours, again, blueChips, incentives, brew }, held),
+      ): Paid[] => aero.strategySteps(market, past, { count, hours, again, blueChips, far }, held),
     ),
   ]),
 );
@@ -389,8 +382,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
             hours: controls.hours,
             again: plan.again,
             blueChips: plan.blueChips,
-            incentives: plan.incentives,
-            brew: plan.brew,
+            far: plan.far,
           },
     ),
   });
@@ -404,8 +396,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
     controls.hours,
     plan.again,
     plan.blueChips,
-    plan.incentives,
-    brewKey(plan.brew),
+    plan.far,
     amount,
     stake && String(stake.id),
     plan.rows,
@@ -413,23 +404,20 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   if (recordFor === shows && [extra, pricing, record, moves].some(waiting)) return;
   if (!market || !extra.value || waiting(pricing) || waiting(moves)) {
     recordFor = undefined;
-    drawCups(() => (extra.failed ? "–" : undefined));
+    drawStops(() => (extra.failed ? "–" : undefined));
     return void fill(aeroView, { plan: stateOf(extra.value ? {} : extra) });
   }
   const then = pricing.value;
   const own = moves.value ?? (stake && moves.failed ? stillOf(stake) : undefined);
   const held = heldAs(amount, then, own);
-  const { count: top, hours, again, blueChips, incentives } = strategyOf(market);
+  const { count: top, hours, again, blueChips } = strategyOf(market);
   const past = strategyPast(market.past, extra.value);
   const lines = new Map(
-    CUPS.map(({ brew }) => [
-      brew,
-      strategyLines.get(brew)!(market, past, top, hours, again, blueChips, incentives, held),
-    ]),
+    STOPS.map(({ far }) => [far, strategyLines.get(far)!(market, past, top, hours, again, blueChips, held)]),
   );
-  const strategy = lines.get(plan.brew)!;
-  drawCups((brew) => {
-    const found = aero.aprOver(lines.get(brew)!);
+  const strategy = lines.get(plan.far)!;
+  drawStops((far) => {
+    const found = aero.aprOver(lines.get(far)!);
     return found ? aprWords(found.apr, found.priced) : "–";
   });
   const custom = plan.rows && customLine(market, plan.rows, held);
@@ -481,7 +469,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
         average: cell(average[k]),
       }),
   );
-  const knows = `each pool's fees over the ${WINDOW[hours].over} before it${incentives ? " and the incentives running then" : ""}`;
+  const knows = `each pool's fees over the ${WINDOW[hours].over} before it and the incentives running then`;
   fill(aeroView, {
     "record-note": [
       again
@@ -540,7 +528,7 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
   const ahead = new Map(market.gauges.map((gauge) => [gauge, aero.paysNext(gauge, controls.hours, market, hold)]));
   const next = (gauge: Gauge) => ahead.get(gauge);
   const strategy = strategyOf(market);
-  const { blueChips, incentives } = strategy;
+  const { blueChips } = strategy;
   const picks = aero.picksOf(
     market.gauges
       .filter((gauge) => routable(gauge) && (!blueChips || isBlueChip(gauge)))
@@ -561,7 +549,7 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
   // Filtered as the strategy is, and listed by what they pay.
   const pays = (gauge: Gauge) => {
     const found = next(gauge);
-    return found ? aero.payOf(found, incentives) : -1;
+    return found ? aero.totalOf(found) : -1;
   };
   const more = new Set(plan.more);
   nextPools = market.gauges
@@ -961,13 +949,8 @@ actions["aero-again"] = (el) => {
   plan.again = (el as HTMLInputElement).checked;
   render();
 };
-actions["aero-incentives"] = (el) => {
-  plan.incentives = (el as HTMLInputElement).checked;
-  suggest();
-};
-actions["aero-brew"] = (el) => {
-  const value = (el as HTMLInputElement).value;
-  plan.brew = CUPS.find(({ brew }) => brewKey(brew) === value)?.brew;
+actions["aero-far"] = (el) => {
+  plan.far = STOPS.find(({ far }) => String(far) === (el as HTMLInputElement).value)?.far ?? 0;
   suggest();
 };
 actions["aero-blue"] = (el) => {
