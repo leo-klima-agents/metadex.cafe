@@ -951,11 +951,11 @@
             <div class="Pair">
               <dt class="u-small u-quiet">How far</dt>
               <dd>
-                At 0%, your sAERO is spread over the top pools by exchange revenue, each given its share of it. At 100%,
-                it goes where each sAERO should earn the most if every pool pays again what it paid lately. Your own
-                weight lowers what each sAERO earns in a pool, which is counted, but that rarely spreads a small stake:
-                it goes into the one or two pools that should pay it the most. In between, sAERO moves out of the pools
-                where each sAERO earned the least and into those where it earned the most
+                At 0%: the top pools by exchange revenue, each given its share of it. At 100%: the pools where each
+                sAERO earned the most lately, counting the dilution your own sAERO adds; a small stake usually goes into
+                one or two. The further you turn the dial, the more sAERO moves from the first split to the second, out
+                of the pools that paid least per sAERO first. A pool's sAERO counts as the larger of its average over
+                the last 48 hours and today's, so that a pool others just left doesn't look better than it is
               </dd>
             </div>
             <div class="Pair">
@@ -1002,7 +1002,8 @@
                 A day's exchange revenue per sAERO, times 365, over the price of one AERO.
                 <span data-text="record-prices">The last 8 days use the prices of each step</span>. Projected APR: if
                 the exchange revenue of the last <span data-text="plan-window">48 hours</span> came again, with the
-                incentives already scheduled
+                incentives already scheduled, shared by the larger of each pool's sAERO over the last 48 hours and
+                today's
               </dd>
             </div>
             <div class="Pair">

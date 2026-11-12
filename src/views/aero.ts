@@ -144,13 +144,15 @@ const STOPS: { far: number; name: string; note: string; words: string }[] = [
   { far: 1, name: "100%", note: "Best pay per sAERO", words: "" },
 ];
 const stopOf = (far: number) => STOPS.find((stop) => stop.far === far)!;
-// What the dial does where it is, in words.
-function farWords(far: number): string {
+// What the dial does where it is, in a sentence, with the controls filled in.
+function farWords(far: number, top: number, hours: Hours, blueChips: boolean): string {
+  const [chips, over] = [blueChips ? " of blue chips" : "", `over the last ${WINDOW[hours].over}`];
   if (far === 0)
-    return "Spreads your sAERO over the top pools by exchange revenue, each given its share of it, however crowded.";
+    return `The top ${count(top, "pool", "pools")}${chips} by exchange revenue ${over}, each given its share of it.`;
   if (far === 1)
-    return "Puts your sAERO where each sAERO should earn the most if every pool pays again what it paid lately, after your own weight dilutes it: a small stake usually goes into one or two pools, a large one spreads.";
-  return `Goes ${stopOf(far).words} from spreading by revenue to the best pay per sAERO: it moves sAERO out of the pools where each sAERO earned the least lately, and into those where it earned the most.`;
+    return `The pools${chips} where each sAERO earned the most ${over}, counting the dilution your own sAERO adds.`;
+  const words = stopOf(far).words;
+  return `${words[0]!.toUpperCase()}${words.slice(1)} from 0% to 100%: sAERO moves from the top pools by revenue to where each sAERO earned the most, out of the pools that paid least per sAERO first.`;
 }
 // The rows as last drawn, which the actions edit, and the next pools "Show more pools" adds.
 let drawn: Part[] = [];
@@ -336,22 +338,24 @@ function drawStops(apr: (far: number) => Value): void {
       fill(label, { name, note, apr: apr(far) });
     },
   );
-  fill(aeroView, { "far-words": farWords(plan.far) });
+  const market = data.market().value;
+  const top = market ? Math.min(plan.count, market.maxGauges) : plan.count;
+  fill(aeroView, { "far-words": farWords(plan.far, top, controls.hours, plan.blueChips) });
 }
 
 // The strategy as the controls set it, and that it is picked from only what was known then.
 function introOf({ count: top, hours, again, blueChips, far }: aero.Strategy): string {
   const chips = blueChips ? " of blue chips" : "";
-  const window = `the ${WINDOW[hours].over} before`;
+  const before = `the ${WINDOW[hours].over} before ${again ? "each pick" : "that"}`;
   const pools =
     far === 0
-      ? `the top ${count(top, "pool", "pools")}${chips} by exchange revenue over ${window}`
+      ? `the top ${count(top, "pool", "pools")}${chips} by exchange revenue over ${before}`
       : far === 1
-        ? `the best pay per sAERO, in up to ${count(top, "pool", "pools")}${chips}, judged on ${window}`
-        : `${stopOf(far).name} of the way from the top ${count(top, "pool", "pools")}${chips} by exchange revenue to the best pay per sAERO, judged on ${window}`;
+        ? `the pools${chips} where each sAERO earned the most over ${before}, counting the dilution your own sAERO adds`
+        : `${stopOf(far).name} of the way from the top ${count(top, "pool", "pools")}${chips} by exchange revenue to where each sAERO earned the most over ${before}`;
   return again
-    ? `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools} each pick, picked again every ${hoursWords(aero.STEP)}. Without hindsight: each pick knows only what was known then.`
-    : `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools} that, and kept since. Without hindsight: the pick knows only what was known then.`;
+    ? `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools}, picked again every ${hoursWords(aero.STEP)}. Without hindsight: each pick knows only what was known then.`
+    : `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools}, and kept since. Without hindsight: the pick knows only what was known then.`;
 }
 
 // The last result of `make`, kept while its arguments are the same values or objects.

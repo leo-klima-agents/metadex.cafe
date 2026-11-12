@@ -561,6 +561,11 @@ export const thinOver = (accrued: Accrued): boolean => weightOf(accrued) < THIN;
 // The harmonic mean, which times the fees per unit gives what was paid when fees come evenly.
 export const meanOf = (accrued: Accrued): number =>
   accrued.spread ?? Math.min(whole(accrued.power), whole(accrued.endPower));
+// The sAERO that will share a pool's pay, as a strategy counts it: the larger of what shared it lately, over `recent`,
+// and what holds it at the end, so that a pool others just left doesn't look better than it is.
+export const crowdOf = (recent: Accrued, end = recent.endPower): number => Math.max(meanOf(recent), whole(end));
+// Lately, whatever the window a strategy is judged on.
+export const LATELY: Hours = 48;
 
 // `priced` is false if a token that paid has no price, which counts as 0.
 export type Yield = { value: number; priced: boolean };
@@ -908,7 +913,7 @@ export function paidOver(gauge: Gauge, accrued: Accrued | undefined, prices: Pri
     power,
   };
 }
-// What a pool would pay a day over the next `hold` seconds, shared by its sAERO now: the window's fees again, and what
+// What a pool would pay a day over the next `hold` seconds, shared by its crowd now: the window's fees again, and what
 // its programs stream over the hold.
 export function paysNext(gauge: Gauge, hours: Hours, market: Market, hold: number): Paying | undefined {
   const accrued = gauge.windows[hours];
@@ -916,7 +921,7 @@ export function paysNext(gauge: Gauge, hours: Hours, market: Market, hold: numbe
   return {
     fees: feeFlows(gauge, accrued, market.prices),
     incentives: streamFlows(gauge, market.time, market.time + hold, market.prices),
-    power: whole(gauge.power),
+    power: crowdOf(covers(gauge.windows[LATELY], LATELY * HOUR) ? gauge.windows[LATELY] : accrued, gauge.power),
   };
 }
 
@@ -1205,7 +1210,7 @@ export const isBlueChip = ({ token0, token1 }: Gauge): boolean =>
 export const weighable = (accrued: Accrued, paying: Paying): boolean =>
   !thinOver(accrued) && !!per10kOf(paying)?.priced;
 // From what each pool paid over the `hours` before `time`, and what its programs live then would stream over the next
-// step, at `prices`, those of `time`, shared by its sAERO then, of which `own` are the stake's, by gauge; for `amount`
+// step, at `prices`, those of `time`, shared by its crowd then, of which `own` are the stake's, by gauge; for `amount`
 // sAERO.
 export function picksAt(
   market: Market,
@@ -1224,10 +1229,11 @@ export function picksAt(
       if (!before || before.to <= before.from || before.from > since + 0.1 * (time - since) || !(meanOf(before) > 0))
         return [];
       const live = (program: Program) => program.start <= time;
+      const recent = strategy.hours === LATELY ? before : accrualOf(gauge, past, time - LATELY * HOUR, time, market);
       const paying = {
         fees: feeFlows(gauge, before, prices),
         incentives: streamFlows(gauge, time, time + STEP, prices, live),
-        power: whole(before.endPower),
+        power: crowdOf(recent && recent.to > recent.from ? recent : before),
       };
       return weighable(before, paying) ? [{ gauge, paying, own: own?.get(key(gauge.address)) }] : [];
     });

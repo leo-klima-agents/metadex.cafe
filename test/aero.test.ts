@@ -7,6 +7,7 @@ import {
   THIN,
   WINDOWS,
   accruedFrom,
+  crowdOf,
   aprOf,
   aprOver,
   heldIn,
@@ -628,7 +629,7 @@ const streaming = (perDay: number, start: number, end: number): Program => ({
 const HOLD = 169_200;
 const near = (a: number, b: number, what = "") => assert.ok(Math.abs(a - b) < 1e-6, `${what} ${a} ≠ ${b}`);
 
-test("ahead, a pool pays its window's fees again, shared by its sAERO now, and only the incentives that stream over the hold", () => {
+test("ahead, a pool pays its window's fees again, shared by its crowd now, and only the incentives that stream over the hold", () => {
   // $2 per 10k a day at 5M sAERO is $1,000 a day in all; now it has 10M.
   const g = gauge({ perDay: 2, power: 10_000_000n * SAERO, programs: [streaming(1_000, NOW - DAY, NOW + DAY / 2)] });
   const next = paysNext(g, 48, market([g]), HOLD)!;
@@ -637,6 +638,13 @@ test("ahead, a pool pays its window's fees again, shared by its sAERO now, and o
   // Half a day of $1,000 over a 47-hour hold.
   near(found.incentives, ((1_000 * 0.5) / (HOLD / DAY)) * (10_000 / 10_000_000), "incentives prorated");
   near(per10kOf(next, 10_000_000)!.fees, 0.5, "and dilute with more");
+  // Others just left: 5M shared its fees over the window and 1M holds it now, so it counts as 5M, the larger.
+  const left = gauge({ perDay: 2, power: 1_000_000n * SAERO });
+  near(per10kOf(paysNext(left, 48, market([left]), HOLD)!)!.fees, 2, "no better than it was");
+  near(crowdOf(left.windows[48], left.power), 5_000_000, "the larger");
+  // Judged on 8 days, its crowd is still the last 48 hours': 5M, though 10M shared it over the 8 days.
+  left.windows[192] = { ...left.windows[192], power: 10_000_000n * SAERO, endPower: 10_000_000n * SAERO };
+  near(paysNext(left, 192, market([left]), HOLD)!.power, 5_000_000, "lately is 48 hours");
   const young = gauge({ windows: { ...gauge().windows, 48: accrued(1n, 1) } });
   assert.equal(paysNext(young, 48, market([young]), HOLD), undefined, "too young for the window");
 });
