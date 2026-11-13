@@ -29,7 +29,7 @@ export type Connection = { wallet: Wallet; provider: EIP1193Provider; address: A
 // `tip` is the highest priority fee per gas to ask for, in wei, where the wallet lets the page set one.
 export type Tx = { to: Address; data: Hex; tip?: bigint | undefined };
 // `after` is text shown after `code`. `calldata` marks `code` as a call's data, shown as a block. `lines` shows one
-// item a line, its tag first and its value last.
+// item per line, with its tag first and its value last.
 export type Field = {
   label: string;
   code?: string | string[];
@@ -40,7 +40,7 @@ export type Field = {
   calldata?: boolean;
   lines?: boolean;
 };
-// A call as the review shows it: `title` says what it is, `says` describes it in the page's own words, and `on` names
+// A call as the review shows it. `title` says what it is, `says` describes it in the page's own words, and `on` names
 // the contract it goes to.
 export type Slip = Tx & { title: string; says: string; on: string; call: string; fields: Field[] };
 
@@ -51,7 +51,7 @@ const UNKNOWN_METHOD: number[] = [UnsupportedProviderMethodError.code, MethodNot
 
 export class NoWallet extends Error {}
 
-// Wallets that announce themselves (EIP-6963), or window.ethereum if none does.
+// Wallets that announce themselves (EIP-6963), or `window.ethereum` if none does.
 export function findWallets(found: (wallets: Wallet[]) => void): void {
   const announced = new Map<string, Wallet>();
   const offer = () =>
@@ -81,10 +81,11 @@ export const SAFE_ORIGIN = "https://app.safe.global";
 // The Safe Apps SDK version sent with each request, which Safe{Wallet} expects from a Safe App.
 const SAFE_APPS_VERSION = "9.1.0";
 
-// The origin of the page that frames this one, when the browser gives it. A sandboxed frame has the opaque origin
-// "null", and without `ancestorOrigins` a frame loaded with no referrer has none at all; neither tells anything, so
-// then only whether Safe{Wallet} answers decides. Without `ancestorOrigins`, a referrer from the page's own origin
-// (`own`) tells nothing either: the frame navigated within itself.
+// The origin of the page that frames this one, when the browser gives it. Undefined when the origin tells nothing.
+// Then only whether Safe{Wallet} answers decides. The origin tells nothing when:
+// - it is "null", the opaque origin of a sandboxed frame;
+// - without `ancestorOrigins`, the frame was loaded with no referrer;
+// - without `ancestorOrigins`, the referrer has the page's own origin (`own`): the frame navigated within itself.
 export function parentOrigin(ancestor: string | undefined, referrer: string, own?: string): string | undefined {
   const origin = ancestor ?? (referrer ? new URL(referrer).origin : "");
   if (ancestor === undefined && origin === own) return undefined;
@@ -96,8 +97,9 @@ type SafeAnswer = { id: string; success: boolean; data?: unknown; error?: string
 type AskSafe = ((method: string, params?: unknown) => Promise<unknown>) & { stop(): void };
 
 // Asks Safe{Wallet}, the parent frame, as a Safe App does. Each message goes to `SAFE_ORIGIN` only, and Safe{Wallet}
-// answers it with the same `id`. Only answers from the parent, at that origin, to a question still waiting count. Ids
-// are random, as in the SDK, so an answer to a question asked before a reload can't pass for one asked since.
+// answers it with the same `id`. An answer counts only if it comes from the parent, at that origin, and its question
+// is still waiting. Ids are random, as in the SDK, so that an answer to a question asked before a reload can't pass for
+// an answer to a newer one.
 export function askSafe(
   parent: { postMessage(message: unknown, targetOrigin: string): void },
   events: Pick<EventTarget, "addEventListener"> = window,
@@ -164,7 +166,7 @@ export async function safeFrom(ask: AskSafe, wait: number): Promise<Wallet | und
     async propose(txs) {
       // An empty list is refused before Safe{Wallet} is asked, as the Safe Apps SDK does.
       if (!txs.length) throw new Error("There is no transaction to propose.");
-      // Safe{Wallet} answers "Transaction was rejected" when the user closes its window, so that counts as the user
+      // Safe{Wallet} answers "Transaction was rejected" when the user closes its window. That counts as the user
       // declining.
       await ask("sendTransactions", { txs: txs.map(({ to, data }) => ({ to, data, value: "0" })) }).catch(
         (error: Error) => {
@@ -228,10 +230,12 @@ export const sendTransaction = ({ provider, address }: Connection, { to, data, t
     ],
   });
 
-// What a wallet can do beyond one transaction at a time, from EIP-5792's `wallet_getCapabilities`: send several calls
-// in one prompt (`batch`), all or nothing (`atomic`), and list the tokens it holds (ERC-7811's `assets`). Asked once
-// per wallet and address. A wallet that doesn't know the method can do none of these. One that fails for another
-// reason, such as being locked, can do none of them for now and is asked again next time.
+// What a wallet can do beyond one transaction at a time, from EIP-5792's `wallet_getCapabilities`:
+// - `batch`: send several calls in one prompt;
+// - `atomic`: send them all or nothing;
+// - `assets`: list the tokens it holds (ERC-7811).
+// The page asks once per wallet and address. A wallet that doesn't know the method can do none of these. A wallet that
+// fails for another reason, such as being locked, can do none of them for now, and is asked again next time.
 export type Capabilities = { batch: boolean; atomic: boolean; assets: boolean };
 const NONE: Capabilities = { batch: false, atomic: false, assets: false };
 const asked = new WeakMap<EIP1193Provider, Map<string, Promise<Capabilities>>>();
@@ -278,8 +282,8 @@ export async function sendCalls({ provider, address }: Connection, txs: Tx[], at
   return id;
 }
 
-// EIP-5792 status 100 means pending and 200 means included, with each transaction's receipt; anything else means
-// failed. A 200 without receipts yet still counts as pending, since the receipts decide the outcome.
+// In EIP-5792, status 100 means pending, and 200 means included, with each transaction's receipt. Any other status
+// means failed. A 200 with no receipts yet still counts as pending, since the receipts decide the outcome.
 type CallsStatus = { state: "pending" | "done" | "failed"; receipts: Landed[] };
 
 export async function callsStatus({ provider }: Connection, id: string): Promise<CallsStatus> {

@@ -20,8 +20,8 @@ import { pricesFrom } from "./prices.ts";
 import { now, same, tagged } from "./rpc.ts";
 import { state } from "./state.ts";
 
-// What the views show from Base, cached by key. Keys name the wallet and the epoch, so nothing read for another wallet
-// is shown, and reads of an epoch that has ended are made again.
+// What the views show from Base, cached by key. Keys hold the wallet and the epoch, so nothing read for another wallet
+// is shown, and a read is made again once its epoch has ended.
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const week = (): number => weekStart(now());
@@ -42,8 +42,8 @@ export function accountShown(id: bigint): { holdings: Got<Holdings | null>; own:
   return { holdings: { value: { ...own, accounts: own.accounts.filter((each) => each.id === id) } }, own: true };
 }
 
-// The start of the last epoch Hydrex has ended. Just after a flip it may still be the epoch before; until Hydrex moves
-// on, it is read again every five minutes.
+// The start of the last epoch that Hydrex has ended. Just after an epoch ends, Hydrex may still give the one before.
+// Until Hydrex moves on, this is read again every five minutes.
 const epoch = () =>
   use(`epoch ${week()}`, lastEpoch, (start: number) => (start < week() - WEEK ? 5 * MINUTE : Infinity));
 const earningsKey = (automation: Automation, start: number) => `earnings ${automation.kind} ${start}`;
@@ -63,8 +63,8 @@ export const holderEarnings = (holder: Address): Got<Earnings> =>
   andThen(epoch(), (start) =>
     use(`voter ${holder} ${start}`, () => votesEarned(holder, start, false, tagged("shares"))),
   );
-// What an account's votes earned last epoch: its share of what their holder earned. `null` when it had no votes as the
-// epoch began, when their holder had none, or when a holder other than the automations did not vote.
+// What an account's votes earned last epoch: its share of what their holder earned. `null` when the account had no
+// votes as the epoch began, when their holder had none, or when a holder other than the automations did not vote.
 export function accountEarned(holdings: Holdings, id: bigint): Got<Money | null> {
   return andThen(stakes(holdings), (all) => {
     const stake = all.get(id);
@@ -78,8 +78,9 @@ export function accountEarned(holdings: Holdings, id: bigint): Got<Money | null>
 }
 const holders = (holdings: Holdings) => andThen(stakes(holdings), (all) => ({ value: holdersOf(all.values()) }));
 
-// The payouts of the accounts in the automations, as of the last epoch Hydrex has ended. Read again when Hydrex moves
-// on, and every five minutes while a due payout has not come or some rewards could not be weighed.
+// The payouts of the accounts in the automations, as of the last epoch that Hydrex has ended. They are read again when
+// Hydrex moves on. They are also read every five minutes while a due payout has not come, or while some rewards could
+// not be priced.
 export function payouts(holdings: Holdings): Got<Payouts> {
   const key = holdings.accounts.map(({ id, delegate, claimer }) => `${id}:${delegate}:${claimer}`).join(" ");
   return andThen(epoch(), (start) =>
@@ -92,11 +93,11 @@ export function payouts(holdings: Holdings): Got<Payouts> {
   );
 }
 
-// Aero's reads of the present last five minutes, and its universe as `universeReads` says.
+// Aero's reads of the present are kept for five minutes. Its universe is kept as long as `universeReads` says.
 const MARKET = "aero market";
 const universes = aero.universeReads(() => aero.readUniverse(tagged("aero")));
 const universe = () => memo("aero universe", universes.read, universes.ttl);
-// A short, stable name for a list of addresses in a key: its length and a 53-bit hash of it.
+// A short, stable name for a list of addresses, for use in a key: the list's length and a 53-bit hash of it.
 function digest(list: readonly string[]): string {
   let [h1, h2] = [0xdeadbeef, 0x41c6ce57];
   for (const item of list)
@@ -108,7 +109,7 @@ function digest(list: readonly string[]): string {
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
   return `${list.length}:${(4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)}`;
 }
-// Snapshots on the grid's whole hours never change, so each set is read once, unless some could not be.
+// Snapshots on the grid's whole hours never change, so each set is read only once, unless some could not be read.
 const startsOf: aero.StartsOf = (rewards, times) =>
   memo(
     `aero starts ${times.join()} ${digest(rewards)}`,
@@ -116,7 +117,7 @@ const startsOf: aero.StartsOf = (rewards, times) =>
     (found: aero.Start[]) => (found.some(aero.unreadStart) ? 0 : Infinity),
   );
 const readAero = () => aero.readMarket(universe(), tagged("aero"), startsOf);
-// Reads keyed by the grid's hour, forgotten once newer hours have replaced them.
+// Reads keyed by the grid's hour. They are forgotten once newer hours have replaced them.
 const HOURLY = ["aero starts ", "aero past ", "aero prices ", "aero autopilot ", "aero moves "];
 let pruned = 0;
 export const market = (): Got<aero.Market> => {
@@ -141,8 +142,8 @@ export const autopilots = (): Got<aero.Stake[]> =>
       ),
     5 * MINUTE,
   );
-// Prices at the record's step starts, from the pools that price each token now. The grid's times are on the hour, so
-// they are kept, unless some pools could not be read.
+// Prices at the start of each of the record's steps, from the pools that price each token now. The grid's times are on
+// the hour, so these prices are kept. If some pools could not be read, they are read again in five minutes.
 export const pricesThen = (): Got<aero.Then> =>
   andThen(market(), (found) => {
     const times = aero.stepsOf(found).map(({ from }) => from);
@@ -159,8 +160,8 @@ export const pricesThen = (): Got<aero.Then> =>
       (then: aero.Then) => ([...then.values()].some(({ unread }) => unread) ? 5 * MINUTE : Infinity),
     );
   });
-// Snapshots beyond the grid's, which a longer window needs, read when it is chosen; read again in five minutes if some
-// could not be.
+// Snapshots outside the grid, which the record's older picks need to look back 8 days. They are read again in five
+// minutes if some could not be read.
 const unreadIn = (past: aero.Past): boolean =>
   [...past.starts.values()].some((starts) => starts.some((start) => start && aero.unreadStart(start)));
 export function pastFor(times: number[]): Got<aero.Past> {
@@ -174,7 +175,7 @@ export function pastFor(times: number[]): Got<aero.Past> {
     );
   });
 }
-// A stake's moves back to the record's oldest step, read again when it moves.
+// A stake's moves since the record's oldest step. They are read again when the stake moves.
 const sinceOf = (found: aero.Market): number => aero.stepsOf(found).at(-1)!.from;
 const movesSince = (stake: aero.Stake, since: number): [string, () => Promise<aero.Move[]>] => [
   `aero moves ${stake.id} ${stake.lastAllocated} ${since}`,
@@ -182,7 +183,7 @@ const movesSince = (stake: aero.Stake, since: number): [string, () => Promise<ae
 ];
 export const stakeMoves = (stake: aero.Stake): Got<aero.Move[]> =>
   andThen(market(), (found) => use(...movesSince(stake, sinceOf(found))));
-// The first Autopilot its Relay still owns: its moves and its pools' snapshots at each.
+// The first Autopilot that its Relay still owns, with its moves and its pools' snapshots at each move.
 export type AutopilotRecord = { stake: aero.Stake; moves: aero.Move[]; past: aero.Past };
 export const autopilotRecord = (): Got<AutopilotRecord | null> =>
   andThen(market(), (found) =>
@@ -198,7 +199,7 @@ export const autopilotRecord = (): Got<AutopilotRecord | null> =>
       });
     }),
   );
-// Waits for the wallet's own stakes, so as not to read one twice.
+// Waits for the wallet's own stakes first, so that no stake is read twice.
 export function stakeShown(id: bigint): Got<aero.Stake | null> {
   const mine = ownStakes();
   const own = mine.value?.find((stake) => stake.id === id);
@@ -206,7 +207,7 @@ export function stakeShown(id: bigint): Got<aero.Stake | null> {
   if (owner() && mine.value === undefined && !mine.failed) return {};
   return use(`aero stake ${id}`, async () => (await aero.readStakes([id], tagged("aero")))[0] ?? null, 5 * MINUTE);
 }
-// Read again when a stake moves.
+// Read again when a stake moves, and every five minutes.
 export const pending = (stakes: aero.Stake[]): Got<Map<bigint, aero.Pending>> =>
   use(
     `aero pending ${stakes.map(({ id, lastAllocated }) => `${id}:${lastAllocated}`).join(" ")}`,

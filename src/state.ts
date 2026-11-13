@@ -9,7 +9,7 @@ export const state: {
   picks: Map<string, Set<bigint>>;
 } = { route: { view: "home" }, picks: new Map() };
 
-// Any change redraws everything shown from what is known, at most once a frame.
+// `render()` redraws everything on show from what is known, at most once a frame.
 const drawers: (() => void)[] = [];
 let due = false;
 export const onRender = (draw: () => void): void => void drawers.push(draw);

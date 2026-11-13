@@ -14,8 +14,8 @@ import { drawReview } from "./views/review.ts";
 import { drawSwap, preloadSwap } from "./views/swap.ts";
 import { drawWallets, startWallets } from "./views/wallet.ts";
 
-// The page is one HTML file of views, and the hash picks the one shown. A view's tags name its reads, which go before
-// other views' reads.
+// The page is one HTML file of views, and the hash in the address picks the one shown. A view's tags name its reads,
+// which go before the reads of other views.
 const TAGS: Record<View, Tag[]> = {
   home: [],
   about: [],
@@ -44,7 +44,7 @@ const popups = [...document.querySelectorAll<HTMLElement>("[popover]")];
 function show(first: boolean): void {
   const before = state.route;
   const route = (state.route = parse(location.hash));
-  // Another account, stake or pool is another page.
+  // Another account, stake or pool counts as another page.
   const other = (view: View) => route.view === view && before.view === view && hrefOf(route) !== hrefOf(before);
   const moved = route.view !== before.view || other("account") || other("stake") || other("pool") || first;
   const view = views.find(({ dataset }) => dataset.view === route.view)!;
@@ -75,7 +75,7 @@ function show(first: boolean): void {
     if (!first) $("h1", view).focus({ preventScroll: true });
   }
 }
-// When a popup closes, its section leaves the address, so that the same address opens it again.
+// When a popup closes, its section is removed from the address, so that the same address opens it again.
 for (const popup of popups) {
   popup.querySelector("h2")?.setAttribute("tabindex", "-1");
   popup.addEventListener("toggle", () => {
@@ -123,7 +123,7 @@ onRender(() => {
   preloadSwap();
 });
 
-// Safe{Wallet} shows the page in a frame, where it starts on the App.
+// Safe{Wallet} shows the page in a frame. There, the page starts on the App.
 if (window.parent !== window && !location.hash) location.replace("#app");
 addEventListener("hashchange", () => show(false));
 show(true);

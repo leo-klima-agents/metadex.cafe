@@ -46,7 +46,7 @@ export const contract =
   <const A extends Abi>(address: Address, abi: A) =>
   <N extends ContractFunctionName<A>>(functionName: N, ...args: Args<A, N>): Call<A, N> =>
     call(address, abi, functionName, ...args);
-// Compares addresses in any case. Unlike viem's `isAddressEqual`, it never throws on a string that isn't an address.
+// Compares addresses, ignoring case. Unlike viem's `isAddressEqual`, it never throws on a string that isn't an address.
 export const same = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
 
@@ -57,8 +57,8 @@ export const blockNumber = call(
   "getBlockNumber",
 );
 
-// The newest block that every RPC should have: 10 seconds of blocks are skipped, since an RPC a little behind may not
-// have them yet. That's 50 blocks since Denim and 5 before, as `schedule` paces them.
+// The newest block that every RPC should have. It is 10 seconds of blocks below `newest`, since an RPC that is a little
+// behind may not have those yet. At the pace `schedule` gives, that is 50 blocks since Denim and 5 before it.
 export function settledBelow(newest: number, schedule: Schedule = BLOCK_SCHEDULE): number {
   const ms = schedule.findLast((each) => each.block <= newest)?.ms ?? 2_000;
   return newest - Math.ceil(10_000 / ms);
@@ -66,7 +66,8 @@ export function settledBelow(newest: number, schedule: Schedule = BLOCK_SCHEDULE
 
 export const timeAt = async (block: number, rd: Read = read): Promise<number> =>
   Number(required(await rd([blockTime], { block }))[0]);
-// The newest block and its time, and the time of any other, each asked for once: what `firstBlockAt` searches with.
+// Reads the newest block and its time. `timeOf` gives any other block's time, and reads each block only once.
+// `firstBlockAt` searches with these.
 export async function blockClock(rd: Read = read) {
   const [newest, newestTime] = required(await rd([blockNumber, blockTime])).map(Number) as [number, number];
   const times = new Map<number, Promise<number>>();
@@ -78,7 +79,7 @@ export async function blockClock(rd: Read = read) {
   return { newest, newestTime, timeOf };
 }
 
-// Blocks made on a fixed schedule, as `BLOCK_SCHEDULE` lists Base's.
+// A fixed block schedule, such as Base's `BLOCK_SCHEDULE`.
 export type Schedule = readonly { block: number; time: number; ms: number }[];
 // The first block whose time, in whole seconds, is at least `time`, if every block kept to `schedule`.
 export function scheduled(time: number, schedule: Schedule): number | undefined {
@@ -90,12 +91,14 @@ export function scheduled(time: number, schedule: Schedule): number | undefined 
   return next && block > next.block ? next.block : block;
 }
 
-// The first block whose time is at least `time`, at or below `top`, which must be at or after it. The block `schedule`
-// gives and the one before are read together, and if they fit, that's the answer. Otherwise, the first five guesses
-// interpolate between the closest blocks read so far or, until one before `time` is read, follow the pace of the last
-// two read, starting from `top` and the newer `above`, if given. Later ones halve the range. Times are whole seconds,
-// so with several blocks a second, guesses aim a second's blocks below `time` until one is before it, then as far
-// above, and the range is halved once it holds two seconds' blocks or fewer.
+// The first block whose time is at least `time`. It looks at or below `top`, whose time must be at least `time`.
+// It first reads the block that `schedule` gives and the block before it, together. If they fit, that block is the
+// answer. If not, the first five guesses estimate where `time` falls, from the nearest blocks read on each side of it.
+// Until a block before `time` has been read, they follow the pace of the last two blocks read instead, starting with
+// `top` and the newer `above`, if given. Later guesses halve the range. Times are whole seconds, so several blocks can
+// share one time. When they do, a guess aims one second's worth of blocks below its estimate until a block before
+// `time` has been read. After that, it aims as far towards the middle of the range. The range is halved once it holds
+// two seconds' worth of blocks or fewer.
 export async function firstBlockAt(
   time: number,
   top: number,
@@ -130,7 +133,7 @@ export async function firstBlockAt(
   return hi;
 }
 
-// Base's time, from the newest block read, in case the device's clock is wrong.
+// Base's time in seconds, from the newest block read, in case the device's clock is wrong.
 let drift = 0;
 let newest = 0;
 export function sawBlock(time: number): void {
@@ -140,8 +143,8 @@ export function sawBlock(time: number): void {
 }
 export const now = (): number => Math.floor(Date.now() / 1000) + drift;
 
-// What a read is for. Untagged reads, and those tagged for the shown page, go first. The rest hold at most `BEHIND` of
-// the `MAX` slots, so the shown page, whose reads often wait on one another, always has the others.
+// What a read is for. Reads with no tag, or with a tag of the page on show, go first. The others take at most `BEHIND`
+// of the `MAX` slots. So the page on show, whose reads often wait on one another, always has the rest.
 export type Tag = "earnings" | "average" | "shares" | "payouts" | "swap" | "aero";
 const MAX = 6;
 const BEHIND = 2;
@@ -181,8 +184,8 @@ async function inSlot<T>(tag: Tag | undefined, ask: () => Promise<T>): Promise<T
   }
 }
 
-// 5 seconds, plus as long as `MAX` such requests take to send together at 1 Mbit/s, so that a slow upload is not given
-// up and sent again.
+// In milliseconds: 5 seconds, plus the time that `MAX` requests of this size take to send together at 1 Mbit/s. This
+// way a slow upload is not given up and sent again.
 export const timeoutFor = (bytes: number): number => 5_000 + Math.ceil((bytes * MAX) / 125);
 
 // Each RPC gets at most 25 requests a second, 5 of them for logs. One that is busy or out of reach rests for a second.
@@ -200,9 +203,9 @@ type Reply = { result?: unknown; error?: { code?: number; message?: string } };
 const BUSY = /request limit|rate limit|too many requests/i;
 type Options<T> = { tag?: Tag | undefined; want?: (result: T) => boolean };
 
-// Asks the RPCs in turn until one gives an answer that passes `want` (by default, any answer but null). If none does,
-// returns the last non-null answer, or throws if there is none. RPCs that were busy or out of reach are asked again a
-// little later, up to three more times.
+// Asks the RPCs in turn until one gives an answer that passes `want`. By default, any answer but null passes. If none
+// does, it returns the last non-null answer, or throws if there is none. RPCs that were busy or out of reach are asked
+// again a little later, up to three more times.
 export function rpc<T>(
   method: string,
   params: unknown[],
@@ -248,15 +251,17 @@ export function rpc<T>(
 }
 
 type ReadOptions = { block?: number | "latest"; tag?: Tag | undefined; perBatch?: number };
-// Each call's result, as its ABI types it, or undefined if it failed.
+// Each call's result, typed by its ABI. Undefined when the call failed.
 type Results<C extends readonly Call[]> = { -readonly [K in keyof C]: Result<C[K]> | undefined };
-// Which addresses hold code, undefined where unread. Reads of Base have it (`codeAt`); a test's may not.
+// Says which addresses hold code. Undefined for an address that could not be read. The reads of Base have this, as
+// `codeAt`; a test's reads may not.
 export type CodeAt = (addresses: readonly Address[]) => Promise<(boolean | undefined)[]>;
 export type Read = (<const C extends readonly Call[]>(calls: C, options?: ReadOptions) => Promise<Results<C>>) & {
   codeAt?: CodeAt;
 };
-// Reads through Multicall3 in batches of at most `perBatch` calls, since each `eth_call` has its own gas limit, and
-// `BATCH_BYTES` of calldata, so that none takes long to send. Multicall3 pads each call to 32 bytes and adds 160.
+// Reads through Multicall3, in batches. A batch has at most `perBatch` calls, since each `eth_call` has its own gas
+// limit. It also has at most `BATCH_BYTES` of calldata, so that it is quick to send. In a batch, each call takes its
+// calldata padded to a multiple of 32 bytes, plus 160 bytes.
 export const BATCH_BYTES = 100_000;
 const CALL_BYTES = 160;
 export const read: Read = async (calls, { block = "latest", tag, perBatch = 200 } = {}) => {
@@ -304,9 +309,9 @@ export function tagged(tag: Tag): Read {
   return rd;
 }
 
-// Which addresses hold code, with no contract of the page's own: `eth_call` runs this program as a contract's
-// creation, with the addresses appended, 20 bytes each, and the program returns one byte for each, 1 if it holds code
-// and 0 if not. By offset:
+// Says which addresses hold code, without a contract of the page's own. `eth_call` runs this program as the creation
+// code of a contract, with the addresses appended, 20 bytes each. The program returns one byte for each address: 1 if
+// it holds code, 0 if not. By offset:
 //   00  PUSH1 0x2f DUP1 CODESIZE SUB DUP1 SWAP2 PUSH0 CODECOPY   the addresses, after the program's 0x2f bytes, to
 //                                                                memory at 0
 //   09  PUSH1 20 DUP2 DIV PUSH0                                  n = their length / 20; i = 0
@@ -315,7 +320,7 @@ export function tagged(tag: Tag): Read {
 //   1e  EXTCODESIZE ISZERO ISZERO DUP4 DUP3 ADD MSTORE8            1 if its code size is not 0, after the addresses
 //   25  PUSH1 1 ADD PUSH1 0x0e JUMP                                i += 1
 //   2b  JUMPDEST POP SWAP1 RETURN                                the n bytes
-// A creation's code may not exceed 49,152 bytes, so a call asks about `CODE_BATCH` addresses at most, 2,600 gas each.
+// Creation code can't be over 49,152 bytes, so one call asks about `CODE_BATCH` addresses at most, at 2,600 gas each.
 const CODE_AT: Hex = "0x602f80380380915f39601481045f5b81811015602b57806014025160601c3b151583820153600101600e565b5090f3";
 const CODE_BATCH = 2_000;
 const FLAGS: Record<string, boolean> = { "00": false, "01": true };
@@ -333,10 +338,10 @@ export async function codeAt(addresses: readonly Address[], tag?: Tag): Promise<
   }
   return (await Promise.all(batches)).flat();
 }
-// What one of an item's calls returned, or undefined if it failed or was not asked.
+// What one of an item's calls returned. Undefined when the call failed or was not made.
 type Field<F> = F extends (item: never) => infer C ? Result<C> | undefined : undefined;
-// Reads some calls of every item together. Each item comes back with its calls' results by field name, so nothing is
-// matched up by index. A field set to `undefined` is not read.
+// Reads some calls for every item, together. Each item comes back with its calls' results by field name, so nothing
+// needs matching up by index. A field set to `undefined` is not read.
 export async function readEach<T, F extends Record<string, ((item: T) => Call) | undefined>>(
   items: readonly T[],
   fields: F,
@@ -365,7 +370,7 @@ export const implementation = async (proxy: Address): Promise<Address> =>
 
 export type Tx = { to: Address; data: Hex };
 // Runs the calls in order on the latest block, without checks such as gas or balance. A call that reverted returns
-// the revert's data, which RPCs put in its error.
+// the revert data, which RPCs put in its error.
 export async function simulate(from: Address, txs: Tx[]): Promise<{ ok: boolean; returnData: Hex; gas: bigint }[]> {
   type Simulated = { calls: { status: Hex; returnData: Hex; gasUsed: Hex; error?: { data?: Hex } }[] }[];
   const calls = txs.map(({ to, data }) => ({ from, to, data }));
@@ -381,13 +386,14 @@ export async function simulate(from: Address, txs: Tx[]): Promise<{ ok: boolean;
 }
 
 type Receipt = OpStackRpcTransactionReceipt;
-// The fields every receipt has, wherever it comes from: a wallet's receipt, from EIP-5792's `wallet_getCallsStatus`,
-// has no more.
+// The fields that every receipt has, wherever it comes from. A wallet's receipt, from EIP-5792's
+// `wallet_getCallsStatus`, has only these.
 export type Landed = WalletCallReceipt;
-// The receipts' logs, typed for `parseEventLogs`. A wallet's logs hold only address, data and topics, which is enough
-// to decode their events, but not the block and index that an RPC's logs also hold.
+// The receipts' logs, typed for `parseEventLogs`. A wallet's logs hold only address, data and topics. That is enough to
+// decode their events, but they lack the block and index that an RPC's logs also hold.
 export const logsIn = (receipts: Pick<Landed, "logs">[]): RpcLog[] => receipts.flatMap(({ logs }) => logs) as RpcLog[];
-// Asks every 0.2 seconds, as often as Base makes a block, for 10 seconds, then every 2, for up to 10 minutes.
+// Asks every 0.2 seconds, as often as Base makes a block, for 10 seconds. Then asks every 2 seconds, for up to 10
+// minutes in all.
 export async function poll<T>(ask: () => Promise<T | undefined>): Promise<T | undefined> {
   const start = Date.now();
   for (const end = start + 600_000; Date.now() < end; await sleep(Date.now() - start < 10_000 ? 200 : 2_000)) {
@@ -408,8 +414,8 @@ export async function includedAt(receipts: Landed[]): Promise<number | undefined
   const found = block && (await rpc<RpcBlock>("eth_getBlockByNumber", [block, false]).catch(() => undefined));
   return found ? Number(found.timestamp) : undefined;
 }
-// What the transactions cost in wei, L1 fee included, or `undefined` unless `from` sent and paid for every one, rather
-// than a bundler or a sponsor.
+// What the transactions cost in wei, L1 fee included. `undefined` unless `from` itself sent and paid for every one,
+// rather than a bundler or a sponsor. Also `undefined` when a receipt could not be read.
 export async function gasPaid(hashes: Hex[], from: Address): Promise<bigint | undefined> {
   const receipts = await Promise.all(
     [...new Set(hashes)].map((hash) => rpc<Receipt>("eth_getTransactionReceipt", [hash]).catch(() => undefined)),
@@ -422,7 +428,8 @@ export async function gasPaid(hashes: Hex[], from: Address): Promise<bigint | un
   return receipts.length ? wei : undefined;
 }
 
-// The gas price and the tip to ask for. The tip is capped at 1 gwei because Aero's basic pools tax a swap that tips more.
+// The gas price and the tip to ask for, in wei. The tip is capped at 1 gwei because Aero's basic pools tax a swap that
+// tips more.
 const MAX_TIP = 1_000_000_000n;
 export type Costs = { gasPrice: bigint; tip?: bigint | undefined };
 async function readCosts(): Promise<Costs> {
