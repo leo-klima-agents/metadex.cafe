@@ -2,7 +2,8 @@ import type { Address, Hex } from "viem";
 import { DOUBLE_ESPRESSO, WETH } from "../src/config.ts";
 import * as h from "../fork/harness.ts";
 
-// The states `npm run qa` forks Base into. Each owner gets 0.1 ETH for gas, and the wallet starts signing as the first.
+// The states that `npm run qa` forks Base into. Each owner gets 0.1 ETH for gas. The wallet starts by signing as the
+// first owner.
 export type Owner = { address: Address; holds: string };
 export type Scenario = {
   name: string;
@@ -11,7 +12,7 @@ export type Scenario = {
   hash: string;
   owners: Owner[];
   setup?: () => Promise<unknown>;
-  // Transactions Base included after `block`, which the QA wallet sends again, in order, as their senders.
+  // Transactions that Base included after `block`. The QA wallet sends them again, in order, from their senders.
   replays?: { hash: Hex; does: string }[];
 };
 
@@ -24,7 +25,7 @@ const ACCOUNTS: Owner[] = [
   { address: h.PAYEE, holds: "93 Hydrex accounts; #82774 in Matcha Latte, paid up to Thu 5 Nov" },
 ];
 
-// Thu 22 Oct 2026, 00:00:26 UTC: Hydrex has moved on to the new epoch, and Matcha Latte's operator has not paid yet.
+// Thu 22 Oct 2026, 00:00:27 UTC: Hydrex has moved on to the new epoch, and Matcha Latte's operator has not paid yet.
 const PAYOUT_BLOCK = 52_918_940;
 
 export const SCENARIOS: Scenario[] = [

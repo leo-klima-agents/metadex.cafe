@@ -1,5 +1,5 @@
-// Shared by the browser tests and the QA wallet (qa/qa.ts). Each test file starts its own anvil, and each test starts
-// from the snapshot its file took.
+// Shared by the browser tests and the QA wallet (qa/qa.ts). Each test file starts its own anvil. What a test changes on
+// the fork is undone after it, so each test starts from the state its file set up.
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -46,9 +46,10 @@ import { runsCalls } from "./rpc-cache.ts";
 export const CONDUIT = MATCHA_LATTE.address;
 export const BLOCK = 55_388_000; // Mon 9 Nov 2026, 23:46 UTC, after Base Denim made five blocks a second
 export const FLIP = 1_794_441_600; // Thu 12 Nov 2026, 00:00 UTC, when the epoch after BLOCK's starts
-// Matcha Latte paid every account up to Thu 5 Nov, before Denim, so no block since holds a payout late, with rewards
-// left to claim. The tests of one keep to blocks before Denim that do, until a block after it does: Fri 16 Oct 2026,
-// 19:02 UTC, with #82774 unpaid since Thu 17 Sept, and Wed 21 Oct 2026, after the swappers' deployment, still unpaid.
+// Matcha Latte paid every account up to Thu 5 Nov, before Denim, so no block since then has a late payout with rewards
+// left to claim. Until one does, the tests of a late payout use blocks from before Denim: `UNPAID`, Fri 16 Oct 2026,
+// 19:02 UTC, with #82774 unpaid since Thu 17 Sept; and `UNPAID_SWAPS`, Wed 21 Oct 2026, after the swappers were
+// deployed, with #82774 still unpaid.
 export const UNPAID = 52_694_000;
 export const UNPAID_SWAPS = 52_904_000;
 export const SITE = "https://metadex.cafe";
@@ -56,14 +57,14 @@ const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 export const RPC_ORIGINS = RPCS.map((url) => new URL(url).origin);
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type" };
 
-// What each owner holds at `BLOCK`, and at the payout tests' blocks unless said.
+// What each owner holds at `BLOCK`, and also at the payout tests' blocks unless the comment says otherwise.
 export const MEMBER = getAddress("0x388b2d29e7919d45b1b8f6e88b8a13a392f97b40"); // #9540 in Matcha Latte, #14485 its own
 export const NEWCOMER = getAddress("0x0208ddbc05a91e1b937e8b3140b62ef22a274c95"); // #141 its own, #42877 in Liquid Hydrex
 export const ELSEWHERE = getAddress("0x69707a120ade8239f07595165e180c61395ea655"); // #2435 in Lock Maxi, #2439 in USDC
 export const LEAVER = getAddress("0x2573264b8e690ca6b2128c113890f42198840b16"); // #53350 and #82206 in Matcha Latte
 export const ENDED = getAddress("0x2518820268e4079e90446b93020dfad7dd54e84d"); // #123351 (ended, holds HYDX), #123364
 export const PAYEE = getAddress("0x60924601e73ebc5c2bd9244c788d93e0710a6c93"); // #82774 in Matcha Latte
-// #82774's last payout at `UNPAID`, on Wed 23 Sept, up to Thu 17 Sept.
+// #82774's last payout as of `UNPAID`: sent on Wed 23 Sept, paying up to Thu 17 Sept.
 export const PAID_TX = "0x0932e5a24f24e45bfd1021764d94abc1d920754c4dc17128dd89f44bd086e899";
 export const LOCK_MAXI = getAddress("0x53388a4E98Bb56F8571433F5461010Fc287929d3");
 export const STRANGER = getAddress("0x000000000000000000000000000000000000dead");
@@ -74,7 +75,7 @@ export const AVNT = getAddress("0x696f9436b67233384889472cd7cd58a6fb5df4f1");
 export const ZORA = getAddress("0x1111111111166b7fe7bd91427724b487980afc69");
 export const SELLER = getAddress("0x0000000000000000000000000000000000c0ffee");
 
-// Double Espresso, as deployed through the CREATE2 deployer from hydrex-conduit v2, commit 718c107.
+// Double Espresso as it was deployed through the CREATE2 deployer, from hydrex-conduit v2 at commit 718c107.
 const CREATE2_DEPLOYER = getAddress("0x4e59b44847b379578588920cA78FbF26c0B4956C");
 const SALT = keccak256(toHex("metadex.cafe/ImmutableVeTokenConduit/v2"));
 const INIT_CODE = readFileSync(
@@ -92,8 +93,8 @@ const NATIVE: Address[] = [
   "0xb200000000000000000000451d033a5000cb479e",
   "0xb200000000000000000000856a95738c92feed01",
 ];
-// A generous gas limit, like a wallet's margin: anvil estimates gas at a different time from when it mines the
-// transaction.
+// A generous gas limit, like the margin a wallet adds, because anvil estimates gas at a different time from when it
+// mines the transaction.
 const GAS = 16_000_000n;
 export const FOR_GAS = 10n ** 17n;
 export const abi = parseAbi([
@@ -118,14 +119,16 @@ export const abi = parseAbi([
 let ANVIL = "";
 let CACHE_URL = "";
 const nodeFetch = globalThis.fetch;
-// While anvil runs a request, the cache fetches everything it reads from the upstream at once: see rpc-cache.ts.
+// While anvil runs a request, the cache fetches everything that the request reads from the upstream RPC at once (see
+// rpc-cache.ts).
 const prefetch = (body: string): void =>
   void (runsCalls(body) && nodeFetch(`${CACHE_URL}/prefetch`, { method: "POST", body }).catch(() => {}));
 async function post(body: string): Promise<string> {
   prefetch(body);
   return (await nodeFetch(ANVIL, { method: "POST", headers: { "content-type": "application/json" }, body })).text();
 }
-// Each request waits up to ten minutes, as anvil does for Base: a first run reads Base one slot at a time.
+// Each request waits up to ten minutes, as anvil does for Base, because a first run reads Base one storage slot at a
+// time.
 const clientOf = (url: string) =>
   createPublicClient({
     transport: http(url, {
@@ -151,8 +154,8 @@ async function onFork<T>(reads: () => Promise<T>): Promise<T> {
   }
 }
 
-// Sends from any account, as anvil impersonates them all. The cache is told the hash, so that it never asks the
-// upstream for that transaction or its receipt.
+// Sends from any account, since anvil impersonates them all. The cache is told the hash, so that it never asks the
+// upstream RPC for that transaction or its receipt.
 type Sendable = { from: Address; to?: Address | null; data: Hex; gas?: bigint };
 export async function send({ from, ...tx }: Sendable): Promise<Hex> {
   const hash = await anvil.sendTransaction({ account: from, chain: null, maxPriorityFeePerGas: 0n, ...tx });
@@ -188,14 +191,14 @@ export async function expectApprovals(ids: bigint[], delegate: Address, claimer:
       `#${id}`,
     );
 }
-// The page reads a few blocks behind the latest (`settledBelow`), so mine as many and one more to let it see the last
-// transactions.
+// The page reads a few blocks behind the newest (`settledBelow`). Mine that many blocks and one more, so that the page
+// sees the last transactions.
 export async function settle(): Promise<void> {
   const newest = Number(await anvil.getBlockNumber());
   await anvil.mine({ blocks: newest - settledBelow(newest) + 1 });
 }
 
-// Moves Hydrex on to the current epoch, as anyone may once the epoch has flipped. What the previous epoch earned is
+// Moves Hydrex on to the current epoch, as anyone may once a new epoch has started. What the previous epoch earned is
 // then final.
 export async function moveOn(): Promise<void> {
   await anvil.setBalance({ address: STRANGER, value: FOR_GAS });
@@ -220,9 +223,9 @@ const feedAbi = parseAbi([
   "function pricedTokens(uint256) view returns (address token, address feed, uint256 maxAge, uint256 mul, uint256 div)",
   "function latestRoundData() view returns (uint80, int256, uint256, uint256, uint80)",
 ]);
-// Double Espresso values a vote only with feeds updated within their maxAge, but on a fork moved on days, nothing
-// updates them. This keeps each of its feeds at its last answer, as if updated in every block: their code becomes one
-// that answers any call with (1, answer, now, now, 1).
+// Double Espresso values a vote only with price feeds updated within their `maxAge`. On a fork moved days ahead,
+// nothing updates them. So this keeps each of its feeds at its last answer, as if updated in every block: each feed's
+// code is replaced with code that answers any call with (1, answer, now, now, 1).
 export async function freshenFeeds(): Promise<void> {
   for (let i = 0n; ; i++) {
     const priced = await anvil
@@ -251,7 +254,7 @@ export async function deployDoubleEspresso(): Promise<void> {
     DOUBLE_ESPRESSO.address,
   );
 }
-// Sets Matcha Latte's payout fee as its Hydrex admin can, up to its MAX_TREASURY_FEE_BPS, 1%.
+// Sets Matcha Latte's payout fee, in basis points, as its Hydrex admin can, up to its `MAX_TREASURY_FEE_BPS` of 1%.
 export async function setMatchaLatteFee(bps: bigint): Promise<void> {
   await anvil.setBalance({ address: MATCHA_LATTE_ADMIN, value: FOR_GAS });
   await mined(
@@ -291,7 +294,8 @@ export async function fund(tokens: Address[]): Promise<void> {
     );
 }
 
-// The test wallet announces itself by EIP-6963 and hands each request to Node, which the page's CSP cannot block.
+// The test wallet announces itself through EIP-6963 and passes each request to Node, which the page's Content Security
+// Policy cannot block.
 export type WalletOptions = {
   owner: Address;
   chainId: number;
@@ -305,7 +309,7 @@ export type WalletOptions = {
   ask?: (method: string, params: any[]) => Promise<boolean>;
   // How many of the next transactions to send with too little gas, so that they fail.
   failing?: number;
-  // The tokens it lists with ERC-7811's wallet_getAssets.
+  // The tokens it lists with ERC-7811's `wallet_getAssets`.
   assets?: Address[];
 };
 const sendsBatches = (options: Pick<WalletOptions, "batch" | "assets">): boolean => !!options.batch || !!options.assets;
@@ -334,8 +338,8 @@ export const walletScript = (names: string[]) => `(() => {
   window.addEventListener("eip6963:requestProvider", announce);
   announce();
 })();`;
-// Makes `AbortSignal.timeout` never fire, as a first run reads Base one slot at a time, and logs each Content Security
-// Policy violation.
+// Makes `AbortSignal.timeout` never fire, because a first run reads Base one storage slot at a time. Also logs each
+// Content Security Policy violation.
 export const PAGE_SCRIPT = `AbortSignal.timeout = () => new AbortController().signal;
 document.addEventListener("securitypolicyviolation", (event) => console.error("Content Security Policy: " + event.violatedDirective + " " + event.blockedURI));`;
 const safePage = (safe: Address) => `<!doctype html><meta charset="utf-8"><title>Safe{Wallet}</title>
@@ -485,8 +489,8 @@ export async function serve(route: Route, { origins, rpc, safe }: Served): Promi
       return route.fulfill({ headers: { ...CORS, "content-type": "application/json" }, body: answered });
     const reply = post(body);
     forwarding.add(reply);
-    // anvil can drop a connection ("fetch failed"). The request then fails as on a flaky network, and the page asks
-    // again, rather than the rejection escaping this handler, which fails the whole test file.
+    // anvil can drop a connection ("fetch failed"). The request then fails as it would on a flaky network, and the page
+    // asks again. Otherwise the rejection would escape this handler and fail the whole test file.
     const answer = await reply.finally(() => forwarding.delete(reply)).catch(() => undefined);
     if (answer === undefined) return route.abort("connectionreset").catch(() => {});
     return route.fulfill({
@@ -554,7 +558,7 @@ export async function open(wallet: Partial<WalletOptions> | false, options: Open
     safe,
   };
   await context.route("**/*", (route) => serve(route, opened));
-  // Playwright's clock fakes `AbortSignal.timeout` too, so PAGE_SCRIPT must be added after it to undo that.
+  // Playwright's clock fakes `AbortSignal.timeout` too, so `PAGE_SCRIPT` must be added after the clock to undo that.
   const { timestamp } = await anvil.getBlock();
   if (script)
     await (flowing
@@ -598,7 +602,7 @@ export const field = (slip: Locator, label: string, part: "value" | "description
 export const pick = async (page: Page, ...ids: number[]) => {
   for (const id of ids) await page.getByRole("checkbox", { name: new RegExp(`#${id}$`) }).check();
 };
-// Ticks only these accounts of the group and unticks the rest, as accounts that need their owner start ticked.
+// Ticks only these accounts in the group and unticks the rest, because accounts that need their owner start ticked.
 export async function only(page: Page, key: string, ...ids: number[]): Promise<void> {
   const rows = group(page, key).locator("[data-list=account] > li");
   await rows.first().waitFor();

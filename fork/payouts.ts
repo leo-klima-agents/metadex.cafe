@@ -69,7 +69,7 @@ describe("payouts against a fork of Base before Denim, with a payout late", { ti
       ["sent by 0x0000…dEaD", "sent by 0x0000…1234"],
     );
     assert.match(await bill.innerText(), /Fee 1%/i);
-    // Claims of dust in many blocks: the page reads only ten of those blocks and says it stopped.
+    // Claim dust in many blocks: the page reads only ten of those blocks and says that it stopped.
     for (const reward of rewards.filter(({ token }) => token.symbol !== "USDC").slice(0, 10))
       await h.mined(STRANGER, DOUBLE_ESPRESSO.address, h.claimOne(82774n, reward));
     await h.settle();

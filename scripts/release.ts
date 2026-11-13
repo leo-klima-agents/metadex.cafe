@@ -10,29 +10,30 @@ import { buffer } from "node:stream/consumers";
 import { fileURLToPath } from "node:url";
 import { crc32 } from "node:zlib";
 
-// Packs dist/ into release/ as a GitHub Release's files: `metadex.cafe_v<version>.car` for IPFS and ENS, and
-// `metadex.cafe_v<version>.zip` with the same files for anyone to unpack. The same dist/ always gives the same bytes.
-// `notes.md`, also printed, holds the Release's notes: the CID and its ENS content hash.
+// Packs dist/ into release/ as the files of a GitHub Release: `metadex.cafe_v<version>.car` for IPFS and ENS, and
+// `metadex.cafe_v<version>.zip`, with the same files, for anyone to unpack. The same dist/ always gives the same bytes.
+// `notes.md` holds the Release's notes: the CID and its ENS content hash. The notes are also printed.
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUT = `${ROOT}/release`;
 const { version } = JSON.parse(readFileSync(`${ROOT}/package.json`, "utf8")) as { version: string };
 const NAME = `metadex.cafe_v${version}`;
 
-// Paths use "/" on every system and are sorted. Hidden files and folders are left out, as `ipfs add -r` leaves them
-// out, so a `.DS_Store` does not change the CID.
+// Paths use "/" on every system and are sorted. Hidden files and folders are left out, as `ipfs add -r` does, so that a
+// `.DS_Store` file does not change the CID.
 const filesOf = (dir: string): string[] =>
   readdirSync(dir, { recursive: true, encoding: "utf8" })
     .map((path) => path.split(sep).join("/"))
     .filter((path) => !path.split("/").some((part) => part.startsWith(".")) && statSync(`${dir}/${path}`).isFile())
     .sort();
 
-// Packs a folder as a CAR file. The root is the CID Pinata gives the folder when it uploads it as `v1`, which Pinata's
-// docs equate to `ipfs add -r --cid-version=1`: CIDv1 in base32, sha2-256, raw leaves, 256 KiB chunks in a balanced DAG
-// of 174 links a node, and one directory of the folder's files with no mode, no modification time and no inlined CIDs.
-// Every setting is passed explicitly, because the importer's defaults may change; it only hashes with sha2-256 and
-// never inlines. The CAR holds the root, then each block once, in the order the importer writes them, which is stable
-// because it imports one file and one block at a time.
+// Packs a folder as a CAR file. Its root is the CID that Pinata gives the folder when it uploads it as `v1`. Pinata's
+// docs say that this is the same as `ipfs add -r --cid-version=1`: CIDv1 in base32, sha2-256, raw leaves, 256 KiB
+// chunks in a balanced DAG of up to 174 links per node, and one directory of the folder's files with no mode, no
+// modification time and no inlined CIDs. Every setting is passed explicitly, because the importer's defaults may
+// change. The importer only hashes with sha2-256 and never inlines, so those two need no setting. The CAR holds the
+// root, then each block once, in the order the importer writes them. That order is stable, because the importer handles
+// one file and one block at a time.
 export async function carOf(dir: string): Promise<{ root: CID; car: Uint8Array }> {
   const candidates: ImportCandidate[] = filesOf(dir).map((path) => ({ path, content: readFileSync(`${dir}/${path}`) }));
   const blocks = new Map<string, { cid: CID; bytes: Uint8Array }>();
@@ -79,20 +80,20 @@ const le = (...fields: [2 | 4, number][]): Buffer =>
     }),
   );
 
-// Zips a folder's files, sorted by name, inside one folder, `folder`. They are stored, not compressed, so the bytes
-// depend only on the files and not on the zlib version. Each is dated 1 Jan 1980, 00:00, the earliest date a zip can
-// hold, and has no mode, so unzip applies the umask.
+// Zips a folder's files, sorted by name, inside one folder named `folder`. The files are stored, not compressed, so
+// that the bytes depend only on the files and not on the zlib version. Each file is dated 1 Jan 1980, 00:00, the
+// earliest date a zip can hold. No file has a mode, so unzip applies the umask.
 export function zipOf(dir: string, folder: string): Uint8Array {
   const files = filesOf(dir);
   const entries: Buffer[] = [];
   const listed: Buffer[] = [];
   let offset = 0;
   for (const path of files) {
-    // Names must be ASCII: zip version 1.0 has no UTF-8 names, which need version 6.3.
+    // Names must be in ASCII: these entries use zip version 1.0, and UTF-8 names need version 6.3.
     if (!/^[\x20-\x7e]+$/.test(`${folder}/${path}`)) throw new Error(`${folder}/${path} is not in ASCII.`);
     const name = Buffer.from(`${folder}/${path}`, "ascii");
     const data = readFileSync(`${dir}/${path}`);
-    // Fields the local header and the central directory entry share, in the same order.
+    // The fields that the local header and the central directory entry share, in the same order.
     const fields = le(
       [2, 10], // version needed to extract: 1.0
       [2, 0], // no flags
@@ -120,10 +121,10 @@ export function zipOf(dir: string, folder: string): Uint8Array {
     [4, 0x06054b50],
     [2, 0], // this disk
     [2, 0], // the disk the directory starts on
-    [2, files.length], // the files on this disk
-    [2, files.length], // the files in all
+    [2, files.length], // entries on this disk
+    [2, files.length], // entries in all
     [4, directory.length],
-    [4, offset], // where the directory starts
+    [4, offset], // offset of the directory
     [2, 0], // no comment
   );
   return Buffer.concat([...entries, directory, end]);

@@ -1,10 +1,11 @@
 import type { Metafile } from "esbuild";
 import { readFileSync, readdirSync } from "node:fs";
 
-// Builds the license notices of what a built file bundles, appended to it as one comment so they travel with it. An npm
-// package's notice comes from its package.json and the copyright lines of its LICENSE; a repository file that is not
-// the café's, such as a font, gets its notice from REUSE.toml. License texts come verbatim from `LICENSES/`. A license
-// without a text or name here stops the build.
+// Builds the license notices for what a built file bundles. They are added to the end of the file as one comment, so
+// that they travel with it. An npm package's notice comes from its package.json and the copyright lines of its LICENSE
+// file. A repository file that is not the café's own, such as a font, gets its notice from REUSE.toml. License texts
+// are copied word for word from `LICENSES/`. The build stops if a license has no text there or no name in
+// `LICENSE_NAMES`.
 
 type Part = { name: string; copyright: string[]; license: string };
 
@@ -13,7 +14,7 @@ const LICENSE_NAMES: Record<string, string> = {
   "OFL-1.1": "the SIL Open Font License 1.1",
 };
 
-// What an output bundles: its inputs, and the files a stylesheet embeds through url(), as data.
+// What an output bundles: its inputs, and the files that a stylesheet embeds as data through `url()`.
 export function bundled(metafile: Metafile, output: string): string[] {
   const found = Object.entries(metafile.outputs).find(([path]) => path === output || path.endsWith(`/${output}`));
   if (!found) throw new Error(`The build has no ${output}.`);
@@ -26,7 +27,7 @@ export function bundled(metafile: Metafile, output: string): string[] {
   return [...new Set([...inputs, ...embedded])];
 }
 
-// A package whose LICENSE has no copyright line stops the build, rather than having its notice guessed.
+// The build stops if a package's LICENSE file has no copyright line, rather than guess the notice.
 export function packagePart(root: string, dir: string): Part {
   const pkg = JSON.parse(readFileSync(`${root}/${dir}/package.json`, "utf8")) as {
     name: string;
@@ -44,7 +45,7 @@ export function packagePart(root: string, dir: string): Part {
 
 type Annotation = { path: string; copyright: string; license: string };
 
-// In file order, because a later annotation takes precedence over an earlier one for the same file.
+// In file order, because when two annotations cover the same file, the later one wins.
 function annotations(root: string): Annotation[] {
   const blocks = readFileSync(`${root}/REUSE.toml`, "utf8").split("[[annotations]]").slice(1);
   return blocks.map((block) => {
@@ -61,14 +62,14 @@ function annotations(root: string): Annotation[] {
   });
 }
 
-// A REUSE.toml path as a pattern: "*" within a folder, "**" across them.
+// A REUSE.toml path as a regular expression: "*" matches within one folder, and "**" matches across folders.
 const glob = (pattern: string) => {
   const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`^${escaped.replace(/\*\*|\*/g, (star) => (star === "**" ? ".*" : "[^/]*"))}$`);
 };
 
-// One part per bundled package, and one per repository file that REUSE.toml gives a holder other than the café. The
-// café's own files are those only its `**` annotation covers.
+// One part for each bundled package, and one for each repository file that REUSE.toml gives to a copyright holder other
+// than the café. The café's own files are those that only the `**` annotation covers.
 export function partsOf(root: string, files: string[]): Part[] {
   const parts = new Map<string, Part>();
   const annotated = annotations(root);
