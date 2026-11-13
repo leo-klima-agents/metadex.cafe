@@ -1,7 +1,7 @@
 import { render } from "../state.ts";
 
-// A line chart of a few series over a few positions, drawn at its own width so that its text keeps its size, the first
-// series on top. A missing value breaks a line.
+// A line chart of a few series over a few positions. It is drawn at its own width, so its text keeps its size. The
+// first series is drawn on top. A missing value breaks a line.
 export type Series = { id: string; name: string; color: string; dashed?: boolean; values: (number | undefined)[] };
 export type Plot = {
   positions: string[];
@@ -15,9 +15,9 @@ const NS = "http://www.w3.org/2000/svg";
 const HEIGHT = 240;
 const [TOP, BOTTOM, LEFT, RIGHT] = [12, 28, 48, 72];
 const LABEL = 14;
-// Under this many pixels a position, the positions take their brief names.
+// When each position gets fewer pixels than this, the axis shows the brief names.
 const ROOM = 96;
-// What each chart shows and where its pointer or focus is.
+// What each chart shows, and the position its pointer or focus is on.
 const charts = new WeakMap<SVGSVGElement, { plot: Plot; tip: HTMLElement; at: number | undefined }>();
 addEventListener("resize", render);
 
@@ -26,7 +26,8 @@ const el = <K extends keyof SVGElementTagNameMap>(name: K, attributes: Record<st
   for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
   return node;
 };
-// Ticks from zero, a step of 1, 2 or 5 times a power of ten apart, up to the first at or above the highest value.
+// Ticks from zero up to the first one at or above the highest value. The step between them is 1, 2 or 5 times a power
+// of ten.
 function ticksOf(most: number): number[] {
   if (!(most > 0)) return [0, 1];
   const rough = most / 4;
@@ -65,7 +66,7 @@ export function drawChart(svg: SVGSVGElement, tip: HTMLElement, plot: Plot): voi
     nodes.push(el("line", { class: "Chart-cross", x1: x(state.at), x2: x(state.at), y1: TOP, y2: HEIGHT - BOTTOM }));
   const ends: { y: number; x: number; text: string }[] = [];
   for (const { values, color, dashed } of plot.series.toReversed()) {
-    // Runs of known values, each its own line.
+    // Each run of known values is its own line.
     let run: string[] = [];
     const flush = () => {
       if (run.length > 1) {
@@ -87,7 +88,8 @@ export function drawChart(svg: SVGSVGElement, tip: HTMLElement, plot: Plot): voi
     const last = values.findLastIndex((value) => value !== undefined);
     if (last >= 0) ends.push({ x: x(last) + 10, y: y(values[last]!) + 4, text: plot.value(values[last]!) });
   }
-  // End labels, the series drawn on top first; one that would touch another is left to the legend and the tooltip.
+  // End labels, starting with the series drawn on top. A label that would touch one already placed is left out; the
+  // legend and the tooltip still cover that series.
   const placed: number[] = [];
   for (const end of ends.toReversed()) {
     if (placed.some((at) => Math.abs(at - end.y) < LABEL)) continue;
@@ -151,7 +153,7 @@ function showTip(svg: SVGSVGElement): void {
   const box = svg.getBoundingClientRect();
   const n = plot.positions.length;
   const left = LEFT + ((at + 0.5) * (box.width - LEFT - RIGHT)) / n;
-  // On the side of the crosshair with room for it.
+  // Put the tip on whichever side of the crosshair has more room.
   const right = left > box.width / 2;
   tip.style.left = right ? "" : `${left + 12}px`;
   tip.style.right = right ? `${box.width - left + 12}px` : "";
