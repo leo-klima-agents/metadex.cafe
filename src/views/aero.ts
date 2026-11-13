@@ -833,7 +833,7 @@ export function drawStake(): void {
     "paid-note": !market
       ? undefined
       : paid
-        ? `last ${SPAN}, with live incentives · Base average ${apr(average!.total, true, market)}`
+        ? `last ${SPAN}, with the incentives running now · Base average ${apr(average!.total, true, market)}`
         : null,
     "window-head": `Last ${SPAN}`,
   });
@@ -893,7 +893,7 @@ export function drawPool(): void {
       ? status("running", "Takes allocations")
       : status("stopped", "Pays nothing", gauge.activated ? ": its emissions cap is zero" : ": not activated"),
     power: compact(gauge.power),
-    thin: isThin(gauge, HOURS) ? "Thin: one allocation changes what it pays" : null,
+    thin: isThin(gauge, HOURS) ? "Thin: one allocation changes what each sAERO earns" : null,
     paid: paid ? `${apr(paid.total, paid.priced, market)} APR` : "Not enough history",
     "paid-note": `last ${SPAN}`,
     stream: live.length ? perDay(stream.value, stream.priced, market) : "None",

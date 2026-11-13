@@ -369,12 +369,12 @@
         </header>
         <p class="Pill u-small" data-text="state"></p>
         <p class="u-lead" data-only="matcha-latte">
-          Votes with your Hydrex accounts, retires a share of their rewards as carbon credits, and pays you the rest in
-          kVCM.
+          Votes with your Hydrex accounts, retires <span data-text="retires">part</span> of their rewards as carbon
+          credits, and pays you the rest in kVCM.
         </p>
         <p class="u-lead" data-only="double-espresso">
-          Votes with your Hydrex accounts for the pools it expects to earn the most rewards, and pays you what they
-          earn, in the tokens earned.
+          Votes with your Hydrex accounts for the pools anyone proposes, if they would earn at least $1 more this epoch
+          than its current votes at Chainlink prices, and pays you what they earn, in the tokens earned.
         </p>
         <p class="u-small">Your Hydrex account stays in your wallet. Leave with one call, at any time.</p>
         <p class="Notice" data-text="off"></p>
@@ -521,7 +521,10 @@
               </div>
               <div class="Pair">
                 <dt class="u-small u-quiet">Permissionless</dt>
-                <dd>Anyone can propose votes that earn at least $1 more rewards based on Chainlink prices</dd>
+                <dd>
+                  Anyone can replace its votes with ones expected to earn at least $1 more this epoch, at Chainlink
+                  prices
+                </dd>
               </div>
             </dl>
           </section>
@@ -709,7 +712,9 @@
           <legend><h2>Your strategy</h2></legend>
           <div class="u-stack">
             <fieldset class="u-stackTight">
-              <legend class="u-small">Which pools to follow, each with its APR over the last 8 days:</legend>
+              <legend class="u-small">
+                Which pools to follow, each with the APR it would have earned over the last 8 days:
+              </legend>
               <div class="u-stackTight" data-list="strategy"></div>
             </fieldset>
             <div class="u-row u-small">
@@ -795,7 +800,7 @@
           </div>
         </section>
         <section class="u-stack u-gapAbove" aria-labelledby="plan-title">
-          <h2 id="plan-title">Allocate like this now</h2>
+          <h2 id="plan-title">Allocate now</h2>
           <div class="Card u-stackTight" data-if="no-wallet">
             <p class="u-label">Connect a wallet</p>
             <p class="u-row" data-list="wallet"></p>
@@ -819,7 +824,7 @@
                       <th scope="col">Share</th>
                       <th scope="col">Projected APR</th>
                       <th scope="col">sAERO weight</th>
-                      <th scope="col">Pool's revenue a day</th>
+                      <th scope="col">Revenue a day, last 8 days</th>
                     </tr>
                   </thead>
                   <tbody data-list="pick"></tbody>
@@ -920,11 +925,11 @@
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Projected APR</dt>
-              <dd>What a pool would pay if its last 8 days came again, counting your own sAERO in it</dd>
+              <dd>Your APR in a pool if its last 8 days came again, with your sAERO added to its weight</dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Base average</dt>
-              <dd>What the average sAERO on Base earned</dd>
+              <dd>All pools' revenue divided by all their sAERO weight</dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Blue chips</dt>
@@ -932,7 +937,10 @@
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Thin</dt>
-              <dd>Under 1M sAERO weight, where one allocation changes what it pays. Strategies leave it out</dd>
+              <dd>
+                Under 1M sAERO weight on average over the last 8 days, so one allocation changes what each sAERO earns.
+                Strategies leave it out
+              </dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">sAERO weight</dt>
@@ -1009,8 +1017,8 @@
               </dl>
               <p class="u-small u-quiet">
                 APR, each sAERO counted as one AERO. Since it allocated: the fees its pools paid since then, exactly,
-                and every pool's on average over the same time. Its pools: their exchange revenue lately, which it did
-                not earn if it just moved there.
+                and the average of all pools over the same time. Its pools: their revenue over the last 8 days, which it
+                did not earn if it moved there within those days.
               </p>
               <div class="u-scroll">
                 <table>
@@ -1056,7 +1064,7 @@
                 <dd class="Facts-value Facts-figure" data-text="power"></dd>
               </div>
               <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">Exchange revenue</dt>
+                <dt class="u-label Facts-tileLabel">Revenue</dt>
                 <dd class="Facts-value Facts-figure" data-text="paid"></dd>
                 <dd class="Facts-tileNote u-small u-quiet" data-text="paid-note"></dd>
               </div>
@@ -1076,11 +1084,11 @@
               <div class="u-scroll">
                 <table>
                   <caption class="u-visuallyHidden">
-                    Its APR over each window
+                    Its APR over the last 48 hours, 4 days and 8 days
                   </caption>
                   <thead>
                     <tr>
-                      <th scope="col">Over</th>
+                      <th scope="col">Last</th>
                       <th scope="col">Fees</th>
                       <th scope="col">Incentives</th>
                       <th scope="col">In all</th>
@@ -1595,7 +1603,7 @@
             <dd class="Facts-value Facts-figure" data-text="next"></dd>
           </div>
           <div class="Facts-tile">
-            <dt class="u-label Facts-tileLabel">Est. per week</dt>
+            <dt class="u-label Facts-tileLabel">A week at last epoch's pay</dt>
             <dd class="Facts-value Facts-figure" data-text="weekly"></dd>
           </div>
           <div class="Facts-tile">
@@ -1680,7 +1688,7 @@
         <article class="Slip u-stack">
           <header>
             <p class="Slip-name">metaDEX Café</p>
-            <p class="u-label Slip-sub">What waits</p>
+            <p class="u-label Slip-sub">Unclaimed rewards</p>
           </header>
           <ul class="Slip-ruled" data-list="line"></ul>
           <dl class="Slip-ruled" data-list="sum"></dl>
@@ -1694,7 +1702,7 @@
         <fieldset class="u-stack">
           <legend class="u-label">Receive</legend>
           <label class="u-gapAbove"
-            ><input type="radio" name="receive" value="as" data-action="receive" checked /> As they are, in
+            ><input type="radio" name="receive" value="as" data-action="receive" checked /> Unswapped, in
             <span data-text="count"></span
           ></label>
           <label class="u-row">

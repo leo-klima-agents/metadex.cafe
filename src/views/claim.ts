@@ -40,7 +40,7 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
       steps: () => [],
       checkHref,
     });
-  const unanswered = "Base did not say what waits: try again in a moment.";
+  const unanswered = "Base did not return the unclaimed rewards: try again in a moment.";
   // `checksRead()` is awaited though its result is unused: swaps wait for the checks, which say whether the RPCs serve
   // Base.
   const [owed, gasCosts, caps, middles] = await Promise.all([
@@ -192,7 +192,7 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
     const run = await swap.simulatePlan(connection.address, calls, sale, tokens, at, true);
     if (id !== current.planned) return;
     if (!run || run.refused !== undefined || run.gas > claim.MAX_CLAIM_GAS) {
-      current.into = "Base refused both together: they come as they are.";
+      current.into = "Base refused the claim and the swap together: they are claimed unswapped.";
       current.steps = () => calls;
       current.outcome = asTheyAre;
       return draw();
@@ -240,7 +240,7 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
     if (chosen && !into.disabled)
       void plan(swapperOf(select.value)!).catch((error: unknown) => {
         console.error(error);
-        current.into = "Not read: they come as they are.";
+        current.into = "Not read: they are claimed unswapped.";
         draw();
       });
     else draw();
@@ -268,7 +268,7 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
   draw();
   openReview({
     name,
-    pages: [{ title: "What waits", body }, {}],
+    pages: [{ title: "Unclaimed rewards", body }, {}],
     steps: (sending) => current.steps(sending),
     atomic: true,
     groups: apart ? groups : undefined,

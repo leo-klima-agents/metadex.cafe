@@ -130,7 +130,7 @@ describe("swaps against a fork of Base after Denim", { timeout: 2_400_000 }, () 
     const { page, sent, violations } = await connected({ owner: NEWCOMER, batch: true }, { url: `${SITE}/#app` });
     const line = view(page, "app").locator("[data-list=need] > li").filter({ hasText: "#141: payout overdue" });
     await line.getByRole("button", { name: "Claim now" }).click();
-    await heading(review(page), "What waits", 2).waitFor();
+    await heading(review(page), "Unclaimed rewards", 2).waitFor();
     await review(page).getByRole("radio", { name: "Into" }).check();
     await review(page).getByRole("combobox", { name: "The token to receive" }).selectOption("weth");
     await review(page)
@@ -188,14 +188,14 @@ describe("claims of a payout late, against a fork of Base before Denim", { timeo
     await line.filter({ hasText: /payout overdue, at least (<\s)?\$[\d,.]+ in \d+ tokens?/ }).waitFor();
     refusing = true;
     await line.getByRole("button", { name: "Claim now" }).click();
-    await review(page).getByText("Base did not say what waits: try again in a moment.").waitFor();
+    await review(page).getByText("Base did not return the unclaimed rewards: try again in a moment.").waitFor();
     await review(page).getByRole("button", { name: "Back" }).click();
     refusing = false;
     await line.getByRole("button", { name: "Claim now" }).click();
-    await heading(review(page), "What waits", 2).waitFor();
+    await heading(review(page), "Unclaimed rewards", 2).waitFor();
     assert.equal(
       await review(page)
-        .getByRole("radio", { name: /As they are/ })
+        .getByRole("radio", { name: /Unswapped/ })
         .isChecked(),
       true,
       "nothing sold unasked",
@@ -240,7 +240,7 @@ describe("claims of a payout late, against a fork of Base before Denim", { timeo
       .filter({ hasText: "#82774: payout overdue" })
       .getByRole("button", { name: "Claim now" })
       .click();
-    await heading(dialog, "What waits", 2).waitFor();
+    await heading(dialog, "Unclaimed rewards", 2).waitFor();
     assert.equal(await dialog.getByRole("radio", { name: "Into" }).isDisabled(), true);
     await dialog.getByText("Swap them once the claims go through.").waitFor();
     await dialog.getByRole("button", { name: "Continue" }).click();

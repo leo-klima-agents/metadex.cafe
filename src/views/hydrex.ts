@@ -286,11 +286,14 @@ export function drawProduct(): void {
   const automation = byKind(state.route.view === "product" ? state.route.kind : "")!;
   const earnings = data.earnings(automation);
   const off = !joinable(automation) && checks().value;
+  const matcha = data.matchaLatte().value;
   fill(productView, {
     name: automation.name,
     state: stateNode(automation),
     off: off ? frag(status("failed", `Joining ${automation.name} is off. `), link("#hydrex", "Why")) : null,
     "retired-share": matchaLatteValue(({ retireBps }) => `Up to ${bps(retireBps)}`),
+    // Until read, the lead says "part".
+    retires: matcha ? `up to ${bps(matcha.retireBps)}` : "part",
     takes: matchaLatteValue(({ feeBps }) => `retired${feeWords(feeBps)}`),
     record: record(automation),
     "record-average": averageNote(),
@@ -450,7 +453,7 @@ export function change(accounts: Account[], action: "join" | "leave" | "self", a
     const gas = hydrex.gasEstimate(steps, connection.address);
     const drawBody = (wei?: Value) =>
       fill(body, {
-        unclaimed: `Unclaimed rewards on ${plural("this Hydrex account", "these Hydrex accounts")} will be paid to you ${ml ? "in kVCM " : ""}with ${plural("its next payout", "their next payouts")}${ml ? `, less the share retired${fee}` : ", less the 1% fee"}.`,
+        unclaimed: `Unclaimed rewards on ${plural("this Hydrex account", "these Hydrex accounts")} will be paid to you ${ml ? "in kVCM " : ""}with ${plural("its next payout", "their next payouts")}${ml ? `, less ${settings ? `up to ${bps(settings.retireBps)}` : "the share"} retired${fee}` : ", less the 1% fee"}.`,
         next,
         weekly: shown(weekly, (earnings) => {
           if (!earnings.votes) return "No record yet";

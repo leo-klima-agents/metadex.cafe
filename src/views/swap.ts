@@ -138,7 +138,8 @@ function scan(): Got<Scan> {
             row.worth = value(route.out) ?? (price === undefined ? undefined : worthOf(capped, token.decimals, price));
             const units = route.gas + (allowance < capped ? swap.APPROVAL_GAS : 0n);
             const cost = gas.value ? (ethCost(units * gas.value.gasPrice, pricing)?.value ?? 0) : 0;
-            row.reason = row.worth === undefined ? "No price" : row.worth < 2 * cost ? "Below gas" : undefined;
+            row.reason =
+              row.worth === undefined ? "No price" : row.worth < 2 * cost ? "Worth under twice its gas" : undefined;
           }
           const auto = !!route && !row.reason && (!prefilled || prefilled.has(key(address)));
           row.ticked = !!route && (ticks.get(key(address)) ?? auto);
@@ -315,11 +316,11 @@ export function drawSwap(): void {
         amount: figure(row.amount, row.token.decimals),
         fetches: row.reading ? undefined : (quote?.exact ?? ""),
         worth: quote?.worthText ?? "",
-        note: row.reason ?? (skipped ? "Base would skip it" : null),
+        note: row.reason ?? (skipped ? "Its route fails on Base" : null),
         warning: like
-          ? `Not the usual ${like.symbol}`
+          ? `Same symbol as ${like.symbol}, different contract`
           : under !== undefined
-            ? `Quote ${fraction(under)} under price`
+            ? `Quote ${fraction(under)} below its market price`
             : null,
       });
     },
@@ -464,7 +465,7 @@ export async function reviewSwap(
         value: reason ? "Skipped" : value(item.out).exact,
         worth: reason ? "" : value(item.out).worthText,
         route: swap.hopsWords(item.route, tokens),
-        note: reason ? `Skipped: ${reason}` : under !== undefined ? `${fraction(under)} under price` : null,
+        note: reason ? `Skipped: ${reason}` : under !== undefined ? `${fraction(under)} below its market price` : null,
       };
     }),
     [
