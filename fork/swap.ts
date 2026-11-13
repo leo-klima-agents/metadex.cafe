@@ -144,7 +144,7 @@ describe("swaps against a fork of Base after Denim", { timeout: 2_400_000 }, () 
     // The claim asks the incentives contract twice in one call: the first time moves `earned()` on by 50 epochs, and
     // the second time pays.
     await review(page)
-      .getByText(/incentives contracts that owe it; twice where one asking cannot reach all it owes/i)
+      .getByText(/incentives contracts that owe it; a contract owed for more than 50 epochs is listed once per 50/i)
       .waitFor();
     const before = await balanceOf(WETH, NEWCOMER);
     await review(page).getByRole("button", { name: "Sign 3 transactions" }).click();

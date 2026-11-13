@@ -70,7 +70,7 @@ test("a contract owing past the 50 epochs one asking reads is listed, and costed
     [
       undefined,
       "Pools' fees contracts that owe it",
-      "Pools' incentives contracts that owe it; twice where one asking cannot reach all it owes",
+      "Pools' incentives contracts that owe it; a contract owed for more than 50 epochs is listed once per 50",
       undefined,
     ],
   );

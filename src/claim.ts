@@ -109,7 +109,7 @@ export function claimSlip(claim: Claim, tokens: Map<string, Token>, whole = true
   const from = whole ? "" : ` from ${count(contracts, "reward contract", "reward contracts")}`;
   // A contract listed more than once is asked more than once, to reach what it owes past the 50 epochs one asking reads.
   const again = (listed: Address[]) =>
-    unique(listed).length < listed.length ? "; twice where one asking cannot reach all it owes" : "";
+    unique(listed).length < listed.length ? "; a contract owed for more than 50 epochs is listed once per 50" : "";
   return {
     to: DOUBLE_ESPRESSO.address,
     data: encodeFunctionData({ abi, functionName: "claim", args }),
