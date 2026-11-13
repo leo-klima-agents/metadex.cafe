@@ -41,8 +41,8 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
       checkHref,
     });
   const unanswered = "Base did not return the unclaimed rewards: try again in a moment.";
-  // `checksRead()` is awaited though its result is unused: swaps wait for the checks, which say whether the RPCs serve
-  // Base.
+  // `checksRead()` is awaited but its result is not used. Swaps must wait for the checks, which say whether the RPCs
+  // serve Base.
   const [owed, gasCosts, caps, middles] = await Promise.all([
     claim.owedOf(entries).catch((error: unknown) => void console.error(error)),
     costsRead().catch(() => undefined),
@@ -142,8 +142,8 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
     });
     render();
   };
-  // No swap while swaps are off, nor from a Safe whose claim takes several transactions: the swap needs the claim's
-  // receipts, which come only once the owners sign.
+  // No swap while swaps are off. No swap either from a Safe whose claim takes several transactions: the swap needs the
+  // claim's receipts, which come only once the owners sign.
   const options = swapsOff() !== false ? [] : SWAPPERS;
   list(
     $("[data-list=option]", body),
@@ -177,8 +177,8 @@ export async function openClaim(entries: Overdue[]): Promise<void> {
     };
     sayInto(sale.items);
     if (!sale.items.length) return draw();
-    // When the claim and swap can't go together, the claim goes first, and its Done page then offers to swap what it
-    // brought, if the visitor chose a swap.
+    // When the claim and the swap can't go together, the claim goes first. If the visitor chose a swap, the claim's
+    // Done page then offers to swap what it brought.
     if (!together) {
       if (into.checked)
         current.outcome = async (receipts) =>

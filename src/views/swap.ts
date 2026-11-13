@@ -160,8 +160,8 @@ function scan(): Got<Scan> {
   });
 }
 
-// The ticked tokens' routes: each token's own, or the routes found for them together, whichever fetches more when Base
-// runs them in order after their approvals. Without an answer from Base, each token keeps its own quote.
+// The ticked tokens' routes: each token's own route, or the routes found for them together, whichever fetches more when
+// Base runs them in order after their approvals. Without an answer from Base, each token keeps its own quote.
 type Together = {
   parts: Map<string, { route: Route; out?: bigint | undefined }[]>;
   gas?: bigint | undefined;
@@ -224,7 +224,7 @@ function together(found: Scan): Got<Together> {
   );
 }
 
-// Formats an amount of the output token to as many places as a cent of it needs, with its worth.
+// Formats an amount of the output token with enough decimal places to show a cent's worth of it, and gives its worth.
 function output(amount: bigint, swapper: Swapper, prices: Prices | undefined): { exact: string; worthText: string } {
   const price = prices?.of.get(key(swapper.token));
   const places = Math.min(
@@ -241,7 +241,7 @@ function worthUnder(text: string, worth: string): Node {
   const under = Object.assign(document.createElement("small"), { className: "u-worth", textContent: worth });
   return worth ? frag(text, under) : frag(text);
 }
-// Gas is paid apart, in ETH, so it shows in ETH first.
+// Gas is paid separately, in ETH, so it shows in ETH first.
 function gasUnder(wei: bigint, prices: Prices | undefined): Node {
   const cost = ethCost(wei, prices);
   return worthUnder(`${figure(wei, 18)} ETH`, cost ? money(cost, true) : "");
@@ -406,7 +406,7 @@ actions["review-swap"] = async (el) => {
   const items: Item[] = found.rows.filter(isTicked).flatMap((row) =>
     (routed?.parts.get(key(row.token.address)) ?? [{ route: row.route.route, out: row.route.out }]).map(
       ({ route, out }) => {
-        // A part Base would skip has no quote of its own, so it takes its share of the token's.
+        // A part that Base would skip has no quote of its own, so it takes its share of the token's quote.
         const quote = out ?? (row.route.out * route.amount) / row.amount;
         return {
           token: row.token,
@@ -442,7 +442,7 @@ export async function reviewSwap(
     return simulated.refused < simulated.steps.approvals.length
       ? `Base refused “${simulated.steps.slips[simulated.refused]!.says}” Nothing was sent.`
       : "Base refused the swap: the quotes may have moved. Nothing was sent.";
-  // A route that fails even without a minimum is left out; if Base cannot say, all stay.
+  // A route that fails even with no minimum is left out. If Base cannot say, all routes stay.
   const lines = swap.withMinimums(plan, simulated?.results);
   const going = { ...plan, items: lines.flatMap(({ item, reason }) => (reason ? [] : [item])) };
   if (!going.items.length) return "Base would skip every token: none can be swapped now. Nothing was sent.";

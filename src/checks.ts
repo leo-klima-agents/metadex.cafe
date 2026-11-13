@@ -4,10 +4,10 @@ import { AUTOMATIONS, type Kind } from "./config.ts";
 import { escrow } from "./hydrex.ts";
 import { implementation, read, readEach, required, rpc, same } from "./rpc.ts";
 
-// For each automation, the ids of the checks that fail; `src/views/hydrex.ts` words each one for the page. The checks:
-// the RPCs serve Base; Hydrex's VotingEscrow and its approval logic are the ones the page knows, since an upgrade could
-// change what joining allows; and joining each automation is on and approves only its claims and votes. If a read
-// fails, this throws, so the checks count as not read rather than failed.
+// For each automation, the ids of the checks that fail. `src/views/hydrex.ts` puts each one into words for the page.
+// The checks are that the RPCs serve Base; that Hydrex's VotingEscrow and its approval logic are the ones the page
+// knows, since an upgrade could change what joining allows; and that joining each automation is turned on and approves
+// only its claims and votes. If a read fails, this throws, so the checks count as not read rather than failed.
 export async function failedChecks(): Promise<Map<Kind, string[]>> {
   const [chainId, impl, [logic], configs] = await Promise.all([
     rpc<string>("eth_chainId", []),
@@ -34,7 +34,7 @@ export async function failedChecks(): Promise<Map<Kind, string[]>> {
 const HOUR = 3_600_000;
 export const checks = () => use("checks", failedChecks, HOUR);
 export const checksRead = () => memo("checks", failedChecks, HOUR);
-// Swaps are off while the RPCs serve a chain other than Base. `undefined` until the checks are read.
+// Swaps are off while the RPCs serve a chain other than Base. Undefined until the checks are read.
 export const swapsOff = (): boolean | undefined => {
   const found = checks().value;
   return found && [...found.values()].some((failed) => failed.includes("chain"));

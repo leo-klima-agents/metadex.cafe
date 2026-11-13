@@ -27,9 +27,9 @@ import { call, logsIn, read, same, simulate, type Landed, type Read, type Tx } f
 import type { Amount } from "./tokens.ts";
 import type { Slip } from "./wallet.ts";
 
-// ImmutableSwapper sells the tokens its caller names for its output token, each along the route the caller gives, and
-// takes 1% of each route's output. It picks no routes and sets no minimums: the page does, from the pools of the twelve
-// exchanges the swapper accepts and the swapper's own `quote()`.
+// ImmutableSwapper sells the tokens its caller names for its output token. Each token goes along the route the caller
+// gives, and the swapper takes 1% of each route's output. It does not pick routes or set minimums. The page does that,
+// from the pools of the twelve exchanges the swapper accepts and the swapper's own `quote()`.
 
 export const swapperAbi = parseAbi([
   "struct Hop { uint8 exchange; address pool; address tokenOut; uint24 fee; int24 tickSpacing; }",
@@ -55,7 +55,7 @@ export const swapperAbi = parseAbi([
   "error Reentrancy()",
   "error ZeroAddress()",
 ]);
-// An `amount` of `maxUint256` sells the whole balance, up to the approval, as after a claim.
+// An `amount` of `maxUint256` sells the whole balance, up to the approval. Sales after a claim use it.
 export type Route = { token: Address; amount: bigint; minPaid: bigint; hops: Hop[] };
 export type Result = { done: boolean; amountIn: bigint; amountOut: bigint; reason: Hex };
 export const swapperFor = (token: Address): Swapper | undefined =>
@@ -68,8 +68,8 @@ export const hopOf = ({ exchange, pool, tokenOut, fee, tickSpacing }: Hop): Hop 
   tickSpacing,
 });
 
-// The tokens a route may pass through: WETH, USDC and cbBTC, plus HYDX for Hydrex's tokens. Those often trade only
-// against HYDX, which trades against WETH or USDC, so a route can take up to three hops.
+// The tokens a route may pass through: WETH, USDC and cbBTC, plus HYDX for Hydrex's tokens. Hydrex's tokens often trade
+// only against HYDX, which trades against WETH or USDC. So a route can take up to three hops.
 export const MIDDLES: Address[] = [WETH, USDC, CBBTC];
 export function candidatePaths(token: Address, output: Address, hydrex = false): Address[][] {
   if (same(token, output)) return [];
@@ -83,8 +83,8 @@ export function candidatePaths(token: Address, output: Address, hydrex = false):
   return paths;
 }
 
-// Aero's basic pools charge an MEV tax on tips above 1 gwei, which a quote does not see, so one of them wins a hop only
-// when it pays over 1% more than the best other pool.
+// Aero's basic pools charge an MEV tax on tips above 1 gwei, and a quote does not see it. So one of these pools wins a
+// hop only when it pays over 1% more than the best other pool.
 export const taxed = ({ exchange }: Hop): boolean => exchangeOf(exchange).kind === "solidly";
 export const venueOf = ({ exchange }: Hop): string => exchangeOf(exchange).name.split(" ")[0]!;
 const top = <T>(list: T[], by: (each: T) => bigint): T | undefined =>
@@ -101,7 +101,8 @@ export function best<T extends { way: Hop; out: bigint }>(quotes: T[]): T | unde
 }
 
 // Gas figures come from the swapper's tests. Hydrex's Algebra pools look for an arbitrage after each swap, which costs
-// about a million gas a hop. Base allows 16.7 million gas a transaction; the page keeps each swap under 15 million.
+// about a million gas per hop. Base allows 16.7 million gas per transaction. The page keeps each swap at or under 15
+// million.
 export const APPROVAL_GAS = 46_000n;
 export const MAX_SWAP_GAS = 15_000_000n;
 function hopGas({ exchange }: Hop): bigint {
@@ -122,20 +123,20 @@ export function split<T extends { hops: Hop[] }>(routes: T[]): T[][] {
 }
 
 // The swapper's fee on a route's output, rounded down as the swapper rounds it. `minimumOf` is the least a route may
-// pay: its output less the fee, then less the slippage margin.
+// pay: its output minus the fee, then minus the slippage margin, given in basis points.
 export const feeOf = (out: bigint): bigint => (out * FEE_BPS) / 10_000n;
 export const paidOf = (out: bigint): bigint => out - feeOf(out);
 export const minimumOf = (out: bigint, marginBps: bigint): bigint => (paidOf(out) * (10_000n - marginBps)) / 10_000n;
-// Sets a route's amount to what a claim brought. When that is less than `expected`, its quote and minimum shrink in
-// proportion; otherwise they stay as they were.
+// Sets a route's amount to what a claim brought. If that is less than `expected`, its quote and minimum shrink in
+// proportion. Otherwise they stay as they were.
 export function partOf<T extends { route: Route; out: bigint }>(item: T, amount: bigint, expected: bigint): T {
   if (amount >= expected) return { ...item, route: { ...item.route, amount } };
   const share = (value: bigint) => (value * amount) / expected;
   return { ...item, out: share(item.out), route: { ...item.route, amount, minPaid: share(item.route.minPaid) } };
 }
 
-// Quotes routes on each output's swapper, six routes a call and three calls a request: a hop through Hydrex's Algebra
-// pools takes about a million gas, and an RPC allows an eth_call up to 50 million.
+// Quotes routes on each output's swapper, six routes per call and three calls per request. This is because a hop
+// through Hydrex's Algebra pools takes about a million gas, and an RPC allows up to 50 million gas per `eth_call`.
 const ROUTES_PER_CALL = 6;
 const CALLS_PER_READ = 3;
 export const QUOTES_PER_REQUEST = ROUTES_PER_CALL * CALLS_PER_READ;
@@ -167,8 +168,9 @@ export async function quoteAll(
   return results;
 }
 
-// A token's best route to the output, net of gas valued in the output. Each hop takes its best pool for what the hop
-// before paid; routes of several hops are then quoted whole, since their hops may affect one another's pools.
+// A token's best route to the output token, judged by what it fetches minus its gas, valued in the output token. Each
+// hop takes its best pool for what the hop before it paid. Routes of several hops are then quoted whole, since their
+// hops may affect one another's pools.
 export type Routed = { route: Route; out: bigint; gas: bigint };
 export async function findRoute(
   token: Address,
@@ -234,9 +236,9 @@ export async function findRoute(
   return chosen && { route: chosen.route, out: chosen.out, gas: chosen.gas };
 }
 
-// Plans the sale of what a claim brings into `swapper`: each token whole along its best route, approving exactly what
-// the claim brings. Only tokens whose quote is worth at least twice their gas are sold; the rest go in `left`, by
-// symbol.
+// Plans the sale of what a claim brings into `swapper`. Each token is sold whole along its best route, with an approval
+// for exactly what the claim brings. Only tokens whose quote is worth at least twice their gas are sold. The rest go
+// in `left`, by symbol.
 export async function saleOf(
   amounts: Amount[],
   swapper: Swapper,
@@ -301,8 +303,8 @@ export function approveSlip(token: Token, swapper: Swapper, amount: bigint): Sli
     ],
   };
 }
-// Calls `swap` with `skipFailed`, so a route that fails, as one under its minimum does, is skipped and its token stays
-// in the wallet.
+// Calls `swap` with `skipFailed` set. A route that fails, such as one that would pay less than its minimum, is skipped,
+// and its token stays in the wallet.
 export function swapSlip(
   swapper: Swapper,
   routes: Route[],
@@ -347,9 +349,9 @@ export function swapSlip(
   };
 }
 
-// A swap to review. Each item is a route, or one part of a token's route. A token whose allowance falls short of all
-// its parts gets one exact approval for them; `approve` sets that amount, and forces the approval, when the allowance
-// is not yet known, as after a claim.
+// A swap to review. Each item is a route, or one part of a token's split route. If a token's allowance is less than
+// the total of its parts, it gets one approval for exactly that total. When the allowance is not yet known, as after a
+// claim, `approve` sets the amount to approve and forces the approval.
 export type Item = { token: Token; route: Route; out: bigint; allowance: bigint; approve?: bigint | undefined };
 export type Plan = { swapper: Swapper; items: Item[]; margin: bigint };
 type Steps = { approvals: Slip[]; swaps: Route[][]; slips: Slip[] };
@@ -377,9 +379,9 @@ export function planSteps(
   };
 }
 
-// Runs `before`, then the plan's approvals and swaps, in order through Base, with every minimum at zero, so each route
-// fetches what the pools pay once the routes before it have moved them. Undefined if Base cannot say; otherwise the
-// index of the call it refused, if any, or what each item fetched, and the total gas.
+// Runs `before`, then the plan's approvals and swaps, in order through Base, with every minimum set to zero. So each
+// route fetches what the pools pay after the routes before it have moved them. Undefined when Base cannot say.
+// Otherwise it gives the index of the call Base refused, if any, or else what each item fetched, and the total gas.
 export type Simulated = { refused?: number; results: (Result | undefined)[]; gas: bigint; steps: Steps };
 export async function simulatePlan(
   from: Address,
@@ -413,8 +415,8 @@ export async function simulatePlan(
   });
   return { results, gas, steps };
 }
-// Each item with its quote and minimum taken from Base's results, or left as quoted without them, and the reason when
-// it would fetch nothing.
+// Each item with its quote and minimum taken from Base's results. An item without a result stays as quoted. `reason`
+// says why an item would fetch nothing.
 export function withMinimums(
   plan: Plan,
   results?: (Result | undefined)[],

@@ -92,7 +92,7 @@ export function statusNode(s: Status, own: boolean, inGroup?: string): Value {
   }
 }
 
-// To a tenth of a point.
+// Rounded to a tenth of a percentage point.
 const aprWords = (apr: number | undefined): string => (apr === undefined ? "No price for HYDX" : fraction(apr, true));
 const record = (automation: Automation): Value =>
   shown(data.earnings(automation), (earnings) => {
@@ -100,7 +100,6 @@ const record = (automation: Automation): Value =>
     const apr = aprOf(earnings);
     return apr === undefined ? aprWords(apr) : frag(aprWords(apr), fromTemplate("apr"));
   });
-// Shown next to an automation's record.
 function averageNote(): Value {
   const all = data.average();
   return all.failed
@@ -145,11 +144,11 @@ export function can(action: string, account: Account, arg: string | undefined, h
   return false;
 }
 // The accounts ticked in a group. Until the owner ticks or unticks one, a `needs:` group starts with every account its
-// buttons can act on ticked, and any other group with none.
+// buttons can act on ticked. Any other group starts with none ticked.
 const picks = (group: string, able: Account[]): Set<bigint> =>
   state.picks.get(group) ?? new Set(group.includes(" needs:") ? able.map(({ id }) => id) : []);
 
-// The accounts each group's buttons can act on, and those they act on, as last drawn.
+// For each group, as last drawn: the accounts its buttons can act on (`able`), and those they will act on (`chosen`).
 const drawn = new WeakMap<HTMLElement, { able: Account[]; chosen: Account[] }>();
 
 function drawGroups(root: HTMLElement, holdings: Holdings, belongs: (group: string, member: Member) => boolean): void {
@@ -254,7 +253,7 @@ export function drawHydrex(): void {
       : null,
     underway: found && underWay(found) ? "Payout under way." : null,
     average: shown(data.average(), (all) => aprWords(aprOf(all))),
-    // Only beside an APR, not "Loading…", "Not read" or "No price for HYDX".
+    // Shown only beside an APR, not beside "Loading…", "Not read" or "No price for HYDX".
     "average-aside": average && aprOf(average) !== undefined ? true : null,
     own: shown(holdings, ownWords),
     epoch: state.connection ? epochWords() : null,
@@ -269,7 +268,7 @@ function epochWords(): Value {
   const end = found.epochStart + WEEK;
   return `A change made now moves the votes from ${utc(end)}${now() < end ? `, in ${until(end - now())}` : ""}.`;
 }
-// Last epoch's APR, for the votes the wallet casts itself; votes cast through others don't count.
+// Last epoch's APR for the votes the wallet casts itself. Votes cast through others don't count.
 function ownWords(holdings: Holdings): Value {
   return shown(data.holderEarnings(holdings.owner), (own) =>
     !own.votes
@@ -292,7 +291,7 @@ export function drawProduct(): void {
     state: stateNode(automation),
     off: off ? frag(status("failed", `Joining ${automation.name} is off. `), link("#hydrex", "Why")) : null,
     "retired-share": matchaLatteValue(({ retireBps }) => `Up to ${bps(retireBps)}`),
-    // Until read, the lead says "part".
+    // Until Matcha Latte's settings are read, the lead says "part".
     retires: matcha ? `up to ${bps(matcha.retireBps)}` : "part",
     takes: matchaLatteValue(({ feeBps }) => `retired${feeWords(feeBps)}`),
     record: record(automation),
@@ -348,7 +347,7 @@ export function drawProduct(): void {
     );
 }
 
-// Fills the "Performance" popup, valuing the automation and all of Hydrex at the average's prices, and returns why all
+// Fills the "Performance" popup, valuing both the automation and all of Hydrex at the average's prices. Returns why all
 // of Hydrex is missing, if it is.
 function performance(automation: Automation): Value {
   const mine = data.earnings(automation).value;

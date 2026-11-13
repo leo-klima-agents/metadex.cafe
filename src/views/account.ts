@@ -56,8 +56,9 @@ function waiting(found: Payouts): Got<{ tokens: Map<string, Token>; prices: Pric
     300_000,
   );
 }
-// Returns words such as "$1.84 in 9 tokens", starting "at least " when the account is late, or when some tokens could
-// not be read or priced. With nothing waiting in last epoch's pools, it says "from the epoch before last".
+// Words such as "$1.84 in 9 tokens". They start with "at least " when the account is late, when some amounts could not
+// be read, or when some tokens have no price. With nothing waiting in last epoch's pools, they say "from the epoch
+// before last".
 export function waitsWords(standing: Standing, found: Payouts): string {
   const priced = waiting(found).value;
   const tokens = new Set(standing.waiting.map(({ token }) => key(token)));

@@ -23,35 +23,36 @@ import {
   timeAt,
 } from "./rpc.ts";
 
-// For each account and token, Hydrex's reward contracts record the start of the epoch they have paid it up to; every
-// claim, even of nothing, sets it to the current epoch. An epoch counts as paid once the records holding more than half
-// its rewards' worth, at today's quotes, have moved past its end. A search through past blocks then finds the last
-// payout's block, whose logs make its receipt: Matcha Latte pays each account in one transaction that logs both the
-// payout and the retirement; Double Espresso records each account's last claim block, and each claim logs the one
-// before.
+// For each account and token, Hydrex's reward contracts record the start of the epoch it has been paid up to. Every
+// claim, even a claim of nothing, sets this record to the current epoch. An epoch counts as paid once records that hold
+// more than half of its rewards' worth, at today's quotes, have reached its end. A search through past blocks then
+// finds the block of the last payout, and that block's logs make the receipt. Matcha Latte pays each account in one
+// transaction, which logs both the payout and the retirement. Double Espresso stores each account's last claim block,
+// and each claim's log gives the claim block before it.
 
-// A payout takes up to half a day after each flip.
+// A payout can take up to half a day after each flip.
 const UNDER_WAY = 12 * 3600;
-// Caps the blocks of Double Espresso claims read per account, since anyone can claim dust for an account as often as
-// they like.
+// The most blocks of Double Espresso claims read for each account. A limit is needed because anyone can claim tiny
+// amounts for an account as often as they like.
 export const WALK_LIMIT = 10;
 
 export type Pair = { contract: Address; token: Address };
 export type Owed = Amount & { contract: Address };
-// One of an epoch's reward pairs, with `value` the worth of what it paid the automation's votes at today's quotes, or 0
-// if unknown.
+// One of an epoch's reward pairs. `value` is the worth, at today's quotes, of what it paid the automation's votes, or
+// 0 if unknown.
 type Weighed = Pair & { value: number };
 type Rewards = { start: number; pairs: Weighed[] };
 export type Standing = {
   id: bigint;
-  // `through` is the start of the epoch it has been paid up to, and `pair` one whose record reached it in the last
-  // payout. Undefined if never paid.
+  // `through` is the start of the epoch it has been paid up to. `pair` is a pair whose record reached that epoch in the
+  // last payout. Undefined if never paid.
   paidUpTo?: { through: number; pair: Pair } | undefined;
-  // `paid`: it voted with the automation last epoch and has been paid for it. `late`: it voted with the automation the
-  // epoch before and has not been paid for that one.
+  // `paid` is true when it voted with the automation last epoch and has been paid for that epoch. `late` is true when
+  // it voted with the automation the epoch before and has not been paid for that one.
   paid: boolean;
   late: boolean;
-  // What it can claim now from each of last epoch's pairs; `unknown` if some could not be read.
+  // `waiting` is what it can claim now from each of last epoch's pairs. `unknown` is true when some amounts could not
+  // be read.
   waiting: Owed[];
   unknown: boolean;
 };
@@ -73,7 +74,7 @@ const less = (amounts: Amount[], taken: Amount[]): Amount[] =>
       amount: amount - (taken.find((each) => same(each.token, token))?.amount ?? 0n),
     }))
     .filter(({ amount }) => amount > 0n);
-// A token without a price or decimals counts for nothing.
+// A token without a price or decimals counts as 0.
 type Decimals = Map<string, { decimals: number }>;
 export function valueAt(amounts: Amount[], decimals: Decimals, prices: Pick<Prices, "of">): number {
   return sum(
@@ -85,7 +86,7 @@ export function valueAt(amounts: Amount[], decimals: Decimals, prices: Pick<Pric
   );
 }
 
-// What amounts were worth, "at least" if one had no price or decimals; undefined if none counted.
+// What the amounts were worth, marked "at least" when a token had no price or decimals. Undefined when the total is 0.
 export function worthAt(amounts: Amount[], decimals: Decimals, prices: Prices): Money | undefined {
   const total = valueAt(amounts, decimals, prices);
   const partial = amounts.some(({ token }) => !prices.of.has(key(token)) || !decimals.has(key(token)));
@@ -104,18 +105,20 @@ const quotesFor = (rewards: Reward[]) => quotesOf(tokensIn(rewards), tagged("pay
 const weights = (pairs: Weighed[]): number[] =>
   pairs.some(({ value }) => value > 0) ? pairs.map(({ value }) => value) : pairs.map(() => 1);
 
-// Whether claims since the epoch ended at `end` took more than half of what its rewards were worth, or more than half
-// its pairs if none has a known worth; an epoch without rewards counts as paid. Half tells a payout from a claim of a
-// few small rewards, and still counts a payout that leaves some tokens out.
+// Whether the epoch that ended at `end` has been paid. It has when the records that reached `end` hold more than half
+// of its rewards' worth. If no pair has a known worth, each pair counts the same. An epoch without rewards counts as
+// paid. Half tells a payout apart from a claim of a few small rewards, and still counts a payout that leaves some
+// tokens out.
 export function paidFor(pairs: Weighed[], stamps: number[], end: number): boolean {
   if (!pairs.length) return true;
   const weight = weights(pairs);
   return 2 * sum(weight.filter((_, i) => stamps[i]! >= end)) > sum(weight);
 }
 
-// An account's standing from its records in last epoch's rewards and the epoch before's. `paidUpTo` follows payouts,
-// not any claim: if late, it is the newest record up to the start of the epoch it is late for; if paid for last epoch
-// or the one before, that epoch's end; otherwise the newest record, no later than last epoch's start if it voted then.
+// An account's standing, from its records in last epoch's rewards and in the epoch before's. `paidUpTo` follows
+// payouts, not every claim. When late, it is the newest record no later than the start of the epoch it is late for.
+// When paid for last epoch or the one before, it is that epoch's end. Otherwise it is the newest record, no later than
+// last epoch's start if the account voted with the automation then.
 export function standingOf(
   id: bigint,
   last: Rewards,
@@ -175,19 +178,19 @@ export async function readStamps(ids: bigint[], pairs: Pair[], block: number): P
     ids.map((id) => [id, required(found.flatMap(({ item, stamp }) => (item.id === id ? [stamp] : []))).map(Number)]),
   );
 }
-// `earned()` reads at most 50 epochs from the account's last claim from the contract or, if it never claimed there,
-// from the account's creation if that came after the contract's first incentives, or else from the week before them, as
-// the contract does. Each claim moves this window on by up to 50 epochs.
+// `earned()` sums at most 50 epochs. As in the contract, this window starts at the account's last claim from the
+// contract. If it never claimed there, the window starts at the account's creation when that came after the contract's
+// first incentives, or else one week before those first incentives. Each claim moves the window on by up to 50 epochs.
 const WINDOW = 50 * WEEK;
 export const windowStart = (stamp: number, first: number, created: number): number =>
   stamp >= first ? stamp : created > first ? created : first - WEEK;
-// How many times a claim must ask a contract to reach `epoch`, given where `earned()` starts.
+// How many times a claim must ask a contract to reach `epoch`, given where the `earned()` window starts.
 export const passesTo = (start: number, epoch: number): number =>
   epoch < start ? 1 : Math.floor((epoch - start) / WINDOW) + 1;
 
-// What each account can claim from each pair: `earned()`, plus `earnedTokenId` for each of `epochs` beyond its 50-epoch
-// window, or only `earned()` if the window's start cannot be read. Each `earned()` sums up to 50 epochs and costs about
-// a million gas, so calls go 20 to a batch.
+// What each account can claim from each pair. That is `earned()`, plus `earnedTokenId` for each of `epochs` past the
+// 50-epoch window. If the window's start cannot be read, it is `earned()` alone. Each `earned()` sums up to 50 epochs
+// and costs about a million gas, so these calls go 20 to a batch.
 type Owing<P> = { pair: P; amount: bigint | undefined; passes: number; stamp: number | undefined };
 export async function readOwed<P extends Pair>(
   ids: bigint[],
@@ -246,8 +249,8 @@ export async function readOwed<P extends Pair>(
   }));
 }
 
-// For each item that has reached its goal by block `to`, the first block after `from` where it has. Each step reads a
-// whole group at its middle block and splits the group by the answer.
+// For each item that has reached its goal by block `to`, finds the first block after `from` where it has. It is a
+// binary search: each step reads a whole group at the middle block, then splits the group by the answer.
 export async function firstReached<T>(
   reached: (block: number, items: T[]) => Promise<boolean[]>,
   items: T[],
@@ -293,8 +296,8 @@ export const readTime = async (block: number): Promise<number> =>
   );
 const timeOf = (block: number): Promise<number> => memo(`time ${block}`, () => readTime(block));
 
-// Each account's last payout is the first block, from the start of epoch `paidUpTo.through`, in which `paidUpTo.pair`'s
-// record reaches that epoch. Accounts paid up to the same epoch are searched together.
+// Each account's last payout is in the first block, from the start of epoch `paidUpTo.through`, where the record of
+// `paidUpTo.pair` reaches that epoch. Accounts paid up to the same epoch are searched together.
 async function payoutBlocks(
   standings: Standing[],
   top: number,
@@ -318,7 +321,7 @@ async function payoutBlocks(
 type Placed = { blockNumber: bigint; logIndex: number };
 const inOrder = (a: Placed, b: Placed): number => Number(a.blockNumber - b.blockNumber) || a.logIndex - b.logIndex;
 
-// A Matcha Latte payout, from its logs. An account's `CarbonRetired` log, if any, comes just before its payout log in
+// A Matcha Latte payout, from its logs. An account's `CarbonRetired` log, if any, comes just before its payout log, in
 // the same transaction.
 export type Payout = {
   id: bigint;
@@ -366,8 +369,8 @@ export function payoutsOf(logs: RpcLog[]): Payout[] {
   }
   return found;
 }
-// A block's payouts, from one read of its logs. The last claim may have been made by someone else, leaving no Matcha
-// Latte log, so an empty answer is accepted only once no RPC has any logs, and is not cached.
+// A block's payouts, from one read of its logs. Someone else may have made the last claim, which leaves no Matcha Latte
+// log. So an empty answer is taken only when no RPC has any logs, and it is not cached.
 const logsOf = new Map<number, Payout[]>();
 async function payoutsIn(block: number): Promise<Payout[]> {
   const known = logsOf.get(block);
@@ -385,7 +388,7 @@ async function payoutsIn(block: number): Promise<Payout[]> {
   return payouts;
 }
 
-// A Double Espresso claim, from its `Claimed` log; `claimsOf` lists them newest first. `previous` is the claim block
+// A Double Espresso claim, from its `Claimed` log. `claimsOf` lists them newest first. `previous` is the claim block
 // recorded before this one.
 export type ClaimLog = {
   id: bigint;
@@ -418,9 +421,9 @@ export function totals(claims: Pick<ClaimLog, "received" | "fees">[]) {
   return { received, fees, paid: less(received, fees) };
 }
 
-// Walks each account's claims back from its last claim block `from` to `since`, the first block of that claim's epoch.
-// A block can hold several claims of one account: the first points back to an earlier block, the later ones to the
-// block itself.
+// Walks back through each account's claims, from its last claim block `from` to `since`, the first block of that
+// claim's epoch. A block can hold several claims for one account. The first points back to an earlier block, and the
+// later ones point to the block itself.
 export async function walkClaims(
   starts: Map<bigint, { from: number; since: number }>,
   claimsAt: (block: number, ids: bigint[]) => Promise<ClaimLog[]>,
@@ -447,7 +450,7 @@ export async function walkClaims(
     for (const [id, current] of at) {
       const walk = walks.get(id)!;
       const mine = (found.get(current) ?? []).filter((claim) => claim.id === id && claim.block === current);
-      // A claim that received nothing paid nothing, so the receipt leaves it out; the walk still follows it back.
+      // A claim that received nothing paid nothing, so the receipt leaves it out. The walk still follows it back.
       walk.claims.push(...mine.filter(({ received }) => received.length));
       const before = Math.min(...mine.map(({ previous }) => previous).filter((previous) => previous < current));
       if (!Number.isFinite(before) || before === 0 || before < starts.get(id)!.since) continue;
@@ -458,8 +461,8 @@ export async function walkClaims(
   }
   return walks;
 }
-// Some accounts' claims in a block, cached once found. An RPC whose logs lack one of them is behind, so the next is
-// asked; if none has it, it is not cached and is read again next time.
+// Some accounts' claims in a block, cached once found. An RPC whose logs lack one of the accounts is behind, so the
+// next RPC is asked. If no RPC has an account's claims, nothing is cached for it and it is read again next time.
 const claimsIn = new Map<string, ClaimLog[]>();
 async function claimsAt(block: number, ids: bigint[]): Promise<ClaimLog[]> {
   const missing = ids.filter((id) => !claimsIn.has(`${block} ${id}`));
@@ -484,19 +487,19 @@ async function claimsAt(block: number, ids: bigint[]): Promise<ClaimLog[]> {
   return ids.flatMap((id) => claimsIn.get(`${block} ${id}`) ?? found.filter((claim) => claim.id === id));
 }
 
-// An account in one of the page's automations, as `automation`, which it may be joining or leaving. `voter` is the
-// automation it voted with last epoch, or else `automation`, whose pools hold its rewards and set its `standing`. Its
-// last payout's receipt is `payout` or `walk`; `note`, if set, says why there is none.
+// An account in one of the page's automations, `automation`, which it may be joining or leaving. `voter` is the
+// automation it voted with last epoch, or else `automation`. The voter's pools hold its rewards and set its `standing`.
+// The receipt of its last payout is `payout` or `walk`. `note`, if set, says why there is none.
 type Entry = {
   automation: Automation;
   voter: Automation;
   account: Account;
   standing?: Standing | undefined;
-  // Undefined when the voter's figures or the automation's payouts could not be read, or the figures are not final yet,
-  // which `early` marks.
+  // Undefined when the voter's figures or the automation's payouts could not be read. Also undefined when the figures
+  // are not final yet, which `early` marks.
   earnings?: Earnings | undefined;
   early: boolean;
-  // It voted with the automation last epoch and the automation still holds its claims, so a payout is due.
+  // True when it voted with the automation last epoch and the automation still holds its claims, so a payout is due.
   due: boolean;
   block?: number | undefined;
   time?: number | undefined;
@@ -504,7 +507,7 @@ type Entry = {
   walk?: Walk | undefined;
   note?: "outside" | "unclaimed" | undefined;
 };
-// `unread` if some rewards could not be weighed, so that the payouts are read again soon.
+// `unread` is set when some rewards could not be weighed, so the payouts are read again soon.
 export type Payouts = { epochStart: number; entries: Entry[]; unread?: true };
 
 export const automationOf = ({ delegate, claimer, delegateAtStart }: Account): Automation | undefined =>
@@ -566,8 +569,8 @@ async function doubleEspressoParts(ids: bigint[], top: number): Promise<Map<bigi
   );
 }
 
-// `earningsOf` returns what an automation's votes earned in Hydrex's last epoch, so until Hydrex moves on after a flip,
-// it returns the epoch before.
+// `earningsOf` returns what an automation's votes earned in the last epoch Hydrex has ended. So until Hydrex moves on
+// after a flip, it returns the epoch before.
 export async function readPayouts(
   holdings: Holdings,
   earningsOf: (automation: Automation) => Promise<Earnings>,
@@ -683,8 +686,8 @@ export async function readPayouts(
   return { epochStart, entries, ...(unweighed ? { unread: true as const } : {}) };
 }
 
-// A payout is under way when some due accounts have been paid since the flip and others not yet, and the first known
-// payment was less than half a day ago.
+// A payout is under way when some due accounts have been paid since the flip and others have not yet, and the first
+// known payment was less than half a day ago.
 export function underWay({ entries }: Payouts): { paid: Entry[]; left: Entry[] } | undefined {
   const paid = entries.filter((entry) => entry.due && entry.standing?.paid);
   const left = entries.filter((entry) => entry.due && !entry.standing?.paid);
@@ -696,8 +699,8 @@ export const awaited = ({ entries }: Payouts): boolean =>
   entries.some(
     ({ due, standing }) => due && standing && !standing.paid && (standing.waiting.length || standing.unknown),
   );
-// A Double Espresso payout is overdue, and the owner can claim it, once it is late for the epoch before, or once
-// something still waits unclaimed half a day after the flip.
+// A Double Espresso payout is overdue, and the owner can claim it, once it is late for the epoch before. It is also
+// overdue when something still waits unclaimed half a day after the flip.
 export type Overdue = Entry & { standing: Standing; earnings: Earnings };
 export function overdue({ entries, epochStart }: Payouts): Overdue[] {
   return entries.filter((entry): entry is Overdue => {
