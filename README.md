@@ -9,11 +9,11 @@ A static page at <https://metadex.cafe/> for Hydrex accounts and Aero stakes on 
   to sign;
 - pick one of two Aero strategies, each with its APR over the last eight days: follow revenue, the top pools by exchange
   revenue each given its share of it; or follow the leaders, the pools where each sAERO earned the most above the
-  average, each given a share for how much more once the stake has joined it (up to a number of pools, judged on 48
-  hours, four days or eight days, of all pools or blue chips only, picked once or again every 48 hours); see it against
-  Aero's Autopilot as it actually allocated and against the Base average, then allocate a stake on Base to its picks or
-  to shares you edit, among every pool, simulated on Base before the wallet asks to sign; see each stake's pools, when
-  it can move and what it can claim, and each pool's APR, day by day.
+  average, each given a share for how much more once the stake has joined it (up to 10 pools, judged on 48 hours, four
+  days or eight days, of all pools or blue chips only, picked once or again every 48 hours); see it against Aero's
+  Autopilot as it actually allocated and against the Base average, then allocate a stake on Base to its picks or to
+  shares you edit, among every pool, simulated on Base before the wallet asks to sign; see each stake's pools, when it
+  can move and what it can claim, and each pool's APR, day by day.
 
 It has no server, holds no keys and stores nothing. It reads Base through three public RPCs, the only hosts its Content
 Security Policy lets it connect to: `https://mainnet.base.org`, `https://base.drpc.org` and

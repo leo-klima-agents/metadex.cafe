@@ -116,7 +116,6 @@ type Part = { gauge: Address; percent: number };
 // stake. `more` lists the other pools shown too, by gauge, each after the suggestion's in the order it was added, even
 // once its share is typed, so that its row keeps its place and its focus.
 const plan: {
-  count: number;
   again: boolean;
   blueChips: boolean;
   leaders: boolean;
@@ -125,7 +124,6 @@ const plan: {
   rows: Part[] | undefined;
   more: string[];
 } = {
-  count: 10,
   again: true,
   blueChips: false,
   leaders: false,
@@ -165,8 +163,10 @@ function edit(change: (rows: Part[]) => Part[]): void {
   plan.rows = change(plan.rows ?? drawn);
   render();
 }
-const strategyOf = (market: Market): aero.Strategy => ({
-  count: Math.min(plan.count, market.maxGauges),
+// A strategy uses up to 10 pools, as many as Aero allows if fewer.
+const POOLS = 10;
+const strategyOf = (market: Market | undefined): aero.Strategy => ({
+  count: Math.min(POOLS, market?.maxGauges ?? POOLS),
   hours: controls.hours,
   again: plan.again,
   blueChips: plan.blueChips,
@@ -310,15 +310,13 @@ function drawControls(stakes: Stake[], stake: Stake | undefined): void {
     },
   );
   $<HTMLSelectElement>("[data-action=aero-stake]", aeroView).value = stake ? String(stake.id) : "";
-  $<HTMLSelectElement>("[data-action=aero-count]", aeroView).value = String(plan.count);
   $<HTMLSelectElement>("[data-action=aero-window]", aeroView).value = String(controls.hours);
   $<HTMLInputElement>("[data-action=aero-again]", aeroView).checked = plan.again;
   $<HTMLInputElement>("[data-action=aero-blue]", aeroView).checked = plan.blueChips;
 }
 // The two strategies, each with what it would have earned over the record, as `apr` says.
 function drawStrategies(apr: (leaders: boolean) => Value): void {
-  const market = data.market().value;
-  const top = market ? Math.min(plan.count, market.maxGauges) : plan.count;
+  const { count: top } = strategyOf(data.market().value);
   list(
     $("[data-list=strategy]", aeroView),
     STRATEGIES,
@@ -404,26 +402,13 @@ const waiting = (got: Got<unknown>): boolean => got.value === undefined && !got.
 function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined): void {
   const market = got.value;
   const extra = andThen(got, (found) => data.pastFor(aero.timesFor(found, strategyOf(found))));
-  fill(aeroView, {
-    "record-intro": introOf(
-      market
-        ? strategyOf(market)
-        : {
-            count: plan.count,
-            hours: controls.hours,
-            again: plan.again,
-            blueChips: plan.blueChips,
-            leaders: plan.leaders,
-          },
-    ),
-  });
+  fill(aeroView, { "record-intro": introOf(strategyOf(market)) });
   // Without the prices then, at today's.
   const pricing = andThen(got, () => data.pricesThen());
   const record = data.autopilotRecord();
   // The stake's own weight is already in the pools it was in, so it is not added there again.
   const moves: Got<aero.Move[] | null> = stake ? data.stakeMoves(stake) : { value: null };
   const shows = JSON.stringify([
-    plan.count,
     controls.hours,
     plan.again,
     plan.blueChips,
@@ -1018,10 +1003,6 @@ function typed(input: HTMLInputElement, done: boolean, set: (value: number) => v
   set(value);
   render();
 }
-actions["aero-count"] = (el) => {
-  plan.count = Number((el as HTMLSelectElement).value) || 10;
-  suggest();
-};
 actions["aero-again"] = (el) => {
   plan.again = (el as HTMLInputElement).checked;
   render();
