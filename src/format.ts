@@ -167,6 +167,8 @@ export const listWith = <T>(items: T[]): (T | string)[] =>
     .map(({ type, value }) => (type === "element" ? items[Number(value)]! : value));
 export const count = (n: number, one: string, other: string): string =>
   `${whole.format(n)} ${plurals.select(n) === "one" ? one : other}`;
+// The words with their first letter a capital, to start a sentence.
+export const capitalized = (words: string): string => words.charAt(0).toUpperCase() + words.slice(1);
 // Strips invisible and text-reordering characters, which a name could use to pass for another.
 export const clean = (text = ""): string =>
   text

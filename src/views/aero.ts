@@ -2,7 +2,6 @@ import { zeroAddress, type Address } from "viem";
 import * as aero from "../aero.ts";
 import {
   WINDOWS,
-  isBlueChip,
   isThin,
   routable,
   type Gauge,
@@ -17,7 +16,21 @@ import { andThen, type Got } from "../cache.ts";
 import * as config from "../config.ts";
 import { AUTOPILOTS, BASESCAN, PAYMENTS_MODULE } from "../config.ts";
 import * as data from "../data.ts";
-import { compact, count, date, day, figure, fixed, fraction, money, moneyAt, short, until, utc } from "../format.ts";
+import {
+  capitalized,
+  compact,
+  count,
+  date,
+  day,
+  figure,
+  fixed,
+  fraction,
+  money,
+  moneyAt,
+  short,
+  until,
+  utc,
+} from "../format.ts";
 import { key, type Prices } from "../prices.ts";
 import { hrefOf } from "../routes.ts";
 import { now, same, simulate } from "../rpc.ts";
@@ -112,9 +125,9 @@ function pendingFor(stake: Stake): Got<Map<bigint, Pending>> {
 }
 
 type Part = { gauge: Address; percent: number };
-// `rows` undefined follows the suggestion; `stake` undefined is the wallet's first; `amount` counts only without a
-// stake. `more` lists the other pools shown too, by gauge, each after the suggestion's in the order it was added, even
-// once its share is typed, so that its row keeps its place and its focus.
+// `rows` undefined follows the suggestion; `stake` undefined is the largest on Base that can be allocated now, kept
+// once shown; `amount` counts only without a stake. `more` lists the other pools shown too, by gauge, each after the
+// suggestion's in the order it was added, even once its share is typed, so that its row keeps its place and its focus.
 const plan: {
   again: boolean;
   blueChips: boolean;
@@ -132,21 +145,17 @@ const plan: {
   rows: undefined,
   more: [],
 };
-// The two strategies, each with the heights of three pools' shares on its icon.
-const STRATEGIES: { leaders: boolean; key: string; name: string; bars: number[] }[] = [
-  { leaders: false, key: "revenue", name: "Follow revenue", bars: [11, 8, 5] },
-  { leaders: true, key: "leaders", name: "Follow the leaders", bars: [3, 17, 8] },
+// The two strategies, at `Number(leaders)`.
+const STRATEGIES = [
+  { leaders: false, name: "Follow revenue" },
+  { leaders: true, name: "Follow the leaders" },
 ];
-// What a strategy does, in a sentence, with the controls filled in.
-function strategyWords(leaders: boolean, top: number, hours: Hours, blueChips: boolean): string {
-  const [chips, over] = [blueChips ? " of blue chips" : "", `over the last ${WINDOW[hours].over}`];
-  if (leaders)
-    return top === 1
-      ? `The pool${chips} that earned the most above the average ${over}, given all your sAERO.`
-      : `The ${count(top, "pool", "pools")}${chips} that earned the most above the average ${over}, each given a share for how much more.`;
-  return top === 1
-    ? `The top pool${chips} by exchange revenue ${over}, given all your sAERO.`
-    : `The top ${count(top, "pool", "pools")}${chips} by exchange revenue ${over}, each given its share of it.`;
+// The pools a strategy picks and how it splits them, judged `over` a span.
+function poolsWords({ count: top, blueChips, leaders }: aero.Strategy, over: string): string {
+  const pools = `${count(top, "pool", "pools")}${blueChips ? " of blue chips" : ""}`;
+  return leaders
+    ? `the ${pools} that earned the most above the average ${over}, each given a share for how much more`
+    : `the top ${pools} by exchange revenue ${over}, each given its share of it`;
 }
 // The rows as last drawn, which the actions edit, and the next pools "Show more pools" adds.
 let drawn: Part[] = [];
@@ -196,29 +205,23 @@ function stakeFor(stakes: Stake[]): Stake | undefined {
   const sized = bySize(stakes);
   return sized.find((stake) => !aero.blockedOf(stake, cooldownOf(), now())) ?? sized[0];
 }
-// A stake as the picker lists it, and why it can't be allocated now, if it can't.
-function optionWords(stake: Stake): string {
-  const name = stakeName(stake, stake.id);
+// Why a stake can't be allocated now, if it can't.
+function blockedPhrase(stake: Stake): string | undefined {
   const blocked = aero.blockedOf(stake, cooldownOf(), now());
-  if (blocked?.why === "empty") return `${name} · nothing on Base`;
-  if (blocked?.why === "ended") return `${name} · its lock has ended`;
-  const words = `${name} · ${power(aero.budgetOf(stake))} on Base`;
-  return blocked ? `${words} · locked until ${utc(blocked.until)}` : words;
+  if (!blocked) return undefined;
+  if (blocked.why === "empty") return "nothing on Base";
+  if (blocked.why === "ended") return "its lock has ended";
+  return `locked until ${utc(blocked.until)}`;
 }
-function heldWords(stake: Stake | undefined): string | null {
-  const blocked = stake && aero.blockedOf(stake, cooldownOf(), now());
-  if (!blocked) return null;
-  if (blocked.why === "empty") return "Nothing to allocate on Base";
-  if (blocked.why === "ended") return "Its lock has ended";
-  return `Locked until ${utc(blocked.until)}, in ${until(blocked.until - now())}`;
+// A stake as the picker lists it.
+function optionWords(stake: Stake): string {
+  const budget = aero.budgetOf(stake);
+  return [stakeName(stake, stake.id), budget ? `${power(budget)} on Base` : "", blockedPhrase(stake)]
+    .filter(Boolean)
+    .join(" · ");
 }
 // In whole sAERO.
-function placesOf(stake: Stake | undefined) {
-  const mine = new Map<string, number>();
-  for (const { gauge, amount } of stake?.allocations ?? [])
-    if (!aero.isIdleGauge(gauge)) mine.set(key(gauge), (mine.get(key(gauge)) ?? 0) + wholeOf(amount));
-  return mine;
-}
+const placesOf = (stake: Stake | undefined): Map<string, number> => aero.byGauge(stake?.allocations ?? []);
 function flagsOf(gauge: Gauge | undefined, market: Market, hold: number): string | null {
   if (!gauge) return "Not one of Aero's pools on Base";
   if (!routable(gauge)) return "Doesn't take allocations";
@@ -278,6 +281,8 @@ export function drawAero(): void {
   const got = data.market();
   const stakes = data.ownStakes().value ?? [];
   const stake = stakeFor(stakes);
+  // Kept once shown, so that it doesn't change under the user as locks begin and end.
+  if (stake) plan.stake = stake.id;
   const amount = stake ? wholeOf(aero.budgetOf(stake)) : plan.amount;
   drawControls(stakes, stake);
   drawRecord(got, amount, stake);
@@ -292,10 +297,11 @@ export function drawAero(): void {
 }
 
 function drawControls(stakes: Stake[], stake: Stake | undefined): void {
+  const lock = stake && blockedPhrase(stake);
   fill(aeroView, {
     "stake-row": stakes.length ? true : null,
     "stake-link": stake ? { href: hrefOf({ view: "stake", id: stake.id }), text: "Its allocation now" } : null,
-    "stake-lock": heldWords(stake),
+    "stake-lock": lock ? capitalized(lock) : null,
     "amount-row": stakes.length ? null : true,
     "plan-window": WINDOW[controls.hours].over,
     "lock-hours": hoursWords(cooldownOf()),
@@ -314,38 +320,30 @@ function drawControls(stakes: Stake[], stake: Stake | undefined): void {
   $<HTMLInputElement>("[data-action=aero-again]", aeroView).checked = plan.again;
   $<HTMLInputElement>("[data-action=aero-blue]", aeroView).checked = plan.blueChips;
 }
-// The two strategies, each with what it would have earned over the record, as `apr` says.
-function drawStrategies(apr: (leaders: boolean) => Value): void {
-  const { count: top } = strategyOf(data.market().value);
+// The two strategies as `strategy` sets the rest, each with what it would have earned over the record: `apr` of its
+// index.
+function drawStrategies(strategy: aero.Strategy, apr: (i: number) => Value): void {
+  const over = `over the last ${WINDOW[strategy.hours].over}`;
   list(
     $("[data-list=strategy]", aeroView),
     STRATEGIES,
-    ({ key }) => key,
-    (label, { leaders, key, name, bars }) => {
+    ({ name }) => name,
+    (label, { leaders, name }, i) => {
       const input = $<HTMLInputElement>("input", label);
-      input.value = key;
-      input.checked = plan.leaders === leaders;
-      label.querySelectorAll<SVGRectElement>(".Strategy-bar").forEach((bar, i) => {
-        bar.setAttribute("y", String(21 - bars[i]!));
-        bar.setAttribute("height", String(bars[i]!));
-      });
-      fill(label, {
-        name,
-        words: strategyWords(leaders, top, controls.hours, plan.blueChips),
-        apr: apr(leaders),
-      });
+      input.value = String(leaders);
+      input.checked = strategy.leaders === leaders;
+      fill(label, { name, words: `${capitalized(poolsWords({ ...strategy, leaders }, over))}.`, apr: apr(i) });
     },
   );
 }
 
 // The strategy as the controls set it, and that it is picked from only what was known then.
-function introOf({ count: top, hours, again, blueChips, leaders }: aero.Strategy): string {
-  const chips = blueChips ? " of blue chips" : "";
-  const before = `the ${WINDOW[hours].over} before ${again ? "each pick" : "that"}`;
-  const pools = leaders
-    ? `the ${count(top, "pool", "pools")}${chips} that earned the most above the average over ${before}, each given a share for how much more`
-    : `the top ${count(top, "pool", "pools")}${chips} by exchange revenue over ${before}, each given its share of it`;
-  return again
+function introOf(strategy: aero.Strategy): string {
+  const pools = poolsWords(
+    strategy,
+    `over the ${WINDOW[strategy.hours].over} before ${strategy.again ? "each pick" : "that"}`,
+  );
+  return strategy.again
     ? `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools}, picked again every ${hoursWords(aero.STEP)}. Without hindsight: each pick knows only what was known then.`
     : `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools}, and kept since. Without hindsight: the pick knows only what was known then.`;
 }
@@ -362,22 +360,20 @@ function lastOf<A extends unknown[], R>(make: (...args: A) => R): (...args: A) =
 // The record's lines, worked out again only when what they rest on changes, not on every render.
 const strategyPast = lastOf(aero.mergePast);
 const pilotPast = lastOf(aero.mergePast);
-// One line for each strategy, so that each shows what it earned.
-const strategyLines = new Map(
-  STRATEGIES.map(({ leaders }) => [
-    leaders,
-    lastOf(
-      (
-        market: Market,
-        past: aero.Past,
-        count: number,
-        hours: Hours,
-        again: boolean,
-        blueChips: boolean,
-        held: Held,
-      ): Paid[] => aero.strategySteps(market, past, { count, hours, again, blueChips, leaders }, held),
+// Both strategies' lines, at `Number(leaders)`, so that each shows what it earned.
+const strategyLines = lastOf(
+  (
+    market: Market,
+    past: aero.Past,
+    count: number,
+    hours: Hours,
+    again: boolean,
+    blueChips: boolean,
+    held: Held,
+  ): Paid[][] =>
+    STRATEGIES.map(({ leaders }) =>
+      aero.strategySteps(market, past, { count, hours, again, blueChips, leaders }, held),
     ),
-  ]),
 );
 const averageLine = lastOf((market: Market, then: aero.Then | undefined) =>
   aero.averageSteps(market, market.past, then),
@@ -401,8 +397,9 @@ const waiting = (got: Got<unknown>): boolean => got.value === undefined && !got.
 
 function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined): void {
   const market = got.value;
-  const extra = andThen(got, (found) => data.pastFor(aero.timesFor(found, strategyOf(found))));
-  fill(aeroView, { "record-intro": introOf(strategyOf(market)) });
+  const chosen = strategyOf(market);
+  const extra = andThen(got, (found) => data.pastFor(aero.timesFor(found, chosen)));
+  fill(aeroView, { "record-intro": introOf(chosen) });
   // Without the prices then, at today's.
   const pricing = andThen(got, () => data.pricesThen());
   const record = data.autopilotRecord();
@@ -420,23 +417,17 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   if (recordFor === shows && [extra, pricing, record, moves].some(waiting)) return;
   if (!market || !extra.value || waiting(pricing) || waiting(moves)) {
     recordFor = undefined;
-    drawStrategies(() => (extra.failed ? "–" : undefined));
+    drawStrategies(chosen, () => (extra.failed ? "–" : undefined));
     return void fill(aeroView, { plan: stateOf(extra.value ? {} : extra) });
   }
   const then = pricing.value;
   const own = moves.value ?? (stake && moves.failed ? stillOf(stake) : undefined);
   const held = heldAs(amount, then, own);
-  const { count: top, hours, again, blueChips } = strategyOf(market);
-  const past = strategyPast(market.past, extra.value);
-  const lines = new Map(
-    STRATEGIES.map(({ leaders }) => [
-      leaders,
-      strategyLines.get(leaders)!(market, past, top, hours, again, blueChips, held),
-    ]),
-  );
-  const strategy = lines.get(plan.leaders)!;
-  drawStrategies((leaders) => {
-    const found = aero.aprOver(lines.get(leaders)!);
+  const { count: top, hours, again, blueChips, leaders } = chosen;
+  const lines = strategyLines(market, strategyPast(market.past, extra.value), top, hours, again, blueChips, held);
+  const strategy = lines[Number(leaders)]!;
+  drawStrategies(chosen, (i) => {
+    const found = aero.aprOver(lines[i]!);
     return found ? aprWords(found.apr, found.priced) : "–";
   });
   const custom = plan.rows && customLine(market, plan.rows, held);
@@ -577,19 +568,16 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
   const ahead = new Map(market.gauges.map((gauge) => [gauge, aero.paysNext(gauge, controls.hours, market, hold)]));
   const next = (gauge: Gauge) => ahead.get(gauge);
   const strategy = strategyOf(market);
-  const { blueChips } = strategy;
-  const picks = aero.picksOf(
-    market.gauges
-      .filter((gauge) => routable(gauge) && (!blueChips || isBlueChip(gauge)))
-      .flatMap((gauge) => {
-        const paying = next(gauge);
-        return paying && aero.weighable(gauge.windows[controls.hours], paying)
-          ? [{ gauge, paying, own: leaving?.get(key(gauge.address)) }]
-          : [];
-      }),
+  const candidates = aero.candidatesOf(
+    market,
     strategy,
-    amount,
+    (gauge) => {
+      const paying = next(gauge);
+      return paying && { accrued: gauge.windows[controls.hours], paying };
+    },
+    leaving,
   );
+  const picks = aero.picksOf(candidates, strategy, amount);
   fill(aeroView, { picks: stateOf(got) });
   const rows = (drawn = plan.rows ?? ruleRows(picks));
   const total = totalOf(rows);
@@ -603,11 +591,7 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
   const more = new Set(plan.more);
   nextPools = market.gauges
     .filter(
-      (gauge) =>
-        routable(gauge) &&
-        (!blueChips || isBlueChip(gauge)) &&
-        !inRows.has(key(gauge.address)) &&
-        !more.has(key(gauge.address)),
+      (gauge) => aero.eligible(gauge, strategy) && !inRows.has(key(gauge.address)) && !more.has(key(gauge.address)),
     )
     .sort((a, b) => pays(b) - pays(a))
     .slice(0, MORE)
@@ -1008,7 +992,7 @@ actions["aero-again"] = (el) => {
   render();
 };
 actions["aero-strategy"] = (el) => {
-  plan.leaders = (el as HTMLInputElement).value === "leaders";
+  plan.leaders = (el as HTMLInputElement).value === "true";
   suggest();
 };
 actions["aero-blue"] = (el) => {

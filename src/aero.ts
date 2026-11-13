@@ -561,11 +561,6 @@ export const thinOver = (accrued: Accrued): boolean => weightOf(accrued) < THIN;
 // The harmonic mean, which times the fees per unit gives what was paid when fees come evenly.
 export const meanOf = (accrued: Accrued): number =>
   accrued.spread ?? Math.min(whole(accrued.power), whole(accrued.endPower));
-// The sAERO that will share a pool's pay, as a strategy counts it: the larger of what shared it lately, over `recent`,
-// and what holds it at the end, so that a pool others just left doesn't look better than it is.
-export const crowdOf = (recent: Accrued, end = recent.endPower): number => Math.max(meanOf(recent), whole(end));
-// Lately, whatever the window a strategy is judged on.
-export const LATELY: Hours = 48;
 
 // `priced` is false if a token that paid has no price, which counts as 0.
 export type Yield = { value: number; priced: boolean };
@@ -901,6 +896,13 @@ function streamFlows(gauge: Gauge, from: number, to: number, prices: Prices, cou
 }
 // Coming from a checkpoint before the window, a span is shorter only for a gauge younger than the window.
 const covers = (accrued: Accrued, seconds: number): boolean => accrued.to - accrued.from >= 0.9 * seconds;
+// The sAERO that will share a pool's pay, as a strategy counts it: the larger of what shared it over the last 48 hours,
+// `recent`, else over the strategy's `window`, and what holds it at the `end`, so that a pool others just left doesn't
+// look better than it is.
+function crowdOf(recent: Accrued | undefined, window: Accrued, end?: bigint): number {
+  const lately = recent && covers(recent, 48 * HOUR) ? recent : window;
+  return Math.max(meanOf(lately), whole(end ?? lately.endPower));
+}
 
 // Undefined without time or power.
 export function paidOver(gauge: Gauge, accrued: Accrued | undefined, prices: Prices): Paying | undefined {
@@ -921,7 +923,7 @@ export function paysNext(gauge: Gauge, hours: Hours, market: Market, hold: numbe
   return {
     fees: feeFlows(gauge, accrued, market.prices),
     incentives: streamFlows(gauge, market.time, market.time + hold, market.prices),
-    power: crowdOf(covers(gauge.windows[LATELY], LATELY * HOUR) ? gauge.windows[LATELY] : accrued, gauge.power),
+    power: crowdOf(gauge.windows[48], accrued, gauge.power),
   };
 }
 
@@ -977,31 +979,37 @@ function byRevenue(pools: Candidate[], count: number): number[] {
 }
 // The leaders' shares of `amount` sAERO, by pool. A pool's lead is what each of its sAERO earns above the average of
 // all the pools, both counted with the stake in them; each share is in proportion to its pool's lead once that share
-// has joined it, so that no pool is filled past the average. Past `count` pools, or under `SMALLEST`, the smallest
-// shares are left out and the rest solved again. If the pools kept can't take the whole stake above the average, it
-// goes instead to the pools, `count` at most, that pay the most once all are filled to the same pay.
-export function leadersOf(pools: Candidate[], count: number, amount: number): number[] {
+// has joined it, so that no pool is filled past the average. If the pools kept can't take the whole stake above the
+// average, it goes instead to those, `count` at most, that pay the most once all are filled to the same pay.
+function leadersOf(pools: Candidate[], count: number, amount: number): number[] {
   // What all a pool's sAERO earn a day per 10,000, and its sAERO besides the stake's own.
   const rows = pools.map(({ paying, own = 0 }) => ({
     pays: totalOf(paying) * PER,
     others: Math.max(paying.power - own, 0),
   }));
   const average = sum(rows.map(({ pays }) => pays)) / (sum(rows.map(({ others }) => others)) + amount);
-  let kept = rows.map(({ pays }) => pays > 0);
-  for (;;) {
-    const shares = leadingShares(rows, kept, average, amount);
-    if (!shares) return levelled(rows, count, amount);
-    const held = shares.flatMap((share, i) => (share > 0 ? [i] : [])).sort((a, b) => shares[b]! - shares[a]!);
-    const keep = held.slice(0, Math.max(1, count)).filter((i, rank) => rank === 0 || shares[i]! >= SMALLEST);
-    if (keep.length === held.length) return shares;
-    const set = new Set(keep);
-    kept = rows.map((_, i) => set.has(i));
-  }
+  return (
+    trimmed(rows, count, (kept) => leadingShares(rows, kept, average, amount)) ??
+    trimmed(rows, count, (kept) => levelled(rows, kept, count, amount))!
+  );
 }
 const sum = (xs: number[]): number => xs.reduce((all, x) => all + x, 0);
 type Row = { pays: number; others: number };
-// The shares with w = c × (pays ÷ (others + w × amount) − average) that add up to one, for some scale `c`; undefined
-// if the pools `kept` can't take the whole stake above the average.
+// `solve`'s shares over the pools that pay, then again without the smallest past `count` or under `SMALLEST`, until it
+// keeps them all; undefined once `solve` has no answer.
+function trimmed(rows: Row[], count: number, solve: (kept: boolean[]) => number[] | undefined): number[] | undefined {
+  let kept = rows.map(({ pays }) => pays > 0);
+  for (;;) {
+    const shares = solve(kept);
+    if (!shares) return undefined;
+    const held = shares.flatMap((share, i) => (share > 0 ? [i] : [])).sort((a, b) => shares[b]! - shares[a]!);
+    const keep = new Set(held.slice(0, Math.max(1, count)).filter((i, rank) => rank === 0 || shares[i]! >= SMALLEST));
+    if (keep.size === held.length) return shares;
+    kept = rows.map((_, i) => keep.has(i));
+  }
+}
+// The shares of the pools `kept` with w = c × (pays ÷ (others + w × amount) − average) that add up to one, for some
+// scale `c`; undefined if they can't take the whole stake above the average.
 function leadingShares(rows: Row[], kept: boolean[], average: number, amount: number): number[] | undefined {
   // As `c` grows, each pool fills to the average.
   const room = sum(rows.map(({ pays, others }, i) => (kept[i] ? Math.max(0, pays / average - others) : 0)));
@@ -1023,30 +1031,25 @@ function leadingShares(rows: Row[], kept: boolean[], average: number, amount: nu
   const total = sum(found);
   return found.map((share) => share / total);
 }
-// At most `count` pools, each filled until it pays the same, chosen so that this pay is the most it can be: the pools
-// that pay more than it, the most above it first (Dinkelbach's method). Under `SMALLEST`, a share is left out and the
-// rest chosen again.
-function levelled(rows: Row[], count: number, amount: number): number[] {
-  const allowed = rows.map(({ pays }) => pays > 0);
-  for (;;) {
-    let [level, chosen] = [0, [] as number[]];
-    for (let k = 0; k < 100; k++) {
-      const next = rows
-        .flatMap(({ pays, others }, i) => (allowed[i] && pays - level * others > 0 ? [i] : []))
-        .sort((a, b) => rows[b]!.pays - level * rows[b]!.others - (rows[a]!.pays - level * rows[a]!.others))
-        .slice(0, Math.max(1, count));
-      const found = sum(next.map((i) => rows[i]!.pays)) / (sum(next.map((i) => rows[i]!.others)) + amount);
-      if (!(found > level * (1 + 1e-12))) break;
-      [level, chosen] = [found, next];
-    }
-    const shares = rows.map(({ pays, others }, i) =>
-      chosen.includes(i) ? Math.max(0, pays / level - others) / amount : 0,
-    );
-    const total = sum(shares);
-    const small = chosen.filter((i) => shares[i]! < SMALLEST * total);
-    if (!small.length || small.length === chosen.length) return total > 0 ? shares.map((x) => x / total) : shares;
-    for (const i of small) allowed[i] = false;
+// At most `count` of the pools `kept`, each filled until it pays the same, chosen so that this pay is the most it can
+// be: the pools that pay more than it, the most above it first (Dinkelbach's method).
+function levelled(rows: Row[], kept: boolean[], count: number, amount: number): number[] {
+  let [level, chosen] = [0, [] as number[]];
+  for (let k = 0; k < 100; k++) {
+    const gain = (i: number) => rows[i]!.pays - level * rows[i]!.others;
+    const next = rows
+      .flatMap((_, i) => (kept[i] && gain(i) > 0 ? [i] : []))
+      .sort((a, b) => gain(b) - gain(a))
+      .slice(0, Math.max(1, count));
+    const found = sum(next.map((i) => rows[i]!.pays)) / (sum(next.map((i) => rows[i]!.others)) + amount);
+    if (!(found > level * (1 + 1e-12))) break;
+    [level, chosen] = [found, next];
   }
+  const shares = rows.map(({ pays, others }, i) =>
+    chosen.includes(i) ? Math.max(0, pays / level - others) / amount : 0,
+  );
+  const total = sum(shares);
+  return total > 0 ? shares.map((share) => share / total) : shares;
 }
 
 // What 10,000 of `amount` sAERO held as `holdings` earn a day. Each pool takes its weight of `amount`, less what `mine`
@@ -1165,46 +1168,62 @@ function pricesOver(market: Market, then: Then | undefined, { from, to }: Step):
 // At most `count` pools, of all or of blue chips, split as `picksOf` does, following revenue or the `leaders`, from the
 // fees they paid over the `hours` before each pick and what their live programs stream over the next step; picked again
 // every step (`again`), or once at the oldest step's start.
-export type Strategy = {
-  count: number;
-  hours: Hours;
-  again: boolean;
-  blueChips: boolean;
-  leaders: boolean;
-};
+export type Strategy = { count: number; hours: Hours; again: boolean; blueChips: boolean; leaders: boolean };
 export const isBlueChip = ({ token0, token1 }: Gauge): boolean =>
   [token0, token1].every(({ address }) => config.BLUE_CHIPS.some((chip) => same(chip, address)));
+// The pools a strategy considers: those that take allocations, of all or of blue chips.
+export const eligible = (gauge: Gauge, { blueChips }: { blueChips: boolean }): boolean =>
+  routable(gauge) && (!blueChips || isBlueChip(gauge));
 // False for thin pools and pools paying a token without a price, which the strategy and the suggestion leave out.
 export const weighable = (accrued: Accrued, paying: Paying): boolean =>
   !thinOver(accrued) && !!per10kOf(paying)?.priced;
+// The pools `eligible` for a strategy, with what each pays as `payingOf` says from what it paid over `accrued`, but not
+// thin or unpriced, and the stake's `own` whole sAERO in each, by gauge.
+export function candidatesOf(
+  market: Market,
+  strategy: { blueChips: boolean },
+  payingOf: (gauge: Gauge) => { accrued: Accrued; paying: Paying } | undefined,
+  own?: Map<string, number>,
+): Candidate[] {
+  return market.gauges
+    .filter((gauge) => eligible(gauge, strategy))
+    .flatMap((gauge) => {
+      const found = payingOf(gauge);
+      return found && weighable(found.accrued, found.paying)
+        ? [{ gauge, paying: found.paying, own: own?.get(key(gauge.address)) }]
+        : [];
+    });
+}
+// What a pick is made for: `amount` sAERO, of which `own` were already in each pool, at `prices`.
+export type Picking = { prices?: Prices; amount?: number; own?: Map<string, number> };
 // From what each pool paid over the `hours` before `time`, and what its programs live then would stream over the next
-// step, at `prices`, those of `time`, shared by its crowd then, of which `own` are the stake's, by gauge; for `amount`
-// sAERO.
+// step, at the prices of `time`, shared by its crowd then.
 export function picksAt(
   market: Market,
   past: Past,
   time: number,
   strategy: Strategy,
-  prices = market.prices,
-  amount = 0,
-  own?: Map<string, number>,
+  { prices = market.prices, amount = 0, own }: Picking = {},
 ): Pick[] {
   const since = time - strategy.hours * HOUR;
-  const pools = market.gauges
-    .filter((gauge) => routable(gauge) && (!strategy.blueChips || isBlueChip(gauge)))
-    .flatMap((gauge): Candidate[] => {
+  const pools = candidatesOf(
+    market,
+    strategy,
+    (gauge) => {
       const before = accrualOf(gauge, past, since, time, market);
       if (!before || before.to <= before.from || before.from > since + 0.1 * (time - since) || !(meanOf(before) > 0))
-        return [];
+        return undefined;
       const live = (program: Program) => program.start <= time;
-      const recent = strategy.hours === LATELY ? before : accrualOf(gauge, past, time - LATELY * HOUR, time, market);
+      const recent = strategy.hours === 48 ? before : accrualOf(gauge, past, time - 48 * HOUR, time, market);
       const paying = {
         fees: feeFlows(gauge, before, prices),
         incentives: streamFlows(gauge, time, time + STEP, prices, live),
-        power: crowdOf(recent && recent.to > recent.from ? recent : before),
+        power: crowdOf(recent, before),
       };
-      return weighable(before, paying) ? [{ gauge, paying, own: own?.get(key(gauge.address)) }] : [];
-    });
+      return { accrued: before, paying };
+    },
+    own,
+  );
   return picksOf(pools, strategy, amount);
 }
 // The snapshots a strategy needs beyond the grid's.
@@ -1218,14 +1237,23 @@ const paidDuring = (market: Market, past: Past, step: Step, prices: Prices) => (
 // How a record is held: `amount` sAERO more in the pools, less what the stake's `own` moves, if read, already had in
 // them, at `then`'s prices.
 export type Held = { amount?: number; then?: Then; own?: Move[] };
+// The whole sAERO by gauge in `allocations`, leaving out what is on no chain.
+export function byGauge(allocations: Allocation[]): Map<string, number> {
+  const mine = new Map<string, number>();
+  for (const { gauge, amount } of allocations)
+    if (!isIdleGauge(gauge)) mine.set(key(gauge), (mine.get(key(gauge)) ?? 0) + whole(amount));
+  return mine;
+}
+// The whole sAERO by gauge that `moves` held at `time`.
+export const heldAt = (moves: Move[], time: number): Map<string, number> =>
+  byGauge(moves.find(({ at }) => at <= time)?.allocations ?? []);
 // The whole sAERO by gauge that `moves` held over a span, on average: what they already added to each pool's power.
 export function heldIn(moves: Move[], { from, to }: Step): Map<string, number> {
   const mine = new Map<string, number>();
   const cuts = [from, ...moves.map(({ at }) => at).filter((at) => at > from && at < to), to].sort((a, b) => a - b);
   for (let i = 0; i + 1 < cuts.length; i++) {
     const share = (cuts[i + 1]! - cuts[i]!) / (to - from);
-    for (const { gauge, amount } of moves.find(({ at }) => at <= cuts[i]!)?.allocations ?? [])
-      if (!isIdleGauge(gauge)) mine.set(key(gauge), (mine.get(key(gauge)) ?? 0) + whole(amount) * share);
+    for (const [gauge, amount] of heldAt(moves, cuts[i]!)) mine.set(gauge, (mine.get(gauge) ?? 0) + amount * share);
   }
   return mine;
 }
@@ -1240,25 +1268,14 @@ const heldSteps = (
     const mine = own && heldIn(own, step);
     return { ...step, paid: heldOver(holdingsAt(step), paidDuring(market, past, step, prices), amount, mine), prices };
   });
-// The whole sAERO by gauge that `moves` held at `time`.
-export function heldAt(moves: Move[], time: number): Map<string, number> {
-  const mine = new Map<string, number>();
-  for (const { gauge, amount } of moves.find(({ at }) => at <= time)?.allocations ?? [])
-    if (!isIdleGauge(gauge)) mine.set(key(gauge), (mine.get(key(gauge)) ?? 0) + whole(amount));
-  return mine;
-}
 // Each pick at the prices when it was made, for the amount, knowing where the stake's own sAERO was then.
 export function strategySteps(market: Market, past: Past, strategy: Strategy, held: Held = {}): Paid[] {
   const pick = (time: number) =>
-    picksAt(
-      market,
-      past,
-      time,
-      strategy,
-      pricedAt(market, held.then, time) ?? market.prices,
-      held.amount,
-      held.own && heldAt(held.own, time),
-    );
+    picksAt(market, past, time, strategy, {
+      prices: pricedAt(market, held.then, time),
+      amount: held.amount,
+      own: held.own && heldAt(held.own, time),
+    });
   const once = strategy.again ? undefined : pick(stepsOf(market).at(-1)!.from);
   return heldSteps(market, past, (step) => once ?? pick(step.from), held);
 }

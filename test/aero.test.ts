@@ -7,7 +7,6 @@ import {
   THIN,
   WINDOWS,
   accruedFrom,
-  crowdOf,
   aprOf,
   aprOver,
   heldIn,
@@ -640,7 +639,7 @@ test("ahead, a pool pays its window's fees again, shared by its crowd now, and o
   // Others just left: 5M shared its fees over the window and 1M holds it now, so it counts as 5M, the larger.
   const left = gauge({ perDay: 2, power: 1_000_000n * SAERO });
   near(per10kOf(paysNext(left, 48, market([left]), HOLD)!)!.fees, 2, "no better than it was");
-  near(crowdOf(left.windows[48], left.power), 5_000_000, "the larger");
+  near(paysNext(left, 48, market([left]), HOLD)!.power, 5_000_000, "the larger");
   // Judged on 8 days, its crowd is still the last 48 hours': 5M, though 10M shared it over the 8 days.
   left.windows[192] = { ...left.windows[192], power: 10_000_000n * SAERO, endPower: 10_000_000n * SAERO };
   near(paysNext(left, 192, market([left]), HOLD)!.power, 5_000_000, "lately is 48 hours");
@@ -976,6 +975,21 @@ test("both strategies in the record pick from the window before each pick, knowi
   nearAll(totals(strategySteps(m, m.past, { ...top, leaders: false })), Array(4).fill(20 / 11), "by revenue");
   // The leaders: all in last step's best pool, the only one above the average, which then pays $1.
   nearAll(totals(strategySteps(m, m.past, { ...top, leaders: true })), [1, 1, 1, 1], "the leaders");
+  // 5M sAERO, as much as each pool has, follow the leaders: all in last step's best, the only one above the average,
+  // which then pays $1 over 10M sAERO.
+  const big = { ...top, leaders: true };
+  nearAll(totals(strategySteps(m, m.past, big, { amount: 5_000_000 })), Array(4).fill(0.5), "a large stake");
+  // All already in A: where A trails, it shares its pay with no one else, so it leads too, and the two are filled
+  // until each pays $5,500 over 10M sAERO: 2/11 in A, which then pays $10 over 10/11M, and 9/11 in the other, $1 over
+  // 100/11M. Where A leads, it all stays in A, which then pays $1 over its 5M.
+  const allInA: Move[] = [
+    { at: NOW - 10 * STEP, allocations: [{ gauge: m.gauges[0]!.address, amount: 5_000_000n * SAERO }] },
+  ];
+  nearAll(
+    totals(strategySteps(m, m.past, big, { amount: 5_000_000, own: allInA })),
+    [1, (2 / 11) * 55 + (9 / 11) * 0.55, 1, (2 / 11) * 55 + (9 / 11) * 0.55],
+    "the stake's own sAERO at each pick",
+  );
   // Where a stake's sAERO was at a pick.
   const [p, q] = m.gauges;
   const moves: Move[] = [

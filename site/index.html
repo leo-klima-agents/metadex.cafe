@@ -710,7 +710,7 @@
           <div class="u-stack">
             <fieldset class="u-stackTight">
               <legend class="u-small">Which pools to follow, each with its APR over the last 8 days:</legend>
-              <div class="Strategies" data-list="strategy"></div>
+              <div class="u-stackTight" data-list="strategy"></div>
             </fieldset>
             <p class="u-small">
               <label
@@ -729,9 +729,9 @@
               <label class="u-withBox"><input type="checkbox" data-action="aero-blue" /> Blue chips only</label>
             </div>
             <div class="u-row u-small">
-              <label class="u-withBox u-fit" data-text="stake-row"
+              <label class="u-withBox" data-text="stake-row"
                 >For
-                <select class="u-smallSelect u-fit" data-action="aero-stake" data-list="stake-option"></select
+                <select class="u-smallSelect" data-action="aero-stake" data-list="stake-option"></select
               ></label>
               <a data-text="stake-link"></a>
               <span class="u-quiet" data-text="stake-lock"></span>
@@ -838,7 +838,7 @@
             <p class="u-small" data-when="failed">The pools could not be read.</p>
             <div class="u-stack" data-when="ready">
               <div class="u-scroll" tabindex="0" role="region" aria-label="Pools to allocate to, scrolls sideways">
-                <table class="Plan">
+                <table>
                   <caption class="u-visuallyHidden">
                     The pools to allocate to, their shares, and what each would pay
                   </caption>
@@ -948,9 +948,10 @@
               <dd>
                 The pools where each sAERO earned the most above the average of all the pools over the window, fees and
                 incentives together. Each gets a share in proportion to how much more, counted once your own sAERO has
-                joined it, so that no pool gets so much that it pays less than the average: a large stake spreads over
-                more pools. A pool's sAERO counts as the larger of its average over the last 48 hours and today's, so
-                that a pool others just left doesn't look better than it is
+                joined it, so that a large stake spreads over more pools. A stake too large for 10 pools to all stay
+                above the average goes instead to the 10 that pay the most once they all pay the same. A pool's sAERO
+                counts as the larger of its average over the last 48 hours and today's, so that a pool others just left
+                doesn't look better than it is
               </dd>
             </div>
             <div class="Pair">
@@ -1489,17 +1490,13 @@
       </tr>
     </template>
     <template id="strategy">
-      <label class="Strategy">
-        <input class="Pill-input" type="radio" name="aero-strategy" data-action="aero-strategy" />
-        <svg class="Strategy-icon" viewBox="0 0 24 24" aria-hidden="true">
-          <rect class="Strategy-bar" x="3" width="5" />
-          <rect class="Strategy-bar" x="10" width="5" />
-          <rect class="Strategy-bar" x="17" width="5" />
-          <path class="Strategy-base" d="M2 21.5h20" />
-        </svg>
-        <span class="Strategy-name" data-text="name"></span>
-        <span class="Strategy-apr" data-text="apr"></span>
-        <span class="Strategy-words" data-text="words"></span>
+      <label class="Card Ticks Ticks--whole">
+        <input class="Ticks-box" type="radio" name="aero-strategy" data-action="aero-strategy" />
+        <span class="u-spreadTop u-grow">
+          <span class="u-strong" data-text="name"></span>
+          <span class="u-figures u-strong" data-text="apr"></span>
+          <span class="u-small u-quiet u-wide" data-text="words"></span>
+        </span>
       </label>
     </template>
     <template id="legend">
