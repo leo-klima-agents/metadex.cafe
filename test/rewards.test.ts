@@ -59,7 +59,8 @@ test("earnings' value: fees and incentives apart, by pool, a token without a pri
 
 test("what some votes earned at the rate of others', and their APR, at their prices or another's", () => {
   const PLAIN: Token = { address: "0x00000000000000000000000000000000000000aa", decimals: 18, symbol: "PLAIN" };
-  // An automation's 5 PLAIN were priced at $4, but all of Hydrex's 80 PLAIN were too many for PLAIN's pools.
+  // An automation's 5 PLAIN were priced at $4. All of Hydrex's 80 PLAIN were too many for PLAIN's pools, so they have
+  // no price.
   const mine = {
     start: 1_791_417_600,
     votes: 4n * 10n ** 21n,
@@ -74,7 +75,7 @@ test("what some votes earned at the rate of others', and their APR, at their pri
     prices: { unit: "USD" as const, of: PRICES },
   };
   assert.equal(round(shareOf(mine, 10n ** 21n).value), 267.5, "a quarter of $1,070");
-  // A week's $0.2675 a vote, or $0.2625 without PLAIN, for a year of weeks, over HYDX at $0.025.
+  // $0.2675 a vote for the week, or $0.2625 without PLAIN, times 365 / 7 weeks a year, over HYDX at $0.025.
   const near = (a: number | undefined, b: number) =>
     assert.ok(a !== undefined && Math.abs(a - b) < 1e-9, `${a} ≠ ${b}`);
   near(aprOf(mine), ((1_070 / 4_000) * (365 / 7)) / 0.025);
@@ -92,7 +93,8 @@ test("an epoch's rewards are read once for every voter, on its own pools or not,
   const START = 1_791_417_600;
   const NOW = START + WEEK + 3 * 86_400;
   const NEWEST = 1_000_000;
-  // Lower case throughout, as maps key by it; Base's answers come checksummed and are lowered before use.
+  // Addresses here are in lower case, as the maps below are keyed by it. Addresses in the calls come checksummed, so
+  // `answer` lowers them before use.
   const at = (n: number): Address => `0x${n.toString(16).padStart(40, "0")}`;
   const [P1, P2, G1, G2, F1, I1, F2, I2, A, B] = [0x11, 0x12, 0x21, 0x22, 0x31, 0x32, 0x41, 0x42, 0xa1, 0xb1].map(
     at,
@@ -107,7 +109,7 @@ test("an epoch's rewards are read once for every voter, on its own pools or not,
     [G1, [F1, I1]],
     [G2, [F2, I2]],
   ]);
-  // P1's contracts hold 100 votes, P2's 50; A has 40 in P1, and B 10 in P1 and 25 in P2.
+  // P1's contracts hold 100 votes, and P2's 50. A has 40 in P1, and B has 10 in P1 and 25 in P2.
   const supply = new Map([
     [F1, 100n],
     [I1, 100n],
@@ -175,7 +177,8 @@ test("an epoch's rewards are read once for every voter, on its own pools or not,
         return bribes.get(arg(0))![0];
       case "external_bribes":
         return bribes.get(arg(0))![1];
-      // A voted again since the epoch ended, so its pools are found among every pool's; B last voted as it began.
+      // A voted again after the epoch ended, so its pools are found among every pool's. B last voted just before the
+      // epoch began.
       case "lastVoted":
         return BigInt(arg(0) === A ? START + WEEK + 60 : START - 60);
       case "poolVoteLength":
@@ -219,7 +222,8 @@ test("an epoch's rewards are read once for every voter, on its own pools or not,
     return Response.json({ result: encodeFunctionResult({ abi: multicall3Abi, functionName: "aggregate3", result }) });
   });
 
-  // Each through its own read, as each page's are tagged: every call, the pools' list included, goes through one.
+  // Callers pass their own read, as each page does to tag its reads. Every call, the pools' list included, must go
+  // through it.
   const through = new Map<string, number>();
   const own: Read = (calls, options) => {
     for (const { functionName } of calls) through.set(functionName, (through.get(functionName) ?? 0) + 1);
@@ -252,7 +256,7 @@ test("an epoch's rewards are read once for every voter, on its own pools or not,
     a.pools.map(({ address, votes }) => [address, votes]),
     [[P1, 40n]],
   );
-  // Every pool's rewards are read once; A, which voted again, reads its votes in every pool's contracts, and B in its
+  // Every pool's rewards are read once. A, which voted again, reads its votes in every pool's contracts, and B in its
   // own pools'.
   assert.deepEqual(
     ["totalSupplyAt", "rewardsListLength", "rewardTokens", "rewardData", "balanceOfOwnerAt"].map((name) =>

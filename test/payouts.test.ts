@@ -144,7 +144,7 @@ test("what amounts are worth: nothing for a token without a price or decimals", 
   assert.equal(valueAt([amount(KVCM, 10n ** 18n)], tokens, prices({ [KVCM]: 1 })), 0);
 });
 
-// Last epoch's rewards are $90 of USDC fees, $8 of WETH bribes and $2 of kVCM bribes; the epoch before's are $60 of
+// Last epoch's rewards are $90 of USDC fees, $8 of WETH bribes and $2 of kVCM bribes. The epoch before's are $60 of
 // fees and $40 of WETH bribes.
 const fees: Pair = { contract: FEES, token: USDC };
 const bribes: Pair = { contract: BRIBES, token: WETH };
@@ -248,7 +248,7 @@ test("records are read in one batch; what waits in batches of 20, and what lies 
     ["int128", "int128", "int128", "uint48"].map((type) => ({ type })),
     [0n, 0n, 0n, FIRST - 100 * WEEK],
   );
-  // 105 epochs after where `earned()` starts for account #1, so only a third asking would reach it; it owes nothing.
+  // 105 epochs after where `earned()` starts for account #1, so only a third asking would reach it. It owes nothing.
   const LATER = OCT_15 + 50 * WEEK;
   const batches: number[] = [];
   const past: unknown[] = [];
@@ -274,8 +274,8 @@ test("records are read in one batch; what waits in batches of 20, and what lies 
     batches.sort((a, b) => a - b),
     [2, 2, 2, 11, 20, 22],
   );
-  // `earned()` reads 50 epochs from a week before the first incentives. Both epochs lie beyond those 50, so each is
-  // read on its own.
+  // For account #1, `earned()` reads 50 epochs from a week before the first incentives. Both epochs lie beyond those
+  // 50, so each is read on its own, with `earnedTokenId`.
   assert.deepEqual(past, [
     [1n, USDC, OCT_8],
     [1n, USDC, OCT_15],
@@ -322,7 +322,8 @@ const walk = async (claimsAt: (block: number, ids: bigint[]) => Promise<ClaimLog
   (await walkClaims(new Map([[1n, { from, since }]]), claimsAt)).get(1n)!;
 
 test("an account's claims, newest first, back to the start of the epoch of its last one", async () => {
-  // The epoch starts at block 900: a claim at 400 before it, one at 1,000 in it, then a stranger's dust at 1,500.
+  // The epoch starts at block 900. There is a claim at 400 before it, one at 1,000 in it, then a stranger's dust at
+  // 1,500.
   const { claimsAt, reads } = doubleEspresso([
     claimed(1n, 400, 0, { [USDC]: 5_000_000n }),
     claimed(1n, 1_000, 400, { [USDC]: 12_000_000n, [WETH]: 10n ** 15n }),

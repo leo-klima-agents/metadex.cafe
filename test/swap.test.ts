@@ -128,7 +128,7 @@ test("routes split into as few swaps as keep each under 15 million gas", () => {
 });
 
 test("a swap is swap(routes, deadline, true), selling each token once, in as many routes as it has parts", () => {
-  // From the verified source on Sourcify, not from `src/swap.ts`, so a wrong ABI there fails the test.
+  // This ABI comes from the verified source on Sourcify, not from `src/swap.ts`, so a wrong ABI there fails the test.
   const abi = parseAbi([
     "function swap((address token, uint256 amount, uint256 minPaid, (uint8 exchange, address pool, address tokenOut, uint24 fee, int24 tickSpacing)[] hops)[] routes, uint256 deadline, bool skipFailed) returns ((bool done, uint256 amountIn, uint256 amountOut, bytes reason)[] results, uint256 paid, uint256 fee)",
   ]);

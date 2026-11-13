@@ -33,7 +33,7 @@ const serve = (handler: Handler) => {
 const reply = (result: unknown) => Response.json({ jsonrpc: "2.0", id: 1, result });
 
 test("a time's first block, from the blocks' own times, whatever the time between blocks", async () => {
-  // Not Base's schedule, so none is given.
+  // These times do not follow Base's schedule, so no schedule is given.
   const GENESIS = 1_686_789_347;
   const timeAt = (block: number) =>
     GENESIS + 2 * Math.min(block, 1e6) + Math.max(0, Math.min(block, 2e6) - 1e6) + 3 * Math.max(0, block - 2e6);
@@ -66,7 +66,8 @@ test("a time's first block, from the blocks' own times, whatever the time betwee
   }
 });
 
-// Base's blocks as Denim made them: every 2 seconds until block 53,556,127, then five a second, in whole seconds.
+// Base's blocks: one every 2 seconds until block 53,556,127, Denim's first, then five a second. Times are in whole
+// seconds.
 const DENIM = 53_556_127;
 const baseTime = (block: number) =>
   block < DENIM ? 1_686_789_347 + 2 * block : 1_793_901_601 + Math.floor((block - DENIM) / 5);
@@ -252,7 +253,7 @@ test("which addresses hold code is one creation's answer for each 2,000 of them,
     assert.equal(method, "eth_call");
     assert.equal(to, undefined, "no contract is called");
     sent.push(data);
-    // After the 47-byte program, 20 bytes an address; those ending in an odd digit hold code.
+    // After the 47-byte program come 20 bytes for each address. Here, addresses ending in an odd digit hold code.
     const asked = data.slice(2 + 94).match(/.{40}/g)!;
     return reply(`0x${asked.map((hex) => (parseInt(hex.at(-1)!, 16) % 2 ? "01" : "00")).join("")}`);
   });
@@ -300,7 +301,7 @@ test("reads go in batches of at most 200 calls, and of at most 100 kB of calldat
   const small = await read(Array.from({ length: 450 }, () => call(to, abi, "f", "0x")));
   assert.deepEqual(sizes, [200, 200, 50]);
   sizes.length = 0;
-  // Each call sends 1,092 bytes, padded to 1,120, and Multicall3 160 more: 78 of them fit in 100 kB.
+  // Each call's data is 1,092 bytes, padded to 1,120, and Multicall3 adds 160 more. So 78 calls fit in 100 kB.
   const large = await read(Array.from({ length: 200 }, () => call(to, abi, "f", `0x${"ab".repeat(1_024)}`)));
   assert.deepEqual(sizes, [78, 78, 44]);
   assert.ok([...small, ...large].every((value) => value === 7n));
