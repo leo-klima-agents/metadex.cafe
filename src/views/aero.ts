@@ -119,7 +119,7 @@ const plan: {
   count: number;
   again: boolean;
   blueChips: boolean;
-  far: number;
+  leaders: boolean;
   amount: number;
   stake: bigint | undefined;
   rows: Part[] | undefined;
@@ -128,31 +128,27 @@ const plan: {
   count: 10,
   again: true,
   blueChips: false,
-  far: 0,
+  leaders: false,
   amount: 10_000,
   stake: undefined,
   rows: undefined,
   more: [],
 };
-// The stops of the dial: how far a strategy goes from spreading over the pools that paid the most (0) to the best pay
-// for each sAERO (1).
-const STOPS: { far: number; name: string; note: string; words: string }[] = [
-  { far: 0, name: "0%", note: "Spread by revenue", words: "" },
-  { far: 0.25, name: "25%", note: "of the way", words: "a quarter of the way" },
-  { far: 0.5, name: "50%", note: "of the way", words: "halfway" },
-  { far: 0.75, name: "75%", note: "of the way", words: "three quarters of the way" },
-  { far: 1, name: "100%", note: "Best pay per sAERO", words: "" },
+// The two strategies, each with the heights of three pools' shares on its icon.
+const STRATEGIES: { leaders: boolean; key: string; name: string; bars: number[] }[] = [
+  { leaders: false, key: "revenue", name: "Follow revenue", bars: [11, 8, 5] },
+  { leaders: true, key: "leaders", name: "Follow the leaders", bars: [3, 17, 8] },
 ];
-const stopOf = (far: number) => STOPS.find((stop) => stop.far === far)!;
-// What the dial does where it is, in a sentence, with the controls filled in.
-function farWords(far: number, top: number, hours: Hours, blueChips: boolean): string {
+// What a strategy does, in a sentence, with the controls filled in.
+function strategyWords(leaders: boolean, top: number, hours: Hours, blueChips: boolean): string {
   const [chips, over] = [blueChips ? " of blue chips" : "", `over the last ${WINDOW[hours].over}`];
-  if (far === 0)
-    return `The top ${count(top, "pool", "pools")}${chips} by exchange revenue ${over}, each given its share of it.`;
-  if (far === 1)
-    return `The pools${chips} where each sAERO earned the most ${over}, counting the dilution your own sAERO adds.`;
-  const words = stopOf(far).words;
-  return `${words[0]!.toUpperCase()}${words.slice(1)} from 0% to 100%: sAERO moves from the top pools by revenue to where each sAERO earned the most, out of the pools that paid least per sAERO first.`;
+  if (leaders)
+    return top === 1
+      ? `The pool${chips} that earned the most above the average ${over}, given all your sAERO.`
+      : `The ${count(top, "pool", "pools")}${chips} that earned the most above the average ${over}, each given a share for how much more.`;
+  return top === 1
+    ? `The top pool${chips} by exchange revenue ${over}, given all your sAERO.`
+    : `The top ${count(top, "pool", "pools")}${chips} by exchange revenue ${over}, each given its share of it.`;
 }
 // The rows as last drawn, which the actions edit, and the next pools "Show more pools" adds.
 let drawn: Part[] = [];
@@ -174,7 +170,7 @@ const strategyOf = (market: Market): aero.Strategy => ({
   hours: controls.hours,
   again: plan.again,
   blueChips: plan.blueChips,
-  far: plan.far,
+  leaders: plan.leaders,
 });
 // As weights that add up to one.
 function holdingsOf(rows: Part[], market: Market): aero.Holding[] {
@@ -319,40 +315,38 @@ function drawControls(stakes: Stake[], stake: Stake | undefined): void {
   $<HTMLInputElement>("[data-action=aero-again]", aeroView).checked = plan.again;
   $<HTMLInputElement>("[data-action=aero-blue]", aeroView).checked = plan.blueChips;
 }
-// The dial, each stop with what it would have earned over the record, as `apr` says.
-function drawStops(apr: (far: number) => Value): void {
-  list(
-    $("[data-list=stop]", aeroView),
-    STOPS,
-    ({ far }) => String(far),
-    (label, { far, name, note }) => {
-      const input = $<HTMLInputElement>("input", label);
-      input.value = String(far);
-      input.checked = plan.far === far;
-      // Three pools: spread by revenue at 0%, all in the one that pays the most per sAERO at 100%.
-      const heights = [11 * (1 - far), 8 * (1 - far) + 17 * far, 5 * (1 - far)];
-      label.querySelectorAll<SVGRectElement>(".Stop-bar").forEach((bar, i) => {
-        bar.setAttribute("y", String(21 - heights[i]!));
-        bar.setAttribute("height", String(heights[i]!));
-      });
-      fill(label, { name, note, apr: apr(far) });
-    },
-  );
+// The two strategies, each with what it would have earned over the record, as `apr` says.
+function drawStrategies(apr: (leaders: boolean) => Value): void {
   const market = data.market().value;
   const top = market ? Math.min(plan.count, market.maxGauges) : plan.count;
-  fill(aeroView, { "far-words": farWords(plan.far, top, controls.hours, plan.blueChips) });
+  list(
+    $("[data-list=strategy]", aeroView),
+    STRATEGIES,
+    ({ key }) => key,
+    (label, { leaders, key, name, bars }) => {
+      const input = $<HTMLInputElement>("input", label);
+      input.value = key;
+      input.checked = plan.leaders === leaders;
+      label.querySelectorAll<SVGRectElement>(".Strategy-bar").forEach((bar, i) => {
+        bar.setAttribute("y", String(21 - bars[i]!));
+        bar.setAttribute("height", String(bars[i]!));
+      });
+      fill(label, {
+        name,
+        words: strategyWords(leaders, top, controls.hours, plan.blueChips),
+        apr: apr(leaders),
+      });
+    },
+  );
 }
 
 // The strategy as the controls set it, and that it is picked from only what was known then.
-function introOf({ count: top, hours, again, blueChips, far }: aero.Strategy): string {
+function introOf({ count: top, hours, again, blueChips, leaders }: aero.Strategy): string {
   const chips = blueChips ? " of blue chips" : "";
   const before = `the ${WINDOW[hours].over} before ${again ? "each pick" : "that"}`;
-  const pools =
-    far === 0
-      ? `the top ${count(top, "pool", "pools")}${chips} by exchange revenue over ${before}`
-      : far === 1
-        ? `the pools${chips} where each sAERO earned the most over ${before}, counting the dilution your own sAERO adds`
-        : `${stopOf(far).name} of the way from the top ${count(top, "pool", "pools")}${chips} by exchange revenue to where each sAERO earned the most over ${before}`;
+  const pools = leaders
+    ? `the ${count(top, "pool", "pools")}${chips} that earned the most above the average over ${before}, each given a share for how much more`
+    : `the top ${count(top, "pool", "pools")}${chips} by exchange revenue over ${before}, each given its share of it`;
   return again
     ? `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools}, picked again every ${hoursWords(aero.STEP)}. Without hindsight: each pick knows only what was known then.`
     : `Your strategy as if you had started it ${RECORD_DAYS} days ago: ${pools}, and kept since. Without hindsight: the pick knows only what was known then.`;
@@ -370,10 +364,10 @@ function lastOf<A extends unknown[], R>(make: (...args: A) => R): (...args: A) =
 // The record's lines, worked out again only when what they rest on changes, not on every render.
 const strategyPast = lastOf(aero.mergePast);
 const pilotPast = lastOf(aero.mergePast);
-// One line for each stop of the dial, so that each shows what it earned.
+// One line for each strategy, so that each shows what it earned.
 const strategyLines = new Map(
-  STOPS.map(({ far }) => [
-    far,
+  STRATEGIES.map(({ leaders }) => [
+    leaders,
     lastOf(
       (
         market: Market,
@@ -383,7 +377,7 @@ const strategyLines = new Map(
         again: boolean,
         blueChips: boolean,
         held: Held,
-      ): Paid[] => aero.strategySteps(market, past, { count, hours, again, blueChips, far }, held),
+      ): Paid[] => aero.strategySteps(market, past, { count, hours, again, blueChips, leaders }, held),
     ),
   ]),
 );
@@ -419,7 +413,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
             hours: controls.hours,
             again: plan.again,
             blueChips: plan.blueChips,
-            far: plan.far,
+            leaders: plan.leaders,
           },
     ),
   });
@@ -433,7 +427,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
     controls.hours,
     plan.again,
     plan.blueChips,
-    plan.far,
+    plan.leaders,
     amount,
     stake && String(stake.id),
     plan.rows,
@@ -441,7 +435,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   if (recordFor === shows && [extra, pricing, record, moves].some(waiting)) return;
   if (!market || !extra.value || waiting(pricing) || waiting(moves)) {
     recordFor = undefined;
-    drawStops(() => (extra.failed ? "–" : undefined));
+    drawStrategies(() => (extra.failed ? "–" : undefined));
     return void fill(aeroView, { plan: stateOf(extra.value ? {} : extra) });
   }
   const then = pricing.value;
@@ -450,11 +444,14 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   const { count: top, hours, again, blueChips } = strategyOf(market);
   const past = strategyPast(market.past, extra.value);
   const lines = new Map(
-    STOPS.map(({ far }) => [far, strategyLines.get(far)!(market, past, top, hours, again, blueChips, held)]),
+    STRATEGIES.map(({ leaders }) => [
+      leaders,
+      strategyLines.get(leaders)!(market, past, top, hours, again, blueChips, held),
+    ]),
   );
-  const strategy = lines.get(plan.far)!;
-  drawStops((far) => {
-    const found = aero.aprOver(lines.get(far)!);
+  const strategy = lines.get(plan.leaders)!;
+  drawStrategies((leaders) => {
+    const found = aero.aprOver(lines.get(leaders)!);
     return found ? aprWords(found.apr, found.priced) : "–";
   });
   const custom = plan.rows && customLine(market, plan.rows, held);
@@ -1029,8 +1026,8 @@ actions["aero-again"] = (el) => {
   plan.again = (el as HTMLInputElement).checked;
   render();
 };
-actions["aero-far"] = (el) => {
-  plan.far = STOPS.find(({ far }) => String(far) === (el as HTMLInputElement).value)?.far ?? 0;
+actions["aero-strategy"] = (el) => {
+  plan.leaders = (el as HTMLInputElement).value === "leaders";
   suggest();
 };
 actions["aero-blue"] = (el) => {

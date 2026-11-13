@@ -709,12 +709,8 @@
           <legend><h2>Your strategy</h2></legend>
           <div class="u-stack">
             <fieldset class="u-stackTight">
-              <legend class="u-small">
-                How far to go from spreading by revenue to the best pay per sAERO, each with its APR over the last 8
-                days:
-              </legend>
-              <div class="Stops" data-list="stop"></div>
-              <p class="u-small u-quiet" data-text="far-words"></p>
+              <legend class="u-small">Which pools to follow, each with its APR over the last 8 days:</legend>
+              <div class="Strategies" data-list="strategy"></div>
             </fieldset>
             <p class="u-small">
               <label
@@ -949,13 +945,21 @@
               <dd>The actual allocations of Aero's Autopilot USDC Maxi at each step on Base</dd>
             </div>
             <div class="Pair">
-              <dt class="u-small u-quiet">How far</dt>
+              <dt class="u-small u-quiet">Follow revenue</dt>
               <dd>
-                At 0%: the top pools by exchange revenue, each given its share of it. At 100%: the pools where each
-                sAERO earned the most lately, counting the dilution your own sAERO adds; a small stake usually goes into
-                one or two. The further you turn the dial, the more sAERO moves from the first split to the second, out
-                of the pools that paid least per sAERO first. A pool's sAERO counts as the larger of its average over
-                the last 48 hours and today's, so that a pool others just left doesn't look better than it is
+                The top pools by exchange revenue: the fees each paid over the window, and what its incentives pay over
+                the next 48 hours. Each gets the share of your sAERO that it has of their revenue together, however many
+                sAERO already share it
+              </dd>
+            </div>
+            <div class="Pair">
+              <dt class="u-small u-quiet">Follow the leaders</dt>
+              <dd>
+                The pools where each sAERO earned the most above the average of all the pools over the window, fees and
+                incentives together. Each gets a share in proportion to how much more, counted once your own sAERO has
+                joined it, so that no pool gets so much that it pays less than the average: a large stake spreads over
+                more pools. A pool's sAERO counts as the larger of its average over the last 48 hours and today's, so
+                that a pool others just left doesn't look better than it is
               </dd>
             </div>
             <div class="Pair">
@@ -1493,18 +1497,18 @@
         <td class="u-figures" data-text="pilot"></td>
       </tr>
     </template>
-    <template id="stop">
-      <label class="Stop">
-        <input class="Pill-input" type="radio" name="aero-far" data-action="aero-far" />
-        <svg class="Stop-icon" viewBox="0 0 24 24" aria-hidden="true">
-          <rect class="Stop-bar" x="3" width="5" />
-          <rect class="Stop-bar" x="10" width="5" />
-          <rect class="Stop-bar" x="17" width="5" />
-          <path class="Stop-base" d="M2 21.5h20" />
+    <template id="strategy">
+      <label class="Strategy">
+        <input class="Pill-input" type="radio" name="aero-strategy" data-action="aero-strategy" />
+        <svg class="Strategy-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <rect class="Strategy-bar" x="3" width="5" />
+          <rect class="Strategy-bar" x="10" width="5" />
+          <rect class="Strategy-bar" x="17" width="5" />
+          <path class="Strategy-base" d="M2 21.5h20" />
         </svg>
-        <span class="Stop-name" data-text="name"></span>
-        <span class="Stop-note" data-text="note"></span>
-        <span class="Stop-apr" data-text="apr"></span>
+        <span class="Strategy-name" data-text="name"></span>
+        <span class="Strategy-apr" data-text="apr"></span>
+        <span class="Strategy-words" data-text="words"></span>
       </label>
     </template>
     <template id="legend">

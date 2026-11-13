@@ -224,7 +224,7 @@ code,
 }
 :focus-visible,
 .Pill--choice:has(.Pill-input:focus-visible),
-.Stop:has(.Pill-input:focus-visible) {
+.Strategy:has(.Pill-input:focus-visible) {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
 }
@@ -363,101 +363,68 @@ button,
   content: "· ";
 }
 
-/* The Aero dial: a row of stops, or a list of them on a narrow screen. */
-.Stops {
+/* The two Aero strategies: side by side, or one above the other on a narrow screen. */
+.Strategies {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--gap-s);
 }
-.Stop {
+.Strategy {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  /* The APRs line up at the foot, whatever the lines above them. */
-  grid-template-rows: auto auto 1fr auto;
-  justify-items: center;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "icon name apr" "words words words";
+  align-items: center;
   align-content: start;
-  gap: 0.125rem;
-  padding: var(--gap-s) 0.25rem;
+  gap: 0.25rem var(--gap-s);
+  padding: var(--gap-s) var(--gap);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--card);
-  text-align: center;
   cursor: pointer;
 }
-.Stop:has(.Pill-input:checked) {
+.Strategy:has(.Pill-input:checked) {
   border-color: var(--accent);
   background: var(--tint);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
-.Stop:has(.Pill-input:checked) .Stop-name {
+.Strategy:has(.Pill-input:checked) .Strategy-name {
   font-weight: 700;
 }
-.Stop-icon {
+.Strategy-icon {
+  grid-area: icon;
   inline-size: 2rem;
   block-size: 2rem;
 }
-.Stop-bar {
+.Strategy-bar {
   fill: var(--accent);
 }
-.Stop-base {
+.Strategy-base {
   stroke: currentColor;
   stroke-width: 1.5;
   stroke-linecap: round;
   opacity: 0.5;
 }
-.Stop-name {
+.Strategy-name {
+  grid-area: name;
   font-size: var(--small);
   line-height: 1.25;
 }
-.Stop-note {
-  align-self: start;
-  color: var(--quiet);
-  font-size: var(--label);
-  line-height: 1.25;
-}
-.Stop-apr {
+.Strategy-apr {
+  grid-area: apr;
   font-size: var(--small);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+.Strategy-words {
+  grid-area: words;
+  color: var(--quiet);
+  font-size: var(--small);
+  line-height: 1.4;
+}
 @media (width <= 36rem) {
-  .Stops {
+  .Strategies {
     grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-    overflow: hidden;
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--card);
-  }
-  .Stop {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-rows: auto auto;
-    grid-template-areas: "icon name apr" "icon note apr";
-    justify-items: start;
-    column-gap: var(--gap-s);
-    padding: var(--gap-s) var(--gap);
-    border: 0;
-    border-radius: 0;
-    background: none;
-    text-align: start;
-  }
-  .Stop + .Stop {
-    border-block-start: 1px solid var(--line);
-  }
-  .Stop-icon {
-    grid-area: icon;
-    align-self: center;
-  }
-  .Stop-name {
-    grid-area: name;
-  }
-  .Stop-note {
-    grid-area: note;
-  }
-  .Stop-apr {
-    grid-area: apr;
-    align-self: center;
   }
 }
 

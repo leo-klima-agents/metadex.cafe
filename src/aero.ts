@@ -948,139 +948,107 @@ export function per10kOf(paying: Paying, added = 0): Per10k | undefined {
 export type Holding = { gauge: Gauge | undefined; weight: number };
 // Shares under this are left out, so that each pool picked counts.
 const SMALLEST = 0.01;
-// The split of `amount` that pays the most, as shares of it, when each pool pays `pays` a day to all its sAERO and holds
-// `others` (above 0) besides it: `x` in a pool earns pays × x / (others + x). What one sAERO more earns there falls as
-// `x` grows, so the best split gives every pool it funds the same λ for one sAERO more: x = max(0, √(pays × others / λ)
-// − others), with λ such that the `x` add up to `amount`. Beyond the `most` largest shares, or under `SMALLEST`, pools
-// are left out and the rest solved again. Undefined if no pool pays.
-export function waterFill(
-  pools: { pays: number; others: number }[],
-  amount: number,
-  most: number,
-): number[] | undefined {
-  let shares = filled(pools, amount);
-  while (shares) {
-    const of = shares;
-    const funded = of.flatMap((share, i) => (share > 0 ? [i] : [])).sort((a, b) => of[b]! - of[a]!);
-    const kept =
-      funded.length > most
-        ? funded.slice(0, Math.max(1, most))
-        : funded.filter((i, rank) => rank === 0 || of[i]! >= SMALLEST);
-    if (kept.length === funded.length) return of;
-    const keep = new Set(kept);
-    shares = filled(
-      pools.map((pool, i) => (keep.has(i) ? pool : { ...pool, pays: 0 })),
-      amount,
-    );
-  }
-  return undefined;
-}
-function filled(pools: { pays: number; others: number }[], amount: number): number[] | undefined {
-  const pays = pools.map((pool) => Math.max(0, pool.pays));
-  const ratios = pools.map(({ others }, i) => pays[i]! / others);
-  const best = Math.max(...ratios);
-  if (!(best > 0)) return undefined;
-  const at = (lambda: number) =>
-    pools.map(({ others }, i) => Math.max(0, Math.sqrt((pays[i]! * others) / lambda) - others));
-  const sum = (xs: number[]) => xs.reduce((all, x) => all + x, 0);
-  let [low, high] = [0, best];
-  for (let k = 0; k < 200; k++) {
-    const mid = (low + high) / 2;
-    if (sum(at(mid)) > amount) low = mid;
-    else high = mid;
-  }
-  const x = at(high);
-  const total = sum(x);
-  if (total > 0) return x.map((each) => each / total);
-  // So little that it all goes where one sAERO earns the most.
-  const tops = ratios.filter((ratio) => ratio === best).length;
-  return ratios.map((ratio) => (ratio === best ? 1 / tops : 0));
-}
-
 // A pool the strategy can pick from: what it pays, shared by its sAERO at the pick (`paying.power`), and how many of
 // those whole sAERO are the stake's own (`own`).
 export type Candidate = { gauge: Gauge; paying: Paying; own?: number };
 export type Pick = { gauge: Gauge; weight: number; paying: Paying };
-// The split of `amount` sAERO over at most `count` pools, `far` of the way from the top `count` pools by what they pay,
-// each weighed by its share of it, to the split that pays the most, after it dilutes them, if each pays again what it
-// paid. Without an amount, as for one sAERO.
-export function picksOf(pools: Candidate[], { count, far }: { count: number; far: number }, amount = 0): Pick[] {
-  const size = amount > 0 ? amount : 1;
+// At most `count` pools for `amount` sAERO: following revenue, the top pools by what they pay, each given its share of
+// it; or following the leaders, as `leadersOf` splits it. Without an amount, as for one sAERO.
+export function picksOf(
+  pools: Candidate[],
+  { count, leaders }: { count: number; leaders: boolean },
+  amount = 0,
+): Pick[] {
+  const shares = leaders ? leadersOf(pools, count, amount > 0 ? amount : 1) : byRevenue(pools, count);
+  return shares
+    .flatMap((weight, i) => (weight > 0 ? [{ gauge: pools[i]!.gauge, paying: pools[i]!.paying, weight }] : []))
+    .sort((a, b) => b.weight - a.weight);
+}
+function byRevenue(pools: Candidate[], count: number): number[] {
   const top = pools
     .map(({ paying }, i) => ({ i, total: totalOf(paying) }))
     .filter(({ total }) => total > 0)
     .sort((a, b) => b.total - a.total)
     .slice(0, Math.max(0, count));
-  const sum = top.reduce((all, { total }) => all + total, 0);
-  const from = pools.map(() => 0);
-  for (const { i, total } of top) from[i] = (size * total) / sum;
-  const paid = pools.map(({ paying, own = 0 }) => ({
-    pays: totalOf(paying),
-    others: Math.max(paying.power - own, size / 10_000),
-  }));
-  const filled = far > 0 ? waterFill(paid, size, count) : undefined;
-  const held = filled
-    ? between(
-        paid,
-        from,
-        filled.map((share) => share * size),
-        far,
-        count,
-      )
-    : from;
-  const total = held.reduce((all, x) => all + x, 0);
-  return held
-    .flatMap((x, i) => (x > 0 ? [{ gauge: pools[i]!.gauge, paying: pools[i]!.paying, weight: x / total }] : []))
-    .sort((a, b) => b.weight - a.weight);
+  const all = sum(top.map(({ total }) => total));
+  const shares = pools.map(() => 0);
+  for (const { i, total } of top) shares[i] = total / all;
+  return shares;
 }
-// `far` of the way from `from` to `to`, whole sAERO by pool: of what differs, `far` moves out of the pools where one
-// sAERO more earns the least and into those where it earns the most, each pool staying between its two ends. No more than
-// `count` pools then hold any: past it, the pools that `to` leaves out and where one sAERO earns the least are emptied
-// first.
-export function between(
-  pools: { pays: number; others: number }[],
-  from: number[],
-  to: number[],
-  far: number,
-  count: number,
-): number[] {
-  const all = pools.map((_, i) => i).filter((i) => from[i]! > 0 || to[i]! > 0);
-  const up = all.filter((i) => to[i]! > from[i]!);
-  const down = all.filter((i) => to[i]! < from[i]!);
-  const moved = up.reduce((sum, i) => sum + to[i]! - from[i]!, 0);
-  // What one sAERO more earns in a pool holding `x`; and what it holds, between its two ends, when that is `level`.
-  const marginal = (i: number, x: number) => (pools[i]!.pays * pools[i]!.others) / (pools[i]!.others + x) ** 2;
-  const at = (i: number, level: number) => {
-    const x = level > 0 ? Math.sqrt((pools[i]!.pays * pools[i]!.others) / level) - pools[i]!.others : Infinity;
-    return Math.min(Math.max(x, Math.min(from[i]!, to[i]!)), Math.max(from[i]!, to[i]!));
-  };
-  // The pools of `of`, all moving `into` them or all out, once `amount` has moved: what moves falls as the level rises
-  // into pools, and grows out of them.
-  const moving = (of: number[], amount: number, into: boolean) => {
-    const shift = (level: number) => of.reduce((sum, i) => sum + Math.abs(at(i, level) - from[i]!), 0);
-    let [low, high] = [0, Math.max(0, ...of.flatMap((i) => [marginal(i, from[i]!), marginal(i, to[i]!)]))];
-    for (let k = 0; k < 200; k++) {
-      const mid = (low + high) / 2;
-      if (shift(mid) > amount === into) low = mid;
-      else high = mid;
-    }
-    return into ? high : low;
-  };
-  const step = (amount: number): number[] => {
-    if (amount <= 0) return from.slice();
-    if (amount >= moved) return to.slice();
-    const [into, out] = [moving(up, amount, true), moving(down, amount, false)];
-    return from.map((x, i) => (to[i]! > x ? at(i, into) : to[i]! < x ? at(i, out) : x));
-  };
-  let amount = far * moved;
+// The leaders' shares of `amount` sAERO, by pool. A pool's lead is what each of its sAERO earns above the average of
+// all the pools, both counted with the stake in them; each share is in proportion to its pool's lead once that share
+// has joined it, so that no pool is filled past the average. Past `count` pools, or under `SMALLEST`, the smallest
+// shares are left out and the rest solved again. If the pools kept can't take the whole stake above the average, it
+// goes instead to the pools, `count` at most, that pay the most once all are filled to the same pay.
+export function leadersOf(pools: Candidate[], count: number, amount: number): number[] {
+  // What all a pool's sAERO earn a day per 10,000, and its sAERO besides the stake's own.
+  const rows = pools.map(({ paying, own = 0 }) => ({
+    pays: totalOf(paying) * PER,
+    others: Math.max(paying.power - own, 0),
+  }));
+  const average = sum(rows.map(({ pays }) => pays)) / (sum(rows.map(({ others }) => others)) + amount);
+  let kept = rows.map(({ pays }) => pays > 0);
   for (;;) {
-    const held = step(amount);
-    const extra = all.filter((i) => held[i]! > 0 && !(to[i]! > 0));
-    if (all.filter((i) => held[i]! > 0).length <= count || amount >= moved || !extra.length) return held;
-    const next = extra.reduce((a, b) => (marginal(a, held[a]!) <= marginal(b, held[b]!) ? a : b));
-    amount = Math.min(moved, amount + held[next]!);
+    const shares = leadingShares(rows, kept, average, amount);
+    if (!shares) return levelled(rows, count, amount);
+    const held = shares.flatMap((share, i) => (share > 0 ? [i] : [])).sort((a, b) => shares[b]! - shares[a]!);
+    const keep = held.slice(0, Math.max(1, count)).filter((i, rank) => rank === 0 || shares[i]! >= SMALLEST);
+    if (keep.length === held.length) return shares;
+    const set = new Set(keep);
+    kept = rows.map((_, i) => set.has(i));
   }
 }
+const sum = (xs: number[]): number => xs.reduce((all, x) => all + x, 0);
+type Row = { pays: number; others: number };
+// The shares with w = c × (pays ÷ (others + w × amount) − average) that add up to one, for some scale `c`; undefined
+// if the pools `kept` can't take the whole stake above the average.
+function leadingShares(rows: Row[], kept: boolean[], average: number, amount: number): number[] | undefined {
+  // As `c` grows, each pool fills to the average.
+  const room = sum(rows.map(({ pays, others }, i) => (kept[i] ? Math.max(0, pays / average - others) : 0)));
+  if (!(room > amount * (1 + 1e-6))) return undefined;
+  // The positive root of amount·w² + (others + c·average·amount)·w − c·(pays − average·others) = 0.
+  const at = (c: number) =>
+    rows.map(({ pays, others }, i) => {
+      const [b, k] = [others + c * average * amount, c * (pays - average * others)];
+      return kept[i] && k > 0 ? (2 * k) / (b + Math.sqrt(b * b + 4 * amount * k)) : 0;
+    });
+  let [low, high] = [0, 1];
+  while (sum(at(high)) < 1) high *= 2;
+  for (let k = 0; k < 200; k++) {
+    const mid = (low + high) / 2;
+    if (sum(at(mid)) < 1) low = mid;
+    else high = mid;
+  }
+  const found = at(high);
+  const total = sum(found);
+  return found.map((share) => share / total);
+}
+// At most `count` pools, each filled until it pays the same, chosen so that this pay is the most it can be: the pools
+// that pay more than it, the most above it first (Dinkelbach's method). Under `SMALLEST`, a share is left out and the
+// rest chosen again.
+function levelled(rows: Row[], count: number, amount: number): number[] {
+  const allowed = rows.map(({ pays }) => pays > 0);
+  for (;;) {
+    let [level, chosen] = [0, [] as number[]];
+    for (let k = 0; k < 100; k++) {
+      const next = rows
+        .flatMap(({ pays, others }, i) => (allowed[i] && pays - level * others > 0 ? [i] : []))
+        .sort((a, b) => rows[b]!.pays - level * rows[b]!.others - (rows[a]!.pays - level * rows[a]!.others))
+        .slice(0, Math.max(1, count));
+      const found = sum(next.map((i) => rows[i]!.pays)) / (sum(next.map((i) => rows[i]!.others)) + amount);
+      if (!(found > level * (1 + 1e-12))) break;
+      [level, chosen] = [found, next];
+    }
+    const shares = rows.map(({ pays, others }, i) =>
+      chosen.includes(i) ? Math.max(0, pays / level - others) / amount : 0,
+    );
+    const total = sum(shares);
+    const small = chosen.filter((i) => shares[i]! < SMALLEST * total);
+    if (!small.length || small.length === chosen.length) return total > 0 ? shares.map((x) => x / total) : shares;
+    for (const i of small) allowed[i] = false;
+  }
+}
+
 // What 10,000 of `amount` sAERO held as `holdings` earn a day. Each pool takes its weight of `amount`, less what `mine`
 // (whole sAERO by gauge) already holds there. A holding outside the market's pools, or in a pool without an answer,
 // counts for nothing and leaves the figure partial, a lower bound. Undefined when no pool has an answer.
@@ -1194,15 +1162,15 @@ function pricesOver(market: Market, then: Then | undefined, { from, to }: Step):
   return found;
 }
 
-// At most `count` pools, of all or of blue chips, split as `picksOf` does `far` of the way, from the fees they paid over
-// the `hours` before each pick and what their live programs stream over the next step; picked again every step (`again`),
-// or once at the oldest step's start.
+// At most `count` pools, of all or of blue chips, split as `picksOf` does, following revenue or the `leaders`, from the
+// fees they paid over the `hours` before each pick and what their live programs stream over the next step; picked again
+// every step (`again`), or once at the oldest step's start.
 export type Strategy = {
   count: number;
   hours: Hours;
   again: boolean;
   blueChips: boolean;
-  far: number;
+  leaders: boolean;
 };
 export const isBlueChip = ({ token0, token1 }: Gauge): boolean =>
   [token0, token1].every(({ address }) => config.BLUE_CHIPS.some((chip) => same(chip, address)));
