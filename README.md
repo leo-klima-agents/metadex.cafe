@@ -7,13 +7,13 @@ A static page at <https://metadex.cafe/> for Hydrex accounts and Aero stakes on 
 - see the APR votes earned last epoch compared with Hydrex's average, and each account's last payout as a receipt;
 - swap many tokens into one through **ImmutableSwapper**, routed together and simulated on Base before the wallet asks
   to sign;
-- pick one of two Aero strategies: follow the leaders, the pools where each sAERO earned the most above the average,
-  each given a share for how much more once the stake has joined it; or follow revenue, the top pools by exchange
-  revenue, each given its share of it (up to 10 pools, judged on the last eight days, of all pools or blue chips only,
-  picked once or again every 48 hours); see both over the last eight days against Aero's Autopilot as it actually
-  allocated and against the Base average, then allocate a stake on Base to its picks or to shares you edit, among every
-  pool, simulated on Base before the wallet asks to sign; see each stake's pools, when it can move and what it can
-  claim, and each pool's APR, day by day.
+- pick one of two Aero strategies: follow the leaders, the pools paying the most per sAERO above the average, each
+  weighted in proportion to that excess, counted with the stake in the pool; or follow revenue, the pools with the most
+  revenue, each weighted in proportion to its revenue (up to 10 pools, judged on the last eight days, of all pools or
+  blue chips only, picked once or again every 48 hours); see both over the last eight days against Aero's Autopilot as
+  it actually allocated and against the Base average, then allocate a stake on Base to its picks or to shares you edit,
+  among every pool, simulated on Base before the wallet asks to sign; see each stake's pools, when it can move and what
+  it can claim, and each pool's APR, day by day.
 
 It has no server, holds no keys and stores nothing. It reads Base through three public RPCs, the only hosts its Content
 Security Policy lets it connect to: `https://mainnet.base.org`, `https://base.drpc.org` and

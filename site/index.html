@@ -702,8 +702,8 @@
           <button type="button" class="Button--info" popovertarget="aero-info" aria-label="How it works">i</button>
         </header>
         <p class="u-small u-quiet">
-          Your sAERO earns a share of the revenue of each pool it is allocated to. Pick a strategy, see how it would
-          have done, then allocate.
+          Each pool splits its revenue among the sAERO allocated to it, in proportion to their weight. Pick a strategy,
+          see how it would have done, then allocate.
         </p>
         <fieldset>
           <legend><h2>Your strategy</h2></legend>
@@ -895,13 +895,17 @@
             <div class="Pair">
               <dt class="u-small u-quiet">Follow the leaders</dt>
               <dd>
-                The pools where each sAERO earned the most above the average over the last 8 days, each given more the
-                further ahead it stays once your sAERO joins it
+                The 10 pools paying the most per sAERO above the average of the pools it can pick, over the last 8 days.
+                Each is weighted in proportion to that excess, counted with your sAERO in the pool, so a larger stake
+                spreads over more pools. A stake too large for 10 pools to stay above the average goes to the 10 that
+                pay the most once each pays the same per sAERO
               </dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Follow revenue</dt>
-              <dd>The pools with the most revenue over the last 8 days, each given its share of it</dd>
+              <dd>
+                The 10 pools with the most revenue over the last 8 days, each weighted in proportion to its revenue
+              </dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Revenue</dt>

@@ -152,8 +152,8 @@ const STRATEGIES = [
 function poolsWords({ count: top, blueChips, leaders }: aero.Strategy): string {
   const pools = `${count(top, "pool", "pools")}${blueChips ? " of blue chips" : ""}`;
   return leaders
-    ? `The ${pools} that earned the most above the average, each given a share for how much more.`
-    : `The top ${pools} by exchange revenue, each given its share of it.`;
+    ? `The ${pools} paying the most per sAERO above the average, each weighted in proportion to that excess, counted with your sAERO in the pool.`
+    : `The ${pools} with the most revenue, each weighted in proportion to its revenue.`;
 }
 // The rows as last drawn, which the actions edit, and the next pools "Show more pools" adds.
 let drawn: Part[] = [];
