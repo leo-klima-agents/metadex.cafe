@@ -1,7 +1,7 @@
 import { render } from "../state.ts";
 
-// A line chart of a few series over a few positions, drawn at its own width so that its text keeps its size. A missing
-// value breaks a line.
+// A line chart of a few series over a few positions, drawn at its own width so that its text keeps its size, the first
+// series on top. A missing value breaks a line.
 export type Series = { id: string; name: string; color: string; dashed?: boolean; values: (number | undefined)[] };
 export type Plot = {
   positions: string[];
@@ -64,7 +64,7 @@ export function drawChart(svg: SVGSVGElement, tip: HTMLElement, plot: Plot): voi
   if (state.at !== undefined)
     nodes.push(el("line", { class: "Chart-cross", x1: x(state.at), x2: x(state.at), y1: TOP, y2: HEIGHT - BOTTOM }));
   const ends: { y: number; x: number; text: string }[] = [];
-  for (const { values, color, dashed } of plot.series) {
+  for (const { values, color, dashed } of plot.series.toReversed()) {
     // Runs of known values, each its own line.
     let run: string[] = [];
     const flush = () => {

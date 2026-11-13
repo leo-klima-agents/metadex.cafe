@@ -702,8 +702,8 @@
           <button type="button" class="Button--info" popovertarget="aero-info" aria-label="How it works">i</button>
         </header>
         <p class="u-small u-quiet">
-          Your sAERO earns a share of the exchange revenue of each pool it is allocated to. Set your strategy, see how
-          it would have done against Aero's Autopilot and the average allocator on Base, then allocate.
+          Your sAERO earns a share of the revenue of each pool it is allocated to. Pick a strategy, see how it would
+          have done, then allocate.
         </p>
         <fieldset>
           <legend><h2>Your strategy</h2></legend>
@@ -712,16 +712,6 @@
               <legend class="u-small">Which pools to follow, each with its APR over the last 8 days:</legend>
               <div class="u-stackTight" data-list="strategy"></div>
             </fieldset>
-            <p class="u-small">
-              <label
-                >Judged on the last
-                <select class="u-smallSelect" data-action="aero-window">
-                  <option value="48" selected>48 hours</option>
-                  <option value="96">4 days</option>
-                  <option value="192">8 days</option>
-                </select></label
-              >
-            </p>
             <div class="u-row u-small">
               <label class="u-withBox"
                 ><input type="checkbox" data-action="aero-again" checked /> Come back every 48 h to pick again</label
@@ -765,30 +755,10 @@
           </div>
           <p class="u-small" data-when="failed">The pools could not be read.</p>
           <div class="u-stack" data-when="ready">
-            <dl class="Facts Facts--tiles">
-              <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">Base average</dt>
-                <dd class="Facts-value Facts-figure" data-text="average-apr"></dd>
-              </div>
-              <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">Autopilot</dt>
-                <dd class="Facts-value Facts-figure" data-text="pilot-apr"></dd>
-                <dd class="Facts-tileNote u-small u-quiet" data-text="pilot-note"></dd>
-              </div>
-              <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">Your strategy</dt>
-                <dd class="Facts-value Facts-figure" data-text="strategy-apr"></dd>
-                <dd class="Facts-tileNote u-small u-quiet" data-text="strategy-note"></dd>
-              </div>
-              <div class="Facts-tile" data-text="custom-tile">
-                <dt class="u-label Facts-tileLabel">Custom allocation</dt>
-                <dd class="Facts-value Facts-figure" data-text="custom-apr"></dd>
-                <dd class="Facts-tileNote u-small u-quiet">in hindsight</dd>
-              </div>
-            </dl>
+            <dl class="Facts Facts--tiles" data-list="tile"></dl>
             <p class="Notice" data-text="edited">
-              The dashed line is your custom allocation: the shares you edited, held through all 8 days. It's hindsight,
-              as you chose them knowing how the pools did.
+              The dashed line holds the shares you edited through all 8 days: hindsight, as you chose them knowing how
+              the pools did.
             </p>
             <figure class="Chart u-stackTight">
               <ul class="Chart-legend u-small" data-list="legend"></ul>
@@ -811,10 +781,11 @@
                 <thead>
                   <tr>
                     <th scope="col">APR</th>
-                    <th scope="col">Your strategy</th>
-                    <th scope="col" data-text="custom-head">Custom allocation</th>
-                    <th scope="col">Base average</th>
+                    <th scope="col">Follow the leaders</th>
+                    <th scope="col">Follow revenue</th>
                     <th scope="col">Autopilot</th>
+                    <th scope="col">Base average</th>
+                    <th scope="col" data-text="custom-head">Custom allocation</th>
                   </tr>
                 </thead>
                 <tbody data-list="step"></tbody>
@@ -904,9 +875,6 @@
                 <button type="button" data-action="aero-allocate">Allocate</button>
                 <p class="u-small u-hang" data-text="allocate-why"></p>
               </div>
-              <p class="u-small u-quiet">
-                Thin pools and pools paying a token without a price are left out. Dilution is taken into account.
-              </p>
             </div>
           </div>
         </section>
@@ -925,89 +893,46 @@
           </header>
           <dl class="u-stackTight">
             <div class="Pair">
-              <dt class="u-small u-quiet">Base average</dt>
+              <dt class="u-small u-quiet">Follow the leaders</dt>
               <dd>
-                What the average allocator on Base earned: all the pools' exchange revenue at each step, over all their
-                sAERO weight, leaving out pools paying a token without a price
+                The pools where each sAERO earned the most above the average over the last 8 days, each given more the
+                further ahead it stays once your sAERO joins it
               </dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Autopilot</dt>
-              <dd>The actual allocations of Aero's Autopilot USDC Maxi at each step on Base</dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Follow revenue</dt>
-              <dd>
-                The top pools by exchange revenue: the fees each paid over the window, and what its incentives pay over
-                the next 48 hours. Each gets the share of your sAERO that it has of their revenue together, however many
-                sAERO already share it
-              </dd>
+              <dd>The pools with the most revenue over the last 8 days, each given its share of it</dd>
             </div>
             <div class="Pair">
-              <dt class="u-small u-quiet">Follow the leaders</dt>
-              <dd>
-                The pools where each sAERO earned the most above the average of all the pools over the window, fees and
-                incentives together. Each gets a share in proportion to how much more, counted once your own sAERO has
-                joined it, so that a large stake spreads over more pools. A stake too large for 10 pools to all stay
-                above the average goes instead to the 10 that pay the most once they all pay the same. A pool's sAERO
-                counts as the larger of its average over the last 48 hours and today's, so that a pool others just left
-                doesn't look better than it is
-              </dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Judged on</dt>
-              <dd>How far back a strategy looks at what each pool paid</dd>
+              <dt class="u-small u-quiet">Revenue</dt>
+              <dd>A pool's trading fees, and the incentives already scheduled for it</dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Come back every 48 h</dt>
               <dd>
-                In the record, the strategy picks again every 48 hours, as an allocation is locked for
-                <span data-text="lock-hours">47 hours</span> after each change. Nothing does it for you: to follow it,
-                come back and allocate again. Unticked, the record picks once, 8 days ago, and keeps that
+                An allocation is locked for <span data-text="lock-hours">47 hours</span> after each change. Nothing
+                picks again for you
               </dd>
             </div>
             <div class="Pair">
-              <dt class="u-small u-quiet">sAERO weight</dt>
-              <dd>What a stake allocates to pools. Aero's app calls it Allocation Power</dd>
+              <dt class="u-small u-quiet">Projected APR</dt>
+              <dd>What a pool would pay if its last 8 days came again, counting your own sAERO in it</dd>
             </div>
             <div class="Pair">
-              <dt class="u-small u-quiet">Pool's revenue a day</dt>
-              <dd>
-                What a pool pays all its sAERO a day: its exchange revenue over the window you set, and the incentives
-                already scheduled. Your sAERO earns its share of it
-              </dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Thin</dt>
-              <dd>
-                A pool with under 1M sAERO weight over the window, where one allocation changes what it pays. Strategies
-                leave them out
-              </dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">More sAERO weight than before</dt>
-              <dd>Others moved into the pool lately, so each sAERO there earns less than it did</dd>
+              <dt class="u-small u-quiet">Base average</dt>
+              <dd>What the average sAERO on Base earned</dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Blue chips</dt>
-              <dd>Pools whose two tokens are both among USDC, EURC, WETH, cbBTC and AERO</dd>
+              <dd>Pools of two tokens among USDC, EURC, WETH, cbBTC and AERO</dd>
             </div>
             <div class="Pair">
-              <dt class="u-small u-quiet">APR</dt>
-              <dd>
-                A day's exchange revenue per sAERO, times 365, over the price of one AERO.
-                <span data-text="record-prices">The last 8 days use the prices of each step</span>. Projected APR: if
-                the exchange revenue of the last <span data-text="plan-window">48 hours</span> came again, with the
-                incentives already scheduled, shared by the larger of each pool's sAERO over the last 48 hours and
-                today's
-              </dd>
+              <dt class="u-small u-quiet">Thin</dt>
+              <dd>Under 1M sAERO weight, where one allocation changes what it pays. Strategies leave it out</dd>
             </div>
             <div class="Pair">
-              <dt class="u-small u-quiet">Other chains</dt>
-              <dd>
-                Not counted: pools on Aero's other chains aren't shown, and allocating here leaves a stake's sAERO
-                weight on them as it is
-              </dd>
+              <dt class="u-small u-quiet">sAERO weight</dt>
+              <dd>What Aero's app calls Allocation Power</dd>
             </div>
           </dl>
           <section class="u-stack" data-section="check">
@@ -1483,11 +1408,19 @@
     <template id="step">
       <tr>
         <td data-text="when"></td>
-        <td class="u-figures u-strong" data-text="strategy"></td>
-        <td class="u-figures" data-text="custom"></td>
-        <td class="u-figures" data-text="average"></td>
+        <td class="u-figures" data-text="leaders"></td>
+        <td class="u-figures" data-text="revenue"></td>
         <td class="u-figures" data-text="pilot"></td>
+        <td class="u-figures" data-text="average"></td>
+        <td class="u-figures" data-text="custom"></td>
       </tr>
+    </template>
+    <template id="tile">
+      <div class="Facts-tile">
+        <dt class="u-label Facts-tileLabel" data-text="name"></dt>
+        <dd class="Facts-value Facts-figure" data-text="apr"></dd>
+        <dd class="Facts-tileNote u-small u-quiet" data-text="note"></dd>
+      </div>
     </template>
     <template id="strategy">
       <label class="Card Ticks Ticks--whole">
