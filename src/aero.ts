@@ -1240,12 +1240,12 @@ export function picksAt(
   );
   return picksOf(pools, strategy, amount);
 }
-// The snapshot times a strategy needs that the grid doesn't already have.
-export function timesFor(market: Market, { again, hours }: Strategy): number[] {
-  const steps = stepsOf(market);
-  const picks = again ? steps.map(({ from }) => from) : steps.slice(-1).map(({ from }) => from);
-  return picks.map((time) => time - hours * HOUR).filter((time) => !market.past.times.includes(time));
-}
+// The snapshot times that picks looking back `hours` need and the grid doesn't already have. They cover a pick at
+// every step, so a strategy that picks only once needs nothing more.
+export const timesFor = (market: Market, hours: Hours): number[] =>
+  stepsOf(market)
+    .map(({ from }) => from - hours * HOUR)
+    .filter((time) => !market.past.times.includes(time));
 const paidDuring = (market: Market, past: Past, step: Step, prices: Prices) => (gauge: Gauge) =>
   paidOver(gauge, accrualOf(gauge, past, step.from, step.to, market), prices);
 // How a record is worked out: for `amount` sAERO added to the pools, less what the stake's `own` moves (if read)

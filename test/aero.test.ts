@@ -1039,13 +1039,13 @@ test("the strategy leaves out thin pools and pools paying a token without a pric
 test("a longer window needs snapshots before the grid's, read for it alone", () => {
   const { m, past } = twoPools([NOW - 6 * STEP]);
   const top = { count: 1, hours: 96, again: true, blueChips: false, leaders: false } as const;
-  assert.deepEqual(timesFor(m, { ...top, hours: 48 }), [], "48 hours: the grid's own");
-  assert.deepEqual(timesFor(m, top), [NOW - 6 * STEP]);
+  assert.deepEqual(timesFor(m, 48), [], "48 hours: the grid's own");
+  assert.deepEqual(timesFor(m, 96), [NOW - 6 * STEP]);
   assert.deepEqual(
-    timesFor(m, { ...top, hours: 192 }),
+    timesFor(m, 192),
     [6, 7, 8].map((k) => NOW - k * STEP),
+    "8 days: a time before every pick, also for a strategy that picks once",
   );
-  assert.deepEqual(timesFor(m, { ...top, hours: 192, again: false }), [NOW - 8 * STEP], "once: the oldest pick's");
   // Without them, the oldest step has no picks; with them, it does.
   const without = totals(strategySteps(m, m.past, top));
   assert.ok(without.slice(0, 3).every((each) => each !== undefined) && without[3] === undefined);

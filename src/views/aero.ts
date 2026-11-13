@@ -383,40 +383,45 @@ const heldAs = lastOf((amount: number, then: aero.Then | undefined, own: aero.Mo
 }));
 // A stake's current allocation, used in place of its moves when they could not be read.
 const stillOf = lastOf((stake: Stake): aero.Move[] => [{ at: stake.lastAllocated, allocations: stake.allocations }]);
-// The settings the record was last fully drawn for. While a new hour's reads load, the record keeps showing instead of
-// going blank.
-let recordFor: string | undefined;
+// The reads behind the last record drawn in full. While a new hour's reads load, the record is drawn from these, with
+// the settings as they are now, instead of going blank. A stake's own moves can't stand in for another stake's.
+let basis:
+  | {
+      market: Market;
+      past: aero.Past;
+      then: aero.Then | undefined;
+      own: aero.Move[] | undefined;
+      record: Got<data.AutopilotRecord | null>;
+      stake?: bigint;
+    }
+  | undefined;
 const waiting = (got: Got<unknown>): boolean => got.value === undefined && !got.failed;
 
 function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined): void {
-  const market = got.value;
-  const chosen = strategyOf(market);
-  const extra = andThen(got, (found) => data.pastFor(aero.timesFor(found, chosen)));
+  const chosen = strategyOf(got.value);
+  const extra = andThen(got, (found) => data.pastFor(aero.timesFor(found, chosen.hours)));
   fill(aeroView, { "record-intro": introOf(chosen) });
   // Past prices. When they can't be read, the record uses today's prices.
   const pricing = andThen(got, () => data.pricesThen());
-  const record = data.autopilotRecord();
   // The stake's own weight is already in the pools it was in, so it is not added there again.
   const moves: Got<aero.Move[] | null> = stake ? data.stakeMoves(stake) : { value: null };
-  const shows = JSON.stringify([
-    plan.again,
-    plan.blueChips,
-    plan.leaders,
-    amount,
-    stake && String(stake.id),
-    plan.rows,
-  ]);
-  if (recordFor === shows && [extra, pricing, record, moves].some(waiting)) return;
-  if (!market || !extra.value || waiting(pricing) || waiting(moves)) {
-    recordFor = undefined;
+  if (got.value && extra.value && !waiting(pricing) && !waiting(moves))
+    basis = {
+      market: got.value,
+      past: extra.value,
+      then: pricing.value,
+      own: moves.value ?? (stake && moves.failed ? stillOf(stake) : undefined),
+      record: data.autopilotRecord(),
+      stake: stake?.id,
+    };
+  if (!basis || basis.stake !== stake?.id) {
     drawStrategies(chosen, () => (extra.failed ? "–" : undefined));
     return void fill(aeroView, { plan: stateOf(extra.value ? {} : extra) });
   }
-  const then = pricing.value;
-  const own = moves.value ?? (stake && moves.failed ? stillOf(stake) : undefined);
+  const { market, past, then, own, record } = basis;
   const held = heldAs(amount, then, own);
   const { count: top, hours, again, blueChips } = chosen;
-  const strategies = strategyLines(market, strategyPast(market.past, extra.value), top, hours, again, blueChips, held);
+  const strategies = strategyLines(market, strategyPast(market.past, past), top, hours, again, blueChips, held);
   drawStrategies(chosen, (i) => {
     const found = aero.aprOver(strategies[i]!);
     return found ? aprWords(found.apr, found.priced) : "–";
@@ -424,7 +429,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   const custom = plan.rows && customLine(market, plan.rows, held);
   const average = averageLine(market, then);
   const pilot: Got<Paid[]> = andThen(record, (found) => ({ value: pilotLine(market, found, held) }));
-  fill(aeroView, { plan: stateOf(extra) });
+  fill(aeroView, { plan: { state: "ready" } });
   const who = stake ? stakeName(stake, stake.id) : wholePower(amount);
   // The APR, and what the amount or stake would have earned a day, over the same steps.
   const figure = (steps: Paid[]) => {
@@ -483,7 +488,6 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
     "custom-head": custom ? true : null,
     "record-note": then ? null : "Valued at today's prices: the prices then could not be read.",
   });
-  recordFor = waiting(record) ? undefined : shows;
 }
 
 // A line of the record, with its tile. `steps` are newest first. The chart puts the oldest on the left.
