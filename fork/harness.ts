@@ -64,6 +64,8 @@ export const ELSEWHERE = getAddress("0x69707a120ade8239f07595165e180c61395ea655"
 export const LEAVER = getAddress("0x2573264b8e690ca6b2128c113890f42198840b16"); // #53350 and #82206 in Matcha Latte
 export const ENDED = getAddress("0x2518820268e4079e90446b93020dfad7dd54e84d"); // #123351 (ended, holds HYDX), #123364
 export const PAYEE = getAddress("0x60924601e73ebc5c2bd9244c788d93e0710a6c93"); // #82774 in Matcha Latte
+// 25 sAERO stakes at BLOCK. The largest, #2848, is locked; #2890 is the largest that can move.
+export const ALLOCATOR = getAddress("0x41870186e8cf4c6d445492a9f7bb233a02a9b633");
 // #82774's last payout as of `UNPAID`: sent on Wed 23 Sept, paying up to Thu 17 Sept.
 export const PAID_TX = "0x0932e5a24f24e45bfd1021764d94abc1d920754c4dc17128dd89f44bd086e899";
 export const LOCK_MAXI = getAddress("0x53388a4E98Bb56F8571433F5461010Fc287929d3");

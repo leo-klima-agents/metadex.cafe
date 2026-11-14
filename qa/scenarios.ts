@@ -66,6 +66,13 @@ export const SCENARIOS: Scenario[] = [
     setup: () => h.fund([WETH, h.ZORA, h.AVNT]),
   },
   {
+    name: "aero",
+    title: "Mon 9 Nov 2026, after Base Denim: a wallet with 25 sAERO stakes to allocate, its largest locked",
+    block: h.BLOCK,
+    hash: "#aero",
+    owners: [{ address: h.ALLOCATOR, holds: "25 sAERO stakes; #2848, the largest, locked; #2890 can move" }],
+  },
+  {
     name: "claim",
     title: "Wed 21 Oct 2026, before Denim: #82774 in Double Espresso, its payout overdue, to claim as it is or swapped",
     block: h.UNPAID_SWAPS,
