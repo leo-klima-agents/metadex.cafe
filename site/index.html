@@ -813,6 +813,7 @@
             </ul>
             <p class="u-small" data-when="failed">The pools could not be read.</p>
             <div class="u-stack" data-when="ready">
+              <p data-text="plan-pay"></p>
               <div class="u-scroll" tabindex="0" role="region" aria-label="Pools to allocate to, scrolls sideways">
                 <table>
                   <caption class="u-visuallyHidden">
@@ -832,7 +833,7 @@
                     <tr>
                       <th scope="row">Total</th>
                       <td class="u-figures u-strong" data-text="share-total"></td>
-                      <td class="u-figures u-strong" data-text="total-per"></td>
+                      <td></td>
                       <td class="u-figures" data-text="total-amount"></td>
                       <td></td>
                     </tr>
@@ -874,7 +875,6 @@
                   Make the shares add up to 100%
                 </button>
               </div>
-              <p class="u-small" data-text="plan-pay"></p>
               <p class="u-small" data-text="plan-auto"></p>
               <div class="u-row" data-if="wallet">
                 <button type="button" data-action="aero-allocate">Allocate</button>

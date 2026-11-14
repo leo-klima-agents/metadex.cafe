@@ -284,7 +284,7 @@ export function drawAero(): void {
   if (stake) plan.stake = stake.id;
   const amount = stake ? aero.whole(aero.budgetOf(stake)) : plan.amount;
   drawControls(stakes, stake);
-  drawRecord(got, amount, stake);
+  expectation = drawRecord(got, amount, stake);
   drawAllocation(got, amount, stake, stakes);
 }
 // The contract that allocating calls.
@@ -395,7 +395,12 @@ let basis:
   | undefined;
 const waiting = (got: Got<unknown>): boolean => got.value === undefined && !got.failed;
 
-function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined): void {
+// What the chosen strategy earned over the record, without hindsight, as the allocation's guide to what to expect.
+// Unlike a projection from the last 8 days, its picks never saw the days they are judged on. Null for edited shares,
+// whose own line in the record is hindsight.
+let expectation: Value = undefined;
+// Draws the record, and gives `expectation`.
+function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined): Value {
   const chosen = strategyOf(got.value);
   const extra = andThen(got, (found) => data.pastFor(aero.timesFor(found, chosen.hours)));
   fill(aeroView, { "record-intro": introOf(chosen) });
@@ -414,7 +419,8 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
     };
   if (!basis || basis.stake !== stake?.id) {
     drawStrategies(chosen, () => (extra.failed ? "–" : undefined));
-    return void fill(aeroView, { plan: stateOf(extra.value ? {} : extra) });
+    fill(aeroView, { plan: stateOf(extra.value ? {} : extra) });
+    return extra.failed ? null : undefined;
   }
   const { market, past, then, own, record } = basis;
   const held = heldAs(amount, then, own);
@@ -486,6 +492,11 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
     "custom-head": custom ? true : null,
     "record-note": then ? null : "Valued at today's prices: the prices then could not be read.",
   });
+  const at = STRATEGIES.findIndex(({ leaders }) => leaders === chosen.leaders);
+  const found = aero.aprOver(strategies[at]!);
+  return found && amount > 0 && !plan.rows
+    ? `Without hindsight, ${STRATEGIES[at]!.name} earned ${aprWords(found.apr, found.priced)} APR over the last ${RECORD_DAYS} days: ${daily(strategies[at]!)}.`
+    : null;
 }
 
 // A line of the record, with its tile. `steps` are newest first. The chart puts the oldest on the left.
@@ -528,39 +539,6 @@ function drawLines(lines: Line[]): void {
   );
 }
 
-// What `rows` would earn for `amount` sAERO if the window's revenue came again. If the stake is in pools now, also what
-// those pools would earn for what it holds in them. `picked` says the rows are the strategy's picks, chosen for how
-// they did over that same window, so likely to do less well next.
-function projectedWords(
-  market: Market,
-  next: (gauge: Gauge) => aero.Paying | undefined,
-  rows: Part[],
-  amount: number,
-  stake: Stake | undefined,
-  picked: boolean,
-): string | null {
-  if (!(amount > 0)) return null;
-  const mine = placesOf(stake);
-  const then = aero.heldOver(holdingsOf(rows, market), next, amount, mine.size ? mine : undefined);
-  if (!then) return null;
-  const words = (found: aero.Per10k, of: number) =>
-    `${apr(found.total, found.priced, market)} APR, ${perDay((found.total * of) / aero.PER, found.priced, market)} a day`;
-  const held = sum(mine.values());
-  const current =
-    held > 0
-      ? aero.heldOver(
-          [...mine].map(([gauge, each]) => ({ gauge: aero.gaugeAt(market, gauge as Address), weight: each / held })),
-          next,
-          held,
-          mine,
-        )
-      : undefined;
-  const who = stake ? stakeName(stake) : wholePower(amount);
-  const [shares, today] = [words(then, amount), current && words(current, held)];
-  // Rows that are the current pools aren't compared with themselves.
-  const against = today && today !== shares ? `, against ${today} in its current pools` : "";
-  return `If the last ${SPAN} came again: ${shares} for ${who}${against}.${picked ? ` Pools picked for those ${SPAN} usually earn less afterwards.` : ""}`;
-}
 const AUTOMATIC = "Nothing happens automatically: an allocation stays as it is until you change it.";
 
 function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefined, stakes: Stake[]): void {
@@ -586,7 +564,6 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
   fill(aeroView, { picks: stateOf(got) });
   const rows = (drawn = plan.rows ?? ruleRows(picks));
   const total = percentOf(rows);
-  const expected = aero.heldOver(holdingsOf(rows, market), next, amount, leaving);
   const inRows = new Set(rows.map(({ gauge }) => key(gauge)));
   // The pools "Show more pools" adds: those `eligible` for the strategy and not shown yet, best paying first. Unlike
   // the strategy, this doesn't leave out thin or unpriced pools.
@@ -635,13 +612,12 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
   fill(aeroView, {
     "share-total": fraction(total / 100, true),
     "total-amount": amount ? compact(aero.wholeUnits((amount * total) / 100)) : "–",
-    "total-per": expected ? apr(expected.total, expected.priced, market) : "–",
     more: nextPools.length ? true : null,
     scale: (!isFull(total) && total > 0) || null,
     edited: plan.rows ? true : null,
     current: mine.size ? true : null,
     "allocate-why": words,
-    "plan-pay": projectedWords(market, next, rows, amount, stake, !plan.rows),
+    "plan-pay": expectation,
     "plan-auto":
       plan.again && !plan.rows
         ? `Nothing happens automatically: to follow this strategy, allocate again every ${hoursWords(aero.STEP)}.`
@@ -744,14 +720,7 @@ async function allocateNow(): Promise<void> {
     $("[data-list=allot-note]", body),
     [
       `This replaces its current allocation on Base. It can't be changed again until ${utc(ends)}.`,
-      projectedWords(
-        market,
-        (gauge) => aero.paysNext(gauge, HOURS, market, market.cooldown),
-        rows,
-        aero.whole(budget),
-        stake,
-        !plan.rows,
-      ) ?? "",
+      typeof expectation === "string" ? expectation : "",
       stake.idle ? `Its ${power(stake.idle)} not yet on any chain moves onto Base too.` : "",
       stake.elsewhere ? `Its ${power(stake.elsewhere)} on other chains isn't affected.` : "",
       run ? "Simulated on Base: it succeeds." : "Base couldn't simulate it, so your wallet may warn you.",
