@@ -24,7 +24,7 @@ export function figure(value: bigint, decimals: number): string {
   const n = Number(value) / 10 ** decimals;
   return n >= 10_000 ? whole.format(n) : fourDigits.format(n);
 }
-// Votes, which have 18 decimals, with an SI prefix: "897k", "1.17M".
+// An 18-decimal amount, such as votes or sAERO, with an SI prefix: "897k", "1.17M".
 export function compact(value: bigint): string {
   const n = Number((Number(value / 10n ** 15n) / 1000).toPrecision(3));
   const [scale, suffix] = (
@@ -64,6 +64,11 @@ export const bps = (value: bigint): string => percent.format(Number(value) / 10_
 // For example "16.7%" or "3%". With `column`, always to a tenth of a percent: "3.0%", "< 0.1%".
 export const fraction = (value: number, column = false): string =>
   !column ? roughPercent.format(value) : value > 0 && value < 0.0005 ? "< 0.1%" : tenthsPercent.format(value);
+// Starts a figure that is only a lower bound, because some of what it sums had no price.
+const AT_LEAST = "At\u00a0least\u00a0";
+// An APR to a tenth of a percent, or "–" when there is none. `priced` is false when it is only a lower bound.
+export const aprWords = (apr: number | undefined, priced = true): string =>
+  apr === undefined ? "–" : `${priced ? "" : AT_LEAST}${fraction(apr, true)}`;
 
 // The unit prices are in: USD, or USDC when no dollar price was found. `rates` gives each currency's price in dollars
 // at the prices' time.
@@ -109,8 +114,7 @@ export const between = (from: Money, to: Money): Money => ({ ...to, value: toCen
 
 // For example "$692", "−€0.69", "< £0.01", "0.77 USDC" or "At least $3.10". With `cents`, always to the cent,
 // as in a column.
-export const money = (sum: Money, cents = false): string =>
-  `${sum.atLeast ? "At\u00a0least\u00a0" : ""}${figureOf(sum, cents)}`;
+export const money = (sum: Money, cents = false): string => `${sum.atLeast ? AT_LEAST : ""}${figureOf(sum, cents)}`;
 function figureOf(sum: Money, cents: boolean): string {
   const [shown, rate] = shownOf(sum);
   const value = sum.value / rate;
@@ -158,6 +162,18 @@ export function walletLines(address: string): string[][] {
   const cells = hexLines(address)[0]!;
   return [cells.slice(0, 4), cells.slice(4, 8), cells.slice(8)];
 }
+
+// Adds up numbers, or bigints.
+export const sum = (values: Iterable<number>): number => {
+  let total = 0;
+  for (const value of values) total += value;
+  return total;
+};
+export const sumBig = (values: Iterable<bigint>): bigint => {
+  let total = 0n;
+  for (const value of values) total += value;
+  return total;
+};
 
 export const listWords = (items: string[]): string => and.format(items);
 // The items with the words between them: [a, ", ", b, " and ", c].

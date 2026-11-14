@@ -3,7 +3,7 @@ import { doubleEspressoAbi, matchaLatteAbi, rewardsAbi } from "./abi.ts";
 import type { Amount } from "./tokens.ts";
 import { memo } from "./cache.ts";
 import { AUTOMATIONS, DOUBLE_ESPRESSO, MATCHA_LATTE, type Automation } from "./config.ts";
-import { WEEK, moneyAt, weekStart, type Money } from "./format.ts";
+import { WEEK, moneyAt, sum, weekStart, type Money } from "./format.ts";
 import { escrow, type Account, type Holdings } from "./hydrex.ts";
 import { key, quotesOf, worthOf, type Prices } from "./prices.ts";
 import { rewardsFor, tokensIn, type Earnings, type Reward } from "./rewards.ts";
@@ -58,7 +58,6 @@ export type Standing = {
 };
 export type Records = { last: number[]; earned: (bigint | undefined)[]; before: number[] };
 
-const sum = (values: number[]): number => values.reduce((total, value) => total + value, 0);
 const positive = (tokens: readonly Address[], values: readonly bigint[]): Amount[] =>
   tokens.map((token, i) => ({ token, amount: values[i] ?? 0n })).filter(({ amount }) => amount > 0n);
 export function summed(amounts: Amount[]): Amount[] {

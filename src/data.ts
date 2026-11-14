@@ -132,7 +132,7 @@ export const ownStakes = (): Got<aero.Stake[]> => {
   const address = owner();
   return address ? use(`aero stakes ${address}`, () => aero.stakesOf(address, tagged("aero")), 5 * MINUTE) : {};
 };
-export const autopilots = (): Got<aero.Stake[]> =>
+const autopilots = (): Got<aero.Stake[]> =>
   use(
     "aero autopilots",
     () =>
@@ -222,7 +222,7 @@ export const since = (time: number): Got<Map<string, aero.Start>> =>
 const HISTORY_DAYS = 14;
 export const history = (gauge: Address): Got<aero.Day[] | null> =>
   andThen(market(), (found) => {
-    const shown = found.gauges.find((each) => each.address === gauge);
+    const shown = aero.gaugeAt(found, gauge);
     if (!shown) return { value: null };
     return use(
       `aero history ${gauge} ${found.time - (found.time % aero.DAY)}`,

@@ -15,11 +15,11 @@ import {
   amountOf,
   blockedOf,
   budgetOf,
-  average,
-  averageOver,
   dayOf,
-  earnedBy,
   heldOver,
+  holdingsIn,
+  latestPaid,
+  paidIn,
   marketOver,
   paidOver,
   gridOf,
@@ -30,12 +30,9 @@ import {
   picksOf,
   heldAt,
   refusalOf,
-  feesPerDay,
   isThin,
   movesAt,
-  paidBy,
   pendingOf,
-  per10k,
   readMarket,
   readUniverse,
   sharesOf,
@@ -47,7 +44,6 @@ import {
   meanOf,
   nameOf,
   weightOf,
-  windowFees,
   averageSteps,
   customSteps,
   isBlueChip,
@@ -148,22 +144,24 @@ function fake(answer: (call: Call) => unknown, asked: Asked[] = []): Read {
 
 test("fees per 10,000 sAERO a day come from the accumulator's growth over the time it grew", () => {
   const g = gauge();
-  assert.deepEqual(feesPerDay(g, accrued(2_000_000n, 2), PRICES), { value: 1, priced: true });
+  const fees = (of: Gauge, span: Accrued) => per10kOf(paidOver(of, span, PRICES)!)!;
+  assert.equal(fees(g, accrued(2_000_000n, 2)).fees, 1);
   const both = { ...accrued(1_000_000n), fees1: 10n ** 15n * 100n };
-  assert.deepEqual(feesPerDay(g, both, PRICES), { value: 1 + 2, priced: true }, "0.001 WETH at $2,000");
-  assert.deepEqual(feesPerDay(gauge({ token1: other }), both, PRICES), { value: 1, priced: false });
-  assert.equal(feesPerDay(g, { ...accrued(1n), from: NOW }, PRICES), undefined, "no time, no yield");
+  assert.ok(Math.abs(fees(g, both).fees - 3) < 1e-9, "0.001 WETH at $2,000");
+  const unpriced = fees(gauge({ token1: other }), both);
+  assert.ok(Math.abs(unpriced.fees - 1) < 1e-9 && !unpriced.priced);
+  assert.equal(paidOver(g, { ...accrued(1n), from: NOW }, PRICES), undefined, "no time, no yield");
 });
 
 test("a pool whose power dipped pays exactly what it paid, and is thin and weighs little for it", () => {
   // 5M sAERO at both ends, but a harmonic mean of 50k over the 48 hours: the power fell close to nothing in between.
   const dipped = gauge({ perDay: 1_000 });
   dipped.windows[48] = { ...dipped.windows[48], spread: 50_000 };
-  assert.equal(feesPerDay(dipped, dipped.windows[48], PRICES)!.value, 1_000, "exactly what it paid");
+  assert.equal(per10kOf(paidOver(dipped, dipped.windows[48], PRICES)!)!.fees, 1_000, "exactly what it paid");
   assert.ok(isThin(dipped, 48) && !isThin(gauge(), 48));
   assert.equal(weightOf(dipped.windows[48]), 50_000);
   const steady = gauge({ perDay: 2 });
-  const mixed = averageOver(market([steady, dipped]), 48);
+  const mixed = marketOver([steady, dipped], (g) => paidOver(g, g.windows[48], PRICES));
   assert.ok(mixed.fees > 2 && mixed.fees < 12, `the dip weighs a hundredth: ${mixed.fees}`);
   // A mean of 2.5M sAERO is lower, but not close to nothing: the pool is not thin, and its weight is its mean.
   const lower = gauge();
@@ -186,10 +184,12 @@ test("a pool whose power dipped pays exactly what it paid, and is thin and weigh
   assert.ok(Math.abs(window.spread! - 50_000) < 1e-6, `the mean is the window's: ${window.spread}`);
 });
 
-test("a window counts only if the gauge's history covers most of it", () => {
+test("a window counts only if the gauge's history covers most of it, and pages fall back to the longest it covers", () => {
   const young = gauge({ windows: { ...gauge().windows, 192: accrued(3_000_000n, 3) } });
-  assert.equal(windowFees(young, 192, PRICES), undefined);
-  assert.deepEqual(windowFees(young, 48, PRICES), { value: 1, priced: true });
+  assert.equal(paidIn(young, 192, PRICES), undefined);
+  assert.equal(per10kOf(paidIn(young, 48, PRICES)!)!.fees, 1);
+  assert.equal(latestPaid(young, PRICES)!.hours, 96);
+  assert.equal(latestPaid(gauge(), PRICES)!.hours, 192);
 });
 
 test("an accrual starts at the checkpoint before it, or from nothing at the first one, or not at all if unread", () => {
@@ -253,19 +253,23 @@ test("incentives stream only while live, and sAERO a visitor adds shares both fe
     power: 1_000_000n * SAERO,
     programs: [program(NOW - DAY, NOW + DAY, 100), program(NOW - 9 * DAY, NOW - DAY, 1_000)],
   });
+  g.windows[48] = { ...g.windows[48], power: 1_000_000n * SAERO, endPower: 1_000_000n * SAERO };
   assert.ok(Math.abs(streamPerDay(g, NOW, PRICES).value - 100) < 1e-6);
-  const alone = per10k(g, 48, NOW, PRICES)!;
+  const next = paysNext(g, 48, market([g]), DAY)!;
+  const alone = per10kOf(next)!;
   assert.ok(Math.abs(alone.fees - 2) < 1e-9 && Math.abs(alone.incentives - 1) < 1e-6, "$100 a day over 1M sAERO");
-  const shared = per10k(g, 48, NOW, PRICES, 1_000_000)!;
+  const shared = per10kOf(next, 1_000_000)!;
   assert.ok(Math.abs(shared.fees - 1) < 1e-9 && Math.abs(shared.incentives - 0.5) < 1e-6);
-  assert.equal(per10k(gauge({ power: 0n }), 48, NOW, PRICES), undefined);
+  const young = gauge({ windows: { ...gauge().windows, 48: accrued(1n, 1) } });
+  assert.equal(paysNext(young, 48, market([young]), DAY), undefined, "not enough history");
 });
 
 test("the average weighs each gauge by its least power, and leaves out gauges paying tokens without a price", () => {
   const steady = gauge({ perDay: 2 });
   const surge = gauge({ perDay: 1_000_000 });
   surge.windows[48] = { ...surge.windows[48], power: SAERO };
-  const found = averageOver(market([steady, surge]), 48);
+  const over = (gauges: Gauge[]) => marketOver(gauges, (g) => paidOver(g, g.windows[48], PRICES));
+  const found = over([steady, surge]);
   assert.ok(found.fees > 2 && found.fees < 2.3, String(found.fees));
   assert.ok(isThin(surge, 48) && !isThin(steady, 48));
   const emptied = gauge();
@@ -273,8 +277,8 @@ test("the average weighs each gauge by its least power, and leaves out gauges pa
   assert.ok(isThin(emptied, 48), "thin at the end too");
   const unpriced = gauge({ perDay: 0, token1: other });
   unpriced.windows[48] = { ...unpriced.windows[48], fees1: 10n ** 20n };
-  assert.equal(averageOver(market([steady, unpriced]), 48).fees, 2, "not counted at nothing");
-  assert.equal(average(market([]), () => undefined).total, 0);
+  assert.equal(over([steady, unpriced]).fees, 2, "not counted at nothing");
+  assert.equal(over([]).total, 0);
 });
 
 const stake = (fields: Partial<Stake> = {}): Stake => ({
@@ -356,14 +360,13 @@ test("a stake earns its pools' yields by its share in each, and its power on the
       [zeroAddress, 0.25],
     ],
   );
-  assert.deepEqual(
-    earnedBy(shares, (g) => g.windows[48], PRICES),
-    { value: 2 + 0.25, priced: true },
-  );
-  assert.ok(Math.abs(paidBy(shares, m, 48)!.value - 2.25) < 1e-9);
+  const earned = heldOver(holdingsIn(shares), (g) => paidOver(g, g.windows[48], PRICES))!;
+  assert.ok(Math.abs(earned.fees - 2.25) < 1e-9 && earned.priced, "the zero gauge's quarter earns nothing");
+  assert.ok(Math.abs(heldOver(holdingsIn(shares), (g) => paidIn(g, 48, PRICES))!.total - 2.25) < 1e-9);
   const young = gauge({ windows: { ...gauge().windows, 48: accrued(1n, 1) } });
+  const inYoung = sharesOf(stake({ allocations: [{ gauge: young.address, amount: SAERO }] }), market([young]));
   assert.equal(
-    paidBy(sharesOf(stake({ allocations: [{ gauge: young.address, amount: SAERO }] }), m), m, 48),
+    heldOver(holdingsIn(inYoung), (g) => paidIn(g, 48, PRICES)),
     undefined,
   );
 });

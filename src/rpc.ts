@@ -67,7 +67,7 @@ export function settledBelow(newest: number, schedule: Schedule = BLOCK_SCHEDULE
 export const timeAt = async (block: number, rd: Read = read): Promise<number> =>
   Number(required(await rd([blockTime], { block }))[0]);
 // Reads the newest block and its time. `timeOf` gives any other block's time, and reads each block only once.
-// `firstBlockAt` searches with these.
+// `firstAt` is `firstBlockAt` with these: the first block whose time is at least `time`, at or below `top`.
 export async function blockClock(rd: Read = read) {
   const [newest, newestTime] = required(await rd([blockNumber, blockTime])).map(Number) as [number, number];
   const times = new Map<number, Promise<number>>();
@@ -76,7 +76,9 @@ export async function blockClock(rd: Read = read) {
     times.set(block, known);
     return known;
   };
-  return { newest, newestTime, timeOf };
+  const firstAt = async (time: number, top = newest): Promise<number> =>
+    firstBlockAt(time, top, top === newest ? newestTime : await timeOf(top), timeOf, [newest, newestTime]);
+  return { newest, newestTime, timeOf, firstAt };
 }
 
 // A fixed block schedule, such as Base's `BLOCK_SCHEDULE`.
@@ -357,6 +359,11 @@ export async function readEach<T, F extends Record<string, ((item: T) => Call) |
     item,
     ...Object.fromEntries(asked.map(([name], n) => [name, all[n * items.length + i]])),
   })) as never;
+}
+// Splits `replies`, the results of every group's calls read together, back into one list per group.
+export function regroup<T>(groups: readonly (readonly unknown[])[], replies: readonly T[]): T[][] {
+  let next = 0;
+  return groups.map(({ length }) => replies.slice(next, (next += length)));
 }
 export function required<const T extends readonly unknown[]>(
   values: T,

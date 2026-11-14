@@ -3,7 +3,7 @@ import { render } from "../state.ts";
 // A line chart of a few series over a few positions. It is drawn at its own width, so its text keeps its size. The
 // first series is drawn on top. A missing value breaks a line.
 export type Series = { id: string; name: string; color: string; dashed?: boolean; values: (number | undefined)[] };
-export type Plot = {
+type Plot = {
   positions: string[];
   brief: string[];
   series: Series[];

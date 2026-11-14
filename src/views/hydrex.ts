@@ -13,6 +13,7 @@ import type { Got } from "../cache.ts";
 import { checks } from "../checks.ts";
 import * as data from "../data.ts";
 import {
+  aprWords,
   WEEK,
   bps,
   compact,
@@ -24,6 +25,7 @@ import {
   money,
   moneyAt,
   short,
+  sumBig,
   type Money,
   units,
   until,
@@ -93,18 +95,18 @@ export function statusNode(s: Status, own: boolean, inGroup?: string): Value {
 }
 
 // Rounded to a tenth of a percentage point.
-const aprWords = (apr: number | undefined): string => (apr === undefined ? "No price for HYDX" : fraction(apr, true));
+const aprOrNoPrice = (apr: number | undefined): string => (apr === undefined ? "No price for HYDX" : aprWords(apr));
 const record = (automation: Automation): Value =>
   shown(data.earnings(automation), (earnings) => {
     if (!earnings.votes) return "No record yet";
     const apr = aprOf(earnings);
-    return apr === undefined ? aprWords(apr) : frag(aprWords(apr), fromTemplate("apr"));
+    return apr === undefined ? aprOrNoPrice(apr) : frag(aprOrNoPrice(apr), fromTemplate("apr"));
   });
 function averageNote(): Value {
   const all = data.average();
   return all.failed
     ? null
-    : shown(all, (found) => (aprOf(found) === undefined ? null : `Hydrex average: ${aprWords(aprOf(found))}`));
+    : shown(all, (found) => (aprOf(found) === undefined ? null : `Hydrex average: ${aprOrNoPrice(aprOf(found))}`));
 }
 function stateNode(automation: Automation): Value {
   const off = checks().value?.get(automation.kind)?.length;
@@ -199,7 +201,7 @@ function drawGroups(root: HTMLElement, holdings: Holdings, belongs: (group: stri
       box.checked = chosen.length === able.length;
       box.indeterminate = chosen.length > 0 && chosen.length < able.length;
     }
-    const votes = chosen.reduce((sum, { votes }) => sum + votes, 0n);
+    const votes = sumBig(chosen.map(({ votes }) => votes));
     const fewer = these.some(({ account }) => account.votes > 0n);
     fill(section, {
       all: able.length > 1 || null,
@@ -252,7 +254,7 @@ export function drawHydrex(): void {
       ? frag(...[...failed].map((id) => Object.assign(document.createElement("p"), { textContent: reasons[id] })))
       : null,
     underway: found && underWay(found) ? "Payout under way." : null,
-    average: shown(data.average(), (all) => aprWords(aprOf(all))),
+    average: shown(data.average(), (all) => aprOrNoPrice(aprOf(all))),
     // Shown only beside an APR, not beside "Loading…", "Not read" or "No price for HYDX".
     "average-aside": average && aprOf(average) !== undefined ? true : null,
     own: shown(holdings, ownWords),
@@ -276,8 +278,8 @@ function ownWords(holdings: Holdings): Value {
       : !own.pools.length
         ? "Didn't vote"
         : aprOf(own) === undefined
-          ? aprWords(undefined)
-          : `${aprWords(aprOf(own))} APR, last epoch`,
+          ? aprOrNoPrice(undefined)
+          : `${aprOrNoPrice(aprOf(own))} APR, last epoch`,
   );
 }
 
@@ -363,7 +365,7 @@ function performance(automation: Automation): Value {
       [`${prefix}earned`]: cents(value && moneyAt(value.total, value)),
       [`${prefix}fees`]: cents(value && moneyAt(value.fees, value)),
       [`${prefix}incentives`]: cents(value && moneyAt(value.incentives, value)),
-      [`${prefix}apr`]: earnings ? aprWords(aprOf(earnings, prices)) : pending,
+      [`${prefix}apr`]: earnings ? aprOrNoPrice(aprOf(earnings, prices)) : pending,
     };
   };
   const value = valueOf(mine, all.value?.prices);
@@ -448,7 +450,7 @@ export function change(accounts: Account[], action: "join" | "leave" | "self", a
     const steps = hydrex.join(able, automation);
     const weekly = data.earnings(automation);
     const paid = ml ? settings && hydrex.paidBpsOf(settings) : 10_000n - FEE_BPS;
-    const votes = able.reduce((sum, { votes }) => sum + votes, 0n);
+    const votes = sumBig(able.map(({ votes }) => votes));
     const gas = hydrex.gasEstimate(steps, connection.address);
     const drawBody = (wei?: Value) =>
       fill(body, {

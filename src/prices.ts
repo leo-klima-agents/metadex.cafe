@@ -11,22 +11,23 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { memo } from "./cache.ts";
+import { memo, refresh } from "./cache.ts";
 import * as config from "./config.ts";
 import type { Anchor, Exchange, ExchangeKind, Fiat, PricedKind } from "./config.ts";
 import { figure, money, moneyAt, type Basis, type Money, type Rates } from "./format.ts";
-import { blockClock, blockTime, call, firstBlockAt, read, same, settledBelow, type Call, type Read } from "./rpc.ts";
+import { blockClock, blockTime, call, read, regroup, same, settledBelow, type Call, type Read } from "./rpc.ts";
 
 export type Token = { address: Address; decimals: number; symbol: string };
 // Prices per whole token, keyed by lower-case address. `unread` is set when some pools could not be read, so some
 // tokens may have no price. `sources` holds the pool that priced each token, so the token can be priced again at
 // another time.
-export type Prices = Basis & { of: Map<string, number>; unread?: true; sources?: Map<string, Source> };
+export type Prices = Basis & { of: Map<string, number>; unread?: true; sources?: Map<string, Pool> };
 export function key(address: Address): Address;
 export function key(address: string): string;
 export function key(address: string): string {
   return address.toLowerCase();
 }
+export const isAnchor = (address: Address): boolean => config.ANCHORS.some((anchor) => same(anchor.address, address));
 export const noPrices = (): Prices => ({ unit: "USD", of: new Map() });
 // How much of each token will be priced, in its smallest units, keyed by lower-case address.
 export type Amounts = Map<string, bigint> | Promise<Map<string, bigint>>;
@@ -243,10 +244,10 @@ function placements(rd: Read): Promise<Map<number, Placement>> {
   return (placementsRead ??= rd(asks.flat()).then(
     (replies) => {
       if (replies.includes(undefined)) placementsRead = undefined;
-      let next = 0;
+      const answers = regroup(asks, replies as (Address | Hex | undefined)[]);
       return new Map(
         placed.flatMap((exchange, i): [number, Placement][] => {
-          const got = asks[i]!.map(() => replies[next++] as Address | Hex | undefined);
+          const got = answers[i]!;
           if (got.includes(undefined)) return [];
           const { id, kind, factory, codeHash } = exchange;
           if (kind === "pair") {
@@ -299,10 +300,6 @@ async function lookUp(
       const light = lookups.every((each, i) => !each.length || missing[i]![1][0].kind !== "v4");
       return calls.length ? rd(calls, light ? { perBatch: LOOKUPS } : {}) : Promise.resolve([]);
     };
-    const answersTo = (lookups: Lookup[][], replies: unknown[]) => {
-      let next = 0;
-      return lookups.map((each) => each.map(() => replies[next++]));
-    };
     const all = Promise.all([
       needsSpacings ? spacings(rd) : new Map<number, number[]>(),
       placing ? placements(rd).catch(() => new Map<number, Placement>()) : new Map<number, Placement>(),
@@ -319,14 +316,16 @@ async function lookUp(
           ? codeAt(candidates.flatMap((list) => list ?? []).map(({ pool }) => pool))
           : [],
       ]);
-      let nextHeld = 0;
-      const holds = candidates.map((list) => list?.map(() => held[nextHeld++]));
+      const holds = regroup(
+        candidates.map((list) => list ?? []),
+        held,
+      );
       // When the code check did not answer, ask the factory instead.
       const again = missing.map(([, [exchange, pair]], i) =>
-        holds[i]?.includes(undefined) ? lookupsOn(exchange, pair, known) : [],
+        holds[i]!.includes(undefined) ? lookupsOn(exchange, pair, known) : [],
       );
-      const answers = answersTo(first, replies);
-      const answersAgain = answersTo(again, await ask(again));
+      const answers = regroup(first, replies);
+      const answersAgain = regroup(again, await ask(again));
       return missing.map(([, [exchange]], i) => {
         const lookups = again[i]!.length ? again[i]! : first[i]!;
         const replied = again[i]!.length ? answersAgain[i]! : answers[i]!;
@@ -393,8 +392,7 @@ const feedAbi = parseAbi([
   "function latestRoundData() view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)",
 ]);
 
-type Pool = { address: Address; exchange: Exchange; stable: boolean; token: Token; anchor: Anchor };
-export type Source = Pool;
+export type Pool = { address: Address; exchange: Exchange; stable: boolean; token: Token; anchor: Anchor };
 type Measured = { pool: Pool; price: number; depth: number };
 // `end` is the window's last block. `start()` searches for its first.
 type Window = { start(): Promise<number>; end: number };
@@ -511,9 +509,9 @@ async function measure(
   const asked = pools.map((pool) => pricingOf(pool.exchange).state(pool));
   const replies = await rd(asked.flat(), { block: window.end }).catch(logged);
   if (!replies) return undefined;
-  let next = 0;
+  const states = regroup(asked, replies);
   const ready = pools.flatMap((pool, i) => {
-    const state = replies.slice(next, (next += asked[i]!.length));
+    const state = states[i]!;
     if (state.includes(undefined)) return [];
     const kind = pricingOf(pool.exchange);
     const [decimals0, decimals1] = decimalsOf(pool);
@@ -598,7 +596,7 @@ export function forget(): void {
   placementsRead = undefined;
   blocksAt.clear();
   nowStart = undefined;
-  quotes.clear();
+  refresh(QUOTE);
 }
 
 // Prices per whole token, averaged over the 30 minutes up to `time`, or up to the newest block if that is earlier. The
@@ -615,7 +613,7 @@ export async function pricesAt(
   tiers = config.PRICING,
 ): Promise<Prices> {
   tiers.flat().forEach(pricingOf);
-  const early = tokens.some(({ address }) => !config.ANCHORS.some((anchor) => same(anchor.address, address)));
+  const early = tokens.some(({ address }) => !isAnchor(address));
   const { window, prices } = await fedAt(time, early, rd);
   const anchors = config.ANCHORS.map(({ address, decimals }) => ({ address, decimals, symbol: "" }));
   for (const each of [anchors, tokens])
@@ -633,17 +631,16 @@ export async function pricesAt(
 // Prices at `time`, from the pools that priced each token at another time. This reads far less than searching again.
 // A token has no price if its pool is too thin, too young or unread at `time`.
 export async function pricesFrom(
-  sources: Map<string, Source>,
+  sources: Map<string, Pool>,
   amounts: Amounts,
   time: number,
   rd: Read = read,
 ): Promise<Prices> {
   const { window, prices } = await fedAt(time, sources.size > 0, rd);
-  const isAnchor = ({ token }: Source) => config.ANCHORS.some(({ address }) => same(address, token.address));
   for (const anchors of [true, false]) {
     const pools = [...sources.values()].filter(
       (pool) =>
-        isAnchor(pool) === anchors &&
+        isAnchor(pool.token.address) === anchors &&
         !prices.of.has(key(pool.token.address)) &&
         prices.of.has(key(pool.anchor.address)),
     );
@@ -661,14 +658,13 @@ export async function pricesFrom(
 async function fedAt(time: number, early: boolean, rd: Read): Promise<{ window: Window; prices: Prices }> {
   // Both ends of the window are searched for downward from `top`. The search first assumes the block pace between
   // `top` and the newest block. Both searches share the block times they read.
-  const { newest, newestTime, timeOf } = await blockClock(rd);
+  const { newest, newestTime, timeOf, firstAt } = await blockClock(rd);
   const top = settledBelow(newest);
   const lastBlockAt = async (at: number): Promise<number> => {
-    const topTime = await timeOf(top);
-    if (at >= topTime) return top;
+    if (at >= (await timeOf(top))) return top;
     const known = blocksAt.get(at);
     if (known) return known;
-    const found = firstBlockAt(at + 1, top, topTime, timeOf, [newest, newestTime]).then((first) => first - 1);
+    const found = firstAt(at + 1, top).then((first) => first - 1);
     if (time >= newestTime) {
       if (nowStart !== undefined) blocksAt.delete(nowStart);
       nowStart = at;
@@ -724,28 +720,27 @@ export async function pricesAtFlip(
 }
 // Current prices without amounts, as a market would quote them. They are for weighing rewards against one another, not
 // for showing. Each token's quote is shared for five minutes. If a read fails, the next caller reads again.
+const QUOTE = "quote ";
 const QUOTED = 5 * 60_000;
-const quotes = new Map<string, { at: number; reading: Promise<Prices> }>();
 export async function quotesOf(asked: Token[], rd: Read = read): Promise<Pick<Prices, "of" | "unread">> {
   const tokens = [...new Map(asked.map((token) => [key(token.address), token])).values()];
-  const fresh = (address: Address) => {
-    const quote = quotes.get(key(address));
-    return quote && performance.now() - quote.at < QUOTED ? quote : undefined;
-  };
-  const missing = tokens.filter(({ address }) => !fresh(address));
-  if (missing.length) {
-    const reading = pricesNow(missing, new Map(), rd).catch((error: unknown): Prices => {
-      console.error(error);
-      return { ...noPrices(), unread: true };
-    });
-    const quote = { at: performance.now(), reading };
-    for (const { address } of missing) quotes.set(key(address), quote);
-    void reading.then(({ unread }) => {
-      if (unread)
-        for (const { address } of missing) if (quotes.get(key(address)) === quote) quotes.delete(key(address));
-    });
-  }
-  const readings = tokens.map(({ address }) => quotes.get(key(address))!.reading);
+  // `memo` reads one key at a time. So every token it finds due waits on one read, made once they are all known.
+  const missing: Token[] = [];
+  const batch = Promise.withResolvers<Prices>();
+  const readings = tokens.map((token) =>
+    memo(
+      QUOTE + key(token.address),
+      () => (missing.push(token), batch.promise),
+      ({ unread }) => (unread ? 0 : QUOTED),
+    ),
+  );
+  if (missing.length)
+    batch.resolve(
+      pricesNow(missing, new Map(), rd).catch((error: unknown): Prices => {
+        console.error(error);
+        return { ...noPrices(), unread: true };
+      }),
+    );
   const found = await Promise.all(readings);
   const of = new Map<string, number>();
   tokens.forEach(({ address }, i) => {

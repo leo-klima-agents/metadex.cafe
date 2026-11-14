@@ -13,11 +13,13 @@ import {
 import { BLOCK_SCHEDULE, RPCS } from "../src/config.ts";
 import {
   BATCH_BYTES,
+  blockClock,
   call,
   codeAt,
   firstBlockAt,
   poll,
   read,
+  regroup,
   rpc,
   scheduled,
   settledBelow,
@@ -106,6 +108,21 @@ test("on Base, a time's first block is the schedule's, checked with it and the o
   }
 });
 
+test("a block clock searches below the newest block, or below a block given, and reads each block's time once", async () => {
+  const asked: (number | "latest" | undefined)[] = [];
+  const rd = async (_: unknown, options?: { block?: number | "latest" }): Promise<any> => {
+    asked.push(options?.block);
+    return options?.block === undefined ? [NEWEST, baseTime(NEWEST)] : [baseTime(options.block as number)];
+  };
+  const { firstAt } = await blockClock(rd);
+  const time = baseTime(NEWEST) - 1_800;
+  const found = await firstAt(time);
+  assert.ok(isFirst(time, found, baseTime));
+  const top = settledBelow(NEWEST);
+  assert.equal(await firstAt(time, top), found);
+  assert.deepEqual(asked, [undefined, found, found - 1, top], "the newest block's time is known already");
+});
+
 test("with five blocks a second and no schedule, or a wrong one, a search takes a few reads", async () => {
   // Five blocks share each second, so a guess at a block of the right second may not be the first of it.
   const GENESIS = 1_686_789_347;
@@ -178,6 +195,10 @@ test("reads go through Multicall3; a call that fails reads as undefined", async 
     "0x0000000000000000000000000000000000000001",
   );
   assert.deepEqual(await read([balance, balance]), [42n, undefined]);
+});
+
+test("replies to groups of calls read together go back to their groups", () => {
+  assert.deepEqual(regroup([["a", "b"], [], ["c"]], [1, 2, 3]), [[1, 2], [], [3]]);
 });
 
 test("reads for the page shown go first; the others never hold more than two slots", async () => {

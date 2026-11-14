@@ -17,6 +17,7 @@ import * as config from "../config.ts";
 import { AUTOPILOTS, BASESCAN, PAYMENTS_MODULE } from "../config.ts";
 import * as data from "../data.ts";
 import {
+  aprWords,
   capitalized,
   compact,
   count,
@@ -28,6 +29,8 @@ import {
   money,
   moneyAt,
   short,
+  sum,
+  sumBig,
   until,
   utc,
 } from "../format.ts";
@@ -61,21 +64,17 @@ const stepBrief = (k: number): string => `${k * STEP_DAYS}–${(k + 1) * STEP_DA
 // To the cent, and "At least" when some tokens have no price.
 const perDay = (value: number, priced: boolean, market: Market): string =>
   money(moneyAt(value, market.prices, !priced), true);
-// To one decimal place, and "At least" when some tokens have no price.
-const aprWords = (found: number | undefined, priced: boolean): string =>
-  found === undefined ? "–" : `${priced ? "" : "At\u00a0least\u00a0"}${fraction(found, true)}`;
 // What 10,000 sAERO earn a day as an APR.
 const aprAt = (per10k: number, priced: boolean, prices: Prices): string => aprWords(aero.aprOf(per10k, prices), priced);
 const apr = (per10k: number, priced: boolean, market: Market): string => aprAt(per10k, priced, market.prices);
+const per10k = (paying: aero.Paying | undefined): aero.Per10k | undefined => paying && aero.per10kOf(paying);
 const sAero = (amount: bigint): string => `${compact(amount)} sAERO`;
 const power = (amount: bigint): string => `${compact(amount)} sAERO weight`;
 const hoursWords = (seconds: number): string =>
   seconds % 3_600 === 0 ? count(seconds / 3_600, "hour", "hours") : until(seconds);
 
-export const autopilotOf = (stake: Stake) =>
-  AUTOPILOTS.find((each) => each.id === stake.id && same(stake.owner, each.relay));
-export const stakeName = (stake: Stake | undefined, id: bigint): string =>
-  (stake && autopilotOf(stake)?.name) ?? `sAERO #${id}`;
+const autopilotOf = (stake: Stake) => AUTOPILOTS.find((each) => each.id === stake.id && same(stake.owner, each.relay));
+const stakeName = (stake: Stake): string => autopilotOf(stake)?.name ?? `sAERO #${stake.id}`;
 const lockWords = ({ permanent, end }: Stake): string =>
   permanent ? "Permanent" : `${end > now() ? "Ends" : "Ended"} ${date(end)}`;
 const poolsIn = (stake: Stake): number => stake.allocations.filter(({ gauge }) => !aero.isIdleGauge(gauge)).length;
@@ -162,11 +161,10 @@ function poolsWords({ count: top, blueChips, leaders }: aero.Strategy): string {
 let drawn: Part[] = [];
 let nextPools: string[] = [];
 const MORE = 10;
-const wholeOf = (amount: bigint): number => Number(amount) / 1e18;
-const wholePower = (amount: number): string => power(BigInt(Math.round(amount)) * 10n ** 18n);
-const totalOf = (rows: Part[]): number => rows.reduce((sum, { percent }) => sum + percent, 0);
-// Shares within 0.05 points of 100% count as whole. They are scaled to exactly 100% when sent.
-const whole = (total: number): boolean => Math.abs(total - 100) < 0.05;
+const wholePower = (amount: number): string => power(aero.wholeUnits(amount));
+const percentOf = (rows: Part[]): number => sum(rows.map(({ percent }) => percent));
+// Shares within 0.05 points of 100% count as full. They are scaled to exactly 100% when sent.
+const isFull = (total: number): boolean => Math.abs(total - 100) < 0.05;
 const ruleRows = (picks: aero.Pick[]): Part[] =>
   picks.map(({ gauge, weight }) => ({ gauge: gauge.address, percent: weight * 100 }));
 function edit(change: (rows: Part[]) => Part[]): void {
@@ -184,7 +182,7 @@ const strategyOf = (market: Market | undefined): aero.Strategy => ({
 });
 // The rows as holdings, with weights that add up to one.
 function holdingsOf(rows: Part[], market: Market): aero.Holding[] {
-  const total = totalOf(rows);
+  const total = percentOf(rows);
   return total > 0
     ? rows.map(({ gauge, percent }) => ({ gauge: aero.gaugeAt(market, gauge), weight: percent / total }))
     : [];
@@ -217,9 +215,7 @@ function blockedPhrase(stake: Stake): string | undefined {
 // A stake as the picker lists it.
 function optionWords(stake: Stake): string {
   const budget = aero.budgetOf(stake);
-  return [stakeName(stake, stake.id), budget ? `${power(budget)} on Base` : "", blockedPhrase(stake)]
-    .filter(Boolean)
-    .join(" · ");
+  return [stakeName(stake), budget ? `${power(budget)} on Base` : "", blockedPhrase(stake)].filter(Boolean).join(" · ");
 }
 // The stake's sAERO in each pool, in whole sAERO, by gauge.
 const placesOf = (stake: Stake | undefined): Map<string, number> => aero.byGauge(stake?.allocations ?? []);
@@ -231,23 +227,25 @@ function flagsOf(gauge: Gauge | undefined, market: Market, hold: number): string
       ({ rate, start, end }) => rate && start < market.time + hold && end > market.time && end < market.time + hold,
     )
     .map(({ end }) => end);
-  const grew = Number(gauge.power) / Number(gauge.windows[HOURS].power) - 1;
+  const [current, before] = [Number(gauge.power), Number(gauge.windows[HOURS].power)];
+  const grew =
+    before && current > 1.25 * before ? `${fraction(current / before - 1)} more sAERO weight than ${SPAN} ago` : "";
   const flags = [
     isThin(gauge, HOURS) ? "Thin" : "",
     ends.length ? `Incentives end in ${until(Math.min(...ends) - market.time)}` : "",
-    grew > 0.25 ? `${fraction(grew)} more sAERO weight than ${SPAN} ago` : "",
+    current && !before ? `No sAERO weight ${SPAN} ago` : grew,
   ].filter(Boolean);
   return flags.length ? flags.join(" · ") : null;
 }
 function blockedWords(blocked: aero.Blocked, stake: Stake): string {
-  const name = stakeName(stake, stake.id);
+  const name = stakeName(stake);
   switch (blocked.why) {
     case "ended":
       return `The lock of ${name} has ended, so it can't be allocated.`;
     case "empty":
       return `${name} has nothing to allocate on Base: all its sAERO weight is on other chains.`;
     case "held":
-      return `${name} was allocated less than ${hoursWords(data.market().value?.cooldown ?? 0)} ago. It can be changed again from ${utc(blocked.until)}, in ${until(blocked.until - now())}.`;
+      return `${name} was allocated less than ${hoursWords(cooldownOf())} ago. It can be changed again from ${utc(blocked.until)}, in ${until(blocked.until - now())}.`;
   }
 }
 // Why the rows cannot be allocated now, or what allocating them does.
@@ -258,8 +256,8 @@ function allocateWords(stake: Stake | undefined, stakes: Stake[], rows: Part[], 
   const blocked = aero.blockedOf(stake, market.cooldown, now());
   if (blocked) return [false, blockedWords(blocked, stake)];
   if (!rows.length) return [false, "Show more pools, then give one a share."];
-  const total = totalOf(rows);
-  if (!whole(total)) return [false, `The shares add up to ${fraction(total / 100, true)}, not 100%.`];
+  const total = percentOf(rows);
+  if (!isFull(total)) return [false, `The shares add up to ${fraction(total / 100, true)}, not 100%.`];
   // A pool at 0% is not sent.
   const included = rows.filter(({ percent }) => percent > 0);
   if (included.length > market.maxGauges) return [false, `Aero allows at most ${market.maxGauges} pools.`];
@@ -274,7 +272,7 @@ function allocateWords(stake: Stake | undefined, stakes: Stake[], rows: Part[], 
     ];
   return [
     true,
-    `Replaces the allocation of ${stakeName(stake, stake.id)} on Base, which then can't change for ${hoursWords(market.cooldown)}.`,
+    `Replaces the allocation of ${stakeName(stake)} on Base, which then can't change for ${hoursWords(market.cooldown)}.`,
   ];
 }
 
@@ -284,18 +282,18 @@ export function drawAero(): void {
   const stake = stakeFor(stakes);
   // Kept once shown, so that the stake doesn't change under the user as locks start and end.
   if (stake) plan.stake = stake.id;
-  const amount = stake ? wholeOf(aero.budgetOf(stake)) : plan.amount;
+  const amount = stake ? aero.whole(aero.budgetOf(stake)) : plan.amount;
   drawControls(stakes, stake);
   drawRecord(got, amount, stake);
   drawAllocation(got, amount, stake, stakes);
-  list(
-    $("[data-list=contract]", aeroView),
-    // The contract that allocating calls.
-    [["Voter contract", config.AERO_VOTER]] as const,
-    ([name]) => name,
-    (row, [name, address]) => fill(row, { name, address: { address } }),
-  );
 }
+// The contract that allocating calls.
+list(
+  $("[data-list=contract]", aeroView),
+  [["Voter contract", config.AERO_VOTER]] as const,
+  ([name]) => name,
+  (row, [name, address]) => fill(row, { name, address: { address } }),
+);
 
 function drawControls(stakes: Stake[], stake: Stake | undefined): void {
   const lock = stake && blockedPhrase(stake);
@@ -430,7 +428,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
   const average = averageLine(market, then);
   const pilot: Got<Paid[]> = andThen(record, (found) => ({ value: pilotLine(market, found, held) }));
   fill(aeroView, { plan: { state: "ready" } });
-  const who = stake ? stakeName(stake, stake.id) : wholePower(amount);
+  const who = stake ? stakeName(stake) : wholePower(amount);
   // The APR, and what the amount or stake would have earned a day, over the same steps.
   const figure = (steps: Paid[]) => {
     const found = aero.aprOver(steps);
@@ -545,7 +543,7 @@ function projectedWords(
   if (!then) return null;
   const words = (found: aero.Per10k, of: number) =>
     `${apr(found.total, found.priced, market)} APR, ${perDay((found.total * of) / aero.PER, found.priced, market)} a day`;
-  const held = [...mine.values()].reduce((sum, each) => sum + each, 0);
+  const held = sum(mine.values());
   const current =
     held > 0
       ? aero.heldOver(
@@ -555,7 +553,7 @@ function projectedWords(
           mine,
         )
       : undefined;
-  const who = stake ? stakeName(stake, stake.id) : wholePower(amount);
+  const who = stake ? stakeName(stake) : wholePower(amount);
   return `If the last ${SPAN} came again: ${words(then, amount)} for ${who}${current ? `, against ${words(current, held)} in its current pools` : ""}.`;
 }
 const AUTOMATIC = "Nothing happens automatically: an allocation stays as it is until you change it.";
@@ -582,7 +580,7 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
   const picks = aero.picksOf(candidates, strategy, amount);
   fill(aeroView, { picks: stateOf(got) });
   const rows = (drawn = plan.rows ?? ruleRows(picks));
-  const total = totalOf(rows);
+  const total = percentOf(rows);
   const expected = aero.heldOver(holdingsOf(rows, market), next, amount, leaving);
   const inRows = new Set(rows.map(({ gauge }) => key(gauge)));
   // The pools "Show more pools" adds: those `eligible` for the strategy and not shown yet, best paying first. Unlike
@@ -621,7 +619,7 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
       fill(tr, {
         pool: gauge ? { href: hrefOf({ view: "pool", gauge: gauge.address }), text: name } : name,
         note: flagsOf(gauge, market, hold),
-        amount: amount && weight ? compact(BigInt(Math.round(amount * weight)) * 10n ** 18n) : "–",
+        amount: amount && weight ? compact(aero.wholeUnits(amount * weight)) : "–",
         pays: found ? money(moneyAt(aero.totalOf(found), market.prices, !all?.priced)) : "–",
         per: here ? apr(here.total, here.priced, market) : "Not enough history",
       });
@@ -631,10 +629,10 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
   enable($<HTMLButtonElement>("[data-action=aero-allocate]", aeroView), can);
   fill(aeroView, {
     "share-total": fraction(total / 100, true),
-    "total-amount": amount ? compact(BigInt(Math.round((amount * total) / 100)) * 10n ** 18n) : "–",
+    "total-amount": amount ? compact(aero.wholeUnits((amount * total) / 100)) : "–",
     "total-per": expected ? apr(expected.total, expected.priced, market) : "–",
     more: nextPools.length ? true : null,
-    scale: (!whole(total) && total > 0) || null,
+    scale: (!isFull(total) && total > 0) || null,
     edited: plan.rows ? true : null,
     current: mine.size ? true : null,
     "allocate-why": words,
@@ -652,9 +650,9 @@ function refusalWords(name: string | undefined, stake: Stake, market: Market): s
       return blockedWords({ why: "held", until: aero.movesAt(stake, market.cooldown) }, stake);
     case "ChainAllocationMismatch":
     case "InsufficientChain0Allocation":
-      return `${stakeName(stake, stake.id)} changed since the page read it. Close this, wait a moment, and try again.`;
+      return `${stakeName(stake)} changed since the page read it. Close this, wait a moment, and try again.`;
     case "NotAuthorized":
-      return `This wallet doesn't own ${stakeName(stake, stake.id)} and isn't approved for it.`;
+      return `This wallet doesn't own ${stakeName(stake)} and isn't approved for it.`;
     case "StakeExpired":
     case "StakeWithdrawn":
       return blockedWords({ why: "ended" }, stake);
@@ -672,7 +670,7 @@ async function allocateNow(): Promise<void> {
   const market = data.market().value;
   const picked = stakeFor(data.ownStakes().value ?? []);
   if (!connection || !market || !picked) return;
-  const name = `Allocate ${stakeName(picked, picked.id)}`;
+  const name = `Allocate ${stakeName(picked)}`;
   const checkHref = hrefOf({ view: "aero", section: "check" });
   const say = (words: string) =>
     openReview({
@@ -698,11 +696,11 @@ async function allocateNow(): Promise<void> {
   const slip: Slip = {
     ...call,
     title: name,
-    says: `Allocates the ${power(budget)} of ${stakeName(stake, stake.id)} on Base to ${count(allotments.length, "pool", "pools")}, replacing its current allocation.`,
+    says: `Allocates the ${power(budget)} of ${stakeName(stake)} on Base to ${count(allotments.length, "pool", "pools")}, replacing its current allocation.`,
     on: "Aero's Voter",
     call: "allocate",
     fields: [
-      { label: "sAERO", code: String(stake.id), description: stakeName(stake, stake.id) },
+      { label: "sAERO", code: String(stake.id), description: stakeName(stake) },
       ...(stake.idle
         ? [
             {
@@ -730,7 +728,7 @@ async function allocateNow(): Promise<void> {
   const body = fromTemplate("allocate-review");
   const ends = now() + market.cooldown;
   fill(body, {
-    summary: `${stakeName(stake, stake.id)} will allocate its ${power(budget)} on Base to these pools:`,
+    summary: `${stakeName(stake)} will allocate its ${power(budget)} on Base to these pools:`,
   });
   list(
     $("[data-list=allot]", body),
@@ -751,7 +749,7 @@ async function allocateNow(): Promise<void> {
         market,
         (gauge) => aero.paysNext(gauge, HOURS, market, market.cooldown),
         rows,
-        wholeOf(budget),
+        aero.whole(budget),
         stake,
       ) ?? "",
       stake.idle ? `Its ${power(stake.idle)} not yet on any chain moves onto Base too.` : "",
@@ -770,7 +768,7 @@ async function allocateNow(): Promise<void> {
     outcome: async () => {
       const done = fromTemplate("done");
       fill(done, {
-        words: `Allocated. ${stakeName(stake, stake.id)} can be changed again from ${utc(ends)}.`,
+        words: `Allocated. ${stakeName(stake)} can be changed again from ${utc(ends)}.`,
         vote: null,
       });
       return done;
@@ -784,7 +782,7 @@ export function drawStake(): void {
   const got = data.stakeShown(id);
   const stake = got.value ?? undefined;
   const market = data.market().value;
-  const name = stakeName(stake, id);
+  const name = stake ? stakeName(stake) : `sAERO #${id}`;
   document.title = `${name} · metaDEX Café`;
   fill(stakeView, { name, stake: stateOf(got, got.value === null) });
   if (!stake) return;
@@ -800,17 +798,16 @@ export function drawStake(): void {
       : market
         ? data.since(stake.lastAllocated)
         : andThen(data.market(), () => ({}));
-  const record = andThen(since, (starts) => ({
-    value:
-      starts && market
-        ? {
-            earned: aero.earnedBy(shares, aero.sinceIn(starts), market.prices),
-            average: aero.average(market, aero.sinceIn(starts), false),
-          }
-        : null,
-  }));
-  const paid = market && aero.paidBy(shares, market, HOURS);
-  const average = market && aero.averageOver(market, HOURS);
+  const record = andThen(since, (starts) => {
+    if (!starts || !market) return { value: null };
+    const paid = (gauge: Gauge) => aero.paidOver(gauge, aero.sinceIn(starts)(gauge), market.prices);
+    return {
+      value: { earned: aero.heldOver(aero.holdingsIn(shares), paid), average: aero.marketOver(market.gauges, paid) },
+    };
+  });
+  const paid = market && aero.heldOver(aero.holdingsIn(shares), (gauge) => aero.paidIn(gauge, HOURS, market.prices));
+  const average =
+    market && aero.marketOver(market.gauges, (gauge) => aero.paidOver(gauge, gauge.windows[HOURS], market.prices));
   fill(stakeView, {
     hold: holdNode(stake, market),
     amount: sAero(stake.amount),
@@ -830,7 +827,7 @@ export function drawStake(): void {
     record: poolsIn(stake) ? true : null,
     since: soon
       ? `Allocated ${until(held!)} ago`
-      : shown(record, ({ earned }) => `${apr(earned.value, earned.priced, market!)} APR`),
+      : shown(record, ({ earned }) => (earned ? `${apr(earned.fees, earned.priced, market!)} APR` : "–")),
     "since-note": soon
       ? "Too soon for a record"
       : shown(
@@ -838,13 +835,8 @@ export function drawStake(): void {
           ({ average }) =>
             `fees since ${utc(stake.lastAllocated)} · Base average fees ${apr(average.fees, true, market!)}`,
         ),
-    paid: !market ? undefined : paid ? `${apr(paid.value, paid.priced, market)} APR` : "Not enough history",
-    "paid-note": !market
-      ? undefined
-      : paid
-        ? `last ${SPAN}, with the incentives running now · Base average ${apr(average!.total, true, market)}`
-        : null,
-    "window-head": `Last ${SPAN}`,
+    paid: !market ? undefined : paid ? `${apr(paid.total, paid.priced, market)} APR` : "Not enough history",
+    "paid-note": !market ? undefined : paid ? `last ${SPAN} · Base average ${apr(average!.total, true, market)}` : null,
   });
   list(
     $("[data-list=share]", stakeView),
@@ -853,9 +845,11 @@ export function drawStake(): void {
     (tr, { gauge, address, amount, share }) => {
       const earned =
         gauge && market && since.value
-          ? aero.feesPerDay(gauge, aero.sinceIn(since.value)(gauge), market.prices)
+          ? per10k(aero.paidOver(gauge, aero.sinceIn(since.value)(gauge), market.prices))
           : undefined;
-      const window = gauge && market && aero.per10k(gauge, HOURS, market.time, market.prices);
+      // A pool too young for the full window shows the longest one it has, named.
+      const latest = gauge && market && aero.latestPaid(gauge, market.prices);
+      const window = latest && per10k(latest.paying);
       fill(tr, {
         pool: aero.isIdleGauge(address)
           ? "Not allocated"
@@ -864,8 +858,10 @@ export function drawStake(): void {
             : { address, text: short(address) },
         share: fraction(share),
         power: compact(amount),
-        since: earned ? apr(earned.value, earned.priced, market!) : "–",
-        window: window ? apr(window.total, window.priced, market!) : "–",
+        since: earned ? apr(earned.fees, earned.priced, market!) : "–",
+        window: window
+          ? `${apr(window.total, window.priced, market!)}${latest.hours === HOURS ? "" : ` (${WINDOW[latest.hours]})`}`
+          : "–",
       });
     },
   );
@@ -882,7 +878,7 @@ export function drawPool(): void {
   const address = state.route.gauge;
   const got = data.market();
   const market = got.value;
-  const gauge = market?.gauges.find((each) => same(each.address, address));
+  const gauge = market && aero.gaugeAt(market, address);
   const unread = !!market?.unread.some((each) => same(each, address));
   document.title = `${gauge?.name ?? "Aero pool"} · metaDEX Café`;
   fill(poolView, {
@@ -893,10 +889,11 @@ export function drawPool(): void {
   if (!market || !gauge) return;
   const aeroPrice = market.prices.of.get(key(config.AERO));
   const capPerDay = (Number(gauge.cap) / 1e18) * aero.DAY;
-  const aeroAmount = (amount: number) => `${figure(BigInt(Math.round(amount)) * 10n ** 18n, 18)} AERO`;
+  const aeroAmount = (amount: number) => `${figure(aero.wholeUnits(amount), 18)} AERO`;
   const stream = aero.streamPerDay(gauge, market.time, market.prices);
   const live = gauge.programs.filter((program) => aero.isLive(program, market.time));
-  const paid = aero.per10k(gauge, HOURS, market.time, market.prices);
+  const latest = aero.latestPaid(gauge, market.prices);
+  const paid = latest && per10k(latest.paying);
   fill(poolView, {
     status: routable(gauge)
       ? status("running", "Takes allocations")
@@ -904,7 +901,7 @@ export function drawPool(): void {
     power: compact(gauge.power),
     thin: isThin(gauge, HOURS) ? "Thin: one allocation changes what each sAERO earns" : null,
     paid: paid ? `${apr(paid.total, paid.priced, market)} APR` : "Not enough history",
-    "paid-note": `last ${SPAN}`,
+    "paid-note": latest ? `last ${WINDOW[latest.hours]}` : null,
     stream: live.length ? perDay(stream.value, stream.priced, market) : "None",
     programs: live.length ? `a day, from ${count(live.length, "live program", "live programs")}` : "no live program",
     cap: aeroPrice === undefined ? aeroAmount(capPerDay * 7) : money(moneyAt(capPerDay * 7 * aeroPrice, market.prices)),
@@ -915,7 +912,7 @@ export function drawPool(): void {
     [...WINDOWS],
     (hours) => String(hours),
     (tr, hours) => {
-      const found = aero.per10k(gauge, hours, market.time, market.prices);
+      const found = per10k(aero.paidIn(gauge, hours, market.prices));
       fill(tr, {
         window: WINDOW[hours],
         fees: found ? apr(found.fees, found.priced, market) : "–",
@@ -932,12 +929,12 @@ export function drawPool(): void {
     history.value ?? [],
     ({ day }) => String(day),
     (tr, row) => {
-      const found = aero.feesPerDay(gauge, row, market.prices);
+      const found = per10k(aero.paidOver(gauge, row, market.prices));
       fill(tr, {
         day: daysWords(row, today),
         note: aero.thinOver(row) ? "Thin" : null,
         power: compact(row.power),
-        fees: found ? apr(found.value, found.priced, market) : "–",
+        fees: found ? apr(found.fees, found.priced, market) : "–",
       });
     },
   );
@@ -1029,16 +1026,15 @@ actions["aero-more"] = () => {
 };
 actions["aero-scale"] = () =>
   edit((rows) => {
-    const total = totalOf(rows);
+    const total = percentOf(rows);
     return total > 0 ? rows.map((row) => ({ ...row, percent: (row.percent * 100) / total })) : rows;
   });
 actions["aero-rule"] = suggest;
 actions["aero-current"] = () => {
-  const stake = stakeFor(data.ownStakes().value ?? []);
-  const pools = (stake?.allocations ?? []).filter(({ gauge }) => !aero.isIdleGauge(gauge));
-  const sum = pools.reduce((all, { amount }) => all + wholeOf(amount), 0);
-  if (!sum) return;
-  plan.rows = pools.map(({ gauge, amount }) => ({ gauge, percent: (wholeOf(amount) * 100) / sum }));
+  const places = placesOf(stakeFor(data.ownStakes().value ?? []));
+  const held = sum(places.values());
+  if (!held) return;
+  plan.rows = [...places].map(([gauge, each]) => ({ gauge: gauge as Address, percent: (each * 100) / held }));
   render();
 };
 actions["aero-allocate"] = (el) => {
@@ -1054,7 +1050,7 @@ actions["aero-allocate"] = (el) => {
 export function aeroLine(): Value {
   return shown(data.ownStakes(), (stakes) =>
     stakes.length
-      ? `${count(stakes.length, "stake", "stakes")} · ${sAero(stakes.reduce((sum, { amount }) => sum + amount, 0n))}`
+      ? `${count(stakes.length, "stake", "stakes")} · ${sAero(sumBig(stakes.map(({ amount }) => amount)))}`
       : "No sAERO",
   );
 }
