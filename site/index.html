@@ -705,8 +705,8 @@
           <button type="button" class="Button--info" popovertarget="aero-info" aria-label="How it works">i</button>
         </header>
         <p class="u-small u-quiet">
-          Each pool splits its revenue among the sAERO allocated to it, in proportion to their weight. Pick a strategy,
-          see how it would have done, then allocate.
+          Each pool shares its protocol revenue in proportion to the allocation power in it. Pick a strategy, see how it
+          would have done, then allocate.
         </p>
         <fieldset>
           <legend><h2>Your strategy</h2></legend>
@@ -742,7 +742,7 @@
                   autocomplete="off"
                   spellcheck="false"
                 />
-                sAERO weight</label
+                allocation power</label
               >
             </div>
           </div>
@@ -824,8 +824,8 @@
                       <th scope="col">Pool</th>
                       <th scope="col">Share</th>
                       <th scope="col">Projected APR</th>
-                      <th scope="col">sAERO weight</th>
-                      <th scope="col">Revenue a day, last 8 days</th>
+                      <th scope="col">Allocation power</th>
+                      <th scope="col">Protocol revenue a day, last 8 days</th>
                     </tr>
                   </thead>
                   <tbody data-list="pick"></tbody>
@@ -900,36 +900,16 @@
             <div class="Pair">
               <dt class="u-small u-quiet">Follow the leaders</dt>
               <dd>
-                The 10 pools paying the most per sAERO above the average of the pools it can pick, over the last 8 days.
-                Each is weighted in proportion to that excess, counted with your sAERO in the pool, so a larger stake
-                spreads over more pools. A stake too large for 10 pools to stay above the average goes to the 10 that
-                pay the most once each pays the same per sAERO
+                The 10 pools that paid the most per allocation power over the last 8 days, more to those that paid more
               </dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Follow revenue</dt>
-              <dd>
-                The 10 pools with the most revenue over the last 8 days, each weighted in proportion to its revenue
-              </dd>
+              <dd>The 10 pools with the most protocol revenue over the last 8 days, in proportion to that revenue</dd>
             </div>
             <div class="Pair">
-              <dt class="u-small u-quiet">Revenue</dt>
-              <dd>A pool's trading fees and incentives. Looking ahead, only the incentives already scheduled count</dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Come back every 48 h</dt>
-              <dd>
-                An allocation is locked for <span data-text="lock-hours">47 hours</span> after each change. Nothing
-                picks again for you
-              </dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Projected APR</dt>
-              <dd>Your APR in a pool if its last 8 days came again, with your sAERO added to its weight</dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Base average</dt>
-              <dd>All pools' revenue divided by all their sAERO weight</dd>
+              <dt class="u-small u-quiet">Protocol revenue</dt>
+              <dd>A pool's trading fees and incentives</dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Blue chips</dt>
@@ -937,14 +917,7 @@
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Thin</dt>
-              <dd>
-                Under 1M sAERO weight 8 days ago, now, or on average in between, so one allocation changes what each
-                sAERO earns. Strategies leave it out
-              </dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">sAERO weight</dt>
-              <dd>What Aero's app calls Allocation Power</dd>
+              <dd>Under 1M allocation power 8 days ago, now or on average in between. Strategies leave it out</dd>
             </div>
           </dl>
           <section class="u-stack" data-section="check">
@@ -982,12 +955,12 @@
               <div class="Facts-tile" data-text="idle-row">
                 <dt class="u-label Facts-tileLabel">Not allocated</dt>
                 <dd class="Facts-value Facts-figure" data-text="idle"></dd>
-                <dd class="Facts-tileNote u-small u-quiet">sAERO weight, earning nothing</dd>
+                <dd class="Facts-tileNote u-small u-quiet">Allocation power, earning nothing</dd>
               </div>
               <div class="Facts-tile" data-text="elsewhere-row">
                 <dt class="u-label Facts-tileLabel">Other chains</dt>
                 <dd class="Facts-value Facts-figure" data-text="elsewhere"></dd>
-                <dd class="Facts-tileNote u-small u-quiet">sAERO weight, not shown here</dd>
+                <dd class="Facts-tileNote u-small u-quiet">Allocation power, not shown here</dd>
               </div>
               <div class="Facts-tile" data-text="owner-row">
                 <dt class="u-label Facts-tileLabel">Owner</dt>
@@ -1017,8 +990,8 @@
               </dl>
               <p class="u-small u-quiet">
                 Each sAERO counts as one AERO. Since it allocated: the fees its pools paid since then, against all
-                pools'. Its pools: their revenue over the last 8 days, which it did not earn if it moved there within
-                those days.
+                pools'. Its pools: their protocol revenue over the last 8 days, which it did not earn if it moved there
+                within those days.
               </p>
               <div class="u-scroll">
                 <table>
@@ -1029,7 +1002,7 @@
                     <tr>
                       <th scope="col">Pool</th>
                       <th scope="col">Share</th>
-                      <th scope="col">sAERO weight</th>
+                      <th scope="col">Allocation power</th>
                       <th scope="col">Since it allocated</th>
                       <th scope="col">Last 8 days</th>
                     </tr>
@@ -1060,11 +1033,11 @@
             <p class="Notice" data-text="thin"></p>
             <dl class="Facts Facts--tiles">
               <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">sAERO weight</dt>
+                <dt class="u-label Facts-tileLabel">Allocation power</dt>
                 <dd class="Facts-value Facts-figure" data-text="power"></dd>
               </div>
               <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">Revenue</dt>
+                <dt class="u-label Facts-tileLabel">Protocol revenue</dt>
                 <dd class="Facts-value Facts-figure" data-text="paid"></dd>
                 <dd class="Facts-tileNote u-small u-quiet" data-text="paid-note"></dd>
               </div>
@@ -1119,7 +1092,7 @@
                   <thead>
                     <tr>
                       <th scope="col">Day, UTC</th>
-                      <th scope="col">sAERO weight</th>
+                      <th scope="col">Allocation power</th>
                       <th scope="col">Fees APR</th>
                     </tr>
                   </thead>
@@ -1481,7 +1454,7 @@
               <tr>
                 <th scope="col">Pool</th>
                 <th scope="col">Share</th>
-                <th scope="col">sAERO weight</th>
+                <th scope="col">Allocation power</th>
               </tr>
             </thead>
             <tbody data-list="allot"></tbody>
