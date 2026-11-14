@@ -8,12 +8,12 @@ import { key, noPrices, pricesAt, pricesAtFlip, worthOf, type Prices, type Token
 import { call, read, readEach, required, type Read } from "./rpc.ts";
 import { tokensOf } from "./tokens.ts";
 
-// What votes earned in an ended epoch, from Hydrex's reward contracts. Each pool's gauge has two, one for the pool's
-// fees and one for incentives, and each keeps every epoch's votes and rewards.
+// What votes earned in an ended epoch, from Hydrex's reward contracts. Each pool's gauge has two reward contracts: one
+// for the pool's fees and one for incentives. Each keeps every epoch's votes and rewards.
 
 type Pool = { address: Address; name: string; votes: bigint };
 export type Reward = { pool: Address; contract: Address; token: Token; amount: bigint; fee: boolean };
-// The epoch runs from start to start + WEEK; its prices are those at the flip that ended it.
+// The epoch runs from `start` to `start + WEEK`, in Unix seconds. `prices` are those at the flip that ended it.
 export type Earnings = { start: number; votes: bigint; pools: Pool[]; rewards: Reward[]; prices: Prices };
 
 const poolAbi = parseAbi([
@@ -50,7 +50,7 @@ async function contractsOf(pools: Address[], rd: Read): Promise<Contract[]> {
 }
 // Every pool's reward contracts, for the average and for voters who voted again after an epoch began. They take
 // thousands of reads, so they are read once, at the priority of the page that first asks. Hydrex only adds pools, so
-// the list covers every epoch up to the one under way when it was read.
+// the list covers every epoch that started before the one under way when it was read.
 async function allContracts(start: number, rd: Read): Promise<Contract[]> {
   const readAll = async () => {
     const [length, active] = required(await rd([voter("length"), voter("_epochTimestamp")]));
@@ -65,7 +65,8 @@ async function allContracts(start: number, rd: Read): Promise<Contract[]> {
 export const earnedBy = (perEpoch: bigint, supply: bigint, balance: bigint): bigint =>
   (((perEpoch * 10n ** 32n) / supply) * balance) / 10n ** 32n;
 
-// What all votes earned in each of these contracts that had votes in the epoch from `start`, by reward token.
+// What all votes earned in each of these contracts in the epoch from `start`, by reward token. Contracts without votes
+// in that epoch are left out.
 type Paid = Contract & { supply: bigint; paid: { token: Address; amount: bigint }[] };
 async function paidIn(contracts: Contract[], start: number, rd: Read): Promise<Paid[]> {
   const at = BigInt(start);
@@ -105,12 +106,13 @@ async function paidIn(contracts: Contract[], start: number, rd: Read): Promise<P
     })),
   }));
 }
-// Read once an epoch: every voter takes its share of these, and the epoch's prices need them all.
+// Read once for each epoch: every voter takes its share of these, and the epoch's prices need them all.
 const allPaid = (start: number, rd: Read) =>
   memo(`paid ${start}`, async () => paidIn(await allContracts(start, rd), start, rd));
 
-// What `holder`'s votes, or all votes when `holder` is undefined, earned in the epoch from `start`, with the votes for
-// each pool: in `contracts`, or in every pool's. Contracts not among every pool's are read apart.
+// What `holder`'s votes earned in the epoch from `start`, with the votes for each pool. When `holder` is undefined, it
+// is what all votes earned. It reads `contracts`, or every pool's contracts when `contracts` is not given. Contracts
+// missing from every pool's list are read on their own.
 async function rewardsOf(start: number, holder: Address | undefined, rd: Read, contracts?: Contract[]) {
   const at = BigInt(start);
   const every = await allContracts(start, rd);
@@ -153,7 +155,8 @@ export const tokensIn = (rewards: Reward[]): Token[] => [
 ];
 
 const allRewards = (start: number, rd: Read) => memo(`all rewards ${start}`, () => rewardsOf(start, undefined, rd));
-// The epoch's prices, which every voter's earnings in it share, deep enough for all of each token the epoch paid.
+// The epoch's prices, shared by every voter's earnings in that epoch. Each token is priced for the whole amount of it
+// that the epoch paid.
 const epochPrices = (start: number, rd: Read): Promise<Prices> =>
   memo(`epoch prices ${start}`, async () => {
     const { rewards } = await allRewards(start, rd);
@@ -163,8 +166,8 @@ const epochPrices = (start: number, rd: Read): Promise<Prices> =>
     const tokens = tokensIn(rewards);
     if (tokens.some(({ address }) => key(address) === key(HYDX)))
       return pricesAtFlip(tokens, amounts, start + WEEK, rd);
-    // HYDX too, which APRs need; but if a pool could not be read, the rewards are priced again without it, so that
-    // HYDX alone fails only the APRs.
+    // Prices HYDX too, since APRs need it. If a pool could not be read, the rewards are priced again without HYDX. So
+    // a failure on HYDX alone fails only the APRs.
     const hydx: Token = { address: HYDX, decimals: 18, symbol: "HYDX" };
     const all = await pricesAt([...tokens, hydx], amounts, start + WEEK, rd, HYDREX_PRICING);
     return all.unread ? pricesAtFlip(tokens, amounts, start + WEEK, rd) : all;
@@ -177,10 +180,10 @@ const priced = async (start: number, votes: bigint, pools: Pool[], rewards: Rewa
   prices: await epochPrices(start, rd),
 });
 
-// What a voter earned in the epoch from `start`: an automation, whose pools are `named`, or an owner. Rewards go to the
-// votes standing when the epoch starts. A voter with no votes then, or that has not voted since the epoch before began,
-// earned nothing. Hydrex's Voter keeps only a voter's latest pools, so once it votes again, as the automations do just
-// before each flip, its pools are found among every pool's.
+// What a voter earned in the epoch from `start`. The voter is an automation, whose pools are given names (`named`), or
+// an owner. Rewards go to the votes standing when the epoch starts. A voter with no votes then, or that has not voted
+// since the epoch before began, earned nothing. Hydrex's Voter keeps only a voter's latest pools. So once the voter
+// votes again, as the automations do just before each flip, its pools are looked for among every pool's.
 export async function votesEarned(holder: Address, start: number, named: boolean, rd: Read = read): Promise<Earnings> {
   const [voted, length, votes] = required(
     await rd([
@@ -203,7 +206,8 @@ export async function votesEarned(holder: Address, start: number, named: boolean
   pools.sort((a, b) => (a.votes === b.votes ? 0 : a.votes > b.votes ? -1 : 1));
   return priced(start, votes, pools, rewards, rd);
 }
-// Names a pool by its two tokens, a classic pair (`sAMM-`, `vAMM-`) by its own symbol, and a vault by both.
+// Names a pool by its two tokens. A classic pair (`sAMM-`, `vAMM-`) is named by its own symbol, and a vault by both its
+// tokens and its symbol.
 async function withNames(used: [Address, bigint][], rd: Read): Promise<Pool[]> {
   const found = await readEach(
     used,
@@ -263,7 +267,7 @@ export const holdersOf = (stakes: Iterable<Stake>): Address[] => [
 ];
 
 export type Value = ReturnType<typeof valueOf>;
-// A token without a price counts for nothing.
+// A token without a price counts as 0.
 export function valueOf({ rewards, prices: own }: Earnings, prices = own) {
   const counted = { fees: 0, incentives: 0 };
   const byPool = new Map<string, number>();
@@ -276,11 +280,11 @@ export function valueOf({ rewards, prices: own }: Earnings, prices = own) {
   }
   return { total: counted.fees + counted.incentives, ...counted, byPool, unit: prices.unit, rates: prices.rates };
 }
-// What `votes` earned at the rate of these earnings' votes, by default at their own prices.
+// What `votes` earned at the rate of these earnings' votes. By default it uses the earnings' own prices.
 export const shareOf = (earnings: Earnings, votes: bigint, value: Value = valueOf(earnings)): Money =>
   moneyAt(earnings.votes > 0n ? (Number(votes) / Number(earnings.votes)) * value.total : 0, value);
-// A year of what the votes earned in an epoch, over what they stand for: a vote of a permanent lock is one HYDX, at the
-// same prices. Undefined without votes or a price for HYDX.
+// The APR: what the votes earned in an epoch, scaled up to a year, over what the votes stand for. A vote of a permanent
+// lock stands for one HYDX, at the same prices. Undefined without votes or without a price for HYDX.
 export function aprOf(earnings: Earnings, prices = earnings.prices): number | undefined {
   const hydx = prices.of.get(key(HYDX));
   const votes = Number(earnings.votes) / 1e18;

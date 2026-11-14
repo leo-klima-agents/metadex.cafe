@@ -5,9 +5,9 @@ import { clean } from "./format.ts";
 import { key, type Token } from "./prices.ts";
 import { call, read, readEach, same, type Read } from "./rpc.ts";
 
-// The tokens whose balances the page reads, since no RPC lists a wallet's tokens: Base's common tokens and, for this
-// visit, Hydrex's reward tokens and any token added by address, listed by the wallet or seen in a payout. `name` tells
-// apart two listed tokens with the same symbol.
+// The tokens whose balances the page reads, since no RPC lists a wallet's tokens. They are Base's common tokens and,
+// for this visit only, Hydrex's reward tokens and any token that was added by address, listed by the wallet or seen in
+// a payout. `name` tells apart two listed tokens with the same symbol.
 type Listed = Token & { name?: string };
 const LISTED = list as Listed[];
 const more = new Map<string, Address>();
@@ -15,7 +15,7 @@ const hydrex = new Set<string>();
 const described = new Map<string, Token>();
 
 export const listed = (address: string): Listed | undefined => LISTED.find((token) => same(token.address, address));
-// Hydrex's reward tokens also route through HYDX.
+// `fromHydrex` marks Hydrex's reward tokens, which may also route through HYDX.
 export function know(addresses: Address[], fromHydrex = false): void {
   for (const address of addresses) {
     if (!listed(address)) more.set(key(address), getAddress(address));
@@ -31,8 +31,8 @@ export const lookalike = (token: Token): Listed | undefined =>
 // An amount of a token, in its smallest units.
 export type Amount = { token: Address; amount: bigint };
 
-// Each token's decimals as its contract gives them, and its symbol cleaned, or "?" if unread, keyed by lower-case
-// address. A token whose `decimals` read fails is left out.
+// Each token's decimals and cleaned symbol, as its contract gives them, keyed by lower-case address. The symbol is "?"
+// if it is unread or empty. A token whose `decimals` read fails is left out.
 export async function tokensOf(addresses: Address[], rd: Read = read): Promise<Map<string, Token>> {
   const unique = [...new Set(addresses.map((address) => key(address)))];
   const found = await readEach(
@@ -49,8 +49,8 @@ export async function tokensOf(addresses: Address[], rd: Read = read): Promise<M
     ),
   );
 }
-// Like `tokensOf`, but takes listed tokens from the list and keeps every other token once read. A token whose read
-// fails is read again next time.
+// Like `tokensOf`, but takes listed tokens from the list, and remembers every other token once it is read. A token
+// whose read fails is read again next time.
 export async function describe(addresses: Address[], rd: Read = read): Promise<Map<string, Token>> {
   const unknown = addresses.filter((address) => !listed(address) && !described.has(key(address)));
   if (unknown.length) for (const [address, token] of await tokensOf(unknown, rd)) described.set(address, token);

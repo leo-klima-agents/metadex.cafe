@@ -83,7 +83,7 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
   });
 
   test("what votes earned last epoch: on the menu, for each account, and when all of Hydrex cannot be read", async () => {
-    // Refuse the reads of all of Hydrex, which its average needs; the rest of the page must still show.
+    // Refuse the reads of all of Hydrex, which Hydrex's average needs. The rest of the page must still show.
     const everyPool = toFunctionSelector("function totalWeightAt(uint256)").slice(2);
     const { page, violations } = await h.connected(
       { owner: MEMBER },
@@ -151,12 +151,12 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
     await page.getByText(/moves the votes from Thu,? 19 Nov/).waitFor();
     await h.group(page, "in:matcha-latte").getByRole("link", { name: "Hydrex account #141" }).waitFor();
     await h.row(page, 141).getByText("Joining Matcha Latte:").waitFor({ state: "hidden" });
-    // Last epoch's payouts are final only once someone calls Hydrex's minter; the page then reads them.
+    // Last epoch's payouts are final only once someone calls Hydrex's minter. The page then reads them.
     await h.row(page, 141).getByRole("link", { name: "Hydrex account #141" }).click();
     const standing = view(page, "account").locator("[data-list=standing] > article");
     await standing.getByText("Not final yet").waitFor();
-    // The page reads payouts `settledBelow` the newest block, which on Base is soon past the minter's call: a fork's
-    // blocks come only with its transactions, so it mines them.
+    // The page reads payouts a few blocks below the newest (`settledBelow`). On Base, new blocks soon pass the minter's
+    // call. On a fork, blocks come only with transactions, so the test mines them.
     await h.moveOn();
     await h.settle();
     await page.clock.runFor(5 * 60_000);

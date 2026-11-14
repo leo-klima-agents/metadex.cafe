@@ -4,9 +4,9 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 
-// The JSON-RPC server anvil forks from. It asks the upstream once for each answer about the fork's block, and keeps the
-// answers in a file per block for later runs. Answers that may change, such as the newest block or a receipt not found,
-// are kept for this run only.
+// The JSON-RPC server that anvil forks from. It asks the upstream RPC once for each answer about the fork's block, and
+// saves the answers in one file per block for later runs. Answers that may change, such as the newest block or a
+// receipt that was not found, are kept for this run only.
 export const forkUrl = (fallback: string): string => process.env.BASE_RPC_URL || fallback;
 const FORK_CACHE = process.env.FORK_CACHE || join(homedir(), ".cache", "metadex.cafe", "fork");
 export const cacheFileOf = (block: number): string => join(FORK_CACHE, `base-${block}.json.gz`);
@@ -27,14 +27,21 @@ const UNSERVED_STATUS = [401, 403, 405];
 const UNSERVED_CODES = [-32601, -32611];
 const BUSY_CODES = [429, -32005, -32007, -32011, -32090];
 const BUSY = /request limit|rate limit|too many requests/i;
+// The fields of an `eth_getAccountInfo` answer, by the request that reads each one alone.
+const FIELDS: Record<string, string> = {
+  eth_getBalance: "balance",
+  eth_getTransactionCount: "nonce",
+  eth_getCode: "code",
+};
 const fixed = ({ method, params = [] }: Call) => !MOVING_METHODS.has(method) && !MOVING.test(JSON.stringify(params));
 const keyOf = ({ method, params = [] }: Call) => `${method} ${JSON.stringify(params)}`;
 const ask = (method: string, params: unknown[]): Call => ({ jsonrpc: "2.0", id: 0, method, params });
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const upstreamFetch = globalThis.fetch;
 
-// An upstream refusal, passed on to anvil with its body as it came, and its status, or 429 or 503 if it came as 200.
-// `again` means the upstream was busy or out of reach, so the request may be retried.
+// An upstream refusal. It is passed on to anvil with its body as it came, and with its HTTP status, or 429 or 503 if
+// the status was 200. `again` means that the upstream was busy or out of reach, so the request may be retried. `after`
+// is how long the upstream asked to wait, in milliseconds.
 class Refused extends Error {
   status: number;
   body: string;
@@ -66,10 +73,10 @@ function txsIn(body: string): Tx[] {
 }
 export const runsCalls = (body: string): boolean => txsIn(body).length > 0;
 
-// One queue to the upstream for all of a run's caches: at most `inFlight` requests at once, with anvil's ahead of
-// prefetches. A request that is rate-limited or does not reach the upstream is retried for up to five minutes, after
-// its Retry-After or a jittered exponential backoff, whichever is longer. A method the upstream does not serve is not
-// asked again.
+// One queue to the upstream RPC for all of a run's caches. It sends at most `inFlight` requests at once, and anvil's
+// requests go before prefetches. A request that is rate-limited, gets a server error or does not reach the upstream is
+// retried for up to five minutes. Before each retry, it waits for its Retry-After time or for a random exponential
+// backoff, whichever is longer. A method that the upstream does not serve is not asked again.
 export function upstreamOf(url: string, inFlight = 8): Upstream {
   const waiting: [(() => void)[], (() => void)[]] = [[], []];
   const unserved = new Map<string, Refused | Reply>();
@@ -142,9 +149,9 @@ const read = (file: string): Record<string, unknown> => {
   }
 };
 
-// Serves the answers about `block`, kept in `file`. POST /prefetch with a request anvil is about to run fetches
-// everything it reads at once, behind anvil's own requests. POST /sent with a transaction hash marks it as sent on the
-// fork, so that the upstream is not asked for it.
+// Serves the answers about `block`, saved in `file`. A POST to /prefetch with a request that anvil is about to run
+// fetches everything that the request reads, all at once, after anvil's own requests. A POST to /sent with a
+// transaction hash marks it as sent on the fork, so that the upstream is not asked for it.
 export async function serveCached(upstream: Upstream, file: string, block: number): Promise<Cache> {
   const answers = new Map(Object.entries(read(file)));
   const known = answers.size;
@@ -155,8 +162,8 @@ export async function serveCached(upstream: Upstream, file: string, block: numbe
   const at = `0x${block.toString(16)}`;
   let closing = false;
 
-  // anvil names the fork's block by its hash in some requests (EIP-1898). Those are kept and asked by the block's
-  // number.
+  // In some requests, anvil names the fork's block by its hash (EIP-1898). Those requests are saved and asked with the
+  // block's number instead.
   const byNumber = (call: Call): Call => {
     const params = call.params ?? [];
     const i = params.findIndex((param) => typeof (param as { blockHash?: unknown } | null)?.blockHash === "string");
@@ -173,9 +180,11 @@ export async function serveCached(upstream: Upstream, file: string, block: numbe
     const keep = fixed(call);
     const reply = (result: unknown): Reply => ({ jsonrpc: "2.0", id: call.id, result });
     if (keep && answers.has(key)) return reply(answers.get(key));
+    const fromAccount = keep ? await accountAnswer(call, later) : undefined;
+    if (fromAccount !== undefined) return reply(fromAccount);
     if (forRun.has(key)) return reply(forRun.get(key));
     if (BY_HASH.has(call.method) && sent.has(String(call.params?.[0]).toLowerCase())) return reply(null);
-    // Requests for the same answer share one upstream request, but anvil's never waits behind a prefetch's.
+    // Requests for the same answer share one upstream request, but a request from anvil never waits for a prefetch.
     const shared = keep ? pending.get(key) : undefined;
     let asked = shared && (later || !shared.later) ? shared.reply : undefined;
     if (!asked) {
@@ -194,7 +203,23 @@ export async function serveCached(upstream: Upstream, file: string, block: numbe
     }
   }
 
-  // anvil reads an account with `eth_getAccountInfo`, or with three requests when the upstream does not serve it.
+  // When anvil starts, it reads an account both with `eth_getAccountInfo` and with three requests, and keeps whichever
+  // answers first, so runs differ. Each way is answered from what the other saved, and the three requests are asked as
+  // one `eth_getAccountInfo` when the upstream serves it.
+  async function accountAnswer({ method, params = [] }: Call, later: boolean): Promise<unknown> {
+    const field = FIELDS[method];
+    if (field) {
+      const info = ask("eth_getAccountInfo", params);
+      if (!answers.has(keyOf(info)) && !upstream.serves(info.method)) return undefined;
+      const { result } = await answer(info, later).catch(() => ({ result: undefined }));
+      return (result as Record<string, unknown> | undefined)?.[field];
+    }
+    if (method !== "eth_getAccountInfo") return undefined;
+    const [balance, nonce, code] = Object.keys(FIELDS).map((each) => answers.get(keyOf(ask(each, params))));
+    return balance === undefined || nonce === undefined || code === undefined ? undefined : { balance, nonce, code };
+  }
+
+  // A prefetch reads an account with `eth_getAccountInfo`, or with three requests when the upstream does not serve it.
   const accountCalls = (address: string): Call[] =>
     (upstream.serves("eth_getAccountInfo")
       ? ["eth_getAccountInfo"]
@@ -207,8 +232,8 @@ export async function serveCached(upstream: Upstream, file: string, block: numbe
     const call = ask("eth_createAccessList", [{ from, to, data: data ?? input, value, gas }, at]);
     const { result, error } = await answer(call, true);
     if (closing) return;
-    // A call the upstream cannot trace, such as one to a contract deployed on the fork, is kept with an empty access
-    // list, so that it is not asked again.
+    // A call that the upstream cannot trace, such as one to a contract deployed on the fork, is saved with an empty
+    // access list, so that it is not asked again.
     if (error) answers.set(keyOf(call), { accessList: [] });
     const list =
       (result as { accessList?: { address: string; storageKeys: string[] }[] } | undefined)?.accessList ?? [];
@@ -261,7 +286,7 @@ export async function serveCached(upstream: Upstream, file: string, block: numbe
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));
       if (answers.size === known) return;
-      // Merges what other runs kept meanwhile, writes a temporary file, and renames it over the old one.
+      // Merges in what other runs saved in the meantime, writes a temporary file, and renames it over the old one.
       mkdirSync(dirname(file), { recursive: true });
       writeFileSync(
         `${file}.${process.pid}`,

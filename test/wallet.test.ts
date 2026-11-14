@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { EIP1193Provider } from "viem";
+import { now } from "../src/rpc.ts";
 import {
   SAFE_ORIGIN,
   askSafe,
   callsStatus,
   capabilities,
+  deadlineFor,
   declined,
   parentOrigin,
   safeFrom,
@@ -54,6 +56,12 @@ test("capabilities are asked again after a failure, unless the wallet does not k
     assert.deepEqual([await capabilities(old), await capabilities(old)], [NONE, NONE]);
     assert.equal(unknown, 1, `${code} is kept`);
   }
+});
+
+test("a swap's deadline is half an hour away, or a day for a Safe's co-signers", () => {
+  const [plain, safe, at] = [deadlineFor(connected(() => null)), deadlineFor(connected(() => null, true)), now()];
+  assert.ok(plain >= BigInt(at + 1_800) - 1n && plain <= BigInt(at + 1_800), String(plain));
+  assert.ok(safe >= BigInt(at + 86_400) - 1n && safe <= BigInt(at + 86_400), String(safe));
 });
 
 test("a batch is pending, done once every receipt succeeded, or failed", async () => {

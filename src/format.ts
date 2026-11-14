@@ -2,7 +2,7 @@ import { CURRENCIES, type Currency, type Fiat } from "./config.ts";
 
 const LANG = "en-GB";
 export const WEEK = 604_800;
-// Hydrex's epochs start on Thursday at 00:00 UTC, as the Unix epoch did, so each starts at a multiple of `WEEK`.
+// Hydrex's epochs start on Thursday at 00:00 UTC, like the Unix epoch, so each starts at a multiple of `WEEK` seconds.
 export const weekStart = (time: number): number => time - (time % WEEK);
 
 const number = (options: Intl.NumberFormatOptions) => new Intl.NumberFormat(LANG, options);
@@ -24,7 +24,7 @@ export function figure(value: bigint, decimals: number): string {
   const n = Number(value) / 10 ** decimals;
   return n >= 10_000 ? whole.format(n) : fourDigits.format(n);
 }
-// Votes, which have 18 decimals, with an SI prefix: "897k", "1.17M".
+// An 18-decimal amount, such as votes or sAERO, with an SI prefix: "897k", "1.17M".
 export function compact(value: bigint): string {
   const n = Number((Number(value / 10n ** 15n) / 1000).toPrecision(3));
   const [scale, suffix] = (
@@ -37,7 +37,7 @@ export function compact(value: bigint): string {
   return `${threeDigits.format(n / scale)}${suffix}`;
 }
 
-// `value` rounded half away from zero to `places`, still with `decimals`.
+// Rounds `value` to `places` decimals, half away from zero. The result still has `decimals` decimals.
 export function rounded(value: bigint, decimals: number, places: number): bigint {
   if (places >= decimals) return value;
   const unit = 10n ** BigInt(decimals - places);
@@ -61,16 +61,21 @@ export const voteFigure = (votes: bigint): string => (votes > 0n && votes < 10n 
 export const voteWords = (votes: bigint): string =>
   `${voteFigure(votes)} ${votes > 0n && votes < 2n * 10n ** 18n ? "vote" : "votes"}`;
 export const bps = (value: bigint): string => percent.format(Number(value) / 10_000);
-// For example "16.7%" or "3%". With `column`, always to a tenth, as in a column: "3.0%", "< 0.1%".
+// For example "16.7%" or "3%". With `column`, always to a tenth of a percent: "3.0%", "< 0.1%".
 export const fraction = (value: number, column = false): string =>
   !column ? roughPercent.format(value) : value > 0 && value < 0.0005 ? "< 0.1%" : tenthsPercent.format(value);
+// Starts a figure that is only a lower bound, because some of what it sums had no price.
+const AT_LEAST = "At\u00a0least\u00a0";
+// An APR to a tenth of a percent, or "–" when there is none. `priced` is false when it is only a lower bound.
+export const aprWords = (apr: number | undefined, priced = true): string =>
+  apr === undefined ? "–" : `${priced ? "" : AT_LEAST}${fraction(apr, true)}`;
 
 // The unit prices are in: USD, or USDC when no dollar price was found. `rates` gives each currency's price in dollars
 // at the prices' time.
 type Unit = "USD" | "USDC";
 export type Rates = Partial<Record<Fiat, number>>;
 export type Basis = { unit: Unit; rates?: Rates | undefined };
-// `atLeast` when some of what it sums had no price.
+// `atLeast` is set when some parts of the sum had no price.
 export type Money = Basis & { value: number; atLeast?: true };
 export const moneyAt = (value: number, { unit, rates }: Basis, atLeast = false): Money => ({
   value,
@@ -109,8 +114,7 @@ export const between = (from: Money, to: Money): Money => ({ ...to, value: toCen
 
 // For example "$692", "−€0.69", "< £0.01", "0.77 USDC" or "At least $3.10". With `cents`, always to the cent,
 // as in a column.
-export const money = (sum: Money, cents = false): string =>
-  `${sum.atLeast ? "At\u00a0least\u00a0" : ""}${figureOf(sum, cents)}`;
+export const money = (sum: Money, cents = false): string => `${sum.atLeast ? AT_LEAST : ""}${figureOf(sum, cents)}`;
 function figureOf(sum: Money, cents: boolean): string {
   const [shown, rate] = shownOf(sum);
   const value = sum.value / rate;
@@ -146,7 +150,7 @@ export function until(seconds: number): string {
 }
 
 export const short = (hex: string): string => `${hex.slice(0, 6)}…${hex.slice(-4)}`;
-// Hex in groups of four digits. An address or a hash fits on one line; calldata shows its selector, then one line per
+// Hex in groups of four digits. An address or a hash is one line. Calldata shows its selector, then one line per
 // 32-byte word.
 export function hexLines(hex: string): string[][] {
   const groups = (digits: string): string[] => digits.match(/.{1,4}/g) ?? [];
@@ -159,6 +163,18 @@ export function walletLines(address: string): string[][] {
   return [cells.slice(0, 4), cells.slice(4, 8), cells.slice(8)];
 }
 
+// Adds up numbers, or bigints.
+export const sum = (values: Iterable<number>): number => {
+  let total = 0;
+  for (const value of values) total += value;
+  return total;
+};
+export const sumBig = (values: Iterable<bigint>): bigint => {
+  let total = 0n;
+  for (const value of values) total += value;
+  return total;
+};
+
 export const listWords = (items: string[]): string => and.format(items);
 // The items with the words between them: [a, ", ", b, " and ", c].
 export const listWith = <T>(items: T[]): (T | string)[] =>
@@ -167,6 +183,8 @@ export const listWith = <T>(items: T[]): (T | string)[] =>
     .map(({ type, value }) => (type === "element" ? items[Number(value)]! : value));
 export const count = (n: number, one: string, other: string): string =>
   `${whole.format(n)} ${plurals.select(n) === "one" ? one : other}`;
+// Makes the first letter a capital, to start a sentence.
+export const capitalized = (words: string): string => words.charAt(0).toUpperCase() + words.slice(1);
 // Strips invisible and text-reordering characters, which a name could use to pass for another.
 export const clean = (text = ""): string =>
   text

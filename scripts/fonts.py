@@ -1,6 +1,6 @@
-# Makes site/fonts/ from Google Fonts' sources at a pinned commit: Latin subsets as WOFF2, without hinting. Needs Python
-# 3 with fonttools 4.68.0 and brotli 1.2.1. Run it from the repository's root (`python3 scripts/fonts.py`); it gives the
-# same files on every run.
+# Makes the fonts in site/fonts/ from Google Fonts' source files at a fixed commit. Each font keeps only a Latin subset
+# of its characters, has no hinting and is saved as WOFF2. Needs Python 3 with fonttools 4.68.0 and brotli 1.2.1. Run it
+# from the repository's root: `python3 scripts/fonts.py`. Every run gives the same files.
 
 import hashlib
 import io
@@ -33,7 +33,7 @@ FONTS = {
     "atkinson-hyperlegible-mono-600.woff2": ("mono", 600),
     "young-serif-400.woff2": ("serif", None),
 }
-# Google Fonts' Latin subset, plus the arrows and ≈ the page uses.
+# Google Fonts' Latin subset, plus the arrows and the ≈ sign that the page uses.
 UNICODES = [
     *range(0x0000, 0x0100),
     0x0131,
@@ -57,7 +57,7 @@ UNICODES = [
     0xFEFF,
     0xFFFD,
 ]
-# Number features kept in the subset, though the page's CSS asks only for tabular figures (`tnum`).
+# The number features to keep. The page's CSS only asks for tabular figures (`tnum`), but the others are kept too.
 FEATURES = ["tnum", "pnum", "lnum", "onum", "zero", "case", "frac", "numr", "dnom", "sups"]
 
 

@@ -1,7 +1,7 @@
 import { isAddress, isHash, size, type Hex } from "viem";
 import { refresh } from "../cache.ts";
 import { BASESCAN, CHAIN_ID } from "../config.ts";
-import { count } from "../format.ts";
+import { count, sum } from "../format.ts";
 import { poll, waitForReceipt, type Landed } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import { $, announce, asWritten, code, fill, frag, hex, link, list } from "../ui.ts";
@@ -19,14 +19,14 @@ import {
 
 type Review = {
   name: string;
-  // The last page also shows the calls. A page without a title is titled after the calls, rather than giving them a
+  // The last page also shows the calls. A page without a title takes its title from the calls, which then get no
   // heading of their own.
   pages: { title?: string; body?: Node }[];
   // The calls. With `sending`, they are encoded to be sent, with a fresh deadline.
   steps: (sending?: boolean) => Slip[];
   atomic?: boolean;
-  // When the calls don't fit in one transaction: how many go in each, in order. A Safe proposes one transaction per
-  // group; other wallets then sign each call alone.
+  // How many calls go in each transaction, in order, when they don't fit in one. A Safe proposes one transaction per
+  // group. Other wallets then sign each call on its own.
   groups?: number[] | undefined;
   outcome?: (receipts: Landed[]) => Promise<Node | undefined>;
   // What the calls wait for, if anything. They may change until then, so nothing is sent while this returns text.
@@ -37,8 +37,8 @@ type Review = {
 type Sending = Review & {
   page: number;
   capabilities?: Capabilities;
-  // Whether the calls go in one prompt. Set when the first is sent, from the wallet's capabilities and the calls at
-  // that moment.
+  // Whether the calls go in one prompt. Set when the first call is sent, from the wallet's capabilities and the calls
+  // at that moment.
   batch?: boolean;
   done: Hex[];
   receipts: Landed[];
@@ -59,7 +59,7 @@ const batched = (review: Sending, steps = review.steps()): boolean =>
   review.batch ?? (!!review.capabilities?.batch && !apart(review) && steps.length > 1);
 
 export function openReview(review: Review): void {
-  // A review opened from another, such as the swap after a claim, first re-reads what the other one sent.
+  // A review opened from another, such as the swap after a claim, first re-reads what the other one's calls changed.
   if (current?.submitted && !current.sending) refreshAfter();
   const opened: Sending = {
     ...review,
@@ -81,6 +81,15 @@ export function openReview(review: Review): void {
       opened.capabilities = found;
       render();
     });
+}
+// A review with nothing to send, only `words` saying why.
+export function openMessage(name: string, words: string, checkHref: string): void {
+  openReview({
+    name,
+    pages: [{ title: name, body: Object.assign(document.createElement("p"), { textContent: words }) }],
+    steps: () => [],
+    checkHref,
+  });
 }
 export const closeReview = (): void => dialog.close();
 export const drawReview = (): void => void (current && draw());
@@ -239,7 +248,7 @@ async function proposeAll(review: Sending): Promise<void> {
   const steps = review.steps(true);
   const groups = review.groups ?? [steps.length];
   for (; review.proposed < groups.length; review.proposed++) {
-    const start = groups.slice(0, review.proposed).reduce((sum, size) => sum + size, 0);
+    const start = sum(groups.slice(0, review.proposed));
     say(
       review,
       apart(review)
@@ -365,8 +374,8 @@ dialog.addEventListener("click", (event) => {
     open(anchor.href, "_blank", "noopener");
   } else closeReview();
 });
-// Closing after sending re-reads what the calls changed. A review still sending keeps being followed, and re-reads when
-// it settles.
+// Closing after sending re-reads what the calls changed. A review that is still sending keeps being followed, and
+// re-reads when it finishes.
 dialog.addEventListener("close", () => {
   const review = current;
   current = undefined;

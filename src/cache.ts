@@ -1,6 +1,7 @@
-// Every read from Base the page keeps, by key: its value or error, and any read under way. A failed read stays failed
-// until `retry()`, or a `refresh()` of its key. A read past its time to live (in ms) is made again and shows its last
-// value meanwhile. A read given no time to live keeps its key's previous one.
+// Every read from Base that the page keeps, by key: its value or error, and any read under way. A failed read stays
+// failed until `retry()`, or until `refresh()` covers its key. A read older than its time to live (in milliseconds) is
+// made again, and its last value stays on show meanwhile. A read given no time to live keeps the one its key had
+// before, or else never expires.
 type TTL<T> = number | ((value: T) => number);
 type Entry = { value?: unknown; error?: unknown; reading?: Promise<unknown>; at: number; ttl: TTL<never> };
 const entries = new Map<string, Entry>();
@@ -50,16 +51,16 @@ export function retry(): void {
   for (const [key, entry] of entries) if ("error" in entry) entries.delete(key);
   settled();
 }
-// Makes every read whose key starts with `prefix` due again, failed or not, keeping its last value on show meanwhile.
-// For use after a transaction.
+// Makes every read whose key starts with `prefix` due again, failed or not. Its last value stays on show meanwhile.
+// Used after a transaction, and when the wallet changes network.
 export function refresh(prefix: string): void {
   for (const [key, { error: _, ...entry }] of entries)
     if (key.startsWith(prefix)) entries.set(key, { ...entry, at: -Infinity, reading: undefined });
   settled();
 }
 export const failures = (): number => [...entries.values()].filter((entry) => "error" in entry).length;
-// Forgets the settled reads whose keys start with one of `prefixes` and that were made over `age` ms ago: reads keyed by
-// a time that has moved on, which nothing asks for again.
+// Forgets the finished reads whose keys start with one of `prefixes` and that were made over `age` milliseconds ago.
+// These are reads keyed by a time that has passed, which nothing asks for again.
 export function prune(prefixes: readonly string[], age: number): void {
   const now = performance.now();
   for (const [key, entry] of entries)

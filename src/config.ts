@@ -1,11 +1,12 @@
 import type { Address, Hex } from "viem";
 
 export const CHAIN_ID = 8453;
-// Asked in this order. Prices read old blocks, which Base's RPC and drpc serve; publicnode serves only recent ones.
+// Asked in this order. Prices read old blocks. Base's RPC and drpc serve those, but publicnode serves only recent ones.
 export const RPCS = ["https://mainnet.base.org", "https://base.drpc.org", "https://base-rpc.publicnode.com"];
 export const MULTICALL3: Address = "0xcA11bde05977b3631167028862bE2a173976CA11";
 // Base makes its blocks on a fixed schedule: one every 2 seconds from genesis, then five a second from Denim's first
-// block, on 5 November 2026 at 18:00:01 UTC. Each entry is a first block, its time and the milliseconds between blocks.
+// block, on 5 November 2026 at 18:00:01 UTC. Each entry is a first block, its time in seconds, and the milliseconds
+// between blocks.
 export const BLOCK_SCHEDULE = [
   { block: 0, time: 1_686_789_347, ms: 2_000 },
   { block: 53_556_127, time: 1_793_901_601, ms: 200 },
@@ -15,9 +16,9 @@ export const BASESCAN = "https://basescan.org";
 export const GAS_PRICE_ORACLE: Address = "0x420000000000000000000000000000000000000F";
 
 export type Kind = "matcha-latte" | "double-espresso";
-// `actions` is what joining approves: 3 sends the account's claims to the automation, 5 delegates its votes.
+// `actions` are what joining approves: 3 sends the account's claims to the automation, and 5 delegates its votes.
 export type Automation = { kind: Kind; name: string; contract: string; address: Address; actions: number[] };
-// Hydrex's automation; Hydrex controls its settings.
+// Hydrex's automation. Hydrex controls its settings.
 export const MATCHA_LATTE: Automation = {
   kind: "matcha-latte",
   name: "Matcha Latte",
@@ -25,7 +26,7 @@ export const MATCHA_LATTE: Automation = {
   address: "0xdE91885cF35ac57DF0c4A75c16862127dBe8317c",
   actions: [3, 5],
 };
-// ImmutableVeTokenConduit v2 (github.com/ldeso/hydrex-conduit, tag v2): no owner, no settings.
+// ImmutableVeTokenConduit v2 (github.com/ldeso/hydrex-conduit, tag v2). It has no owner and no settings.
 export const DOUBLE_ESPRESSO: Automation = {
   kind: "double-espresso",
   name: "Double Espresso",
@@ -35,7 +36,8 @@ export const DOUBLE_ESPRESSO: Automation = {
 };
 export const AUTOMATIONS = [MATCHA_LATTE, DOUBLE_ESPRESSO];
 export const byKind = (kind: string): Automation | undefined => AUTOMATIONS.find((each) => each.kind === kind);
-// The fee Double Espresso takes on each claim and the swappers take on each route, and the Safe that receives both.
+// The fee, in basis points (100 is 1%), that Double Espresso takes on each claim and the swappers take on each route.
+// `FEE_RECIPIENT` is the Safe that receives both.
 export const FEE_BPS = 100n;
 export const FEE_RECIPIENT: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
 // The account that holds Matcha Latte's DEFAULT_ADMIN_ROLE, and the Safe that holds its EXECUTOR_ROLE.
@@ -62,7 +64,8 @@ export const GAUGE_FACTORIES: { address: Address; kind: GaugeKind }[] = [
   { address: "0x1e0f776E88649285f99e65Fa599aD6e0f9D97800", kind: "stable" },
   { address: "0xf437f62053ACB121665b8fDBfeA8F214FB8E589d", kind: "cl" },
 ];
-// The Aero Autopilot the page names and compares with: a stake its Relay owns, shown only while it does.
+// The Aero Autopilots that the page names and compares with. Each is a stake that its Relay owns. The page shows it
+// only while the Relay still owns it.
 export type Autopilot = { id: bigint; name: string; relay: Address };
 export const AUTOPILOTS: Autopilot[] = [
   { id: 20366n, name: "Autopilot USDC Maxi", relay: "0xAfa7cA53e0A63d94218728842ED286308435DD86" },
@@ -80,8 +83,8 @@ export const CURRENCIES = ["USD", "EUR", "GBP", "CHF", "AUD", "CAD"] as const;
 export type Currency = (typeof CURRENCIES)[number];
 export const currencyOf = (name: string): Currency | undefined => CURRENCIES.find((each) => each === name);
 export type Fiat = Exclude<Currency, "USD">;
-// Chainlink feeds on Base, all with 8 decimals: each currency's price in dollars, and the dollar price of each anchor,
-// the tokens that others are priced against.
+// Chainlink feeds on Base, all with 8 decimals. They give each currency's price in dollars, and the dollar price of
+// each anchor. Anchors are the tokens that other tokens are priced against.
 export const FIAT_FEEDS: Record<Fiat, Address> = {
   EUR: "0xc91D87E81faB8f93699ECf7Ee9B44D11e1D53F0F",
   GBP: "0xCceA6576904C118037695eB71195a5425E69Fa15",
@@ -97,8 +100,8 @@ export const ANCHORS: Anchor[] = [
   { address: EURC, decimals: 6, feed: "0xDAe398520e2B67cd3f27aeF9Cf14D93D927f8250" },
 ];
 
-// ImmutableSwapper, one per output token, with no owner and no settings. `places` is the number of decimals that shows
-// about a cent at the token's usual price.
+// ImmutableSwapper, one per output token, with no owner and no settings. `places` is how many decimals show about one
+// cent at the token's usual price.
 export type Output = "usdc" | "eurc" | "weth" | "cbbtc" | "aero" | "hydx";
 export type Swapper = {
   output: Output;
@@ -137,7 +140,8 @@ export const swapperOf = (output: string): Swapper | undefined => SWAPPERS.find(
 // The swappers' exchanges, in the order pricing prefers them. `id` is the value of the swapper's `Exchange` enum. For
 // Uniswap v4, `factory` is the PoolManager.
 export type ExchangeKind = "algebra" | "pair" | "solidly" | "slipstream" | "aerodrome" | "v2" | "v3" | "v4";
-// `codeHash`: the init code hash of the pairs a factory has made, for one whose pair code an upgrade could change.
+// `codeHash` is the init code hash of the pairs that the factory made. It is set only for a factory whose pair code an
+// upgrade could change.
 export type Exchange = {
   id: number;
   name: string;
@@ -172,9 +176,10 @@ export const EXCHANGES: Exchange[] = [
   },
   { id: 0, name: "Hydrex Integral", kind: "algebra", factory: "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E" },
 ];
-// Prices come from Aero's, Aerodrome's and Hydrex's pools, and at an epoch's end from Hydrex's only, in tiers, each
-// searched only for what those before left unpriced. Aerodrome's Slipstream pools, the costliest to look up, come last.
-// Of two equally deep pools in a tier, the first listed wins.
+// Prices come from Aero's, Aerodrome's and Hydrex's pools. At an epoch's end, they come from Hydrex's pools only. The
+// pools are searched in tiers, and each tier only for the tokens that earlier tiers left without a price. Aerodrome's
+// Slipstream pools cost the most to look up, so they come last. Of two equally deep pools in a tier, the one listed
+// first wins.
 const PRICED = ["solidly", "slipstream", "aerodrome", "pair", "algebra"] as const;
 export type PricedKind = (typeof PRICED)[number];
 const priced = EXCHANGES.filter(({ kind }) => (PRICED as readonly ExchangeKind[]).includes(kind));

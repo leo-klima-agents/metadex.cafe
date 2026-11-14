@@ -41,15 +41,15 @@ test("a concentrated pool's tick, in whole tokens of each", () => {
   close(tickPrice(0, 18, 18), 1);
   close(tickPrice(0, 18, 6), 1e12);
   close(tickPrice(10_000, 6, 6), 1.0001 ** 10_000);
-  // USDC (6 decimals) is token0 of USDC / cbBTC (8 decimals), so the tick gives cbBTC per dollar: about 0.0000123, with
-  // bitcoin at about $81,460.
+  // USDC (6 decimals) is token0 of the USDC / cbBTC pool (8 decimals). So the tick gives cbBTC per dollar: about
+  // 0.0000123, with bitcoin at about $81,460.
   close(1 / tickPrice(-67_040, 6, 8), 81_460, 1e-3);
 });
 
 test("a classic pair's price: the ratio of its reserves, or the slope of x³y + xy³ for a stable one", () => {
   close(pairPrice(100, 250, false), 2.5);
   close(pairPrice(100, 100, true), 1);
-  // A stable pair keeps its price near 1 even when its reserves are uneven; a volatile pair would not.
+  // A stable pair keeps its price near 1 even when its reserves are uneven. A volatile pair would not.
   const stable = pairPrice(110, 90, true);
   assert.ok(stable < 1 && stable > 0.99, String(stable));
   assert.ok(pairPrice(90, 110, true) > 1);
@@ -77,12 +77,12 @@ test("prices come from Aero's, Aerodrome's and Hydrex's pools, then Aerodrome's 
 });
 
 const NOW = 1_792_800_000;
-// Prices now are read at the newest block less those an RPC may not have yet. The fake chain makes a block every seven
-// seconds, so nothing may count on Base's two, and its window starts half an hour before the newest block, not before
-// the one priced.
+// Prices now are read at the newest block, less the blocks an RPC may not have yet. The fake chain makes a block every
+// seven seconds, so the code cannot count on Base's own pace. Its window starts half an hour before the newest block,
+// not before the block priced.
 const PACE = 7;
 const PRICED = 60_000_000;
-// Ten seconds of Denim's blocks.
+// Ten seconds of blocks at five a second, Base's pace since Denim.
 const NEWEST = PRICED + 50;
 test("the fake chain's newest settled block is the one priced", () => assert.equal(settledBelow(NEWEST), PRICED));
 const timeOf = (block: number) => NOW + (block - PRICED) * PACE;
@@ -113,10 +113,10 @@ const [AERO, AERO_STABLE, AERO_CL, AERODROME, AERODROME_CL, HYDREX, INTEGRAL] = 
 ];
 const SPACING = 100;
 
-// A pool of `token` against `anchor` (USDC by default). `now` is what it holds at the block priced and `held` what it
-// held through the window before, if different, both in whole tokens with the token's first. A concentrated pool's
-// tick follows the price those give, and its `liquidity` at the price, by default plenty, is that of a basic pool
-// holding `inRange` times what it holds. A pool `since` a block has no state before it.
+// A pool of `token` against `anchor` (USDC by default). `now` is what it holds at the block priced. `held` is what it
+// held through the window before, if different. Both are in whole tokens, the token's amount first. A concentrated
+// pool's tick follows the price these give. Its `liquidity` at the price is that of a basic pool holding `inRange`
+// times what it holds: 1,000 times by default, which is plenty. A pool with `since` has no state before that block.
 type Fake = {
   exchange: Exchange;
   token: Token;
@@ -263,7 +263,7 @@ test("without any of Chainlink's prices, prices are in USDC, from the pools alon
 
 test("each currency's rate goes with dollar prices, read with the anchors' feeds; prices in USDC have none", async () => {
   const pools: Fake[] = [{ exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] }];
-  // Also answers EUR / USD at 1.12 dollars a euro and GBP / USD at 1.34; CHF / USD and the other fiat feeds fail.
+  // Also answers EUR / USD at 1.12 dollars a euro and GBP / USD at 1.34. CHF / USD and the other fiat feeds fail.
   const withRates = (answers?: Map<Address, number>) => {
     const { reader } = market(pools, answers);
     return async (calls: readonly Call[], options?: object): Promise<any> => {
@@ -286,7 +286,7 @@ test("each currency's rate goes with dollar prices, read with the anchors' feeds
 });
 
 test("the deepest pool wins, now and at a flip", async () => {
-  // 2,000 USDC deep at 2 USDC in Aero, 15,000 at 3 in Aerodrome, 8,000 at 4 in Hydrex Classic.
+  // Aero's pool holds 2,000 USDC at a price of 2 USDC, Aerodrome's 15,000 at 3, and Hydrex Classic's 8,000 at 4.
   const pools: Fake[] = [
     { exchange: AERO, token: TOKEN, now: [1_000, 2_000] },
     { exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] },
@@ -298,7 +298,7 @@ test("the deepest pool wins, now and at a flip", async () => {
 });
 
 test("prices at another time come from the pools that priced each token, without searching again", async () => {
-  // 2,000 USDC deep at 2 USDC in Aero, 15,000 at 3 in Aerodrome.
+  // Aero's pool holds 2,000 USDC at a price of 2 USDC, and Aerodrome's 15,000 at 3.
   const pools: Fake[] = [
     { exchange: AERO, token: TOKEN, now: [1_000, 2_000] },
     { exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] },
@@ -335,7 +335,7 @@ test("prices at another time price an anchor without a feed from its pool first,
 });
 
 test("an epoch's prices come from Hydrex's pools only; current ones from all", async () => {
-  // 15,000 USDC deep at 3 in Aerodrome, 8,000 at 4 in Hydrex Classic.
+  // Aerodrome's pool holds 15,000 USDC at a price of 3 USDC, and Hydrex Classic's 8,000 at 4.
   const pools: Fake[] = [
     { exchange: AERODROME, token: TOKEN, now: [5_000, 15_000] },
     { exchange: HYDREX, token: TOKEN, now: [2_000, 8_000] },
@@ -367,7 +367,7 @@ test("pool lookups go 1,000 to a batch, since each is cheap; other reads go in s
 });
 
 test("every kind of pool gives its average over the window, not what it holds at its end", async () => {
-  // At 2 USDC at the end, and 2.5 through the window; as token0 and as token1.
+  // The price is 2 USDC at the window's end and 2.5 through the window. TOKEN is token0 of its pool, and LATE token1.
   for (const kind of [AERO, AERO_CL, AERODROME, HYDREX, INTEGRAL])
     for (const token of [TOKEN, LATE]) {
       forget();
@@ -379,7 +379,7 @@ test("every kind of pool gives its average over the window, not what it holds at
 });
 
 test("Aerodrome's Slipstream pools price only what the others cannot", async () => {
-  // Whether Aerodrome's Slipstream factories were asked for TKN's pools.
+  // `last` says whether Aerodrome's Slipstream factories were asked for TKN's pools.
   const lookedIn = (pools: Fake[]) => {
     const { reader } = market(pools);
     const asked = new Set<string>();
@@ -391,25 +391,27 @@ test("Aerodrome's Slipstream pools price only what the others cannot", async () 
     const last = () => PRICING[1]!.some(({ factory }) => [...asked].some((each) => same(each, factory)));
     return { watched, last };
   };
-  // The Aero pool holds 3,000 USDC at 2: enough, so Aerodrome's Slipstream pool, deeper at 4, is not looked up.
+  // The Aero pool holds 3,000 USDC at 2. That is enough, so Aerodrome's Slipstream pool, deeper at 4, is not looked up.
   const basic: Fake = { exchange: AERO, token: TOKEN, now: [1_500, 3_000] };
   const aerodromeCl: Fake = { exchange: AERODROME_CL, token: TOKEN, now: [20_000, 80_000] };
   let found = lookedIn([basic, aerodromeCl]);
   close((await pricesNow([TOKEN], new Map(), found.watched)).of.get(TOKEN.address)!, 2 * USDC_USD, 1e-6);
   assert.equal(found.last(), false);
-  // Too thin for 1,000 TKN, about $2,000, which needs $20,000 on each side: Aerodrome's, $80,000 deep, prices them.
+  // The Aero pool is too thin for 1,000 TKN, about $2,000, which need $20,000 on each side. Aerodrome's pool, $80,000
+  // deep, prices them.
   forget();
   found = lookedIn([basic, aerodromeCl]);
   const thousand = new Map([[TOKEN.address, 1_000n * 10n ** 18n]]);
   close((await pricesNow([TOKEN], thousand, found.watched)).of.get(TOKEN.address)!, 4 * USDC_USD, 1e-6);
   assert.equal(found.last(), true);
-  // Aero's Slipstream pools are in the first tier: of the Aero pool and Aero's Slipstream pool, the deeper prices.
+  // Aero's Slipstream pools are in the first tier. Of the Aero pool and Aero's Slipstream pool, the deeper one prices.
   forget();
   close((await priceOf([basic, { exchange: AERO_CL, token: TOKEN, now: [10_000, 30_000] }]))!, 3 * USDC_USD, 1e-6);
 });
 
 test("with amounts to come, pools are read meanwhile and judged deep enough once they are known", async () => {
-  // 15,000 USDC deep at 3: enough for 100 TKN, about $300, but not for 1,000, which needs $30,000 on each side.
+  // The pool holds 15,000 USDC at 3. That is enough for 100 TKN, about $300, but not for 1,000, which need $30,000 on
+  // each side.
   for (const [count, priced] of [
     [100n, true],
     [1_000n, false],
@@ -441,7 +443,7 @@ test("sums are read at the block priced and the last block half an hour before t
 });
 
 test("a pool holding under $250 of its anchor is dropped before its sums are read", async () => {
-  // 200 USDC in Aerodrome, at 2 USDC; 4,000 USDC in Hydrex Classic, at 4.
+  // Aerodrome's pool holds 200 USDC at a price of 2 USDC, and Hydrex Classic's 4,000 at 4.
   const { reader } = market([
     { exchange: AERODROME, token: TOKEN, now: [100, 200] },
     { exchange: HYDREX, token: TOKEN, now: [1_000, 4_000] },
@@ -457,7 +459,7 @@ test("a pool holding under $250 of its anchor is dropped before its sums are rea
 });
 
 test("a concentrated pool counts only the liquidity at its price, not what it parks away from it", async () => {
-  // Aero's Slipstream pool holds 20,000 USDC, but its liquidity at the price is that of a basic pool holding 20 USDC;
+  // Aero's Slipstream pool holds 20,000 USDC, but its liquidity at the price is that of a basic pool holding 20 USDC.
   // Aerodrome's holds 3,000 USDC at 3.
   const pools: Fake[] = [
     { exchange: AERO_CL, token: TOKEN, now: [10_000, 20_000], inRange: 0.001 },
@@ -503,7 +505,7 @@ test("an epoch's prices fail if a pool could not be read, rather than leave its 
 });
 
 test("a search for the window's start that fails after the pools are dropped is not left unhandled", async () => {
-  // USDC's feed fails and its one pool, holding 100 EURC, is too thin to price it; then every search for a past block
+  // USDC's feed fails, and its one pool, holding 100 EURC, is too thin to price it. Then every search for a past block
   // fails.
   const { reader } = market(
     [{ exchange: HYDREX, token: USDC_TOKEN, anchor: EURC, now: [115, 100] }],
@@ -550,7 +552,7 @@ test("searches read no block past the newest settled one, and find a past time's
   probed = [];
   await pricesAt([TOKEN], new Map(), flip, watched);
   assert.deepEqual(probed, [PRICED], "only the newest settled block's time, to tell a past time from a recent one");
-  // Prices now share their window's start while the newest block stays the same, and search again once it moves on.
+  // Prices now share their window's start while the newest block stays the same. They search again once it moves on.
   await pricesNow([TOKEN], new Map(), watched);
   probed = [];
   await Promise.all([pricesNow([TOKEN], new Map(), watched), pricesNow([TOKEN], new Map(), watched)]);
@@ -744,8 +746,9 @@ test("a read that knows which addresses hold code finds pools at their computed 
     placedPools(exchange, placement, pair)
       .filter((each) => stable === undefined || each.stable === stable)
       .map(({ pool }) => pool);
-  // Aero Slipstream's pool at 100, Aerodrome's stable basic pool, Hydrex Classic's volatile pair, made at its known
-  // code hash, and its stable one, made since an upgrade changed it, and Hydrex Integral's pool.
+  // The pools that hold code: Aero Slipstream's pool at a spacing of 100, Aerodrome's stable basic pool, Hydrex
+  // Classic's volatile pair (made with its known code hash), its stable pair (made after an upgrade changed the hash),
+  // and Hydrex Integral's pool.
   const [integral] = pools(INTEGRAL, { deployer, hashes: [integralHash] });
   const held = [
     slipstreamPool(AERO_CL.factory, implementation, pair, 100),
@@ -756,7 +759,8 @@ test("a read that knows which addresses hold code finds pools at their computed 
   ];
   const asked: string[] = [];
   const checked: (readonly Address[])[] = [];
-  // At first, Aero's volatile basic pool's check does not answer, nor does Hydrex Integral's code hash.
+  // At first, the code check of Aero's volatile basic pool gets no answer, and neither does the read of Hydrex
+  // Integral's code hash.
   let unanswered: Address | undefined = pools(AERO, { implementation })[0];
   let hashUnread = true;
   const rd: Read = async (calls): Promise<any> =>
@@ -793,11 +797,12 @@ test("a read that knows which addresses hold code finds pools at their computed 
     ],
   );
   assert.equal(checked.length, 1, "one ask");
-  // Two spacings for each Slipstream factory, a pool for each of Aero's basic factories, a curve each for Aerodrome's,
-  // and a curve each for Hydrex Classic's at both code hashes; none for Hydrex Integral, whose code hash is unknown.
+  // The one ask checks two spacings for each Slipstream factory, one pool for each of Aero's two basic factories, one
+  // pool for each curve of Aerodrome's, and one for each curve of Hydrex Classic's at both code hashes. It checks none
+  // for Hydrex Integral, whose code hash is unknown.
   assert.equal(checked[0]!.length, placed.filter(({ kind }) => kind === "slipstream").length * 2 + 2 + 2 + 2 * 2);
   assert.deepEqual(askedForPools(), [INTEGRAL, AERO], "only Integral and the pool whose check did not answer");
-  // Read again, the code hash is known: a new pair's Integral pool is computed, and no factory is asked.
+  // Read again, the code hash is known. A new pair's Integral pool is computed, and no factory is asked.
   [hashUnread, unanswered] = [false, undefined];
   asked.length = 0;
   await waysFor([[USDC, LATE.address]], BY_ID, rd);

@@ -40,7 +40,7 @@ jobs:
           npm run release
           diff -r "$GITHUB_WORKSPACE/dist" dist
           diff -r "$GITHUB_WORKSPACE/release" release
-      # A release tag must match package.json's version, which About shows.
+      # A release tag must match the version in package.json, which the About view shows.
       - if: startsWith(github.ref, 'refs/tags/v')
         run: test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
       - if:
@@ -56,8 +56,9 @@ jobs:
           path: release/
           if-no-files-found: error
 
-  # The page in Chrome against forks of Base, through `BASE_RPC_URL` if set. Cache entries cannot be overwritten, so a
-  # run that adds answers saves them under its own attempt's key, and the next run restores the newest `fork-` entry.
+  # Tests the page in Chrome against forks of Base, through the `BASE_RPC_URL` secret if it is set. A cache entry can't
+  # be overwritten. So a run that adds answers saves them under a key for its own attempt, and the next run restores the
+  # newest entry whose key starts with `fork-`.
   fork:
     concurrency: fork-${{ github.head_ref || github.ref_name }}
     runs-on: ubuntu-26.04

@@ -25,8 +25,8 @@ import {
 const INTO_USDC = SWAPPERS[0]!;
 // The selector the page's reads use to ask a reward contract what it owes an account.
 const EARNED = toFunctionSelector("function earned(uint256, address)").slice(2);
-// A pool on Hydrex whose incentives contract began 57 epochs before the epoch claimed, beyond the 50 that `earned()`
-// reads for an account that never claimed from it.
+// A pool on Hydrex whose incentives contract started 57 epochs before the claimed epoch. That is more than the 50
+// epochs that `earned()` reads for an account that never claimed from it.
 const POOL = "0x66352585BAD83DA857a020f739f1f7cA93209A1B";
 const says = (root: h.Opened["page"] | ReturnType<h.Opened["page"]["frameLocator"]>) =>
   review(root).locator("[data-text=says]").allTextContents();
@@ -115,11 +115,12 @@ describe("swaps against a fork of Base after Denim", { timeout: 2_400_000 }, () 
     await page.getByText("Joining is off: the page reached another network than Base.").waitFor();
   });
 
-  // Keep this test last: it moves the fork on two epochs, about eight days.
+  // Keep this test last: it moves the fork on two epochs, to Thu 19 Nov 2026.
   test("a claim past the 50 epochs earned() reads, and the swap of what it brings, go in one prompt", async () => {
-    // Stages an epoch as anyone could on Base: #141 joins Double Espresso, which votes for a pool that someone
-    // incentivises. Half a day after that epoch, its payout is overdue and owes one reward beyond what `earned()`
-    // reads. Its feeds, which Chainlink would have updated meanwhile, are kept at their last answers.
+    // Set up an epoch as anyone could on Base: #141 joins Double Espresso, which votes for a pool that someone
+    // incentivises. Half a day after that epoch ends, its payout is overdue, and it is owed one reward beyond what
+    // `earned()` reads. Double Espresso's price feeds, which Chainlink would have updated in the meantime, are kept at
+    // their last answers.
     await h.approveConduit(NEWCOMER, DOUBLE_ESPRESSO.address, 141n);
     await h.nextEpoch();
     await h.freshenFeeds();
@@ -130,26 +131,26 @@ describe("swaps against a fork of Base after Denim", { timeout: 2_400_000 }, () 
     const { page, sent, violations } = await connected({ owner: NEWCOMER, batch: true }, { url: `${SITE}/#app` });
     const line = view(page, "app").locator("[data-list=need] > li").filter({ hasText: "#141: payout overdue" });
     await line.getByRole("button", { name: "Claim now" }).click();
-    await heading(review(page), "What waits", 2).waitFor();
+    await heading(review(page), "Unclaimed rewards", 2).waitFor();
     await review(page).getByRole("radio", { name: "Into" }).check();
     await review(page).getByRole("combobox", { name: "The token to receive" }).selectOption("weth");
     await review(page)
       .getByText(/^[\d,.]+ WETH, at least [\d,.]+, from USDC$/)
       .waitFor();
     await review(page).getByRole("button", { name: "Continue" }).click();
-    // The review began with the claim's one call; now the claim, the approval and the swap go together.
+    // The review started with the claim's one call. After Continue, the claim, the approval and the swap go together.
     await review(page).getByText("All 3 in one prompt, all or nothing").waitFor();
     assert.match((await says(page))[0]!, /^Claims account #141's rewards through Double Espresso/);
-    // The claim asks the incentives contract twice in one call: the first moves `earned()` on 50 epochs, the second
-    // pays.
+    // The claim asks the incentives contract twice in one call: the first time moves `earned()` on by 50 epochs, and
+    // the second time pays.
     await review(page)
-      .getByText(/incentives contracts that owe it; twice where one asking cannot reach all it owes/i)
+      .getByText(/incentives contracts that owe it; a contract owed for more than 50 epochs is listed once per 50/i)
       .waitFor();
     const before = await balanceOf(WETH, NEWCOMER);
     await review(page).getByRole("button", { name: "Sign 3 transactions" }).click();
     await heading(review(page), "Done", 2).waitFor();
     assert.equal(sent.length, 3);
-    // The claim's receipt shows what `earned()` alone did not, less the 1% fee: some USDC.
+    // The claim's receipt shows what `earned()` alone did not find, less the 1% fee: some USDC.
     const claimed = review(page).locator("[data-text=done] .Slip").filter({ hasNotText: "swap into" });
     await claimed
       .getByText(/^[\d,.]+ USDC$/)
@@ -188,14 +189,14 @@ describe("claims of a payout late, against a fork of Base before Denim", { timeo
     await line.filter({ hasText: /payout overdue, at least (<\s)?\$[\d,.]+ in \d+ tokens?/ }).waitFor();
     refusing = true;
     await line.getByRole("button", { name: "Claim now" }).click();
-    await review(page).getByText("Base did not say what waits: try again in a moment.").waitFor();
+    await review(page).getByText("Base did not return the unclaimed rewards: try again in a moment.").waitFor();
     await review(page).getByRole("button", { name: "Back" }).click();
     refusing = false;
     await line.getByRole("button", { name: "Claim now" }).click();
-    await heading(review(page), "What waits", 2).waitFor();
+    await heading(review(page), "Unclaimed rewards", 2).waitFor();
     assert.equal(
       await review(page)
-        .getByRole("radio", { name: /As they are/ })
+        .getByRole("radio", { name: /Unswapped/ })
         .isChecked(),
       true,
       "nothing sold unasked",
@@ -240,7 +241,7 @@ describe("claims of a payout late, against a fork of Base before Denim", { timeo
       .filter({ hasText: "#82774: payout overdue" })
       .getByRole("button", { name: "Claim now" })
       .click();
-    await heading(dialog, "What waits", 2).waitFor();
+    await heading(dialog, "Unclaimed rewards", 2).waitFor();
     assert.equal(await dialog.getByRole("radio", { name: "Into" }).isDisabled(), true);
     await dialog.getByText("Swap them once the claims go through.").waitFor();
     await dialog.getByRole("button", { name: "Continue" }).click();
