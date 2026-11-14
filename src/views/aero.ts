@@ -529,13 +529,15 @@ function drawLines(lines: Line[]): void {
 }
 
 // What `rows` would earn for `amount` sAERO if the window's revenue came again. If the stake is in pools now, also what
-// those pools would earn for what it holds in them.
+// those pools would earn for what it holds in them. `picked` says the rows are the strategy's picks, chosen for how
+// they did over that same window, so likely to do less well next.
 function projectedWords(
   market: Market,
   next: (gauge: Gauge) => aero.Paying | undefined,
   rows: Part[],
   amount: number,
   stake: Stake | undefined,
+  picked: boolean,
 ): string | null {
   if (!(amount > 0)) return null;
   const mine = placesOf(stake);
@@ -554,7 +556,10 @@ function projectedWords(
         )
       : undefined;
   const who = stake ? stakeName(stake) : wholePower(amount);
-  return `If the last ${SPAN} came again: ${words(then, amount)} for ${who}${current ? `, against ${words(current, held)} in its current pools` : ""}.`;
+  const [shares, today] = [words(then, amount), current && words(current, held)];
+  // Rows that are the current pools aren't compared with themselves.
+  const against = today && today !== shares ? `, against ${today} in its current pools` : "";
+  return `If the last ${SPAN} came again: ${shares} for ${who}${against}.${picked ? ` Pools picked for those ${SPAN} usually earn less afterwards.` : ""}`;
 }
 const AUTOMATIC = "Nothing happens automatically: an allocation stays as it is until you change it.";
 
@@ -636,7 +641,7 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
     edited: plan.rows ? true : null,
     current: mine.size ? true : null,
     "allocate-why": words,
-    "plan-pay": projectedWords(market, next, rows, amount, stake),
+    "plan-pay": projectedWords(market, next, rows, amount, stake, !plan.rows),
     "plan-auto":
       plan.again && !plan.rows
         ? `Nothing happens automatically: to follow this strategy, allocate again every ${hoursWords(aero.STEP)}.`
@@ -745,6 +750,7 @@ async function allocateNow(): Promise<void> {
         rows,
         aero.whole(budget),
         stake,
+        !plan.rows,
       ) ?? "",
       stake.idle ? `Its ${power(stake.idle)} not yet on any chain moves onto Base too.` : "",
       stake.elsewhere ? `Its ${power(stake.elsewhere)} on other chains isn't affected.` : "",
@@ -898,6 +904,7 @@ export function drawPool(): void {
     "paid-note": latest ? `last ${WINDOW[latest.hours]}` : null,
     stream: live.length ? perDay(stream.value, stream.priced, market) : "None",
     programs: live.length ? `a day, from ${count(live.length, "live program", "live programs")}` : "no live program",
+    "programs-section": live.length ? true : null,
     cap: aeroPrice === undefined ? aeroAmount(capPerDay * 7) : money(moneyAt(capPerDay * 7 * aeroPrice, market.prices)),
     "cap-note": `a week, ${aeroAmount(capPerDay)} a day`,
   });
