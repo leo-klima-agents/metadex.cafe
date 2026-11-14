@@ -1,7 +1,7 @@
 import { isAddress, isHash, size, type Hex } from "viem";
 import { refresh } from "../cache.ts";
 import { BASESCAN, CHAIN_ID } from "../config.ts";
-import { count } from "../format.ts";
+import { count, sum } from "../format.ts";
 import { poll, waitForReceipt, type Landed } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import { $, announce, asWritten, code, fill, frag, hex, link, list } from "../ui.ts";
@@ -81,6 +81,15 @@ export function openReview(review: Review): void {
       opened.capabilities = found;
       render();
     });
+}
+// A review with nothing to send, only `words` saying why.
+export function openMessage(name: string, words: string, checkHref: string): void {
+  openReview({
+    name,
+    pages: [{ title: name, body: Object.assign(document.createElement("p"), { textContent: words }) }],
+    steps: () => [],
+    checkHref,
+  });
 }
 export const closeReview = (): void => dialog.close();
 export const drawReview = (): void => void (current && draw());
@@ -239,7 +248,7 @@ async function proposeAll(review: Sending): Promise<void> {
   const steps = review.steps(true);
   const groups = review.groups ?? [steps.length];
   for (; review.proposed < groups.length; review.proposed++) {
-    const start = groups.slice(0, review.proposed).reduce((sum, size) => sum + size, 0);
+    const start = sum(groups.slice(0, review.proposed));
     say(
       review,
       apart(review)

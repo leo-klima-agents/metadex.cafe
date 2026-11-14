@@ -37,6 +37,7 @@ import {
   swapSlip,
   swappedIn,
   swapperAbi,
+  totalsOf,
   venueOf,
   withMinimums,
   type Plan,
@@ -113,6 +114,24 @@ test("the minimum is the quote, less the swap's 1% as its code rounds it, less t
   const item = { out: 1_000n, route: { ...route(100n), minPaid: 985n } };
   assert.deepEqual(partOf(item, 60n, 100n), { out: 600n, route: { ...item.route, amount: 60n, minPaid: 591n } });
   assert.deepEqual(partOf(item, 120n, 100n), { ...item, route: { ...item.route, amount: 120n } }, "not for more");
+});
+
+test("totals sum each route's quote, its fee as the swapper rounds it, and the minimum it is given", () => {
+  const items = [
+    { out: 1_000_000n, route: { ...route(100n), minPaid: 985_050n } },
+    { out: 99n, route: { ...route(1n), minPaid: 7n } },
+    { out: 99n, route: { ...route(1n), minPaid: 7n } },
+  ];
+  assert.deepEqual(
+    totalsOf(items, ({ route }) => route.minPaid),
+    { out: 1_000_198n, fee: 10_000n, least: 985_064n },
+    "1% of 99 rounds down to nothing, twice",
+  );
+  assert.deepEqual(totalsOf(items, ({ out }) => minimumOf(out, 50n)).least, 985_050n + 2n * minimumOf(99n, 50n));
+  assert.deepEqual(
+    totalsOf([], () => 1n),
+    { out: 0n, fee: 0n, least: 0n },
+  );
 });
 
 test("routes split into as few swaps as keep each under 15 million gas", () => {

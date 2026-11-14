@@ -41,7 +41,7 @@ import { actions, render, state } from "../state.ts";
 import { $, busy, enable, fill, fromTemplate, link, list, shown, stateOf, status, type Value } from "../ui.ts";
 import type { Slip } from "../wallet.ts";
 import { drawChart, type Series } from "./chart.ts";
-import { openReview } from "./review.ts";
+import { openMessage, openReview } from "./review.ts";
 
 const aeroView = $('[data-view="aero"]');
 const stakeView = $('[data-view="stake"]');
@@ -672,13 +672,7 @@ async function allocateNow(): Promise<void> {
   if (!connection || !market || !picked) return;
   const name = `Allocate ${stakeName(picked)}`;
   const checkHref = hrefOf({ view: "aero", section: "check" });
-  const say = (words: string) =>
-    openReview({
-      name,
-      pages: [{ title: name, body: Object.assign(document.createElement("p"), { textContent: words }) }],
-      steps: () => [],
-      checkHref,
-    });
+  const say = (words: string) => openMessage(name, words, checkHref);
   const [stake] = await aero.readStakes([picked.id]).catch(() => []);
   if (!stake) return say("Base did not answer: try again in a moment.");
   const blocked = aero.blockedOf(stake, market.cooldown, now());

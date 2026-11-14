@@ -1,7 +1,8 @@
 import type { Address } from "viem";
 import type { Swapper } from "./config.ts";
+import { sum } from "./format.ts";
 import { key, pairKey, waysFor, type Hop, type Way } from "./prices.ts";
-import { tagged } from "./rpc.ts";
+import { tagged, type Read } from "./rpc.ts";
 import {
   QUOTES_PER_REQUEST,
   candidatePaths,
@@ -41,7 +42,8 @@ const MAX_MOVES = 80;
 // step that fits in `BUDGET` requests. Every pool is first read at two of the amounts: all that may reach it, and an
 // eighth of that.
 const BUDGET = 75;
-const LADDER = [
+type Step = { pools: number; amounts: number };
+const LADDER: Step[] = [
   { pools: 3, amounts: 6 },
   { pools: 2, amounts: 5 },
   { pools: 2, amounts: 4 },
@@ -167,21 +169,7 @@ export async function routeTogether(
   gasValue: (gas: bigint) => bigint,
 ): Promise<Route[][] | undefined> {
   const rd = tagged("swap");
-  const probes = await quoteAll(
-    sales.map(({ found, amount }) => ({
-      swapper: output,
-      route: { ...found.route, amount: amount / PROBE, minPaid: 0n },
-    })),
-    rd,
-  );
-  const heavy = sales
-    .map((sale, i) => ({ sale, i, probe: probes[i] }))
-    .filter(({ sale, probe }) => {
-      if (!probe?.done || !probe.amountOut || sale.amount < PROBE) return false;
-      return Number(sale.found.out) < Number(probe.amountOut * PROBE) * (1 - IMPACT);
-    })
-    .sort((a, b) => (a.sale.found.out > b.sale.found.out ? -1 : 1))
-    .slice(0, MAX_SALES);
+  const heavy = await heavyOf(sales, output, rd);
   if (!heavy.length) return undefined;
   const paths = heavy.map(({ sale }) => candidatePaths(sale.token, output.token, sale.hydrex));
   const pairs = [
@@ -190,45 +178,94 @@ export async function routeTogether(
     ).values(),
   ];
   const ways = await waysFor(pairs, undefined, rd);
-  const poolsOf = (a: Address, b: Address) => ways.get(pairKey(a, b)) ?? [];
-  const all = pairs.reduce((sum, [a, b]) => sum + poolsOf(a, b).length, 0);
+  const pools: Pools = { pairs, poolsOf: (a, b) => ways.get(pairKey(a, b)) ?? [], read: new Map(), rd };
+  const step = stepOf(pools);
+  if (!step) return undefined;
+  const reach = await reachOf(pools, heavy);
+  const kept = await keepPools(pools, reach, heavy, step);
+  const curves = new Map(
+    [...kept.values()]
+      .flat()
+      .map((way) => [poolKey(way), curveOf([...pools.read.get(poolKey(way))!], taxed(way))] as const),
+  );
+  const candidates = heavy.map(({ sale }, s) => candidatesOf(sale, paths[s]!, kept, curves));
+  const gasPrice = Number(gasValue(1_000_000n)) / 1e6;
+  const model: Model = { amounts: heavy.map(({ sale }) => Number(sale.amount)), candidates, curves, gasPrice };
+  const chunks = allocate(model);
+  if (chunks.every((row) => row[0] === CHUNKS)) return undefined;
+  return routesOf(sales, heavy, candidates, chunks);
+}
+
+// A sale that moves its pools, with its index in the sales.
+type Heavy = { sale: Sale; i: number };
+// The token pairs on the heavy sales' paths, each pair's pools, and what each pool paid at each amount read.
+type Pools = {
+  pairs: (readonly [Address, Address])[];
+  poolsOf: (a: Address, b: Address) => Way[];
+  read: Map<string, Map<bigint, bigint | undefined>>;
+  rd: Read;
+};
+
+// The sales that move their pools, those that fetch the most first.
+async function heavyOf(sales: Sale[], output: Swapper, rd: Read): Promise<Heavy[]> {
+  const probes = await quoteAll(
+    sales.map(({ found, amount }) => ({
+      swapper: output,
+      route: { ...found.route, amount: amount / PROBE, minPaid: 0n },
+    })),
+    rd,
+  );
+  return sales
+    .map((sale, i) => ({ sale, i, probe: probes[i] }))
+    .filter(({ sale, probe }) => {
+      if (!probe?.done || !probe.amountOut || sale.amount < PROBE) return false;
+      return Number(sale.found.out) < Number(probe.amountOut * PROBE) * (1 - IMPACT);
+    })
+    .sort((a, b) => (a.sale.found.out > b.sale.found.out ? -1 : 1))
+    .slice(0, MAX_SALES);
+}
+
+function stepOf({ pairs, poolsOf }: Pools): Step | undefined {
+  const all = sum(pairs.map(([a, b]) => poolsOf(a, b).length));
   // The `+ 2` saves two requests for running both plans through Base: each sale on its own route, and the sales routed
   // together.
   const requests = (quotes: number) => Math.ceil(quotes / QUOTES_PER_REQUEST);
-  const step = LADDER.find(
+  return LADDER.find(
     ({ pools, amounts }) =>
       requests(2 * all) +
-        requests(pairs.reduce((sum, [a, b]) => sum + Math.min(pools, poolsOf(a, b).length) * (amounts - 2), 0)) +
+        requests(sum(pairs.map(([a, b]) => Math.min(pools, poolsOf(a, b).length) * (amounts - 2)))) +
         2 <=
       BUDGET,
   );
-  if (!step) return undefined;
+}
 
-  const read = new Map<string, Map<bigint, bigint | undefined>>();
-  const readAll = async (asks: { way: Way; amounts: bigint[] }[]) => {
-    const items = asks.flatMap(({ way, amounts }) => {
-      const known = read.get(poolKey(way));
-      return [...new Set(amounts)]
-        .filter((amount) => amount > 0n && !known?.has(amount))
-        .map((amount) => ({ way, amount }));
-    });
-    const results = await quoteAll(
-      items.map(({ way, amount }) => ({
-        swapper: swapperFor(way.tokenOut)!,
-        route: { token: way.tokenIn, amount, minPaid: 0n, hops: [hopOf(way)] },
-      })),
-      rd,
-    );
-    items.forEach(({ way, amount }, i) => {
-      const at = read.get(poolKey(way)) ?? new Map();
-      at.set(amount, results[i]?.done ? results[i]!.amountOut : undefined);
-      read.set(poolKey(way), at);
-    });
-  };
+// Quotes each pool at the amounts it has not been read at yet.
+async function readPools({ read, rd }: Pools, asks: { way: Way; amounts: bigint[] }[]): Promise<void> {
+  const items = asks.flatMap(({ way, amounts }) => {
+    const known = read.get(poolKey(way));
+    return [...new Set(amounts)]
+      .filter((amount) => amount > 0n && !known?.has(amount))
+      .map((amount) => ({ way, amount }));
+  });
+  const results = await quoteAll(
+    items.map(({ way, amount }) => ({
+      swapper: swapperFor(way.tokenOut)!,
+      route: { token: way.tokenIn, amount, minPaid: 0n, hops: [hopOf(way)] },
+    })),
+    rd,
+  );
+  items.forEach(({ way, amount }, i) => {
+    const at = read.get(poolKey(way)) ?? new Map();
+    at.set(amount, results[i]?.done ? results[i]!.amountOut : undefined);
+    read.set(poolKey(way), at);
+  });
+}
 
-  // What may reach each token: the amount of it sold, if any, plus the most each pair into it can pay. Each pair's
-  // pools are read at all of that and at an eighth of it. This takes up to three rounds, since a route has up to three
-  // hops. A pair is read again when its amount grows by more than a tenth.
+// What may reach each token: the amount of it sold, if any, plus the most each pair into it can pay. Each pair's pools
+// are read at all of that and at an eighth of it. This takes up to three rounds, since a route has up to three hops. A
+// pair is read again when its amount grows by more than a tenth. Gives the amount each pair was last read at.
+async function reachOf(pools: Pools, heavy: Heavy[]): Promise<Map<string, bigint>> {
+  const { pairs, poolsOf, read } = pools;
   const sold = new Map(heavy.map(({ sale }) => [key(sale.token), sale.amount]));
   const most = new Map<string, bigint>();
   const reach = new Map<string, bigint>();
@@ -245,7 +282,8 @@ export async function routeTogether(
         return range > 0n && (was === undefined || range * 10n > was * 11n);
       });
     if (!due.length) break;
-    await readAll(
+    await readPools(
+      pools,
       due.flatMap(({ a, b, range }) => poolsOf(a, b).map((way) => ({ way, amounts: [range, range / 8n] }))),
     );
     for (const { a, b, range } of due) {
@@ -260,9 +298,18 @@ export async function routeTogether(
       );
     }
   }
+  return reach;
+}
 
-  // Each pair keeps its `step.pools` best pools for an eighth of what may reach it, plus any pools on the sales' own
-  // routes. Each kept pool is then read at more amounts, halving down from the full amount.
+// Each pair keeps its `step.pools` best pools for an eighth of what may reach it, plus any pools on the sales' own
+// routes. Each kept pool is then read at more amounts, halving down from the full amount.
+async function keepPools(
+  pools: Pools,
+  reach: Map<string, bigint>,
+  heavy: Heavy[],
+  step: Step,
+): Promise<Map<string, Way[]>> {
+  const { pairs, poolsOf, read } = pools;
   const ownPools = new Set(heavy.flatMap(({ sale }) => ownKeys(sale)));
   const kept = new Map<string, Way[]>();
   for (const [a, b] of pairs) {
@@ -276,7 +323,8 @@ export async function routeTogether(
     for (const way of poolsOf(a, b)) if (ownPools.has(poolKey(way)) && !chosen.includes(way)) chosen.push(way);
     kept.set(pairKey(a, b), chosen);
   }
-  await readAll(
+  await readPools(
+    pools,
     pairs.flatMap(([a, b]) => {
       const range = reach.get(pairKey(a, b));
       if (range === undefined) return [];
@@ -284,43 +332,46 @@ export async function routeTogether(
       return (kept.get(pairKey(a, b)) ?? []).map((way) => ({ way, amounts }));
     }),
   );
-  const curves = new Map(
-    [...kept.values()].flat().map((way) => [poolKey(way), curveOf([...read.get(poolKey(way))!], taxed(way))] as const),
-  );
+  return kept;
+}
 
-  const candidates = heavy.map(({ sale }, s) => {
-    const routes: Candidate[] = [];
-    for (const path of paths[s]!) {
-      let partial: Way[][] = [[]];
-      for (let h = 0; h + 1 < path.length; h++) {
-        const options = kept.get(pairKey(path[h]!, path[h + 1]!)) ?? [];
-        partial = partial.flatMap((ways) => options.map((way) => [...ways, way]));
-      }
-      for (const ways of partial) {
-        const hops = ways.map(hopOf);
-        routes.push({ pools: ways.map(poolKey), hops, gas: Number(routeGas({ hops })) });
-      }
+// A sale's own route, then its best others through the kept pools, ranked by what each fetches for the whole sale
+// alone.
+function candidatesOf(
+  sale: Sale,
+  paths: Address[][],
+  kept: Map<string, Way[]>,
+  curves: Map<string, Curve>,
+): Candidate[] {
+  const routes: Candidate[] = [];
+  for (const path of paths) {
+    let partial: Way[][] = [[]];
+    for (let h = 0; h + 1 < path.length; h++) {
+      const options = kept.get(pairKey(path[h]!, path[h + 1]!)) ?? [];
+      partial = partial.flatMap((ways) => options.map((way) => [...ways, way]));
     }
-    const mine = ownKeys(sale);
-    const own: Candidate = { pools: mine, hops: sale.found.route.hops, gas: Number(sale.found.gas) };
-    const others = routes.filter(({ pools }) => pools.join() !== mine.join());
-    const alone = (route: Candidate) =>
-      worth({ amounts: [Number(sale.amount)], candidates: [[route]], curves, gasPrice: 0 }, [[CHUNKS]]) ?? -Infinity;
-    const best = others
-      .map((route) => ({ route, value: alone(route) }))
-      .filter(({ value }) => value > 0)
-      .sort((a, b) => b.value - a.value)
-      .slice(0, MAX_CANDIDATES - 1)
-      .map(({ route }) => route);
-    return [own, ...best];
-  });
-  const gasPrice = Number(gasValue(1_000_000n)) / 1e6;
-  const model: Model = { amounts: heavy.map(({ sale }) => Number(sale.amount)), candidates, curves, gasPrice };
-  const chunks = allocate(model);
-  if (chunks.every((row) => row[0] === CHUNKS)) return undefined;
+    for (const ways of partial) {
+      const hops = ways.map(hopOf);
+      routes.push({ pools: ways.map(poolKey), hops, gas: Number(routeGas({ hops })) });
+    }
+  }
+  const mine = ownKeys(sale);
+  const own: Candidate = { pools: mine, hops: sale.found.route.hops, gas: Number(sale.found.gas) };
+  const others = routes.filter(({ pools }) => pools.join() !== mine.join());
+  const alone = (route: Candidate) =>
+    worth({ amounts: [Number(sale.amount)], candidates: [[route]], curves, gasPrice: 0 }, [[CHUNKS]]) ?? -Infinity;
+  const best = others
+    .map((route) => ({ route, value: alone(route) }))
+    .filter(({ value }) => value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, MAX_CANDIDATES - 1)
+    .map(({ route }) => route);
+  return [own, ...best];
+}
 
-  // Each sale's parts, largest first. The last part takes what is left after rounding the tenths, so the parts add up
-  // to the sale.
+// Each sale's parts, largest first. The last part takes what is left after rounding the tenths, so the parts add up to
+// the sale. A sale not routed together keeps its own route.
+function routesOf(sales: Sale[], heavy: Heavy[], candidates: Candidate[][], chunks: number[][]): Route[][] {
   const routes: Route[][] = sales.map(({ found, amount }) => [{ ...found.route, amount, minPaid: 0n }]);
   heavy.forEach(({ sale, i }, s) => {
     const parts = candidates[s]!.map((route, c) => ({ route, n: chunks[s]![c]! }))

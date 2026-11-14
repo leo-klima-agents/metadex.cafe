@@ -10,7 +10,7 @@ import {
   type Hex,
 } from "viem";
 import { CBBTC, FEE_BPS, HYDX, SWAPPERS, USDC, WETH, type Swapper } from "./config.ts";
-import { figure, utc } from "./format.ts";
+import { figure, sumBig, utc } from "./format.ts";
 import {
   ethCost,
   exchangeOf,
@@ -109,9 +109,8 @@ function hopGas({ exchange }: Hop): bigint {
   const { kind } = exchangeOf(exchange);
   return kind === "algebra" ? 1_000_000n : ["pair", "solidly", "aerodrome", "v2"].includes(kind) ? 50_000n : 110_000n;
 }
-export const routeGas = ({ hops }: { hops: Hop[] }): bigint => hops.reduce((sum, hop) => sum + hopGas(hop), 50_000n);
-export const swapGas = (routes: { hops: Hop[] }[]): bigint =>
-  routes.reduce((sum, route) => sum + routeGas(route), 150_000n);
+export const routeGas = ({ hops }: { hops: Hop[] }): bigint => 50_000n + sumBig(hops.map(hopGas));
+export const swapGas = (routes: { hops: Hop[] }[]): bigint => 150_000n + sumBig(routes.map(routeGas));
 export function split<T extends { hops: Hop[] }>(routes: T[]): T[][] {
   const swaps: T[][] = [];
   for (const route of routes) {
@@ -127,6 +126,14 @@ export function split<T extends { hops: Hop[] }>(routes: T[]): T[][] {
 export const feeOf = (out: bigint): bigint => (out * FEE_BPS) / 10_000n;
 export const paidOf = (out: bigint): bigint => out - feeOf(out);
 export const minimumOf = (out: bigint, marginBps: bigint): bigint => (paidOf(out) * (10_000n - marginBps)) / 10_000n;
+// What some routes fetch, the swapper's fee on that and the least they may pay, each summed route by route. The fee is
+// rounded per route, as the swapper rounds it. `leastOf` gives a route's minimum.
+export type Totals = { out: bigint; fee: bigint; least: bigint };
+export const totalsOf = <T extends { out: bigint }>(items: T[], leastOf: (item: T) => bigint): Totals =>
+  items.reduce(
+    (sum, item) => ({ out: sum.out + item.out, fee: sum.fee + feeOf(item.out), least: sum.least + leastOf(item) }),
+    { out: 0n, fee: 0n, least: 0n },
+  );
 // Sets a route's amount to what a claim brought. If that is less than `expected`, its quote and minimum shrink in
 // proportion. Otherwise they stay as they were.
 export function partOf<T extends { route: Route; out: bigint }>(item: T, amount: bigint, expected: bigint): T {
@@ -313,7 +320,7 @@ export function swapSlip(
   tip?: bigint,
   whole = false,
 ): Slip {
-  const least = routes.reduce((sum, { minPaid }) => sum + minPaid, 0n);
+  const least = sumBig(routes.map(({ minPaid }) => minPaid));
   const sold = new Set(routes.map(({ token }) => key(token))).size;
   const amountOf = (route: Route) =>
     whole
@@ -400,7 +407,7 @@ export async function simulatePlan(
   );
   const run = await simulate(from, [...before, ...steps.slips]).catch(() => undefined);
   if (!run || run.length !== before.length + steps.slips.length) return undefined;
-  const gas = run.reduce((sum, { gas }) => sum + gas, 0n);
+  const gas = sumBig(run.map(({ gas }) => gas));
   const refused = run.findIndex(({ ok }) => !ok);
   if (refused >= 0) return { refused, results: [], gas, steps };
   const first = before.length + steps.approvals.length;

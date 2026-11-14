@@ -3,7 +3,7 @@ import { andThen, use, type Got } from "../cache.ts";
 import { swapsOff } from "../checks.ts";
 import { AUTOMATIONS, DEFAULT_OUTPUT, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
 import * as data from "../data.ts";
-import { count, fixed, figure, fraction, money, moneyAt, utc } from "../format.ts";
+import { count, fixed, figure, fraction, money, moneyAt, sum, sumBig, utc } from "../format.ts";
 import { ethCost, gasWords, key, noPrices, pricesNow, worthOf, type Prices, type Token } from "../prices.ts";
 import { hrefOf, parse } from "../routes.ts";
 import { routeTogether, type Sale } from "../routing.ts";
@@ -38,7 +38,7 @@ import {
   stateOf,
   type Value,
 } from "../ui.ts";
-import { walletAssets } from "../wallet.ts";
+import { deadlineFor, walletAssets } from "../wallet.ts";
 import { openReview } from "./review.ts";
 
 const view = $('[data-view="swap"]');
@@ -160,10 +160,12 @@ function scan(): Got<Scan> {
   });
 }
 
+// One of a token's routes. `out` is undefined when Base would skip it.
+type Part = { route: Route; out?: bigint | undefined };
 // The ticked tokens' routes: each token's own route, or the routes found for them together, whichever fetches more when
 // Base runs them in order after their approvals. Without an answer from Base, each token keeps its own quote.
 type Together = {
-  parts: Map<string, { route: Route; out?: bigint | undefined }[]>;
+  parts: Map<string, Part[]>;
   gas?: bigint | undefined;
   swaps: number;
 };
@@ -205,7 +207,7 @@ function together(found: Scan): Got<Together> {
       const partedRun = parted && (await run(parted));
       const net = (simulated: swap.Simulated | undefined) =>
         simulated && simulated.refused === undefined
-          ? simulated.results.reduce((sum, r) => sum + (r?.done ? r.amountOut : 0n), 0n)
+          ? sumBig(simulated.results.map((r) => (r?.done ? r.amountOut : 0n)))
           : undefined;
       const better = net(partedRun) !== undefined && (net(ownRun) === undefined || net(partedRun)! > net(ownRun)!);
       const [routes, simulated] = better ? [parted!, partedRun] : [own, ownRun];
@@ -262,6 +264,31 @@ function underPrice(
 export function drawSwap(): void {
   const swapper = swapperShown();
   const off = swapsOff();
+  drawOutputs(swapper, off);
+  drawAllowances($("[data-list=allowance]", view));
+  const found = scan();
+  const rows = found.value?.rows ?? [];
+  const picked = rows.filter(isTicked);
+  const routed = found.value && picked.length ? together(found.value) : {};
+  const partsOf = (row: Ticked): Part[] =>
+    routed.value?.parts.get(key(row.token.address)) ?? [{ route: row.route.route, out: row.route.out }];
+  fill(view, {
+    off: off ? "Swaps are off." : null,
+    tokens: stateOf(found, !rows.length && !found.value?.reading),
+    ticked: rows.length ? `${picked.length} of ${rows.length}` : "",
+    "add-error": added || null,
+  });
+  list(
+    $("[data-list=token]", view),
+    rows,
+    ({ token }) => token.address,
+    (li, row) =>
+      drawToken(li, row, isTicked(row) ? partsOf(row) : undefined, !!routed.value, swapper, found.value?.prices),
+  );
+  drawSummary(picked, picked.flatMap(partsOf), routed, found.value, swapper, off);
+}
+
+function drawOutputs(swapper: Swapper, off: boolean | undefined): void {
   list(
     $("[data-list=output]", view),
     SWAPPERS,
@@ -280,56 +307,54 @@ export function drawSwap(): void {
     ({ output }) => output,
     (row, each) => fill(row, { name: `${each.symbol} swaps`, address: { address: each.address } }),
   );
-  drawAllowances($("[data-list=allowance]", view));
-  const found = scan();
-  const rows = found.value?.rows ?? [];
-  const prices = found.value?.prices;
-  const picked = rows.filter(isTicked);
-  const routed = found.value && picked.length ? together(found.value) : {};
-  const partsOf = (row: Ticked) =>
-    routed.value?.parts.get(key(row.token.address)) ?? [{ route: row.route.route, out: row.route.out }];
-  fill(view, {
-    off: off ? "Swaps are off." : null,
-    tokens: stateOf(found, !rows.length && !found.value?.reading),
-    ticked: rows.length ? `${picked.length} of ${rows.length}` : "",
-    "add-error": added || null,
+}
+
+// One token's row. `parts` are its routes when it is ticked. `routed` says whether Base has run the ticked tokens'
+// routes.
+function drawToken(
+  li: HTMLElement,
+  row: Row,
+  parts: Part[] | undefined,
+  routed: boolean,
+  swapper: Swapper,
+  prices: Prices | undefined,
+): void {
+  const box = li.querySelector("input")!;
+  box.checked = row.ticked;
+  box.disabled = !row.route;
+  box.setAttribute("aria-label", `Sell ${row.token.symbol}`);
+  const out = parts ? sumBig(parts.flatMap(({ out }) => (out === undefined ? [] : [out]))) : row.route?.out;
+  const skipped = !!parts && routed && parts.every(({ out }) => out === undefined);
+  const quote = out === undefined || skipped ? undefined : output(out, swapper, prices);
+  const like = lookalike(row.token);
+  const under =
+    quote && out !== undefined && !row.reason ? underPrice(row.token, row.amount, out, swapper, prices) : undefined;
+  fill(li, {
+    symbol: row.token.symbol,
+    amount: figure(row.amount, row.token.decimals),
+    fetches: row.reading ? undefined : (quote?.exact ?? ""),
+    worth: quote?.worthText ?? "",
+    note: row.reason ?? (skipped ? "Its route fails on Base" : null),
+    warning: like
+      ? `Same symbol as ${like.symbol}, different contract`
+      : under !== undefined
+        ? `Quote ${fraction(under)} below its market price`
+        : null,
   });
-  list(
-    $("[data-list=token]", view),
-    rows,
-    ({ token }) => token.address,
-    (li, row) => {
-      const box = li.querySelector("input")!;
-      box.checked = row.ticked;
-      box.disabled = !row.route;
-      box.setAttribute("aria-label", `Sell ${row.token.symbol}`);
-      const out = isTicked(row)
-        ? partsOf(row).reduce((sum, { out }) => (out === undefined ? sum : sum + out), 0n)
-        : row.route?.out;
-      const skipped = isTicked(row) && !!routed.value && partsOf(row).every(({ out }) => out === undefined);
-      const quote = out === undefined || skipped ? undefined : output(out, swapper, prices);
-      const like = lookalike(row.token);
-      const under =
-        quote && out !== undefined && !row.reason ? underPrice(row.token, row.amount, out, swapper, prices) : undefined;
-      fill(li, {
-        symbol: row.token.symbol,
-        amount: figure(row.amount, row.token.decimals),
-        fetches: row.reading ? undefined : (quote?.exact ?? ""),
-        worth: quote?.worthText ?? "",
-        note: row.reason ?? (skipped ? "Its route fails on Base" : null),
-        warning: like
-          ? `Same symbol as ${like.symbol}, different contract`
-          : under !== undefined
-            ? `Quote ${fraction(under)} below its market price`
-            : null,
-      });
-    },
-  );
-  const parts = picked.flatMap(partsOf);
-  const going = parts.flatMap(({ out }) => (out === undefined ? [] : [out]));
-  const out = going.reduce((sum, each) => sum + each, 0n);
-  const least = going.reduce((sum, each) => sum + swap.minimumOf(each, margin), 0n);
-  const fee = going.reduce((sum, each) => sum + swap.feeOf(each), 0n);
+}
+
+// The totals under the list, for the ticked tokens' routes.
+function drawSummary(
+  picked: Ticked[],
+  parts: Part[],
+  routed: Got<Together>,
+  found: Scan | undefined,
+  swapper: Swapper,
+  off: boolean | undefined,
+): void {
+  const prices = found?.prices;
+  const going = parts.flatMap(({ out }) => (out === undefined ? [] : [{ out }]));
+  const { out, fee, least } = swap.totalsOf(going, ({ out }) => swap.minimumOf(out, margin));
   const gas =
     routed.value?.gas ??
     BigInt(picked.filter((row) => row.allowance < row.amount).length) * swap.APPROVAL_GAS +
@@ -338,7 +363,7 @@ export function drawSwap(): void {
     const shown = output(amount, swapper, prices);
     return worthUnder(shown.exact, shown.worthText);
   };
-  const waiting = !picked.length && found.value?.reading;
+  const waiting = !picked.length && found?.reading;
   const button = $<HTMLButtonElement>("[data-action=review-swap]", view);
   enable(button, !!picked.length && off === false);
   fill(view, {
@@ -348,12 +373,7 @@ export function drawSwap(): void {
     fee: picked.length ? line(-fee) : undefined,
     paid: picked.length ? line(out - fee) : undefined,
     least: picked.length ? line(least) : undefined,
-    gas:
-      picked.length && found.value?.costs
-        ? gasUnder(gas * found.value.costs.gasPrice, prices)
-        : picked.length
-          ? ""
-          : undefined,
+    gas: picked.length && found?.costs ? gasUnder(gas * found.costs.gasPrice, prices) : picked.length ? "" : undefined,
     routing:
       off === undefined && picked.length
         ? "Checking Base…"
@@ -436,8 +456,7 @@ export async function reviewSwap(
 ): Promise<string | undefined> {
   const connection = state.connection!;
   const safe = !!connection.wallet.propose;
-  const deadline = () => BigInt(now() + (safe ? 86_400 : 1_800));
-  const simulated = await swap.simulatePlan(connection.address, [], plan, tokens, deadline());
+  const simulated = await swap.simulatePlan(connection.address, [], plan, tokens, deadlineFor(connection));
   if (simulated?.refused !== undefined)
     return simulated.refused < simulated.steps.approvals.length
       ? `Base refused “${simulated.steps.slips[simulated.refused]!.says}” Nothing was sent.`
@@ -446,9 +465,7 @@ export async function reviewSwap(
   const lines = swap.withMinimums(plan, simulated?.results);
   const going = { ...plan, items: lines.flatMap(({ item, reason }) => (reason ? [] : [item])) };
   if (!going.items.length) return "Base would skip every token: none can be swapped now. Nothing was sent.";
-  const out = going.items.reduce((sum, { out }) => sum + out, 0n);
-  const fee = going.items.reduce((sum, { out }) => sum + swap.feeOf(out), 0n);
-  const least = going.items.reduce((sum, { route }) => sum + route.minPaid, 0n);
+  const { out, fee, least } = swap.totalsOf(going.items, ({ route }) => route.minPaid);
   const gas =
     simulated?.gas ??
     BigInt(simulated?.steps.approvals.length ?? 0) * swap.APPROVAL_GAS +
@@ -476,15 +493,17 @@ export async function reviewSwap(
     [`Minimum at ${Number(plan.margin) / 100}% slippage`, value(least).exact, value(least).worthText],
   );
   if (!simulated) body.append(fromTemplate("not-simulated"));
-  let at = deadline();
+  let at = deadlineFor(connection);
   const quoted = new Map<string, bigint>();
   for (const { token, out } of going.items)
     quoted.set(key(token.address), (quoted.get(key(token.address)) ?? 0n) + out);
   openReview({
     name: `Swap into ${plan.swapper.symbol}`,
     pages: [{ title: "Quote", body }, {}],
-    steps: (sending) =>
-      swap.planSteps(going, tokens, sending ? (at = deadline()) : at, safe ? undefined : gasCosts?.tip).slips,
+    steps: (sending) => {
+      if (sending) at = deadlineFor(connection);
+      return swap.planSteps(going, tokens, at, safe ? undefined : gasCosts?.tip).slips;
+    },
     atomic: true,
     checkHref: hrefOf({ view: "swap", output: plan.swapper.output, section: "check" }),
     outcome: async (receipts) => {
@@ -519,15 +538,15 @@ export function swapReceipt(
     [each.amountIn, each.amountOut] = [each.amountIn + amountIn, each.amountOut + amountOut];
     sold.set(key(token), each);
   }
-  const fetched = swapped.reduce((sum, { amountOut }) => sum + amountOut, 0n);
+  const fetched = sumBig(swapped.map(({ amountOut }) => amountOut));
   const value = (amount: bigint) => output(amount, swapper, prices);
   const node = bill(
     frag("Receipt · swap into ", code(swapper.symbol)),
     `${utc(time)}${gas === undefined ? "" : ` · gas ${gasWords(gas, prices)}`}`,
     [...sold.values()].map(({ token, amountIn, amountOut }) => {
-      const planned = plan.items
-        .filter((each) => same(each.token.address, token))
-        .reduce((sum, { route }) => sum + route.amount, 0n);
+      const planned = sumBig(
+        plan.items.filter((each) => same(each.token.address, token)).map(({ route }) => route.amount),
+      );
       const quote = quoted.get(key(token));
       const tenths = quote && planned === amountIn ? Number(((amountOut - quote) * 1000n) / quote) : undefined;
       return {
@@ -621,7 +640,7 @@ export function swapLine(): Value {
   const found = scan();
   return shown(found, ({ rows, reading, prices }) => {
     const swappable = rows.filter(({ route, reason }) => route && !reason);
-    const worth = swappable.reduce((sum, { worth = 0 }) => sum + worth, 0);
+    const worth = sum(swappable.map(({ worth = 0 }) => worth));
     if (!swappable.length) return reading ? undefined : "Nothing to swap";
     return `${count(swappable.length, "token", "tokens")} · ${money(moneyAt(worth, prices))}${reading ? " so far" : ""}`;
   });

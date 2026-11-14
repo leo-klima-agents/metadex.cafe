@@ -14,7 +14,7 @@ import {
 } from "viem";
 import { BASESCAN, CHAIN_ID, RPCS } from "./config.ts";
 import { clean } from "./format.ts";
-import type { Landed } from "./rpc.ts";
+import { now, type Landed } from "./rpc.ts";
 import type {} from "viem/window";
 
 export type Wallet = {
@@ -184,6 +184,10 @@ export async function connect(wallet: Wallet): Promise<Connection | undefined> {
   const chainId = Number(await provider.request({ method: "eth_chainId" }));
   return { wallet, provider, address: getAddress(address), chainId };
 }
+
+// When a swap's calls stop being valid, in Base's time. A Safe gets a day, since its co-signers need time to sign. Other
+// wallets get half an hour.
+export const deadlineFor = ({ wallet }: Connection): bigint => BigInt(now() + (wallet.propose ? 86_400 : 1_800));
 
 // Some wallets wrap the error code they pass on.
 const code = (error: unknown): number | undefined => {
