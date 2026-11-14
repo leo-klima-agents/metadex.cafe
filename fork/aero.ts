@@ -23,6 +23,13 @@ describe("allocating an sAERO stake against a fork of Base", { timeout: 1_800_00
     const rows = aero.locator("[data-list=pick] tr");
     assert.equal(await rows.count(), 10, "the strategy's 10 pools");
     assert.equal(await aero.locator("[data-text=share-total]").innerText(), "100.0%");
+    // "Show more pools" adds 10 pools each time, with no share, so what is sent stays the same.
+    for (const count of [20, 30]) {
+      await aero.getByRole("button", { name: "Show more pools" }).click();
+      await rows.nth(count - 1).waitFor();
+      assert.equal(await rows.count(), count);
+    }
+    assert.equal(await aero.locator("[data-text=share-total]").innerText(), "100.0%");
 
     await aero.getByRole("button", { name: "Allocate" }).click();
     await heading(review(page), "Before you allocate", 2).waitFor();

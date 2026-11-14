@@ -27,6 +27,12 @@ const UNSERVED_STATUS = [401, 403, 405];
 const UNSERVED_CODES = [-32601, -32611];
 const BUSY_CODES = [429, -32005, -32007, -32011, -32090];
 const BUSY = /request limit|rate limit|too many requests/i;
+// The fields of an `eth_getAccountInfo` answer, by the request that reads each one alone.
+const FIELDS: Record<string, string> = {
+  eth_getBalance: "balance",
+  eth_getTransactionCount: "nonce",
+  eth_getCode: "code",
+};
 const fixed = ({ method, params = [] }: Call) => !MOVING_METHODS.has(method) && !MOVING.test(JSON.stringify(params));
 const keyOf = ({ method, params = [] }: Call) => `${method} ${JSON.stringify(params)}`;
 const ask = (method: string, params: unknown[]): Call => ({ jsonrpc: "2.0", id: 0, method, params });
@@ -174,6 +180,8 @@ export async function serveCached(upstream: Upstream, file: string, block: numbe
     const keep = fixed(call);
     const reply = (result: unknown): Reply => ({ jsonrpc: "2.0", id: call.id, result });
     if (keep && answers.has(key)) return reply(answers.get(key));
+    const fromAccount = keep ? await accountAnswer(call, later) : undefined;
+    if (fromAccount !== undefined) return reply(fromAccount);
     if (forRun.has(key)) return reply(forRun.get(key));
     if (BY_HASH.has(call.method) && sent.has(String(call.params?.[0]).toLowerCase())) return reply(null);
     // Requests for the same answer share one upstream request, but a request from anvil never waits for a prefetch.
@@ -195,7 +203,23 @@ export async function serveCached(upstream: Upstream, file: string, block: numbe
     }
   }
 
-  // anvil reads an account with `eth_getAccountInfo`, or with three requests when the upstream does not serve it.
+  // When anvil starts, it reads an account both with `eth_getAccountInfo` and with three requests, and keeps whichever
+  // answers first, so runs differ. Each way is answered from what the other saved, and the three requests are asked as
+  // one `eth_getAccountInfo` when the upstream serves it.
+  async function accountAnswer({ method, params = [] }: Call, later: boolean): Promise<unknown> {
+    const field = FIELDS[method];
+    if (field) {
+      const info = ask("eth_getAccountInfo", params);
+      if (!answers.has(keyOf(info)) && !upstream.serves(info.method)) return undefined;
+      const { result } = await answer(info, later).catch(() => ({ result: undefined }));
+      return (result as Record<string, unknown> | undefined)?.[field];
+    }
+    if (method !== "eth_getAccountInfo") return undefined;
+    const [balance, nonce, code] = Object.keys(FIELDS).map((each) => answers.get(keyOf(ask(each, params))));
+    return balance === undefined || nonce === undefined || code === undefined ? undefined : { balance, nonce, code };
+  }
+
+  // A prefetch reads an account with `eth_getAccountInfo`, or with three requests when the upstream does not serve it.
   const accountCalls = (address: string): Call[] =>
     (upstream.serves("eth_getAccountInfo")
       ? ["eth_getAccountInfo"]
