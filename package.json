@@ -1,13 +1,13 @@
 {
   "name": "metadex.cafe",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "Vote, claim and swap on Base",
   "license": "MIT",
   "type": "module",
   "homepage": "https://metadex.cafe/",
   "engines": {
-    "node": "^26.13.0"
+    "node": "^26.13.1"
   },
   "scripts": {
     "build": "node scripts/build.ts",
@@ -20,7 +20,7 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "viem": "2.57.17"
+    "viem": "2.57.19"
   },
   "devDependencies": {
     "@ipld/car": "5.4.7",
@@ -29,8 +29,8 @@
     "esbuild": "0.28.2",
     "ipfs-unixfs-importer": "17.1.1",
     "multiformats": "14.0.5",
-    "playwright-core": "1.65.0",
-    "prettier": "3.9.10",
+    "playwright-core": "1.65.1",
+    "prettier": "3.10.1",
     "typescript": "7.0.2"
   },
   "prettier": {

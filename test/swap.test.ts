@@ -37,6 +37,7 @@ import {
   swapSlip,
   swappedIn,
   swapperAbi,
+  totalsOf,
   venueOf,
   withMinimums,
   type Plan,
@@ -115,6 +116,24 @@ test("the minimum is the quote, less the swap's 1% as its code rounds it, less t
   assert.deepEqual(partOf(item, 120n, 100n), { ...item, route: { ...item.route, amount: 120n } }, "not for more");
 });
 
+test("totals sum each route's quote, its fee as the swapper rounds it, and the minimum it is given", () => {
+  const items = [
+    { out: 1_000_000n, route: { ...route(100n), minPaid: 985_050n } },
+    { out: 99n, route: { ...route(1n), minPaid: 7n } },
+    { out: 99n, route: { ...route(1n), minPaid: 7n } },
+  ];
+  assert.deepEqual(
+    totalsOf(items, ({ route }) => route.minPaid),
+    { out: 1_000_198n, fee: 10_000n, least: 985_064n },
+    "1% of 99 rounds down to nothing, twice",
+  );
+  assert.deepEqual(totalsOf(items, ({ out }) => minimumOf(out, 50n)).least, 985_050n + 2n * minimumOf(99n, 50n));
+  assert.deepEqual(
+    totalsOf([], () => 1n),
+    { out: 0n, fee: 0n, least: 0n },
+  );
+});
+
 test("routes split into as few swaps as keep each under 15 million gas", () => {
   const algebra = { hops: [hop(0)] };
   const uniswap = { hops: [hop(9, WETH), hop(10, USDC, 500)] };
@@ -128,7 +147,7 @@ test("routes split into as few swaps as keep each under 15 million gas", () => {
 });
 
 test("a swap is swap(routes, deadline, true), selling each token once, in as many routes as it has parts", () => {
-  // From the verified source on Sourcify, not from `src/swap.ts`, so a wrong ABI there fails the test.
+  // This ABI comes from the verified source on Sourcify, not from `src/swap.ts`, so a wrong ABI there fails the test.
   const abi = parseAbi([
     "function swap((address token, uint256 amount, uint256 minPaid, (uint8 exchange, address pool, address tokenOut, uint24 fee, int24 tickSpacing)[] hops)[] routes, uint256 deadline, bool skipFailed) returns ((bool done, uint256 amountIn, uint256 amountOut, bytes reason)[] results, uint256 paid, uint256 fee)",
   ]);

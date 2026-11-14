@@ -3,8 +3,8 @@ import { test } from "node:test";
 import { zeroAddress } from "viem";
 import { allocate, along, curveOf, worth, type Candidate, type Curve, type Model } from "../src/routing.ts";
 
-// `pays(r)` is what a fee-free constant-product pool with reserves r and r pays for x; `curve` reads it at amounts
-// halving from `range`.
+// `pays(r)(x)` is what a constant-product pool with no fee and r of each token pays for x. `curve` reads a payout at
+// `range`, then at half of that, and so on, six times.
 const pays = (r: number) => (x: number) => (r * x) / (r + x);
 const curve = (paid: (x: number) => number, range: number): Curve =>
   curveOf(

@@ -80,7 +80,8 @@ export const aeroVoterAbi = parseAbi([
   "struct GaugeAllocationDispatch { uint256 chainId; uint256 gasLimit; uint256 value; GaugeAllocation[] gauges; }",
   "function allocate(uint256 tokenId, ChainAllocationDispatch[] chainDispatches, GaugeAllocationDispatch[] gaugeDispatches, address refundRecipient) payable",
 ]);
-// What Aero's Voter, and its LeafVoter on Base, which it calls in the same transaction, revert with when allocating.
+// The errors that Aero's Voter reverts with when allocating. They include those of its LeafVoter on Base, which it
+// calls in the same transaction.
 export const allocateErrorsAbi = parseAbi([
   "error AllocationExpired()",
   "error ChainAllocationMismatch()",

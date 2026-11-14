@@ -51,7 +51,7 @@ const group = (changes: Partial<Account>) => groupOf(account(changes), status(ch
 const inBoth = (at: Address, changes: Partial<Account> = {}) => ({ delegate: at, claimer: at, ...changes });
 const matcha = { automation: MATCHA_LATTE };
 
-// From the verified source on Sourcify, not from `src/abi.ts`, so a wrong ABI there fails the test.
+// This ABI comes from the verified source on Sourcify, not from `src/abi.ts`, so a wrong ABI there fails the test.
 const abi = parseAbi(["function setConduitApproval(address conduitAddress, uint256 tokenId, bool approve)"]);
 const approval = (id: bigint, approve: boolean, conduit: Address = CONDUIT) => ({
   to: VOTING_ESCROW,
@@ -85,7 +85,7 @@ test("status by delegate: the owner, other automations, which may have stopped, 
   assert.deepEqual(status({ delegate: zeroAddress, delegateAtStart: USDC }), left);
   assert.deepEqual(status(inBoth(CONDUIT, { amount: 0n })), { kind: "empty" });
   assert.deepEqual(status({ lockType: 0, end: NOW }), { kind: "ended" });
-  // An automation that has not voted since the previous epoch began has stopped; one that never voted may be new.
+  // An automation that has not voted since the previous epoch began has stopped. One that never voted may be new.
   const stopped = { kind: "stopped", name: "USDC", voted: STOPPED, since: 1_788_998_400 };
   assert.deepEqual(status({ delegate: USDC, delegateAtStart: USDC, delegateVoted: STOPPED }), stopped);
   const later = { ...stopped, voted: START - WEEK - 1, since: START - WEEK };

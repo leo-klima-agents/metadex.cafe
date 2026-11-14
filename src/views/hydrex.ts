@@ -13,6 +13,7 @@ import type { Got } from "../cache.ts";
 import { checks } from "../checks.ts";
 import * as data from "../data.ts";
 import {
+  aprWords,
   WEEK,
   bps,
   compact,
@@ -24,6 +25,7 @@ import {
   money,
   moneyAt,
   short,
+  sumBig,
   type Money,
   units,
   until,
@@ -92,20 +94,19 @@ export function statusNode(s: Status, own: boolean, inGroup?: string): Value {
   }
 }
 
-// To a tenth of a point.
-const aprWords = (apr: number | undefined): string => (apr === undefined ? "No price for HYDX" : fraction(apr, true));
+// Rounded to a tenth of a percentage point.
+const aprOrNoPrice = (apr: number | undefined): string => (apr === undefined ? "No price for HYDX" : aprWords(apr));
 const record = (automation: Automation): Value =>
   shown(data.earnings(automation), (earnings) => {
     if (!earnings.votes) return "No record yet";
     const apr = aprOf(earnings);
-    return apr === undefined ? aprWords(apr) : frag(aprWords(apr), fromTemplate("apr"));
+    return apr === undefined ? aprOrNoPrice(apr) : frag(aprOrNoPrice(apr), fromTemplate("apr"));
   });
-// Shown next to an automation's record.
 function averageNote(): Value {
   const all = data.average();
   return all.failed
     ? null
-    : shown(all, (found) => (aprOf(found) === undefined ? null : `Hydrex average: ${aprWords(aprOf(found))}`));
+    : shown(all, (found) => (aprOf(found) === undefined ? null : `Hydrex average: ${aprOrNoPrice(aprOf(found))}`));
 }
 function stateNode(automation: Automation): Value {
   const off = checks().value?.get(automation.kind)?.length;
@@ -145,11 +146,11 @@ export function can(action: string, account: Account, arg: string | undefined, h
   return false;
 }
 // The accounts ticked in a group. Until the owner ticks or unticks one, a `needs:` group starts with every account its
-// buttons can act on ticked, and any other group with none.
+// buttons can act on ticked. Any other group starts with none ticked.
 const picks = (group: string, able: Account[]): Set<bigint> =>
   state.picks.get(group) ?? new Set(group.includes(" needs:") ? able.map(({ id }) => id) : []);
 
-// The accounts each group's buttons can act on, and those they act on, as last drawn.
+// For each group, as last drawn: the accounts its buttons can act on (`able`), and those they will act on (`chosen`).
 const drawn = new WeakMap<HTMLElement, { able: Account[]; chosen: Account[] }>();
 
 function drawGroups(root: HTMLElement, holdings: Holdings, belongs: (group: string, member: Member) => boolean): void {
@@ -200,7 +201,7 @@ function drawGroups(root: HTMLElement, holdings: Holdings, belongs: (group: stri
       box.checked = chosen.length === able.length;
       box.indeterminate = chosen.length > 0 && chosen.length < able.length;
     }
-    const votes = chosen.reduce((sum, { votes }) => sum + votes, 0n);
+    const votes = sumBig(chosen.map(({ votes }) => votes));
     const fewer = these.some(({ account }) => account.votes > 0n);
     fill(section, {
       all: able.length > 1 || null,
@@ -253,8 +254,8 @@ export function drawHydrex(): void {
       ? frag(...[...failed].map((id) => Object.assign(document.createElement("p"), { textContent: reasons[id] })))
       : null,
     underway: found && underWay(found) ? "Payout under way." : null,
-    average: shown(data.average(), (all) => aprWords(aprOf(all))),
-    // Only beside an APR, not "Loading…", "Not read" or "No price for HYDX".
+    average: shown(data.average(), (all) => aprOrNoPrice(aprOf(all))),
+    // Shown only beside an APR, not beside "Loading…", "Not read" or "No price for HYDX".
     "average-aside": average && aprOf(average) !== undefined ? true : null,
     own: shown(holdings, ownWords),
     epoch: state.connection ? epochWords() : null,
@@ -269,7 +270,7 @@ function epochWords(): Value {
   const end = found.epochStart + WEEK;
   return `A change made now moves the votes from ${utc(end)}${now() < end ? `, in ${until(end - now())}` : ""}.`;
 }
-// Last epoch's APR, for the votes the wallet casts itself; votes cast through others don't count.
+// Last epoch's APR for the votes the wallet casts itself. Votes cast through others don't count.
 function ownWords(holdings: Holdings): Value {
   return shown(data.holderEarnings(holdings.owner), (own) =>
     !own.votes
@@ -277,8 +278,8 @@ function ownWords(holdings: Holdings): Value {
       : !own.pools.length
         ? "Didn't vote"
         : aprOf(own) === undefined
-          ? aprWords(undefined)
-          : `${aprWords(aprOf(own))} APR, last epoch`,
+          ? aprOrNoPrice(undefined)
+          : `${aprOrNoPrice(aprOf(own))} APR, last epoch`,
   );
 }
 
@@ -286,11 +287,14 @@ export function drawProduct(): void {
   const automation = byKind(state.route.view === "product" ? state.route.kind : "")!;
   const earnings = data.earnings(automation);
   const off = !joinable(automation) && checks().value;
+  const matcha = data.matchaLatte().value;
   fill(productView, {
     name: automation.name,
     state: stateNode(automation),
     off: off ? frag(status("failed", `Joining ${automation.name} is off. `), link("#hydrex", "Why")) : null,
     "retired-share": matchaLatteValue(({ retireBps }) => `Up to ${bps(retireBps)}`),
+    // Until Matcha Latte's settings are read, the lead says "part".
+    retires: matcha ? `up to ${bps(matcha.retireBps)}` : "part",
     takes: matchaLatteValue(({ feeBps }) => `retired${feeWords(feeBps)}`),
     record: record(automation),
     "record-average": averageNote(),
@@ -345,7 +349,7 @@ export function drawProduct(): void {
     );
 }
 
-// Fills the "Performance" popup, valuing the automation and all of Hydrex at the average's prices, and returns why all
+// Fills the "Performance" popup, valuing both the automation and all of Hydrex at the average's prices. Returns why all
 // of Hydrex is missing, if it is.
 function performance(automation: Automation): Value {
   const mine = data.earnings(automation).value;
@@ -361,7 +365,7 @@ function performance(automation: Automation): Value {
       [`${prefix}earned`]: cents(value && moneyAt(value.total, value)),
       [`${prefix}fees`]: cents(value && moneyAt(value.fees, value)),
       [`${prefix}incentives`]: cents(value && moneyAt(value.incentives, value)),
-      [`${prefix}apr`]: earnings ? aprWords(aprOf(earnings, prices)) : pending,
+      [`${prefix}apr`]: earnings ? aprOrNoPrice(aprOf(earnings, prices)) : pending,
     };
   };
   const value = valueOf(mine, all.value?.prices);
@@ -446,11 +450,11 @@ export function change(accounts: Account[], action: "join" | "leave" | "self", a
     const steps = hydrex.join(able, automation);
     const weekly = data.earnings(automation);
     const paid = ml ? settings && hydrex.paidBpsOf(settings) : 10_000n - FEE_BPS;
-    const votes = able.reduce((sum, { votes }) => sum + votes, 0n);
+    const votes = sumBig(able.map(({ votes }) => votes));
     const gas = hydrex.gasEstimate(steps, connection.address);
     const drawBody = (wei?: Value) =>
       fill(body, {
-        unclaimed: `Unclaimed rewards on ${plural("this Hydrex account", "these Hydrex accounts")} will be paid to you ${ml ? "in kVCM " : ""}with ${plural("its next payout", "their next payouts")}${ml ? `, less the share retired${fee}` : ", less the 1% fee"}.`,
+        unclaimed: `Unclaimed rewards on ${plural("this Hydrex account", "these Hydrex accounts")} will be paid to you ${ml ? "in kVCM " : ""}with ${plural("its next payout", "their next payouts")}${ml ? `, less ${settings ? `up to ${bps(settings.retireBps)}` : "the share"} retired${fee}` : ", less the 1% fee"}.`,
         next,
         weekly: shown(weekly, (earnings) => {
           if (!earnings.votes) return "No record yet";

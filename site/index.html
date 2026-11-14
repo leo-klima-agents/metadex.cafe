@@ -369,12 +369,12 @@
         </header>
         <p class="Pill u-small" data-text="state"></p>
         <p class="u-lead" data-only="matcha-latte">
-          Votes with your Hydrex accounts, retires a share of their rewards as carbon credits, and pays you the rest in
-          kVCM.
+          Votes with your Hydrex accounts, retires <span data-text="retires">part</span> of their rewards as carbon
+          credits, and pays you the rest in kVCM.
         </p>
         <p class="u-lead" data-only="double-espresso">
-          Votes with your Hydrex accounts for the pools it expects to earn the most rewards, and pays you what they
-          earn, in the tokens earned.
+          Votes with your Hydrex accounts for the pools anyone proposes, if they would earn at least $1 more this epoch
+          than its current votes at Chainlink prices, and pays you what they earn, in the tokens earned.
         </p>
         <p class="u-small">Your Hydrex account stays in your wallet. Leave with one call, at any time.</p>
         <p class="Notice" data-text="off"></p>
@@ -521,7 +521,10 @@
               </div>
               <div class="Pair">
                 <dt class="u-small u-quiet">Permissionless</dt>
-                <dd>Anyone can propose votes that earn at least $1 more rewards based on Chainlink prices</dd>
+                <dd>
+                  Anyone can replace its votes with ones expected to earn at least $1 more this epoch, at Chainlink
+                  prices
+                </dd>
               </div>
             </dl>
           </section>
@@ -701,47 +704,29 @@
           <h1 tabindex="-1">Aero</h1>
           <button type="button" class="Button--info" popovertarget="aero-info" aria-label="How it works">i</button>
         </header>
-        <p class="u-small u-quiet">
-          Your sAERO earns a share of the exchange revenue of each pool it is allocated to. Set your strategy, see how
-          it would have done against Aero's Autopilot and the average allocator on Base, then allocate.
-        </p>
+        <p class="u-small u-quiet">Each pool shares its protocol revenue in proportion to the sAERO weight in it.</p>
         <fieldset>
           <legend><h2>Your strategy</h2></legend>
           <div class="u-stack">
-            <p class="u-small">
-              <label
-                >Top
-                <select class="u-smallSelect" data-action="aero-count">
-                  <option value="1">1</option>
-                  <option value="3">3</option>
-                  <option value="5">5</option>
-                  <option value="10" selected>10</option>
-                  <option value="15">15</option>
-                  <option value="20">20</option>
-                </select>
-                pools by exchange revenue over the last
-                <select class="u-smallSelect" data-action="aero-window">
-                  <option value="48" selected>48 hours</option>
-                  <option value="96">4 days</option>
-                  <option value="192">8 days</option>
-                </select></label
-              >
-            </p>
+            <fieldset class="u-stackTight">
+              <legend class="u-small">
+                Which pools to follow, each with the APR it would have earned over the last 8 days:
+              </legend>
+              <div class="u-stackTight" data-list="strategy"></div>
+            </fieldset>
             <div class="u-row u-small">
               <label class="u-withBox"
-                ><input type="checkbox" data-action="aero-incentives" checked /> Include incentives</label
-              >
-              <label class="u-withBox"
-                ><input type="checkbox" data-action="aero-again" checked /> Reallocate every 48 h</label
+                ><input type="checkbox" data-action="aero-again" checked /> Come back every 48 h to pick again</label
               >
               <label class="u-withBox"><input type="checkbox" data-action="aero-blue" /> Blue chips only</label>
             </div>
             <div class="u-row u-small">
-              <label data-text="stake-row"
+              <label class="u-withBox" data-text="stake-row"
                 >For
                 <select class="u-smallSelect" data-action="aero-stake" data-list="stake-option"></select
               ></label>
               <a data-text="stake-link"></a>
+              <span class="u-quiet" data-text="stake-lock"></span>
               <label class="u-withBox" data-text="amount-row"
                 >For
                 <input
@@ -772,30 +757,9 @@
           </div>
           <p class="u-small" data-when="failed">The pools could not be read.</p>
           <div class="u-stack" data-when="ready">
-            <dl class="Facts Facts--tiles">
-              <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">Base average</dt>
-                <dd class="Facts-value Facts-figure" data-text="average-apr"></dd>
-              </div>
-              <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">Autopilot</dt>
-                <dd class="Facts-value Facts-figure" data-text="pilot-apr"></dd>
-                <dd class="Facts-tileNote u-small u-quiet" data-text="pilot-note"></dd>
-              </div>
-              <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">Your strategy</dt>
-                <dd class="Facts-value Facts-figure" data-text="strategy-apr"></dd>
-                <dd class="Facts-tileNote u-small u-quiet" data-text="strategy-note"></dd>
-              </div>
-              <div class="Facts-tile" data-text="custom-tile">
-                <dt class="u-label Facts-tileLabel">Custom allocation</dt>
-                <dd class="Facts-value Facts-figure" data-text="custom-apr"></dd>
-                <dd class="Facts-tileNote u-small u-quiet">in hindsight</dd>
-              </div>
-            </dl>
+            <dl class="Facts Facts--tiles" data-list="tile"></dl>
             <p class="Notice" data-text="edited">
-              The dashed line is your custom allocation: the shares you edited, held through all 8 days. It's hindsight,
-              as you chose them knowing how the pools did.
+              The dashed line holds your custom allocation through all 8 days (hindsight).
             </p>
             <figure class="Chart u-stackTight">
               <ul class="Chart-legend u-small" data-list="legend"></ul>
@@ -810,7 +774,7 @@
                 <div class="Chart-tip u-small" aria-live="polite" hidden></div>
               </div>
             </figure>
-            <div class="u-scroll">
+            <div class="u-scroll" tabindex="0" role="region" aria-label="APR in each step, scrolls sideways">
               <table>
                 <caption class="u-visuallyHidden">
                   The APR of each strategy in each step of 48 hours
@@ -818,9 +782,10 @@
                 <thead>
                   <tr>
                     <th scope="col">APR</th>
-                    <th scope="col">Base average</th>
+                    <th scope="col">Follow the leaders</th>
+                    <th scope="col">Follow revenue</th>
                     <th scope="col">Autopilot</th>
-                    <th scope="col">Your strategy</th>
+                    <th scope="col">Base average</th>
                     <th scope="col" data-text="custom-head">Custom allocation</th>
                   </tr>
                 </thead>
@@ -831,7 +796,7 @@
           </div>
         </section>
         <section class="u-stack u-gapAbove" aria-labelledby="plan-title">
-          <h2 id="plan-title">Allocate like this now</h2>
+          <h2 id="plan-title">Allocate now</h2>
           <div class="Card u-stackTight" data-if="no-wallet">
             <p class="u-label">Connect a wallet</p>
             <p class="u-row" data-list="wallet"></p>
@@ -844,7 +809,8 @@
             </ul>
             <p class="u-small" data-when="failed">The pools could not be read.</p>
             <div class="u-stack" data-when="ready">
-              <div class="u-scroll">
+              <p data-text="plan-pay"></p>
+              <div class="u-scroll" tabindex="0" role="region" aria-label="Pools to allocate to, scrolls sideways">
                 <table>
                   <caption class="u-visuallyHidden">
                     The pools to allocate to, their shares, and what each would pay
@@ -852,20 +818,20 @@
                   <thead>
                     <tr>
                       <th scope="col">Pool</th>
-                      <th scope="col">Daily revenue</th>
                       <th scope="col">Share</th>
-                      <th scope="col">sAERO weight</th>
                       <th scope="col">Projected APR</th>
+                      <th scope="col">sAERO weight</th>
+                      <th scope="col">Protocol revenue a day, last 8 days</th>
                     </tr>
                   </thead>
                   <tbody data-list="pick"></tbody>
                   <tfoot>
                     <tr>
                       <th scope="row">Total</th>
-                      <td></td>
                       <td class="u-figures u-strong" data-text="share-total"></td>
+                      <td></td>
                       <td class="u-figures" data-text="total-amount"></td>
-                      <td class="u-figures u-strong" data-text="total-per"></td>
+                      <td></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -909,9 +875,6 @@
                 <button type="button" data-action="aero-allocate">Allocate</button>
                 <p class="u-small u-hang" data-text="allocate-why"></p>
               </div>
-              <p class="u-small u-quiet">
-                Thin pools and pools paying a token without a price are left out. Dilution is taken into account.
-              </p>
             </div>
           </div>
         </section>
@@ -930,35 +893,16 @@
           </header>
           <dl class="u-stackTight">
             <div class="Pair">
-              <dt class="u-small u-quiet">Base average</dt>
-              <dd>
-                What the average allocator on Base earned: all the pools' exchange revenue at each step, over all their
-                sAERO weight, leaving out pools paying a token without a price
-              </dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Autopilot</dt>
-              <dd>The actual allocations of Aero's Autopilot USDC Maxi at each step on Base</dd>
+              <dt class="u-small u-quiet">Protocol revenue</dt>
+              <dd>A pool's trading fees and incentives</dd>
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Blue chips</dt>
-              <dd>Pools whose two tokens are both among USDC, EURC, WETH, cbBTC and AERO</dd>
+              <dd>Pools of two tokens among USDC, EURC, WETH, cbBTC and AERO</dd>
             </div>
             <div class="Pair">
-              <dt class="u-small u-quiet">APR</dt>
-              <dd>
-                A day's exchange revenue per sAERO, times 365, over the price of one AERO.
-                <span data-text="record-prices">The last 8 days use the prices of each step</span>. Projected APR: if
-                the exchange revenue of the last <span data-text="plan-window">48 hours</span> came again, with the
-                incentives already scheduled
-              </dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Other chains</dt>
-              <dd>
-                Not counted: pools on Aero's other chains aren't shown, and allocating here leaves a stake's sAERO
-                weight on them as it is
-              </dd>
+              <dt class="u-small u-quiet">Thin</dt>
+              <dd>Under 1M sAERO weight 8 days ago, now or on average in between. Strategies leave it out</dd>
             </div>
           </dl>
           <section class="u-stack" data-section="check">
@@ -1029,11 +973,6 @@
                   <dd class="Facts-tileNote u-small u-quiet" data-text="paid-note"></dd>
                 </div>
               </dl>
-              <p class="u-small u-quiet">
-                APR, each sAERO counted as one AERO. Since it allocated: the fees its pools paid since then, exactly,
-                and every pool's on average over the same time. Its pools: their exchange revenue lately, which it did
-                not earn if it just moved there.
-              </p>
               <div class="u-scroll">
                 <table>
                   <caption class="u-visuallyHidden">
@@ -1045,7 +984,7 @@
                       <th scope="col">Share</th>
                       <th scope="col">sAERO weight</th>
                       <th scope="col">Since it allocated</th>
-                      <th scope="col" data-text="window-head"></th>
+                      <th scope="col">Last 8 days</th>
                     </tr>
                   </thead>
                   <tbody data-list="share"></tbody>
@@ -1078,7 +1017,7 @@
                 <dd class="Facts-value Facts-figure" data-text="power"></dd>
               </div>
               <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">Exchange revenue</dt>
+                <dt class="u-label Facts-tileLabel">Protocol revenue</dt>
                 <dd class="Facts-value Facts-figure" data-text="paid"></dd>
                 <dd class="Facts-tileNote u-small u-quiet" data-text="paid-note"></dd>
               </div>
@@ -1098,11 +1037,11 @@
               <div class="u-scroll">
                 <table>
                   <caption class="u-visuallyHidden">
-                    Its APR over each window
+                    Its APR over the last 48 hours, 4 days and 8 days
                   </caption>
                   <thead>
                     <tr>
-                      <th scope="col">Over</th>
+                      <th scope="col">Last</th>
                       <th scope="col">Fees</th>
                       <th scope="col">Incentives</th>
                       <th scope="col">In all</th>
@@ -1141,9 +1080,9 @@
                 </table>
               </div>
             </section>
-            <section class="u-stack u-gapAbove" aria-labelledby="pool-programs-title">
+            <section class="u-stack u-gapAbove" aria-labelledby="pool-programs-title" data-text="programs-section">
               <h2 id="pool-programs-title">Live incentives</h2>
-              <ul class="u-stackTight u-small" data-list="program" data-empty="None"></ul>
+              <ul class="u-stackTight u-small" data-list="program"></ul>
             </section>
             <section class="u-stack u-gapAbove" aria-labelledby="pool-contracts-title">
               <h2 id="pool-contracts-title">Contracts</h2>
@@ -1434,11 +1373,29 @@
     <template id="step">
       <tr>
         <td data-text="when"></td>
-        <td class="u-figures" data-text="average"></td>
+        <td class="u-figures" data-text="leaders"></td>
+        <td class="u-figures" data-text="revenue"></td>
         <td class="u-figures" data-text="pilot"></td>
-        <td class="u-figures u-strong" data-text="strategy"></td>
+        <td class="u-figures" data-text="average"></td>
         <td class="u-figures" data-text="custom"></td>
       </tr>
+    </template>
+    <template id="tile">
+      <div class="Facts-tile">
+        <dt class="u-label Facts-tileLabel" data-text="name"></dt>
+        <dd class="Facts-value Facts-figure" data-text="apr"></dd>
+        <dd class="Facts-tileNote u-small u-quiet" data-text="note"></dd>
+      </div>
+    </template>
+    <template id="strategy">
+      <label class="Card Ticks Ticks--whole">
+        <input class="Ticks-box" type="radio" name="aero-strategy" data-action="aero-strategy" />
+        <span class="u-spreadTop u-grow">
+          <span class="u-strong" data-text="name"></span>
+          <span class="u-figures u-strong" data-text="apr"></span>
+          <span class="u-small u-quiet u-wide" data-text="words"></span>
+        </span>
+      </label>
     </template>
     <template id="legend">
       <li class="Chart-key">
@@ -1449,7 +1406,6 @@
     <template id="pick">
       <tr>
         <td><a data-text="pool"></a><small class="u-detail" data-text="note"></small></td>
-        <td class="u-figures" data-text="pays"></td>
         <td class="u-figures">
           <input
             class="Amount Amount--share"
@@ -1460,8 +1416,9 @@
           />
           %
         </td>
-        <td class="u-figures" data-text="amount"></td>
         <td class="u-figures u-strong" data-text="per"></td>
+        <td class="u-figures" data-text="amount"></td>
+        <td class="u-figures" data-text="pays"></td>
       </tr>
     </template>
     <template id="stake-option"><option data-text="name"></option></template>
@@ -1599,7 +1556,7 @@
             <dd class="Facts-value Facts-figure" data-text="next"></dd>
           </div>
           <div class="Facts-tile">
-            <dt class="u-label Facts-tileLabel">Est. per week</dt>
+            <dt class="u-label Facts-tileLabel">A week at last epoch's pay</dt>
             <dd class="Facts-value Facts-figure" data-text="weekly"></dd>
           </div>
           <div class="Facts-tile">
@@ -1684,7 +1641,7 @@
         <article class="Slip u-stack">
           <header>
             <p class="Slip-name">metaDEX Café</p>
-            <p class="u-label Slip-sub">What waits</p>
+            <p class="u-label Slip-sub">Unclaimed rewards</p>
           </header>
           <ul class="Slip-ruled" data-list="line"></ul>
           <dl class="Slip-ruled" data-list="sum"></dl>
@@ -1698,7 +1655,7 @@
         <fieldset class="u-stack">
           <legend class="u-label">Receive</legend>
           <label class="u-gapAbove"
-            ><input type="radio" name="receive" value="as" data-action="receive" checked /> As they are, in
+            ><input type="radio" name="receive" value="as" data-action="receive" checked /> Unswapped, in
             <span data-text="count"></span
           ></label>
           <label class="u-row">

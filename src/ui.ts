@@ -3,10 +3,15 @@ import type { Got } from "./cache.ts";
 import { BASESCAN } from "./config.ts";
 import { hexLines, walletLines } from "./format.ts";
 
-// What `fill()` does with each value for an element marked `data-text="key"`: a string sets its text; `undefined` shows
-// "Loading…" as a bar; `null` hides it; `true` shows it unchanged; a `Node` becomes its content; `{state}` sets
-// `data-state`, and CSS shows only the `[data-when]` children that match; `{href, text}` makes a link; `{address}`
-// links to Basescan, a hash as a transaction, and shows `text`, or else the hex in groups of four.
+// What `fill()` does with each value, for an element marked `data-text="key"`:
+// - a string sets its text;
+// - `undefined` shows "Loading…" as a bar;
+// - `null` hides the element;
+// - `true` shows it unchanged;
+// - a `Node` becomes its content;
+// - `{state}` sets `data-state`, and CSS shows only the `[data-when]` children that match;
+// - `{href, text}` makes a link;
+// - `{address}` links to Basescan, as a transaction for a hash, and shows `text` or else the hex in groups of four.
 export type Value =
   | string
   | undefined
@@ -106,7 +111,7 @@ export function list<T>(
   const focused = [...old.values()].some((row) => row.contains(document.activeElement));
   rows.forEach((row, i) => el.children[i] !== row && el.insertBefore(row, el.children[i] ?? null));
   for (const row of old.values()) row.remove();
-  // If a removed row held focus, move it to the heading of the row's section or dialog so it isn't lost.
+  // If a removed row held focus, move focus to the heading of the list's section or dialog, so that it isn't lost.
   const heading = focused ? el.closest("section, dialog")?.querySelector<HTMLElement>("h1, h2, h3") : undefined;
   if (heading) {
     heading.tabIndex = -1;
@@ -114,8 +119,8 @@ export function list<T>(
   }
 }
 
-// Turns a read into a `Value`: loading while it reads, "Not read" if it failed, hidden when it read `null` (nothing to
-// show).
+// Turns a read into a `Value`: loading while it reads, "Not read" if it failed, and hidden when it read `null`, which
+// means there is nothing to show.
 export const shown = <T>(got: Got<T>, text: (value: NonNullable<T>) => Value): Value =>
   got.value === null ? null : got.value !== undefined ? text(got.value) : got.failed ? "Not read" : undefined;
 export const stateOf = (got: Got<unknown>, empty?: boolean): Value => ({
@@ -185,9 +190,9 @@ export function frag(...parts: (string | Node)[]): DocumentFragment {
 export const asWritten = (text: string): DocumentFragment =>
   frag(...text.split(/(\S*[a-z][A-Z]\S*)/).map((part, i) => (i % 2 ? code(part) : part)));
 
-// Splits hex into spans of four digits that CSS spaces apart, so a copy is still plain hex. An address or hash splits
-// into two halves that break where one line doesn't fit; with `wallet`, an address takes three lines, as the wallet
-// shows it; calldata gets a line per 32-byte word.
+// Splits hex into spans of four digits that CSS spaces apart, so that a copy is still plain hex. An address or a hash
+// splits into two halves, which go on two lines when one line is too narrow. With `wallet`, an address takes three
+// lines, as the wallet shows it. Calldata gets its selector, then a line per 32-byte word.
 export function hex(el: HTMLElement, value: string, wallet = false): void {
   if (el.dataset.hex === `${wallet} ${value}`) return;
   el.dataset.hex = `${wallet} ${value}`;
@@ -233,8 +238,8 @@ export function announce(text: string): void {
   region.textContent = "";
   queueMicrotask(() => (region.textContent = text));
 }
-// A busy button keeps its size and name under a spinner and stays disabled until its action is done. Draws set
-// `disabled` through `enable()`, which leaves a busy button disabled.
+// A busy button keeps its size and name under a spinner, and stays disabled until its action is done. Redraws set
+// `disabled` through `enable()`, which keeps a busy button disabled.
 export function busy(button: HTMLButtonElement, on = true): void {
   button.disabled = on;
   setAttr(button, "aria-busy", on ? "true" : null);

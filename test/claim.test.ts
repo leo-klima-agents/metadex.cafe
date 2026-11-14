@@ -28,8 +28,8 @@ const owed: Owed[] = [
   { contract: BRIBES, token: AVNT, amount: 2_400_000_000_000_000_000n, fee: false, passes: 1 },
   { contract: "0x00000000000000000000000000000000000000f2", token: AVNT, amount: 0n, fee: true, passes: 1 },
 ];
-// Contracts and tokens at addresses made from their numbers. `many` has the shape of account #82774's claim on a fork:
-// 71 contracts, 37 tokens.
+// `contract(n)` and `token(n)` make an address from the number n. `many` has the shape of account #82774's claim on a
+// fork: 71 contracts and 37 tokens.
 const contract = (n: number): Address => `0x${n.toString(16).padStart(40, "0")}`;
 const token = (n: number): Address => contract(n + 0x1000);
 const owe = (contract: Address, token: Address, fee = false): Owed => ({ contract, token, amount: 1n, fee, passes: 1 });
@@ -70,7 +70,7 @@ test("a contract owing past the 50 epochs one asking reads is listed, and costed
     [
       undefined,
       "Pools' fees contracts that owe it",
-      "Pools' incentives contracts that owe it; twice where one asking cannot reach all it owes",
+      "Pools' incentives contracts that owe it; a contract owed for more than 50 epochs is listed once per 50",
       undefined,
     ],
   );
