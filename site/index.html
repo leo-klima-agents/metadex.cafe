@@ -704,10 +704,7 @@
           <h1 tabindex="-1">Aero</h1>
           <button type="button" class="Button--info" popovertarget="aero-info" aria-label="How it works">i</button>
         </header>
-        <p class="u-small u-quiet">
-          Each pool shares its protocol revenue in proportion to the allocation power in it. Pick a strategy, see how it
-          would have done, then allocate.
-        </p>
+        <p class="u-small u-quiet">Each pool shares its protocol revenue in proportion to the sAERO weight in it.</p>
         <fieldset>
           <legend><h2>Your strategy</h2></legend>
           <div class="u-stack">
@@ -742,7 +739,7 @@
                   autocomplete="off"
                   spellcheck="false"
                 />
-                allocation power</label
+                sAERO weight</label
               >
             </div>
           </div>
@@ -762,8 +759,7 @@
           <div class="u-stack" data-when="ready">
             <dl class="Facts Facts--tiles" data-list="tile"></dl>
             <p class="Notice" data-text="edited">
-              The dashed line holds the shares you edited through all 8 days: hindsight, as you chose them knowing how
-              the pools did.
+              The dashed line holds your custom allocation through all 8 days (hindsight).
             </p>
             <figure class="Chart u-stackTight">
               <ul class="Chart-legend u-small" data-list="legend"></ul>
@@ -824,7 +820,7 @@
                       <th scope="col">Pool</th>
                       <th scope="col">Share</th>
                       <th scope="col">Projected APR</th>
-                      <th scope="col">Allocation power</th>
+                      <th scope="col">sAERO weight</th>
                       <th scope="col">Protocol revenue a day, last 8 days</th>
                     </tr>
                   </thead>
@@ -875,7 +871,6 @@
                   Make the shares add up to 100%
                 </button>
               </div>
-              <p class="u-small" data-text="plan-auto"></p>
               <div class="u-row" data-if="wallet">
                 <button type="button" data-action="aero-allocate">Allocate</button>
                 <p class="u-small u-hang" data-text="allocate-why"></p>
@@ -898,16 +893,6 @@
           </header>
           <dl class="u-stackTight">
             <div class="Pair">
-              <dt class="u-small u-quiet">Follow the leaders</dt>
-              <dd>
-                The 10 pools that paid the most per allocation power over the last 8 days, more to those that paid more
-              </dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Follow revenue</dt>
-              <dd>The 10 pools with the most protocol revenue over the last 8 days, in proportion to that revenue</dd>
-            </div>
-            <div class="Pair">
               <dt class="u-small u-quiet">Protocol revenue</dt>
               <dd>A pool's trading fees and incentives</dd>
             </div>
@@ -917,7 +902,7 @@
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Thin</dt>
-              <dd>Under 1M allocation power 8 days ago, now or on average in between. Strategies leave it out</dd>
+              <dd>Under 1M sAERO weight 8 days ago, now or on average in between. Strategies leave it out</dd>
             </div>
           </dl>
           <section class="u-stack" data-section="check">
@@ -955,12 +940,12 @@
               <div class="Facts-tile" data-text="idle-row">
                 <dt class="u-label Facts-tileLabel">Not allocated</dt>
                 <dd class="Facts-value Facts-figure" data-text="idle"></dd>
-                <dd class="Facts-tileNote u-small u-quiet">Allocation power, earning nothing</dd>
+                <dd class="Facts-tileNote u-small u-quiet">sAERO weight, earning nothing</dd>
               </div>
               <div class="Facts-tile" data-text="elsewhere-row">
                 <dt class="u-label Facts-tileLabel">Other chains</dt>
                 <dd class="Facts-value Facts-figure" data-text="elsewhere"></dd>
-                <dd class="Facts-tileNote u-small u-quiet">Allocation power, not shown here</dd>
+                <dd class="Facts-tileNote u-small u-quiet">sAERO weight, not shown here</dd>
               </div>
               <div class="Facts-tile" data-text="owner-row">
                 <dt class="u-label Facts-tileLabel">Owner</dt>
@@ -988,11 +973,6 @@
                   <dd class="Facts-tileNote u-small u-quiet" data-text="paid-note"></dd>
                 </div>
               </dl>
-              <p class="u-small u-quiet">
-                Each sAERO counts as one AERO. Since it allocated: the fees its pools paid since then, against all
-                pools'. Its pools: their protocol revenue over the last 8 days, which it did not earn if it moved there
-                within those days.
-              </p>
               <div class="u-scroll">
                 <table>
                   <caption class="u-visuallyHidden">
@@ -1002,7 +982,7 @@
                     <tr>
                       <th scope="col">Pool</th>
                       <th scope="col">Share</th>
-                      <th scope="col">Allocation power</th>
+                      <th scope="col">sAERO weight</th>
                       <th scope="col">Since it allocated</th>
                       <th scope="col">Last 8 days</th>
                     </tr>
@@ -1033,7 +1013,7 @@
             <p class="Notice" data-text="thin"></p>
             <dl class="Facts Facts--tiles">
               <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">Allocation power</dt>
+                <dt class="u-label Facts-tileLabel">sAERO weight</dt>
                 <dd class="Facts-value Facts-figure" data-text="power"></dd>
               </div>
               <div class="Facts-tile">
@@ -1092,7 +1072,7 @@
                   <thead>
                     <tr>
                       <th scope="col">Day, UTC</th>
-                      <th scope="col">Allocation power</th>
+                      <th scope="col">sAERO weight</th>
                       <th scope="col">Fees APR</th>
                     </tr>
                   </thead>
@@ -1454,7 +1434,7 @@
               <tr>
                 <th scope="col">Pool</th>
                 <th scope="col">Share</th>
-                <th scope="col">Allocation power</th>
+                <th scope="col">sAERO weight</th>
               </tr>
             </thead>
             <tbody data-list="allot"></tbody>

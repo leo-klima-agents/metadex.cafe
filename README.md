@@ -13,7 +13,7 @@ A static page at <https://metadex.cafe/> for Hydrex accounts and Aero stakes on 
 The two Aero strategies pick up to 10 pools, judged on their last eight days, from all pools or from blue chips only.
 They pick once, or again every 48 hours.
 
-- **Follow the leaders** picks the pools that paid the most per allocation power, more to those that paid more.
+- **Follow the leaders** picks the pools that paid the most per sAERO weight, more to those that paid more.
 - **Follow revenue** picks the pools with the most protocol revenue, in proportion to that revenue.
 
 The page shows how both strategies did over the last eight days, against Aero's Autopilot as it actually allocated and

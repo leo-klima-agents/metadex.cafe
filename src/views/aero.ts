@@ -69,7 +69,7 @@ const aprAt = (per10k: number, priced: boolean, prices: Prices): string => aprWo
 const apr = (per10k: number, priced: boolean, market: Market): string => aprAt(per10k, priced, market.prices);
 const per10k = (paying: aero.Paying | undefined): aero.Per10k | undefined => paying && aero.per10kOf(paying);
 const sAero = (amount: bigint): string => `${compact(amount)} sAERO`;
-const power = (amount: bigint): string => `${compact(amount)} allocation power`;
+const power = (amount: bigint): string => `${compact(amount)} sAERO weight`;
 const hoursWords = (seconds: number): string =>
   seconds % 3_600 === 0 ? count(seconds / 3_600, "hour", "hours") : until(seconds);
 
@@ -154,7 +154,7 @@ const STRATEGIES = [
 function poolsWords({ count: top, blueChips, leaders }: aero.Strategy): string {
   const pools = `${count(top, "pool", "pools")}${blueChips ? " of blue chips" : ""}`;
   return leaders
-    ? `The ${pools} that paid the most per allocation power, more to those that paid more.`
+    ? `The ${pools} that paid the most per sAERO weight, more to those that paid more.`
     : `The ${pools} with the most protocol revenue, in proportion to that revenue.`;
 }
 // `drawn` is the rows as last drawn, which the actions edit. `nextPools` is the pools "Show more pools" adds next.
@@ -229,11 +229,11 @@ function flagsOf(gauge: Gauge | undefined, market: Market, hold: number): string
     .map(({ end }) => end);
   const [current, before] = [Number(gauge.power), Number(gauge.windows[HOURS].power)];
   const grew =
-    before && current > 1.25 * before ? `${fraction(current / before - 1)} more allocation power than ${SPAN} ago` : "";
+    before && current > 1.25 * before ? `${fraction(current / before - 1)} more sAERO weight than ${SPAN} ago` : "";
   const flags = [
     isThin(gauge, HOURS) ? "Thin" : "",
     ends.length ? `Incentives end in ${until(Math.min(...ends) - market.time)}` : "",
-    current && !before ? `No allocation power ${SPAN} ago` : grew,
+    current && !before ? `No sAERO weight ${SPAN} ago` : grew,
   ].filter(Boolean);
   return flags.length ? flags.join(" · ") : null;
 }
@@ -243,7 +243,7 @@ function blockedWords(blocked: aero.Blocked, stake: Stake): string {
     case "ended":
       return `The lock of ${name} has ended, so it can't be allocated.`;
     case "empty":
-      return `${name} has nothing to allocate on Base: all its allocation power is on other chains.`;
+      return `${name} has nothing to allocate on Base: all its sAERO weight is on other chains.`;
     case "held":
       return `${name} was allocated less than ${hoursWords(cooldownOf())} ago. It can be changed again from ${utc(blocked.until)}, in ${until(blocked.until - now())}.`;
   }
@@ -538,8 +538,6 @@ function drawLines(lines: Line[]): void {
   );
 }
 
-const AUTOMATIC = "Nothing happens automatically: an allocation stays as it is until you change it.";
-
 function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefined, stakes: Stake[]): void {
   const market = got.value;
   if (!market) return void fill(aeroView, { picks: stateOf(got) });
@@ -617,10 +615,6 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
     current: mine.size ? true : null,
     "allocate-why": words,
     "plan-pay": expectation,
-    "plan-auto":
-      plan.again && !plan.rows
-        ? `Nothing happens automatically: to follow this strategy, allocate again every ${hoursWords(aero.STEP)}.`
-        : AUTOMATIC,
   });
 }
 
@@ -680,16 +674,16 @@ async function allocateNow(): Promise<void> {
             {
               label: "Onto Base",
               code: String(stake.idle),
-              description: `${fixed(stake.idle, 18, 2)} allocation power not yet on any chain`,
+              description: `${fixed(stake.idle, 18, 2)} sAERO weight not yet on any chain`,
             },
           ]
         : []),
       { label: "Chain", code: String(config.CHAIN_ID), description: "Base" },
       ...allotments.map(({ gauge, amount }, i) => ({
         label: `Pool ${i + 1}`,
-        description: `${named(gauge)} · ${fixed(amount, 18, 2)} allocation power`,
+        description: `${named(gauge)} · ${fixed(amount, 18, 2)} sAERO weight`,
         code: [gauge, String(amount)],
-        tags: ["Gauge", "Allocation power"],
+        tags: ["Gauge", "sAERO weight"],
         lines: true,
       })),
       {
@@ -723,7 +717,7 @@ async function allocateNow(): Promise<void> {
       stake.idle ? `Its ${power(stake.idle)} not yet on any chain moves onto Base too.` : "",
       stake.elsewhere ? `Its ${power(stake.elsewhere)} on other chains isn't affected.` : "",
       run ? "Simulated on Base: it succeeds." : "Base couldn't simulate it, so your wallet may warn you.",
-      AUTOMATIC,
+      "Nothing happens automatically: an allocation stays as it is until you change it.",
     ].filter(Boolean),
     (words) => words,
     (li, words) => fill(li, { words }),
@@ -781,7 +775,7 @@ export function drawStake(): void {
     amount: sAero(stake.amount),
     lock: lockWords(stake),
     "on-base": compact(stake.onBase),
-    pools: `Allocation power, in ${count(poolsIn(stake), "pool", "pools")}`,
+    pools: `sAERO weight, in ${count(poolsIn(stake), "pool", "pools")}`,
     "idle-row": stake.idle ? true : null,
     idle: compact(stake.idle),
     "elsewhere-row": stake.elsewhere ? true : null,

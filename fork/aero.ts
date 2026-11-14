@@ -33,7 +33,7 @@ describe("allocating an sAERO stake against a fork of Base", { timeout: 1_800_00
 
     await aero.getByRole("button", { name: "Allocate" }).click();
     await heading(review(page), "Before you allocate", 2).waitFor();
-    assert.match(await review(page).innerText(), /sAERO #2890 will allocate its [\d.]+k allocation power on Base/);
+    assert.match(await review(page).innerText(), /sAERO #2890 will allocate its [\d.]+k sAERO weight on Base/);
     await review(page).getByText("Simulated on Base: it succeeds.").waitFor();
     await review(page).getByRole("button", { name: "Continue" }).click();
     await h.confirm(page);
