@@ -474,18 +474,33 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       : []),
   ];
   drawLines(lines);
-  const cell = (step: Paid | undefined) => (step?.paid ? aprAt(step.paid.total, step.paid.priced, step.prices) : "–");
+  // A step's APR in tenths of a percentage point, as shown, so that figures shown alike rank alike.
+  const shownApr = (step: Paid | undefined): number | undefined => {
+    const found = step?.paid && aero.aprOf(step.paid.total, step.prices);
+    return found === undefined ? undefined : Math.round(found * 1000);
+  };
+  // The highest APR in a row is in bold, when the row has more than one to compare.
+  const cell = (step: Paid | undefined, best: number | undefined): Value => {
+    if (!step?.paid) return "–";
+    const words = aprAt(step.paid.total, step.paid.priced, step.prices);
+    return best !== undefined && shownApr(step) === best
+      ? Object.assign(document.createElement("strong"), { textContent: words })
+      : words;
+  };
   list(
     $("[data-list=step]", aeroView),
     lines[0]!.steps,
     ({ from }) => String(from),
-    (tr, _, k) =>
+    (tr, _, k) => {
+      const figures = lines.flatMap(({ steps }) => shownApr(steps[k]) ?? []);
+      const best = figures.length > 1 ? Math.max(...figures) : undefined;
       fill(tr, {
         when: stepWords(k),
         custom: null,
-        ...Object.fromEntries(lines.map(({ id, steps }) => [id, cell(steps[k])])),
-        pilot: shown(pilot, (steps) => cell(steps[k])),
-      }),
+        ...Object.fromEntries(lines.map(({ id, steps }) => [id, cell(steps[k], best)])),
+        pilot: shown(pilot, (steps) => cell(steps[k], best)),
+      });
+    },
   );
   fill(aeroView, {
     "custom-head": custom ? true : null,
