@@ -398,8 +398,8 @@ button,
   stroke-width: 2;
   stroke-linecap: round;
 }
-.Chart-key[data-dashed] .Chart-swatch line {
-  stroke-dasharray: 4 3;
+.Chart-key .Chart-swatch line {
+  stroke-dasharray: var(--dashes, none);
 }
 .Chart-frame {
   position: relative;

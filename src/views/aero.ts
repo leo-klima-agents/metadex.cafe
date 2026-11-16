@@ -40,7 +40,7 @@ import { now, same, simulate } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import { $, busy, enable, fill, fromTemplate, link, list, shown, stateOf, status, type Value } from "../ui.ts";
 import type { Slip } from "../wallet.ts";
-import { drawChart, type Series } from "./chart.ts";
+import { drawChart, swatchDashes, type Series } from "./chart.ts";
 import { openMessage, openReview } from "./review.ts";
 
 const aeroView = $('[data-view="aero"]');
@@ -147,8 +147,8 @@ const plan: {
 // The two strategies, in the order shown. Each has its line's colour, and its `id` names its column in the record's
 // table.
 const STRATEGIES = [
-  { id: "leaders", leaders: true, name: "Follow the leaders", color: "var(--series-1)" },
-  { id: "revenue", leaders: false, name: "Follow revenue", color: "var(--series-3)" },
+  { id: "leaders", leaders: true, name: "Follow the leaders", short: "Leaders", color: "var(--series-1)" },
+  { id: "revenue", leaders: false, name: "Follow revenue", short: "Revenue", color: "var(--series-3)" },
 ];
 // The pools a strategy picks and how it splits them.
 function poolsWords({ count: top, blueChips, leaders }: aero.Strategy): string {
@@ -446,23 +446,37 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       : null;
   };
   const lines: Line[] = [
-    ...STRATEGIES.map(({ id, name, color }, i) => {
+    ...STRATEGIES.map(({ id, name, short, color, leaders }, i) => {
       const steps = strategies[i]!;
-      return { id, name, color, steps, apr: figure(steps), note: daily(steps) };
+      // The chosen strategy's line is in bold, unless a custom allocation replaces it.
+      const bold = !custom && leaders === chosen.leaders;
+      return { id, name, short, color, bold, steps, apr: figure(steps), note: daily(steps) };
     }),
     {
       id: "pilot",
+      short: "Autopilot",
       name: (record.value && autopilotOf(record.value.stake)?.name) ?? AUTOPILOTS[0]!.name,
       color: "var(--series-2)",
       steps: pilot.value ?? [],
       apr: shown(pilot, figure),
       note: shown(pilot, daily),
     },
-    { id: "average", name: "Base average", color: "var(--quiet)", steps: average, apr: figure(average), note: null },
+    {
+      id: "average",
+      name: "Base average",
+      short: "Average",
+      color: "var(--quiet)",
+      reference: true,
+      steps: average,
+      apr: figure(average),
+      note: null,
+    },
     ...(custom
       ? [
           {
             id: "custom",
+            short: "Custom",
+            bold: true,
             name: "Custom allocation",
             color: "var(--ink)",
             dashed: true,
@@ -514,7 +528,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
 }
 
 // A line of the record, with its tile. `steps` are newest first. The chart puts the oldest on the left.
-type Line = { id: string; name: string; color: string; dashed?: boolean; steps: Paid[]; apr: Value; note: Value };
+type Line = Omit<Series, "values"> & { steps: Paid[]; apr: Value; note: Value };
 // Draws the tiles, the chart and its legend, in the order of `lines`. The first line is drawn on top.
 function drawLines(lines: Line[]): void {
   list(
@@ -523,11 +537,8 @@ function drawLines(lines: Line[]): void {
     ({ id }) => id,
     (tile, { name, apr, note }) => fill(tile, { name, apr, note }),
   );
-  const series: Series[] = lines.map(({ id, name, color, dashed, steps }) => ({
-    id,
-    name,
-    color,
-    dashed,
+  const series: Series[] = lines.map(({ steps, apr: _apr, note: _note, ...line }) => ({
+    ...line,
     values: Array.from({ length: aero.PICKS }, (_, i) => {
       const step = steps[aero.PICKS - 1 - i];
       return step?.paid && aero.aprOf(step.paid.total, step.prices);
@@ -545,9 +556,9 @@ function drawLines(lines: Line[]): void {
     $("[data-list=legend]", aeroView),
     lines,
     ({ id }) => id,
-    (li, { name, color, dashed }) => {
+    (li, { name, color, ...style }) => {
       li.style.setProperty("--key", color);
-      li.toggleAttribute("data-dashed", !!dashed);
+      li.style.setProperty("--dashes", swatchDashes(style) ?? "none");
       fill(li, { name });
     },
   );
