@@ -30,7 +30,7 @@ import {
   units,
   until,
   utc,
-  voteWords,
+  powerWords,
 } from "../format.ts";
 import * as hydrex from "../hydrex.ts";
 import type { Account, Holdings, MatchaLatte, Status } from "../hydrex.ts";
@@ -94,8 +94,8 @@ export function statusNode(s: Status, own: boolean, inGroup?: string): Value {
   }
 }
 
-// Rounded to a tenth of a percentage point.
-const aprOrNoPrice = (apr: number | undefined): string => (apr === undefined ? "No price for HYDX" : aprWords(apr));
+// Rounded to a tenth of a percentage point. Without a price for oHYDX, which values earning power, there is no APR.
+const aprOrNoPrice = (apr: number | undefined): string => (apr === undefined ? "No price for oHYDX" : aprWords(apr));
 const record = (automation: Automation): Value =>
   shown(data.earnings(automation), (earnings) => {
     if (!earnings.votes) return "No record yet";
@@ -177,7 +177,7 @@ function drawGroups(root: HTMLElement, holdings: Holdings, belongs: (group: stri
         const earned = data.accountEarned(holdings, account.id);
         fill(row, {
           link: { href: hrefOf({ view: "account", id: account.id }), text: accountName(account) },
-          votes: voteWords(account.votes),
+          power: powerWords(hydrex.earningPowerOf(account.votes)),
           earned: shown(earned, (worth) => ` · ${money(worth)} last epoch`),
           status: statusNode(st, true, section.dataset.group),
           late: late.has(account.id) ? status("stopped", "Payout late") : null,
@@ -201,18 +201,15 @@ function drawGroups(root: HTMLElement, holdings: Holdings, belongs: (group: stri
       box.checked = chosen.length === able.length;
       box.indeterminate = chosen.length > 0 && chosen.length < able.length;
     }
-    const votes = sumBig(chosen.map(({ votes }) => votes));
-    const fewer = these.some(({ account }) => account.votes > 0n);
+    const power = hydrex.earningPowerOf(sumBig(chosen.map(({ votes }) => votes)));
+    const some = these.some(({ account }) => account.votes > 0n);
+    const without = some ? "with less than one earning power" : "without earning power";
     fill(section, {
       all: able.length > 1 || null,
-      picked: able.length > 1 && chosen.length > 0 ? `${chosen.length} of ${able.length} · ${voteWords(votes)}` : null,
+      picked: able.length > 1 && chosen.length > 0 ? `${chosen.length} of ${able.length} · ${powerWords(power)}` : null,
       count:
         section.dataset.group === "closed"
-          ? count(
-              these.length,
-              `Hydrex account ${fewer ? "with less than one vote" : "without votes"}`,
-              `Hydrex accounts ${fewer ? "with less than one vote" : "without votes"}`,
-            )
+          ? count(these.length, `Hydrex account ${without}`, `Hydrex accounts ${without}`)
           : String(these.length),
     });
   }
@@ -255,7 +252,7 @@ export function drawHydrex(): void {
       : null,
     underway: found && underWay(found) ? "Payout under way." : null,
     average: shown(data.average(), (all) => aprOrNoPrice(aprOf(all))),
-    // Shown only beside an APR, not beside "Loading…", "Not read" or "No price for HYDX".
+    // Shown only beside an APR, not beside "Loading…", "Not read" or "No price for oHYDX".
     "average-aside": average && aprOf(average) !== undefined ? true : null,
     own: shown(holdings, ownWords),
     epoch: state.connection ? epochWords() : null,
@@ -360,7 +357,7 @@ function performance(automation: Automation): Value {
     const value = earnings && valueOf(earnings, prices);
     const cents = (sum: Money | undefined) => (sum ? money(sum, true) : pending);
     return {
-      [`${prefix}votes`]: earnings ? compact(earnings.votes) : pending,
+      [`${prefix}power`]: earnings ? compact(hydrex.earningPowerOf(earnings.votes)) : pending,
       [`${prefix}pools`]: earnings ? count(earnings.pools.length, "pool", "pools") : pending,
       [`${prefix}earned`]: cents(value && moneyAt(value.total, value)),
       [`${prefix}fees`]: cents(value && moneyAt(value.fees, value)),

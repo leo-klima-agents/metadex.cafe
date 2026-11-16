@@ -76,6 +76,8 @@ export const USDC: Address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 export const CBBTC: Address = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf";
 export const EURC: Address = "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42";
 export const HYDX: Address = "0x00000e7efa313F4E11Bfff432471eD9423AC6B30";
+// oHYDX, Hydrex's options token. Exercising one gives one HYDX, for a payment in USDC.
+export const OHYDX: Address = "0xA1136031150E50B015b41f1ca6B2e99e49D8cB78";
 // A pool is a blue chip when both its tokens are among these.
 export const BLUE_CHIPS: Address[] = [USDC, EURC, WETH, CBBTC, AERO];
 

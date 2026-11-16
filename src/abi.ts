@@ -137,4 +137,8 @@ export const rewardsManagerAbi = parseAbi([
   "function earnedIncentives(uint256 tokenId, uint256 programId, uint256 maxCheckpoints) view returns (uint256)",
 ]);
 
+// What exercising `amount` oHYDX into HYDX costs, in USDC: a share of HYDX's time-weighted price, but no less than a
+// floor price.
+export const optionsTokenAbi = parseAbi(["function getMinPrice(uint256 amount) view returns (uint256)"]);
+
 export const aeroPoolAbi = parseAbi(["function tickSpacing() view returns (int24)"]);

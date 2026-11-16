@@ -16,15 +16,25 @@ import { ANCHORS, FIAT_FEEDS, WETH } from "../src/config.ts";
 import { WEEK } from "../src/format.ts";
 import { key, type Token } from "../src/prices.ts";
 import { read, type Read } from "../src/rpc.ts";
-import { allEarnings, earnedBy, aprOf, shareOf, valueOf, votesEarned, type Earnings } from "../src/rewards.ts";
+import {
+  allEarnings,
+  earnedBy,
+  aprOf,
+  shareOf,
+  valueOf,
+  votesEarned,
+  withOhydx,
+  type Earnings,
+} from "../src/rewards.ts";
 
 const USDC: Token = { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, symbol: "USDC" };
 const HYDX: Token = { address: "0x00000e7efa313F4E11Bfff432471eD9423AC6B30", decimals: 18, symbol: "HYDX" };
+const OHYDX: Address = "0xA1136031150E50B015b41f1ca6B2e99e49D8cB78";
 const WFRAX: Token = { address: "0x0CEAC003B0d2479BebeC9f4b2EBAd0a803759bbf", decimals: 18, symbol: "WFRAX" };
 const POOL: Address = "0x605abD1873737CA9a9Ec1CFa52CDfc8ef62c2E1d";
 const OTHER: Address = "0x0BA69825c4C033e72309F6AC0Bde0023b15Cc97c";
 const pay = (token: Token, amount: bigint, at = POOL) => ({ pool: at, contract: at, token, amount, fee: at === POOL });
-const PRICES = new Map(Object.entries({ [key(USDC.address)]: 1, [key(HYDX.address)]: 0.025 }));
+const PRICES = new Map(Object.entries({ [key(USDC.address)]: 1, [key(HYDX.address)]: 0.025, [key(OHYDX)]: 0.015 }));
 const round = (value: number) => Math.round(value * 1e6) / 1e6;
 
 test("a voter's share of a reward contract's rewards rounds down, as the contract's does", () => {
@@ -75,18 +85,56 @@ test("what some votes earned at the rate of others', and their APR, at their pri
     prices: { unit: "USD" as const, of: PRICES },
   };
   assert.equal(round(shareOf(mine, 10n ** 21n).value), 267.5, "a quarter of $1,070");
-  // $0.2675 a vote for the week, or $0.2625 without PLAIN, times 365 / 7 weeks a year, over HYDX at $0.025.
+  // 4,000 votes are 5,200 earning power. $1,070 for the week, or $1,050 without PLAIN, over that, times 365 / 7 weeks
+  // a year, over oHYDX at $0.015.
   const near = (a: number | undefined, b: number) =>
     assert.ok(a !== undefined && Math.abs(a - b) < 1e-9, `${a} ≠ ${b}`);
-  near(aprOf(mine), ((1_070 / 4_000) * (365 / 7)) / 0.025);
-  near(aprOf(mine, all.prices), ((1_050 / 4_000) * (365 / 7)) / 0.025);
-  const unpriced = {
+  near(aprOf(mine), ((1_070 / 5_200) * (365 / 7)) / 0.015);
+  near(aprOf(mine, all.prices), ((1_050 / 5_200) * (365 / 7)) / 0.015);
+  const without = (token: string) => ({
     ...mine.prices,
-    of: new Map([...mine.prices.of].filter(([token]) => token !== key(HYDX.address))),
-  };
-  assert.equal(aprOf(mine, unpriced), undefined, "no price for HYDX, no APR");
+    of: new Map([...mine.prices.of].filter(([each]) => each !== key(token))),
+  });
+  assert.equal(aprOf(mine, without(OHYDX)), undefined, "no price for oHYDX, no APR");
+  assert.ok(aprOf(mine, without(HYDX.address)) !== undefined, "HYDX's own price is not needed");
   assert.equal(aprOf({ ...mine, votes: 0n }), undefined, "no votes, no APR");
   assert.equal(shareOf({ ...mine, votes: 0n }, 10n ** 21n).value, 0, "no votes, no rate");
+});
+
+test("oHYDX is priced at HYDX's price less what exercising one costs in USDC, read in the last block at the flip", async () => {
+  // Block n's time is 2n seconds, so the last block at or before time 1,001 is 500.
+  const NEWEST = 1_000;
+  const FLIP = 1_001;
+  const blocks: (number | "latest" | undefined)[] = [];
+  const answering =
+    (cost: bigint | undefined, fails = false): Read =>
+    async (calls, { block } = {}) => {
+      const at = block === "latest" || block === undefined ? NEWEST : block;
+      return calls.map(({ functionName }) => {
+        if (functionName === "getBlockNumber") return BigInt(NEWEST);
+        if (functionName === "getCurrentBlockTimestamp") return BigInt(2 * at);
+        assert.equal(functionName, "getMinPrice");
+        if (fails) throw new Error("Not read");
+        blocks.push(block);
+        return cost;
+      }) as never;
+    };
+  const prices = (of: Record<string, number>) => ({ unit: "USD" as const, of: new Map(Object.entries(of)) });
+  const both = prices({ [key(HYDX.address)]: 0.025, [key(USDC.address)]: 0.999 });
+  // Exercising costs $0.01 at least, here 10,000 USDC units.
+  const found = await withOhydx(both, FLIP, answering(10_000n));
+  assert.ok(Math.abs(found.of.get(key(OHYDX))! - (0.025 - 0.00999)) < 1e-12);
+  assert.deepEqual(blocks, [500]);
+  assert.equal(both.of.has(key(OHYDX)), false, "the prices given are left as they were");
+  // An oHYDX that costs more to exercise than HYDX is worth is worth nothing.
+  assert.equal((await withOhydx(both, FLIP, answering(30_000n))).of.get(key(OHYDX)), 0);
+  for (const [why, given, rd] of [
+    ["no HYDX price", prices({ [key(USDC.address)]: 1 }), answering(10_000n)],
+    ["no USDC price", prices({ [key(HYDX.address)]: 0.025 }), answering(10_000n)],
+    ["the cost not read", both, answering(undefined)],
+    ["a failed read", both, answering(10_000n, true)],
+  ] as const)
+    assert.equal((await withOhydx(given, FLIP, rd)).of.has(key(OHYDX)), false, why);
 });
 
 test("an epoch's rewards are read once for every voter, on its own pools or not, each reading its votes, and priced once", async (t) => {
