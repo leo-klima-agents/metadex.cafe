@@ -459,6 +459,8 @@ export function change(accounts: Account[], action: "join" | "leave" | "self", a
           const each = shareOf(earnings, votes);
           return money({ ...each, value: (each.value * Number(paid)) / 10_000 });
         }),
+        // Shown only beside a figure, not beside "Loading…", "Not read" or "No record yet".
+        "weekly-note": weekly.value?.votes && paid !== undefined ? "at last epoch's rate" : null,
         gas: wei,
         takes: ml ? (settings ? `Up to ${bps(settings.retireBps)}` : "Not read") : "1%",
         "takes-note": ml ? (settings ? `retired${feeWords(settings.feeBps)}` : null) : "on claims",
