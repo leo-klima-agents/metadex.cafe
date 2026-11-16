@@ -1,0 +1,108 @@
+
+## Blocks read
+Ethereum block                               26427003
+Base block                                   58173258
+Robinhood Chain block                        115693592
+Sonic block                                  82652818
+Time (UTC)                                   2026-11-16T10:30:27Z
+
+## 1. NAMI supply: liquid NAMI plus burned-into-veNAMI, per chain (sum should be 1,200,000e18)
+ETH NAMI totalSupply                         90999009999999999998000 [9.099e22]
+ETH veNAMI supply                            963997970000000000000000 [9.639e23]
+ETH veNAMI infinityNFTBalance                963997970000000000000000 [9.639e23]
+ETH veNAMI lastTokenId                       2
+BASE NAMI totalSupply                        138723395708036659724109 [1.387e23]
+BASE veNAMI supply                           1277614291963340276891 [1.277e21]
+BASE veNAMI infinityNFTBalance               1277614291963340276891 [1.277e21]
+BASE veNAMI lastTokenId                      28
+RH NAMI totalSupply                          5000010000000000001000 [5e21]
+RH veNAMI supply                             2000000000000000000 [2e18]
+RH veNAMI infinityNFTBalance                 2000000000000000000 [2e18]
+RH veNAMI lastTokenId                        3
+NamiHub GENESIS_SUPPLY                       1200000000000000000000000 [1.2e24]
+
+## 2. Who holds the voting power (Ethereum veNAMI #2)
+ownerOf(2)                                   0x52a34381251fA5531746EAa952b7153ff9FFA56b
+locked(2) = (amount,end,isINFT)              (963996970000000000000000 [9.639e23], 0, true)
+Safe threshold                               4
+Safe owners                                  [0xfaE109D7DE0c86cB7EB1c6289486EAF56B6466E6, 0xFC35577ff50224D61588cF5BEC56826A388867C7, 0xAe8551d8E186BA871a83eBCe3FCe215d6046cfa2, 0xDdae00A4B3458233369D061236183D4eE74A65C9, 0x9835fa5D1bc9A64549093A8a13027ACD2bc8C992, 0xFd223753Ec26E5cC6fbD0C3002355A21949D9Aa2, 0xb98568bE13019afa6b6c45a29aC446F47de59e11]
+
+## 3. Minter (Ethereum hub): emission parameters
+Minter.owner()(address)                      0x52a34381251fA5531746EAa952b7153ff9FFA56b
+Minter.weekly()(uint256)                     400000000000000000000000 [4e23]
+Minter.EMISSION()(uint256)                   1000000 [1e6]
+Minter.rebaseRate()(uint256)                 40000 [4e4]
+Minter.lockIncentiveRate()(uint256)          100000 [1e5]
+Minter.isEpochsStarted()(bool)               false
+Minter.initialWeeklySet()(bool)              false
+Minter.weekNumber()(uint256)                 0
+Minter.active_period()(uint256)              0
+
+## 4. Admin keys (Ethereum hub)
+veNAMI diamond owner                         0xed2ebf7B0C43398F7EC5b517A4C87BF799A8Cd5F
+1-day timelock getMinDelay                   86400 [8.64e4]
+3-day timelock getMinDelay                   259200 [2.592e5]
+Safe is proposer on 1-day timelock           true
+Safe is executor on 1-day timelock           true
+Minter ProxyAdmin                            0xe47318ec0428d5a44b1cedc8fd28914502886a85
+Minter ProxyAdmin owner                      0xed2ebf7B0C43398F7EC5b517A4C87BF799A8Cd5F
+NAMI DEFAULT_ADMIN_ROLE: 1-day timelock      true
+NAMI BRIDGE_LIMITS_ROLE: Safe                true
+
+## 5. Emissions settlement and voter-reward roots (Ethereum hub)
+EmissionsSettlement owner                    0x52a34381251fA5531746EAa952b7153ff9FFA56b
+EmissionsSettlement disputeWindow (seconds)  3600
+EmissionsSettlement reviewThreshold          1
+EmissionsSettlement DISPUTER_ROLE count      1
+EmissionsSettlement DISPUTER_ROLE member 0   0xb17a6a8613cdE5a52098EE4700692495B291cA43
+EmissionsSettlement KEEPER_ROLE count        1
+EmissionsSettlement KEEPER_ROLE member 0     0x13ead17ddfB2960F586E8262342B7ac2888A512B
+EmissionsSettlement MERKLE_ROOT_MANAGER count 1
+EmissionsSettlement MERKLE_ROOT_MANAGER member 0 0x52a34381251fA5531746EAa952b7153ff9FFA56b
+VoterRewards owner                           0xed2ebf7B0C43398F7EC5b517A4C87BF799A8Cd5F
+VoterRewards disputeWindow (seconds)         3600
+VoterRewards reviewThreshold                 1
+VoterRewards DISPUTER_ROLE count             1
+VoterRewards DISPUTER_ROLE member 0          0xb17a6a8613cdE5a52098EE4700692495B291cA43
+VoterRewards KEEPER_ROLE count               1
+VoterRewards KEEPER_ROLE member 0            0x13ead17ddfB2960F586E8262342B7ac2888A512B
+VoterRewards MERKLE_ROOT_MANAGER count       1
+VoterRewards MERKLE_ROOT_MANAGER member 0    0x52a34381251fA5531746EAa952b7153ff9FFA56b
+
+## 6. Presale and ogNAMI (Base)
+getPresaleInfo()                             (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913, 0x11110ecC00D927f70Be6E35adb24BB7d3dC11111, 0x0db1e546Bd8b3B3DA2a08E543E72C69b9bc652c7, 0x04eb95B70cbEfdA968B8568F09f1Ff54F10C6E66, 0x0101d61ab0Af01FE430db7c287B8f2704Ae30101, 200000000000000000000000 [2e23], 20000000000000000000000 [2e22], 2000000000000 [2e12], 100000000 [1e8], 100000000000 [1e11], 1791223200 [1.791e9], 1793660400 [1.793e9], 865000000000 [8.65e11], 86500000000000000000000 [8.65e22], true, false, true, 0, 0, 100000000000000000000000000000 [1e29], 1791219600 [1.791e9], 3600, false, 0)
+vaultCount()                                 405
+ogNAMI totalSupply                           249917260683620000000000 [2.499e23]
+sogNAMI totalSupply (staked)                 87695680281045565736637 [8.769e22]
+ogNAMI held by team Safe (unsold)            124850000000000000000000 [1.248e23]
+that Safe's threshold                        4
+that Safe's owners                           [0xfaE109D7DE0c86cB7EB1c6289486EAF56B6466E6, 0xFC35577ff50224D61588cF5BEC56826A388867C7, 0xAe8551d8E186BA871a83eBCe3FCe215d6046cfa2, 0xDdae00A4B3458233369D061236183D4eE74A65C9, 0x9835fa5D1bc9A64549093A8a13027ACD2bc8C992, 0xFd223753Ec26E5cC6fbD0C3002355A21949D9Aa2, 0xb98568bE13019afa6b6c45a29aC446F47de59e11]
+
+## 7. Market (Base). Algebra globalState = (sqrtPriceX96, tick, lastFee, pluginConfig, communityFee, unlocked)
+NAMI/WETH pool                               0x22c96E2873ac34462addf0160e1b69d3373c64ae
+NAMI/WETH token0                             0x4200000000000000000000000000000000000006
+NAMI/WETH globalState                        1200649546069795544193464067397 [1.2e30] 54368 [5.436e4] 500 195 1000 true 
+NAMI/WETH pool WETH balance                  68888403832490339477 [6.888e19]
+NAMI/WETH pool NAMI balance                  68967397942506227013387 [6.896e22]
+ogNAMI/WETH pool                             0xDbc10ef6eA573F11849096330a76459c789Ecb67
+ogNAMI/WETH token0                           0x11110ecC00D927f70Be6E35adb24BB7d3dC11111
+ogNAMI/WETH globalState                      6118614845280910413635265552 [6.118e27] -51223 [-5.122e4] 500 195 1000 true 
+ogNAMI/WETH pool ogNAMI balance              28004779739645247370375 [2.8e22]
+Chainlink ETH/USD answer (8 decimals)        180595000000 [1.805e11]
+
+## 8. The SwapX link
+Nami deployer's first funding: from          0xe67E6a96235A4f7A81B8532f3d491c20DaADe2cd
+Nami deployer's first funding: to            0x2358545EeF7E56B2EbEaCbF62212278dD27A99db
+swapx.eth resolves to                        0xe67E6a96235A4f7A81B8532f3d491c20DaADe2cd
+swapx.eth registrant                         0xe67E6a96235A4f7A81B8532f3d491c20DaADe2cd
+veSWPx (Sonic) name                          "veSwapX"
+veSWPx implementation slot                   0x000000000000000000000000099850d49ca301729edb8d8ec533b155e0abaaf2
+that implementation was created by           0xe67E6a96235A4f7A81B8532f3d491c20DaADe2cd
+and the creation made contract               0x099850d49CA301729Edb8D8ec533b155E0ABaAf2
+
+## 9. SwapX today (Sonic)
+SWPx totalSupply                             160902747178570019017490111 [1.609e26]
+SwapX minter weekly                          935065520563282239371839 [9.35e23]
+SwapX minter owner                           0xAdB5A1518713095C39dBcA08Da6656af7249Dd20
+SwapX owner Safe threshold                   2
+SwapX owner Safe owners                      [0xBCAA4c21c674DFD89e8C4e550d1e02eA099c8afb, 0x59A8b78Edf9469565a7a3Bf7DDc5391dF2c49B71, 0x622007f5C08Dde671ffe2BdBF24CDa996766b941, 0x3B2a7d6743047Bb37e81D2684EAC864F8562128A, 0x2Ab0F018D67803C82151910084BF8597d67B698d, 0x5b82A4b44a7f60dB06Ff5255607761A697cE1801]
