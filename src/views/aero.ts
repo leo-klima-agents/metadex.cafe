@@ -154,7 +154,7 @@ const STRATEGIES = [
 function poolsWords({ count: top, blueChips, leaders }: aero.Strategy): string {
   const pools = `${count(top, "pool", "pools")}${blueChips ? " of blue chips" : ""}`;
   return leaders
-    ? `The ${pools} that paid the most per sAERO weight, more to those that paid more.`
+    ? `The ${pools} that paid the most per sAERO weight, in proportion to how far each paid above the average.`
     : `The ${pools} with the most protocol revenue, in proportion to that revenue.`;
 }
 // `drawn` is the rows as last drawn, which the actions edit. `nextPools` is the pools "Show more pools" adds next.
