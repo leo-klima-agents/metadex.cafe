@@ -147,8 +147,8 @@ const plan: {
 // The two strategies, in the order shown. Each has its line's colour, and its `id` names its column in the record's
 // table.
 const STRATEGIES = [
-  { id: "leaders", leaders: true, name: "Follow the leaders", short: "Leaders", color: "var(--series-1)" },
-  { id: "revenue", leaders: false, name: "Follow revenue", short: "Revenue", color: "var(--series-3)" },
+  { id: "leaders", leaders: true, name: "Follow the leaders", color: "var(--series-1)" },
+  { id: "revenue", leaders: false, name: "Follow revenue", color: "var(--series-3)" },
 ];
 // The pools a strategy picks and how it splits them.
 function poolsWords({ count: top, blueChips, leaders }: aero.Strategy): string {
@@ -446,15 +446,14 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       : null;
   };
   const lines: Line[] = [
-    ...STRATEGIES.map(({ id, name, short, color, leaders }, i) => {
+    ...STRATEGIES.map(({ id, name, color, leaders }, i) => {
       const steps = strategies[i]!;
       // The chosen strategy's line is in bold, unless a custom allocation replaces it.
       const bold = !custom && leaders === chosen.leaders;
-      return { id, name, short, color, bold, steps, apr: figure(steps), note: daily(steps) };
+      return { id, name, color, bold, steps, apr: figure(steps), note: daily(steps) };
     }),
     {
       id: "pilot",
-      short: "Autopilot",
       name: (record.value && autopilotOf(record.value.stake)?.name) ?? AUTOPILOTS[0]!.name,
       color: "var(--series-2)",
       steps: pilot.value ?? [],
@@ -464,7 +463,6 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
     {
       id: "average",
       name: "Base average",
-      short: "Average",
       color: "var(--quiet)",
       reference: true,
       steps: average,
@@ -475,7 +473,6 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       ? [
           {
             id: "custom",
-            short: "Custom",
             bold: true,
             name: "Custom allocation",
             color: "var(--ink)",

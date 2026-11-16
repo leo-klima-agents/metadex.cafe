@@ -14,15 +14,3 @@ export function ticksOf(least: number, most: number): number[] {
   // Rounded, so that 0.1 + 0.2 shows as 0.3.
   return Array.from({ length: last - first + 1 }, (_, i) => Number(((first + i) * step).toPrecision(12)));
 }
-// Moves labels apart, keeping their order, so that none is closer than `gap` to the next, nor outside `low`–`high`. Each
-// stays as near its own place as it can.
-export function spread(at: number[], gap: number, low: number, high: number): number[] {
-  const order = at.map((_, i) => i).sort((a, b) => at[a]! - at[b]!);
-  const placed = order.map((i) => at[i]!);
-  for (let k = 0; k < placed.length; k++) placed[k] = Math.max(placed[k]!, low, k ? placed[k - 1]! + gap : low);
-  for (let k = placed.length - 1; k >= 0; k--)
-    placed[k] = Math.min(placed[k]!, k < placed.length - 1 ? placed[k + 1]! - gap : high);
-  const moved = [...at];
-  order.forEach((i, k) => (moved[i] = placed[k]!));
-  return moved;
-}
