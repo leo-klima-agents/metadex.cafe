@@ -62,7 +62,8 @@ The docs give this split of the 1.2M. **[docs]**
 
 There is no bucket named "team". The docs do not say who controls Incentives, Protocol Reserve, Ecosystem Partners and
 Blockchain Foundations, how they vest, or whether they vote. Together with the buyback engine's seed, those buckets are
-820,000 veNAMI, 85% of the initial voting power. **[derived]**
+840,000 NAMI-equivalent, 70% of the allocation. 820,000 of that is veNAMI, 85% of the initial voting power.
+**[derived]**
 
 **Today one multisig holds almost all of it.** veNAMI #2 on Ethereum holds 963,996.97 veNAMI and belongs to a 4-of-7
 Safe, `0x52a34381251fA5531746EAa952b7153ff9FFA56b`. That is 99.87% of all voting power. The public holds about 1,280

@@ -55,4 +55,5 @@ Key transactions:
 
 ## Aerodrome, Aero and Hydrex
 
-See the source notes at the end of `../03-comparison.md`.
+`aero-facts.md` and `hydrex-facts.md` in this directory give a source and a status for every line. The main sources are
+listed at the end of `../03-comparison.md`. Token prices for AERO, HYDX and SWPx came from `coins.llama.fi`.

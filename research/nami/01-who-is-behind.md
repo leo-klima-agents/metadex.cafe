@@ -78,14 +78,14 @@ SwapX's six, and Nami's deployer has no history on Ethereum or Sonic before 27 A
 
 ### Why it matters: SwapX's record
 
-| Measure            | Peak                             | Now                                        | Source                                                       |
-| ------------------ | -------------------------------- | ------------------------------------------ | ------------------------------------------------------------ |
-| SwapX TVL          | $65.1M on 28 March 2025          | $0.31M on 16 November 2026 (down 99.5%)    | [secondary] DefiLlama `swapx`                                |
-| SWPx price         | $0.7548 on 25 February 2025      | about $0.0009 in October 2026 (down 99.9%) | [secondary] CryptoRank and SonicScan excerpts, not rechecked |
-| SWPx supply        | 40M at launch                    | 160.9M                                     | [secondary] blocmates for launch; [on-chain] `totalSupply()` |
-| SWPx emissions     | 2M a week at launch, decaying 1% | 935,066 a week, still running              | [secondary] blocmates; [on-chain] `Minter.weekly()`          |
-| SwapX 7-day volume |                                  | $0.80M                                     | [secondary] DefiLlama                                        |
-| SwapX admin        |                                  | A 2-of-6 Safe owns the minter              | [on-chain]                                                   |
+| Measure            | Peak                             | Now                                      | Source                                                                 |
+| ------------------ | -------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------- |
+| SwapX TVL          | $65.1M on 28 March 2025          | $0.31M on 16 November 2026 (down 99.5%)  | [secondary] DefiLlama `swapx`                                          |
+| SWPx price         | $0.7548 on 25 February 2025      | $0.0011 on 16 November 2026 (down 99.9%) | [secondary] CryptoRank excerpt for the high; DefiLlama price for today |
+| SWPx supply        | 40M at launch                    | 160.9M                                   | [secondary] blocmates for launch; [on-chain] `totalSupply()`           |
+| SWPx emissions     | 2M a week at launch, decaying 1% | 935,066 a week, still running            | [secondary] blocmates; [on-chain] `Minter.weekly()`                    |
+| SwapX 7-day volume |                                  | $0.80M                                   | [secondary] DefiLlama                                                  |
+| SwapX admin        |                                  | A 2-of-6 Safe owns the minter            | [on-chain]                                                             |
 
 Sonic's whole DeFi ecosystem shrank over the same period, so SwapX's decline is not only the team's doing. Two points
 still bear on Nami. First, the same developers' previous token lost almost all its value while it kept emitting; Nami's

@@ -107,9 +107,9 @@ the bridge path is bounded by rate limits, which the Safe sets. Robinhood Chain 
 
 ### 12. It competes with Aero on all three chains
 
-Aero has about $256M of TVL on Base, $11.5M on Ethereum and $3.9M on Robinhood Chain, against Nami's $0.5M in total.
-Nami's liquidity providers earn no swap fees on gauged pools, so its liquidity lasts only as long as its emissions are
-worth more than what Aero and Uniswap pay.
+Aero has about $147M of TVL on Base, $11.5M on Ethereum and $3.9M on Robinhood Chain, and legacy Aerodrome holds another
+$109M on Base. Nami has $0.5M in total. Nami's liquidity providers earn no swap fees on gauged pools, so its liquidity
+lasts only as long as its emissions are worth more than what Aero and Uniswap pay.
 
 ### 13. Legal and access risk
 
