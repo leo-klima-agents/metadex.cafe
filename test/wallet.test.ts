@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { EIP1193Provider } from "viem";
+import {
+  MethodNotFoundRpcError,
+  SwitchChainError,
+  UnsupportedProviderMethodError,
+  UserRejectedRequestError,
+  type EIP1193Provider,
+} from "viem";
 import { now } from "../src/rpc.ts";
 import {
+  CODES,
   SAFE_ORIGIN,
   askSafe,
   callsStatus,
@@ -195,4 +202,13 @@ test("a Safe proposes its calls as one Safe transaction, none without a call; a 
     assert.equal((await thrown)!.message, error);
     assert.equal(declined(await thrown), isDeclined, error);
   }
+});
+
+test("the wallet error codes are viem's, without bundling viem's error classes", () => {
+  assert.deepEqual(CODES, {
+    rejected: UserRejectedRequestError.code,
+    unsupported: UnsupportedProviderMethodError.code,
+    unknownChain: SwitchChainError.code,
+    methodNotFound: MethodNotFoundRpcError.code,
+  });
 });
