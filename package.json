@@ -1,6 +1,6 @@
 {
   "name": "metadex.cafe",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "description": "Vote, claim and swap on Base",
   "license": "MIT",
@@ -20,7 +20,7 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "viem": "2.57.19"
+    "viem": "2.57.20"
   },
   "devDependencies": {
     "@ipld/car": "5.4.7",
