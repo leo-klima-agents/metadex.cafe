@@ -25,9 +25,10 @@ test("numbers, votes, counts and lists", () => {
     "in a column, always to a tenth",
   );
   assert.equal(f.units(5_691_499_999_999_999_999_999n), "5,691");
-  assert.equal(f.voteWords(897_043n * 10n ** 18n), "897,043 votes");
-  assert.equal(f.voteWords(15n * 10n ** 17n), "1 vote");
-  assert.equal(f.voteWords(10n ** 17n), "< 1 vote");
+  assert.equal(f.powerWords(897_043n * 10n ** 18n), "897,043 earning power");
+  assert.equal(f.powerWords(15n * 10n ** 17n), "1 earning power");
+  assert.equal(f.powerWords(10n ** 17n), "< 1 earning power");
+  assert.equal(f.powerFigure(0n), "0");
   assert.equal(f.compact(897_042_934_693_272_892_269_268n), "897k");
   assert.equal(f.compact(999_600n * 10n ** 18n), "1M");
   assert.equal(f.figure(41_234_000n, 6), "41.23");

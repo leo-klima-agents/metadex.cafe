@@ -13,7 +13,7 @@ import {
   moneyAt,
   short,
   utc,
-  voteFigure,
+  powerFigure,
   weekStart,
 } from "../format.ts";
 import * as hydrex from "../hydrex.ts";
@@ -90,7 +90,7 @@ export function drawAccount(): void {
   fill(view, {
     status: statusNode(st, own),
     lock: account.amount === 0n ? "Empty" : lockWords(account),
-    votes: voteFigure(account.votes),
+    power: powerFigure(hydrex.earningPowerOf(account.votes)),
     "earned-row": earned.value !== null || null,
     earned: shown(earned, (worth) => money(worth)),
     "owner-row": !own || null,

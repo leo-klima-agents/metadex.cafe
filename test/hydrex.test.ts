@@ -18,6 +18,7 @@ import {
   canJoin,
   canLeave,
   canLeaveOther,
+  earningPowerOf,
   groupOf,
   join,
   leave,
@@ -94,13 +95,21 @@ test("status by delegate: the owner, other automations, which may have stopped, 
   assert.deepEqual(status({ delegate: USDC, delegateVoted: 0 }), { kind: "other", name: "USDC" }, "never voted");
 });
 
-test("accounts are grouped by what their owner can do; without a vote, closed unless still held", () => {
+test("earning power is 1.3 for each vote, rounded down", () => {
+  assert.equal(earningPowerOf(10n ** 21n), 13n * 10n ** 20n);
+  assert.equal(earningPowerOf(769_230_769_230_769_231n), 10n ** 18n);
+  assert.equal(earningPowerOf(769_230_769_230_769_230n), 10n ** 18n - 1n);
+});
+
+test("accounts are grouped by what their owner can do; without earning power, closed unless still held", () => {
   const stopped = { delegate: USDC, delegateAtStart: USDC, delegateVoted: STOPPED };
-  const dust = { votes: 10n ** 18n - 1n };
+  // Just under one earning power, and just at it.
+  const dust = { votes: 769_230_769_230_769_230n };
+  const one = { votes: 769_230_769_230_769_231n };
   const groups: Record<string, Partial<Account>[]> = {
     "needs:stopped": [stopped],
     "needs:partly": [{ claimer: CONDUIT }],
-    "needs:unvoted": [{ ownerVoted: 0 }],
+    "needs:unvoted": [{ ownerVoted: 0 }, { ...one, ownerVoted: 0 }],
     "in:matcha-latte": [inBoth(CONDUIT, { delegateAtStart: CONDUIT }), inBoth(CONDUIT), { ...dust, claimer: CONDUIT }],
     "in:double-espresso": [inBoth(MAXI, { delegateAtStart: MAXI }), inBoth(MAXI, { ...dust, amount: 0n })],
     other: [{}, { delegateAtStart: CONDUIT }, { delegate: USDC, delegateVoted: NOW }, { delegate: STRANGER }],

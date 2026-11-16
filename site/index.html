@@ -566,9 +566,9 @@
                   </thead>
                   <tbody>
                     <tr>
-                      <th scope="row">Votes</th>
-                      <td class="u-figures" data-text="votes"></td>
-                      <td class="u-figures" data-text="all-votes"></td>
+                      <th scope="row">Earning power</th>
+                      <td class="u-figures" data-text="power"></td>
+                      <td class="u-figures" data-text="all-power"></td>
                     </tr>
                     <tr>
                       <th scope="row">Pools</th>
@@ -639,8 +639,8 @@
                 <dd class="Facts-value Facts-figure" data-text="lock"></dd>
               </div>
               <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">Votes</dt>
-                <dd class="Facts-value Facts-figure" data-text="votes"></dd>
+                <dt class="u-label Facts-tileLabel">Earning power</dt>
+                <dd class="Facts-value Facts-figure" data-text="power"></dd>
               </div>
               <div class="Facts-tile" data-text="earned-row">
                 <dt class="u-label Facts-tileLabel">Last epoch</dt>
@@ -759,7 +759,8 @@
           <div class="u-stack" data-when="ready">
             <dl class="Facts Facts--tiles" data-list="tile"></dl>
             <p class="Notice" data-text="edited">
-              The dashed line holds your custom allocation through all 8 days (hindsight).
+              The dashed line is your custom allocation, held for all 8 days. You chose it today, knowing how pools
+              paid, so unlike the strategies it has hindsight.
             </p>
             <figure class="Chart u-stackTight">
               <ul class="Chart-legend u-small" data-list="legend"></ul>
@@ -902,7 +903,7 @@
             </div>
             <div class="Pair">
               <dt class="u-small u-quiet">Thin</dt>
-              <dd>Under 1M sAERO weight 8 days ago, now or on average in between. Strategies leave it out</dd>
+              <dd>Left out of strategies for having under 1M sAERO weight 8 days ago, now or on average in between</dd>
             </div>
           </dl>
           <section class="u-stack" data-section="check">
@@ -1357,7 +1358,7 @@
         <label class="Ticks-target"><input class="Ticks-box" type="checkbox" data-action="pick" /></label>
         <div class="u-grow">
           <a class="Linked-cover Card-title" data-text="link"></a>
-          <p class="u-small u-quiet"><span data-text="votes"></span><span data-text="earned"></span></p>
+          <p class="u-small u-quiet"><span data-text="power"></span><span data-text="earned"></span></p>
           <p class="u-small" data-text="status"></p>
           <p class="u-small" data-text="late"></p>
         </div>
@@ -1556,8 +1557,9 @@
             <dd class="Facts-value Facts-figure" data-text="next"></dd>
           </div>
           <div class="Facts-tile">
-            <dt class="u-label Facts-tileLabel">A week at last epoch's pay</dt>
+            <dt class="u-label Facts-tileLabel">Projected weekly pay</dt>
             <dd class="Facts-value Facts-figure" data-text="weekly"></dd>
+            <dd class="Facts-tileNote u-small u-quiet" data-text="weekly-note"></dd>
           </div>
           <div class="Facts-tile">
             <dt class="u-label Facts-tileLabel">Gas</dt>

@@ -37,7 +37,7 @@ export function drawApp(): void {
   if (holdings.value) {
     const { owner, accounts, epochStart } = holdings.value;
     const statuses = accounts
-      .filter(hydrex.hasVotes)
+      .filter(hydrex.hasEarningPower)
       .map((account) => ({ account, status: hydrex.statusOf(account, owner, now(), epochStart) }));
     const unvoted = statuses.filter(({ status }) => status.kind === "unvoted").length;
     const stopped = statuses.filter(({ status }) => status.kind === "stopped").length;

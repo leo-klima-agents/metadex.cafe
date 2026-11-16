@@ -40,7 +40,7 @@ import { now, same, simulate } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import { $, busy, enable, fill, fromTemplate, link, list, shown, stateOf, status, type Value } from "../ui.ts";
 import type { Slip } from "../wallet.ts";
-import { drawChart, type Series } from "./chart.ts";
+import { drawChart, swatchDashes, type Series } from "./chart.ts";
 import { openMessage, openReview } from "./review.ts";
 
 const aeroView = $('[data-view="aero"]');
@@ -154,7 +154,7 @@ const STRATEGIES = [
 function poolsWords({ count: top, blueChips, leaders }: aero.Strategy): string {
   const pools = `${count(top, "pool", "pools")}${blueChips ? " of blue chips" : ""}`;
   return leaders
-    ? `The ${pools} that paid the most per sAERO weight, more to those that paid more.`
+    ? `The ${pools} that paid the most per sAERO weight, in proportion to how far each paid above the average.`
     : `The ${pools} with the most protocol revenue, in proportion to that revenue.`;
 }
 // `drawn` is the rows as last drawn, which the actions edit. `nextPools` is the pools "Show more pools" adds next.
@@ -446,9 +446,11 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       : null;
   };
   const lines: Line[] = [
-    ...STRATEGIES.map(({ id, name, color }, i) => {
+    ...STRATEGIES.map(({ id, name, color, leaders }, i) => {
       const steps = strategies[i]!;
-      return { id, name, color, steps, apr: figure(steps), note: daily(steps) };
+      // The chosen strategy's line is in bold, unless a custom allocation replaces it.
+      const bold = !custom && leaders === chosen.leaders;
+      return { id, name, color, bold, steps, apr: figure(steps), note: daily(steps) };
     }),
     {
       id: "pilot",
@@ -458,11 +460,20 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       apr: shown(pilot, figure),
       note: shown(pilot, daily),
     },
-    { id: "average", name: "Base average", color: "var(--quiet)", steps: average, apr: figure(average), note: null },
+    {
+      id: "average",
+      name: "Base average",
+      color: "var(--quiet)",
+      reference: true,
+      steps: average,
+      apr: figure(average),
+      note: null,
+    },
     ...(custom
       ? [
           {
             id: "custom",
+            bold: true,
             name: "Custom allocation",
             color: "var(--ink)",
             dashed: true,
@@ -474,18 +485,33 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       : []),
   ];
   drawLines(lines);
-  const cell = (step: Paid | undefined) => (step?.paid ? aprAt(step.paid.total, step.paid.priced, step.prices) : "–");
+  // A step's APR in tenths of a percentage point, as shown, so that figures shown alike rank alike.
+  const shownApr = (step: Paid | undefined): number | undefined => {
+    const found = step?.paid && aero.aprOf(step.paid.total, step.prices);
+    return found === undefined ? undefined : Math.round(found * 1000);
+  };
+  // The highest APR in a row is in bold, when the row has more than one to compare.
+  const cell = (step: Paid | undefined, best: number | undefined): Value => {
+    if (!step?.paid) return "–";
+    const words = aprAt(step.paid.total, step.paid.priced, step.prices);
+    return best !== undefined && shownApr(step) === best
+      ? Object.assign(document.createElement("strong"), { textContent: words })
+      : words;
+  };
   list(
     $("[data-list=step]", aeroView),
     lines[0]!.steps,
     ({ from }) => String(from),
-    (tr, _, k) =>
+    (tr, _, k) => {
+      const figures = lines.flatMap(({ steps }) => shownApr(steps[k]) ?? []);
+      const best = figures.length > 1 ? Math.max(...figures) : undefined;
       fill(tr, {
         when: stepWords(k),
         custom: null,
-        ...Object.fromEntries(lines.map(({ id, steps }) => [id, cell(steps[k])])),
-        pilot: shown(pilot, (steps) => cell(steps[k])),
-      }),
+        ...Object.fromEntries(lines.map(({ id, steps }) => [id, cell(steps[k], best)])),
+        pilot: shown(pilot, (steps) => cell(steps[k], best)),
+      });
+    },
   );
   fill(aeroView, {
     "custom-head": custom ? true : null,
@@ -499,7 +525,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
 }
 
 // A line of the record, with its tile. `steps` are newest first. The chart puts the oldest on the left.
-type Line = { id: string; name: string; color: string; dashed?: boolean; steps: Paid[]; apr: Value; note: Value };
+type Line = Omit<Series, "values"> & { steps: Paid[]; apr: Value; note: Value };
 // Draws the tiles, the chart and its legend, in the order of `lines`. The first line is drawn on top.
 function drawLines(lines: Line[]): void {
   list(
@@ -508,11 +534,8 @@ function drawLines(lines: Line[]): void {
     ({ id }) => id,
     (tile, { name, apr, note }) => fill(tile, { name, apr, note }),
   );
-  const series: Series[] = lines.map(({ id, name, color, dashed, steps }) => ({
-    id,
-    name,
-    color,
-    dashed,
+  const series: Series[] = lines.map(({ steps, apr: _apr, note: _note, ...line }) => ({
+    ...line,
     values: Array.from({ length: aero.PICKS }, (_, i) => {
       const step = steps[aero.PICKS - 1 - i];
       return step?.paid && aero.aprOf(step.paid.total, step.prices);
@@ -530,9 +553,9 @@ function drawLines(lines: Line[]): void {
     $("[data-list=legend]", aeroView),
     lines,
     ({ id }) => id,
-    (li, { name, color, dashed }) => {
+    (li, { name, color, ...style }) => {
       li.style.setProperty("--key", color);
-      li.toggleAttribute("data-dashed", !!dashed);
+      li.style.setProperty("--dashes", swatchDashes(style) ?? "none");
       fill(li, { name });
     },
   );

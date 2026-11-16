@@ -1,11 +1,11 @@
 import { getAddress, parseAbi, type Address } from "viem";
-import { rewardsAbi } from "./abi.ts";
+import { optionsTokenAbi, rewardsAbi } from "./abi.ts";
 import { memo } from "./cache.ts";
-import { HYDREX_PRICING, HYDX } from "./config.ts";
+import { HYDREX_PRICING, HYDX, OHYDX, USDC } from "./config.ts";
 import { WEEK, clean, moneyAt, type Money } from "./format.ts";
-import { automationAt, escrow, voter } from "./hydrex.ts";
+import { automationAt, earningPowerOf, escrow, voter } from "./hydrex.ts";
 import { key, noPrices, pricesAt, pricesAtFlip, worthOf, type Prices, type Token } from "./prices.ts";
-import { call, read, readEach, required, type Read } from "./rpc.ts";
+import { blockClock, call, read, readEach, required, type Read } from "./rpc.ts";
 import { tokensOf } from "./tokens.ts";
 
 // What votes earned in an ended epoch, from Hydrex's reward contracts. Each pool's gauge has two reward contracts: one
@@ -164,14 +164,32 @@ const epochPrices = (start: number, rd: Read): Promise<Prices> =>
     for (const { token, amount } of rewards)
       amounts.set(key(token.address), (amounts.get(key(token.address)) ?? 0n) + amount);
     const tokens = tokensIn(rewards);
+    const flip = start + WEEK;
     if (tokens.some(({ address }) => key(address) === key(HYDX)))
-      return pricesAtFlip(tokens, amounts, start + WEEK, rd);
-    // Prices HYDX too, since APRs need it. If a pool could not be read, the rewards are priced again without HYDX. So
-    // a failure on HYDX alone fails only the APRs.
+      return withOhydx(await pricesAtFlip(tokens, amounts, flip, rd), flip, rd);
+    // Prices HYDX too, since oHYDX's price, and so APRs, need it. If a pool could not be read, the rewards are priced
+    // again without HYDX. So a failure on HYDX alone fails only the APRs.
     const hydx: Token = { address: HYDX, decimals: 18, symbol: "HYDX" };
-    const all = await pricesAt([...tokens, hydx], amounts, start + WEEK, rd, HYDREX_PRICING);
-    return all.unread ? pricesAtFlip(tokens, amounts, start + WEEK, rd) : all;
+    const all = await pricesAt([...tokens, hydx], amounts, flip, rd, HYDREX_PRICING);
+    return all.unread ? pricesAtFlip(tokens, amounts, flip, rd) : withOhydx(all, flip, rd);
   });
+// Adds oHYDX's price, as Hydrex values it: the HYDX that exercising one gives, less what exercising costs in USDC in
+// the last block at or before `time`. Without a price for HYDX or USDC, oHYDX has none, nor does it if the cost cannot
+// be read. Either fails only the APRs. A price found for oHYDX in a pool is replaced.
+export async function withOhydx(prices: Prices, time: number, rd: Read): Promise<Prices> {
+  const [hydx, usdc] = [HYDX, USDC].map((token) => prices.of.get(key(token)));
+  if (hydx === undefined || usdc === undefined) return prices;
+  try {
+    const { firstAt } = await blockClock(rd);
+    const block = (await firstAt(time + 1)) - 1;
+    const [cost] = await rd([call(OHYDX, optionsTokenAbi, "getMinPrice", 10n ** 18n)], { block });
+    if (cost === undefined) return prices;
+    const ohydx = Math.max(hydx - worthOf(cost, 6, usdc), 0);
+    return { ...prices, of: new Map([...prices.of, [key(OHYDX), ohydx]]) };
+  } catch {
+    return prices;
+  }
+}
 const priced = async (start: number, votes: bigint, pools: Pool[], rewards: Reward[], rd: Read): Promise<Earnings> => ({
   start,
   votes,
@@ -283,10 +301,11 @@ export function valueOf({ rewards, prices: own }: Earnings, prices = own) {
 // What `votes` earned at the rate of these earnings' votes. By default it uses the earnings' own prices.
 export const shareOf = (earnings: Earnings, votes: bigint, value: Value = valueOf(earnings)): Money =>
   moneyAt(earnings.votes > 0n ? (Number(votes) / Number(earnings.votes)) * value.total : 0, value);
-// The APR: what the votes earned in an epoch, scaled up to a year, over what the votes stand for. A vote of a permanent
-// lock stands for one HYDX, at the same prices. Undefined without votes or without a price for HYDX.
+// The APR: what the votes earned in an epoch, scaled up to a year, over what their earning power is worth at the same
+// prices. As on Hydrex, each earning power is worth one oHYDX: exercising one oHYDX into a Protocol Account gives one
+// earning power, without a payment. Undefined without votes or without a price for oHYDX.
 export function aprOf(earnings: Earnings, prices = earnings.prices): number | undefined {
-  const hydx = prices.of.get(key(HYDX));
-  const votes = Number(earnings.votes) / 1e18;
-  return hydx && votes > 0 ? ((valueOf(earnings, prices).total / votes) * (365 / 7)) / hydx : undefined;
+  const ohydx = prices.of.get(key(OHYDX));
+  const power = Number(earningPowerOf(earnings.votes)) / 1e18;
+  return ohydx && power > 0 ? ((valueOf(earnings, prices).total / power) * (365 / 7)) / ohydx : undefined;
 }

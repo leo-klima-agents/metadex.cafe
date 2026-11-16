@@ -1,8 +1,24 @@
 import { render } from "../state.ts";
+import { ticksOf } from "./scale.ts";
 
 // A line chart of a few series over a few positions. It is drawn at its own width, so its text keeps its size. The
-// first series is drawn on top. A missing value breaks a line.
-export type Series = { id: string; name: string; color: string; dashed?: boolean; values: (number | undefined)[] };
+// first series is drawn on top, except that a `bold` one is always on top, and the others are then drawn thinner. A
+// `reference`, such as an average to compare with, is drawn thin and dotted, without dots. A missing value breaks a
+// line.
+export type Series = {
+  id: string;
+  name: string;
+  color: string;
+  dashed?: boolean;
+  reference?: boolean;
+  bold?: boolean;
+  values: (number | undefined)[];
+};
+// The dashes of a dashed line and of a reference's dotted line, in the chart and in its swatches.
+const DASHES = "6 4";
+const DOTS = "1 4";
+export const swatchDashes = ({ dashed, reference }: Pick<Series, "dashed" | "reference">): string | null =>
+  reference ? DOTS : dashed ? "4 3" : null;
 type Plot = {
   positions: string[];
   brief: string[];
@@ -26,16 +42,6 @@ const el = <K extends keyof SVGElementTagNameMap>(name: K, attributes: Record<st
   for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
   return node;
 };
-// Ticks from zero up to the first one at or above the highest value. The step between them is 1, 2 or 5 times a power
-// of ten.
-function ticksOf(most: number): number[] {
-  if (!(most > 0)) return [0, 1];
-  const rough = most / 4;
-  const power = 10 ** Math.floor(Math.log10(rough));
-  const step = [1, 2, 5, 10].map((k) => k * power).find((each) => each >= rough)!;
-  return Array.from({ length: Math.ceil(most / step) + 1 }, (_, i) => i * step);
-}
-
 export function drawChart(svg: SVGSVGElement, tip: HTMLElement, plot: Plot): void {
   const known = charts.get(svg);
   if (!known) listen(svg);
@@ -45,10 +51,11 @@ export function drawChart(svg: SVGSVGElement, tip: HTMLElement, plot: Plot): voi
   svg.setAttribute("viewBox", `0 0 ${width} ${HEIGHT}`);
   svg.setAttribute("height", String(HEIGHT));
   const n = plot.positions.length;
-  const ticks = ticksOf(Math.max(0, ...plot.series.flatMap(({ values }) => values.filter((v) => v !== undefined))));
-  const top = ticks.at(-1)!;
+  const figures = plot.series.flatMap(({ values }) => values.filter((v) => v !== undefined));
+  const ticks = ticksOf(Math.min(...figures), Math.max(0, ...figures));
+  const [bottom, top] = [ticks[0]!, ticks.at(-1)!];
   const x = (i: number) => LEFT + ((i + 0.5) * (width - LEFT - RIGHT)) / n;
-  const y = (value: number) => TOP + (1 - value / top) * (HEIGHT - TOP - BOTTOM);
+  const y = (value: number) => TOP + (1 - (value - bottom) / (top - bottom)) * (HEIGHT - TOP - BOTTOM);
   const nodes: SVGElement[] = [];
   for (const tick of ticks) {
     nodes.push(el("line", { class: "Chart-grid", x1: LEFT, x2: width - RIGHT + 8, y1: y(tick), y2: y(tick) }));
@@ -65,26 +72,32 @@ export function drawChart(svg: SVGSVGElement, tip: HTMLElement, plot: Plot): voi
   if (state.at !== undefined)
     nodes.push(el("line", { class: "Chart-cross", x1: x(state.at), x2: x(state.at), y1: TOP, y2: HEIGHT - BOTTOM }));
   const ends: { y: number; x: number; text: string }[] = [];
-  for (const { values, color, dashed } of plot.series.toReversed()) {
+  const bold = plot.series.some((series) => series.bold);
+  // The first series ends up on top, and a bold one above all.
+  const drawn = plot.series.toReversed().sort((a, b) => Number(!!a.bold) - Number(!!b.bold));
+  for (const { values, color, dashed, reference, ...series } of drawn) {
+    const thickness = series.bold ? 3 : reference || bold ? 1.5 : 2;
     // Each run of known values is its own line.
     let run: string[] = [];
     const flush = () => {
       if (run.length > 1) {
         const path = el("polyline", { class: "Chart-line", points: run.join(" ") });
         path.style.stroke = color;
-        if (dashed) path.setAttribute("stroke-dasharray", "6 4");
+        path.style.strokeWidth = String(thickness);
+        if (reference || dashed) path.setAttribute("stroke-dasharray", reference ? DOTS : DASHES);
         nodes.push(path);
       }
       run = [];
     };
     values.forEach((value, i) => (value === undefined ? flush() : run.push(`${x(i)},${y(value)}`)));
     flush();
-    values.forEach((value, i) => {
-      if (value === undefined) return;
-      const dot = el("circle", { class: "Chart-dot", cx: x(i), cy: y(value), r: 4 });
-      dot.style.fill = color;
-      nodes.push(dot);
-    });
+    if (!reference)
+      values.forEach((value, i) => {
+        if (value === undefined) return;
+        const dot = el("circle", { class: "Chart-dot", cx: x(i), cy: y(value), r: series.bold ? 4.5 : 3.5 });
+        dot.style.fill = color;
+        nodes.push(dot);
+      });
     const last = values.findLastIndex((value) => value !== undefined);
     if (last >= 0) ends.push({ x: x(last) + 10, y: y(values[last]!) + 4, text: plot.value(values[last]!) });
   }
@@ -136,12 +149,13 @@ function showTip(svg: SVGSVGElement): void {
   tip.hidden = at === undefined;
   if (at === undefined) return;
   const title = Object.assign(document.createElement("p"), { className: "u-label", textContent: plot.positions[at]! });
-  const rows = plot.series.map(({ name, color, dashed, values }) => {
+  const rows = plot.series.map(({ name, color, values, ...style }) => {
     const row = Object.assign(document.createElement("p"), { className: "Chart-tipRow" });
     const key = el("svg", { class: "Chart-swatch", viewBox: "0 0 24 8", "aria-hidden": "true" });
     const line = el("line", { x1: 2, y1: 4, x2: 22, y2: 4 });
     line.style.stroke = color;
-    if (dashed) line.setAttribute("stroke-dasharray", "4 3");
+    const dashes = swatchDashes(style);
+    if (dashes) line.setAttribute("stroke-dasharray", dashes);
     key.append(line);
     const value = Object.assign(document.createElement("strong"), {
       textContent: values[at] === undefined ? "–" : plot.value(values[at]),

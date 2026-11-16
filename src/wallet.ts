@@ -1,8 +1,4 @@
 import {
-  MethodNotFoundRpcError,
-  SwitchChainError,
-  UnsupportedProviderMethodError,
-  UserRejectedRequestError,
   getAddress,
   isAddress,
   numberToHex,
@@ -47,7 +43,10 @@ export type Slip = Tx & { title: string; says: string; on: string; call: string;
 type Announcement = { info: { name: string; icon: string; rdns: string }; provider: EIP1193Provider };
 
 const CHAIN = numberToHex(CHAIN_ID);
-const UNKNOWN_METHOD: number[] = [UnsupportedProviderMethodError.code, MethodNotFoundRpcError.code];
+// Error codes from EIP-1193, EIP-3326 and JSON-RPC. viem's error classes carry the same codes, but importing one of
+// them bundles all of viem's RPC errors, about 8 KB.
+export const CODES = { rejected: 4001, unsupported: 4200, unknownChain: 4902, methodNotFound: -32601 } as const;
+const UNKNOWN_METHOD: number[] = [CODES.unsupported, CODES.methodNotFound];
 
 export class NoWallet extends Error {}
 
@@ -154,7 +153,7 @@ export async function safeFrom(ask: AskSafe, wait: number): Promise<Wallet | und
       if (method === "eth_requestAccounts") return [info.safeAddress];
       if (method === "eth_chainId") return numberToHex(info.chainId);
       throw Object.assign(new Error(`Safe{Wallet} does not answer ${method} here.`), {
-        code: UnsupportedProviderMethodError.code,
+        code: CODES.unsupported,
       });
     },
     on() {},
@@ -170,7 +169,7 @@ export async function safeFrom(ask: AskSafe, wait: number): Promise<Wallet | und
       // declining.
       await ask("sendTransactions", { txs: txs.map(({ to, data }) => ({ to, data, value: "0" })) }).catch(
         (error: Error) => {
-          throw Object.assign(error, /rejected/i.test(error.message) ? { code: UserRejectedRequestError.code } : {});
+          throw Object.assign(error, /rejected/i.test(error.message) ? { code: CODES.rejected } : {});
         },
       );
     },
@@ -195,14 +194,14 @@ const code = (error: unknown): number | undefined => {
   return data?.originalError?.code ?? code;
 };
 
-export const declined = (error: unknown): boolean => code(error) === UserRejectedRequestError.code;
+export const declined = (error: unknown): boolean => code(error) === CODES.rejected;
 
 export async function switchToBase(connection: Connection): Promise<void> {
   const { provider } = connection;
   try {
     await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN }] });
   } catch (error) {
-    if (code(error) !== SwitchChainError.code) throw error;
+    if (code(error) !== CODES.unknownChain) throw error;
     await provider.request({
       method: "wallet_addEthereumChain",
       params: [

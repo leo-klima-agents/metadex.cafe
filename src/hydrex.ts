@@ -207,12 +207,17 @@ export const canLeave = (account: Account, automation: Automation): boolean => {
   return votes || claims;
 };
 export const canLeaveOther = (account: Account): boolean => otherName(account.delegate) !== undefined;
-// An account with less than one vote (10^18) needs no action from its owner.
-export const hasVotes = ({ votes }: Account): boolean => votes >= 10n ** 18n;
+// Hydrex shows votes as "earning power": 1.3 for each vote, whatever the lock. A Protocol Account gets one vote for
+// each 1.3 HYDX it burns, so one earning power for each HYDX. A Flex Account gets up to one vote for each HYDX it
+// locks, fewer as a timed lock runs down, so up to 1.3 earning power for each HYDX.
+export const earningPowerOf = (votes: bigint): bigint => (votes * 13n) / 10n;
+// An account with less than one earning power (10^18) needs no action from its owner.
+export const hasEarningPower = ({ votes }: Account): boolean => earningPowerOf(votes) >= 10n ** 18n;
 
 export function groupOf(account: Account, status: Status): Group {
-  // An account without a vote is folded away, unless one of the page's automations still holds approvals to revoke.
-  const withoutVotes = (): Group => {
+  // An account without earning power is folded away, unless one of the page's automations still holds approvals to
+  // revoke.
+  const withoutPower = (): Group => {
     const holder = AUTOMATIONS.find((automation) => canLeave(account, automation));
     return holder ? `in:${holder.kind}` : "closed";
   };
@@ -220,13 +225,13 @@ export function groupOf(account: Account, status: Status): Group {
     case "stopped":
     case "partly":
     case "unvoted":
-      return hasVotes(account) ? `needs:${status.kind}` : withoutVotes();
+      return hasEarningPower(account) ? `needs:${status.kind}` : withoutPower();
     case "in":
     case "joined":
       return `in:${status.automation.kind}`;
     case "ended":
     case "empty":
-      return withoutVotes();
+      return withoutPower();
     default:
       return "other";
   }

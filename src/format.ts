@@ -24,7 +24,7 @@ export function figure(value: bigint, decimals: number): string {
   const n = Number(value) / 10 ** decimals;
   return n >= 10_000 ? whole.format(n) : fourDigits.format(n);
 }
-// An 18-decimal amount, such as votes or sAERO, with an SI prefix: "897k", "1.17M".
+// An 18-decimal amount, such as earning power or sAERO, with an SI prefix: "897k", "1.17M".
 export function compact(value: bigint): string {
   const n = Number((Number(value / 10n ** 15n) / 1000).toPrecision(3));
   const [scale, suffix] = (
@@ -57,9 +57,9 @@ export function fixed(value: bigint, decimals: number, places: number): string {
   return `${sign}${shown(scaled)}`;
 }
 
-export const voteFigure = (votes: bigint): string => (votes > 0n && votes < 10n ** 18n ? "< 1" : units(votes));
-export const voteWords = (votes: bigint): string =>
-  `${voteFigure(votes)} ${votes > 0n && votes < 2n * 10n ** 18n ? "vote" : "votes"}`;
+// Hydrex's earning power, an 18-decimal amount, in whole units: "897,043", "< 1".
+export const powerFigure = (power: bigint): string => (power > 0n && power < 10n ** 18n ? "< 1" : units(power));
+export const powerWords = (power: bigint): string => `${powerFigure(power)} earning power`;
 export const bps = (value: bigint): string => percent.format(Number(value) / 10_000);
 // For example "16.7%" or "3%". With `column`, always to a tenth of a percent: "3.0%", "< 0.1%".
 export const fraction = (value: number, column = false): string =>
