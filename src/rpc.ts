@@ -18,7 +18,7 @@ import {
 } from "viem";
 import type { OpStackRpcTransactionReceipt } from "viem/chains";
 import { memo, use, type Got } from "./cache.ts";
-import { BLOCK_SCHEDULE, MULTICALL3, RPCS } from "./config.ts";
+import { BLOCK_SCHEDULE, GZIP_RPCS, MULTICALL3, RPCS } from "./config.ts";
 
 export type Call<A extends Abi = Abi, N extends string = string> = {
   address: Address;
@@ -201,6 +201,27 @@ async function pace(url: string, logs: boolean): Promise<void> {
   await sleep(at - performance.now());
 }
 
+// Requests of at least `GZIP_FROM` bytes go gzipped to the RPCs in `GZIP_RPCS`. Smaller ones gain little. If a gzipped
+// request fails and the same request sent plain doesn't, that RPC is sent plain requests from then on.
+export const GZIP_FROM = 1_024;
+const gzips = new Set(GZIP_RPCS);
+const gzip = (text: string): Promise<ArrayBuffer> =>
+  new Response(new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
+function post(url: string, body: string | ArrayBuffer): Promise<Response> {
+  const zipped = typeof body !== "string";
+  return fetch(url, {
+    method: "POST",
+    headers: zipped
+      ? { "content-type": "application/json", "content-encoding": "gzip" }
+      : { "content-type": "application/json" },
+    body,
+    signal: AbortSignal.timeout(timeoutFor(zipped ? body.byteLength : body.length)),
+  });
+}
+// A 4xx answer other than 429 says the RPC could not read the request.
+const unread = (response: Response | undefined): boolean =>
+  !response || (response.status >= 400 && response.status < 500 && response.status !== 429);
+
 type Reply = { result?: unknown; error?: { code?: number; message?: string } };
 const BUSY = /request limit|rate limit|too many requests/i;
 type Options<T> = { tag?: Tag | undefined; want?: (result: T) => boolean };
@@ -214,6 +235,16 @@ export function rpc<T>(
   { tag, want = (r) => r !== null }: Options<T> = {},
 ): Promise<T> {
   const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
+  let zipped: Promise<ArrayBuffer> | undefined;
+  const send = async (url: string): Promise<Response> => {
+    if (!gzips.has(url) || body.length < GZIP_FROM || typeof CompressionStream === "undefined") return post(url, body);
+    zipped ??= gzip(body);
+    const response = await post(url, await zipped).catch(() => undefined);
+    if (!unread(response)) return response!;
+    const plain = await post(url, body);
+    if (!unread(plain)) gzips.delete(url);
+    return plain;
+  };
   return inSlot(tag, async () => {
     if (globalThis.navigator?.onLine === false) throw new Error("Offline.");
     let urls = RPCS;
@@ -224,12 +255,7 @@ export function rpc<T>(
         await pace(url, method === "eth_getLogs");
         let reply: Reply | undefined;
         try {
-          const response = await fetch(url, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body,
-            signal: AbortSignal.timeout(timeoutFor(body.length)),
-          });
+          const response = await send(url);
           if (response.status === 429 || response.status >= 500) throw new Error("Busy.");
           reply = (await response.json()) as Reply;
           if (typeof reply !== "object" || reply === null) throw new Error("Not JSON-RPC.");

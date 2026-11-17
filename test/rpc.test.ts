@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { gunzipSync } from "node:zlib";
 import {
   decodeFunctionData,
   encodeAbiParameters,
@@ -10,13 +11,14 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { BLOCK_SCHEDULE, RPCS } from "../src/config.ts";
+import { BLOCK_SCHEDULE, GZIP_RPCS, RPCS } from "../src/config.ts";
 import {
   BATCH_BYTES,
   blockClock,
   call,
   codeAt,
   firstBlockAt,
+  GZIP_FROM,
   poll,
   read,
   regroup,
@@ -28,9 +30,17 @@ import {
   timeoutFor,
 } from "../src/rpc.ts";
 
-type Handler = (url: string, body: { method: string; params: unknown[] }) => Response | Promise<Response>;
+type Handler = (
+  url: string,
+  body: { method: string; params: unknown[] },
+  gzipped: boolean,
+) => Response | Promise<Response>;
 const serve = (handler: Handler) => {
-  globalThis.fetch = (async (url: string, init: RequestInit) => handler(url, JSON.parse(String(init.body)))) as never;
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    const gzipped = (init.headers as Record<string, string>)["content-encoding"] === "gzip";
+    const body = gzipped ? gunzipSync(init.body as ArrayBuffer) : init.body;
+    return handler(url, JSON.parse(String(body)), gzipped);
+  }) as never;
 };
 const reply = (result: unknown) => Response.json({ jsonrpc: "2.0", id: 1, result });
 
@@ -176,6 +186,37 @@ test("a busy RPC hands over to the next; an unwanted answer is taken only when n
   assert.deepEqual(await rpc("eth_getLogs", [], { want: (logs) => (logs as unknown[]).length > 0 }), []);
   serve(() => reply(null));
   await assert.rejects(rpc("eth_getTransactionReceipt", ["0x"]));
+});
+
+test("large requests go gzipped to the RPCs that read them, and plain once an RPC turns them down", async () => {
+  const [zipper] = GZIP_RPCS;
+  assert.ok(zipper && RPCS.includes(zipper));
+  const large = ["0x" + "ab".repeat(GZIP_FROM)];
+  const asked: [string, boolean, unknown][] = [];
+  let reads = true;
+  serve((url, { params }, gzipped) => {
+    asked.push([url, gzipped, params[0]]);
+    if (url !== zipper) return new Response("", { status: 429 });
+    return gzipped && !reads ? new Response("", { status: 415 }) : reply("0x1");
+  });
+  const askedOf = async (params: string[]) => {
+    asked.length = 0;
+    assert.equal(await rpc("eth_call", params), "0x1");
+    return asked.filter(([url]) => url === zipper).map(([, gzipped, param]) => [gzipped, param]);
+  };
+  assert.deepEqual(await askedOf(["0x"]), [[false, "0x"]], "a small request goes plain");
+  assert.deepEqual(await askedOf(large), [[true, large[0]]], "a large one goes gzipped");
+  reads = false;
+  assert.deepEqual(
+    await askedOf(large),
+    [
+      [true, large[0]],
+      [false, large[0]],
+    ],
+    "turned down, it is sent again plain",
+  );
+  reads = true;
+  assert.deepEqual(await askedOf(large), [[false, large[0]]], "and later ones go plain");
 });
 
 test("reads go through Multicall3; a call that fails reads as undefined", async () => {

@@ -22,10 +22,10 @@ pools. The allocation is simulated on Base before the wallet asks you to sign.
 
 The page has no server, holds no keys and stores nothing. It reads Base through three public RPCs:
 `https://mainnet.base.org`, `https://base.drpc.org` and `https://base-rpc.publicnode.com`. Its Content Security Policy
-lets it connect to these hosts only. Prices come from Chainlink feeds and from pools on Base. Pool prices are averages
-over the 30 minutes before a block. Prices are read from past blocks, so they need an RPC that serves old blocks. Before
-anyone can join, the page checks Base against the contracts it trusts (`src/config.ts`). If a check fails, joining is
-turned off and the page says why. Leaving always works.
+lets it connect to these hosts only. Requests of 1 KB or more go to drpc gzipped. Prices come from Chainlink feeds and
+from pools on Base. Pool prices are averages over the 30 minutes before a block. Prices are read from past blocks, so
+they need an RPC that serves old blocks. Before anyone can join, the page checks Base against the contracts it trusts
+(`src/config.ts`). If a check fails, joining is turned off and the page says why. Leaving always works.
 
 ## Develop
 

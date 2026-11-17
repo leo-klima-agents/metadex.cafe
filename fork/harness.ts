@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { after, afterEach, before, beforeEach } from "node:test";
 import { fileURLToPath } from "node:url";
+import { gunzipSync } from "node:zlib";
 import {
   chromium,
   type Browser,
@@ -49,7 +50,7 @@ export const FLIP = 1_795_046_400; // Thu 19 Nov 2026, 00:00 UTC, when the epoch
 export const SITE = "https://metadex.cafe";
 const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 export const RPC_ORIGINS = RPCS.map((url) => new URL(url).origin);
-const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type" };
+const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type, content-encoding" };
 
 // What each owner holds at `BLOCK`.
 export const MEMBER = getAddress("0x388b2d29e7919d45b1b8f6e88b8a13a392f97b40"); // #9540 in Matcha Latte, #14485 its own
@@ -478,7 +479,8 @@ export async function serve(route: Route, { origins, rpc, safe }: Served): Promi
   }
   if (RPC_ORIGINS.includes(origin)) {
     if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: CORS });
-    const body = request.postData() ?? "";
+    const sent = request.postDataBuffer() ?? Buffer.alloc(0);
+    const body = String(request.headers()["content-encoding"] === "gzip" ? gunzipSync(sent) : sent);
     if (rpc.refuse?.(body)) return route.abort();
     const answered = rpc.answer?.(body);
     if (answered !== undefined)
