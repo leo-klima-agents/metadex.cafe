@@ -102,7 +102,7 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
     await h.shoot(page, "member-390");
     await page.goto(`${SITE}/#hydrex/matcha-latte/record`);
     const popup = page.getByRole("dialog", { name: "Performance" });
-    await popup.getByText("1.06M").waitFor();
+    await popup.getByText("1.38M").waitFor();
     await popup.getByText("20 pools").waitFor();
     await popup.getByText("All of Hydrex could not be read.").waitFor();
     await popup.getByRole("row").filter({ hasText: "AVNT / USDC" }).waitFor();

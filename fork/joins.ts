@@ -37,7 +37,7 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     await row(page, 2439)
       .getByText(/In USDC · stopped since Wed,? 9 Sept?/)
       .waitFor();
-    await needs.getByText(/^2 of 2 · [\d,]+ votes$/).waitFor();
+    await needs.getByText(/^2 of 2 · [\d,]+ earning power$/).waitFor();
     assert.equal(
       await page.getByRole("checkbox", { name: "Pick Hydrex account #2439" }).isChecked(),
       true,
