@@ -188,35 +188,55 @@ test("a busy RPC hands over to the next; an unwanted answer is taken only when n
   await assert.rejects(rpc("eth_getTransactionReceipt", ["0x"]));
 });
 
-test("large requests go gzipped to the RPCs that read them, and plain once an RPC turns them down", async () => {
+test("large requests go gzipped to the RPCs that read them, and plain once an RPC can't take them", async () => {
   const [zipper] = GZIP_RPCS;
   assert.ok(zipper && RPCS.includes(zipper));
   const large = ["0x" + "ab".repeat(GZIP_FROM)];
-  const asked: [string, boolean, unknown][] = [];
-  let reads = true;
-  serve((url, { params }, gzipped) => {
-    asked.push([url, gzipped, params[0]]);
-    if (url !== zipper) return new Response("", { status: 429 });
-    return gzipped && !reads ? new Response("", { status: 415 }) : reply("0x1");
+  const asked: [string, boolean][] = [];
+  let gzipped: "read" | "refused" | "dropped" | "slow" = "read";
+  serve((url, { params }, zipped) => {
+    asked.push([url, zipped]);
+    // The others answer only when the zipper is slow, so that the read still ends.
+    if (url !== zipper) return gzipped === "slow" ? reply("0x1") : new Response("", { status: 429 });
+    assert.equal(params[0], (params[0] as string).length < GZIP_FROM ? "0x" : large[0]);
+    if (zipped && gzipped === "refused") return new Response("", { status: 415 });
+    if (zipped && gzipped === "dropped") throw new TypeError("Failed to fetch");
+    if (zipped && gzipped === "slow") throw new DOMException("Timed out.", "TimeoutError");
+    return reply("0x1");
   });
   const askedOf = async (params: string[]) => {
     asked.length = 0;
     assert.equal(await rpc("eth_call", params), "0x1");
-    return asked.filter(([url]) => url === zipper).map(([, gzipped, param]) => [gzipped, param]);
+    return asked.filter(([url]) => url === zipper).map(([, zipped]) => zipped);
   };
-  assert.deepEqual(await askedOf(["0x"]), [[false, "0x"]], "a small request goes plain");
-  assert.deepEqual(await askedOf(large), [[true, large[0]]], "a large one goes gzipped");
-  reads = false;
-  assert.deepEqual(
-    await askedOf(large),
-    [
-      [true, large[0]],
-      [false, large[0]],
-    ],
-    "turned down, it is sent again plain",
-  );
-  reads = true;
-  assert.deepEqual(await askedOf(large), [[false, large[0]]], "and later ones go plain");
+  assert.deepEqual(await askedOf(["0x"]), [false], "a small request goes plain");
+  assert.deepEqual(await askedOf(large), [true], "a large one goes gzipped");
+  gzipped = "slow";
+  assert.deepEqual(await askedOf(large), [true], "one that times out is not sent again plain");
+  gzipped = "dropped";
+  assert.deepEqual(await askedOf(large), [true, false], "one that doesn't get through is sent again plain");
+  assert.deepEqual(await askedOf(large), [true, false]);
+  gzipped = "read";
+  assert.deepEqual(await askedOf(large), [true], "a gzipped request that gets through starts the count again");
+  gzipped = "dropped";
+  for (let i = 0; i < 3; i++) assert.deepEqual(await askedOf(large), [true, false]);
+  assert.deepEqual(await askedOf(large), [false], "after three in a row, requests go plain");
+});
+
+test("an RPC that turns down a gzipped request it takes plain is sent plain requests from then on", async () => {
+  // A fresh copy of the module, since the test above already stopped gzipping.
+  const { rpc: fresh } = (await import(`../src/rpc.ts?fresh=${Date.now()}`)) as typeof import("../src/rpc.ts");
+  const [zipper] = GZIP_RPCS;
+  const large = ["0x" + "ab".repeat(GZIP_FROM)];
+  const asked: boolean[] = [];
+  serve((url, _, zipped) => {
+    if (url !== zipper) return new Response("", { status: 429 });
+    asked.push(zipped);
+    return zipped ? new Response("", { status: 415 }) : reply("0x1");
+  });
+  assert.equal(await fresh("eth_call", large), "0x1");
+  assert.equal(await fresh("eth_call", large), "0x1");
+  assert.deepEqual(asked, [true, false, false]);
 });
 
 test("reads go through Multicall3; a call that fails reads as undefined", async () => {

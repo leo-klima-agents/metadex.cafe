@@ -201,26 +201,30 @@ async function pace(url: string, logs: boolean): Promise<void> {
   await sleep(at - performance.now());
 }
 
-// Requests of at least `GZIP_FROM` bytes go gzipped to the RPCs in `GZIP_RPCS`. Smaller ones gain little. If a gzipped
-// request fails and the same request sent plain doesn't, that RPC is sent plain requests from then on.
+// Requests of at least `GZIP_FROM` bytes go gzipped to the RPCs in `GZIP_RPCS`. Smaller ones gain little. A gzipped
+// request that the RPC turns down, or that doesn't reach it, is sent again plain. An RPC is sent plain requests from
+// then on once it takes a request plain after turning it down gzipped, or after `MISSES` gzipped requests in a row
+// failed to reach it. That is how a CORS error looks, but so does a dropped connection, so one is not enough. A
+// gzipped request that times out is not sent again plain: the RPC is slow, not unable to read it.
 export const GZIP_FROM = 1_024;
+const MISSES = 3;
 const gzips = new Set(GZIP_RPCS);
+const misses = new Map<string, number>();
 const gzip = (text: string): Promise<ArrayBuffer> =>
   new Response(new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
-function post(url: string, body: string | ArrayBuffer): Promise<Response> {
-  const zipped = typeof body !== "string";
-  return fetch(url, {
+// The timeout is the same whether the body is gzipped or not, since the answer can be as large as the request.
+const post = (url: string, body: string, zipped?: ArrayBuffer): Promise<Response> =>
+  fetch(url, {
     method: "POST",
     headers: zipped
       ? { "content-type": "application/json", "content-encoding": "gzip" }
       : { "content-type": "application/json" },
-    body,
-    signal: AbortSignal.timeout(timeoutFor(zipped ? body.byteLength : body.length)),
+    body: zipped ?? body,
+    signal: AbortSignal.timeout(timeoutFor(body.length)),
   });
-}
 // A 4xx answer other than 429 says the RPC could not read the request.
-const unread = (response: Response | undefined): boolean =>
-  !response || (response.status >= 400 && response.status < 500 && response.status !== 429);
+const turnedDown = ({ status }: Response): boolean => status >= 400 && status < 500 && status !== 429;
+const timedOut = (error: unknown): boolean => (error as Error | undefined)?.name === "TimeoutError";
 
 type Reply = { result?: unknown; error?: { code?: number; message?: string } };
 const BUSY = /request limit|rate limit|too many requests/i;
@@ -239,10 +243,21 @@ export function rpc<T>(
   const send = async (url: string): Promise<Response> => {
     if (!gzips.has(url) || body.length < GZIP_FROM || typeof CompressionStream === "undefined") return post(url, body);
     zipped ??= gzip(body);
-    const response = await post(url, await zipped).catch(() => undefined);
-    if (!unread(response)) return response!;
+    let response: Response | undefined;
+    try {
+      response = await post(url, body, await zipped);
+    } catch (error) {
+      if (timedOut(error)) throw error;
+    }
+    if (response && !turnedDown(response)) {
+      misses.delete(url);
+      return response;
+    }
     const plain = await post(url, body);
-    if (!unread(plain)) gzips.delete(url);
+    if (!plain.ok) return plain;
+    const missed = response ? MISSES : (misses.get(url) ?? 0) + 1;
+    misses.set(url, missed);
+    if (missed >= MISSES) gzips.delete(url);
     return plain;
   };
   return inSlot(tag, async () => {
