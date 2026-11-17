@@ -51,11 +51,13 @@
   --warn: light-dark(#944e00, #efb062);
   --info: light-dark(#234e82, #85b6e9);
   --danger: light-dark(#ab331f, #ef816b);
-  /* Chart lines, checked for colour blindness in light and dark mode. The third has less than 3:1 contrast on the light
-     background, so a chart that uses it also needs labels or a table. */
+  /* Chart lines, checked for colour blindness in light and dark mode. The third and fourth have less than 3:1 contrast
+     on the light background, so a chart that uses them also needs labels or a table. Only the first three stay apart
+     from each other where lines cross, so a line in the fourth is also dashed. */
   --series-1: light-dark(#2a78d6, #3987e5);
   --series-2: light-dark(#eb6834, #d95926);
   --series-3: light-dark(#1baf7a, #199e70);
+  --series-4: light-dark(#eda100, #c98500);
   color-scheme: light dark;
   font-family: var(--sans);
   line-height: 1.5;
