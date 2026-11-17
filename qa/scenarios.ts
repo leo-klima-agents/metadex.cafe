@@ -69,10 +69,10 @@ export const SCENARIOS: Scenario[] = [
   },
   {
     name: "aero",
-    title: "Mon 16 Nov 2026, after Base Denim: a wallet with 25 sAERO stakes to allocate, its largest locked",
+    title: "Mon 16 Nov 2026, after Base Denim: a wallet with 25 sAERO stakes to allocate, none locked",
     block: h.BLOCK,
     hash: "#aero",
-    owners: [{ address: h.ALLOCATOR, holds: "25 sAERO stakes; #2848, the largest, locked; #2890 can move" }],
+    owners: [{ address: h.ALLOCATOR, holds: "25 sAERO stakes, none locked; #2848 the largest" }],
   },
   {
     name: "claim",
@@ -92,7 +92,10 @@ export const SCENARIOS: Scenario[] = [
       { address: h.MEMBER, holds: "#9540 in Matcha Latte, its payout due; #14485, its own" },
       { address: "0x8cafEd70F1B60066d3B076410C9eED0cE1f9667C", holds: "#35366 in Matcha Latte, its payout due" },
     ],
+    // The operator's payouts in the order it sent them, the first two to accounts outside this scenario.
     replays: [
+      { hash: "0xf0f5225bfad17f401a858ea2e23cbe5a638b1ba105f2cf6fd3ef46d6b7584bec", does: "pays #43261" },
+      { hash: "0x23c75fda8a9a214ad7ce1c71ccfad1c994aadc41bd7ced404a235797958068d1", does: "pays #52050" },
       { hash: "0x8d2cbed92015c1b7b8baa2a4f81b8fc385093870cd809cec0e95769b6c8a2caf", does: "pays #82774" },
       { hash: "0xec856e71724c65c2895ae24360424f20b48f53a0ba96fe827186778374a751ee", does: "pays #35366" },
       { hash: "0xdc4caa3792b12d37301f14565a1247e4f606e0cae0bfb1f8e3178eb416b0efcd", does: "pays #9540" },

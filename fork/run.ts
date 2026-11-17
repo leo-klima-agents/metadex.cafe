@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { RPCS } from "../src/config.ts";
 import { BLOCK } from "./harness.ts";
-import { cacheFileOf, forkUrl, serveCached, upstreamOf } from "./rpc-cache.ts";
+import { SCENARIOS } from "../qa/scenarios.ts";
+import { cacheFileOf, forkUrl, pruneCaches, serveCached, upstreamOf } from "./rpc-cache.ts";
 
 // Runs the browser test files in parallel, each with its own anvil. They all fork `BLOCK` through one cache and one
 // queue to `BASE_RPC_URL`, or else to the page's first RPC (see rpc-cache.ts). Arguments are passed to `node --test`:
@@ -10,6 +11,8 @@ const FILES = ["fork/views.ts", "fork/joins.ts", "fork/payouts.ts", "fork/swap.t
 const args = process.argv.slice(2);
 const named = args.some((arg) => !arg.startsWith("-"));
 const upstream = upstreamOf(forkUrl(RPCS[0]!));
+// The caches of blocks that neither these tests nor the QA scenarios fork any more are deleted first.
+for (const file of pruneCaches([BLOCK, ...SCENARIOS.map(({ block }) => block)])) console.log(`Deleted ${file}.`);
 const caches = [{ block: BLOCK, cache: await serveCached(upstream, cacheFileOf(BLOCK), BLOCK) }];
 const child = spawn(
   process.execPath,

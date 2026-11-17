@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
@@ -10,6 +10,18 @@ import { gunzipSync, gzipSync } from "node:zlib";
 export const forkUrl = (fallback: string): string => process.env.BASE_RPC_URL || fallback;
 const FORK_CACHE = process.env.FORK_CACHE || join(homedir(), ".cache", "metadex.cafe", "fork");
 export const cacheFileOf = (block: number): string => join(FORK_CACHE, `base-${block}.json.gz`);
+// Deletes the cache files of blocks not in `kept`, which nothing forks any more. CI saves the whole folder with every
+// run, so they would otherwise be restored and saved again for good.
+export function pruneCaches(kept: number[]): string[] {
+  const keep = new Set(kept.map(cacheFileOf));
+  const files = existsSync(FORK_CACHE) ? readdirSync(FORK_CACHE) : [];
+  const gone = files
+    .filter((name) => /^base-\d+\.json\.gz$/.test(name))
+    .map((name) => join(FORK_CACHE, name))
+    .filter((file) => !keep.has(file));
+  for (const file of gone) rmSync(file);
+  return gone;
+}
 
 type Call = { jsonrpc: "2.0"; id: unknown; method: string; params?: unknown[] };
 type Reply = { jsonrpc: "2.0"; id: unknown; result?: unknown; error?: unknown };
