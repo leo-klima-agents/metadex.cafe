@@ -325,6 +325,26 @@ test("a busy RPC rests a second, twice as long each time it is busy again, or as
   assert.equal(restFor(1, " "), 1_000);
 });
 
+test("an RPC that was busy is asked first again once its rest is over", async () => {
+  const { rpc } = await fresh();
+  const asked: string[] = [];
+  let busy = true;
+  serve((url) => {
+    asked.push(url);
+    return url === ZIPPER && busy ? new Response("", { status: 429 }) : reply("0x1");
+  });
+  assert.equal(await rpc("eth_call", SMALL), "0x1");
+  assert.deepEqual(asked, [ZIPPER, OTHER]);
+  busy = false;
+  asked.length = 0;
+  assert.equal(await rpc("eth_call", SMALL), "0x1");
+  assert.deepEqual(asked, [OTHER], "while it rests, the next one is asked first");
+  await wait(1_050);
+  asked.length = 0;
+  assert.equal(await rpc("eth_call", SMALL), "0x1");
+  assert.deepEqual(asked, [ZIPPER]);
+});
+
 test("requests turned down together count as one towards a longer rest", async () => {
   const { rpc } = await fresh();
   const times: number[] = [];

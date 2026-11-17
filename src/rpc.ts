@@ -296,7 +296,11 @@ export function rpc<T>(
     let last: T | null = null;
     for (let attempt = 0; attempt < 4 && urls.length; attempt++) {
       const busy: string[] = [];
-      for (const url of [...urls].sort((a, b) => (restUntil.get(a) ?? 0) - (restUntil.get(b) ?? 0))) {
+      // RPCs that are resting go last, the one that rests longest at the end. The others keep their order, so an RPC
+      // whose rest is over is asked first again.
+      const now = performance.now();
+      const resting = (url: string): number => Math.max(0, (restUntil.get(url) ?? 0) - now);
+      for (const url of [...urls].sort((a, b) => resting(a) - resting(b))) {
         await pace(url, method === "eth_getLogs");
         const started = performance.now();
         let reply: Reply | undefined;
