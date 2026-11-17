@@ -1,12 +1,12 @@
 // Run `npm run qa [-- scenario]`, or `node qa/qa.ts --list` to list the scenarios. Opens the page against a fork of
 // Base, as the browser tests do, next to the QA wallet's window (qa.html). The QA wallet signs as any address, can ask
 // you before it acts, can move the fork to the next epoch and can send a scenario's transactions again. anvil forks
-// from `BASE_RPC_URL`, or else from the page's first RPC, through the same caches as the browser tests
+// from `BASE_RPC_URL`, or else from Base's RPC, through the same caches as the browser tests
 // (fork/rpc-cache.ts). `CHROMIUM` sets the browser binary.
 import { readFileSync } from "node:fs";
 import { chromium, type BrowserContext, type Page, type Route } from "playwright-core";
 import { decodeFunctionData, erc20Abi, getAddress, isAddress, toHex, type Address, type Hex } from "viem";
-import { AUTOMATIONS, CHAIN_ID, RPCS, SWAPPERS, VOTING_ESCROW } from "../src/config.ts";
+import { AUTOMATIONS, BASE_RPC, CHAIN_ID, SWAPPERS, VOTING_ESCROW } from "../src/config.ts";
 import { WEEK, short } from "../src/format.ts";
 import { same } from "../src/rpc.ts";
 import { swapperAbi } from "../src/swap.ts";
@@ -87,7 +87,7 @@ type Session = {
 };
 
 async function launch(first: Scenario, { headless = false } = {}): Promise<Session> {
-  const upstream = upstreamOf(forkUrl(RPCS[0]!));
+  const upstream = upstreamOf(forkUrl(BASE_RPC));
   const caches = new Map<number, Promise<Cache>>();
   async function cacheAt(block: number): Promise<string> {
     if (!caches.has(block)) caches.set(block, serveCached(upstream, cacheFileOf(block), block));

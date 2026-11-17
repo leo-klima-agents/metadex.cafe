@@ -8,7 +8,7 @@ import {
   type ExtractCapabilities,
   type Hex,
 } from "viem";
-import { BASESCAN, CHAIN_ID, RPCS } from "./config.ts";
+import { BASE_RPC, BASESCAN, CHAIN_ID } from "./config.ts";
 import { clean } from "./format.ts";
 import { now, type Landed } from "./rpc.ts";
 import type {} from "viem/window";
@@ -209,7 +209,7 @@ export async function switchToBase(connection: Connection): Promise<void> {
           chainId: CHAIN,
           chainName: "Base",
           nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-          rpcUrls: RPCS.slice(0, 1),
+          rpcUrls: [BASE_RPC],
           blockExplorerUrls: [BASESCAN],
         },
       ],
