@@ -25,8 +25,9 @@ const asked = (owed: Claim["owed"]): Address[] =>
       contract,
     ),
   );
-// An upper bound on a call's gas, measured from traces on a fork. Each asking of each contract walks each token back
-// up to 50 epochs.
+// A first guess at a call's gas, from traces on a fork, to split a claim before its calls are measured (see `fitted`).
+// It falls short for an account left unclaimed for many epochs: each asking of each contract walks each token back up
+// to 50 epochs, and each epoch adds to the cost.
 export function claimGas(owed: Claim["owed"]): bigint {
   const contracts = BigInt(asked(owed).length);
   const tokens = BigInt(new Set(owed.map(({ token }) => key(token))).size);
@@ -83,23 +84,40 @@ export function halves({ id, owed }: Claim): [Claim, Claim] | undefined {
     { id, owed: owed.filter((item) => !inFirst(item)) },
   ];
 }
-// `claimGas` can fall short: each epoch an account has gone unclaimed adds to what each asking walks, and that cost
-// varies by token. So each call is measured on Base, and one over `budget` is split in two and measured again, until it
-// fits or asks one contract for one token. A call that can't be measured, because it needs more gas than Base allows or
-// for any other reason, is split too. One that still can't be measured keeps `claimGas`'s estimate.
+// `claimGas` can fall short, so each call is measured on Base. One over `budget` is split in two and measured again,
+// until it fits or asks one contract for one token. One that can't be measured, because it needs more gas than Base
+// allows or for any other reason, is split only if one of its halves can be: when neither can, Base is not answering or
+// the claim would fail, so it keeps `claimGas`'s estimate and stays whole, for simulation to judge. At most `AT_ONCE`
+// measurements run together.
+const AT_ONCE = 4;
 export async function fitted(
   calls: Claim[],
   budget: bigint,
   measure: (call: Claim) => Promise<bigint | undefined>,
 ): Promise<{ call: Claim; gas: bigint }[]> {
-  const fit = async (call: Claim): Promise<{ call: Claim; gas: bigint }[]> => {
-    const gas = await measure(call);
+  let running = 0;
+  const waiting: (() => void)[] = [];
+  const limited = async (call: Claim): Promise<bigint | undefined> => {
+    // A slot that frees goes straight to the next waiting call, so no more than `AT_ONCE` ever run.
+    if (running >= AT_ONCE) await new Promise<void>((go) => waiting.push(go));
+    else running++;
+    try {
+      return await measure(call);
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else running--;
+    }
+  };
+  const fit = async (call: Claim, gas: bigint | undefined): Promise<{ call: Claim; gas: bigint }[]> => {
     if (gas !== undefined && gas <= budget) return [{ call, gas }];
     const parts = halves(call);
     if (!parts) return [{ call, gas: gas ?? claimGas(call.owed) }];
-    return (await Promise.all(parts.map(fit))).flat();
+    const measured = await Promise.all(parts.map(limited));
+    if (gas === undefined && measured.every((each) => each === undefined)) return [{ call, gas: claimGas(call.owed) }];
+    return (await Promise.all(parts.map((part, i) => fit(part, measured[i])))).flat();
   };
-  return (await Promise.all(calls.map(fit))).flat();
+  return (await Promise.all(calls.map(async (call) => fit(call, await limited(call))))).flat();
 }
 
 // Groups consecutive calls into transactions of up to `budget` gas, and returns how many calls go in each.

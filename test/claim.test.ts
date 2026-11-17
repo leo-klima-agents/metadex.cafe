@@ -212,3 +212,25 @@ test("calls are measured, and one over its budget, or that cannot be measured, i
     { call: one, gas: claimGas(one.owed) },
   ]);
 });
+
+test("a call that can't be measured, nor either of its halves, stays whole with the guessed gas", async () => {
+  const call = { id: 26432n, owed: [0, 1, 2, 3].map((c) => owe(contract(c), token(0))) };
+  let asked = 0;
+  const found = await fitted([call], CLAIM_CALL_GAS, async () => (asked++, undefined));
+  assert.deepEqual(found, [{ call, gas: claimGas(call.owed) }]);
+  assert.equal(asked, 3, "the call and its two halves, no further");
+});
+
+test("no more than four calls are measured at once", async () => {
+  const calls = Array.from({ length: 10 }, (_, i) => ({ id: BigInt(i), owed: [owe(contract(i), token(0))] }));
+  let running = 0;
+  let most = 0;
+  const found = await fitted(calls, CLAIM_CALL_GAS, async () => {
+    most = Math.max(most, ++running);
+    await new Promise((done) => setTimeout(done, 5));
+    running--;
+    return 1_000_000n;
+  });
+  assert.equal(found.length, 10);
+  assert.equal(most, 4);
+});
