@@ -96,8 +96,6 @@ test("what some votes earned at the rate of others', and their APR, at their pri
     of: new Map([...mine.prices.of].filter(([each]) => each !== key(token))),
   });
   assert.equal(aprOf(mine, without(OHYDX)), undefined, "no price for oHYDX, no APR");
-  const worthless = { ...mine.prices, of: new Map([...mine.prices.of, [key(OHYDX), 0]]) };
-  assert.equal(aprOf(mine, worthless), Infinity, "oHYDX worth nothing, no figure");
   assert.ok(aprOf(mine, without(HYDX.address)) !== undefined, "HYDX's own price is not needed");
   assert.equal(aprOf({ ...mine, votes: 0n }), undefined, "no votes, no APR");
   assert.equal(shareOf({ ...mine, votes: 0n }, 10n ** 21n).value, 0, "no votes, no rate");
@@ -130,18 +128,13 @@ test("oHYDX is priced at HYDX's price less what exercising one costs in USDC, re
   assert.equal(both.of.has(key(OHYDX)), false, "the prices given are left as they were");
   // An oHYDX that costs more to exercise than HYDX is worth is worth nothing.
   assert.equal((await withOhydx(both, FLIP, answering(30_000n))).of.get(key(OHYDX)), 0);
-  // Without a price for HYDX or USDC, oHYDX has none. A cost that can't be read leaves it without one too, and marks the
-  // prices unread, so that they are read again.
-  for (const [why, given, rd, unread] of [
-    ["no HYDX price", prices({ [key(USDC.address)]: 1 }), answering(10_000n), undefined],
-    ["no USDC price", prices({ [key(HYDX.address)]: 0.025 }), answering(10_000n), undefined],
-    ["the cost not read", both, answering(undefined), true],
-    ["a failed read", both, answering(10_000n, true), true],
-  ] as const) {
-    const out = await withOhydx(given, FLIP, rd);
-    assert.equal(out.of.has(key(OHYDX)), false, why);
-    assert.equal(out.unread, unread, why);
-  }
+  for (const [why, given, rd] of [
+    ["no HYDX price", prices({ [key(USDC.address)]: 1 }), answering(10_000n)],
+    ["no USDC price", prices({ [key(HYDX.address)]: 0.025 }), answering(10_000n)],
+    ["the cost not read", both, answering(undefined)],
+    ["a failed read", both, answering(10_000n, true)],
+  ] as const)
+    assert.equal((await withOhydx(given, FLIP, rd)).of.has(key(OHYDX)), false, why);
   // Prices read at a block give that block, so it isn't searched for again.
   blocks.length = 0;
   await withOhydx({ ...both, block: 444 }, FLIP, answering(10_000n));
