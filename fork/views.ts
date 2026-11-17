@@ -91,7 +91,7 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
     );
     await h
       .row(page, 9540)
-      .getByText(/\$5\.6\d last epoch/)
+      .getByText(/\$5\.4\d last epoch/)
       .waitFor();
     const menu = view(page, "hydrex").locator('[data-kind="matcha-latte"]');
     await menu.getByText(/^[\d,]+\.\d% APR$/).waitFor();
@@ -103,7 +103,7 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
     await page.goto(`${SITE}/#hydrex/matcha-latte/record`);
     const popup = page.getByRole("dialog", { name: "Performance" });
     await popup.getByText("1.38M").waitFor();
-    await popup.getByText("20 pools").waitFor();
+    await popup.getByText("21 pools").waitFor();
     await popup.getByText("All of Hydrex could not be read.").waitFor();
     await popup.getByRole("row").filter({ hasText: "AVNT / USDC" }).waitFor();
     await h.shoot(page, "record-390");
@@ -142,13 +142,13 @@ describe("the page's views against a fork of Base", { timeout: 1_800_000 }, () =
     await h.approveConduit(NEWCOMER, h.CONDUIT, 141n);
     const { page } = await h.connected({ owner: NEWCOMER }, { flowing: true });
     await h.row(page, 141).getByText("Joining Matcha Latte:").waitFor();
-    await page.getByText(/moves the votes from Thu,? 12 Nov/).waitFor();
+    await page.getByText(/moves the votes from Thu,? 19 Nov/).waitFor();
     await Promise.allSettled(h.forwarding);
     await h.anvil.setNextBlockTimestamp({ timestamp: BigInt(FLIP + 60) });
     await h.anvil.mine({ blocks: 1 });
     await page.clock.setSystemTime((FLIP + 60) * 1000);
     await page.clock.runFor(30_000);
-    await page.getByText(/moves the votes from Thu,? 19 Nov/).waitFor();
+    await page.getByText(/moves the votes from Thu,? 26 Nov/).waitFor();
     await h.group(page, "in:matcha-latte").getByRole("link", { name: "Hydrex account #141" }).waitFor();
     await h.row(page, 141).getByText("Joining Matcha Latte:").waitFor({ state: "hidden" });
     // Last epoch's payouts are final only once someone calls Hydrex's minter. The page then reads them.

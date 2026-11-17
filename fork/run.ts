@@ -1,21 +1,16 @@
 import { spawn } from "node:child_process";
 import { RPCS } from "../src/config.ts";
-import { BLOCK, UNPAID, UNPAID_SWAPS } from "./harness.ts";
+import { BLOCK } from "./harness.ts";
 import { cacheFileOf, forkUrl, serveCached, upstreamOf } from "./rpc-cache.ts";
 
-// Runs the browser test files in parallel, each with its own anvil. They all fork through one cache per block and one
+// Runs the browser test files in parallel, each with its own anvil. They all fork `BLOCK` through one cache and one
 // queue to `BASE_RPC_URL`, or else to the page's first RPC (see rpc-cache.ts). Arguments are passed to `node --test`:
 // files to run (all of them by default), or options.
 const FILES = ["fork/views.ts", "fork/joins.ts", "fork/payouts.ts", "fork/swap.ts", "fork/aero.ts"];
 const args = process.argv.slice(2);
 const named = args.some((arg) => !arg.startsWith("-"));
 const upstream = upstreamOf(forkUrl(RPCS[0]!));
-const caches = await Promise.all(
-  [BLOCK, UNPAID, UNPAID_SWAPS].map(async (block) => ({
-    block,
-    cache: await serveCached(upstream, cacheFileOf(block), block),
-  })),
-);
+const caches = [{ block: BLOCK, cache: await serveCached(upstream, cacheFileOf(BLOCK), BLOCK) }];
 const child = spawn(
   process.execPath,
   ["--test", `--test-concurrency=${FILES.length}`, ...args, ...(named ? [] : FILES)],

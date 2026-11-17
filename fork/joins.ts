@@ -48,7 +48,7 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     await h.pick(page, 2435, 2439);
     await needs.getByRole("button", { name: "Join Matcha Latte" }).click();
     await review(page).getByText("Join Matcha Latte · 1 of 2").waitFor();
-    assert.match(await review(page).innerText(), /Votes from\s+Thu,? 12 Nov,? 00:00 UTC/i);
+    assert.match(await review(page).innerText(), /Votes from\s+Thu,? 19 Nov,? 00:00 UTC/i);
     await review(page)
       .getByText(/^(<\s)?\$[\d.]+$/)
       .first()
@@ -75,7 +75,7 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     assert.equal(sent.length, 2);
     await expectApprovals([2435n, 2439n], CONDUIT, CONDUIT);
     await row(page, 2439)
-      .getByText(/Joining Matcha Latte: votes from Thu,? 12 Nov/)
+      .getByText(/Joining Matcha Latte: votes from Thu,? 19 Nov/)
       .waitFor();
     assert.deepEqual([...new Set(asked)].sort(), [
       "eth_chainId",
@@ -109,7 +109,7 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     await expectApprovals([141n], CONDUIT, CONDUIT);
     await group(page, "in:matcha-latte").getByRole("button", { name: "Leave" }).click();
     await heading(review(page), "Leave Matcha Latte", 2).waitFor();
-    assert.match(await review(page).innerText(), /Claims stop\s+Now\s+Votes return\s+Thu,? 12 Nov/i);
+    assert.match(await review(page).innerText(), /Claims stop\s+Now\s+Votes return\s+Thu,? 19 Nov/i);
     await review(page).getByRole("button", { name: "Sign transaction" }).click();
     await review(page)
       .getByText(/^Left\./)
@@ -128,7 +128,7 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     await h.confirm(page);
     await review(page).getByRole("button", { name: "Close" }).click();
     await row(page, 2439)
-      .getByText(/Left USDC: your votes from Thu,? 12 Nov/)
+      .getByText(/Left USDC: your votes from Thu,? 19 Nov/)
       .waitFor();
     await row(page, 2435)
       .getByText(/In Hydrex Lock Maxi · stopped/)
@@ -147,7 +147,7 @@ describe("joining and leaving against a fork of Base", { timeout: 1_800_000 }, (
     assert.deepEqual(await says(page), ["Account #2439 leaves the USDC automation."]);
     await h.confirm(page);
     await review(page).getByRole("button", { name: "Close" }).click();
-    await account.getByText(/Left USDC: your votes from Thu,? 12 Nov/).waitFor();
+    await account.getByText(/Left USDC: your votes from Thu,? 19 Nov/).waitFor();
     assert.deepEqual(violations, []);
   });
 

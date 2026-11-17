@@ -9,11 +9,10 @@ import {
   HOLDER,
   NEWCOMER,
   BLOCK,
-  PAYEE,
+  LATE,
   SELLER,
   SITE,
   STRANGER,
-  UNPAID_SWAPS,
   ZORA,
   balanceOf,
   connected,
@@ -115,7 +114,7 @@ describe("swaps against a fork of Base after Denim", { timeout: 2_400_000 }, () 
     await page.getByText("Joining is off: the page reached another network than Base.").waitFor();
   });
 
-  // Keep this test last: it moves the fork on two epochs, to Thu 19 Nov 2026.
+  // Keep this test last: it moves the fork on two epochs, to Thu 26 Nov 2026.
   test("a claim past the 50 epochs earned() reads, and the swap of what it brings, go in one prompt", async () => {
     // Set up an epoch as anyone could on Base: #141 joins Double Espresso, which votes for a pool that someone
     // incentivises. Half a day after that epoch ends, its payout is overdue, and it is owed one reward beyond what
@@ -174,18 +173,18 @@ describe("swaps against a fork of Base after Denim", { timeout: 2_400_000 }, () 
   });
 });
 
-describe("claims of a payout late, against a fork of Base before Denim", { timeout: 2_400_000 }, () => {
-  h.fork(UNPAID_SWAPS, [PAYEE]);
+describe("claims of a payout late, against a fork of Base", { timeout: 2_400_000 }, () => {
+  h.fork(BLOCK, [LATE]);
 
   test("an overdue payout in Double Espresso: claimed, then what it brought swapped into USDC", async () => {
-    await h.approveConduit(PAYEE, DOUBLE_ESPRESSO.address, 82774n);
+    await h.approveConduit(LATE, DOUBLE_ESPRESSO.address, 26432n);
     await h.settle();
     let refusing = false;
     const { page, sent } = await connected(
-      { owner: PAYEE, batch: true },
+      { owner: LATE, batch: true },
       { url: `${SITE}/#app`, refuse: (body) => refusing && body.includes(EARNED) },
     );
-    const line = view(page, "app").locator("[data-list=need] > li").filter({ hasText: "#82774: payout overdue" });
+    const line = view(page, "app").locator("[data-list=need] > li").filter({ hasText: "#26432: payout overdue" });
     await line.filter({ hasText: /payout overdue, at least (<\s)?\$[\d,.]+ in \d+ tokens?/ }).waitFor();
     refusing = true;
     await line.getByRole("button", { name: "Claim now" }).click();
@@ -209,10 +208,10 @@ describe("claims of a payout late, against a fork of Base before Denim", { timeo
     // The claim's calls need more gas than one transaction may use, so they go one at a time, before the swap.
     const claims = await says(page);
     assert.ok(
-      claims.length > 1 && claims.every((each) => /^Claims account #82774's rewards from /.test(each)),
+      claims.length > 1 && claims.every((each) => /^Claims account #26432's rewards from /.test(each)),
       JSON.stringify(claims),
     );
-    const before = await balanceOf(INTO_USDC.token, PAYEE);
+    const before = await balanceOf(INTO_USDC.token, LATE);
     await h.confirm(page);
     await review(page).getByRole("button", { name: "Review the swap into USDC" }).click();
     await heading(review(page), "Quote", 2).waitFor();
@@ -226,19 +225,19 @@ describe("claims of a payout late, against a fork of Base before Denim", { timeo
       .click();
     await heading(review(page), "Done", 2).waitFor();
     assert.equal(sent.length, claims.length + swaps.length);
-    assert.ok((await balanceOf(INTO_USDC.token, PAYEE)) > before);
-    assert.ok((await h.at(DOUBLE_ESPRESSO.address).read.lastClaimBlock([82774n])) > 0n);
+    assert.ok((await balanceOf(INTO_USDC.token, LATE)) > before);
+    assert.ok((await h.at(DOUBLE_ESPRESSO.address).read.lastClaimBlock([26432n])) > 0n);
   });
 
   test("inside Safe{Wallet}, a Safe proposes a claim too large for one transaction as several Safe transactions", async () => {
-    await h.approveConduit(PAYEE, DOUBLE_ESPRESSO.address, 82774n);
+    await h.approveConduit(LATE, DOUBLE_ESPRESSO.address, 26432n);
     await h.settle();
-    const { page, violations } = await h.open(false, { url: `${SAFE_ORIGIN}/`, safe: PAYEE });
+    const { page, violations } = await h.open(false, { url: `${SAFE_ORIGIN}/`, safe: LATE });
     const frame = page.frameLocator("iframe");
     const dialog = review(frame);
     await frame
       .locator('[data-view="app"] [data-list=need] > li')
-      .filter({ hasText: "#82774: payout overdue" })
+      .filter({ hasText: "#26432: payout overdue" })
       .getByRole("button", { name: "Claim now" })
       .click();
     await heading(dialog, "Unclaimed rewards", 2).waitFor();

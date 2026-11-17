@@ -44,30 +44,24 @@ import { SAFE_ORIGIN } from "../src/wallet.ts";
 import { runsCalls } from "./rpc-cache.ts";
 
 export const CONDUIT = MATCHA_LATTE.address;
-export const BLOCK = 55_388_000; // Mon 9 Nov 2026, 23:46 UTC, after Base Denim made five blocks a second
-export const FLIP = 1_794_441_600; // Thu 12 Nov 2026, 00:00 UTC, when the epoch after BLOCK's starts
-// Matcha Latte paid every account up to Thu 5 Nov, before Denim, so no block since then has a late payout with rewards
-// left to claim. Until one does, the tests of a late payout use blocks from before Denim: `UNPAID`, Fri 16 Oct 2026,
-// 19:02 UTC, with #82774 unpaid since Thu 17 Sept; and `UNPAID_SWAPS`, Wed 21 Oct 2026, after the swappers were
-// deployed, with #82774 still unpaid.
-export const UNPAID = 52_694_000;
-export const UNPAID_SWAPS = 52_904_000;
+export const BLOCK = 58_400_000; // Mon 16 Nov 2026, 23:06 UTC, after Base Denim made five blocks a second
+export const FLIP = 1_795_046_400; // Thu 19 Nov 2026, 00:00 UTC, when the epoch after BLOCK's starts
 export const SITE = "https://metadex.cafe";
 const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 export const RPC_ORIGINS = RPCS.map((url) => new URL(url).origin);
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type" };
 
-// What each owner holds at `BLOCK`, and also at the payout tests' blocks unless the comment says otherwise.
+// What each owner holds at `BLOCK`.
 export const MEMBER = getAddress("0x388b2d29e7919d45b1b8f6e88b8a13a392f97b40"); // #9540 in Matcha Latte, #14485 its own
 export const NEWCOMER = getAddress("0x0208ddbc05a91e1b937e8b3140b62ef22a274c95"); // #141 its own, #42877 in Liquid Hydrex
 export const ELSEWHERE = getAddress("0x69707a120ade8239f07595165e180c61395ea655"); // #2435 in Lock Maxi, #2439 in USDC
 export const LEAVER = getAddress("0x2573264b8e690ca6b2128c113890f42198840b16"); // #53350 and #82206 in Matcha Latte
 export const ENDED = getAddress("0x2518820268e4079e90446b93020dfad7dd54e84d"); // #123351 (ended, holds HYDX), #123364
-export const PAYEE = getAddress("0x60924601e73ebc5c2bd9244c788d93e0710a6c93"); // #82774 in Matcha Latte
+// 134 Hydrex accounts. #26432 and #14247 are in Matcha Latte, which last paid them up to Thu 11 June and Thu 27 Aug: its
+// operator leaves some accounts unpaid on purpose, so both are late, with rewards left to claim.
+export const LATE = getAddress("0xa79cd47655156b299762dfe92a67980805ce5a31");
 // 25 sAERO stakes at BLOCK. The largest, #2848, is locked; #2890 is the largest that can move.
 export const ALLOCATOR = getAddress("0x41870186e8cf4c6d445492a9f7bb233a02a9b633");
-// #82774's last payout as of `UNPAID`: sent on Wed 23 Sept, paying up to Thu 17 Sept.
-export const PAID_TX = "0x0932e5a24f24e45bfd1021764d94abc1d920754c4dc17128dd89f44bd086e899";
 export const LOCK_MAXI = getAddress("0x53388a4E98Bb56F8571433F5461010Fc287929d3");
 export const STRANGER = getAddress("0x000000000000000000000000000000000000dead");
 const SOMEONE = getAddress("0x0000000000000000000000000000000000001234");
@@ -269,14 +263,14 @@ export async function setMatchaLatteFee(bps: bigint): Promise<void> {
 export async function doubleEspressoReceipts(): Promise<Reward[]> {
   await deployDoubleEspresso();
   const { rewards } = await onFork(async () => votesEarned(CONDUIT, await lastEpoch(), true));
-  for (const who of [PAYEE, STRANGER, SOMEONE]) await anvil.setBalance({ address: who, value: FOR_GAS });
-  await approveConduit(PAYEE, DOUBLE_ESPRESSO.address, 82774n);
+  for (const who of [LATE, STRANGER, SOMEONE]) await anvil.setBalance({ address: who, value: FOR_GAS });
+  await approveConduit(LATE, DOUBLE_ESPRESSO.address, 26432n);
   const usdc = rewards.filter(({ token }) => token.symbol === "USDC");
   for (const [who, { contract, token, fee }] of [
     [SOMEONE, usdc[0]!],
     [STRANGER, usdc[1]!],
   ] as const) {
-    await mined(who, DOUBLE_ESPRESSO.address, claimOne(82774n, { contract, token, fee }));
+    await mined(who, DOUBLE_ESPRESSO.address, claimOne(26432n, { contract, token, fee }));
   }
   await settle();
   return rewards;
