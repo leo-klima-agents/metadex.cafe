@@ -11,6 +11,8 @@ import {
   claimSlip,
   claimTransactions,
   claimedIn,
+  fitted,
+  halves,
   paidBy,
   type Claim,
 } from "../src/claim.ts";
@@ -162,4 +164,51 @@ test("a claim's receipts sum the page's own Claimed events, and none when anothe
     { id: 9540n, received: [], fees: [], paid: [] },
   ]);
   assert.deepEqual(claimedIn([receipt([USDC], [5n], [0n], AVNT)], [9540n], OWNER), []);
+});
+
+test("a call is halved by its contracts, or by its tokens when it asks one contract, down to one pair", () => {
+  const four = { id: 1n, owed: [0, 1, 2, 3].map((n) => owe(contract(n), token(n % 2))) };
+  const [a, b] = halves(four)!;
+  assert.deepEqual(
+    [a, b].map(({ owed }) => owed.map(({ contract }) => contract)),
+    [
+      [contract(0), contract(1)],
+      [contract(2), contract(3)],
+    ],
+  );
+  const oneContract = { id: 1n, owed: [0, 1, 2].map((n) => owe(contract(9), token(n))) };
+  assert.deepEqual(
+    halves(oneContract)!.map(({ owed }) => owed.map(({ token }) => token)),
+    [[token(0), token(1)], [token(2)]],
+  );
+  assert.equal(halves({ id: 1n, owed: [owe(contract(9), token(0))] }), undefined);
+});
+
+test("calls are measured, and one over its budget, or that cannot be measured, is halved until it fits", async () => {
+  // A long-unclaimed account: each pair costs 900k gas, far above `claimGas`'s guess.
+  const call = {
+    id: 26432n,
+    owed: [0, 1, 2, 3].flatMap((c) => [0, 1, 2, 3, 4, 5].map((t) => owe(contract(c), token(t)))),
+  };
+  const measured: number[] = [];
+  const measure = async ({ owed }: Claim) => {
+    measured.push(owed.length);
+    // Over Base's limit, the estimate fails.
+    return owed.length * 900_000 > 16_777_216 ? undefined : BigInt(owed.length * 900_000);
+  };
+  const found = await fitted([call], CLAIM_CALL_GAS, measure);
+  assert.deepEqual(
+    found.map(({ call, gas }) => [call.owed.length, gas]),
+    [
+      [12, 10_800_000n],
+      [12, 10_800_000n],
+    ],
+  );
+  assert.deepEqual(measured, [24, 12, 12]);
+  assert.deepEqual(pairs(found.map(({ call }) => call)), pairs([call]), "every pair is still claimed");
+  // A pair that can't be measured keeps `claimGas`'s estimate.
+  const one = { id: 1n, owed: [owe(contract(0), token(0))] };
+  assert.deepEqual(await fitted([one], CLAIM_CALL_GAS, async () => undefined), [
+    { call: one, gas: claimGas(one.owed) },
+  ]);
 });

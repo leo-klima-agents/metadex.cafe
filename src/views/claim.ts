@@ -1,11 +1,12 @@
+import type { Hex } from "viem";
 import * as claim from "../claim.ts";
-import { DEFAULT_OUTPUT, HYDX, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
+import { DEFAULT_OUTPUT, DOUBLE_ESPRESSO, HYDX, SWAPPERS, swapperOf, type Swapper } from "../config.ts";
 import { checksRead, swapsOff } from "../checks.ts";
 import { count, figure, listWords, money, moneyAt, sumBig } from "../format.ts";
 import { summed, valueAt, type Overdue } from "../payouts.ts";
 import { gasWords, key, pricesNow, quotesOf, type Prices, type Token } from "../prices.ts";
 import { hrefOf } from "../routes.ts";
-import { costsRead, same, simulate, type Costs, type Landed } from "../rpc.ts";
+import { costsRead, rpc, same, simulate, type Costs, type Landed } from "../rpc.ts";
 import { actions, render, state } from "../state.ts";
 import * as swap from "../swap.ts";
 import { describe, type Amount } from "../tokens.ts";
@@ -121,7 +122,7 @@ async function planClaim(entries: Overdue[], connection: Connection): Promise<Cl
   };
 }
 
-// The claim's calls, each account's most valuable first, and each call's estimated gas.
+// The claim's calls, each account's most valuable first, and each call's gas as measured on Base (see `claim.fitted`).
 async function callsOf(
   owing: claim.Claim[],
   tokens: Map<string, Token>,
@@ -131,13 +132,24 @@ async function callsOf(
   const quotes = await quotesOf(owedTokens);
   const weight = ({ owed }: claim.Claim) => valueAt(owed, tokens, quotes);
   const budget = connection.wallet.propose ? claim.SAFE_CLAIM_CALL_GAS : claim.CLAIM_CALL_GAS;
-  const parts = owing.flatMap((each) => {
-    const split = claim.claimCalls(each, budget).sort((a, b) => weight(b) - weight(a));
-    return split.map((part) => ({ part, whole: split.length === 1 }));
-  });
+  const measure = (part: claim.Claim) =>
+    rpc<Hex>("eth_estimateGas", [
+      { from: connection.address, to: DOUBLE_ESPRESSO.address, data: claim.claimSlip(part, tokens).data },
+    ])
+      .then(BigInt)
+      .catch(() => undefined);
+  const parts = (
+    await Promise.all(
+      owing.map(async (each) => {
+        const split = await claim.fitted(claim.claimCalls(each, budget), budget, measure);
+        split.sort((a, b) => weight(b.call) - weight(a.call));
+        return split.map(({ call, gas }) => ({ part: call, gas, whole: split.length === 1 }));
+      }),
+    )
+  ).flat();
   return {
     calls: parts.map(({ part, whole }) => claim.claimSlip(part, tokens, whole)),
-    estimates: parts.map(({ part }) => claim.claimGas(part.owed)),
+    estimates: parts.map(({ gas }) => gas),
   };
 }
 

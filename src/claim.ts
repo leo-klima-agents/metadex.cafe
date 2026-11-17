@@ -69,6 +69,39 @@ export function claimCalls(claim: Claim, budget = CLAIM_CALL_GAS): Claim[] {
   }
   return calls.map((owed) => ({ id: claim.id, owed }));
 }
+// Splits a call in two: its contracts, or, when it asks one contract, its tokens. Undefined when it asks one contract
+// for one token.
+export function halves({ id, owed }: Claim): [Claim, Claim] | undefined {
+  const contracts = unique(owed.map(({ contract }) => contract)).map(key);
+  const tokens = unique(owed.map(({ token }) => token)).map(key);
+  const [by, all] = contracts.length > 1 ? (["contract", contracts] as const) : (["token", tokens] as const);
+  if (all.length < 2) return undefined;
+  const first = new Set(all.slice(0, Math.ceil(all.length / 2)));
+  const inFirst = (item: Claim["owed"][number]) => first.has(key(item[by]));
+  return [
+    { id, owed: owed.filter(inFirst) },
+    { id, owed: owed.filter((item) => !inFirst(item)) },
+  ];
+}
+// `claimGas` can fall short: each epoch an account has gone unclaimed adds to what each asking walks, and that cost
+// varies by token. So each call is measured on Base, and one over `budget` is split in two and measured again, until it
+// fits or asks one contract for one token. A call that can't be measured, because it needs more gas than Base allows or
+// for any other reason, is split too. One that still can't be measured keeps `claimGas`'s estimate.
+export async function fitted(
+  calls: Claim[],
+  budget: bigint,
+  measure: (call: Claim) => Promise<bigint | undefined>,
+): Promise<{ call: Claim; gas: bigint }[]> {
+  const fit = async (call: Claim): Promise<{ call: Claim; gas: bigint }[]> => {
+    const gas = await measure(call);
+    if (gas !== undefined && gas <= budget) return [{ call, gas }];
+    const parts = halves(call);
+    if (!parts) return [{ call, gas: gas ?? claimGas(call.owed) }];
+    return (await Promise.all(parts.map(fit))).flat();
+  };
+  return (await Promise.all(calls.map(fit))).flat();
+}
+
 // Groups consecutive calls into transactions of up to `budget` gas, and returns how many calls go in each.
 export function claimTransactions(gas: bigint[], budget = MAX_CLAIM_GAS): number[] {
   const groups: { size: number; gas: bigint }[] = [];
