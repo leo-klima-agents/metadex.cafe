@@ -21,7 +21,8 @@ export type Token = { address: Address; decimals: number; symbol: string };
 // Prices per whole token, keyed by lower-case address. `unread` is set when some pools could not be read, so some
 // tokens may have no price. `sources` holds the pool that priced each token, so the token can be priced again at
 // another time.
-export type Prices = Basis & { of: Map<string, number>; unread?: true; sources?: Map<string, Pool> };
+// `block` is the block that prices read up to, when they were read at a time (see `pricesAt`).
+export type Prices = Basis & { of: Map<string, number>; unread?: true; sources?: Map<string, Pool>; block?: number };
 export function key(address: Address): Address;
 export function key(address: string): string;
 export function key(address: string): string {
@@ -626,6 +627,7 @@ export async function pricesAt(
         exchanges,
         rd,
       );
+  prices.block = window.end;
   return prices;
 }
 // Prices at `time`, from the pools that priced each token at another time. This reads far less than searching again.

@@ -94,19 +94,22 @@ export function statusNode(s: Status, own: boolean, inGroup?: string): Value {
   }
 }
 
-// Rounded to a tenth of a percentage point. Without a price for oHYDX, which values earning power, there is no APR.
-const aprOrNoPrice = (apr: number | undefined): string => (apr === undefined ? "No price for oHYDX" : aprWords(apr));
+// Rounded to a tenth of a percentage point. Without a price for oHYDX, which values earning power, there is no APR; nor
+// is there when oHYDX is worth nothing. `hasApr` says whether there is a figure to put "APR" beside.
+const hasApr = (apr: number | undefined): apr is number => apr !== undefined && Number.isFinite(apr);
+const aprOrNoPrice = (apr: number | undefined): string =>
+  apr === undefined ? "No price for oHYDX" : hasApr(apr) ? aprWords(apr) : "oHYDX worth nothing";
 const record = (automation: Automation): Value =>
   shown(data.earnings(automation), (earnings) => {
     if (!earnings.votes) return "No record yet";
     const apr = aprOf(earnings);
-    return apr === undefined ? aprOrNoPrice(apr) : frag(aprOrNoPrice(apr), fromTemplate("apr"));
+    return hasApr(apr) ? frag(aprOrNoPrice(apr), fromTemplate("apr")) : aprOrNoPrice(apr);
   });
 function averageNote(): Value {
   const all = data.average();
   return all.failed
     ? null
-    : shown(all, (found) => (aprOf(found) === undefined ? null : `Hydrex average: ${aprOrNoPrice(aprOf(found))}`));
+    : shown(all, (found) => (hasApr(aprOf(found)) ? `Hydrex average: ${aprOrNoPrice(aprOf(found))}` : null));
 }
 function stateNode(automation: Automation): Value {
   const off = checks().value?.get(automation.kind)?.length;
@@ -252,8 +255,8 @@ export function drawHydrex(): void {
       : null,
     underway: found && underWay(found) ? "Payout under way." : null,
     average: shown(data.average(), (all) => aprOrNoPrice(aprOf(all))),
-    // Shown only beside an APR, not beside "Loading…", "Not read" or "No price for oHYDX".
-    "average-aside": average && aprOf(average) !== undefined ? true : null,
+    // Shown only beside an APR, not beside "Loading…", "Not read", "No price for oHYDX" or "oHYDX worth nothing".
+    "average-aside": average && hasApr(aprOf(average)) ? true : null,
     own: shown(holdings, ownWords),
     epoch: state.connection ? epochWords() : null,
     accounts: stateOf(holdings, !holdings.value?.accounts.some(({ amount }) => amount > 0n)),
@@ -274,9 +277,9 @@ function ownWords(holdings: Holdings): Value {
       ? "No votes of your own"
       : !own.pools.length
         ? "Didn't vote"
-        : aprOf(own) === undefined
-          ? aprOrNoPrice(undefined)
-          : `${aprOrNoPrice(aprOf(own))} APR, last epoch`,
+        : hasApr(aprOf(own))
+          ? `${aprOrNoPrice(aprOf(own))} APR, last epoch`
+          : aprOrNoPrice(aprOf(own)),
   );
 }
 

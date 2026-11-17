@@ -157,37 +157,45 @@ export const tokensIn = (rewards: Reward[]): Token[] => [
 const allRewards = (start: number, rd: Read) => memo(`all rewards ${start}`, () => rewardsOf(start, undefined, rd));
 // The epoch's prices, shared by every voter's earnings in that epoch. Each token is priced for the whole amount of it
 // that the epoch paid.
+// Epoch prices that could not all be read are read again in five minutes.
+const MINUTE = 60_000;
 const epochPrices = (start: number, rd: Read): Promise<Prices> =>
-  memo(`epoch prices ${start}`, async () => {
-    const { rewards } = await allRewards(start, rd);
-    const amounts = new Map<string, bigint>();
-    for (const { token, amount } of rewards)
-      amounts.set(key(token.address), (amounts.get(key(token.address)) ?? 0n) + amount);
-    const tokens = tokensIn(rewards);
-    const flip = start + WEEK;
-    if (tokens.some(({ address }) => key(address) === key(HYDX)))
-      return withOhydx(await pricesAtFlip(tokens, amounts, flip, rd), flip, rd);
-    // Prices HYDX too, since oHYDX's price, and so APRs, need it. If a pool could not be read, the rewards are priced
-    // again without HYDX. So a failure on HYDX alone fails only the APRs.
-    const hydx: Token = { address: HYDX, decimals: 18, symbol: "HYDX" };
-    const all = await pricesAt([...tokens, hydx], amounts, flip, rd, HYDREX_PRICING);
-    return all.unread ? pricesAtFlip(tokens, amounts, flip, rd) : withOhydx(all, flip, rd);
-  });
+  memo(
+    `epoch prices ${start}`,
+    async () => {
+      const { rewards } = await allRewards(start, rd);
+      const amounts = new Map<string, bigint>();
+      for (const { token, amount } of rewards)
+        amounts.set(key(token.address), (amounts.get(key(token.address)) ?? 0n) + amount);
+      const tokens = tokensIn(rewards);
+      const flip = start + WEEK;
+      if (tokens.some(({ address }) => key(address) === key(HYDX)))
+        return withOhydx(await pricesAtFlip(tokens, amounts, flip, rd), flip, rd);
+      // Prices HYDX too, since oHYDX's price, and so APRs, need it. If a pool could not be read, the rewards are
+      // priced again without HYDX, and marked unread. So a failure on HYDX alone fails only the APRs, until it is read
+      // again.
+      const hydx: Token = { address: HYDX, decimals: 18, symbol: "HYDX" };
+      const all = await pricesAt([...tokens, hydx], amounts, flip, rd, HYDREX_PRICING);
+      if (!all.unread) return withOhydx(all, flip, rd);
+      return { ...(await pricesAtFlip(tokens, amounts, flip, rd)), unread: true };
+    },
+    ({ unread }) => (unread ? 5 * MINUTE : Infinity),
+  );
 // Adds oHYDX's price, as Hydrex values it: the HYDX that exercising one gives, less what exercising costs in USDC in
-// the last block at or before `time`. Without a price for HYDX or USDC, oHYDX has none, nor does it if the cost cannot
-// be read. Either fails only the APRs. A price found for oHYDX in a pool is replaced.
+// the last block at or before `time`, which the prices were read at. Without a price for HYDX or USDC, oHYDX has none.
+// If the cost cannot be read, it has none either, and the prices are marked unread, to be read again. Either fails only
+// the APRs. A price found for oHYDX in a pool is replaced.
 export async function withOhydx(prices: Prices, time: number, rd: Read): Promise<Prices> {
   const [hydx, usdc] = [HYDX, USDC].map((token) => prices.of.get(key(token)));
   if (hydx === undefined || usdc === undefined) return prices;
   try {
-    const { firstAt } = await blockClock(rd);
-    const block = (await firstAt(time + 1)) - 1;
+    const block = prices.block ?? (await (await blockClock(rd)).firstAt(time + 1)) - 1;
     const [cost] = await rd([call(OHYDX, optionsTokenAbi, "getMinPrice", 10n ** 18n)], { block });
-    if (cost === undefined) return prices;
+    if (cost === undefined) return { ...prices, unread: true };
     const ohydx = Math.max(hydx - worthOf(cost, 6, usdc), 0);
     return { ...prices, of: new Map([...prices.of, [key(OHYDX), ohydx]]) };
   } catch {
-    return prices;
+    return { ...prices, unread: true };
   }
 }
 const priced = async (start: number, votes: bigint, pools: Pool[], rewards: Reward[], rd: Read): Promise<Earnings> => ({
@@ -303,9 +311,11 @@ export const shareOf = (earnings: Earnings, votes: bigint, value: Value = valueO
   moneyAt(earnings.votes > 0n ? (Number(votes) / Number(earnings.votes)) * value.total : 0, value);
 // The APR: what the votes earned in an epoch, scaled up to a year, over what their earning power is worth at the same
 // prices. As on Hydrex, each earning power is worth one oHYDX: exercising one oHYDX into a Protocol Account gives one
-// earning power, without a payment. Undefined without votes or without a price for oHYDX.
+// earning power, without a payment. Undefined without votes or without a price for oHYDX. Infinite when oHYDX is worth
+// nothing, which happens when HYDX costs no more than exercising one oHYDX.
 export function aprOf(earnings: Earnings, prices = earnings.prices): number | undefined {
   const ohydx = prices.of.get(key(OHYDX));
   const power = Number(earningPowerOf(earnings.votes)) / 1e18;
-  return ohydx && power > 0 ? ((valueOf(earnings, prices).total / power) * (365 / 7)) / ohydx : undefined;
+  if (ohydx === undefined || !(power > 0)) return undefined;
+  return ohydx > 0 ? ((valueOf(earnings, prices).total / power) * (365 / 7)) / ohydx : Infinity;
 }

@@ -49,10 +49,12 @@ const epoch = () =>
 const earningsKey = (automation: Automation, start: number) => `earnings ${automation.kind} ${start}`;
 const readEarnings = (automation: Automation, start: number) => () =>
   votesEarned(automation.address, start, true, tagged("earnings"));
+// Earnings whose prices could not all be read, such as oHYDX's, which APRs need, are read again in five minutes.
+const pricedTtl = ({ prices }: Earnings): number => (prices.unread ? 5 * MINUTE : Infinity);
 export const earnings = (automation: Automation): Got<Earnings> =>
-  andThen(epoch(), (start) => use(earningsKey(automation, start), readEarnings(automation, start)));
+  andThen(epoch(), (start) => use(earningsKey(automation, start), readEarnings(automation, start), pricedTtl));
 export const average = (): Got<Earnings> =>
-  andThen(epoch(), (start) => use(`average ${start}`, () => allEarnings(start, tagged("average"))));
+  andThen(epoch(), (start) => use(`average ${start}`, () => allEarnings(start, tagged("average")), pricedTtl));
 const stakes = (holdings: Holdings): Got<Map<bigint, Stake>> =>
   andThen(epoch(), (start) => {
     const ids = holdings.accounts.filter(({ amount }) => amount > 0n).map(({ id }) => id);
@@ -61,7 +63,7 @@ const stakes = (holdings: Holdings): Got<Map<bigint, Stake>> =>
 // What a holder of votes earned last epoch with all the votes it held.
 export const holderEarnings = (holder: Address): Got<Earnings> =>
   andThen(epoch(), (start) =>
-    use(`voter ${holder} ${start}`, () => votesEarned(holder, start, false, tagged("shares"))),
+    use(`voter ${holder} ${start}`, () => votesEarned(holder, start, false, tagged("shares")), pricedTtl),
   );
 // What an account's votes earned last epoch: its share of what their holder earned. `null` when the account had no
 // votes as the epoch began, when their holder had none, or when a holder other than the automations did not vote.
