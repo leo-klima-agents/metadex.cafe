@@ -7,16 +7,20 @@ A static page at <https://metadex.cafe/> for Hydrex accounts and Aero stakes on 
 - see the APR that votes earned last epoch, next to Hydrex's average, and each account's last payout as a receipt;
 - swap many tokens into one through **ImmutableSwapper**, with routes planned together and a simulation on Base before
   the wallet asks you to sign;
-- follow one of two Aero strategies with a stake (see below);
+- follow one of three Aero strategies with a stake (see below);
 - see each Aero stake's pools, when it can be allocated again and what it can claim, and each pool's APR, day by day.
 
-The two Aero strategies pick up to 10 pools, judged on their last eight days, from all pools or from blue chips only.
+The three Aero strategies pick up to 10 pools, judged on their last eight days, from all pools or from blue chips only.
 They pick once, or again every 48 hours.
 
 - **Follow the leaders** picks the pools that paid the most per sAERO weight, more to those that paid more.
 - **Follow revenue** picks the pools with the most protocol revenue, in proportion to that revenue.
+- **Persistence carry** picks the pools with the most protocol revenue, less half of how much it swung between spans of
+  48 hours. It splits them so that one more sAERO would earn the same in each. Picking again, it keeps its pools while
+  the new picks are within 10% of them. It follows PersistenceCarry from
+  [aero-autopilot](https://github.com/leo-klima-agents/aero-autopilot).
 
-The page shows how both strategies did over the last eight days, against Aero's Autopilot as it actually allocated and
+The page shows how the strategies did over the last eight days, against Aero's Autopilot as it actually allocated and
 against the Base average. You can then allocate a stake on Base to a strategy's picks, or set your own shares across any
 pools. The allocation is simulated on Base before the wallet asks you to sign.
 

@@ -907,17 +907,21 @@ export type Holding = { gauge: Gauge | undefined; weight: number };
 const SMALLEST = 0.01;
 // A pool the strategy can pick from. `paying` is what it pays, shared by its sAERO at the time of the pick
 // (`paying.power`). `own` is how many of those whole sAERO belong to the stake.
-export type Candidate = { gauge: Gauge; paying: Paying; own?: number };
+// `swing` is how much what it paid moved between spans of 48 hours (see `swingOf`), for persistence carry.
+export type Candidate = { gauge: Gauge; paying: Paying; own?: number; swing?: number };
 export type Pick = { gauge: Gauge; weight: number; paying: Paying };
-// Picks at most `count` pools for `amount` sAERO. Following revenue, it takes the pools that pay the most, each
-// weighted by what it pays. Following the leaders, it splits the stake as `leadersOf` does. With no amount, it picks as
-// for one sAERO.
-export function picksOf(
-  pools: Candidate[],
-  { count, leaders }: { count: number; leaders: boolean },
-  amount = 0,
-): Pick[] {
-  const shares = leaders ? leadersOf(pools, count, amount > 0 ? amount : 1) : byRevenue(pools, count);
+// How a strategy chooses its pools and splits them. Following revenue, it takes the pools that pay the most, each
+// weighted by what it pays. Following the leaders, it splits the stake as `leadersOf` does. Persistence carry splits it
+// as `carryOf` does.
+export type Rule = "leaders" | "revenue" | "carry";
+// Picks at most `count` pools for `amount` sAERO, by `rule`. With no amount, it picks as for one sAERO.
+export function picksOf(pools: Candidate[], { count, rule }: { count: number; rule: Rule }, amount = 0): Pick[] {
+  const shares =
+    rule === "leaders"
+      ? leadersOf(pools, count, amount > 0 ? amount : 1)
+      : rule === "carry"
+        ? carryOf(pools, count, amount > 0 ? amount : 1)
+        : byRevenue(pools, count);
   return shares
     .flatMap((weight, i) => (weight > 0 ? [{ gauge: pools[i]!.gauge, paying: pools[i]!.paying, weight }] : []))
     .sort((a, b) => b.weight - a.weight);
@@ -952,10 +956,14 @@ function leadersOf(pools: Candidate[], count: number, amount: number): number[] 
   );
 }
 type Row = { pays: number; others: number };
-// Runs `solve` over the pools that pay. Then drops pools past the top `count`, and pools under `SMALLEST` other than
-// the largest, and runs it again, until none are dropped. Undefined once `solve` finds no answer.
-function trimmed(rows: Row[], count: number, solve: (kept: boolean[]) => number[] | undefined): number[] | undefined {
-  let kept = rows.map(({ pays }) => pays > 0);
+// Runs `solve` over the `kept` pools, by default those that pay. Then drops pools past the top `count`, and pools under
+// `SMALLEST` other than the largest, and runs it again, until none are dropped. Undefined once `solve` finds no answer.
+function trimmed(
+  rows: Row[],
+  count: number,
+  solve: (kept: boolean[]) => number[] | undefined,
+  kept = rows.map(({ pays }) => pays > 0),
+): number[] | undefined {
   for (;;) {
     const shares = solve(kept);
     if (!shares) return undefined;
@@ -1007,6 +1015,89 @@ function levelled(rows: Row[], kept: boolean[], count: number, amount: number): 
   );
   const total = sum(shares);
   return total > 0 ? shares.map((share) => share / total) : shares;
+}
+
+// Persistence carry, after the strategy of that name in aero-autopilot. A pool's score is what it pays, less `CUT`
+// times its `swing`: a pool whose pay comes in bursts is trusted less to keep paying. The `count` pools with the highest
+// scores share the stake as `filled` does, with each pool's score as its pay. Picking again, it keeps the pools it holds
+// while the new picks are within `BAND` of them (see `apart`), since each move locks the stake for 47 hours.
+export const CUT = 0.5;
+export const BAND = 0.1;
+function carryOf(pools: Candidate[], count: number, amount: number): number[] {
+  const rows = pools.map(({ paying, own = 0, swing = 0 }) => ({
+    pays: totalOf(paying) * Math.max(0, 1 - CUT * swing),
+    others: Math.max(paying.power - own, 0),
+  }));
+  const top = new Set(
+    rows
+      .flatMap(({ pays }, i) => (pays > 0 ? [i] : []))
+      .sort((a, b) => rows[b]!.pays - rows[a]!.pays)
+      .slice(0, Math.max(0, count)),
+  );
+  return trimmed(
+    rows,
+    count,
+    (kept) => filled(rows, kept, amount),
+    rows.map((_, i) => top.has(i)),
+  )!;
+}
+// Splits `amount` sAERO across the `kept` pools so that one more sAERO would earn the same in each (water-filling).
+// A pool that pays p a day to o other sAERO pays w × p ÷ (o + w) to w of the stake's. One more sAERO earns
+// p × o ÷ (o + w)², so at the level λ each pool takes w = √(p × o ÷ λ) − o, or none if it pays less than λ to its
+// first sAERO. Others are counted as at least one sAERO.
+function filled(rows: Row[], kept: boolean[], amount: number): number[] {
+  const at = (level: number) =>
+    rows.map(({ pays, others }, i) => {
+      const o = Math.max(others, 1);
+      return kept[i] && pays > 0 ? Math.max(0, Math.sqrt((pays * o) / level) - o) : 0;
+    });
+  const first = Math.max(0, ...rows.map(({ pays, others }, i) => (kept[i] ? pays / Math.max(others, 1) : 0)));
+  if (!(first > 0)) return rows.map(() => 0);
+  // The level falls as the stake grows. Bisect it between the best first sAERO and far below, on a log scale.
+  let [low, high] = [Math.log(first) - 80, Math.log(first)];
+  for (let k = 0; k < 200; k++) {
+    const mid = (low + high) / 2;
+    if (sum(at(Math.exp(mid))) > amount) low = mid;
+    else high = mid;
+  }
+  const found = at(Math.exp(low));
+  const total = sum(found);
+  return total > 0 ? found.map((share) => share / total) : found;
+}
+// How much a pool's pay moved between spans: the mean absolute gap of what it paid a day in each from their mean, over
+// that mean. 0 when it paid the same in each, up to 2 when it paid in one span of many. Spans with no figure are left
+// out. With fewer than two, it is 0.
+export function swingOf(totals: (number | undefined)[]): number {
+  const known = totals.filter((total): total is number => total !== undefined && Number.isFinite(total));
+  const mean = sum(known) / known.length;
+  return known.length > 1 && mean > 0 ? sum(known.map((total) => Math.abs(total - mean))) / known.length / mean : 0;
+}
+// What a pool paid a day in each of `spans`, from `past`, at `prices`.
+const spanTotals = (gauge: Gauge, past: Past, spans: Step[], market: Market, prices: Prices) =>
+  spans.map(({ from, to }) => {
+    const paying = paidOver(gauge, accrualOf(gauge, past, from, to, market), prices);
+    return paying && totalOf(paying);
+  });
+// A pool's swing over the record's steps within the last `hours`.
+export const swingNow = (gauge: Gauge, market: Market, hours: Hours): number =>
+  swingOf(
+    spanTotals(
+      gauge,
+      market.past,
+      stepsOf(market).filter(({ from }) => from >= market.time - (market.time % HOUR) - hours * HOUR),
+      market,
+      market.prices,
+    ),
+  );
+// How far apart two splits are: half the sum of the gaps between their shares of each pool. 0 when they are the same,
+// 1 when they share no pool.
+export function apart(a: Holding[], b: Holding[]): number {
+  const shares = new Map<string, number>();
+  for (const { gauge, weight } of a)
+    if (gauge) shares.set(key(gauge.address), (shares.get(key(gauge.address)) ?? 0) + weight);
+  for (const { gauge, weight } of b)
+    if (gauge) shares.set(key(gauge.address), (shares.get(key(gauge.address)) ?? 0) - weight);
+  return sum([...shares.values()].map(Math.abs)) / 2;
 }
 
 // What 10,000 of `amount` sAERO, split as `holdings`, earn a day. Each pool gets its weight of `amount`, less what
@@ -1124,11 +1215,10 @@ function pricesOver(market: Market, then: Then | undefined, { from, to }: Step):
   return found;
 }
 
-// A strategy picks at most `count` pools, from all pools or only blue chips. It splits them as `picksOf` does,
-// following revenue or the `leaders`. It uses the fees each pool paid over the `hours` before each pick, and what its
-// live programs stream over the next step. With `again` it picks again every step; otherwise it picks once, at the
-// start of the oldest step.
-export type Strategy = { count: number; hours: Hours; again: boolean; blueChips: boolean; leaders: boolean };
+// A strategy picks at most `count` pools, from all pools or only blue chips. It splits them as `picksOf` does, by its
+// `rule`. It uses the fees each pool paid over the `hours` before each pick, and what its live programs stream over the
+// next step. With `again` it picks again every step; otherwise it picks once, at the start of the oldest step.
+export type Strategy = { count: number; hours: Hours; again: boolean; blueChips: boolean; rule: Rule };
 export const isBlueChip = ({ token0, token1 }: Gauge): boolean =>
   [token0, token1].every(({ address }) => config.BLUE_CHIPS.some((chip) => same(chip, address)));
 // The pools a strategy considers: those that take allocations, from all pools or only blue chips.
@@ -1141,7 +1231,7 @@ const weighable = (accrued: Accrued, paying: Paying): boolean => !thinOver(accru
 export function candidatesOf(
   market: Market,
   strategy: { blueChips: boolean },
-  payingOf: (gauge: Gauge) => { accrued: Accrued; paying: Paying } | undefined,
+  payingOf: (gauge: Gauge) => { accrued: Accrued; paying: Paying; swing?: number } | undefined,
   own?: Map<string, number>,
 ): Candidate[] {
   return market.gauges
@@ -1149,7 +1239,7 @@ export function candidatesOf(
     .flatMap((gauge) => {
       const found = payingOf(gauge);
       return found && weighable(found.accrued, found.paying)
-        ? [{ gauge, paying: found.paying, own: own?.get(key(gauge.address)) }]
+        ? [{ gauge, paying: found.paying, own: own?.get(key(gauge.address)), swing: found.swing }]
         : [];
     });
 }
@@ -1174,7 +1264,13 @@ function picksAt(
       const recent = accrualOf(gauge, past, time - 48 * HOUR, time, market);
       const live = (program: Program) => program.start <= time;
       const paying = payingFrom(gauge, before, prices, [time, time + STEP], crowdOf(recent, before), live);
-      return paying && { accrued: before, paying };
+      // Persistence carry looks at each span of 48 hours in the window.
+      const spans = Array.from({ length: strategy.hours / 48 }, (_, k) => ({
+        from: time - (k + 1) * STEP,
+        to: time - k * STEP,
+      }));
+      const swing = strategy.rule === "carry" ? swingOf(spanTotals(gauge, past, spans, market, prices)) : undefined;
+      return paying && { accrued: before, paying, swing };
     },
     own,
   );
@@ -1231,7 +1327,19 @@ export function strategySteps(market: Market, past: Past, strategy: Strategy, he
       own: held.own && heldAt(held.own, time),
     });
   const once = strategy.again ? undefined : pick(stepsOf(market).at(-1)!.from);
-  return heldSteps(market, past, (step) => once ?? pick(step.from), held);
+  const kept = strategy.again && strategy.rule === "carry" ? keptPicks(stepsOf(market), pick) : undefined;
+  return heldSteps(market, past, (step) => once ?? kept?.get(step.from) ?? pick(step.from), held);
+}
+// Picks at each step, oldest first, keeping the last picks while the new ones are within `BAND` of them.
+function keptPicks(steps: Step[], pick: (time: number) => Pick[]): Map<number, Pick[]> {
+  const found = new Map<number, Pick[]>();
+  let last: Pick[] | undefined;
+  for (const { from } of steps.toReversed()) {
+    const next = pick(from);
+    if (!last || !next.length || apart(last, next) > BAND) last = next;
+    found.set(from, last);
+  }
+  return found;
 }
 // Shares chosen now, held over every step. This uses hindsight.
 export const customSteps = (market: Market, past: Past, holdings: Holding[], held: Held = {}): Paid[] =>

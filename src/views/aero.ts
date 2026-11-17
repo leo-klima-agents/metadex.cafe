@@ -130,7 +130,7 @@ type Part = { gauge: Address; percent: number };
 const plan: {
   again: boolean;
   blueChips: boolean;
-  leaders: boolean;
+  rule: aero.Rule;
   amount: number;
   stake: bigint | undefined;
   rows: Part[] | undefined;
@@ -138,24 +138,27 @@ const plan: {
 } = {
   again: true,
   blueChips: false,
-  leaders: true,
+  rule: "leaders",
   amount: 10_000,
   stake: undefined,
   rows: undefined,
   more: [],
 };
-// The two strategies, in the order shown. Each has its line's colour, and its `id` names its column in the record's
-// table.
-const STRATEGIES = [
-  { id: "leaders", leaders: true, name: "Follow the leaders", color: "var(--series-1)" },
-  { id: "revenue", leaders: false, name: "Follow revenue", color: "var(--series-3)" },
+// The strategies, in the order shown. Each has its line's colour, and its `id` names its column in the record's table.
+// The fourth colour is near the Autopilot's where lines cross, so that line is also dashed.
+const STRATEGIES: { id: string; rule: aero.Rule; name: string; color: string; dashed?: boolean }[] = [
+  { id: "leaders", rule: "leaders", name: "Follow the leaders", color: "var(--series-1)" },
+  { id: "revenue", rule: "revenue", name: "Follow revenue", color: "var(--series-3)" },
+  { id: "carry", rule: "carry", name: "Persistence carry", color: "var(--series-4)", dashed: true },
 ];
 // The pools a strategy picks and how it splits them.
-function poolsWords({ count: top, blueChips, leaders }: aero.Strategy): string {
+function poolsWords({ count: top, blueChips, rule, again }: aero.Strategy): string {
   const pools = `${count(top, "pool", "pools")}${blueChips ? " of blue chips" : ""}`;
-  return leaders
-    ? `The ${pools} that paid the most per sAERO weight, in proportion to how far each paid above the average.`
-    : `The ${pools} with the most protocol revenue, in proportion to that revenue.`;
+  if (rule === "leaders")
+    return `The ${pools} that paid the most per sAERO weight, in proportion to how far each paid above the average.`;
+  if (rule === "revenue") return `The ${pools} with the most protocol revenue, in proportion to that revenue.`;
+  const keep = again ? ` It keeps its pools while the new picks are within ${fraction(aero.BAND)} of them.` : "";
+  return `The ${pools} with the most protocol revenue, less half of how much it swung between spans of 48 hours, split so that one more sAERO would earn the same in each.${keep}`;
 }
 // `drawn` is the rows as last drawn, which the actions edit. `nextPools` is the pools "Show more pools" adds next.
 let drawn: Part[] = [];
@@ -178,7 +181,7 @@ const strategyOf = (market: Market | undefined): aero.Strategy => ({
   hours: HOURS,
   again: plan.again,
   blueChips: plan.blueChips,
-  leaders: plan.leaders,
+  rule: plan.rule,
 });
 // The rows as holdings, with weights that add up to one.
 function holdingsOf(rows: Part[], market: Market): aero.Holding[] {
@@ -219,6 +222,17 @@ function optionWords(stake: Stake): string {
 }
 // The stake's sAERO in each pool, in whole sAERO, by gauge.
 const placesOf = (stake: Stake | undefined): Map<string, number> => aero.byGauge(stake?.allocations ?? []);
+// The stake's pools as rows, by share of its sAERO in pools. Empty when it is in none.
+function currentRows(stake: Stake | undefined): Part[] {
+  const places = placesOf(stake);
+  const held = sum(places.values());
+  return held ? [...places].map(([gauge, each]) => ({ gauge: gauge as Address, percent: (each * 100) / held })) : [];
+}
+// Each pool's swing over the window, for persistence carry, worked out once for each market read.
+const swingsOf = lastOf(
+  (market: Market): Map<Gauge, number> =>
+    new Map(market.gauges.map((gauge) => [gauge, aero.swingNow(gauge, market, HOURS)])),
+);
 function flagsOf(gauge: Gauge | undefined, market: Market, hold: number): string | null {
   if (!gauge) return "Not one of Aero's pools on Base";
   if (!routable(gauge)) return "Doesn't take allocations";
@@ -316,18 +330,18 @@ function drawControls(stakes: Stake[], stake: Stake | undefined): void {
   $<HTMLInputElement>("[data-action=aero-again]", aeroView).checked = plan.again;
   $<HTMLInputElement>("[data-action=aero-blue]", aeroView).checked = plan.blueChips;
 }
-// Draws both strategies, with their other settings from `strategy`. `apr(i)` is what strategy `i` would have earned
+// Draws the strategies, with their other settings from `strategy`. `apr(i)` is what strategy `i` would have earned
 // over the record.
 function drawStrategies(strategy: aero.Strategy, apr: (i: number) => Value): void {
   list(
     $("[data-list=strategy]", aeroView),
     STRATEGIES,
     ({ id }) => id,
-    (label, { leaders, name }, i) => {
+    (label, { rule, name }, i) => {
       const input = $<HTMLInputElement>("input", label);
-      input.value = String(leaders);
-      input.checked = strategy.leaders === leaders;
-      fill(label, { name, words: poolsWords({ ...strategy, leaders }), apr: apr(i) });
+      input.value = rule;
+      input.checked = strategy.rule === rule;
+      fill(label, { name, words: poolsWords({ ...strategy, rule }), apr: apr(i) });
     },
   );
 }
@@ -349,7 +363,7 @@ function lastOf<A extends unknown[], R>(make: (...args: A) => R): (...args: A) =
 // The record's lines, worked out again only when their inputs change, not on every render.
 const strategyPast = lastOf(aero.mergePast);
 const pilotPast = lastOf(aero.mergePast);
-// Both strategies' lines, in the order of `STRATEGIES`, so that each strategy can show what it earned.
+// The strategies' lines, in the order of `STRATEGIES`, so that each strategy can show what it earned.
 const strategyLines = lastOf(
   (
     market: Market,
@@ -360,9 +374,7 @@ const strategyLines = lastOf(
     blueChips: boolean,
     held: Held,
   ): Paid[][] =>
-    STRATEGIES.map(({ leaders }) =>
-      aero.strategySteps(market, past, { count, hours, again, blueChips, leaders }, held),
-    ),
+    STRATEGIES.map(({ rule }) => aero.strategySteps(market, past, { count, hours, again, blueChips, rule }, held)),
 );
 const averageLine = lastOf((market: Market, then: aero.Then | undefined) =>
   aero.averageSteps(market, market.past, then),
@@ -446,11 +458,11 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
       : null;
   };
   const lines: Line[] = [
-    ...STRATEGIES.map(({ id, name, color, leaders }, i) => {
+    ...STRATEGIES.map(({ id, name, color, dashed, rule }, i) => {
       const steps = strategies[i]!;
       // The chosen strategy's line is in bold, unless a custom allocation replaces it.
-      const bold = !custom && leaders === chosen.leaders;
-      return { id, name, color, bold, steps, apr: figure(steps), note: daily(steps) };
+      const bold = !custom && rule === chosen.rule;
+      return { id, name, color, dashed, bold, steps, apr: figure(steps), note: daily(steps) };
     }),
     {
       id: "pilot",
@@ -517,7 +529,7 @@ function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined):
     "custom-head": custom ? true : null,
     "record-note": then ? null : "Valued at today's prices: the prices then could not be read.",
   });
-  const at = STRATEGIES.findIndex(({ leaders }) => leaders === chosen.leaders);
+  const at = STRATEGIES.findIndex(({ rule }) => rule === chosen.rule);
   const found = aero.aprOver(strategies[at]!);
   return found && amount > 0 && !plan.rows
     ? `Without hindsight, ${STRATEGIES[at]!.name} earned ${aprWords(found.apr, found.priced)} APR over the last ${RECORD_DAYS} days: ${daily(strategies[at]!)}.`
@@ -571,18 +583,27 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
   const ahead = new Map(market.gauges.map((gauge) => [gauge, aero.paysNext(gauge, HOURS, market, hold)]));
   const next = (gauge: Gauge) => ahead.get(gauge);
   const strategy = strategyOf(market);
+  const swings = strategy.rule === "carry" ? swingsOf(market) : undefined;
   const candidates = aero.candidatesOf(
     market,
     strategy,
     (gauge) => {
       const paying = next(gauge);
-      return paying && { accrued: gauge.windows[HOURS], paying };
+      return paying && { accrued: gauge.windows[HOURS], paying, swing: swings?.get(gauge) };
     },
     leaving,
   );
   const picks = aero.picksOf(candidates, strategy, amount);
   fill(aeroView, { picks: stateOf(got) });
-  const rows = (drawn = plan.rows ?? ruleRows(picks));
+  // Picking again, persistence carry keeps the stake's pools while its picks are within `BAND` of them.
+  const current = stake ? aero.holdingsIn(aero.sharesOf(stake, market)) : [];
+  const kept =
+    !plan.rows &&
+    strategy.rule === "carry" &&
+    strategy.again &&
+    current.length > 0 &&
+    aero.apart(current, picks) <= aero.BAND;
+  const rows = (drawn = plan.rows ?? (kept ? currentRows(stake) : ruleRows(picks)));
   const total = percentOf(rows);
   const inRows = new Set(rows.map(({ gauge }) => key(gauge)));
   // The pools "Show more pools" adds: those `eligible` for the strategy and not shown yet, best paying first. Unlike
@@ -627,7 +648,13 @@ function drawAllocation(got: Got<Market>, amount: number, stake: Stake | undefin
       });
     },
   );
-  const [can, words] = allocateWords(stake, stakes, rows, market);
+  const [can, words]: [boolean, string] =
+    kept && stake
+      ? [
+          false,
+          `${stakeName(stake)} keeps its pools: Persistence carry's picks are within ${fraction(aero.BAND)} of them.`,
+        ]
+      : allocateWords(stake, stakes, rows, market);
   enable($<HTMLButtonElement>("[data-action=aero-allocate]", aeroView), can);
   fill(aeroView, {
     "share-total": fraction(total / 100, true),
@@ -972,7 +999,7 @@ actions["aero-again"] = (el) => {
   render();
 };
 actions["aero-strategy"] = (el) => {
-  plan.leaders = (el as HTMLInputElement).value === "true";
+  plan.rule = (el as HTMLInputElement).value as aero.Rule;
   suggest();
 };
 actions["aero-blue"] = (el) => {
@@ -1017,10 +1044,9 @@ actions["aero-scale"] = () =>
   });
 actions["aero-rule"] = suggest;
 actions["aero-current"] = () => {
-  const places = placesOf(stakeFor(data.ownStakes().value ?? []));
-  const held = sum(places.values());
-  if (!held) return;
-  plan.rows = [...places].map(([gauge, each]) => ({ gauge: gauge as Address, percent: (each * 100) / held }));
+  const rows = currentRows(stakeFor(data.ownStakes().value ?? []));
+  if (!rows.length) return;
+  plan.rows = rows;
   render();
 };
 actions["aero-allocate"] = (el) => {
