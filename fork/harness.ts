@@ -60,7 +60,7 @@ export const ENDED = getAddress("0x2518820268e4079e90446b93020dfad7dd54e84d"); /
 // 134 Hydrex accounts. #26432 and #14247 are in Matcha Latte, which last paid them up to Thu 11 June and Thu 27 Aug: its
 // operator leaves some accounts unpaid on purpose, so both are late, with rewards left to claim.
 export const LATE = getAddress("0xa79cd47655156b299762dfe92a67980805ce5a31");
-// 25 sAERO stakes at BLOCK. The largest, #2848, is locked; #2890 is the largest that can move.
+// 25 sAERO stakes at BLOCK, none locked. The largest is #2848.
 export const ALLOCATOR = getAddress("0x41870186e8cf4c6d445492a9f7bb233a02a9b633");
 export const LOCK_MAXI = getAddress("0x53388a4E98Bb56F8571433F5461010Fc287929d3");
 export const STRANGER = getAddress("0x000000000000000000000000000000000000dead");

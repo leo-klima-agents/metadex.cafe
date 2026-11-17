@@ -6,20 +6,21 @@ import { AERO_VOTER, LEAF_VOTER } from "../src/config.ts";
 import * as h from "./harness.ts";
 import { ALLOCATOR, BLOCK, SITE, anvil, connected, heading, review, view } from "./harness.ts";
 
-const STAKE = 2890n;
+// At `BLOCK`, ALLOCATOR's largest stake, #2848, can move: it was last allocated on Fri 13 Nov.
+const STAKE = 2848n;
 
 describe("allocating an sAERO stake against a fork of Base", { timeout: 1_800_000 }, () => {
   h.fork(BLOCK, [ALLOCATOR]);
 
-  test("allocate the stake that can move to the leaders' pools; it is then locked, and a second try is refused", async () => {
+  test("allocate the largest stake to the leaders' pools; it is then locked, and a second try is refused", async () => {
     const { page, sent, violations } = await connected({ owner: ALLOCATOR }, { url: `${SITE}/#aero` });
     const aero = view(page, "aero");
     await heading(page, "Aero").waitFor();
-    // The largest stake is locked, so the page starts on the largest that can move.
+    // No stake is locked, so the page starts on the largest.
     await aero.getByText(/^Without hindsight, Follow the leaders earned [\d.]+% APR over the last 8 days: /).waitFor();
     assert.equal(await aero.locator("[data-action=aero-stake]").inputValue(), String(STAKE));
-    assert.match(await aero.locator("[data-action=aero-stake] option[value='2848']").innerText(), /locked until/);
-    assert.match(await aero.locator("[data-text=plan-pay]").innerText(), /a day for sAERO #2890\.$/);
+    assert.doesNotMatch(await aero.locator("[data-action=aero-stake] option[value='2848']").innerText(), /locked/);
+    assert.match(await aero.locator("[data-text=plan-pay]").innerText(), /a day for sAERO #2848\.$/);
     const rows = aero.locator("[data-list=pick] tr");
     assert.equal(await rows.count(), 10, "the strategy's 10 pools");
     assert.equal(await aero.locator("[data-text=share-total]").innerText(), "100.0%");
@@ -33,12 +34,12 @@ describe("allocating an sAERO stake against a fork of Base", { timeout: 1_800_00
 
     await aero.getByRole("button", { name: "Allocate" }).click();
     await heading(review(page), "Before you allocate", 2).waitFor();
-    assert.match(await review(page).innerText(), /sAERO #2890 will allocate its [\d.]+k sAERO weight on Base/);
+    assert.match(await review(page).innerText(), /sAERO #2848 will allocate its [\d.]+M sAERO weight on Base/);
     await review(page).getByText("Simulated on Base: it succeeds.").waitFor();
     await review(page).getByRole("button", { name: "Continue" }).click();
     await h.confirm(page);
     await review(page)
-      .getByText(/^Allocated\. sAERO #2890 can be changed again from /)
+      .getByText(/^Allocated\. sAERO #2848 can be changed again from /)
       .waitFor();
     await review(page).getByRole("button", { name: "Close" }).click();
 
@@ -67,12 +68,12 @@ describe("allocating an sAERO stake against a fork of Base", { timeout: 1_800_00
       .getByText(/^Locked until /)
       .waitFor();
     assert.equal(await aero.locator("[data-action=aero-stake]").inputValue(), String(STAKE));
-    await aero.getByText(/^sAERO #2890 was allocated less than 47 hours ago\. It can be changed again from /).waitFor();
+    await aero.getByText(/^sAERO #2848 was allocated less than 47 hours ago\. It can be changed again from /).waitFor();
     assert.equal(await aero.getByRole("button", { name: "Allocate" }).isDisabled(), true);
 
     // Its page shows the new pools and the lock.
     await aero.locator("[data-text=stake-link]").click();
-    await heading(page, "sAERO #2890").waitFor();
+    await heading(page, "sAERO #2848").waitFor();
     await view(page, "stake")
       .getByText(/^Locked until /)
       .waitFor();
