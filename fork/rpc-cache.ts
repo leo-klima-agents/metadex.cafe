@@ -84,6 +84,9 @@ function txsIn(body: string): Tx[] {
   }
 }
 export const runsCalls = (body: string): boolean => txsIn(body).length > 0;
+// The text of a request the page sent, which it gzips when it is large (see `GZIP_RPCS` in src/config.ts).
+export const bodyOf = (sent: Uint8Array | null, encoding: string | undefined): string =>
+  sent ? new TextDecoder().decode(encoding === "gzip" ? gunzipSync(sent) : sent) : "";
 
 // One queue to the upstream RPC for all of a run's caches. It sends at most `inFlight` requests at once, and anvil's
 // requests go before prefetches. A request that is rate-limited, gets a server error or does not reach the upstream is

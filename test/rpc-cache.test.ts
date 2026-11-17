@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { gzipSync } from "node:zlib";
-import { serveCached } from "../fork/rpc-cache.ts";
+import { bodyOf, serveCached } from "../fork/rpc-cache.ts";
 
 const BLOCK = 100;
 const AT = "0x64";
@@ -67,4 +67,11 @@ test("without eth_getAccountInfo upstream, each account request is asked alone",
   assert.equal(await call("eth_getBalance"), "eth_getBalance");
   assert.deepEqual(upstream.asked, ["eth_getBalance"]);
   await close();
+});
+
+test("the page's gzipped requests are read as the text it gzipped", () => {
+  const text = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: ["0x" + "ab".repeat(2_000)] });
+  assert.equal(bodyOf(gzipSync(text), "gzip"), text);
+  assert.equal(bodyOf(new TextEncoder().encode(text), undefined), text);
+  assert.equal(bodyOf(null, undefined), "");
 });

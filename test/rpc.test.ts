@@ -19,6 +19,8 @@ import {
   codeAt,
   firstBlockAt,
   GZIP_FROM,
+  REST_MAX,
+  restFor,
   poll,
   read,
   regroup,
@@ -188,55 +190,155 @@ test("a busy RPC hands over to the next; an unwanted answer is taken only when n
   await assert.rejects(rpc("eth_getTransactionReceipt", ["0x"]));
 });
 
-test("large requests go gzipped to the RPCs that read them, and plain once an RPC can't take them", async () => {
-  const [zipper] = GZIP_RPCS;
-  assert.ok(zipper && RPCS.includes(zipper));
-  const large = ["0x" + "ab".repeat(GZIP_FROM)];
+// A fresh copy of rpc.ts, so that what one test teaches it about the RPCs doesn't carry over to the next.
+const fresh = async () => (await import(`../src/rpc.ts?${Math.random()}`)) as typeof import("../src/rpc.ts");
+const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
+const [ZIPPER, OTHER] = RPCS as [string, string];
+const LARGE = ["0x" + "ab".repeat(GZIP_FROM)];
+const SMALL = ["0x"];
+
+test("large requests go gzipped to the RPCs that read gzip, and plain to the others", async () => {
+  assert.deepEqual(GZIP_RPCS, [ZIPPER], "the RPC asked first reads gzip");
+  const { rpc } = await fresh();
   const asked: [string, boolean][] = [];
-  let gzipped: "read" | "refused" | "dropped" | "slow" = "read";
-  serve((url, { params }, zipped) => {
-    asked.push([url, zipped]);
-    // The others answer only when the zipper is slow, so that the read still ends.
-    if (url !== zipper) return gzipped === "slow" ? reply("0x1") : new Response("", { status: 429 });
-    assert.equal(params[0], (params[0] as string).length < GZIP_FROM ? "0x" : large[0]);
-    if (zipped && gzipped === "refused") return new Response("", { status: 415 });
-    if (zipped && gzipped === "dropped") throw new TypeError("Failed to fetch");
-    if (zipped && gzipped === "slow") throw new DOMException("Timed out.", "TimeoutError");
-    return reply("0x1");
+  let down = false;
+  serve((url, { params }, gzipped) => {
+    asked.push([url, gzipped]);
+    assert.ok(params[0] === SMALL[0] || params[0] === LARGE[0], "the body is read back as it was sent");
+    return url === ZIPPER && down ? new Response("", { status: 503 }) : reply("0x1");
   });
-  const askedOf = async (params: string[]) => {
+  const askedFor = async (params: string[]) => {
     asked.length = 0;
     assert.equal(await rpc("eth_call", params), "0x1");
-    return asked.filter(([url]) => url === zipper).map(([, zipped]) => zipped);
+    return [...asked];
   };
-  assert.deepEqual(await askedOf(["0x"]), [false], "a small request goes plain");
-  assert.deepEqual(await askedOf(large), [true], "a large one goes gzipped");
-  gzipped = "slow";
-  assert.deepEqual(await askedOf(large), [true], "one that times out is not sent again plain");
-  gzipped = "dropped";
-  assert.deepEqual(await askedOf(large), [true, false], "one that doesn't get through is sent again plain");
-  assert.deepEqual(await askedOf(large), [true, false]);
-  gzipped = "read";
-  assert.deepEqual(await askedOf(large), [true], "a gzipped request that gets through starts the count again");
-  gzipped = "dropped";
-  for (let i = 0; i < 3; i++) assert.deepEqual(await askedOf(large), [true, false]);
-  assert.deepEqual(await askedOf(large), [false], "after three in a row, requests go plain");
+  assert.deepEqual(await askedFor(SMALL), [[ZIPPER, false]]);
+  assert.deepEqual(await askedFor(LARGE), [[ZIPPER, true]]);
+  down = true;
+  assert.deepEqual(await askedFor(LARGE), [
+    [ZIPPER, true],
+    [OTHER, false],
+  ]);
 });
 
-test("an RPC that turns down a gzipped request it takes plain is sent plain requests from then on", async () => {
-  // A fresh copy of the module, since the test above already stopped gzipping.
-  const { rpc: fresh } = (await import(`../src/rpc.ts?fresh=${Date.now()}`)) as typeof import("../src/rpc.ts");
-  const [zipper] = GZIP_RPCS;
-  const large = ["0x" + "ab".repeat(GZIP_FROM)];
+test("an RPC that says it can't read gzip is sent the request again plain, and plain ones from then on", async () => {
+  const refusals = [
+    () => new Response("unsupported content encoding", { status: 415 }),
+    () => Response.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }, { status: 400 }),
+  ];
+  for (const refusal of refusals) {
+    const { rpc, gzipping } = await fresh();
+    const asked: boolean[] = [];
+    serve((url, _, gzipped) => {
+      if (url !== ZIPPER) return new Response("", { status: 429 });
+      asked.push(gzipped);
+      return gzipped ? refusal() : reply("0x1");
+    });
+    assert.equal(await rpc("eth_call", LARGE), "0x1");
+    assert.equal(await rpc("eth_call", LARGE), "0x1");
+    assert.deepEqual(asked, [true, false, false]);
+    assert.equal(gzipping(ZIPPER), false);
+  }
+});
+
+test("a JSON-RPC error or a busy answer to a gzipped request is not taken as gzip refused", async () => {
+  const { rpc, gzipping } = await fresh();
+  const asked: [string, boolean][] = [];
+  let answer = () => Response.json({ jsonrpc: "2.0", id: 1, error: { code: -32602, message: "bad" } }, { status: 400 });
+  serve((url, _, gzipped) => (asked.push([url, gzipped]), url === ZIPPER ? answer() : reply("0x1")));
+  assert.equal(await rpc("eth_call", LARGE), "0x1");
+  assert.deepEqual(asked, [
+    [ZIPPER, true],
+    [OTHER, false],
+  ]);
+  for (const status of [408, 429, 503]) {
+    answer = () => new Response("<html>", { status });
+    assert.equal(await rpc("eth_call", LARGE), "0x1");
+  }
+  assert.equal(gzipping(ZIPPER), true);
+});
+
+test("gzip stops only after gzipped requests keep failing to get through while plain ones do", async () => {
+  const { rpc, gzipping } = await fresh();
+  let gzipped: "read" | "dropped" | "slow" = "dropped";
+  let othersAnswer = true;
   const asked: boolean[] = [];
-  serve((url, _, zipped) => {
-    if (url !== zipper) return new Response("", { status: 429 });
+  serve(async (url, _, zipped) => {
+    if (url !== ZIPPER) return othersAnswer ? reply("0x1") : new Response("", { status: 429 });
     asked.push(zipped);
-    return zipped ? new Response("", { status: 415 }) : reply("0x1");
+    if (!zipped || gzipped === "read") return reply("0x1");
+    await wait(200);
+    throw gzipped === "slow" ? new DOMException("Timed out.", "TimeoutError") : new TypeError("Failed to fetch");
   });
-  assert.equal(await fresh("eth_call", large), "0x1");
-  assert.equal(await fresh("eth_call", large), "0x1");
-  assert.deepEqual(asked, [true, false, false]);
+  // While it is resting, the others are asked first. They are busy here, so it is asked once its rest is over.
+  const reach = async () => {
+    othersAnswer = false;
+    asked.length = 0;
+    assert.equal(await rpc("eth_call", SMALL), "0x1");
+    assert.deepEqual(asked, [false]);
+    othersAnswer = true;
+  };
+  const drop = async (times = 1) => {
+    asked.length = 0;
+    await Promise.all(Array.from({ length: times }, () => rpc("eth_call", LARGE)));
+    assert.deepEqual(asked, Array(times).fill(true), "a gzipped request that fails is not sent again plain at once");
+  };
+  await drop();
+  await reach();
+  await drop(3);
+  await reach();
+  gzipped = "slow";
+  await drop();
+  gzipped = "dropped";
+  await reach();
+  await drop();
+  assert.equal(
+    gzipping(ZIPPER),
+    true,
+    "two count: the first came before any plain request reached it, the three in flight together count as one, and " +
+      "a timeout doesn't count",
+  );
+  await reach();
+  gzipped = "read";
+  await drop();
+  gzipped = "dropped";
+  await reach();
+  await drop();
+  await reach();
+  await drop();
+  assert.equal(gzipping(ZIPPER), true, "a gzipped request that gets through starts the count again");
+  await reach();
+  await drop();
+  assert.equal(gzipping(ZIPPER), false, "after three in a row, requests go plain");
+});
+
+test("a busy RPC rests a second, twice as long each time it is busy again, or as long as it asks", () => {
+  assert.deepEqual(
+    [1, 2, 3, 4, 5].map((count) => restFor(count)),
+    [1_000, 2_000, 4_000, 8_000, 8_000],
+  );
+  assert.equal(REST_MAX, 8_000);
+  assert.equal(restFor(1, "3"), 3_000);
+  assert.equal(restFor(3, "0"), 0);
+  assert.equal(restFor(1, "60"), REST_MAX);
+  assert.equal(restFor(2, "Wed, 21 Oct 2026 07:28:00 GMT"), 2_000, "a date is not read");
+  assert.equal(restFor(1, " "), 1_000);
+});
+
+test("requests turned down together count as one towards a longer rest", async () => {
+  const { rpc } = await fresh();
+  const times: number[] = [];
+  let busy = 3;
+  serve(async (url) => {
+    if (url !== ZIPPER) return new Response("", { status: 429 });
+    times.push(performance.now());
+    if (busy-- <= 0) return reply("0x1");
+    await wait(150);
+    return new Response("", { status: 429 });
+  });
+  await Promise.all([1, 2, 3].map(() => rpc("eth_call", SMALL)));
+  const gap = times[3]! - times[2]!;
+  assert.ok(gap > 900 && gap < 2_000, `asked again after ${Math.round(gap)} ms, not after 4 s`);
 });
 
 test("reads go through Multicall3; a call that fails reads as undefined", async () => {

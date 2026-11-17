@@ -190,9 +190,27 @@ async function inSlot<T>(tag: Tag | undefined, ask: () => Promise<T>): Promise<T
 // way a slow upload is not given up and sent again.
 export const timeoutFor = (bytes: number): number => 5_000 + Math.ceil((bytes * MAX) / 125);
 
-// Each RPC gets at most 25 requests a second, 5 of them for logs. One that is busy or out of reach rests for a second.
+// Each RPC gets at most 25 requests a second, 5 of them for logs. One that is busy or out of reach rests: for a second,
+// then twice as long each time it is busy again before it answers, up to `REST_MAX`. If it says how long to wait, with
+// `Retry-After` in seconds, it rests that long instead, up to `REST_MAX`. Several requests in flight are often turned
+// down together, so a request counts towards the doubling only if it started after the last one that did.
 const nextFree = new Map<string, number>();
 const restUntil = new Map<string, number>();
+const strikes = new Map<string, { count: number; at: number }>();
+export const REST_MAX = 8_000;
+export const restFor = (count: number, retryAfter: string | null = null): number => {
+  const asked = retryAfter === null || retryAfter.trim() === "" ? NaN : Number(retryAfter) * 1_000;
+  return Math.min(REST_MAX, asked >= 0 ? asked : 1_000 * 2 ** Math.max(0, count - 1));
+};
+function rest(url: string, started: number, retryAfter: string | null): void {
+  const strike = strikes.get(url) ?? { count: 0, at: -Infinity };
+  if (started > strike.at) strikes.set(url, { count: strike.count + 1, at: performance.now() });
+  const until = performance.now() + restFor(strikes.get(url)!.count, retryAfter);
+  restUntil.set(url, Math.max(restUntil.get(url) ?? 0, until));
+}
+function answered(url: string, started: number): void {
+  if (started > (strikes.get(url)?.at ?? -Infinity)) strikes.delete(url);
+}
 async function pace(url: string, logs: boolean): Promise<void> {
   const keys = logs ? [url, `${url} logs`] : [url];
   const at = Math.max(performance.now(), restUntil.get(url) ?? 0, ...keys.map((key) => nextFree.get(key) ?? 0));
@@ -201,30 +219,41 @@ async function pace(url: string, logs: boolean): Promise<void> {
   await sleep(at - performance.now());
 }
 
-// Requests of at least `GZIP_FROM` bytes go gzipped to the RPCs in `GZIP_RPCS`. Smaller ones gain little. A gzipped
-// request that the RPC turns down, or that doesn't reach it, is sent again plain. An RPC is sent plain requests from
-// then on once it takes a request plain after turning it down gzipped, or after `MISSES` gzipped requests in a row
-// failed to reach it. That is how a CORS error looks, but so does a dropped connection, so one is not enough. A
-// gzipped request that times out is not sent again plain: the RPC is slow, not unable to read it.
+// Requests of at least `GZIP_FROM` bytes go gzipped to the RPCs in `GZIP_RPCS`. Smaller ones gain little. An RPC that
+// can't read gzip says so with 415, or with JSON-RPC's parse error. The request is then sent again plain at once, and
+// so are all later ones. A CORS error looks like a dropped connection, so it is told apart by repetition. Plain
+// requests are sent from then on once `MISSES` gzipped requests failed to reach the RPC with none reaching it in
+// between, and with a plain request reaching it before each. So the gzipped requests that a dropped connection, or an
+// error page without CORS headers, fails together count as one, and so do those that fail while the RPC is down. A
+// timeout doesn't count: the RPC is slow, not unable to read gzip. A gzipped request that doesn't get through is
+// handled as any other: the RPCs are asked in turn, and this one again later.
 export const GZIP_FROM = 1_024;
 const MISSES = 3;
-const gzips = new Set(GZIP_RPCS);
-const misses = new Map<string, number>();
+// For each RPC that may read gzip: gzipped requests in a row that failed to reach it, and whether a plain request has
+// reached it since the last one.
+const gzips = new Map(GZIP_RPCS.map((url) => [url, { misses: 0, reached: false }]));
+export const gzipping = (url: string): boolean => (gzips.get(url)?.misses ?? MISSES) < MISSES;
 const gzip = (text: string): Promise<ArrayBuffer> =>
   new Response(new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
 // The timeout is the same whether the body is gzipped or not, since the answer can be as large as the request.
 const post = (url: string, body: string, zipped?: ArrayBuffer): Promise<Response> =>
   fetch(url, {
     method: "POST",
-    headers: zipped
-      ? { "content-type": "application/json", "content-encoding": "gzip" }
-      : { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...(zipped && { "content-encoding": "gzip" }) },
     body: zipped ?? body,
     signal: AbortSignal.timeout(timeoutFor(body.length)),
   });
-// A 4xx answer other than 429 says the RPC could not read the request.
-const turnedDown = ({ status }: Response): boolean => status >= 400 && status < 500 && status !== 429;
 const timedOut = (error: unknown): boolean => (error as Error | undefined)?.name === "TimeoutError";
+const PARSE_ERROR = -32700;
+async function unreadable(response: Response): Promise<boolean> {
+  if (response.status === 415) return true;
+  if (response.status < 400 || response.status >= 500) return false;
+  const reply = (await response
+    .clone()
+    .json()
+    .catch(() => undefined)) as Reply | undefined;
+  return reply?.error?.code === PARSE_ERROR;
+}
 
 type Reply = { result?: unknown; error?: { code?: number; message?: string } };
 const BUSY = /request limit|rate limit|too many requests/i;
@@ -241,24 +270,25 @@ export function rpc<T>(
   const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
   let zipped: Promise<ArrayBuffer> | undefined;
   const send = async (url: string): Promise<Response> => {
-    if (!gzips.has(url) || body.length < GZIP_FROM || typeof CompressionStream === "undefined") return post(url, body);
-    zipped ??= gzip(body);
-    let response: Response | undefined;
-    try {
-      response = await post(url, body, await zipped);
-    } catch (error) {
-      if (timedOut(error)) throw error;
-    }
-    if (response && !turnedDown(response)) {
-      misses.delete(url);
+    const state = gzips.get(url);
+    if (!state || state.misses >= MISSES || body.length < GZIP_FROM || typeof CompressionStream === "undefined") {
+      const response = await post(url, body);
+      if (state) state.reached = true;
       return response;
     }
-    const plain = await post(url, body);
-    if (!plain.ok) return plain;
-    const missed = response ? MISSES : (misses.get(url) ?? 0) + 1;
-    misses.set(url, missed);
-    if (missed >= MISSES) gzips.delete(url);
-    return plain;
+    let response: Response;
+    try {
+      response = await post(url, body, await (zipped ??= gzip(body)));
+    } catch (error) {
+      if (!timedOut(error) && state.reached) Object.assign(state, { misses: state.misses + 1, reached: false });
+      throw error;
+    }
+    if (!(await unreadable(response))) {
+      state.misses = 0;
+      return response;
+    }
+    state.misses = MISSES;
+    return post(url, body);
   };
   return inSlot(tag, async () => {
     if (globalThis.navigator?.onLine === false) throw new Error("Offline.");
@@ -268,23 +298,32 @@ export function rpc<T>(
       const busy: string[] = [];
       for (const url of [...urls].sort((a, b) => (restUntil.get(a) ?? 0) - (restUntil.get(b) ?? 0))) {
         await pace(url, method === "eth_getLogs");
+        const started = performance.now();
         let reply: Reply | undefined;
+        let retryAfter: string | null = null;
         try {
           const response = await send(url);
+          retryAfter = response.headers.get("retry-after");
           if (response.status === 429 || response.status >= 500) throw new Error("Busy.");
           reply = (await response.json()) as Reply;
           if (typeof reply !== "object" || reply === null) throw new Error("Not JSON-RPC.");
         } catch {
+          rest(url, started, retryAfter);
           busy.push(url);
           continue;
         }
+        if (reply.error?.code === 429 || BUSY.test(reply.error?.message ?? "")) {
+          rest(url, started, retryAfter);
+          busy.push(url);
+          continue;
+        }
+        answered(url, started);
         if ("result" in reply) {
           const result = reply.result as T;
           if (want(result)) return result;
           last = result ?? last;
-        } else if (reply.error?.code === 429 || BUSY.test(reply.error?.message ?? "")) busy.push(url);
+        }
       }
-      for (const url of busy) restUntil.set(url, performance.now() + 1_000);
       urls = busy;
       if (busy.length) await sleep(Math.random() * 250 * 2 ** attempt);
     }

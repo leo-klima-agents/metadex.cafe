@@ -6,7 +6,6 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { after, afterEach, before, beforeEach } from "node:test";
 import { fileURLToPath } from "node:url";
-import { gunzipSync } from "node:zlib";
 import {
   chromium,
   type Browser,
@@ -42,7 +41,7 @@ import { WEEK, weekStart } from "../src/format.ts";
 import { lastEpoch, votesEarned, type Reward } from "../src/rewards.ts";
 import { settledBelow } from "../src/rpc.ts";
 import { SAFE_ORIGIN } from "../src/wallet.ts";
-import { runsCalls } from "./rpc-cache.ts";
+import { bodyOf, runsCalls } from "./rpc-cache.ts";
 
 export const CONDUIT = MATCHA_LATTE.address;
 export const BLOCK = 58_400_000; // Mon 16 Nov 2026, 23:06 UTC, after Base Denim made five blocks a second
@@ -479,8 +478,7 @@ export async function serve(route: Route, { origins, rpc, safe }: Served): Promi
   }
   if (RPC_ORIGINS.includes(origin)) {
     if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: CORS });
-    const sent = request.postDataBuffer() ?? Buffer.alloc(0);
-    const body = String(request.headers()["content-encoding"] === "gzip" ? gunzipSync(sent) : sent);
+    const body = bodyOf(request.postDataBuffer(), (await request.allHeaders())["content-encoding"]);
     if (rpc.refuse?.(body)) return route.abort();
     const answered = rpc.answer?.(body);
     if (answered !== undefined)
