@@ -119,7 +119,9 @@ onRender(() => {
   drawWallets();
   DRAW[state.route.view]?.();
   drawReview();
-  preloadAero();
+  // Aero's reads are many and heavy, so they are preloaded only on views that read nothing of their own, such as Home
+  // and About. On another view, they would compete with that view's own reads for the RPCs.
+  if (!TAGS[state.route.view].length) preloadAero();
   preload();
   preloadSwap();
 });
