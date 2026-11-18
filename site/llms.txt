@@ -51,15 +51,15 @@ votes on a pool earn a smaller and smaller part of the same rewards, so the best
 
 ### How both automations' votes are picked today
 
-One keeper program picks and sends the votes of both automations, in the same way, twice an epoch. For Matcha Latte it
-votes as the operator's keeper: nothing on Base holds Matcha Latte to this strategy, and its operator can change it. For
-Double Espresso it votes as anyone could, and its votes must pass the contract's check.
+One operator picks and sends the votes of both automations, in the same way, twice an epoch. Nothing on Base holds
+Matcha Latte to this strategy, and the operator can change it. For Double Espresso the operator votes as anyone could,
+and its votes must pass the contract's check.
 
-What the keeper counts as a pool's rewards `B`:
+What the operator counts as a pool's rewards `B`:
 
 - The pool's bribes and trading fees for the current epoch, as the pool's two reward contracts record them. Only pools
   with a live gauge count.
-- Only rewards in the tokens on the keeper's list count. Today these are WETH, cbBTC, SOL, USDC, USDT, USD₮0, EURC,
+- Only rewards in the tokens on the operator's list count. Today these are WETH, cbBTC, SOL, USDC, USDT, USD₮0, EURC,
   BNKR, VVV, HYDX, kVCM, wtBABA, wtCOIN, wtDNUT, wtDRAM, wtFGI, wtGOOGL, wtGRND, wtHOOD, wtIAU, wtMCD, wtMSTR, wtNKE,
   wtNVDA, wtPLBY, wtPPLT, wtQQQM, wtSGOV, wtSKHY, wtSPCX, wtSPYM, wtTR, wtTSM and wtWEN. The list can change.
 - Each token is priced in USD by up to three price services. The price is the median of three quotes, or the lower of
@@ -86,7 +86,7 @@ split that earns the most if the other votes stay where they are:
 - So pool `i` gets `x = max(0, √(B × V / λ) − V)` votes, with `λ` set so that the votes add up to the voting power.
 - `V` counts as at least 0.01% of the automation's voting power, so that a pool nobody voted for doesn't look free.
 - After the limits above drop a pool, the split is worked out again over the pools that are left.
-- The new vote replaces the vote in force only if it is expected to earn over $1 more, at the keeper's prices.
+- The new vote replaces the vote in force only if it is expected to earn over $1 more, at the operator's prices.
 
 The two automations' votes are picked from the same read of the votes. Double Espresso's vote is picked against the
 votes in force. Matcha Latte's vote then counts Double Espresso's new vote among the other votes. On Tuesday, Double
@@ -110,7 +110,7 @@ The score is the same sum of `B × x / (V + x)` over the vote's pools, with the 
 - A proposal has 1 to 20 pools, each listed once, each with a live gauge and with at least one vote.
 - The contract takes no votes while Chainlink reports Base's sequencer down, or for an hour after it comes back.
 
-The keeper counts more tokens than the contract does, so its best vote may not pass. For Double Espresso it therefore
+The operator counts more tokens than the contract does, so its best vote may not pass. For Double Espresso it therefore
 does this, for both of its votes:
 
 - It works out the contract's score of its vote, and aims to beat the vote in force by $1.10, in case other votes move
@@ -118,7 +118,7 @@ does this, for both of its votes:
 - If its vote falls short, it sends instead the vote that earns the most at its own prices among those that reach
   $1.10. It finds that vote by adding the contract's values of the pools to its own, times a factor, and raising the
   factor until the split passes.
-- It sends that vote only if it is still expected to earn over $1 more than the vote in force, at the keeper's prices.
+- It sends that vote only if it is still expected to earn over $1 more than the vote in force, at the operator's prices.
   Otherwise the vote in force stays.
 
 Anyone else can propose a vote in the same way. A proposal that the contract scores at least $1 above the vote in force
@@ -126,14 +126,14 @@ replaces it, whoever sends it.
 
 ### Payouts
 
-After each flip, within the hour, the keeper claims for the accounts that were in each automation when the ended epoch
+After each flip, within the hour, the operator claims for the accounts that were in each automation when the ended epoch
 began and that still let the automation claim for them.
 
 - **Matcha Latte:** each claim collects one account's rewards, swaps them to kVCM with up to 5% slippage, retires part
   of the kVCM as carbon credits, and sends the rest to the account's owner. The page shows how much is retired.
 - **Double Espresso:** each claim sends one account's rewards to its owner in the tokens earned, minus 1%.
 
-A claim takes rewards only in the tokens on the keeper's list, from the pools the automation voted for in the last 12
+A claim takes rewards only in the tokens on the operator's list, from the pools the automation voted for in the last 12
 epochs. It is sent only if it collects at least $5 and its gas costs at most 5% of that. Claims go largest first.
 Smaller rewards wait until they add up to $5. Anyone can claim for an account in Double Espresso at any time, at the
 same 1% fee, and the page does this for an owner whose payout is late.
