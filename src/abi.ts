@@ -49,7 +49,6 @@ export const matchaLatteAbi = parseAbi([
   "function retireBps() view returns (uint256)",
   "function treasuryFeeBps() view returns (uint256)",
   "function MAX_TREASURY_FEE_BPS() view returns (uint256)",
-  "function treasury() view returns (address)",
   "function totalTonnesRetired() view returns (uint256)",
   "event CarbonRetired(address indexed creditToken_, uint256 retireTonnes, uint256 kvcmSpent)",
   "event ClaimSwapAndDistributeCompleted(uint256 indexed tokenId, address indexed owner, address indexed recipient, address[] claimedTokens, uint256[] claimedAmounts, address[] distributedTokens, uint256[] distributedAmounts, uint256[] treasuryFees)",

@@ -43,9 +43,7 @@ export const DOUBLE_ESPRESSO: Automation = {
 export const AUTOMATIONS = [MATCHA_LATTE, DOUBLE_ESPRESSO];
 export const byKind = (kind: string): Automation | undefined => AUTOMATIONS.find((each) => each.kind === kind);
 // The fee, in basis points (100 is 1%), that Double Espresso takes on each claim and the swappers take on each route.
-// `FEE_RECIPIENT` is the Safe that receives both.
 export const FEE_BPS = 100n;
-export const FEE_RECIPIENT: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
 // The account that holds Matcha Latte's DEFAULT_ADMIN_ROLE, and the Safe that holds its EXECUTOR_ROLE.
 export const MATCHA_LATTE_ADMIN: Address = "0x74266f2b206D1359B83fc74949EF07176FB3AE03";
 export const MATCHA_LATTE_OPERATOR: Address = "0x17f513C024C1C67db050258ba569c714a9CF1B12";

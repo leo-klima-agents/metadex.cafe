@@ -5,7 +5,6 @@ import {
   MATCHA_LATTE,
   MATCHA_LATTE_ADMIN,
   MATCHA_LATTE_OPERATOR,
-  FEE_RECIPIENT,
   byKind,
   type Automation,
 } from "../config.ts";
@@ -306,18 +305,13 @@ export function drawProduct(): void {
     "performance-note": performance(automation),
   });
   const ml = automation === MATCHA_LATTE;
-  const recipient = data.matchaLatte().value?.feeRecipient;
   const contracts: [string, Value][] = ml
     ? [
         ["Matcha Latte", { address: MATCHA_LATTE.address }],
-        ["Fee recipient", recipient ? { address: recipient } : shown(data.matchaLatte(), () => "Not read")],
         ["Hydrex admin", { address: MATCHA_LATTE_ADMIN }],
         ["Operator", { address: MATCHA_LATTE_OPERATOR }],
       ]
-    : [
-        ["Double Espresso", { address: automation.address }],
-        ["Fee recipient", { address: FEE_RECIPIENT }],
-      ];
+    : [["Double Espresso", { address: automation.address }]];
   list(
     $("[data-list=contract]", productView),
     contracts,

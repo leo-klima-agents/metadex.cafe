@@ -280,7 +280,6 @@ Any other address shows Home.
 - [ImmutableSwapper to cbBTC](https://basescan.org/address/0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0): Swaps many tokens into cbBTC.
 - [ImmutableSwapper to AERO](https://basescan.org/address/0xdd575A498C625AF96ac89efE578Dc68f4c9aB963): Swaps many tokens into AERO.
 - [ImmutableSwapper to HYDX](https://basescan.org/address/0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC): Swaps many tokens into HYDX.
-- [Fee recipient](https://basescan.org/address/0x450c72de8c0079B49AcedF294a13011bd09D125B): The Safe that receives Double Espresso's fee on claims and the swap fee.
 
 ## Optional
 
