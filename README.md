@@ -1,14 +1,14 @@
 # metaDEX Café
 
-A static page at <https://metadex.cafe/> for Hydrex accounts and Aero stakes on Base. With it, you can:
+A static page at <https://metadex.cafe/> for Aero stakes and Hydrex accounts on Base. With it, you can:
 
+- follow one of two Aero strategies with a stake (see below);
+- see each Aero stake's pools, when it can be allocated again and what it can claim, and each pool's APR, day by day;
 - join or leave **Matcha Latte**, Hydrex's automation, or **Double Espresso**, an automation that nobody controls;
 - claim Double Espresso's rewards when a payout is late;
 - see the APR that votes earned last epoch, next to Hydrex's average, and each account's last payout as a receipt;
 - swap many tokens into one through **ImmutableSwapper**, with routes planned together and a simulation on Base before
-  the wallet asks you to sign;
-- follow one of two Aero strategies with a stake (see below);
-- see each Aero stake's pools, when it can be allocated again and what it can claim, and each pool's APR, day by day.
+  the wallet asks you to sign.
 
 The two Aero strategies pick up to 10 pools, judged on their last eight days, from all pools or from blue chips only.
 They pick once, or again every 48 hours.
@@ -48,19 +48,19 @@ screenshots in.
 
 | Path                                   | What it holds                                                                                                |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `site/`                                | The files the site serves: the page with all its views, popups and row templates, the styles and the icons.  |
+| `site/`                                | The files the site serves: the page with its views, popups and row templates, the styles, icons, `llms.txt`. |
 | `src/main.ts`, `routes.ts`, `state.ts` | How the page starts, its addresses (the part after `#`), and the state that every view is drawn from.        |
-| `src/config.ts`, `abi.ts`              | What the page trusts: contracts, RPCs, price feeds and swap contracts. Hydrex's and Aero's ABIs.             |
+| `src/config.ts`, `abi.ts`              | What the page trusts: contracts, RPCs, price feeds and swap contracts. Aero's and Hydrex's ABIs.             |
 | `src/checks.ts`                        | The checks of Base that run before joining or swapping.                                                      |
 | `src/rpc.ts`, `cache.ts`               | RPC requests (failover, pacing, and the shown view's reads first), and the cache of every read.              |
 | `src/wallet.ts`                        | Wallets (EIP-6963, Safe{Wallet}), and sending calls one at a time or in one prompt.                          |
 | `src/tokens.ts`                        | The tokens the page knows, and an owner's balances and allowances.                                           |
 | `src/prices.ts`                        | Prices from Chainlink and from pools: Aero's, Aerodrome's and Hydrex's now, only Hydrex's at an epoch's end. |
+| `src/aero.ts`                          | Aero's pools on Base, what each paid per sAERO, stakes, and the record of the strategies in 48-hour steps.   |
 | `src/rewards.ts`                       | What votes earned in an epoch, and Hydrex's average.                                                         |
 | `src/hydrex.ts`                        | Hydrex accounts, their statuses, and joining and leaving.                                                    |
 | `src/payouts.ts`                       | How far each account has been paid, what is waiting, and its last receipt.                                   |
 | `src/claim.ts`                         | Claims through Double Espresso, split into calls that fit in transactions.                                   |
-| `src/aero.ts`                          | Aero's pools on Base, what each paid per sAERO, stakes, and the record of the strategies in 48-hour steps.   |
 | `src/swap.ts`, `routing.ts`            | Routes, quotes, simulation and minimums. `routing.ts` routes the ticked tokens together.                     |
 | `src/data.ts`, `views/`                | What each view reads (`data.ts`), and how each view fills the page (`views/`).                               |
 | `src/ui.ts`, `format.ts`               | Filling the page's templates, and how figures, sums, dates and hex are written.                              |

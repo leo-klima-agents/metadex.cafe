@@ -52,6 +52,8 @@ export const RPC_ORIGINS = RPCS.map((url) => new URL(url).origin);
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type, content-encoding" };
 
 // What each owner holds at `BLOCK`.
+// 25 sAERO stakes at BLOCK, none locked. The largest is #2848.
+export const ALLOCATOR = getAddress("0x41870186e8cf4c6d445492a9f7bb233a02a9b633");
 export const MEMBER = getAddress("0x388b2d29e7919d45b1b8f6e88b8a13a392f97b40"); // #9540 in Matcha Latte, #14485 its own
 export const NEWCOMER = getAddress("0x0208ddbc05a91e1b937e8b3140b62ef22a274c95"); // #141 its own, #42877 in Liquid Hydrex
 export const ELSEWHERE = getAddress("0x69707a120ade8239f07595165e180c61395ea655"); // #2435 in Lock Maxi, #2439 in USDC
@@ -60,8 +62,6 @@ export const ENDED = getAddress("0x2518820268e4079e90446b93020dfad7dd54e84d"); /
 // 134 Hydrex accounts. #26432 and #14247 are in Matcha Latte, which last paid them up to Thu 11 June and Thu 27 Aug: its
 // operator leaves some accounts unpaid on purpose, so both are late, with rewards left to claim.
 export const LATE = getAddress("0xa79cd47655156b299762dfe92a67980805ce5a31");
-// 25 sAERO stakes at BLOCK, none locked. The largest is #2848.
-export const ALLOCATOR = getAddress("0x41870186e8cf4c6d445492a9f7bb233a02a9b633");
 export const LOCK_MAXI = getAddress("0x53388a4E98Bb56F8571433F5461010Fc287929d3");
 export const STRANGER = getAddress("0x000000000000000000000000000000000000dead");
 const SOMEONE = getAddress("0x0000000000000000000000000000000000001234");

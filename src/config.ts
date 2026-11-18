@@ -21,6 +21,27 @@ export const BASESCAN = "https://basescan.org";
 // Base's GasPriceOracle, which says what posting a transaction to Ethereum costs.
 export const GAS_PRICE_ORACLE: Address = "0x420000000000000000000000000000000000000F";
 
+// Aero, whose root chain is Base. The FactoryRegistry lists its gauges, each with its pool and rewards manager.
+export const AERO: Address = "0x3f5bF3EdAc59d650D8fDf9657a71F2f904A3a4Ee";
+export const AERO_ESCROW: Address = "0xBF7977E1521e9a3032bf7243Ee4712f311f13915";
+export const AERO_VOTER: Address = "0x49d7d4f17Ec56Ef8fA04E464AF5D1A4942CC31e6";
+export const LEAF_VOTER: Address = "0x382409fad8503FbCdbB27A4211551fa03e884078";
+export const FACTORY_REGISTRY: Address = "0x7b2A2c12dC5Ea2a31455952a05031C3E4BB28F3E";
+// Aero's own module, which stakes approve when they join a Relay.
+export const PAYMENTS_MODULE: Address = "0xBe8e5149Dc0fE28d124dE4222b7Fb332De99AA79";
+export type GaugeKind = "volatile" | "stable" | "cl";
+export const GAUGE_FACTORIES: { address: Address; kind: GaugeKind }[] = [
+  { address: "0x9FBCf2Df0DC553ce40Ef63963Bff465b76792B7E", kind: "volatile" },
+  { address: "0x1e0f776E88649285f99e65Fa599aD6e0f9D97800", kind: "stable" },
+  { address: "0xf437f62053ACB121665b8fDBfeA8F214FB8E589d", kind: "cl" },
+];
+// The Aero Autopilots that the page names and compares with. Each is a stake that its Relay owns. The page shows it
+// only while the Relay still owns it.
+export type Autopilot = { id: bigint; name: string; relay: Address };
+export const AUTOPILOTS: Autopilot[] = [
+  { id: 20366n, name: "Autopilot USDC Maxi", relay: "0xAfa7cA53e0A63d94218728842ED286308435DD86" },
+];
+
 export type Kind = "matcha-latte" | "double-espresso";
 // `actions` are what joining approves: 3 sends the account's claims to the automation, and 5 delegates its votes.
 export type Automation = { kind: Kind; name: string; contract: string; address: Address; actions: number[] };
@@ -43,9 +64,7 @@ export const DOUBLE_ESPRESSO: Automation = {
 export const AUTOMATIONS = [MATCHA_LATTE, DOUBLE_ESPRESSO];
 export const byKind = (kind: string): Automation | undefined => AUTOMATIONS.find((each) => each.kind === kind);
 // The fee, in basis points (100 is 1%), that Double Espresso takes on each claim and the swappers take on each route.
-// `FEE_RECIPIENT` is the Safe that receives both.
 export const FEE_BPS = 100n;
-export const FEE_RECIPIENT: Address = "0x450c72de8c0079B49AcedF294a13011bd09D125B";
 // The account that holds Matcha Latte's DEFAULT_ADMIN_ROLE, and the Safe that holds its EXECUTOR_ROLE.
 export const MATCHA_LATTE_ADMIN: Address = "0x74266f2b206D1359B83fc74949EF07176FB3AE03";
 export const MATCHA_LATTE_OPERATOR: Address = "0x17f513C024C1C67db050258ba569c714a9CF1B12";
@@ -55,27 +74,6 @@ export const VOTING_ESCROW_IMPLEMENTATION: Address = "0x0FC68cE53Be957a1AA779f55
 export const APPROVAL_LOGIC: Address = "0x4B0BC0889EB524Dbae36d409fF733851E9B4f63D";
 export const VOTER: Address = "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b";
 export const ACCOUNT_NAMES: Address = "0x998cf40a742460b4eBbFB569A0D23eA91976c0d3";
-
-// Aero, whose root chain is Base. The FactoryRegistry lists its gauges, each with its pool and rewards manager.
-export const AERO: Address = "0x3f5bF3EdAc59d650D8fDf9657a71F2f904A3a4Ee";
-export const AERO_ESCROW: Address = "0xBF7977E1521e9a3032bf7243Ee4712f311f13915";
-export const AERO_VOTER: Address = "0x49d7d4f17Ec56Ef8fA04E464AF5D1A4942CC31e6";
-export const LEAF_VOTER: Address = "0x382409fad8503FbCdbB27A4211551fa03e884078";
-export const FACTORY_REGISTRY: Address = "0x7b2A2c12dC5Ea2a31455952a05031C3E4BB28F3E";
-// Aero's own module, which stakes approve when they join a Relay.
-export const PAYMENTS_MODULE: Address = "0xBe8e5149Dc0fE28d124dE4222b7Fb332De99AA79";
-export type GaugeKind = "volatile" | "stable" | "cl";
-export const GAUGE_FACTORIES: { address: Address; kind: GaugeKind }[] = [
-  { address: "0x9FBCf2Df0DC553ce40Ef63963Bff465b76792B7E", kind: "volatile" },
-  { address: "0x1e0f776E88649285f99e65Fa599aD6e0f9D97800", kind: "stable" },
-  { address: "0xf437f62053ACB121665b8fDBfeA8F214FB8E589d", kind: "cl" },
-];
-// The Aero Autopilots that the page names and compares with. Each is a stake that its Relay owns. The page shows it
-// only while the Relay still owns it.
-export type Autopilot = { id: bigint; name: string; relay: Address };
-export const AUTOPILOTS: Autopilot[] = [
-  { id: 20366n, name: "Autopilot USDC Maxi", relay: "0xAfa7cA53e0A63d94218728842ED286308435DD86" },
-];
 
 export const WETH: Address = "0x4200000000000000000000000000000000000006";
 export const USDC: Address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
@@ -147,7 +145,7 @@ export const swapperOf = (output: string): Swapper | undefined => SWAPPERS.find(
 
 // The swappers' exchanges, in the order pricing prefers them. `id` is the value of the swapper's `Exchange` enum. For
 // Uniswap v4, `factory` is the PoolManager.
-export type ExchangeKind = "algebra" | "pair" | "solidly" | "slipstream" | "aerodrome" | "v2" | "v3" | "v4";
+export type ExchangeKind = "solidly" | "slipstream" | "aerodrome" | "v4" | "v3" | "v2" | "pair" | "algebra";
 // `codeHash` is the init code hash of the pairs that the factory made. It is set only for a factory whose pair code an
 // upgrade could change.
 export type Exchange = {

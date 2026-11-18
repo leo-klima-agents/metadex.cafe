@@ -1,15 +1,15 @@
 import { getAddress, type Address } from "viem";
 import { byKind, DEFAULT_OUTPUT, swapperOf, type Kind, type Output } from "./config.ts";
 
-// The page's addresses, such as `#app`, `#about`, `#hydrex`, `#hydrex/matcha-latte`, `#hydrex/9540`, `#swap/weth`,
-// `#aero`, `#aero/20366` and `#aero/pool/0x…` (a pool by its gauge). The app, automation, swap and Aero
-// views take an optional section that opens a popup, such as `#hydrex/matcha-latte/check`. Anything else is Home.
+// The page's addresses, such as `#app`, `#about`, `#aero`, `#aero/20366`, `#aero/pool/0x…` (a pool by its gauge),
+// `#hydrex`, `#hydrex/matcha-latte`, `#hydrex/9540` and `#swap/weth`. The app, Aero, automation and swap views take an
+// optional section that opens a popup, such as `#hydrex/matcha-latte/check`. Anything else is Home.
 export type Route =
   | { view: "home" | "about" | "hydrex" }
+  | { view: "app"; section?: string }
   | { view: "aero"; section?: string }
   | { view: "stake"; id: bigint }
   | { view: "pool"; gauge: Address }
-  | { view: "app"; section?: string }
   | { view: "product"; kind: Kind; section?: string }
   | { view: "account"; id: bigint }
   | { view: "swap"; output: Output; section?: string };
@@ -17,9 +17,9 @@ export type View = Route["view"];
 
 const SECTIONS = {
   app: ["allows"],
+  aero: ["how", "check"],
   product: ["fees", "control", "check", "record"],
   swap: ["fees", "check", "approvals"],
-  aero: ["how", "check"],
 };
 
 const HOME: Route = { view: "home" };
@@ -40,7 +40,7 @@ export function parse(hash: string): Route {
     if (swapper) return sectioned({ view: "swap", output: swapper.output }, third);
     if (third === undefined) return sectioned({ view: "swap", output: DEFAULT_OUTPUT }, second);
   }
-  // Hydrex's accounts and Aero's stakes are numbered from 1, up to a uint256's 78 digits.
+  // Aero's stakes and Hydrex's accounts are numbered from 1, up to a uint256's 78 digits.
   const id = (text: string) => /^[1-9]\d{0,77}$/.test(text);
   if (first === "aero") {
     if (second === undefined) return { view: "aero" };
@@ -61,12 +61,12 @@ export function hrefOf(route: Route): string {
   switch (route.view) {
     case "home":
       return "#";
-    case "account":
-      return `#hydrex/${route.id}`;
     case "stake":
       return `#aero/${route.id}`;
     case "pool":
       return `#aero/pool/${route.gauge}`;
+    case "account":
+      return `#hydrex/${route.id}`;
     case "product":
       return ["#hydrex", route.kind, ...section].join("/");
     case "swap":

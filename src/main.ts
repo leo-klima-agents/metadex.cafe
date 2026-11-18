@@ -19,24 +19,24 @@ import { drawWallets, startWallets } from "./views/wallet.ts";
 const TAGS: Record<View, Tag[]> = {
   home: [],
   about: [],
-  app: ["earnings", "payouts", "swap", "aero"],
+  app: ["aero", "earnings", "payouts", "swap"],
+  aero: ["aero"],
+  stake: ["aero"],
+  pool: ["aero"],
   hydrex: ["earnings", "average", "shares", "payouts"],
   product: ["earnings", "average", "shares", "payouts"],
   account: ["earnings", "shares", "payouts"],
   swap: ["earnings", "swap"],
-  aero: ["aero"],
-  stake: ["aero"],
-  pool: ["aero"],
 };
 const DRAW: Partial<Record<View, () => void>> = {
   app: drawApp,
+  aero: drawAero,
+  stake: drawStake,
+  pool: drawPool,
   hydrex: drawHydrex,
   product: drawProduct,
   account: drawAccount,
   swap: drawSwap,
-  aero: drawAero,
-  stake: drawStake,
-  pool: drawPool,
 };
 const views = [...document.querySelectorAll<HTMLElement>("main > [data-view]")];
 const popups = [...document.querySelectorAll<HTMLElement>("[popover]")];
@@ -44,18 +44,18 @@ const popups = [...document.querySelectorAll<HTMLElement>("[popover]")];
 function show(first: boolean): void {
   const before = state.route;
   const route = (state.route = parse(location.hash));
-  // Another account, stake or pool counts as another page.
+  // Another stake, pool or account counts as another page.
   const other = (view: View) => route.view === view && before.view === view && hrefOf(route) !== hrefOf(before);
-  const moved = route.view !== before.view || other("account") || other("stake") || other("pool") || first;
+  const moved = route.view !== before.view || other("stake") || other("pool") || other("account") || first;
   const view = views.find(({ dataset }) => dataset.view === route.view)!;
   for (const each of views) each.hidden = each !== view;
   toggle("view", true, route.view);
   toggle("kind", route.view === "product", route.view === "product" ? route.kind : "");
   document.title =
-    route.view === "account"
-      ? `Hydrex account #${route.id} · metaDEX Café`
-      : route.view === "stake"
-        ? `sAERO #${route.id} · metaDEX Café`
+    route.view === "stake"
+      ? `sAERO #${route.id} · metaDEX Café`
+      : route.view === "account"
+        ? `Hydrex account #${route.id} · metaDEX Café`
         : view.dataset.title!;
   const chip = $("[data-text=chip]");
   if (route.view === "app") chip.setAttribute("aria-current", "page");

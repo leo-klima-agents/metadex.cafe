@@ -27,72 +27,6 @@ const HOUR = 60 * MINUTE;
 const week = (): number => weekStart(now());
 export const owner = (): Address | undefined => state.connection?.address;
 
-export const matchaLatte = () => use(`matcha-latte ${week()}`, readMatchaLatte, HOUR);
-export const freshness = (automation: Automation) =>
-  use(`voted ${automation.kind} ${week()}`, () => readFreshness(automation), HOUR);
-export const accounts = (): Got<Holdings> => {
-  const address = owner();
-  return address ? use(`accounts ${address} ${week()}`, () => readAccounts(address)) : {};
-};
-export const timeOfBlock = (block: number) => use(`time ${block}`, () => readTime(block));
-const account = (id: bigint) => use(`account ${id} ${week()}`, async () => (await readAccount(id)) ?? null);
-export function accountShown(id: bigint): { holdings: Got<Holdings | null>; own: boolean } {
-  const own = accounts().value;
-  if (!own?.accounts.some((each) => each.id === id)) return { holdings: account(id), own: false };
-  return { holdings: { value: { ...own, accounts: own.accounts.filter((each) => each.id === id) } }, own: true };
-}
-
-// The start of the last epoch that Hydrex has ended. Just after an epoch ends, Hydrex may still give the one before.
-// Until Hydrex moves on, this is read again every five minutes.
-const epoch = () =>
-  use(`epoch ${week()}`, lastEpoch, (start: number) => (start < week() - WEEK ? 5 * MINUTE : Infinity));
-const earningsKey = (automation: Automation, start: number) => `earnings ${automation.kind} ${start}`;
-const readEarnings = (automation: Automation, start: number) => () =>
-  votesEarned(automation.address, start, true, tagged("earnings"));
-export const earnings = (automation: Automation): Got<Earnings> =>
-  andThen(epoch(), (start) => use(earningsKey(automation, start), readEarnings(automation, start)));
-export const average = (): Got<Earnings> =>
-  andThen(epoch(), (start) => use(`average ${start}`, () => allEarnings(start, tagged("average"))));
-const stakes = (holdings: Holdings): Got<Map<bigint, Stake>> =>
-  andThen(epoch(), (start) => {
-    const ids = holdings.accounts.filter(({ amount }) => amount > 0n).map(({ id }) => id);
-    return use(`stakes ${start} ${ids.join()}`, () => stakesOf(ids, start, tagged("shares")));
-  });
-// What a holder of votes earned last epoch with all the votes it held.
-export const holderEarnings = (holder: Address): Got<Earnings> =>
-  andThen(epoch(), (start) =>
-    use(`voter ${holder} ${start}`, () => votesEarned(holder, start, false, tagged("shares"))),
-  );
-// What an account's votes earned last epoch: its share of what their holder earned. `null` when the account had no
-// votes as the epoch began, when their holder had none, or when a holder other than the automations did not vote.
-export function accountEarned(holdings: Holdings, id: bigint): Got<Money | null> {
-  return andThen(stakes(holdings), (all) => {
-    const stake = all.get(id);
-    if (!stake) return { value: null };
-    const automation = automationAt(stake.delegate);
-    return andThen(automation ? earnings(automation) : holderEarnings(stake.delegate), (of) => {
-      if (!of.votes || (!automation && !of.pools.length)) return { value: null };
-      return { value: shareOf(of, stake.votes) };
-    });
-  });
-}
-const holders = (holdings: Holdings) => andThen(stakes(holdings), (all) => ({ value: holdersOf(all.values()) }));
-
-// The payouts of the accounts in the automations, as of the last epoch that Hydrex has ended. They are read again when
-// Hydrex moves on. They are also read every five minutes while a due payout has not come, or while some rewards could
-// not be priced.
-export function payouts(holdings: Holdings): Got<Payouts> {
-  const key = holdings.accounts.map(({ id, delegate, claimer }) => `${id}:${delegate}:${claimer}`).join(" ");
-  return andThen(epoch(), (start) =>
-    use(
-      `payouts ${holdings.owner} ${holdings.epochStart} ${start} ${key}`,
-      () =>
-        readPayouts(holdings, (automation) => memo(earningsKey(automation, start), readEarnings(automation, start))),
-      (found: Payouts) => (awaited(found) || found.unread ? 5 * MINUTE : Infinity),
-    ),
-  );
-}
-
 // Aero's reads of the present are kept for five minutes. Its universe is kept as long as `universeReads` says.
 const MARKET = "aero market";
 const universes = aero.universeReads(() => aero.readUniverse(tagged("aero")));
@@ -231,7 +165,74 @@ export const history = (gauge: Address): Got<aero.Day[] | null> =>
     );
   });
 
+export const matchaLatte = () => use(`matcha-latte ${week()}`, readMatchaLatte, HOUR);
+export const freshness = (automation: Automation) =>
+  use(`voted ${automation.kind} ${week()}`, () => readFreshness(automation), HOUR);
+export const accounts = (): Got<Holdings> => {
+  const address = owner();
+  return address ? use(`accounts ${address} ${week()}`, () => readAccounts(address)) : {};
+};
+export const timeOfBlock = (block: number) => use(`time ${block}`, () => readTime(block));
+const account = (id: bigint) => use(`account ${id} ${week()}`, async () => (await readAccount(id)) ?? null);
+export function accountShown(id: bigint): { holdings: Got<Holdings | null>; own: boolean } {
+  const own = accounts().value;
+  if (!own?.accounts.some((each) => each.id === id)) return { holdings: account(id), own: false };
+  return { holdings: { value: { ...own, accounts: own.accounts.filter((each) => each.id === id) } }, own: true };
+}
+
+// The start of the last epoch that Hydrex has ended. Just after an epoch ends, Hydrex may still give the one before.
+// Until Hydrex moves on, this is read again every five minutes.
+const epoch = () =>
+  use(`epoch ${week()}`, lastEpoch, (start: number) => (start < week() - WEEK ? 5 * MINUTE : Infinity));
+const earningsKey = (automation: Automation, start: number) => `earnings ${automation.kind} ${start}`;
+const readEarnings = (automation: Automation, start: number) => () =>
+  votesEarned(automation.address, start, true, tagged("earnings"));
+export const earnings = (automation: Automation): Got<Earnings> =>
+  andThen(epoch(), (start) => use(earningsKey(automation, start), readEarnings(automation, start)));
+export const average = (): Got<Earnings> =>
+  andThen(epoch(), (start) => use(`average ${start}`, () => allEarnings(start, tagged("average"))));
+const stakes = (holdings: Holdings): Got<Map<bigint, Stake>> =>
+  andThen(epoch(), (start) => {
+    const ids = holdings.accounts.filter(({ amount }) => amount > 0n).map(({ id }) => id);
+    return use(`stakes ${start} ${ids.join()}`, () => stakesOf(ids, start, tagged("shares")));
+  });
+// What a holder of votes earned last epoch with all the votes it held.
+export const holderEarnings = (holder: Address): Got<Earnings> =>
+  andThen(epoch(), (start) =>
+    use(`voter ${holder} ${start}`, () => votesEarned(holder, start, false, tagged("shares"))),
+  );
+// What an account's votes earned last epoch: its share of what their holder earned. `null` when the account had no
+// votes as the epoch began, when their holder had none, or when a holder other than the automations did not vote.
+export function accountEarned(holdings: Holdings, id: bigint): Got<Money | null> {
+  return andThen(stakes(holdings), (all) => {
+    const stake = all.get(id);
+    if (!stake) return { value: null };
+    const automation = automationAt(stake.delegate);
+    return andThen(automation ? earnings(automation) : holderEarnings(stake.delegate), (of) => {
+      if (!of.votes || (!automation && !of.pools.length)) return { value: null };
+      return { value: shareOf(of, stake.votes) };
+    });
+  });
+}
+const holders = (holdings: Holdings) => andThen(stakes(holdings), (all) => ({ value: holdersOf(all.values()) }));
+
+// The payouts of the accounts in the automations, as of the last epoch that Hydrex has ended. They are read again when
+// Hydrex moves on. They are also read every five minutes while a due payout has not come, or while some rewards could
+// not be priced.
+export function payouts(holdings: Holdings): Got<Payouts> {
+  const key = holdings.accounts.map(({ id, delegate, claimer }) => `${id}:${delegate}:${claimer}`).join(" ");
+  return andThen(epoch(), (start) =>
+    use(
+      `payouts ${holdings.owner} ${holdings.epochStart} ${start} ${key}`,
+      () =>
+        readPayouts(holdings, (automation) => memo(earningsKey(automation, start), readEarnings(automation, start))),
+      (found: Payouts) => (awaited(found) || found.unread ? 5 * MINUTE : Infinity),
+    ),
+  );
+}
+
 export function preload(): void {
+  ownStakes();
   checks();
   matchaLatte();
   for (const automation of AUTOMATIONS) {
@@ -239,7 +240,6 @@ export function preload(): void {
     earnings(automation);
   }
   average();
-  ownStakes();
   const holdings = accounts().value;
   if (!holdings) return;
   payouts(holdings);

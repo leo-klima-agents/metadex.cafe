@@ -107,7 +107,7 @@ export const APPROVAL_GAS = 46_000n;
 export const MAX_SWAP_GAS = 15_000_000n;
 function hopGas({ exchange }: Hop): bigint {
   const { kind } = exchangeOf(exchange);
-  return kind === "algebra" ? 1_000_000n : ["pair", "solidly", "aerodrome", "v2"].includes(kind) ? 50_000n : 110_000n;
+  return kind === "algebra" ? 1_000_000n : ["solidly", "aerodrome", "v2", "pair"].includes(kind) ? 50_000n : 110_000n;
 }
 export const routeGas = ({ hops }: { hops: Hop[] }): bigint => 50_000n + sumBig(hops.map(hopGas));
 export const swapGas = (routes: { hops: Hop[] }[]): bigint => 150_000n + sumBig(routes.map(routeGas));

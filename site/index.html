@@ -139,6 +139,401 @@
         </dialog>
       </section>
 
+      <section data-view="aero" data-title="Aero · metaDEX Café" class="u-stack" hidden>
+        <nav aria-label="Back"><a class="Back" href="#app">Your wallet</a></nav>
+        <header class="u-row">
+          <h1 tabindex="-1">Aero</h1>
+          <button type="button" class="Button--info" popovertarget="aero-info" aria-label="How it works">i</button>
+        </header>
+        <p class="u-small u-quiet">Each pool shares its protocol revenue in proportion to the sAERO weight in it.</p>
+        <fieldset>
+          <legend><h2>Your strategy</h2></legend>
+          <div class="u-stack">
+            <fieldset class="u-stackTight">
+              <legend class="u-small">
+                Which pools to follow, each with the APR it would have earned over the last 8 days:
+              </legend>
+              <div class="u-stackTight" data-list="strategy"></div>
+            </fieldset>
+            <div class="u-row u-small">
+              <label class="u-withBox"
+                ><input type="checkbox" data-action="aero-again" checked /> Come back every 48 h to pick again</label
+              >
+              <label class="u-withBox"><input type="checkbox" data-action="aero-blue" /> Blue chips only</label>
+            </div>
+            <div class="u-row u-small">
+              <label class="u-withBox" data-text="stake-row"
+                >For
+                <select class="u-smallSelect" data-action="aero-stake" data-list="stake-option"></select
+              ></label>
+              <a data-text="stake-link"></a>
+              <span class="u-quiet" data-text="stake-lock"></span>
+              <label class="u-withBox" data-text="amount-row"
+                >For
+                <input
+                  id="aero-plan-amount"
+                  class="Amount"
+                  data-action="aero-plan-amount"
+                  inputmode="decimal"
+                  value="10000"
+                  placeholder="0"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                sAERO weight</label
+              >
+            </div>
+          </div>
+        </fieldset>
+        <section class="u-stack u-gapAbove" aria-labelledby="aero-record-title" data-text="plan" data-state="loading">
+          <h2 id="aero-record-title">If you had started 8 days ago</h2>
+          <p class="u-small u-quiet" data-text="record-intro"></p>
+          <div class="u-stack" data-when="loading" aria-hidden="true">
+            <ul class="Facts Facts--tiles">
+              <li class="Facts-tile Skeleton-item"></li>
+              <li class="Facts-tile Skeleton-item"></li>
+              <li class="Facts-tile Skeleton-item"></li>
+            </ul>
+            <div class="Skeleton-item Chart-skeleton"></div>
+          </div>
+          <p class="u-small" data-when="failed">The pools could not be read.</p>
+          <div class="u-stack" data-when="ready">
+            <dl class="Facts Facts--tiles" data-list="tile"></dl>
+            <p class="Notice" data-text="edited">
+              The dashed line is your custom allocation, held for all 8 days. You chose it today, knowing how pools
+              paid, so unlike the strategies it has hindsight.
+            </p>
+            <figure class="Chart u-stackTight">
+              <ul class="Chart-legend u-small" data-list="legend"></ul>
+              <div class="Chart-frame">
+                <svg
+                  class="Chart-plot"
+                  data-chart="record"
+                  tabindex="0"
+                  role="img"
+                  aria-label="The APR of each strategy in each step of 48 hours. The arrow keys move between steps; the table below has every figure."
+                ></svg>
+                <div class="Chart-tip u-small" aria-live="polite" hidden></div>
+              </div>
+            </figure>
+            <div class="u-scroll" tabindex="0" role="region" aria-label="APR in each step, scrolls sideways">
+              <table>
+                <caption class="u-visuallyHidden">
+                  The APR of each strategy in each step of 48 hours
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">APR</th>
+                    <th scope="col">Follow the leaders</th>
+                    <th scope="col">Follow revenue</th>
+                    <th scope="col">Autopilot</th>
+                    <th scope="col">Base average</th>
+                    <th scope="col" data-text="custom-head">Custom allocation</th>
+                  </tr>
+                </thead>
+                <tbody data-list="step"></tbody>
+              </table>
+            </div>
+            <p class="u-small u-quiet" data-text="record-note"></p>
+          </div>
+        </section>
+        <section class="u-stack u-gapAbove" aria-labelledby="plan-title">
+          <h2 id="plan-title">Allocate now</h2>
+          <div class="Card u-stackTight" data-if="no-wallet">
+            <p class="u-label">Connect a wallet</p>
+            <p class="u-row" data-list="wallet"></p>
+            <p class="u-small u-hideEmpty" role="status" data-text="connecting"></p>
+          </div>
+          <div class="u-stack" data-text="picks" data-state="loading">
+            <ul class="Skeleton" data-when="loading" aria-hidden="true">
+              <li class="Skeleton-item"></li>
+              <li class="Skeleton-item"></li>
+            </ul>
+            <p class="u-small" data-when="failed">The pools could not be read.</p>
+            <div class="u-stack" data-when="ready">
+              <p data-text="plan-pay"></p>
+              <div class="u-scroll" tabindex="0" role="region" aria-label="Pools to allocate to, scrolls sideways">
+                <table>
+                  <caption class="u-visuallyHidden">
+                    The pools to allocate to, their shares, and what each would pay
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Pool</th>
+                      <th scope="col">Share</th>
+                      <th scope="col">Projected APR</th>
+                      <th scope="col">sAERO weight</th>
+                      <th scope="col">Protocol revenue a day, last 8 days</th>
+                    </tr>
+                  </thead>
+                  <tbody data-list="pick"></tbody>
+                  <tfoot>
+                    <tr>
+                      <th scope="row">Total</th>
+                      <td class="u-figures u-strong" data-text="share-total"></td>
+                      <td></td>
+                      <td class="u-figures" data-text="total-amount"></td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <div class="u-row u-small">
+                <button
+                  type="button"
+                  class="Button--secondary Button--compact"
+                  data-action="aero-more"
+                  data-text="more"
+                >
+                  Show more pools
+                </button>
+                <button
+                  type="button"
+                  class="Button--secondary Button--compact"
+                  data-action="aero-current"
+                  data-text="current"
+                  data-if="wallet"
+                >
+                  Use the current allocation
+                </button>
+                <button
+                  type="button"
+                  class="Button--secondary Button--compact"
+                  data-action="aero-rule"
+                  data-text="edited"
+                >
+                  Back to your strategy
+                </button>
+                <button
+                  type="button"
+                  class="Button--secondary Button--compact"
+                  data-action="aero-scale"
+                  data-text="scale"
+                >
+                  Make the shares add up to 100%
+                </button>
+              </div>
+              <div class="u-row" data-if="wallet">
+                <button type="button" data-action="aero-allocate">Allocate</button>
+                <p class="u-small u-hang" data-text="allocate-why"></p>
+              </div>
+            </div>
+          </div>
+        </section>
+        <dialog popover id="aero-info" data-section="how" aria-labelledby="aero-info-title">
+          <header class="u-spread Dialog-bar">
+            <h2 id="aero-info-title">How it works</h2>
+            <button
+              type="button"
+              class="Button--close"
+              popovertarget="aero-info"
+              popovertargetaction="hide"
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </header>
+          <dl class="u-stackTight">
+            <div class="Pair">
+              <dt class="u-small u-quiet">Protocol revenue</dt>
+              <dd>A pool's trading fees and incentives</dd>
+            </div>
+            <div class="Pair">
+              <dt class="u-small u-quiet">Blue chips</dt>
+              <dd>Pools of two tokens among USDC, EURC, WETH, cbBTC and AERO</dd>
+            </div>
+            <div class="Pair">
+              <dt class="u-small u-quiet">Thin</dt>
+              <dd>Left out of strategies for having under 1M sAERO weight 8 days ago, now or on average in between</dd>
+            </div>
+          </dl>
+          <section class="u-stack" data-section="check">
+            <dl class="u-stackTight" data-list="contract"></dl>
+          </section>
+        </dialog>
+      </section>
+
+      <section data-view="stake" data-title="sAERO · metaDEX Café" class="u-stack" hidden>
+        <nav aria-label="Back"><a class="Back" href="#aero">Aero</a></nav>
+        <h1 tabindex="-1" data-text="name"></h1>
+        <div class="u-stack" data-text="stake" data-state="loading">
+          <div class="u-stack" data-when="loading" aria-hidden="true">
+            <p class="Pill u-small"><span data-loading>Loading…</span></p>
+            <ul class="Facts Facts--tiles">
+              <li class="Facts-tile Skeleton-item"></li>
+              <li class="Facts-tile Skeleton-item"></li>
+            </ul>
+          </div>
+          <p class="u-small" data-when="failed">This sAERO could not be read.</p>
+          <p class="u-small" data-when="empty">No such sAERO.</p>
+          <div class="u-stack" data-when="ready">
+            <p class="Pill u-small" data-text="hold"></p>
+            <dl class="Facts Facts--tiles">
+              <div class="Facts-tile">
+                <dt class="u-label Facts-tileLabel"><code>sAERO</code></dt>
+                <dd class="Facts-value Facts-figure" data-text="amount"></dd>
+                <dd class="Facts-tileNote u-small u-quiet" data-text="lock"></dd>
+              </div>
+              <div class="Facts-tile">
+                <dt class="u-label Facts-tileLabel">On Base</dt>
+                <dd class="Facts-value Facts-figure" data-text="on-base"></dd>
+                <dd class="Facts-tileNote u-small u-quiet" data-text="pools"></dd>
+              </div>
+              <div class="Facts-tile" data-text="idle-row">
+                <dt class="u-label Facts-tileLabel">Not allocated</dt>
+                <dd class="Facts-value Facts-figure" data-text="idle"></dd>
+                <dd class="Facts-tileNote u-small u-quiet">sAERO weight, earning nothing</dd>
+              </div>
+              <div class="Facts-tile" data-text="elsewhere-row">
+                <dt class="u-label Facts-tileLabel">Other chains</dt>
+                <dd class="Facts-value Facts-figure" data-text="elsewhere"></dd>
+                <dd class="Facts-tileNote u-small u-quiet">sAERO weight, not shown here</dd>
+              </div>
+              <div class="Facts-tile" data-text="owner-row">
+                <dt class="u-label Facts-tileLabel">Owner</dt>
+                <dd class="Facts-value Facts-figure" data-text="owner"></dd>
+              </div>
+            </dl>
+            <p class="u-small" data-text="approval"></p>
+            <p class="u-small" data-text="pending-row"><span data-text="pending"></span></p>
+            <p data-text="manage">
+              <a class="Button Button--secondary" href="https://app.aero.xyz/" target="_blank" rel="noopener"
+                >Allocate or claim on Aero</a
+              >
+            </p>
+            <section class="u-stack u-gapAbove" aria-labelledby="stake-record-title" data-text="record">
+              <h2 id="stake-record-title">Record</h2>
+              <dl class="Facts Facts--tiles">
+                <div class="Facts-tile">
+                  <dt class="u-label Facts-tileLabel">Since it allocated</dt>
+                  <dd class="Facts-value Facts-figure" data-text="since"></dd>
+                  <dd class="Facts-tileNote u-small u-quiet" data-text="since-note"></dd>
+                </div>
+                <div class="Facts-tile">
+                  <dt class="u-label Facts-tileLabel">Its pools</dt>
+                  <dd class="Facts-value Facts-figure" data-text="paid"></dd>
+                  <dd class="Facts-tileNote u-small u-quiet" data-text="paid-note"></dd>
+                </div>
+              </dl>
+              <div class="u-scroll">
+                <table>
+                  <caption class="u-visuallyHidden">
+                    Its pools on Base
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Pool</th>
+                      <th scope="col">Share</th>
+                      <th scope="col">sAERO weight</th>
+                      <th scope="col">Since it allocated</th>
+                      <th scope="col">Last 8 days</th>
+                    </tr>
+                  </thead>
+                  <tbody data-list="share"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section data-view="pool" data-title="Aero pool · metaDEX Café" class="u-stack" hidden>
+        <nav aria-label="Back"><a class="Back" href="#aero">Aero</a></nav>
+        <h1 tabindex="-1" data-text="name"></h1>
+        <div class="u-stack" data-text="pool" data-state="loading">
+          <div class="u-stack" data-when="loading" aria-hidden="true">
+            <p class="Pill u-small"><span data-loading>Loading…</span></p>
+            <ul class="Facts Facts--tiles">
+              <li class="Facts-tile Skeleton-item"></li>
+              <li class="Facts-tile Skeleton-item"></li>
+            </ul>
+          </div>
+          <p class="u-small" data-when="failed" data-text="pool-failed">Aero's pools could not be read.</p>
+          <p class="u-small" data-when="empty">No such pool on Aero.</p>
+          <div class="u-stack" data-when="ready">
+            <p class="Pill u-small" data-text="status"></p>
+            <p class="Notice" data-text="thin"></p>
+            <dl class="Facts Facts--tiles">
+              <div class="Facts-tile">
+                <dt class="u-label Facts-tileLabel">sAERO weight</dt>
+                <dd class="Facts-value Facts-figure" data-text="power"></dd>
+              </div>
+              <div class="Facts-tile">
+                <dt class="u-label Facts-tileLabel">Protocol revenue</dt>
+                <dd class="Facts-value Facts-figure" data-text="paid"></dd>
+                <dd class="Facts-tileNote u-small u-quiet" data-text="paid-note"></dd>
+              </div>
+              <div class="Facts-tile">
+                <dt class="u-label Facts-tileLabel">Incentives</dt>
+                <dd class="Facts-value Facts-figure" data-text="stream"></dd>
+                <dd class="Facts-tileNote u-small u-quiet" data-text="programs"></dd>
+              </div>
+              <div class="Facts-tile">
+                <dt class="u-label Facts-tileLabel">Emissions cap</dt>
+                <dd class="Facts-value Facts-figure" data-text="cap"></dd>
+                <dd class="Facts-tileNote u-small u-quiet" data-text="cap-note"></dd>
+              </div>
+            </dl>
+            <section class="u-stack u-gapAbove" aria-labelledby="pool-windows-title">
+              <h2 id="pool-windows-title">APR</h2>
+              <div class="u-scroll">
+                <table>
+                  <caption class="u-visuallyHidden">
+                    Its APR over the last 48 hours, 4 days and 8 days
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Last</th>
+                      <th scope="col">Fees</th>
+                      <th scope="col">Incentives</th>
+                      <th scope="col">In all</th>
+                    </tr>
+                  </thead>
+                  <tbody data-list="window"></tbody>
+                </table>
+              </div>
+            </section>
+            <section
+              class="u-stack u-gapAbove"
+              aria-labelledby="pool-days-title"
+              data-text="history"
+              data-state="loading"
+            >
+              <h2 id="pool-days-title">Day by day</h2>
+              <ul class="Skeleton" data-when="loading" aria-hidden="true">
+                <li class="Skeleton-item"></li>
+                <li class="Skeleton-item"></li>
+              </ul>
+              <p class="u-small" data-when="failed">Its history could not be read.</p>
+              <p class="u-small" data-when="empty">No history yet.</p>
+              <div class="u-scroll" data-when="ready">
+                <table>
+                  <caption class="u-visuallyHidden">
+                    Its fees' APR each day, in UTC
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Day, UTC</th>
+                      <th scope="col">sAERO weight</th>
+                      <th scope="col">Fees APR</th>
+                    </tr>
+                  </thead>
+                  <tbody data-list="day"></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="u-stack u-gapAbove" aria-labelledby="pool-programs-title" data-text="programs-section">
+              <h2 id="pool-programs-title">Live incentives</h2>
+              <ul class="u-stackTight u-small" data-list="program"></ul>
+            </section>
+            <section class="u-stack u-gapAbove" aria-labelledby="pool-contracts-title">
+              <h2 id="pool-contracts-title">Contracts</h2>
+              <dl class="u-stackTight" data-list="contract"></dl>
+            </section>
+          </div>
+        </div>
+      </section>
+
       <section data-view="hydrex" data-title="Hydrex · metaDEX Café" class="u-stack" hidden>
         <nav aria-label="Back"><a class="Back" href="#app">Your wallet</a></nav>
         <h1 tabindex="-1">Hydrex</h1>
@@ -698,401 +1093,6 @@
         </div>
       </section>
 
-      <section data-view="aero" data-title="Aero · metaDEX Café" class="u-stack" hidden>
-        <nav aria-label="Back"><a class="Back" href="#app">Your wallet</a></nav>
-        <header class="u-row">
-          <h1 tabindex="-1">Aero</h1>
-          <button type="button" class="Button--info" popovertarget="aero-info" aria-label="How it works">i</button>
-        </header>
-        <p class="u-small u-quiet">Each pool shares its protocol revenue in proportion to the sAERO weight in it.</p>
-        <fieldset>
-          <legend><h2>Your strategy</h2></legend>
-          <div class="u-stack">
-            <fieldset class="u-stackTight">
-              <legend class="u-small">
-                Which pools to follow, each with the APR it would have earned over the last 8 days:
-              </legend>
-              <div class="u-stackTight" data-list="strategy"></div>
-            </fieldset>
-            <div class="u-row u-small">
-              <label class="u-withBox"
-                ><input type="checkbox" data-action="aero-again" checked /> Come back every 48 h to pick again</label
-              >
-              <label class="u-withBox"><input type="checkbox" data-action="aero-blue" /> Blue chips only</label>
-            </div>
-            <div class="u-row u-small">
-              <label class="u-withBox" data-text="stake-row"
-                >For
-                <select class="u-smallSelect" data-action="aero-stake" data-list="stake-option"></select
-              ></label>
-              <a data-text="stake-link"></a>
-              <span class="u-quiet" data-text="stake-lock"></span>
-              <label class="u-withBox" data-text="amount-row"
-                >For
-                <input
-                  id="aero-plan-amount"
-                  class="Amount"
-                  data-action="aero-plan-amount"
-                  inputmode="decimal"
-                  value="10000"
-                  placeholder="0"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-                sAERO weight</label
-              >
-            </div>
-          </div>
-        </fieldset>
-        <section class="u-stack u-gapAbove" aria-labelledby="aero-record-title" data-text="plan" data-state="loading">
-          <h2 id="aero-record-title">If you had started 8 days ago</h2>
-          <p class="u-small u-quiet" data-text="record-intro"></p>
-          <div class="u-stack" data-when="loading" aria-hidden="true">
-            <ul class="Facts Facts--tiles">
-              <li class="Facts-tile Skeleton-item"></li>
-              <li class="Facts-tile Skeleton-item"></li>
-              <li class="Facts-tile Skeleton-item"></li>
-            </ul>
-            <div class="Skeleton-item Chart-skeleton"></div>
-          </div>
-          <p class="u-small" data-when="failed">The pools could not be read.</p>
-          <div class="u-stack" data-when="ready">
-            <dl class="Facts Facts--tiles" data-list="tile"></dl>
-            <p class="Notice" data-text="edited">
-              The dashed line is your custom allocation, held for all 8 days. You chose it today, knowing how pools
-              paid, so unlike the strategies it has hindsight.
-            </p>
-            <figure class="Chart u-stackTight">
-              <ul class="Chart-legend u-small" data-list="legend"></ul>
-              <div class="Chart-frame">
-                <svg
-                  class="Chart-plot"
-                  data-chart="record"
-                  tabindex="0"
-                  role="img"
-                  aria-label="The APR of each strategy in each step of 48 hours. The arrow keys move between steps; the table below has every figure."
-                ></svg>
-                <div class="Chart-tip u-small" aria-live="polite" hidden></div>
-              </div>
-            </figure>
-            <div class="u-scroll" tabindex="0" role="region" aria-label="APR in each step, scrolls sideways">
-              <table>
-                <caption class="u-visuallyHidden">
-                  The APR of each strategy in each step of 48 hours
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">APR</th>
-                    <th scope="col">Follow the leaders</th>
-                    <th scope="col">Follow revenue</th>
-                    <th scope="col">Autopilot</th>
-                    <th scope="col">Base average</th>
-                    <th scope="col" data-text="custom-head">Custom allocation</th>
-                  </tr>
-                </thead>
-                <tbody data-list="step"></tbody>
-              </table>
-            </div>
-            <p class="u-small u-quiet" data-text="record-note"></p>
-          </div>
-        </section>
-        <section class="u-stack u-gapAbove" aria-labelledby="plan-title">
-          <h2 id="plan-title">Allocate now</h2>
-          <div class="Card u-stackTight" data-if="no-wallet">
-            <p class="u-label">Connect a wallet</p>
-            <p class="u-row" data-list="wallet"></p>
-            <p class="u-small u-hideEmpty" role="status" data-text="connecting"></p>
-          </div>
-          <div class="u-stack" data-text="picks" data-state="loading">
-            <ul class="Skeleton" data-when="loading" aria-hidden="true">
-              <li class="Skeleton-item"></li>
-              <li class="Skeleton-item"></li>
-            </ul>
-            <p class="u-small" data-when="failed">The pools could not be read.</p>
-            <div class="u-stack" data-when="ready">
-              <p data-text="plan-pay"></p>
-              <div class="u-scroll" tabindex="0" role="region" aria-label="Pools to allocate to, scrolls sideways">
-                <table>
-                  <caption class="u-visuallyHidden">
-                    The pools to allocate to, their shares, and what each would pay
-                  </caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Pool</th>
-                      <th scope="col">Share</th>
-                      <th scope="col">Projected APR</th>
-                      <th scope="col">sAERO weight</th>
-                      <th scope="col">Protocol revenue a day, last 8 days</th>
-                    </tr>
-                  </thead>
-                  <tbody data-list="pick"></tbody>
-                  <tfoot>
-                    <tr>
-                      <th scope="row">Total</th>
-                      <td class="u-figures u-strong" data-text="share-total"></td>
-                      <td></td>
-                      <td class="u-figures" data-text="total-amount"></td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-              <div class="u-row u-small">
-                <button
-                  type="button"
-                  class="Button--secondary Button--compact"
-                  data-action="aero-more"
-                  data-text="more"
-                >
-                  Show more pools
-                </button>
-                <button
-                  type="button"
-                  class="Button--secondary Button--compact"
-                  data-action="aero-current"
-                  data-text="current"
-                  data-if="wallet"
-                >
-                  Use the current allocation
-                </button>
-                <button
-                  type="button"
-                  class="Button--secondary Button--compact"
-                  data-action="aero-rule"
-                  data-text="edited"
-                >
-                  Back to your strategy
-                </button>
-                <button
-                  type="button"
-                  class="Button--secondary Button--compact"
-                  data-action="aero-scale"
-                  data-text="scale"
-                >
-                  Make the shares add up to 100%
-                </button>
-              </div>
-              <div class="u-row" data-if="wallet">
-                <button type="button" data-action="aero-allocate">Allocate</button>
-                <p class="u-small u-hang" data-text="allocate-why"></p>
-              </div>
-            </div>
-          </div>
-        </section>
-        <dialog popover id="aero-info" data-section="how" aria-labelledby="aero-info-title">
-          <header class="u-spread Dialog-bar">
-            <h2 id="aero-info-title">How it works</h2>
-            <button
-              type="button"
-              class="Button--close"
-              popovertarget="aero-info"
-              popovertargetaction="hide"
-              aria-label="Close"
-            >
-              ×
-            </button>
-          </header>
-          <dl class="u-stackTight">
-            <div class="Pair">
-              <dt class="u-small u-quiet">Protocol revenue</dt>
-              <dd>A pool's trading fees and incentives</dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Blue chips</dt>
-              <dd>Pools of two tokens among USDC, EURC, WETH, cbBTC and AERO</dd>
-            </div>
-            <div class="Pair">
-              <dt class="u-small u-quiet">Thin</dt>
-              <dd>Left out of strategies for having under 1M sAERO weight 8 days ago, now or on average in between</dd>
-            </div>
-          </dl>
-          <section class="u-stack" data-section="check">
-            <dl class="u-stackTight" data-list="contract"></dl>
-          </section>
-        </dialog>
-      </section>
-
-      <section data-view="stake" data-title="sAERO · metaDEX Café" class="u-stack" hidden>
-        <nav aria-label="Back"><a class="Back" href="#aero">Aero</a></nav>
-        <h1 tabindex="-1" data-text="name"></h1>
-        <div class="u-stack" data-text="stake" data-state="loading">
-          <div class="u-stack" data-when="loading" aria-hidden="true">
-            <p class="Pill u-small"><span data-loading>Loading…</span></p>
-            <ul class="Facts Facts--tiles">
-              <li class="Facts-tile Skeleton-item"></li>
-              <li class="Facts-tile Skeleton-item"></li>
-            </ul>
-          </div>
-          <p class="u-small" data-when="failed">This sAERO could not be read.</p>
-          <p class="u-small" data-when="empty">No such sAERO.</p>
-          <div class="u-stack" data-when="ready">
-            <p class="Pill u-small" data-text="hold"></p>
-            <dl class="Facts Facts--tiles">
-              <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel"><code>sAERO</code></dt>
-                <dd class="Facts-value Facts-figure" data-text="amount"></dd>
-                <dd class="Facts-tileNote u-small u-quiet" data-text="lock"></dd>
-              </div>
-              <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">On Base</dt>
-                <dd class="Facts-value Facts-figure" data-text="on-base"></dd>
-                <dd class="Facts-tileNote u-small u-quiet" data-text="pools"></dd>
-              </div>
-              <div class="Facts-tile" data-text="idle-row">
-                <dt class="u-label Facts-tileLabel">Not allocated</dt>
-                <dd class="Facts-value Facts-figure" data-text="idle"></dd>
-                <dd class="Facts-tileNote u-small u-quiet">sAERO weight, earning nothing</dd>
-              </div>
-              <div class="Facts-tile" data-text="elsewhere-row">
-                <dt class="u-label Facts-tileLabel">Other chains</dt>
-                <dd class="Facts-value Facts-figure" data-text="elsewhere"></dd>
-                <dd class="Facts-tileNote u-small u-quiet">sAERO weight, not shown here</dd>
-              </div>
-              <div class="Facts-tile" data-text="owner-row">
-                <dt class="u-label Facts-tileLabel">Owner</dt>
-                <dd class="Facts-value Facts-figure" data-text="owner"></dd>
-              </div>
-            </dl>
-            <p class="u-small" data-text="approval"></p>
-            <p class="u-small" data-text="pending-row"><span data-text="pending"></span></p>
-            <p data-text="manage">
-              <a class="Button Button--secondary" href="https://app.aero.xyz/" target="_blank" rel="noopener"
-                >Allocate or claim on Aero</a
-              >
-            </p>
-            <section class="u-stack u-gapAbove" aria-labelledby="stake-record-title" data-text="record">
-              <h2 id="stake-record-title">Record</h2>
-              <dl class="Facts Facts--tiles">
-                <div class="Facts-tile">
-                  <dt class="u-label Facts-tileLabel">Since it allocated</dt>
-                  <dd class="Facts-value Facts-figure" data-text="since"></dd>
-                  <dd class="Facts-tileNote u-small u-quiet" data-text="since-note"></dd>
-                </div>
-                <div class="Facts-tile">
-                  <dt class="u-label Facts-tileLabel">Its pools</dt>
-                  <dd class="Facts-value Facts-figure" data-text="paid"></dd>
-                  <dd class="Facts-tileNote u-small u-quiet" data-text="paid-note"></dd>
-                </div>
-              </dl>
-              <div class="u-scroll">
-                <table>
-                  <caption class="u-visuallyHidden">
-                    Its pools on Base
-                  </caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Pool</th>
-                      <th scope="col">Share</th>
-                      <th scope="col">sAERO weight</th>
-                      <th scope="col">Since it allocated</th>
-                      <th scope="col">Last 8 days</th>
-                    </tr>
-                  </thead>
-                  <tbody data-list="share"></tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-        </div>
-      </section>
-
-      <section data-view="pool" data-title="Aero pool · metaDEX Café" class="u-stack" hidden>
-        <nav aria-label="Back"><a class="Back" href="#aero">Aero</a></nav>
-        <h1 tabindex="-1" data-text="name"></h1>
-        <div class="u-stack" data-text="pool" data-state="loading">
-          <div class="u-stack" data-when="loading" aria-hidden="true">
-            <p class="Pill u-small"><span data-loading>Loading…</span></p>
-            <ul class="Facts Facts--tiles">
-              <li class="Facts-tile Skeleton-item"></li>
-              <li class="Facts-tile Skeleton-item"></li>
-            </ul>
-          </div>
-          <p class="u-small" data-when="failed" data-text="pool-failed">Aero's pools could not be read.</p>
-          <p class="u-small" data-when="empty">No such pool on Aero.</p>
-          <div class="u-stack" data-when="ready">
-            <p class="Pill u-small" data-text="status"></p>
-            <p class="Notice" data-text="thin"></p>
-            <dl class="Facts Facts--tiles">
-              <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">sAERO weight</dt>
-                <dd class="Facts-value Facts-figure" data-text="power"></dd>
-              </div>
-              <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">Protocol revenue</dt>
-                <dd class="Facts-value Facts-figure" data-text="paid"></dd>
-                <dd class="Facts-tileNote u-small u-quiet" data-text="paid-note"></dd>
-              </div>
-              <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">Incentives</dt>
-                <dd class="Facts-value Facts-figure" data-text="stream"></dd>
-                <dd class="Facts-tileNote u-small u-quiet" data-text="programs"></dd>
-              </div>
-              <div class="Facts-tile">
-                <dt class="u-label Facts-tileLabel">Emissions cap</dt>
-                <dd class="Facts-value Facts-figure" data-text="cap"></dd>
-                <dd class="Facts-tileNote u-small u-quiet" data-text="cap-note"></dd>
-              </div>
-            </dl>
-            <section class="u-stack u-gapAbove" aria-labelledby="pool-windows-title">
-              <h2 id="pool-windows-title">APR</h2>
-              <div class="u-scroll">
-                <table>
-                  <caption class="u-visuallyHidden">
-                    Its APR over the last 48 hours, 4 days and 8 days
-                  </caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Last</th>
-                      <th scope="col">Fees</th>
-                      <th scope="col">Incentives</th>
-                      <th scope="col">In all</th>
-                    </tr>
-                  </thead>
-                  <tbody data-list="window"></tbody>
-                </table>
-              </div>
-            </section>
-            <section
-              class="u-stack u-gapAbove"
-              aria-labelledby="pool-days-title"
-              data-text="history"
-              data-state="loading"
-            >
-              <h2 id="pool-days-title">Day by day</h2>
-              <ul class="Skeleton" data-when="loading" aria-hidden="true">
-                <li class="Skeleton-item"></li>
-                <li class="Skeleton-item"></li>
-              </ul>
-              <p class="u-small" data-when="failed">Its history could not be read.</p>
-              <p class="u-small" data-when="empty">No history yet.</p>
-              <div class="u-scroll" data-when="ready">
-                <table>
-                  <caption class="u-visuallyHidden">
-                    Its fees' APR each day, in UTC
-                  </caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Day, UTC</th>
-                      <th scope="col">sAERO weight</th>
-                      <th scope="col">Fees APR</th>
-                    </tr>
-                  </thead>
-                  <tbody data-list="day"></tbody>
-                </table>
-              </div>
-            </section>
-            <section class="u-stack u-gapAbove" aria-labelledby="pool-programs-title" data-text="programs-section">
-              <h2 id="pool-programs-title">Live incentives</h2>
-              <ul class="u-stackTight u-small" data-list="program"></ul>
-            </section>
-            <section class="u-stack u-gapAbove" aria-labelledby="pool-contracts-title">
-              <h2 id="pool-contracts-title">Contracts</h2>
-              <dl class="u-stackTight" data-list="contract"></dl>
-            </section>
-          </div>
-        </div>
-      </section>
-
       <section data-view="swap" data-title="Swap · metaDEX Café" class="u-stack" hidden>
         <nav aria-label="Back"><a class="Back" href="#app">Your wallet</a></nav>
         <header class="u-row">
@@ -1353,24 +1353,6 @@
         <button type="button" class="Button--secondary Button--compact" data-action="reset">Reset</button>
       </li>
     </template>
-    <template id="account">
-      <li class="Card Linked Ticks">
-        <label class="Ticks-target"><input class="Ticks-box" type="checkbox" data-action="pick" /></label>
-        <div class="u-grow">
-          <a class="Linked-cover Card-title" data-text="link"></a>
-          <p class="u-small u-quiet"><span data-text="power"></span><span data-text="earned"></span></p>
-          <p class="u-small" data-text="status"></p>
-          <p class="u-small" data-text="late"></p>
-        </div>
-      </li>
-    </template>
-    <template id="pool">
-      <tr>
-        <td data-text="pool"></td>
-        <td class="u-figures" data-text="share"></td>
-        <td class="u-figures" data-text="worth"></td>
-      </tr>
-    </template>
     <template id="step">
       <tr>
         <td data-text="when"></td>
@@ -1478,6 +1460,24 @@
     </template>
     <template id="program">
       <li><span data-text="words"></span> <span class="u-quiet" data-text="until"></span></li>
+    </template>
+    <template id="account">
+      <li class="Card Linked Ticks">
+        <label class="Ticks-target"><input class="Ticks-box" type="checkbox" data-action="pick" /></label>
+        <div class="u-grow">
+          <a class="Linked-cover Card-title" data-text="link"></a>
+          <p class="u-small u-quiet"><span data-text="power"></span><span data-text="earned"></span></p>
+          <p class="u-small" data-text="status"></p>
+          <p class="u-small" data-text="late"></p>
+        </div>
+      </li>
+    </template>
+    <template id="pool">
+      <tr>
+        <td data-text="pool"></td>
+        <td class="u-figures" data-text="share"></td>
+        <td class="u-figures" data-text="worth"></td>
+      </tr>
     </template>
     <template id="apr"><small class="u-aside"> APR</small></template>
     <template id="output">

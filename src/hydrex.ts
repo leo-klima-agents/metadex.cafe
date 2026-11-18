@@ -31,17 +31,15 @@ export type MatchaLatte = {
   voted?: number | undefined;
   feeBps?: bigint | undefined;
   maxFeeBps?: bigint | undefined;
-  feeRecipient?: Address | undefined;
 };
 export async function readMatchaLatte(): Promise<MatchaLatte> {
-  const [time, retire, retired, voted, feeBps, maxFeeBps, feeRecipient] = await read([
+  const [time, retire, retired, voted, feeBps, maxFeeBps] = await read([
     blockTime,
     matchaLatte("retireBps"),
     matchaLatte("totalTonnesRetired"),
     voter("lastVoted", MATCHA_LATTE.address),
     matchaLatte("treasuryFeeBps"),
     matchaLatte("MAX_TREASURY_FEE_BPS"),
-    matchaLatte("treasury"),
   ]);
   const [at, retireBps, tonnes] = required([time, retire, retired]);
   sawBlock(Number(at));
@@ -52,7 +50,6 @@ export async function readMatchaLatte(): Promise<MatchaLatte> {
     voted: voted === undefined ? undefined : Number(voted),
     feeBps,
     maxFeeBps,
-    feeRecipient,
   };
 }
 // The share of a payout's kVCM, in basis points, that reaches the owner. Matcha Latte retires its share first, then
