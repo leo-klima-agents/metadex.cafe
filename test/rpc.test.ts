@@ -57,8 +57,7 @@ test("sliced work gives the page turns while it runs, and keeps the order of wha
   const out = await sliced([1, 2, 3, 4, 5, 6], (each, i) => {
     busy(6);
     return each * 10 + i;
-  });
-  clearInterval(other);
+  }).finally(() => clearInterval(other));
   assert.deepEqual(out, [10, 21, 32, 43, 54, 65]);
   // 36 ms of work in slices of about 10 ms: the timer gets a turn between slices.
   assert.ok(turns >= 2, `${turns} turns`);
@@ -211,19 +210,23 @@ test("a busy RPC hands over to the next; an unwanted answer is taken only when n
 // A fresh copy of rpc.ts, so that what one test teaches it about the RPCs doesn't carry over to the next.
 const fresh = async () => (await import(`../src/rpc.ts?${Math.random()}`)) as typeof import("../src/rpc.ts");
 const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
-const [ZIPPER, OTHER] = RPCS as [string, string];
+// The first RPC reads gzip, and so may the next ones. `OTHER` is the first that doesn't, and `NEXT` the second RPC.
+const ZIPPER = RPCS[0]!;
+const OTHER = RPCS[GZIP_RPCS.length]!;
+const NEXT = RPCS[1]!;
+const zips = (url: string): boolean => GZIP_RPCS.includes(url);
 const LARGE = ["0x" + "ab".repeat(GZIP_FROM)];
 const SMALL = ["0x"];
 
 test("large requests go gzipped to the RPCs that read gzip, and plain to the others", async () => {
-  assert.deepEqual(GZIP_RPCS, [ZIPPER], "the RPC asked first reads gzip");
+  assert.deepEqual(GZIP_RPCS, RPCS.slice(0, GZIP_RPCS.length), "the RPCs asked first read gzip");
   const { rpc } = await fresh();
   const asked: [string, boolean][] = [];
   let down = false;
   serve((url, { params }, gzipped) => {
     asked.push([url, gzipped]);
     assert.ok(params[0] === SMALL[0] || params[0] === LARGE[0], "the body is read back as it was sent");
-    return url === ZIPPER && down ? new Response("", { status: 503 }) : reply("0x1");
+    return zips(url) && down ? new Response("", { status: 503 }) : reply("0x1");
   });
   const askedFor = async (params: string[]) => {
     asked.length = 0;
@@ -233,10 +236,7 @@ test("large requests go gzipped to the RPCs that read gzip, and plain to the oth
   assert.deepEqual(await askedFor(SMALL), [[ZIPPER, false]]);
   assert.deepEqual(await askedFor(LARGE), [[ZIPPER, true]]);
   down = true;
-  assert.deepEqual(await askedFor(LARGE), [
-    [ZIPPER, true],
-    [OTHER, false],
-  ]);
+  assert.deepEqual(await askedFor(LARGE), [...GZIP_RPCS.map((url) => [url, true]), [OTHER, false]]);
 });
 
 test("an RPC that says it can't read gzip is sent the request again plain, and plain ones from then on", async () => {
@@ -267,7 +267,7 @@ test("a JSON-RPC error or a busy answer to a gzipped request is not taken as gzi
   assert.equal(await rpc("eth_call", LARGE), "0x1");
   assert.deepEqual(asked, [
     [ZIPPER, true],
-    [OTHER, false],
+    [NEXT, zips(NEXT)],
   ]);
   for (const status of [408, 429, 503]) {
     answer = () => new Response("<html>", { status });
@@ -352,11 +352,11 @@ test("an RPC that was busy is asked first again once its rest is over", async ()
     return url === ZIPPER && busy ? new Response("", { status: 429 }) : reply("0x1");
   });
   assert.equal(await rpc("eth_call", SMALL), "0x1");
-  assert.deepEqual(asked, [ZIPPER, OTHER]);
+  assert.deepEqual(asked, [ZIPPER, NEXT]);
   busy = false;
   asked.length = 0;
   assert.equal(await rpc("eth_call", SMALL), "0x1");
-  assert.deepEqual(asked, [OTHER], "while it rests, the next one is asked first");
+  assert.deepEqual(asked, [NEXT], "while it rests, the next one is asked first");
   await wait(1_050);
   asked.length = 0;
   assert.equal(await rpc("eth_call", SMALL), "0x1");

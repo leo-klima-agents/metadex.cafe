@@ -276,14 +276,10 @@ function allocateWords(stake: Stake | undefined, stakes: Stake[], rows: Part[], 
   ];
 }
 
-// Starts the reads that the Aero page waits on, as `drawAero` would, so that it opens with them done or under way: the
-// market, past prices, the snapshots the chosen strategy needs, the Autopilot's record, and the shown stake's moves.
+// Starts the reads that the Aero page waits on, as `drawAero` does, so that it opens with them done or under way.
 export function preloadAero(): void {
-  andThen(data.market(), (found) => data.pastFor(aero.timesFor(found, strategyOf(found).hours)));
-  data.pricesThen();
-  data.autopilotRecord();
-  const stake = stakeFor(data.ownStakes().value ?? []);
-  if (stake) data.stakeMoves(stake);
+  const got = data.market();
+  recordReads(got, strategyOf(got.value), stakeFor(data.ownStakes().value ?? []));
 }
 export function drawAero(): void {
   const got = data.market();
@@ -407,22 +403,29 @@ const waiting = (got: Got<unknown>): boolean => got.value === undefined && !got.
 // Unlike a projection from the last 8 days, its picks never saw the days they are judged on. Null for edited shares,
 // whose own line in the record is hindsight.
 let expectation: Value = undefined;
+// The reads the record waits on: the snapshots the strategy needs, past prices (when they can't be read, the record
+// uses today's prices), the stake's moves (its own weight is already in the pools it was in, so it is not added there
+// again), and the Autopilot's record. `preloadAero` starts them too.
+function recordReads(got: Got<Market>, chosen: aero.Strategy, stake: Stake | undefined) {
+  return {
+    extra: andThen(got, (found) => data.pastFor(aero.timesFor(found, chosen.hours))),
+    pricing: andThen(got, () => data.pricesThen()),
+    moves: stake ? data.stakeMoves(stake) : ({ value: null } as Got<aero.Move[] | null>),
+    record: data.autopilotRecord(),
+  };
+}
 // Draws the record, and gives `expectation`.
 function drawRecord(got: Got<Market>, amount: number, stake: Stake | undefined): Value {
   const chosen = strategyOf(got.value);
-  const extra = andThen(got, (found) => data.pastFor(aero.timesFor(found, chosen.hours)));
+  const { extra, pricing, moves, record: pilotRecord } = recordReads(got, chosen, stake);
   fill(aeroView, { "record-intro": introOf(chosen) });
-  // Past prices. When they can't be read, the record uses today's prices.
-  const pricing = andThen(got, () => data.pricesThen());
-  // The stake's own weight is already in the pools it was in, so it is not added there again.
-  const moves: Got<aero.Move[] | null> = stake ? data.stakeMoves(stake) : { value: null };
   if (got.value && extra.value && !waiting(pricing) && !waiting(moves))
     basis = {
       market: got.value,
       past: extra.value,
       then: pricing.value,
       own: moves.value ?? (stake && moves.failed ? stillOf(stake) : undefined),
-      record: data.autopilotRecord(),
+      record: pilotRecord,
       stake: stake?.id,
     };
   if (!basis || basis.stake !== stake?.id) {

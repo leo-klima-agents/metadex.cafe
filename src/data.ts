@@ -81,16 +81,17 @@ const autopilots = (): Got<aero.Stake[]> =>
 export const pricesThen = (): Got<aero.Then> =>
   andThen(market(), (found) => {
     const times = aero.stepsOf(found).map(({ from }) => from);
-    const sources = found.prices.sources ?? new Map();
-    const amounts = aero.dayOf(found.gauges, found.time);
     return use(
       `aero prices ${times.join()}`,
-      async () =>
-        new Map(
+      async () => {
+        const sources = found.prices.sources ?? new Map();
+        const amounts = aero.dayOf(found.gauges, found.time);
+        return new Map(
           await Promise.all(
             times.map(async (time) => [time, await pricesFrom(sources, amounts, time, tagged("aero"))] as const),
           ),
-        ),
+        );
+      },
       (then: aero.Then) => ([...then.values()].some(({ unread }) => unread) ? 5 * MINUTE : Infinity),
     );
   });
