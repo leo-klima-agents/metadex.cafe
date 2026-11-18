@@ -82,7 +82,6 @@ export function drawApp(): void {
   fill(view, {
     needs: stateOf(holdings, !needs.length),
     "needs-count": needs.length ? String(needs.length) : "",
-    "swap-yours": state.connection ? swapLine() : null,
     "aero-yours": state.connection ? aeroLine() : null,
     "hydrex-yours": !state.connection
       ? null
@@ -97,6 +96,7 @@ export function drawApp(): void {
           });
           return [count(full.length, "Hydrex account", "Hydrex accounts"), ...counts].join(" · ");
         }),
+    "swap-yours": state.connection ? swapLine() : null,
   });
   list(
     $("[data-list=need]", view),

@@ -24,7 +24,7 @@ export function figure(value: bigint, decimals: number): string {
   const n = Number(value) / 10 ** decimals;
   return n >= 10_000 ? whole.format(n) : fourDigits.format(n);
 }
-// An 18-decimal amount, such as earning power or sAERO, with an SI prefix: "897k", "1.17M".
+// An 18-decimal amount, such as sAERO or earning power, with an SI prefix: "897k", "1.17M".
 export function compact(value: bigint): string {
   const n = Number((Number(value / 10n ** 15n) / 1000).toPrecision(3));
   const [scale, suffix] = (

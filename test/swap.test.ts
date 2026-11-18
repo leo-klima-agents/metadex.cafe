@@ -87,7 +87,8 @@ test("a token's routes go to the output straight, or through WETH, USDC or cbBTC
 test("the swapper's twelve exchanges each have their place, and a route names its tokens, then each venue once", () => {
   const ids = BY_ID.map(({ id }) => id);
   assert.deepEqual(ids, [...Array(12).keys()]);
-  assert.deepEqual([...new Set(ids.map((id) => venueOf(hop(id))))], ["Hydrex", "Aero", "Aerodrome", "Uniswap"]);
+  const venues = EXCHANGES.map(({ id }) => venueOf(hop(id)));
+  assert.deepEqual([...new Set(venues)], ["Aero", "Aerodrome", "Uniswap", "Hydrex"]);
   const words = (...hops: Hop[]) => hopsWords(route(1n, hops), TOKENS);
   assert.equal(words(hop(6)), "AVNT → USDC via Aerodrome");
   assert.equal(words(hop(6, WETH), hop(8)), "AVNT → WETH → USDC via Aerodrome");
@@ -192,7 +193,7 @@ test("a pair is looked up on every exchange, fee and spacing; a v4 pool counts o
       return [n & 1n, 0n, 0n, n & 2n].map((word) => numberToHex(word, { size: 32 }));
     });
   const ways = await waysFor([[AVNT, USDC]], undefined, rd);
-  assert.equal(lookups, 20, "Hydrex 3, Aero 4, Aerodrome 4, Uniswap v2 1, v3 4, v4 4");
+  assert.equal(lookups, 20, "Aero 4, Aerodrome 4, Uniswap v4 4, v3 4, v2 1, Hydrex 3");
   const found = ways.get(pairKey(AVNT, USDC))!.map((way) => [way.exchange, way.pool, way.fee, way.tickSpacing]);
   assert.deepEqual(found.flat(), [0, POOL, 0, 0, 11, zeroAddress, 10_000, 200]);
 });

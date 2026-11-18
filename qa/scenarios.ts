@@ -33,6 +33,13 @@ const PAYEE = getAddress("0x60924601e73ebc5c2bd9244c788d93e0710a6c93");
 
 export const SCENARIOS: Scenario[] = [
   {
+    name: "aero",
+    title: "Mon 16 Nov 2026, after Base Denim: a wallet with 25 sAERO stakes to allocate, none locked",
+    block: h.BLOCK,
+    hash: "#aero",
+    owners: [{ address: h.ALLOCATOR, holds: "25 sAERO stakes, none locked; #2848 the largest" }],
+  },
+  {
     name: "hydrex",
     title: "Mon 16 Nov 2026, after Base Denim: both automations, those that stopped, accounts in or out",
     block: h.BLOCK,
@@ -66,13 +73,6 @@ export const SCENARIOS: Scenario[] = [
       ACCOUNTS.at(-1)!,
     ],
     setup: () => h.fund([WETH, h.ZORA, h.AVNT]),
-  },
-  {
-    name: "aero",
-    title: "Mon 16 Nov 2026, after Base Denim: a wallet with 25 sAERO stakes to allocate, none locked",
-    block: h.BLOCK,
-    hash: "#aero",
-    owners: [{ address: h.ALLOCATOR, holds: "25 sAERO stakes, none locked; #2848 the largest" }],
   },
   {
     name: "claim",

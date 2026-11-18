@@ -52,7 +52,7 @@ type Sending = Review & {
 
 const dialog = $<HTMLDialogElement>("#review");
 const refreshAfter = (): void =>
-  ["account", "held", "allowances", "payouts", "aero stake", "aero pending"].forEach(refresh);
+  ["aero stake", "aero pending", "account", "held", "allowances", "payouts"].forEach(refresh);
 let current: Sending | undefined;
 const apart = (review: Sending): boolean => (review.groups?.length ?? 1) > 1;
 const batched = (review: Sending, steps = review.steps()): boolean =>

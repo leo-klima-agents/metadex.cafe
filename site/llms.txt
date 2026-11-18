@@ -1,22 +1,114 @@
 # metaDEX Café
 
-> metaDEX Café is a static page at https://metadex.cafe/ for Hydrex accounts, Aero stakes and token swaps on Base (chain ID 8453). With it, a wallet can join or leave automations that vote with its Hydrex accounts, claim their rewards, swap many tokens into one, and allocate an Aero stake to pools by a strategy. The page has no server, holds no keys and stores nothing.
+> metaDEX Café is a static page at https://metadex.cafe/ for Aero stakes, Hydrex accounts and token swaps on Base (chain ID 8453). With it, a wallet can allocate an Aero stake to pools by a strategy, join or leave automations that vote with its Hydrex accounts, claim their rewards, and swap many tokens into one. The page has no server, holds no keys and stores nothing.
 
 What to know before you read the page or answer questions about it:
 
-- The page is one HTML file. Its views are addresses after `#`, such as `https://metadex.cafe/#hydrex`, so every link
+- The page is one HTML file. Its views are addresses after `#`, such as `https://metadex.cafe/#aero`, so every link
   under "Views" returns that same file.
 - The page needs JavaScript. It reads every figure (APRs, balances, payouts, quotes) in the browser, from Base, through
   three public RPCs: `https://base.drpc.org`, `https://mainnet.base.org` and `https://base-rpc.publicnode.com`. A fetch
   of the page gives its words and its empty templates, without figures. There is no API. To get a figure, read the
   contracts below from Base, or open the view in a browser.
 - The figures change with each block and each epoch, so this file gives none of them. The APRs on the page are what
-  votes and pools earned in the past: last epoch for Hydrex, the last eight days for Aero.
+  pools and votes earned in the past: the last eight days for Aero, last epoch for Hydrex.
 - The page works through the user's own wallet: a browser wallet (EIP-6963), or Safe{Wallet} with
   `https://metadex.cafe/` added as a custom app. It never asks for a seed phrase or a private key. Each allocation and
   each swap is simulated on Base before the wallet asks for a signature.
 - The official address is `https://metadex.cafe/`. The same files are on IPFS under the ENS name `metadexcafe.eth`.
   The page stores no cookies.
+
+## Aero
+
+An Aero stake (sAERO) has a weight that its owner allocates to pools. Each pool shares its protocol revenue (its
+trading fees and incentives) in proportion to the sAERO weight in it. Stakes are numbered. A new allocation replaces the
+stake's allocation on Base, which then can't change for a time that Aero sets (47 hours today). This is why the
+strategies move every 48 hours.
+
+The page has two strategies, **Follow the leaders** and **Follow revenue**. Both pick from the same pools and judge them
+on the same figures. They differ only in how they split the stake. The page runs them in the browser and shows their
+picks. Nothing allocates for the user: the owner of the stake signs each allocation, and comes back to allocate again.
+
+### What a strategy knows about a pool
+
+At the time of a pick, a strategy works out two figures for each pool.
+
+What the pool pays a day, `P`, in the currency the page shows:
+
+- Its trading fees over the 8 days (192 hours) before the pick, per day, taken to repeat. They come from the pool's
+  rewards manager on Base, which keeps a running sum of the fees it paid per unit of sAERO weight.
+- Plus its incentives: what the pool's incentive programs that have already started will stream while the allocation
+  is held, per day. That is the next 48 hours in the record, and Aero's 47 hours for a pick made now.
+- Tokens are valued at their prices at the time of the pick.
+
+The sAERO weight that shares this pay, `W`: the larger of the pool's weight at the time of the pick and its mean weight
+over the 48 hours before (or over the 8 days, if the last 48 hours can't be read). Taking the larger stops a pool that
+others just left from looking better than it is. The mean is a harmonic mean: times the fees paid per sAERO, it gives
+the fees paid in all, if fees came in evenly.
+
+A pool is a candidate only if:
+
+- its gauge takes allocations (it is activated and its emissions cap is above zero);
+- with "Blue chips only", both its tokens are among USDC, EURC, WETH, cbBTC and AERO;
+- its fees are known for at least 90% of the 8 days, so a newer pool is left out;
+- every token it pays has a price;
+- it is not thin: its sAERO weight was at least 1,000,000 at the start of the 8 days, at the pick, and on average in
+  between.
+
+A strategy picks up to 10 pools, or fewer if Aero allows fewer pools per stake.
+
+### Follow revenue
+
+Follow revenue takes the candidates with the highest pay a day `P`, up to 10, whatever their sAERO weight. Each pool's
+share of the stake is its `P` divided by the sum of these pools' `P`. The picks don't depend on the size of the stake.
+
+### Follow the leaders
+
+Follow the leaders looks at pay per sAERO, and counts what the stake itself does to it. For a stake of `A` sAERO, write
+`O` for a pool's weight `W` less the stake's own sAERO already in that pool. A share `w` of the stake in a pool makes
+each sAERO there earn `P / (O + w × A)`.
+
+- The average is what each sAERO would earn if all candidates were one pool with the stake in it: `a = ΣP / (ΣO + A)`.
+- A pool's lead is how much more each of its sAERO earns than the average, with the stake's share in it:
+  `P / (O + w × A) − a`.
+- Each share is in proportion to its pool's lead: `w = c × (P / (O + w × A) − a)`, or 0 where that is negative. The
+  scale `c` is the one that makes the shares add up to 100%. So pools that pay more per sAERO get more, a larger stake
+  spreads over more pools, and no pool is filled past the average.
+- Then the 10 largest shares are kept, shares under 1% are dropped (the largest share is always kept), and the shares
+  are worked out again over the pools that are left, until nothing is dropped.
+- If those pools can't take the whole stake and stay above the average, the stake goes instead to up to 10 pools, each
+  filled until they all pay the same per sAERO: `w × A = P / L − O`. The pools are the ones that make this pay `L` as
+  high as possible. Shares under 1% are dropped in the same way.
+
+With a stake chosen, `A` is the sAERO weight the stake can allocate on Base: what it has on Base, plus what it has on
+no chain. Otherwise `A` is the amount typed in the page, which is 10,000 sAERO at first.
+
+### Allocating now
+
+The table under "Allocate now" shows the chosen strategy's picks for a pick made now, each with its share and its
+projected APR: its pay a day `P` over its weight `W` plus the stake's share. The owner can change the shares, add other
+pools, or start from the stake's current allocation. The shares must add up to 100%. The allocation is simulated on Base
+before the wallet asks for a signature.
+
+### The record
+
+"If you had started 8 days ago" shows what each strategy would have earned over the last 8 days, in four steps of 48
+hours counted back from the current hour.
+
+- With "Come back every 48 h to pick again", each strategy picks at the start of every step, from only what was known
+  then: the 8 days before that time, the prices then, and where the stake's own sAERO was then. Without it, each
+  strategy picks once, 8 days ago, and holds those pools for all four steps.
+- A step's figure is what the picked pools really paid over that step, fees and incentives, shared by each pool's mean
+  sAERO weight over the step plus the stake's share. Tokens are valued at the mean of their prices at the step's two
+  ends.
+- An APR is the pay a day per sAERO, times 365, over AERO's price: each sAERO counts as one AERO.
+- **Autopilot** is Aero's "Autopilot USDC Maxi" stake as it actually allocated, with each step split where it moved.
+- **Base average** is what all the pools paid over all their sAERO weight.
+- **Custom allocation**, the dashed line, is the shares the user set today, held for all 8 days. It has hindsight, which
+  the strategies don't.
+
+The page also shows each stake's pools, when it can be allocated again and what it can claim, and each pool's APR day
+by day.
 
 ## Hydrex
 
@@ -138,98 +230,6 @@ epochs. It is sent only if it collects at least $5 and its gas costs at most 5% 
 Smaller rewards wait until they add up to $5. Anyone can claim for an account in Double Espresso at any time, at the
 same 1% fee, and the page does this for an owner whose payout is late.
 
-## Aero
-
-An Aero stake (sAERO) has a weight that its owner allocates to pools. Each pool shares its protocol revenue (its
-trading fees and incentives) in proportion to the sAERO weight in it. Stakes are numbered. A new allocation replaces the
-stake's allocation on Base, which then can't change for a time that Aero sets (47 hours today). This is why the
-strategies move every 48 hours.
-
-The page has two strategies, **Follow the leaders** and **Follow revenue**. Both pick from the same pools and judge them
-on the same figures. They differ only in how they split the stake. The page runs them in the browser and shows their
-picks. Nothing allocates for the user: the owner of the stake signs each allocation, and comes back to allocate again.
-
-### What a strategy knows about a pool
-
-At the time of a pick, a strategy works out two figures for each pool.
-
-What the pool pays a day, `P`, in the currency the page shows:
-
-- Its trading fees over the 8 days (192 hours) before the pick, per day, taken to repeat. They come from the pool's
-  rewards manager on Base, which keeps a running sum of the fees it paid per unit of sAERO weight.
-- Plus its incentives: what the pool's incentive programs that have already started will stream while the allocation
-  is held, per day. That is the next 48 hours in the record, and Aero's 47 hours for a pick made now.
-- Tokens are valued at their prices at the time of the pick.
-
-The sAERO weight that shares this pay, `W`: the larger of the pool's weight at the time of the pick and its mean weight
-over the 48 hours before (or over the 8 days, if the last 48 hours can't be read). Taking the larger stops a pool that
-others just left from looking better than it is. The mean is a harmonic mean: times the fees paid per sAERO, it gives
-the fees paid in all, if fees came in evenly.
-
-A pool is a candidate only if:
-
-- its gauge takes allocations (it is activated and its emissions cap is above zero);
-- with "Blue chips only", both its tokens are among USDC, EURC, WETH, cbBTC and AERO;
-- its fees are known for at least 90% of the 8 days, so a newer pool is left out;
-- every token it pays has a price;
-- it is not thin: its sAERO weight was at least 1,000,000 at the start of the 8 days, at the pick, and on average in
-  between.
-
-A strategy picks up to 10 pools, or fewer if Aero allows fewer pools per stake.
-
-### Follow revenue
-
-Follow revenue takes the candidates with the highest pay a day `P`, up to 10, whatever their sAERO weight. Each pool's
-share of the stake is its `P` divided by the sum of these pools' `P`. The picks don't depend on the size of the stake.
-
-### Follow the leaders
-
-Follow the leaders looks at pay per sAERO, and counts what the stake itself does to it. For a stake of `A` sAERO, write
-`O` for a pool's weight `W` less the stake's own sAERO already in that pool. A share `w` of the stake in a pool makes
-each sAERO there earn `P / (O + w × A)`.
-
-- The average is what each sAERO would earn if all candidates were one pool with the stake in it: `a = ΣP / (ΣO + A)`.
-- A pool's lead is how much more each of its sAERO earns than the average, with the stake's share in it:
-  `P / (O + w × A) − a`.
-- Each share is in proportion to its pool's lead: `w = c × (P / (O + w × A) − a)`, or 0 where that is negative. The
-  scale `c` is the one that makes the shares add up to 100%. So pools that pay more per sAERO get more, a larger stake
-  spreads over more pools, and no pool is filled past the average.
-- Then the 10 largest shares are kept, shares under 1% are dropped (the largest share is always kept), and the shares
-  are worked out again over the pools that are left, until nothing is dropped.
-- If those pools can't take the whole stake and stay above the average, the stake goes instead to up to 10 pools, each
-  filled until they all pay the same per sAERO: `w × A = P / L − O`. The pools are the ones that make this pay `L` as
-  high as possible. Shares under 1% are dropped in the same way.
-
-With a stake chosen, `A` is the sAERO weight the stake can allocate on Base: what it has on Base, plus what it has on
-no chain. Otherwise `A` is the amount typed in the page, which is 10,000 sAERO at first.
-
-### Allocating now
-
-The table under "Allocate now" shows the chosen strategy's picks for a pick made now, each with its share and its
-projected APR: its pay a day `P` over its weight `W` plus the stake's share. The owner can change the shares, add other
-pools, or start from the stake's current allocation. The shares must add up to 100%. The allocation is simulated on Base
-before the wallet asks for a signature.
-
-### The record
-
-"If you had started 8 days ago" shows what each strategy would have earned over the last 8 days, in four steps of 48
-hours counted back from the current hour.
-
-- With "Come back every 48 h to pick again", each strategy picks at the start of every step, from only what was known
-  then: the 8 days before that time, the prices then, and where the stake's own sAERO was then. Without it, each
-  strategy picks once, 8 days ago, and holds those pools for all four steps.
-- A step's figure is what the picked pools really paid over that step, fees and incentives, shared by each pool's mean
-  sAERO weight over the step plus the stake's share. Tokens are valued at the mean of their prices at the step's two
-  ends.
-- An APR is the pay a day per sAERO, times 365, over AERO's price: each sAERO counts as one AERO.
-- **Autopilot** is Aero's "Autopilot USDC Maxi" stake as it actually allocated, with each step split where it moved.
-- **Base average** is what all the pools paid over all their sAERO weight.
-- **Custom allocation**, the dashed line, is the shares the user set today, held for all 8 days. It has hindsight, which
-  the strategies don't.
-
-The page also shows each stake's pools, when it can be allocated again and what it can claim, and each pool's APR day
-by day.
-
 ## Swap
 
 The page swaps many tokens into one, through pools of Aero, Aerodrome, Hydrex and Uniswap. The output is USDC, EURC,
@@ -248,32 +248,32 @@ Sums can be shown in USD, EUR, GBP, CHF, AUD or CAD.
 
 - [Home](https://metadex.cafe/): The start of the page, with a link to the app.
 - [Your wallet](https://metadex.cafe/#app): What needs the connected wallet now, and links to Aero, Hydrex and Swap. `#app/allows` lists the approvals the wallet gave to automations and swap contracts.
+- [Aero](https://metadex.cafe/#aero): The two strategies, their record over eight days, and allocating a stake. Sections: `#aero/how`, `#aero/check`.
 - [Hydrex](https://metadex.cafe/#hydrex): Both automations, voting yourself, and the wallet's Hydrex accounts by status.
 - [Matcha Latte](https://metadex.cafe/#hydrex/matcha-latte): What it takes, what it pays in, last epoch's APR, and the accounts that can join. Sections: `/fees`, `/control`, `/check`, `/record`.
 - [Double Espresso](https://metadex.cafe/#hydrex/double-espresso): The same for Double Espresso, with claims. Sections: `/fees`, `/control`, `/check`, `/record`.
-- [Aero](https://metadex.cafe/#aero): The two strategies, their record over eight days, and allocating a stake. Sections: `#aero/how`, `#aero/check`.
 - [Swap](https://metadex.cafe/#swap): Swapping into USDC. Sections: `#swap/fees`, `#swap/check`, `#swap/approvals`.
 - [About](https://metadex.cafe/#about): The official address, the ENS name, where prices come from, and the version.
 
 Other addresses take a number, a token or a contract:
 
-- `#hydrex/<number>` is one Hydrex account, such as `#hydrex/9540`: its lock, its earning power, last epoch and its
-  last payout.
 - `#aero/<number>` is one Aero stake, such as `#aero/20366`: its pools and its record.
 - `#aero/pool/<gauge address>` is one Aero pool, by its gauge: its sAERO weight, its protocol revenue, its APR over the
   last 48 hours, 4 days and 8 days, and its fees' APR day by day.
+- `#hydrex/<number>` is one Hydrex account, such as `#hydrex/9540`: its lock, its earning power, last epoch and its
+  last payout.
 - `#swap/<token>` swaps into `usdc`, `eurc`, `weth`, `cbbtc`, `aero` or `hydx`.
 
 Any other address shows Home.
 
 ## Contracts on Base
 
+- [Aero escrow](https://basescan.org/address/0xBF7977E1521e9a3032bf7243Ee4712f311f13915): Holds the Aero stakes.
+- [Aero Voter](https://basescan.org/address/0x49d7d4f17Ec56Ef8fA04E464AF5D1A4942CC31e6): The contract that allocating a stake calls.
 - [Hydrex VotingEscrow](https://basescan.org/address/0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1): Holds the Hydrex accounts and their approvals.
 - [Hydrex Voter](https://basescan.org/address/0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b): Records the votes of Hydrex accounts.
 - [Matcha Latte](https://basescan.org/address/0xdE91885cF35ac57DF0c4A75c16862127dBe8317c): Hydrex's automation, a KlimaVeTokenConduit.
 - [Double Espresso](https://basescan.org/address/0x692c323B425A9DfeebE302F56168a7798D93EAC5): The automation with no owner, an ImmutableVeTokenConduit.
-- [Aero escrow](https://basescan.org/address/0xBF7977E1521e9a3032bf7243Ee4712f311f13915): Holds the Aero stakes.
-- [Aero Voter](https://basescan.org/address/0x49d7d4f17Ec56Ef8fA04E464AF5D1A4942CC31e6): The contract that allocating a stake calls.
 - [ImmutableSwapper to USDC](https://basescan.org/address/0x31791f453d2100e728E012c9e189C0828adf4b6F): Swaps many tokens into USDC.
 - [ImmutableSwapper to EURC](https://basescan.org/address/0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E): Swaps many tokens into EURC.
 - [ImmutableSwapper to WETH](https://basescan.org/address/0xe5cbD828c2227E17f7FF8BD54C7A1e6012694Ff2): Swaps many tokens into WETH.
@@ -283,6 +283,6 @@ Any other address shows Home.
 
 ## Optional
 
-- [Hydrex](https://www.hydrex.fi/): Hydrex's own app, to lock HYDX, vote yourself and claim leftovers.
 - [Aero](https://app.aero.xyz/): Aero's own app, to allocate or claim a stake there.
+- [Hydrex](https://www.hydrex.fi/): Hydrex's own app, to lock HYDX, vote yourself and claim leftovers.
 - [metaDEX Café on IPFS](https://metadexcafe.eth.limo/): The same page, served from the content hash of `metadexcafe.eth`.

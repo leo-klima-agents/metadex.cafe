@@ -7,7 +7,7 @@ import { cacheFileOf, forkUrl, pruneCaches, serveCached, upstreamOf } from "./rp
 // Runs the browser test files in parallel, each with its own anvil. They all fork `BLOCK` through one cache and one
 // queue to `BASE_RPC_URL`, or else to Base's RPC (see rpc-cache.ts). Arguments are passed to `node --test`:
 // files to run (all of them by default), or options.
-const FILES = ["fork/views.ts", "fork/joins.ts", "fork/payouts.ts", "fork/swap.ts", "fork/aero.ts"];
+const FILES = ["fork/views.ts", "fork/aero.ts", "fork/joins.ts", "fork/payouts.ts", "fork/swap.ts"];
 const args = process.argv.slice(2);
 const named = args.some((arg) => !arg.startsWith("-"));
 const upstream = upstreamOf(forkUrl(BASE_RPC));

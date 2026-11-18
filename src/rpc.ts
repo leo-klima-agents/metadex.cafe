@@ -147,7 +147,7 @@ export const now = (): number => Math.floor(Date.now() / 1000) + drift;
 
 // What a read is for. Reads with no tag, or with a tag of the page on show, go first. The others take at most `BEHIND`
 // of the `MAX` slots. So the page on show, whose reads often wait on one another, always has the rest.
-export type Tag = "earnings" | "average" | "shares" | "payouts" | "swap" | "aero";
+export type Tag = "aero" | "earnings" | "average" | "shares" | "payouts" | "swap";
 const MAX = 6;
 const BEHIND = 2;
 let shown = new Set<Tag>();
