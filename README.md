@@ -20,13 +20,13 @@ The page shows how both strategies did over the last eight days, against Aero's 
 against the Base average. You can then allocate a stake on Base to a strategy's picks, or set your own shares across any
 pools. The allocation is simulated on Base before the wallet asks you to sign.
 
-The page has no server, holds no keys and stores nothing. It reads Base through three public RPCs:
-`https://base.drpc.org`, `https://mainnet.base.org` and `https://base-rpc.publicnode.com`, asked in that order. Its
-Content Security Policy lets it connect to these hosts only. Requests of 1 KB or more go to drpc gzipped. Prices come
-from Chainlink feeds and from pools on Base. Pool prices are averages over the 30 minutes before a block. Prices are
-read from past blocks, so they need an RPC that serves old blocks. Before anyone can join, the page checks Base against
-the contracts it trusts (`src/config.ts`). If a check fails, joining is turned off and the page says why. Leaving always
-works.
+The page has no server, holds no keys and stores nothing. It reads Base through four public RPCs:
+`https://base.drpc.org`, `https://base-mainnet.public.blastapi.io`, `https://mainnet.base.org` and
+`https://base-rpc.publicnode.com`, asked in that order. Its Content Security Policy lets it connect to these hosts only.
+Requests of 1 KB or more go to drpc and Blast gzipped. Prices come from Chainlink feeds and from pools on Base. Pool
+prices are averages over the 30 minutes before a block. Prices are read from past blocks, so they need an RPC that
+serves old blocks. Before anyone can join, the page checks Base against the contracts it trusts (`src/config.ts`). If a
+check fails, joining is turned off and the page says why. Leaving always works.
 
 ## Develop
 

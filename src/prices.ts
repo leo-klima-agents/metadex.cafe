@@ -15,7 +15,7 @@ import { memo, refresh } from "./cache.ts";
 import * as config from "./config.ts";
 import type { Anchor, Exchange, ExchangeKind, Fiat, PricedKind } from "./config.ts";
 import { figure, money, moneyAt, type Basis, type Money, type Rates } from "./format.ts";
-import { blockClock, blockTime, call, read, regroup, same, settledBelow, type Call, type Read } from "./rpc.ts";
+import { blockClock, blockTime, call, read, regroup, same, settledBelow, sliced, type Call, type Read } from "./rpc.ts";
 
 export type Token = { address: Address; decimals: number; symbol: string };
 // Prices per whole token, keyed by lower-case address. `unread` is set when some pools could not be read, so some
@@ -133,17 +133,20 @@ function lookupsOn(exchange: Exchange, pair: [Address, Address], spacings: Map<n
 // makes whole contracts whose init code hashes to one of `hashes`. Both use CREATE2, with a salt made from the sorted
 // pair.
 export type Placement = { implementation: Address } | { deployer: Address; hashes: Hex[] };
+// The hash of each implementation's clone code, worked out once, since thousands of pools can share one.
+const cloneHashes = new Map<string, Hex>();
+const cloneHash = (implementation: Address): Hex => {
+  let hash = cloneHashes.get(key(implementation));
+  if (!hash) {
+    hash = keccak256(
+      concat(["0x3d602d80600a3d3981f3363d3d373d3d3d363d73", implementation, "0x5af43d82803e903d91602b57fd5bf3"]),
+    );
+    cloneHashes.set(key(implementation), hash);
+  }
+  return hash;
+};
 const cloneAt = (factory: Address, implementation: Address, salt: Hex): Address =>
-  getContractAddress({
-    opcode: "CREATE2",
-    from: factory,
-    salt,
-    bytecode: concat([
-      "0x3d602d80600a3d3981f3363d3d373d3d3d363d73",
-      implementation,
-      "0x5af43d82803e903d91602b57fd5bf3",
-    ]),
-  });
+  getContractAddress({ opcode: "CREATE2", from: factory, salt, bytecodeHash: cloneHash(implementation) });
 // A Slipstream pool's salt is keccak256(abi.encode(token0, token1, tickSpacing)). `pair` must be sorted by address.
 export const slipstreamPool = (factory: Address, implementation: Address, pair: [Address, Address], spacing: number) =>
   cloneAt(
@@ -305,7 +308,8 @@ async function lookUp(
       needsSpacings ? spacings(rd) : new Map<number, number[]>(),
       placing ? placements(rd).catch(() => new Map<number, Placement>()) : new Map<number, Placement>(),
     ]).then(async ([known, placed]) => {
-      const candidates = missing.map(([, [exchange, pair]]) => {
+      // Thousands of addresses can be worked out here, each with keccak256, so the page is given turns meanwhile.
+      const candidates = await sliced(missing, ([, [exchange, pair]]) => {
         const placement = codeAt && PLACED.includes(exchange.kind) ? placed.get(exchange.id) : undefined;
         if (!placement || (exchange.kind === "slipstream" && !known.has(exchange.id))) return undefined;
         return placedPools(exchange, placement, pair, known.get(exchange.id));

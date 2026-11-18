@@ -7,9 +7,9 @@ What to know before you read the page or answer questions about it:
 - The page is one HTML file. Its views are addresses after `#`, such as `https://metadex.cafe/#aero`, so every link
   under "Views" returns that same file.
 - The page needs JavaScript. It reads every figure (APRs, balances, payouts, quotes) in the browser, from Base, through
-  three public RPCs: `https://base.drpc.org`, `https://mainnet.base.org` and `https://base-rpc.publicnode.com`. A fetch
-  of the page gives its words and its empty templates, without figures. There is no API. To get a figure, read the
-  contracts below from Base, or open the view in a browser.
+  four public RPCs: `https://base.drpc.org`, `https://base-mainnet.public.blastapi.io`, `https://mainnet.base.org` and
+  `https://base-rpc.publicnode.com`. A fetch of the page gives its words and its empty templates, without figures.
+  There is no API. To get a figure, read the contracts below from Base, or open the view in a browser.
 - The figures change with each block and each epoch, so this file gives none of them. The APRs on the page are what
   pools and votes earned in the past: the last eight days for Aero, last epoch for Hydrex.
 - The page works through the user's own wallet: a browser wallet (EIP-6963), or Safe{Wallet} with
