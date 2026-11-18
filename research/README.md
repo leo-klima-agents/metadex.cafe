@@ -17,6 +17,7 @@ node research/fetch-allocations.ts   # every GaugesAllocated event since launch 
 node research/fetch-gauges.ts        # each gauge's rewards manager at every hour since launch (~2 minutes)
 node research/fetch-stakes.ts        # which stakes are still staked
 node research/analyze.ts             # writes results/summary.md and results/strategies.csv (~4 minutes)
+CAP=0.01 OUT=./results/strict node research/analyze.ts   # the strict capacity rule, into results/strict
 node research/validate.ts            # compares rebuilt yields with the site's own APR code
 ```
 
@@ -56,6 +57,11 @@ all its spells. That fraction is the p-value.
 - A placebo holds the same amount of sAERO as the strategy, and that **dilutes** the pool it drew, just as the
   strategy's own power diluted its real pools. Without this, small pools look free to a placebo, and a whale is compared
   with placebos that pay no price for its size.
+- A placebo only goes to a pool that **could absorb its size**: one where its sAERO would be at most 25% of the pool's
+  power, or at most the share the strategy took in the pool it stands for, if that was more. Real stakes take more than
+  25% of a pool in only 1% to 8% of their entries, depending on size. Without this rule, a large strategy's placebos
+  land in pools far too small for them and dilute themselves, which no real stake of that size does. The strategy then
+  looks skilled just for avoiding that. If no pool can absorb the placebo, it takes the largest pool left.
 - Only strategies of at least 100 sAERO and 96 hours in pools are tested. A dust stake that is alone in an empty pool
   earns all of that pool's fees, at APRs in the billions of percent.
 - As a robustness check, the crowd is also defined as **stakes rather than sAERO**: pools are drawn in proportion to how
@@ -81,6 +87,9 @@ from drawing hours uniformly, with no model of yields.
 - **Population checks.** The checks are the share of p-values below 0.05, and those p-values as normal quantiles, which
   have mean 0 and variance 1 when nobody has skill. For timing, the check is the mean rank of every move, which is ½
   with no skill.
+- **Calibration by size.** With no skill, 5% of p-values fall below 0.05 and 10% above 0.9, at every size. A size band
+  that departs from this much more than the others points either to a flaw in the placebos at that size or to an edge
+  that comes with size.
 - **Persistence.** The check is the Spearman correlation between a strategy's selection z-score over the first half of
   the period and over the second half.
 
@@ -90,13 +99,38 @@ The full tables are in [`results/summary.md`](results/summary.md), and every str
 [`results/strategies.csv`](results/strategies.csv). Over the period, the average sAERO in a pool earned an APR of 21.4%
 at today's AERO price. Fees were 99.6% of that and incentives the rest.
 
-**Selection is real, but mostly relative to the largest stakes.** Against a crowd weighted by power, 1,741 of 9,620
-strategies are significant at FDR 10%, and 26% have p < 0.05, against the 5% expected with no skill. Against a crowd of
-stakes, only 116 are significant, and 13% have p < 0.05. Much of the power sits with a few very large stakes in pools
-that pay below average: the three largest, at 71–143 million sAERO, earned 12–18%. A stake that avoids those pools beats
-the sAERO-weighted average without much skill. The edge also persists: selection in the first half predicts selection in
-the second (Spearman ρ = 0.34, against ±0.02 for no relation). However, holding the same good pool counts in both
-halves, so this is not independent evidence of repeated skill.
+**Some stakes pick pools better than the crowd, and much of it is avoiding pools that pay little.**
+
+- **Against a crowd weighted by power:** 1,692 of 9,620 strategies are significant at FDR 10%, and 26% have p < 0.05,
+  against the 5% expected with no skill.
+- **Against a crowd of stakes:** 224 strategies are significant, and 12% have p < 0.05.
+- **Why there is an edge to find:** pool yields don't even out. Over the period, the 15 largest pools paid between about
+  10% (vAMM-AERO/USDC, CL100-RSGP/USDC) and 28% (CL50-USDC/cbBTC, CL10-USDC/SNDKc). A quarter of all power sat in pools
+  paying under 15%, mostly pools with AERO on one side. A stake that keeps out of those pools beats the crowd without
+  needing to know anything else.
+- **Persistence:** selection in the first half predicts selection in the second (Spearman ρ = 0.33, against ±0.02 for no
+  relation). Holding the same good pool counts in both halves, though, so this is not independent evidence of repeated
+  skill.
+
+**Large stakes stand out, and it isn't only a flaw in the placebos.** Against a crowd of stakes, p < 0.05 holds for
+about 11% of strategies under 100,000 sAERO, 21% of those between 100,000 and 1 million, and 54% of those above 1
+million. Some of that excess was a flaw: before the capacity rule, the shares were 28% and 71%. Three checks say the
+rest is real:
+
+- **Their APRs:** strategies of a million sAERO or more earned a median of 1.14 times what the average sAERO earned over
+  the same hours.
+- **The strict rule:** a placebo may take no bigger share of a pool than the strategy took (or 1%), so it never dilutes
+  itself more than the strategy did. This makes large strategies look better, not worse (`results/strict/`), because the
+  pools that can absorb a large placebo are the largest ones, and those include the pools that pay least.
+- **Their variance:** a large strategy is spread over several large pools, so random placebos land close to one another.
+  A steady edge of a few percent then gives a very small p-value. The edge is real, but small p-values here don't mean a
+  large edge.
+
+**Timing shows almost no skill.** 24 of 6,687 strategies are significant at FDR 10%, and 8.4% have p < 0.05. Over 25,604
+moves, the mean rank of the hour chosen is 0.505, against 0.5 by chance. The median move gained nothing over a random
+feasible hour, while the best hour would have gained a median of 15 hours of average pay. A handful of strategies time
+well, and they are listed in the summary. The timing p-values come from Monte Carlo draws, so the count near the
+threshold moves by a few between runs that change other parts of the analysis.
 
 **Timing shows almost no skill.** 22 of 6,687 strategies are significant at FDR 10%, and 8.7% have p < 0.05. Over 25,604
 moves, the mean rank of the hour chosen is 0.505, against 0.5 by chance. The median move gained nothing over a random
@@ -105,10 +139,16 @@ well, and they are listed in the summary.
 
 **The highest APRs are real, but small.** The strategies with APRs of 50% to 1,400% are mostly stakes of 100 to 5,000
 sAERO in small pools. Their selection is significant, since placebos rarely draw such pools, but it does not scale.
-Stakes of millions of sAERO mostly earn within a few points of the average, and the three largest earn below it. Aero's
-Autopilot USDC Maxi (stake 20366, 53 million sAERO) earned 22.8% against an average of 22.2% over the same hours. That
-is significant against random pools at its size (p = 0.0001), but its timing is not significant once every strategy
-tested is taken into account (p = 0.015, q = 0.40).
+Stakes of millions of sAERO mostly earn within a few points of the average. Two of the three largest earn well below it,
+and are not significant (stake 10495: 14.2% against 19.8%, p = 0.19; stake 10504: 12.0% against 19.9%, p = 0.97).
+
+**Aero's Autopilot USDC Maxi** (stake 20366, 53 million sAERO) earned 22.8% against an average of 22.2% over the same
+hours.
+
+- **Selection:** significant against the power-weighted crowd (p = 0.0006, q = 0.012). Against a crowd of stakes it
+  isn't (p = 0.005, q = 0.15), though it is under the strict rule (q = 0.003). Its evidence depends on which crowd it is
+  compared with.
+- **Timing:** not significant once every strategy tested is taken into account (p = 0.017, q = 0.42).
 
 ## Limits
 
@@ -124,4 +164,8 @@ tested is taken into account (p = 0.015, q = 0.40).
 - **Strategies are exact copies.** Stakes run by one manager but allocated at different hours count as different
   strategies. Benjamini–Hochberg still controls the false discovery rate under the positive dependence this creates.
 - **A crowd is a choice.** "Better than others" depends on who the others are. Power-weighted and stake-weighted crowds
-  give very different answers here, so both are reported.
+  give very different answers here, so both are reported. Stakes that vote for low-paying pools may be after something
+  other than fees, such as directing emissions to a pool. Beating them is beating a crowd that wasn't trying.
+- **The largest stakes have few pools that can absorb them.** For a stake of 100 million sAERO, almost no pool can take
+  its placebo at 25% or less, so the placebo goes to the largest pools left. "Better than random at its size" means
+  little there.

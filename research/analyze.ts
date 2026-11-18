@@ -11,6 +11,14 @@ const MIN_HOURS = 96;
 // fees, at APRs of billions of percent, which says nothing about allocating.
 const MIN_AMOUNT = 100;
 const FDR = 0.1;
+// A placebo only goes to a pool where its sAERO would be at most this share of the pool's power, or at most the share
+// the strategy took in the pool it stands for, if that was more. Real stakes rarely take more than a quarter of a pool:
+// 1% to 8% of entries, depending on size. Without this, a large strategy's placebos land in pools far too small for
+// them and dilute themselves, which no real stake of that size does, and the strategy looks skilled for avoiding that.
+// `CAP=0.01 OUT=… node research/analyze.ts` runs the strict version, where a placebo takes at most the share the
+// strategy took, into another directory.
+const CAP = Number(process.env.CAP ?? 0.25);
+const OUT = new URL(`${process.env.OUT ?? "./results"}/`, import.meta.url);
 const SIMS = 1_000;
 const MORE_SIMS = 20_000;
 
@@ -216,7 +224,17 @@ for (const [id, list] of byId) {
 }
 
 // `amounts` are the whole strategy's sAERO in each pool: the sum over its stakes.
-type Spell = { ka: number; kb: number; js: number[]; ws: number[]; amounts: number[]; members: number; own: number };
+// `caps` is, for each pool, the largest share of a pool that the placebo standing for it may take (see `CAP`).
+type Spell = {
+  ka: number;
+  kb: number;
+  js: number[];
+  ws: number[];
+  amounts: number[];
+  caps: number[];
+  members: number;
+  own: number;
+};
 type Switch = { u: Float64Array; actual: number; gainHours: number; bestHours: number };
 type Strategy = {
   ids: string[];
@@ -257,12 +275,13 @@ for (const group of Map.groupBy(nfts, ({ key }) => key).values()) {
   for (const { e, kb } of timeline) {
     if (kb === undefined || kb <= e.k || !e.js.length) continue;
     // The stake's share of each of its pools when it moved in, counting every stake in the strategy.
-    let own = 0;
-    for (const [i, j] of e.js.entries()) {
-      const pw = P[j]![Math.min(e.k, K - 1)]!;
-      if (pw > 0) own = Math.max(own, Math.min(1, e.amounts[i]! / pw));
-    }
-    spells.push({ ka: e.k, kb, js: e.js, ws: e.ws, amounts: e.amounts, members: group.length, own });
+    const shares = e.js.map((j, i) => {
+      const pw = P[j]![e.k]!;
+      return pw > 0 ? Math.min(1, e.amounts[i]! / pw) : 1;
+    });
+    const own = Math.max(0, ...shares);
+    const caps = shares.map((share) => Math.max(CAP, share));
+    spells.push({ ka: e.k, kb, js: e.js, ws: e.ws, amounts: e.amounts, caps, members: group.length, own });
   }
   // Timing: each move from one set of pools to another, against every other hour it could have moved at.
   const switches: Switch[] = [];
@@ -405,17 +424,33 @@ function placeboEarnings(spells: Spell[], crowd: Crowd): number {
       const at = s.js.indexOf(g);
       return at < 0 ? 0 : c === "power" ? s.amounts[at]! : s.members;
     };
-    const draw = () => {
+    // Pool g can take `amount` sAERO if they would be at most `cap` of its power.
+    const fits = (g: number, amount: number, cap: number) =>
+      cap >= 1 || Math.max(0, P[g]![s.ka]! - own(g, "power")) >= (amount * (1 - cap)) / cap;
+    const draw = (amount: number, cap: number) => {
       for (let tries = 0; tries < 100; tries++) {
         const g = drawGauge(s.ka, crowd);
         const all = weight[crowd][g]![s.ka]!;
-        if (!taken.has(g) && random() * all < all - own(g, crowd)) return g;
+        if (!taken.has(g) && fits(g, amount, cap) && random() * all < all - own(g, crowd)) return g;
       }
-      return drawGauge(s.ka, crowd);
+      // Few pools can take it: draw among those directly, or else take the largest pool left.
+      let [sum, best, most] = [0, -1, -1];
+      const open: [number, number][] = [];
+      for (let g = 0; g < J; g++) {
+        if (taken.has(g)) continue;
+        const others = Math.max(0, P[g]![s.ka]! - own(g, "power"));
+        if (others > most) [best, most] = [g, others];
+        if (!fits(g, amount, cap)) continue;
+        const w = Math.max(0, weight[crowd][g]![s.ka]! - own(g, crowd));
+        if (w > 0) open.push([g, (sum += w)]);
+      }
+      if (!open.length) return best;
+      const u = random() * sum;
+      return open.find(([, upTo]) => upTo > u)?.[0] ?? open.at(-1)![0];
     };
-    for (const j of s.js) {
+    for (const [m, j] of s.js.entries()) {
       if (next.has(j)) continue;
-      const pick = draw();
+      const pick = draw(s.amounts[m]!, s.caps[m]!);
       taken.add(pick);
       next.set(j, pick);
     }
@@ -627,6 +662,24 @@ out(
 out(
   `- Against a crowd of stakes (pools drawn by how many stakes are in them, not by their power): ${tested.filter((s) => s.selQ2! <= FDR).length} significant at FDR ${FDR}; p < 0.05 for ${pct(tested.filter((s) => s.selP2 < 0.05).length / tested.length)}.`,
 );
+out("- Calibration by size. With no skill, p-values are spread evenly: 5% below 0.05 and 10% above 0.9.");
+out();
+out("  | sAERO | Strategies | p < 0.05 (power) | p > 0.9 (power) | p < 0.05 (stakes) | p > 0.9 (stakes) |");
+out("  |---|---|---|---|---|---|");
+for (const [lo, hi, label] of [
+  [MIN_AMOUNT, 1e3, `${MIN_AMOUNT}–1k`],
+  [1e3, 1e4, "1k–10k"],
+  [1e4, 1e5, "10k–100k"],
+  [1e5, 1e6, "100k–1M"],
+  [1e6, Infinity, "≥ 1M"],
+] as const) {
+  const group = tested.filter(({ amount }) => amount >= lo && amount < hi);
+  const share = (test: (s: Strategy) => boolean) => pct(group.filter(test).length / group.length);
+  out(
+    `  | ${label} | ${group.length} | ${share((s) => s.selP < 0.05)} | ${share((s) => s.selP > 0.9)} | ${share((s) => s.selP2 < 0.05)} | ${share((s) => s.selP2 > 0.9)} |`,
+  );
+}
+out();
 out(
   `- Persistence: Spearman ρ between first-half and second-half selection z, ${halves.length} strategies: ${rho.toFixed(3)} (±${(1.96 / Math.sqrt(Math.max(1, halves.length - 1))).toFixed(3)} is the 95% band for 0).`,
 );
@@ -673,8 +726,8 @@ out(
   '"thin" marks a strategy that held more than 25% of a pool\'s power at some point. Placebos pay the same dilution, but such pools are rarely drawn.',
 );
 
-mkdirSync(new URL("./results/", import.meta.url), { recursive: true });
-writeFileSync(new URL("./results/summary.md", import.meta.url), lines.join("\n") + "\n");
+mkdirSync(OUT, { recursive: true });
+writeFileSync(new URL("summary.md", OUT), lines.join("\n") + "\n");
 const csv = [
   "stakes,count,saero,pools,hours_in_pools,apr,market_apr,relative,selection_z,selection_p,selection_q,selection_p_stakes,selection_q_stakes,moves,timing_rank,timing_p,timing_q,thin",
   ...strategies.map((s) =>
@@ -702,5 +755,5 @@ const csv = [
       .join(","),
   ),
 ];
-writeFileSync(new URL("./results/strategies.csv", import.meta.url), csv.join("\n") + "\n");
+writeFileSync(new URL("strategies.csv", OUT), csv.join("\n") + "\n");
 console.log(lines.join("\n"));
