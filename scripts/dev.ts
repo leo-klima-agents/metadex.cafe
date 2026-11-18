@@ -14,6 +14,7 @@ const TYPES: Record<string, string> = {
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
   ".json": "application/json",
+  ".txt": "text/plain; charset=utf-8",
 };
 
 const build = (): boolean =>

@@ -48,7 +48,7 @@ screenshots in.
 
 | Path                                   | What it holds                                                                                                |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `site/`                                | The files the site serves: the page with all its views, popups and row templates, the styles and the icons.  |
+| `site/`                                | The files the site serves: the page with its views, popups and row templates, the styles, icons, `llms.txt`. |
 | `src/main.ts`, `routes.ts`, `state.ts` | How the page starts, its addresses (the part after `#`), and the state that every view is drawn from.        |
 | `src/config.ts`, `abi.ts`              | What the page trusts: contracts, RPCs, price feeds and swap contracts. Hydrex's and Aero's ABIs.             |
 | `src/checks.ts`                        | The checks of Base that run before joining or swapping.                                                      |

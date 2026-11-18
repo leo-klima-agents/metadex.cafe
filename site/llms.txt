@@ -1,0 +1,115 @@
+# metaDEX Café
+
+> metaDEX Café is a static page at https://metadex.cafe/ for Hydrex accounts, Aero stakes and token swaps on Base (chain ID 8453). With it, a wallet can join or leave automations that vote with its Hydrex accounts, claim their rewards, swap many tokens into one, and allocate an Aero stake to pools by a strategy. The page has no server, holds no keys and stores nothing.
+
+What to know before you read the page or answer questions about it:
+
+- The page is one HTML file. Its views are addresses after `#`, such as `https://metadex.cafe/#hydrex`, so every link
+  under "Views" returns that same file.
+- The page needs JavaScript. It reads every figure (APRs, balances, payouts, quotes) in the browser, from Base, through
+  three public RPCs: `https://base.drpc.org`, `https://mainnet.base.org` and `https://base-rpc.publicnode.com`. A fetch
+  of the page gives its words and its empty templates, without figures. There is no API. To get a figure, read the
+  contracts below from Base, or open the view in a browser.
+- The figures change with each block and each epoch, so this file gives none of them. The APRs on the page are what
+  votes and pools earned in the past: last epoch for Hydrex, the last eight days for Aero.
+- The page works through the user's own wallet: a browser wallet (EIP-6963), or Safe{Wallet} with
+  `https://metadex.cafe/` added as a custom app. It never asks for a seed phrase or a private key. Each allocation and
+  each swap is simulated on Base before the wallet asks for a signature.
+- The official address is `https://metadex.cafe/`. The same files are on IPFS under the ENS name `metadexcafe.eth`.
+  The page stores no cookies.
+
+## Hydrex
+
+A Hydrex account is a lock of HYDX in Hydrex's VotingEscrow. Accounts are numbered, and they vote each week (an epoch).
+An automation votes with the accounts that joined it. The account stays in its owner's wallet, and the owner can leave
+with one call at any time. Joining approves two actions for the automation: action 3 sends the account's claims to it,
+and action 5 delegates the account's votes to it.
+
+- **Matcha Latte** is Hydrex's "Carbon Impact" automation. It retires part of the rewards as carbon credits and pays
+  the rest in kVCM. Hydrex's admin sets the payout tokens, the swap routers, how much can be retired, the payout fee and
+  who receives it. An operator sets what it votes for, how rewards are swapped and how much is retired.
+- **Double Espresso** is an immutable automation with no owner and no settings. It votes for the pools that anyone
+  proposes, if they would earn at least $1 more this epoch than its current votes, at Chainlink prices. It pays what the
+  votes earn, in the tokens earned, and takes 1% on claims. When a payout is late, an account's owner can claim its
+  rewards through the page.
+- An owner can also vote on Hydrex's own app, with no fee. The page shows the APR that votes earned last epoch next to
+  Hydrex's average, and each account's last payout as a receipt.
+
+Before anyone can join, the page checks Base against the contracts it trusts: that the RPC serves Base, that Hydrex's
+VotingEscrow and its approval logic are unchanged, and that joining approves actions 3 and 5 only. If a check fails,
+joining is turned off and the page says why. Leaving always works.
+
+## Aero
+
+An Aero stake (sAERO) has a weight that its owner allocates to pools. Each pool shares its protocol revenue (its
+trading fees and incentives) in proportion to the sAERO weight in it. Stakes are numbered.
+
+The page has two strategies. Each picks up to 10 pools, judged on their last eight days, from all pools or from blue
+chips only (pools of two tokens among USDC, EURC, WETH, cbBTC and AERO). Each picks once, or again every 48 hours. Pools
+with under 1M sAERO weight eight days ago, now or on average in between are left out.
+
+- **Follow the leaders** picks the pools that paid the most per sAERO weight, and gives more to those that paid more.
+- **Follow revenue** picks the pools with the most protocol revenue, in proportion to that revenue.
+
+The page shows how both strategies did over the last eight days, in steps of 48 hours, against Aero's Autopilot as it
+actually allocated and against the Base average. The owner of a stake can allocate it to a strategy's picks, or set
+their own shares across any pools. The page also shows each stake's pools, when it can be allocated again and what it
+can claim, and each pool's APR day by day.
+
+## Swap
+
+The page swaps many tokens into one, through pools of Aero, Aerodrome, Hydrex and Uniswap. The output is USDC, EURC,
+WETH, cbBTC, AERO or HYDX. Each output has its own ImmutableSwapper contract, which has no owner and no settings. The
+swapper sends each token along the route the page gives it. The page plans the routes for the chosen tokens together.
+The swap fee is 1% of each route's output. Pool fees and price impact are part of the quote, and gas is paid separately
+in ETH. The user picks a slippage of 0.1%, 0.5%, 1% or 3%. A token whose minimum is not met is not swapped, and it stays
+in the wallet.
+
+## Prices
+
+Prices come from Chainlink feeds and from pools on Base. Pool prices are averages over the 30 minutes before a block.
+Sums can be shown in USD, EUR, GBP, CHF, AUD or CAD.
+
+## Views
+
+- [Home](https://metadex.cafe/): The start of the page, with a link to the app.
+- [Your wallet](https://metadex.cafe/#app): What needs the connected wallet now, and links to Aero, Hydrex and Swap. `#app/allows` lists the approvals the wallet gave to automations and swap contracts.
+- [Hydrex](https://metadex.cafe/#hydrex): Both automations, voting yourself, and the wallet's Hydrex accounts by status.
+- [Matcha Latte](https://metadex.cafe/#hydrex/matcha-latte): What it takes, what it pays in, last epoch's APR, and the accounts that can join. Sections: `/fees`, `/control`, `/check`, `/record`.
+- [Double Espresso](https://metadex.cafe/#hydrex/double-espresso): The same for Double Espresso, with claims. Sections: `/fees`, `/control`, `/check`, `/record`.
+- [Aero](https://metadex.cafe/#aero): The two strategies, their record over eight days, and allocating a stake. Sections: `#aero/how`, `#aero/check`.
+- [Swap](https://metadex.cafe/#swap): Swapping into USDC. Sections: `#swap/fees`, `#swap/check`, `#swap/approvals`.
+- [About](https://metadex.cafe/#about): The official address, the ENS name, where prices come from, and the version.
+
+Other addresses take a number, a token or a contract:
+
+- `#hydrex/<number>` is one Hydrex account, such as `#hydrex/9540`: its lock, its earning power, last epoch and its
+  last payout.
+- `#aero/<number>` is one Aero stake, such as `#aero/20366`: its pools and its record.
+- `#aero/pool/<gauge address>` is one Aero pool, by its gauge: its sAERO weight, its protocol revenue, its APR over the
+  last 48 hours, 4 days and 8 days, and its fees' APR day by day.
+- `#swap/<token>` swaps into `usdc`, `eurc`, `weth`, `cbbtc`, `aero` or `hydx`.
+
+Any other address shows Home.
+
+## Contracts on Base
+
+- [Hydrex VotingEscrow](https://basescan.org/address/0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1): Holds the Hydrex accounts and their approvals.
+- [Hydrex Voter](https://basescan.org/address/0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b): Records the votes of Hydrex accounts.
+- [Matcha Latte](https://basescan.org/address/0xdE91885cF35ac57DF0c4A75c16862127dBe8317c): Hydrex's automation, a KlimaVeTokenConduit.
+- [Double Espresso](https://basescan.org/address/0x692c323B425A9DfeebE302F56168a7798D93EAC5): The automation with no owner, an ImmutableVeTokenConduit.
+- [Aero escrow](https://basescan.org/address/0xBF7977E1521e9a3032bf7243Ee4712f311f13915): Holds the Aero stakes.
+- [Aero Voter](https://basescan.org/address/0x49d7d4f17Ec56Ef8fA04E464AF5D1A4942CC31e6): The contract that allocating a stake calls.
+- [ImmutableSwapper to USDC](https://basescan.org/address/0x31791f453d2100e728E012c9e189C0828adf4b6F): Swaps many tokens into USDC.
+- [ImmutableSwapper to EURC](https://basescan.org/address/0x2cd8019d4F98e2fE2Ba705d8E7D38284c2a1450E): Swaps many tokens into EURC.
+- [ImmutableSwapper to WETH](https://basescan.org/address/0xe5cbD828c2227E17f7FF8BD54C7A1e6012694Ff2): Swaps many tokens into WETH.
+- [ImmutableSwapper to cbBTC](https://basescan.org/address/0x54805B6E6266c952627E47B8ADe4ae65c5DEA7d0): Swaps many tokens into cbBTC.
+- [ImmutableSwapper to AERO](https://basescan.org/address/0xdd575A498C625AF96ac89efE578Dc68f4c9aB963): Swaps many tokens into AERO.
+- [ImmutableSwapper to HYDX](https://basescan.org/address/0xC629B1A13a0E1d4F0C38cD80d22E4AAC363cc8bC): Swaps many tokens into HYDX.
+- [Fee recipient](https://basescan.org/address/0x450c72de8c0079B49AcedF294a13011bd09D125B): The Safe that receives Double Espresso's fee on claims and the swap fee.
+
+## Optional
+
+- [Hydrex](https://www.hydrex.fi/): Hydrex's own app, to lock HYDX, vote yourself and claim leftovers.
+- [Aero](https://app.aero.xyz/): Aero's own app, to allocate or claim a stake there.
+- [metaDEX Café on IPFS](https://metadexcafe.eth.limo/): The same page, served from the content hash of `metadexcafe.eth`.
