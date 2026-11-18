@@ -20,18 +20,18 @@ What to know before you read the page or answer questions about it:
 
 ## Hydrex
 
-A Hydrex account is a lock of HYDX in Hydrex's VotingEscrow. Accounts are numbered, and they vote each week (an epoch).
+A Hydrex account is a lock of HYDX in Hydrex's VotingEscrow. Accounts are numbered, and they vote each week. An epoch
+ends and the next begins ("the flip") on Thursday at 00:00 UTC, and votes don't carry over from one epoch to the next.
 An automation votes with the accounts that joined it. The account stays in its owner's wallet, and the owner can leave
 with one call at any time. Joining approves two actions for the automation: action 3 sends the account's claims to it,
-and action 5 delegates the account's votes to it.
+and action 5 delegates the account's votes to it, from the next epoch.
 
 - **Matcha Latte** is Hydrex's "Carbon Impact" automation. It retires part of the rewards as carbon credits and pays
   the rest in kVCM. Hydrex's admin sets the payout tokens, the swap routers, how much can be retired, the payout fee and
   who receives it. An operator sets what it votes for, how rewards are swapped and how much is retired.
-- **Double Espresso** is an immutable automation with no owner and no settings. It votes for the pools that anyone
-  proposes, if they would earn at least $1 more this epoch than its current votes, at Chainlink prices. It pays what the
-  votes earn, in the tokens earned, and takes 1% on claims. When a payout is late, an account's owner can claim its
-  rewards through the page.
+- **Double Espresso** is an immutable automation with no owner and no settings. Anyone can propose its vote, and it
+  takes a proposal only if the proposal passes the check below. It pays what the votes earn, in the tokens earned, and
+  takes 1% on claims. When a payout is late, an account's owner can claim its rewards through the page.
 - An owner can also vote on Hydrex's own app, with no fee. The page shows the APR that votes earned last epoch next to
   Hydrex's average, and each account's last payout as a receipt.
 
@@ -39,22 +39,196 @@ Before anyone can join, the page checks Base against the contracts it trusts: th
 VotingEscrow and its approval logic are unchanged, and that joining approves actions 3 and 5 only. If a check fails,
 joining is turned off and the page says why. Leaving always works.
 
+### What a vote earns
+
+A pool's rewards for an epoch are its bribes and its trading fees for that epoch. The voters on the pool share them in
+proportion to their votes. So `x` votes on a pool that has `V` votes from everyone else and `B` dollars of rewards earn
+
+    B × x / (V + x)
+
+A vote splits an automation's voting power across pools. What the vote earns is the sum of this over its pools. More
+votes on a pool earn a smaller and smaller part of the same rewards, so the best vote spreads over several pools.
+
+### How both automations' votes are picked today
+
+One keeper program picks and sends the votes of both automations, in the same way, twice an epoch. For Matcha Latte it
+votes as the operator's keeper: nothing on Base holds Matcha Latte to this strategy, and its operator can change it. For
+Double Espresso it votes as anyone could, and its votes must pass the contract's check.
+
+What the keeper counts as a pool's rewards `B`:
+
+- The pool's bribes and trading fees for the current epoch, as the pool's two reward contracts record them. Only pools
+  with a live gauge count.
+- Only rewards in the tokens on the keeper's list count. Today these are WETH, cbBTC, SOL, USDC, USDT, USD₮0, EURC,
+  BNKR, VVV, HYDX, kVCM, wtBABA, wtCOIN, wtDNUT, wtDRAM, wtFGI, wtGOOGL, wtGRND, wtHOOD, wtIAU, wtMCD, wtMSTR, wtNKE,
+  wtNVDA, wtPLBY, wtPPLT, wtQQQM, wtSGOV, wtSKHY, wtSPCX, wtSPYM, wtTR, wtTSM and wtWEN. The list can change.
+- Each token is priced in USD by up to three price services. The price is the median of three quotes, or the lower of
+  two, because a reward priced too high would draw votes to it. A token without a price counts as zero.
+
+Limits on every vote:
+
+- A pool that would get under 0.1% of the votes is left out.
+- A vote has at most 40 pools for Matcha Latte (more could go over Base's gas limit for a transaction) and at most 20
+  for Double Espresso (the contract's limit). Past that, the pools with the largest shares are kept.
+- Shares are rounded to 0.01% of the voting power.
+- An automation with no voting power this epoch gets no vote. Its voting power is what was delegated to it when the
+  epoch began.
+
+The first vote, a day before the flip (Tuesday, shortly after 23:50 UTC), splits the votes in proportion to each pool's
+rewards `B`, whatever the other votes are. It is a fallback: it stays in place if the second vote fails.
+
+The second vote is sent in each of the last two seconds before the flip (Wednesday, 23:59:58 and 23:59:59 UTC), from the
+other votes as they are in the latest block. Hydrex's Voter takes one vote per automation per second. This vote is the
+split that earns the most if the other votes stay where they are:
+
+- The gain from one more vote on a pool is `B × V / (V + x)²`, which falls as `x` grows. The best split gives every
+  pool it votes for the same gain `λ` from one more vote, and gives no votes to a pool whose first vote would gain less.
+- So pool `i` gets `x = max(0, √(B × V / λ) − V)` votes, with `λ` set so that the votes add up to the voting power.
+- `V` counts as at least 0.01% of the automation's voting power, so that a pool nobody voted for doesn't look free.
+- After the limits above drop a pool, the split is worked out again over the pools that are left.
+- The new vote replaces the vote in force only if it is expected to earn over $1 more, at the keeper's prices.
+
+The two automations' votes are picked from the same read of the votes. Double Espresso's vote is picked against the
+votes in force. Matcha Latte's vote then counts Double Espresso's new vote among the other votes. On Tuesday, Double
+Espresso votes after Matcha Latte's vote is in.
+
+### Double Espresso's check
+
+Double Espresso's contract scores the proposed vote and its vote in force, and takes the proposal only if its score is
+at least $1 higher. Otherwise the transaction reverts. The first proposal of an epoch only has to score $1.
+
+The score is the same sum of `B × x / (V + x)` over the vote's pools, with the contract's own figures:
+
+- `x` is the automation's votes on the pool, and `V` is the other voters' votes on it, at the time of the proposal.
+- `B` counts only WETH, cbBTC, USDC and EURC, at their Chainlink prices. A token counts as zero while its price is
+  stale (older than 25 minutes for WETH and cbBTC, 30 hours for USDC and EURC), not positive or not available.
+- `B` also counts some trading fees in a token that has no Chainlink price. When a pool's fees are in one of the four
+  tokens and one other token, and the pool is that pair's base pool on Hydrex Integral, the other token's fees count
+  too, up to the value of the four tokens' fees in the same pool. The other token is priced at the pool's average price
+  over the last 30 minutes. So a pool's fees count for at most twice their part in the four tokens. Bribes count in the
+  four tokens only.
+- A proposal has 1 to 20 pools, each listed once, each with a live gauge and with at least one vote.
+- The contract takes no votes while Chainlink reports Base's sequencer down, or for an hour after it comes back.
+
+The keeper counts more tokens than the contract does, so its best vote may not pass. For Double Espresso it therefore
+does this, for both of its votes:
+
+- It works out the contract's score of its vote, and aims to beat the vote in force by $1.10, in case other votes move
+  before its vote lands.
+- If its vote falls short, it sends instead the vote that earns the most at its own prices among those that reach
+  $1.10. It finds that vote by adding the contract's values of the pools to its own, times a factor, and raising the
+  factor until the split passes.
+- It sends that vote only if it is still expected to earn over $1 more than the vote in force, at the keeper's prices.
+  Otherwise the vote in force stays.
+
+Anyone else can propose a vote in the same way. A proposal that the contract scores at least $1 above the vote in force
+replaces it, whoever sends it.
+
+### Payouts
+
+After each flip, within the hour, the keeper claims for the accounts that were in each automation when the ended epoch
+began and that still let the automation claim for them.
+
+- **Matcha Latte:** each claim collects one account's rewards, swaps them to kVCM with up to 5% slippage, retires part
+  of the kVCM as carbon credits, and sends the rest to the account's owner. The page shows how much is retired.
+- **Double Espresso:** each claim sends one account's rewards to its owner in the tokens earned, minus 1%.
+
+A claim takes rewards only in the tokens on the keeper's list, from the pools the automation voted for in the last 12
+epochs. It is sent only if it collects at least $5 and its gas costs at most 5% of that. Claims go largest first.
+Smaller rewards wait until they add up to $5. Anyone can claim for an account in Double Espresso at any time, at the
+same 1% fee, and the page does this for an owner whose payout is late.
+
 ## Aero
 
 An Aero stake (sAERO) has a weight that its owner allocates to pools. Each pool shares its protocol revenue (its
-trading fees and incentives) in proportion to the sAERO weight in it. Stakes are numbered.
+trading fees and incentives) in proportion to the sAERO weight in it. Stakes are numbered. A new allocation replaces the
+stake's allocation on Base, which then can't change for a time that Aero sets (47 hours today). This is why the
+strategies move every 48 hours.
 
-The page has two strategies. Each picks up to 10 pools, judged on their last eight days, from all pools or from blue
-chips only (pools of two tokens among USDC, EURC, WETH, cbBTC and AERO). Each picks once, or again every 48 hours. Pools
-with under 1M sAERO weight eight days ago, now or on average in between are left out.
+The page has two strategies, **Follow the leaders** and **Follow revenue**. Both pick from the same pools and judge them
+on the same figures. They differ only in how they split the stake. The page runs them in the browser and shows their
+picks. Nothing allocates for the user: the owner of the stake signs each allocation, and comes back to allocate again.
 
-- **Follow the leaders** picks the pools that paid the most per sAERO weight, and gives more to those that paid more.
-- **Follow revenue** picks the pools with the most protocol revenue, in proportion to that revenue.
+### What a strategy knows about a pool
 
-The page shows how both strategies did over the last eight days, in steps of 48 hours, against Aero's Autopilot as it
-actually allocated and against the Base average. The owner of a stake can allocate it to a strategy's picks, or set
-their own shares across any pools. The page also shows each stake's pools, when it can be allocated again and what it
-can claim, and each pool's APR day by day.
+At the time of a pick, a strategy works out two figures for each pool.
+
+What the pool pays a day, `P`, in the currency the page shows:
+
+- Its trading fees over the 8 days (192 hours) before the pick, per day, taken to repeat. They come from the pool's
+  rewards manager on Base, which keeps a running sum of the fees it paid per unit of sAERO weight.
+- Plus its incentives: what the pool's incentive programs that have already started will stream while the allocation
+  is held, per day. That is the next 48 hours in the record, and Aero's 47 hours for a pick made now.
+- Tokens are valued at their prices at the time of the pick.
+
+The sAERO weight that shares this pay, `W`: the larger of the pool's weight at the time of the pick and its mean weight
+over the 48 hours before (or over the 8 days, if the last 48 hours can't be read). Taking the larger stops a pool that
+others just left from looking better than it is. The mean is a harmonic mean: times the fees paid per sAERO, it gives
+the fees paid in all, if fees came in evenly.
+
+A pool is a candidate only if:
+
+- its gauge takes allocations (it is activated and its emissions cap is above zero);
+- with "Blue chips only", both its tokens are among USDC, EURC, WETH, cbBTC and AERO;
+- its fees are known for at least 90% of the 8 days, so a newer pool is left out;
+- every token it pays has a price;
+- it is not thin: its sAERO weight was at least 1,000,000 at the start of the 8 days, at the pick, and on average in
+  between.
+
+A strategy picks up to 10 pools, or fewer if Aero allows fewer pools per stake.
+
+### Follow revenue
+
+Follow revenue takes the candidates with the highest pay a day `P`, up to 10, whatever their sAERO weight. Each pool's
+share of the stake is its `P` divided by the sum of these pools' `P`. The picks don't depend on the size of the stake.
+
+### Follow the leaders
+
+Follow the leaders looks at pay per sAERO, and counts what the stake itself does to it. For a stake of `A` sAERO, write
+`O` for a pool's weight `W` less the stake's own sAERO already in that pool. A share `w` of the stake in a pool makes
+each sAERO there earn `P / (O + w × A)`.
+
+- The average is what each sAERO would earn if all candidates were one pool with the stake in it: `a = ΣP / (ΣO + A)`.
+- A pool's lead is how much more each of its sAERO earns than the average, with the stake's share in it:
+  `P / (O + w × A) − a`.
+- Each share is in proportion to its pool's lead: `w = c × (P / (O + w × A) − a)`, or 0 where that is negative. The
+  scale `c` is the one that makes the shares add up to 100%. So pools that pay more per sAERO get more, a larger stake
+  spreads over more pools, and no pool is filled past the average.
+- Then the 10 largest shares are kept, shares under 1% are dropped (the largest share is always kept), and the shares
+  are worked out again over the pools that are left, until nothing is dropped.
+- If those pools can't take the whole stake and stay above the average, the stake goes instead to up to 10 pools, each
+  filled until they all pay the same per sAERO: `w × A = P / L − O`. The pools are the ones that make this pay `L` as
+  high as possible. Shares under 1% are dropped in the same way.
+
+With a stake chosen, `A` is the sAERO weight the stake can allocate on Base: what it has on Base, plus what it has on
+no chain. Otherwise `A` is the amount typed in the page, which is 10,000 sAERO at first.
+
+### Allocating now
+
+The table under "Allocate now" shows the chosen strategy's picks for a pick made now, each with its share and its
+projected APR: its pay a day `P` over its weight `W` plus the stake's share. The owner can change the shares, add other
+pools, or start from the stake's current allocation. The shares must add up to 100%. The allocation is simulated on Base
+before the wallet asks for a signature.
+
+### The record
+
+"If you had started 8 days ago" shows what each strategy would have earned over the last 8 days, in four steps of 48
+hours counted back from the current hour.
+
+- With "Come back every 48 h to pick again", each strategy picks at the start of every step, from only what was known
+  then: the 8 days before that time, the prices then, and where the stake's own sAERO was then. Without it, each
+  strategy picks once, 8 days ago, and holds those pools for all four steps.
+- A step's figure is what the picked pools really paid over that step, fees and incentives, shared by each pool's mean
+  sAERO weight over the step plus the stake's share. Tokens are valued at the mean of their prices at the step's two
+  ends.
+- An APR is the pay a day per sAERO, times 365, over AERO's price: each sAERO counts as one AERO.
+- **Autopilot** is Aero's "Autopilot USDC Maxi" stake as it actually allocated, with each step split where it moved.
+- **Base average** is what all the pools paid over all their sAERO weight.
+- **Custom allocation**, the dashed line, is the shares the user set today, held for all 8 days. It has hindsight, which
+  the strategies don't.
+
+The page also shows each stake's pools, when it can be allocated again and what it can claim, and each pool's APR day
+by day.
 
 ## Swap
 
