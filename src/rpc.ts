@@ -50,6 +50,34 @@ export const contract =
 export const same = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
 
+// Gives the page a turn to draw and to answer the user, by waiting for a message to itself. A timer would add at least
+// 4 ms each time, and is slowed down in a hidden tab. Chrome's `scheduler.yield` lets the page answer, but puts off
+// drawing for up to 100 ms.
+function breathe(): Promise<void> {
+  return new Promise((done) => {
+    const { port1, port2 } = new MessageChannel();
+    port1.onmessage = () => {
+      port1.close();
+      done();
+    };
+    port2.postMessage(null);
+  });
+}
+// `items.map(each)`, with a turn for the page every `SLICE` milliseconds, so that long work doesn't freeze it.
+const SLICE = 10;
+export async function sliced<T, U>(items: readonly T[], each: (item: T, i: number) => U): Promise<U[]> {
+  const out: U[] = [];
+  let start = performance.now();
+  for (const [i, item] of items.entries()) {
+    if (performance.now() - start > SLICE) {
+      await breathe();
+      start = performance.now();
+    }
+    out.push(each(item, i));
+  }
+  return out;
+}
+
 export const blockTime = call(MULTICALL3, multicall3Abi, "getCurrentBlockTimestamp");
 export const blockNumber = call(
   MULTICALL3,
@@ -351,7 +379,7 @@ export type Read = (<const C extends readonly Call[]>(calls: C, options?: ReadOp
 export const BATCH_BYTES = 100_000;
 const CALL_BYTES = 160;
 export const read: Read = async (calls, { block = "latest", tag, perBatch = 200 } = {}) => {
-  const data = calls.map((each) => encodeFunctionData(each as never));
+  const data = await sliced(calls, (each) => encodeFunctionData(each as never));
   const batches: Promise<unknown[]>[] = [];
   for (let start = 0; start < calls.length;) {
     let [end, bytes] = [start, 0];
@@ -378,7 +406,8 @@ async function aggregate(
   });
   const at = block === "latest" ? block : numberToHex(block);
   const reply = await rpc<Hex>("eth_call", [{ to: MULTICALL3, data }, at], { tag });
-  return decodeFunctionResult({ abi: multicall3Abi, functionName: "aggregate3", data: reply }).map(
+  return sliced(
+    decodeFunctionResult({ abi: multicall3Abi, functionName: "aggregate3", data: reply }),
     ({ success, returnData }, i) => {
       if (!success || returnData === "0x") return undefined;
       try {

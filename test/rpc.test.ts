@@ -28,6 +28,7 @@ import {
   scheduled,
   settledBelow,
   showTags,
+  sliced,
   simulate,
   timeoutFor,
 } from "../src/rpc.ts";
@@ -45,6 +46,23 @@ const serve = (handler: Handler) => {
   }) as never;
 };
 const reply = (result: unknown) => Response.json({ jsonrpc: "2.0", id: 1, result });
+
+test("sliced work gives the page turns while it runs, and keeps the order of what it maps", async () => {
+  let turns = 0;
+  const other = setInterval(() => turns++, 0);
+  const busy = (ms: number) => {
+    const start = performance.now();
+    while (performance.now() - start < ms);
+  };
+  const out = await sliced([1, 2, 3, 4, 5, 6], (each, i) => {
+    busy(6);
+    return each * 10 + i;
+  });
+  clearInterval(other);
+  assert.deepEqual(out, [10, 21, 32, 43, 54, 65]);
+  // 36 ms of work in slices of about 10 ms: the timer gets a turn between slices.
+  assert.ok(turns >= 2, `${turns} turns`);
+});
 
 test("a time's first block, from the blocks' own times, whatever the time between blocks", async () => {
   // These times do not follow Base's schedule, so no schedule is given.

@@ -276,6 +276,15 @@ function allocateWords(stake: Stake | undefined, stakes: Stake[], rows: Part[], 
   ];
 }
 
+// Starts the reads that the Aero page waits on, as `drawAero` would, so that it opens with them done or under way: the
+// market, past prices, the snapshots the chosen strategy needs, the Autopilot's record, and the shown stake's moves.
+export function preloadAero(): void {
+  andThen(data.market(), (found) => data.pastFor(aero.timesFor(found, strategyOf(found).hours)));
+  data.pricesThen();
+  data.autopilotRecord();
+  const stake = stakeFor(data.ownStakes().value ?? []);
+  if (stake) data.stakeMoves(stake);
+}
 export function drawAero(): void {
   const got = data.market();
   const stakes = data.ownStakes().value ?? [];
