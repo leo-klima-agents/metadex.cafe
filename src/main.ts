@@ -119,7 +119,9 @@ onRender(() => {
   drawWallets();
   DRAW[state.route.view]?.();
   drawReview();
-  preloadAero();
+  // Aero's reads are many and heavy, so they are preloaded only on Home and About, which show no figures of their own.
+  // On another view, they would compete with that view's own reads for the RPCs.
+  if (state.route.view === "home" || state.route.view === "about") preloadAero();
   preload();
   preloadSwap();
 });
