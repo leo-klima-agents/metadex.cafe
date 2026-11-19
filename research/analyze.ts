@@ -4,7 +4,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { AERO } from "../src/config.ts";
+import { AERO, AUTOPILOTS } from "../src/config.ts";
 import { dataEnd, feeSeries, HOUR, load, type Allocations, type Gauges, type Snap, type Stakes } from "./common.ts";
 import { bh, generator, mean, median, probit, scaledRanks, seedOf, spearman, variance } from "./stats.ts";
 
@@ -653,10 +653,13 @@ top(
 top([...forSelection].sort((a, b) => b.amount - a.amount).slice(0, 15), "Largest strategies");
 top([...forSelection].sort((a, b) => a.selP - b.selP || b.selZ - a.selZ).slice(0, 15), "Strongest selection evidence");
 top([...forTiming].sort((a, b) => a.timP - b.timP).slice(0, 15), "Strongest timing evidence");
-// Aero's Autopilots: the stakes of the Relays that its factory (0xA528…4B78, `allRelays`) lists. The two Maxis allocate
-// alike, within minutes. The seven internal Relays (stakes 20367 and 20369 to 20374) never allocated.
-const autopilots = ["20366", "20365"].flatMap((id) => strategies.filter(({ ids }) => ids.includes(id)));
-top(autopilots, "Aero Autopilots: USDC Maxi (stake 20366) and sAERO Maxi (stake 20365)");
+// Aero's Autopilots, as the site names them. The two Maxis allocate alike, within minutes. The seven internal Relays
+// that Aero's factory also lists (stakes 20367 and 20369 to 20374) never allocated.
+const autopilots = AUTOPILOTS.flatMap(({ id }) => strategies.filter(({ ids }) => ids.includes(id.toString())));
+top(
+  autopilots,
+  `Aero Autopilots: ${AUTOPILOTS.map(({ id, name }) => `${name.replace(/^Autopilot /, "")} (stake ${id})`).join(" and ")}`,
+);
 out(
   `"thin" marks a strategy that held more than ${pct(THIN)} of a pool's power at some point. Placebos pay the same dilution, but such pools are rarely drawn.`,
 );
