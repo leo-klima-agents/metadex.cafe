@@ -37,11 +37,13 @@ export const GAUGE_FACTORIES: { address: Address; kind: GaugeKind }[] = [
   { address: "0x1e0f776E88649285f99e65Fa599aD6e0f9D97800", kind: "stable" },
   { address: "0xf437f62053ACB121665b8fDBfeA8F214FB8E589d", kind: "cl" },
 ];
-// The Aero Autopilots that the page names and compares with. Each is a stake that its Relay owns. The page shows it
-// only while the Relay still owns it.
+// The Aero Autopilots that the page names. Each is a stake that its Relay owns, and the page names it only while the
+// Relay still owns it. The record compares with the first one whose Relay still owns its stake. Aero's Relay factory,
+// 0xA5283582951ae0cF72bE4BEA54dA63D199264B78, lists these two Relays and seven internal ones.
 export type Autopilot = { id: bigint; name: string; relay: Address };
 export const AUTOPILOTS: Autopilot[] = [
   { id: 20366n, name: "Autopilot USDC Maxi", relay: "0xAfa7cA53e0A63d94218728842ED286308435DD86" },
+  { id: 20365n, name: "Autopilot sAERO Maxi", relay: "0xf588F86577C472D83E5F84403951AA0B92fc1Dd6" },
 ];
 
 export type Kind = "matcha-latte" | "double-espresso";
