@@ -1,8 +1,9 @@
-// Fetches every GaugesAllocated event of Aero's LeafVoter on Base since launch, into data/allocations.json.
-// publicnode serves old logs, 50,000 blocks per request.
+// Fetches every GaugesAllocated event of Aero's LeafVoter on Base since launch, into data/allocations.json, with the
+// last block searched. publicnode serves old logs, 50,000 blocks per request and 20,000 logs per answer.
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { decodeEventLog, parseAbi, type Hex } from "viem";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { LEAF_VOTER } from "../src/config.ts";
+import { dataUrl, timeOfBlock, type Allocation, type Allocations } from "./common.ts";
 
 const RPC = "https://base-rpc.publicnode.com";
 const FIRST = 52_900_000;
@@ -10,20 +11,13 @@ const SPAN = 50_000;
 const abi = parseAbi([
   "event GaugesAllocated(uint256 indexed tokenId, (address gauge, uint128 allocated, bytes data)[] gauges, uint256 total)",
 ]);
-const OUT = new URL("./data/allocations.json", import.meta.url);
+const topic = "0xb13b0fcaf992c63a38992e4eeb65a542452c8366b7d9d8d7ca306ee1293dc2ba";
+const OUT = dataUrl("allocations.json");
 
-type Log = { topics: Hex[]; data: Hex; blockNumber: Hex; blockTimestamp: Hex; transactionHash: Hex; logIndex: Hex };
-export type Allocation = {
-  id: string;
-  block: number;
-  time: number;
-  log: number;
-  tx: string;
-  total: string;
-  gauges: { gauge: string; amount: string }[];
-};
+type Log = { topics: Hex[]; data: Hex; blockNumber: Hex; blockTimestamp?: Hex; logIndex: Hex };
+class TooMany extends Error {}
 
-async function post(method: string, params: unknown[]): Promise<any> {
+async function post<T>(method: string, params: unknown[]): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
       const response = await fetch(RPC, {
@@ -31,35 +25,47 @@ async function post(method: string, params: unknown[]): Promise<any> {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
       });
-      const reply = await response.json();
-      if (reply.error) throw new Error(JSON.stringify(reply.error));
+      const reply = (await response.json()) as { result?: T; error?: { message?: string } };
+      if (reply.error && /max results|too many|exceed/i.test(reply.error.message ?? "")) throw new TooMany();
+      if (reply.error || reply.result === undefined) throw new Error(JSON.stringify(reply.error));
       return reply.result;
     } catch (error) {
-      if (attempt >= 6) throw error;
+      if (error instanceof TooMany || attempt >= 6) throw error;
       await new Promise((done) => setTimeout(done, 500 * 2 ** attempt));
     }
   }
 }
+// The range's logs, halving it for as long as an answer would hold too many.
+async function logsIn(from: number, to: number): Promise<Log[]> {
+  try {
+    return await post<Log[]>("eth_getLogs", [
+      { address: LEAF_VOTER, topics: [topic], fromBlock: `0x${from.toString(16)}`, toBlock: `0x${to.toString(16)}` },
+    ]);
+  } catch (error) {
+    if (!(error instanceof TooMany) || from === to) throw error;
+    const middle = Math.floor((from + to) / 2);
+    return [...(await logsIn(from, middle)), ...(await logsIn(middle + 1, to))];
+  }
+}
 
-const topic = "0xb13b0fcaf992c63a38992e4eeb65a542452c8366b7d9d8d7ca306ee1293dc2ba";
-const known: Allocation[] = existsSync(OUT) ? JSON.parse(readFileSync(OUT, "utf8")) : [];
-const head = parseInt(await post("eth_blockNumber", []), 16) - 100;
-let from = known.length ? Math.max(...known.map(({ block }) => block)) + 1 : FIRST;
-const found = known.filter(({ block }) => block < from);
+mkdirSync(new URL(".", OUT), { recursive: true });
+const known: Allocations | undefined = existsSync(OUT) ? JSON.parse(readFileSync(OUT, "utf8")) : undefined;
+const head = parseInt(await post<string>("eth_blockNumber", []), 16) - 100;
+let from = known ? known.head + 1 : FIRST;
+const found: Allocation[] = known?.allocations ?? [];
 while (from <= head) {
   const to = Math.min(from + SPAN - 1, head);
-  const logs: Log[] = await post("eth_getLogs", [
-    { address: LEAF_VOTER, topics: [topic], fromBlock: `0x${from.toString(16)}`, toBlock: `0x${to.toString(16)}` },
-  ]);
-  for (const log of logs) {
+  for (const log of await logsIn(from, to)) {
     const { args } = decodeEventLog({ abi, data: log.data, topics: log.topics as [Hex, ...Hex[]] });
+    const block = parseInt(log.blockNumber, 16);
+    const time = timeOfBlock(block);
+    if (log.blockTimestamp && parseInt(log.blockTimestamp, 16) !== time)
+      throw new Error(`Block ${block} is not at ${time}: Base's block schedule (BLOCK_SCHEDULE) has changed.`);
     found.push({
       id: args.tokenId.toString(),
-      block: parseInt(log.blockNumber, 16),
-      time: parseInt(log.blockTimestamp, 16),
+      block,
+      time,
       log: parseInt(log.logIndex, 16),
-      tx: log.transactionHash,
-      total: args.total.toString(),
       gauges: args.gauges.map(({ gauge, allocated }) => ({ gauge: gauge.toLowerCase(), amount: allocated.toString() })),
     });
   }
@@ -67,5 +73,6 @@ while (from <= head) {
   from = to + 1;
 }
 found.sort((a, b) => a.block - b.block || a.log - b.log);
-writeFileSync(OUT, JSON.stringify(found));
+const out: Allocations = { head, headTime: timeOfBlock(head), allocations: found };
+writeFileSync(OUT, JSON.stringify(out));
 console.error(`\nSaved ${found.length} allocations up to block ${head}.`);

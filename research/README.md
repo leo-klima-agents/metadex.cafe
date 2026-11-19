@@ -12,32 +12,49 @@ stakes don't make the result look more significant than it is.
 
 ## Running it
 
+From the repository's root, in this order:
+
 ```bash
-node research/fetch-allocations.ts   # every GaugesAllocated event since launch (publicnode, ~2 minutes)
-node research/fetch-gauges.ts        # each gauge's rewards manager at every hour since launch (~2 minutes)
-node research/fetch-stakes.ts        # which stakes are still staked
-node research/analyze.ts             # writes results/summary.md and results/strategies.csv (~4 minutes)
-CAP=0.01 OUT=./results/strict node research/analyze.ts   # the strict capacity rule, into results/strict
-node research/validate.ts            # compares rebuilt yields with the site's own APR code
+node research/fetch-gauges.ts        # each gauge's rewards manager at every hour since launch, and prices (~2 minutes)
+node research/fetch-allocations.ts   # every GaugesAllocated event since launch (publicnode, ~3 minutes)
+node research/fetch-stakes.ts        # each stake as of the data's last hour, and when withdrawn ones left (~3 minutes)
+node research/analyze.ts             # writes research/results/summary.md and strategies.csv (~5 minutes)
+CAP=0.01 OUT=research/results/strict node research/analyze.ts   # the strict capacity rule
+node research/validate.ts            # compares rebuilt yields with the site's own APR code; run fetch-gauges first
 ```
 
-The fetch scripts write to `data/`, which is not committed. `analyze.ts` uses a seeded random generator, so the same
-data gives the same results.
+The fetch scripts write to `research/data/`, which is not committed. A second run of `fetch-gauges.ts` or
+`fetch-allocations.ts` only reads what is new. `analyze.ts` seeds each test of each strategy on its own, so the same
+data gives the same results, and a change to one test doesn't move another's.
 
 ## Data
 
+- **One end for everything.** The data ends at the last hour that both the gauges' history and the allocation search
+  cover. Allocations after it are left out, and stakes are read as of that hour, so that nothing reaches past the
+  gauges' history.
 - **Allocations.** Every `GaugesAllocated(tokenId, (gauge, allocated, data)[], …)` event of the LeafVoter. Each event
-  replaces the stake's whole allocation on Base. Allocations within one hour are merged, the last one counting. A stake
-  that was withdrawn loses its allocation with no event, so its last spell is dropped.
+  replaces the stake's whole allocation on Base. Allocations within one hour are merged, the last one counting. Event
+  times come from Base's fixed block schedule.
+- **When stakes ended.** A withdrawn stake loses its allocation with no event. `fetch-stakes.ts` finds the first hour at
+  which each one was no longer staked, by reading past blocks. A time lock that ended stops the allocation too. A
+  stake's last allocation lasts until whichever came first.
 - **What each pool paid.** Each gauge's rewards manager keeps its fees per unit of power, and the integral of 1 / power,
   at every checkpoint. Reading both at every hour gives `Y[g][k]`, what one sAERO in gauge `g` earned from launch to
-  hour `k`, fees and incentive programs together. `validate.ts` checks this against the site's own APR code: they agree
-  to about 1% on the largest pools.
-- **Prices.** Today's prices, one per token, for the whole period. Only the comparisons made over the same hours matter,
-  so one snapshot removes price noise without biasing them. Tokens without a price count as 0 for everyone. They are
-  0.1% of power.
-- **Strategies.** Stakes that allocate at the same hours, to the same pools, in the same shares are one strategy, tested
-  once. Otherwise, a manager running 50 identical stakes would count as 50 independent pieces of evidence.
+  hour `k`, fees and incentive programs together. A manager only records fees at its checkpoints, which can be hours
+  apart, so the fees recorded at one are spread evenly over the time since the one before. `validate.ts` checks this
+  against the site's own APR code: they agree within 1% on 10 of the 11 largest pools, and within 3.4% on
+  vAMM-AERO/USDC, which checkpoints least often.
+- **Gauges that don't count allocations.** A gauge that isn't activated, or whose cap is zero, doesn't count the sAERO
+  allocated to it. Its power stays far below them, and the few sAERO that are counted can earn all its fees, at APRs in
+  the hundreds of thousands of percent. While a gauge's power is under 10% of the sAERO allocated to it, those sAERO
+  earn nothing there. This touches 0.3% of allocated sAERO-hours, but it removed the most extreme APRs.
+- **Prices.** Today's prices, one per token, for the whole period, from pools at least 10 times as deep as the most the
+  token paid in a day, as the site requires. Only comparisons made over the same hours matter, so one snapshot removes
+  price noise without biasing them. Tokens without a price count as 0 for everyone. Gauges paying one hold 1.2% of
+  power.
+- **Strategies.** Stakes that allocate at the same hours, to the same pools, in the same shares, and end at the same
+  hour, are one strategy, tested once. Otherwise, a manager running 50 identical stakes would count as 50 independent
+  pieces of evidence.
 
 ## The model
 
@@ -71,12 +88,15 @@ all its spells. That fraction is the p-value.
 
 The null hypothesis is that a move from pools `P` to pools `Q` is equally likely at any hour the stake could have moved
 at. The **feasible window** runs from the end of the 47-hour lock after the previous allocation to 47 hours before the
-next allocation, so that moving at any hour in it would have kept the stake's other moves possible. For each hour `x` in
-that window, `E(x)` is what one sAERO would have earned over the window by staying in `P` until `x` and then holding
-`Q`. Pool power is counted without the stake's own, with its amounts added back in whichever pools it would have been
-in. Under the null, the rank of the actual hour among the window's hours is uniform, so the p-value is exact: it comes
-from drawing hours uniformly, with no model of yields.
+next allocation, or to the hour the stake ended. Moving at any hour in the window would have kept the stake's other
+moves possible. For each hour `x` in the window, `E(x)` is what one sAERO would have earned over it by staying in `P`
+until `x` and then holding `Q`. Pool power is counted without the stake's own, with its amounts added back in whichever
+pools it would have been in. The p-value is the chance that a uniformly drawn hour ranks as high as the actual one, from
+20,000 draws at most. It needs no model of yields.
 
+- The window is set by the stake's neighbouring moves. The test is exact only if those don't depend on how the pools did
+  after this move. A stake that moved again quickly after a bad move would break that, and its timing p-values would be
+  off in a direction that depends on how it reacts.
 - A strategy that always moves as soon as its lock ends has no freedom left within this window, so it is not tested. Its
   timing is a fixed schedule by construction.
 - A strategy's statistic is the sum of (rank − ½) over its moves.
@@ -90,32 +110,32 @@ from drawing hours uniformly, with no model of yields.
 - **Calibration by size.** With no skill, 5% of p-values fall below 0.05 and 10% above 0.9, at every size. A size band
   that departs from this much more than the others points either to a flaw in the placebos at that size or to an edge
   that comes with size.
-- **Persistence.** The check is the Spearman correlation between a strategy's selection z-score over the first half of
-  the period and over the second half.
+- **Persistence.** The check is the Spearman correlation, with ties ranked equally, between a strategy's selection
+  p-values over the first half of the period and over the second half, as normal quantiles.
 
-## Results (22 October to 18 November 2026)
+## Results (22 October to 19 November 2026, 13:00 UTC)
 
 The full tables are in [`results/summary.md`](results/summary.md), and every strategy is in
-[`results/strategies.csv`](results/strategies.csv). Over the period, the average sAERO in a pool earned an APR of 21.4%
-at today's AERO price. Fees were 99.6% of that and incentives the rest.
+[`results/strategies.csv`](results/strategies.csv). Over the period, the average counted sAERO in a pool earned an APR
+of 21.1% at today's AERO price. Fees were 95.5% of all pay and incentives the rest.
 
 **Some stakes pick pools better than the crowd, and much of it is avoiding pools that pay little.**
 
-- **Against a crowd weighted by power:** 1,692 of 9,620 strategies are significant at FDR 10%, and 26% have p < 0.05,
+- **Against a crowd weighted by power:** 1,702 of 9,701 strategies are significant at FDR 10%, and 26% have p < 0.05,
   against the 5% expected with no skill.
-- **Against a crowd of stakes:** 224 strategies are significant, and 12% have p < 0.05.
+- **Against a crowd of stakes:** 155 strategies are significant, and 12% have p < 0.05.
 - **Why there is an edge to find:** pool yields don't even out. Over the period, the 15 largest pools paid between about
   10% (vAMM-AERO/USDC, CL100-RSGP/USDC) and 28% (CL50-USDC/cbBTC, CL10-USDC/SNDKc). A quarter of all power sat in pools
   paying under 15%, mostly pools with AERO on one side. A stake that keeps out of those pools beats the crowd without
   needing to know anything else.
-- **Persistence:** selection in the first half predicts selection in the second (Spearman ρ = 0.33, against ±0.02 for no
+- **Persistence:** selection in the first half predicts selection in the second (Spearman ρ = 0.35, against ±0.02 for no
   relation). Holding the same good pool counts in both halves, though, so this is not independent evidence of repeated
   skill.
 
 **Large stakes stand out, and it isn't only a flaw in the placebos.** Against a crowd of stakes, p < 0.05 holds for
-about 11% of strategies under 100,000 sAERO, 21% of those between 100,000 and 1 million, and 54% of those above 1
-million. Some of that excess was a flaw: before the capacity rule, the shares were 28% and 71%. Three checks say the
-rest is real:
+about 11% of strategies under 100,000 sAERO, 20% of those between 100,000 and 1 million, and 54% of those above 1
+million. Under 100,000 sAERO, p-values above 0.9 are close to the 10% expected (5% to 9%), so the small strategies' test
+looks well calibrated. Three checks say the large strategies' excess is real:
 
 - **Their APRs:** strategies of a million sAERO or more earned a median of 1.14 times what the average sAERO earned over
   the same hours.
@@ -126,43 +146,56 @@ rest is real:
   A steady edge of a few percent then gives a very small p-value. The edge is real, but small p-values here don't mean a
   large edge.
 
-**Timing shows almost no skill.** 24 of 6,687 strategies are significant at FDR 10%, and 8.4% have p < 0.05. Over 25,604
-moves, the mean rank of the hour chosen is 0.505, against 0.5 by chance. The median move gained nothing over a random
-feasible hour, while the best hour would have gained a median of 15 hours of average pay. A handful of strategies time
-well, and they are listed in the summary. The timing p-values come from Monte Carlo draws, so the count near the
-threshold moves by a few between runs that change other parts of the analysis.
+**Timing shows a small edge in aggregate, worth almost nothing to most moves.** 32 of 6,739 strategies are significant
+at FDR 10%, and 9% have p < 0.05. Over 26,179 moves, the mean rank of the hour chosen is 0.506, against 0.5 by chance (z
+= 3.1). The median move gained nothing over a random feasible hour, while the best hour would have gained a median of 15
+hours of average pay. The edge depends on when fees are taken to arrive between checkpoints. Crediting them all at the
+later checkpoint, as the contracts record them, gives a mean rank of 0.503 (z = 1.4) and 25 significant strategies.
+Moving into a pool makes it checkpoint, so that version counts the fees built up before a move as earned at the move,
+which makes earlier moves look better than they were. The strategies that time well mostly made the same moves at the
+same hours: into CL100-RSGP/USDC on 28 and 29 October, CL200-USDC/BLUECHIP around 18:00 UTC on 6 November, and
+CL200-WETH/DRV around 18:00 on 13 November. They look like a few shared signals, or one operator, rather than many
+independent skilled timers.
 
-**Timing shows almost no skill.** 22 of 6,687 strategies are significant at FDR 10%, and 8.7% have p < 0.05. Over 25,604
-moves, the mean rank of the hour chosen is 0.505, against 0.5 by chance. The median move gained nothing over a random
-feasible hour, while the best hour would have gained a median of 15 hours of average pay. A handful of strategies time
-well, and they are listed in the summary.
+**The highest APRs are real, but small.** The 15 strategies with APRs above 100% are stakes of 100 to 6,000 sAERO in
+small pools, and each held more than a quarter of a pool at some point. Their selection is significant, since placebos
+rarely draw such pools, but it does not scale. Stakes of millions of sAERO mostly earn within a few points of the
+average. Two of the three largest earn well below it, and are not significant (stake 10495: 14.1% against 19.6%, p =
+0.19; stake 10504: 11.9% against 19.6%, p = 0.97).
 
-**The highest APRs are real, but small.** The strategies with APRs of 50% to 1,400% are mostly stakes of 100 to 5,000
-sAERO in small pools. Their selection is significant, since placebos rarely draw such pools, but it does not scale.
-Stakes of millions of sAERO mostly earn within a few points of the average. Two of the three largest earn well below it,
-and are not significant (stake 10495: 14.2% against 19.8%, p = 0.19; stake 10504: 12.0% against 19.9%, p = 0.97).
-
-**Aero's Autopilot USDC Maxi** (stake 20366, 53 million sAERO) earned 22.8% against an average of 22.2% over the same
+**Aero's Autopilot USDC Maxi** (stake 20366, 53 million sAERO) earned 22.4% against an average of 21.8% over the same
 hours.
 
-- **Selection:** significant against the power-weighted crowd (p = 0.0006, q = 0.012). Against a crowd of stakes it
-  isn't (p = 0.005, q = 0.15), though it is under the strict rule (q = 0.003). Its evidence depends on which crowd it is
+- **Selection:** significant against the power-weighted crowd (p = 0.0004, q = 0.011). Against a crowd of stakes it
+  isn't (p = 0.006, q = 0.17), though it is under the strict rule (q = 0.004). Its evidence depends on which crowd it is
   compared with.
-- **Timing:** not significant once every strategy tested is taken into account (p = 0.017, q = 0.42).
+- **Timing:** not significant (rank 0.72, p = 0.06, q = 0.59).
+
+**So, is one stake's good APR skill or noise?**
+
+- **Small stakes:** for any one stake under 100,000 sAERO, assume noise unless its selection q is at most 0.1 against
+  both crowds. Across them, about 11% beat chance at p < 0.05 where 5% would, so there is some real pool-picking, but
+  only a few stakes can be singled out.
+- **Large stakes:** above-average APRs are mostly real. They come from staying out of the pools that pay least, not from
+  timing, and the stakes in those pools may be voting for something other than fees.
+- **Timing:** across all stakes there is a small edge, but for any one stake, treat the part of its APR that came from
+  when it moved as noise unless its timing q is at most 0.1. Most of the few that pass made the same moves together.
 
 ## Limits
 
-- **28 days.** A strategy moves at most every 47 hours, so even the most active have about 13 decisions. Most strategies
+- **28 days.** A strategy moves at most every 47 hours, so even the most active have about 14 decisions. Most strategies
   cannot be told apart from chance in either direction.
 - **Selection includes part of timing.** Placebos move when the strategy moves, so a strategy that holds winning pools
   longer gets credit in the selection test. The timing test only covers when each move happened, given its neighbours.
-- **Hourly resolution.** Fees count from the last checkpoint at or before each hour, and allocations from the hour after
-  they happened. Placebo dilution uses each pool's power at the start of the spell. Cooldown reductions, which can
-  shorten a lock, are ignored, so some feasible windows are a little too short.
-- **Non-pool allocations.** 8.3% of allocated power goes to the zero address or to `0x2e67…6902`, an address with no
-  code that is not a registered gauge. It is left out, and weights are taken over real pools only.
+- **Hourly resolution.** Fees between two checkpoints are spread evenly over the time between them, which is an
+  estimate: the timing result depends on it (see above). Allocations count from the hour after they happened. Placebo
+  dilution uses each pool's power at the start of the spell. Cooldown reductions, which can shorten a lock, are ignored;
+  no move in the data came sooner than 47 hours after the last.
+- **Non-pool allocations.** 8.2% of the sAERO in allocation events goes to the zero address or to `0x2e67…6902`, an
+  address with no code that is not a registered gauge. It is left out, and weights are taken over real pools only.
 - **Strategies are exact copies.** Stakes run by one manager but allocated at different hours count as different
-  strategies. Benjamini–Hochberg still controls the false discovery rate under the positive dependence this creates.
+  strategies. Benjamini–Hochberg still controls the false discovery rate under the positive dependence this creates, but
+  counts of significant strategies overstate how many independent decisions they reflect.
 - **A crowd is a choice.** "Better than others" depends on who the others are. Power-weighted and stake-weighted crowds
   give very different answers here, so both are reported. Stakes that vote for low-paying pools may be after something
   other than fees, such as directing emissions to a pool. Beating them is beating a crowd that wasn't trying.
