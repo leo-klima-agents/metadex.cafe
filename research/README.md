@@ -163,13 +163,22 @@ rarely draw such pools, but it does not scale. Stakes of millions of sAERO mostl
 average. Two of the three largest earn well below it, and are not significant (stake 10495: 14.1% against 19.6%, p =
 0.19; stake 10504: 11.9% against 19.6%, p = 0.97).
 
-**Aero's Autopilot USDC Maxi** (stake 20366, 53 million sAERO) earned 22.4% against an average of 21.8% over the same
-hours.
+**Aero's Autopilots.** Aero's Relay factory (`0xA528…4B78`) lists nine Relays. Two are public: USDC Maxi (stake 20366,
+53 million sAERO) and sAERO Maxi (stake 20365, 13 million sAERO). The seven internal ones (stakes 20367 and 20369
+to 20374) never allocated. The two Maxis make the same decisions: each allocation goes to the same pools in the same
+shares, within minutes of the other's. sAERO Maxi made one extra move, on 7 November. Since 1 November, USDC Maxi earned
+22.4% and sAERO Maxi 22.6%, against an average of 21.8% over the same hours.
 
-- **Selection:** significant against the power-weighted crowd (p = 0.0004, q = 0.011). Against a crowd of stakes it
-  isn't (p = 0.006, q = 0.17), though it is under the strict rule (q = 0.004). Its evidence depends on which crowd it is
-  compared with.
-- **Timing:** not significant (rank 0.72, p = 0.06, q = 0.59).
+- **Selection:** the same picks get different p-values, because each is compared with placebos of its own size. A
+  placebo of 53 million sAERO dilutes the pools it lands in more than one of 13 million does, so USDC Maxi beats its
+  placebos more easily.
+  - USDC Maxi is significant against the power-weighted crowd (p = 0.0004, q = 0.011), but not against a crowd of stakes
+    (q = 0.17).
+  - sAERO Maxi is significant against neither (q = 0.12 and q = 0.59).
+  - Both are significant under the strict rule (q at most 0.004).
+  - Their evidence depends on which crowd they are compared with, and they are one strategy, not two independent
+    successes.
+- **Timing:** neither is significant (rank 0.72 and 0.71, q = 0.59 and 0.63).
 
 **So, is one stake's good APR skill or noise?**
 

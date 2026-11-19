@@ -653,8 +653,10 @@ top(
 top([...forSelection].sort((a, b) => b.amount - a.amount).slice(0, 15), "Largest strategies");
 top([...forSelection].sort((a, b) => a.selP - b.selP || b.selZ - a.selZ).slice(0, 15), "Strongest selection evidence");
 top([...forTiming].sort((a, b) => a.timP - b.timP).slice(0, 15), "Strongest timing evidence");
-const autopilot = strategies.find(({ ids }) => ids.includes("20366"));
-if (autopilot) top([autopilot], "Aero Autopilot USDC Maxi (stake 20366)");
+// Aero's Autopilots: the stakes of the Relays that its factory (0xA528…4B78, `allRelays`) lists. The two Maxis allocate
+// alike, within minutes. The seven internal Relays (stakes 20367 and 20369 to 20374) never allocated.
+const autopilots = ["20366", "20365"].flatMap((id) => strategies.filter(({ ids }) => ids.includes(id)));
+top(autopilots, "Aero Autopilots: USDC Maxi (stake 20366) and sAERO Maxi (stake 20365)");
 out(
   `"thin" marks a strategy that held more than ${pct(THIN)} of a pool's power at some point. Placebos pay the same dilution, but such pools are rarely drawn.`,
 );

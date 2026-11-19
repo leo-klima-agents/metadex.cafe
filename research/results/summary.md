@@ -126,10 +126,11 @@ Tested: 6739 strategies of at least 100 sAERO, with 26179 moves that had at leas
 | 3942 | 17,046 | CL200-XDP/USDC, CL10-USDC/SNDKc, CL100-RSGP/USDC | 28.3 | 26.0% | 20.8% | 0.0500 | 0.193 | 3 | 0.98 | 1.0e-4 | 0.042 |
 | 8394 | 5,132 | vAMM-AERO/USDC, CL10-USDC/MUSD, sAMM-WETH/msETH, CL10-USDC/MXNB | 27.6 | 18.4% | 20.2% | 0.6444 | 0.746 | 4 | 0.96 | 1.0e-4 | 0.042 |
 
-## Aero Autopilot USDC Maxi (stake 20366)
+## Aero Autopilots: USDC Maxi (stake 20366) and sAERO Maxi (stake 20365)
 
 | Stakes | sAERO | Pools | Days in pools | APR | Average APR then | Selection p | q | Moves | Timing rank | p | q |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 20366 | 53,132,371 | CL10-WETH/cbBTC, CL100-USDC/cbBTC, CL50-WETH/USDC, CL100-WETH/USDC | 17.8 | 22.4% | 21.8% | 0.0004 | 0.011 | 7 | 0.72 | 0.0629 | 0.588 | thin
+| 20365 | 13,345,773 | CL10-WETH/cbBTC, CL100-USDC/cbBTC, CL50-WETH/USDC, CL100-WETH/USDC | 17.8 | 22.6% | 21.8% | 0.0230 | 0.119 | 7 | 0.71 | 0.0819 | 0.626 |
 
 "thin" marks a strategy that held more than 25.0% of a pool's power at some point. Placebos pay the same dilution, but such pools are rarely drawn.
