@@ -20,10 +20,10 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "viem": "2.58.0"
+    "viem": "2.58.1"
   },
   "devDependencies": {
-    "@ipld/car": "5.4.8",
+    "@ipld/car": "5.4.9",
     "@ipld/dag-pb": "4.2.0",
     "@types/node": "26.6.6",
     "esbuild": "0.28.2",
